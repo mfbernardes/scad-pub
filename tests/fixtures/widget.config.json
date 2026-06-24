@@ -1,0 +1,12 @@
+{
+  "title": "Widget Studio",
+  "logo": "logo.svg",
+  "source": "src",
+  "assets": ["lib"],
+  "features": ["textmetrics"],
+  "fonts": ["Foo.ttf"],
+  "fontPrompt": { "url": "https://example/Foo.ttf", "label": "Foo font", "family": "Foo" },
+  "designs": [
+    { "id": "widget", "label": "Widget", "heavy": true }
+  ]
+}

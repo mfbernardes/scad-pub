@@ -1,0 +1,106 @@
+// urlState.ts — shareable + persistent session state. The current design and
+// the parameters that differ from its defaults are encoded into the URL hash
+// (so a link reproduces an exact configuration) and mirrored to localStorage
+// (so a plain reload of the bare URL restores the last session).
+import type { Design, Schema } from "../openscad/types";
+import { fromPresetString } from "./scad";
+import { defaultsFor, type Values } from "./presets";
+import { ns } from "./appId";
+
+const STORE_KEY = ns("session.v1");
+
+export interface SessionState {
+  designId: string;
+  values: Values;
+  /** The namespaced selected-preset id ("bundled:Name" / "user:Name"), or "". */
+  preset: string;
+}
+
+// Only the values that differ from the design's defaults — keeps the hash short.
+function diffFromDefaults(design: Design, values: Values): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const p of design.params) {
+    const v = values[p.name];
+    if (v !== undefined && v !== p.default) out[p.name] = v;
+  }
+  return out;
+}
+
+// Defaults overlaid with a stored diff, coerced back to each param's type.
+function applyDiff(design: Design, diff: Record<string, unknown>): Values {
+  const values = defaultsFor(design);
+  for (const p of design.params) {
+    if (Object.prototype.hasOwnProperty.call(diff, p.name)) {
+      values[p.name] = fromPresetString(p, String(diff[p.name]));
+    }
+  }
+  return values;
+}
+
+function findDesign(schema: Schema, id: string | null): Design | undefined {
+  return id ? schema.designs.find((d) => d.id === id) : undefined;
+}
+
+function fromHash(schema: Schema): SessionState | null {
+  if (!location.hash) return null;
+  try {
+    const params = new URLSearchParams(location.hash.slice(1));
+    const design = findDesign(schema, params.get("d"));
+    if (!design) return null;
+    const diff = params.get("v") ? JSON.parse(params.get("v")!) : {};
+    return {
+      designId: design.id,
+      values: applyDiff(design, diff),
+      preset: params.get("p") ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function fromStore(schema: Schema): SessionState | null {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return null;
+    const { designId, diff, preset } = JSON.parse(raw);
+    const design = findDesign(schema, designId);
+    if (!design) return null;
+    return {
+      designId: design.id,
+      values: applyDiff(design, diff ?? {}),
+      preset: preset ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Initial state on load: URL hash wins, then last session, then defaults. */
+export function readInitialState(schema: Schema): SessionState {
+  const design0 = schema.designs[0];
+  return (
+    fromHash(schema) ??
+    fromStore(schema) ?? {
+      designId: design0.id,
+      values: defaultsFor(design0),
+      preset: "",
+    }
+  );
+}
+
+/** Write the current state to the URL hash and localStorage (no history entry). */
+export function persistState(design: Design, values: Values, preset = "") {
+  const diff = diffFromDefaults(design, values);
+  const params = new URLSearchParams({ d: design.id });
+  if (Object.keys(diff).length) params.set("v", JSON.stringify(diff));
+  if (preset) params.set("p", preset);
+  history.replaceState(null, "", "#" + params.toString());
+  try {
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({ designId: design.id, diff, preset })
+    );
+  } catch {
+    /* ignore storage quota / privacy mode */
+  }
+}

@@ -1,0 +1,26 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+        exclude: ^src/generated/
+      - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      - id: tsc
+        name: TypeScript type check
+        language: system
+        entry: npx tsc -b
+        pass_filenames: false
+        files: \.(ts|tsx)$
+
+      - id: tests
+        name: Unit tests
+        language: system
+        entry: npm test
+        pass_filenames: false
+        files: \.(ts|tsx|mjs)$

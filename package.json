@@ -1,0 +1,38 @@
+{
+  "name": "scadpub",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "ScadPub publishes OpenSCAD models as static browser-based configurators.",
+  "license": "MIT",
+  "scripts": {
+    "gen": "node scripts/gen-schema.mjs",
+    "predev": "npm run gen",
+    "dev": "vite",
+    "prebuild": "npm run gen",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "pretest": "npm run gen",
+    "test": "node --import ./tests/register-ts.mjs --test \"tests/*.test.mjs\"",
+    "smoke": "node scripts/smoke.mjs",
+    "vis": "node scripts/screenshots.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.169.0",
+    "@vitejs/plugin-react": "^6.0.2",
+    "axe-core": "^4.12.1",
+    "pixelmatch": "^7.2.0",
+    "playwright": "^1.48.0",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.6.3",
+    "vite": "^8.0.16"
+  }
+}

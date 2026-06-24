@@ -1,0 +1,86 @@
+// schema.ts — runtime validation of the generated designs.json. It's produced
+// by scripts/gen-schema.mjs and imported as a typed JSON blob; validating its
+// shape on load turns generator/type drift into a clear, immediate error instead
+// of a confusing failure deep inside a render.
+import type { Schema, Design, Param } from "../openscad/types";
+
+const PARAM_TYPES = ["number", "boolean", "enum", "string"];
+
+function fail(msg: string): never {
+  throw new Error(`Invalid designs schema: ${msg}`);
+}
+
+function checkParam(p: unknown, designId: string): void {
+  const where = `design '${designId}'`;
+  if (!p || typeof p !== "object") fail(`${where} has a non-object param`);
+  const param = p as Record<string, unknown>;
+  if (typeof param.name !== "string") fail(`${where} has a param without a name`);
+  const at = `${where} param '${String(param.name)}'`;
+  if (typeof param.section !== "string") fail(`${at} has no section`);
+  if (typeof param.type !== "string" || !PARAM_TYPES.includes(param.type))
+    fail(`${at} has invalid type '${String(param.type)}'`);
+  if (param.type === "enum" && !Array.isArray(param.choices))
+    fail(`${at} is an enum without choices`);
+  if (param.default === undefined) fail(`${at} has no default`);
+}
+
+function checkDesign(d: unknown): void {
+  if (!d || typeof d !== "object") fail("designs[] contains a non-object");
+  const design = d as Record<string, unknown>;
+  if (typeof design.id !== "string") fail("a design has no id");
+  const id = design.id;
+  if (typeof design.file !== "string") fail(`design '${id}' has no file`);
+  if (typeof design.label !== "string") fail(`design '${id}' has no label`);
+  for (const key of ["sections", "params", "presets"] as const) {
+    if (!Array.isArray(design[key])) fail(`design '${id}' '${key}' must be an array`);
+  }
+  if (design.heavy !== undefined && typeof design.heavy !== "boolean")
+    fail(`design '${id}' 'heavy' must be a boolean`);
+  if (
+    design.collapsedSections !== undefined &&
+    (!Array.isArray(design.collapsedSections) ||
+      !design.collapsedSections.every((s) => typeof s === "string"))
+  )
+    fail(`design '${id}' 'collapsedSections' must be an array of strings`);
+  for (const p of design.params as unknown[]) checkParam(p, id);
+}
+
+/** Validate the raw imported schema and return it typed; throws on drift. */
+export function validateSchema(raw: unknown): Schema {
+  if (!raw || typeof raw !== "object") fail("not an object");
+  const s = raw as Record<string, unknown>;
+  for (const key of ["features", "fonts", "assets"] as const) {
+    if (!Array.isArray(s[key])) fail(`'${key}' must be an array`);
+  }
+  if (!Array.isArray(s.designs) || s.designs.length === 0)
+    fail("'designs' must be a non-empty array");
+  for (const d of s.designs) checkDesign(d);
+  if (typeof s.title !== "string") fail("'title' must be a string");
+  if (s.logo != null) {
+    const lg = s.logo as Record<string, unknown>;
+    if (typeof lg !== "object" || typeof lg.light !== "string" || typeof lg.dark !== "string")
+      fail("'logo' must be { light, dark } URLs or null");
+  }
+  if (s.fontPrompt != null) {
+    const fp = s.fontPrompt as Record<string, unknown>;
+    if (typeof fp !== "object" || typeof fp.url !== "string")
+      fail("'fontPrompt' must be { url, label?, family?, heading?, linkText?, note? } or null");
+  }
+  if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
+  if (s.help != null) {
+    const h = s.help as Record<string, unknown>;
+    if (
+      typeof h !== "object" ||
+      !Array.isArray(h.sections) ||
+      !h.sections.every(
+        (x) =>
+          x && typeof (x as Record<string, unknown>).title === "string" &&
+          typeof (x as Record<string, unknown>).body === "string"
+      )
+    )
+      fail("'help' must be { intro?, sections: [{ title, body }] } or null");
+  }
+  return raw as Schema;
+}
+
+export type { Schema, Design, Param };

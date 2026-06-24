@@ -1,0 +1,92 @@
+// swUpdate.ts — register the service worker and surface "a new version is
+// available" to the UI. The worker no longer auto-activates (see public/sw.js):
+// when an update finishes installing while an old worker still controls the
+// page, it sits in `waiting`; we detect that and let the user apply it, which
+// posts SKIP_WAITING and reloads once the new worker takes control.
+import { useEffect, useRef, useState } from "react";
+import { assetUrl } from "./assetUrl";
+import { APP_ID } from "./appId";
+
+/**
+ * A freshly-installed worker is an *update* (not the first install) only when a
+ * controller already exists for this page. Pure, so it can be unit-tested.
+ */
+export function isWaitingUpdate(state: string, hasController: boolean): boolean {
+  return state === "installed" && hasController;
+}
+
+export function useServiceWorkerUpdate() {
+  const [updateReady, setUpdateReady] = useState(false);
+  const waitingRef = useRef<ServiceWorker | null>(null);
+  // Set when the user accepts, so the resulting controllerchange reloads (and a
+  // first-install clients.claim() doesn't trigger a spurious reload).
+  const applyingRef = useRef(false);
+
+  useEffect(() => {
+    if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
+    const sw = navigator.serviceWorker;
+    let reg: ServiceWorkerRegistration | undefined;
+    let reloaded = false;
+
+    const promote = (worker: ServiceWorker | null) => {
+      if (!worker) return;
+      waitingRef.current = worker;
+      setUpdateReady(true);
+    };
+
+    const onControllerChange = () => {
+      if (applyingRef.current && !reloaded) {
+        reloaded = true;
+        location.reload();
+      }
+    };
+    sw.addEventListener("controllerchange", onControllerChange);
+
+    // Pass the app id so the worker namespaces its shell cache per config
+    // (sw.js is a static file, so it can't read the build-time define directly).
+    sw.register(`${assetUrl("sw.js")}?ns=${encodeURIComponent(APP_ID)}`, {
+      scope: import.meta.env.BASE_URL,
+    })
+      .then((r) => {
+        reg = r;
+        // An update may already be waiting from a previous visit.
+        if (r.waiting && sw.controller) promote(r.waiting);
+        r.addEventListener("updatefound", () => {
+          const installing = r.installing;
+          installing?.addEventListener("statechange", () => {
+            if (isWaitingUpdate(installing.state, !!sw.controller))
+              promote(installing);
+          });
+        });
+      })
+      .catch(() => {
+        /* offline support is best-effort */
+      });
+
+    // Long-lived tabs: the browser only checks for a new worker on navigation,
+    // so nudge it periodically and when the tab regains focus.
+    const check = () => reg?.update().catch(() => {});
+    const onVisible = () => {
+      if (!document.hidden) check();
+    };
+    const timer = setInterval(check, 60 * 60 * 1000);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      sw.removeEventListener("controllerchange", onControllerChange);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+    };
+  }, []);
+
+  const applyUpdate = () => {
+    applyingRef.current = true;
+    const w = waitingRef.current;
+    if (w) w.postMessage({ type: "SKIP_WAITING" });
+    else location.reload(); // no waiting worker (shouldn't happen) — hard reload
+  };
+
+  const dismiss = () => setUpdateReady(false);
+
+  return { updateReady, applyUpdate, dismiss };
+}

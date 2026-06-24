@@ -1,0 +1,65 @@
+// defaultHelp.ts — the generic, project-agnostic help shown when a config does
+// not supply its own `help`. It documents only universal configurator features
+// (no design-specific wording), in the Markdown subset the Markdown component
+// renders. A deployment can override any of this via `help` in its config.
+export interface HelpSection {
+  title: string;
+  body: string;
+}
+
+export interface HelpContent {
+  intro?: string;
+  sections: HelpSection[];
+}
+
+export const DEFAULT_HELP: HelpContent = {
+  intro:
+    "Configure a design in your browser and export a ready-to-print STL. " +
+    "Everything runs locally — your settings never leave your device, and it works offline.",
+  sections: [
+    {
+      title: "1. Pick a design",
+      body: "Use the **Design** dropdown in the top bar to switch between the available designs. Each one auto-sizes to the parameters you set.",
+    },
+    {
+      title: "2. Adjust the parameters",
+      body:
+        "The left panel lists every parameter, grouped into sections.\n\n" +
+        "- Controls are sliders with a number box, dropdowns, text fields, or checkboxes.\n" +
+        "- The grey monospace name is the underlying OpenSCAD variable; **hover** any control for its full description.\n" +
+        "- Click a **section header** to fold or unfold it; some start collapsed.\n" +
+        "- Some controls appear only when another value makes them relevant.\n" +
+        "- **Reset to defaults** (above the first group) clears your changes for the current design.",
+    },
+    {
+      title: "3. Preview the model",
+      body: "**Drag** to orbit, **scroll** to zoom, and **right-drag** (or two fingers) to pan. The top bar shows render status and timing.",
+    },
+    {
+      title: "4. Render",
+      body: "**Auto-render** re-renders a moment after each change. For a heavy design you can turn it off and press **Render now** when you're ready.",
+    },
+    {
+      title: "5. Save & reuse settings (presets)",
+      body:
+        "The **presets** dropdown groups **Bundled** examples (read-only) and **Saved** presets (your own, stored in this browser).\n\n" +
+        "- **This preset → Save / Delete** manages your saved presets.\n" +
+        "- **Parameter file → Export / Import…** moves settings as an OpenSCAD `parameterSets` JSON, which also opens in the desktop OpenSCAD Customizer.",
+    },
+    {
+      title: "6. Export & share",
+      body:
+        "- **Export STL** — download the printable mesh for your slicer.\n" +
+        "- **Save PNG** — save a snapshot of the preview.\n" +
+        "- **Copy link** — copy a URL that reproduces this exact design, parameters and preset.",
+    },
+    {
+      title: "7. Appearance & info",
+      body: "The **sun/moon** button (top-right) cycles light → dark → auto. The **ⓘ** button lists open-source licenses.",
+    },
+    {
+      title: "Troubleshooting",
+      body: "If a render fails or looks wrong, open the **OpenSCAD output** panel below the preview — it shows the exact command plus any warnings and errors.",
+    },
+  ],
+};

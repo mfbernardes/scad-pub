@@ -1,0 +1,10 @@
+[
+  "fonts/LiberationSans-Bold.ttf",
+  "fonts/LiberationSans-Regular.ttf",
+  "fonts/fonts.conf",
+  "icon.svg",
+  "manifest.webmanifest",
+  "scad/tag.json",
+  "scad/tag.scad",
+  "wasm/openscad.js"
+]

@@ -1,0 +1,14 @@
+{
+  "title": "ScadPub",
+  "id": "scadpub",
+  "description": "ScadPub publishes OpenSCAD models as static browser-based configurators.",
+  "source": "examples",
+  "features": [],
+  "fonts": [
+    "LiberationSans-Bold.ttf",
+    "LiberationSans-Regular.ttf"
+  ],
+  "designs": [
+    { "id": "tag", "label": "Tag" }
+  ]
+}

@@ -1,0 +1,42 @@
+# Node deps & build output
+node_modules/
+dist/
+
+# Large vendored WASM binary + glue — fetched via scripts/fetch-wasm.sh
+public/wasm/
+
+# Generated from the configured design source via scripts/gen-schema.mjs
+public/scad/
+src/generated/
+
+# Render outputs
+*.stl
+
+# Visual-regression diff output (baselines live in tests/screenshots/, tracked)
+/screenshots/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Generated PWA assets (from the active config via gen-schema)
+public/manifest.webmanifest
+public/icon.svg
+
+# Playwright artifacts (if a contributor runs `playwright test`)
+/test-results/
+/playwright-report/
+
+# Local env overrides (Vite reads .env*; *.local stays out of git)
+*.local
+.env*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS cruft
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.sw?

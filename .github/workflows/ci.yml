@@ -1,0 +1,67 @@
+name: CI
+
+# ScadPub is a standalone static site: this workflow builds the configured
+# designs, runs the unit + headless end-to-end (smoke + axe) checks, and deploys
+# to GitHub Pages on every push to main. Set the BASE_PATH repo variable to the
+# subpath you serve it under ("/" for a domain root, "/scad-pub/" for
+# <user>.github.io/scad-pub/).
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # node:test globs + TS type-stripping for the unit tests
+          cache: npm
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Fetch pinned OpenSCAD WASM
+        run: ./scripts/fetch-wasm.sh
+
+      - name: Build
+        run: npm run build
+        env:
+          # Override SCADPUB_CONFIG to build a different config.
+          BASE_PATH: ${{ vars.BASE_PATH || '/' }}
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke test (headless browser, incl. axe accessibility)
+        run: npm run smoke
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scadpub-dist
+          path: dist
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

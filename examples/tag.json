@@ -1,0 +1,7 @@
+{
+  "fileFormatVersion": "1",
+  "parameterSets": {
+    "Large tag": { "width": "80", "height": "40", "thickness": "4" },
+    "No hole": { "hole": "false" }
+  }
+}
