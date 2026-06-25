@@ -248,7 +248,7 @@ body {
   gap: 0.6rem 0.75rem;
   padding: 0.55rem 1rem;
   border-bottom: 1px solid var(--line);
-  border-left: 3px solid var(--warn);
+  border-left: 3px solid var(--accent-solid);
   background: var(--panel-2);
   font-size: 0.85rem;
   color: var(--text);
