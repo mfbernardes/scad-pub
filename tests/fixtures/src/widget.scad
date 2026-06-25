@@ -16,6 +16,12 @@ hole = false;
 // Hole diameter in millimetres. Only relevant when a hole is added.
 // @showIf hole
 hole_d = 4; // [2:0.5:8]
+// Wall thickness in millimetres.
+wallThickness = 1.5; // [0.5:0.5:5]
+// Engraving font size.
+FontSize = 10;
+// Horizontal offset.
+_offset = 0;
 
 /* [Hidden] */
 secret = 3;

@@ -3,7 +3,13 @@
 // src/generated and public/scad trees are untouched.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, existsSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,6 +65,18 @@ test("parses params, types and hints from a design", () => {
   assert.equal(param(schema, "hole").default, false);
   // a [Hidden] param must not leak
   assert.equal(param(schema, "secret"), undefined);
+});
+
+test("captures camelCase, PascalCase and leading-underscore param names", () => {
+  // OpenSCAD identifiers aren't all lowercase; the Customizer accepts any of
+  // these, so the schema must expose them rather than silently dropping them.
+  const { schema } = run("widget.config.json");
+  assert.equal(param(schema, "wallThickness").type, "number");
+  assert.equal(param(schema, "wallThickness").min, 0.5);
+  assert.equal(param(schema, "FontSize").type, "number");
+  assert.equal(param(schema, "FontSize").default, 10);
+  assert.equal(param(schema, "_offset").type, "number");
+  assert.equal(param(schema, "_offset").default, 0);
 });
 
 test("// @collapsed marks sections collapsed; others stay open", () => {
@@ -209,6 +227,65 @@ test("public precache manifest lists generated runtime assets", () => {
     assert.ok(precache.includes(path), `${path} should be precached`);
   }
   assert.ok(!precache.includes("wasm/openscad.wasm"));
+});
+
+test("regenerating cleans the scad output dir so removed files don't linger", () => {
+  // outScadDir is entirely generated; a file from a prior config/build must not
+  // survive a regenerate (otherwise a removed/renamed design could still ship).
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const outScadDir = join(out, "scad");
+  const opts = {
+    configPath: join(FIXTURES, "widget.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir,
+  };
+  generate(opts);
+  // Simulate a stale artifact left by a previous build.
+  const stale = join(outScadDir, "old-removed.scad");
+  writeFileSync(stale, "// stale\n");
+  assert.ok(existsSync(stale));
+  generate(opts);
+  assert.ok(!existsSync(stale), "stale file should be cleaned on regenerate");
+  // The current design's files are still present after the clean+copy.
+  assert.ok(existsSync(join(outScadDir, "widget.scad")));
+  rmSync(out, { recursive: true, force: true });
+});
+
+test("per-theme logos with the same basename don't overwrite each other", () => {
+  // branding/light/logo.svg and branding/dark/logo.svg both end in logo.svg;
+  // a flat basename would clobber one with the other.
+  const { schema, out } = run("widget-logo-collide.config.json");
+  assert.notEqual(schema.logo.light, schema.logo.dark);
+  const lightAbs = join(out, schema.logo.light);
+  const darkAbs = join(out, schema.logo.dark);
+  assert.ok(existsSync(lightAbs));
+  assert.ok(existsSync(darkAbs));
+  // Each served file matches its own source (no overwrite).
+  assert.match(readFileSync(lightAbs, "utf-8"), /#fff/);
+  assert.match(readFileSync(darkAbs, "utf-8"), /#000/);
+});
+
+test("renderHash folds in the renderer source so flag changes invalidate it", () => {
+  // With outPublicDir + rendererFiles, a change to the renderer's render
+  // contract (e.g. an OpenSCAD flag in worker.ts) must change renderHash.
+  const base = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const renderer = join(base, "worker.ts");
+  writeFileSync(renderer, "// flags: --backend=manifold\n");
+  const gen = () => {
+    const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+    return generate({
+      configPath: join(FIXTURES, "widget.config.json"),
+      outSchemaDir: join(out, "schema"),
+      outScadDir: join(out, "public", "scad"),
+      outPublicDir: join(out, "public"),
+      rendererFiles: [renderer],
+    }).renderHash;
+  };
+  const before = gen();
+  writeFileSync(renderer, "// flags: --backend=cgal\n");
+  const after = gen();
+  assert.notEqual(before, after);
+  rmSync(base, { recursive: true, force: true });
 });
 
 test("firstSentence does not break on decimals or abbreviations", () => {
