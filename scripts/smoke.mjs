@@ -181,6 +181,21 @@ async function main() {
           (await page.inputValue(".preset-bar select")) === opts[0],
           "preset auto-selected from the URL after reload"
         );
+        // Editing a parameter flags the preset as "(modified)" in the dropdown.
+        const num = page.locator('.param-form input[type="number"]').first();
+        await num.fill("85");
+        await num.blur();
+        await page.waitForTimeout(200);
+        check(
+          (await page.inputValue(".preset-bar select")) === "__modified__",
+          "editing a param flags the preset as modified"
+        );
+        check(
+          /\(modified\)/.test(
+            (await page.locator(".preset-bar select option:checked").textContent()) ?? ""
+          ),
+          "dropdown shows the (modified) label"
+        );
         presetTested = true;
         break;
       }
