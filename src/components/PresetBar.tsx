@@ -156,7 +156,6 @@ export function PresetBar({
           )}
         </select>
       </div>
-      <div className="grp-label">This preset</div>
       <div className="row btn-row">
         <button
           type="button"
