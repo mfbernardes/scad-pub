@@ -209,9 +209,14 @@ async function main() {
       /addEventListener\(\s*["']message["']/.test(swText) && /SKIP_WAITING/.test(swText),
       "sw.js activates a waiting worker on a SKIP_WAITING message"
     );
+    // An install handler is fine (it precaches the app shell for offline use),
+    // but it must not call skipWaiting — a new worker has to wait so the page
+    // can prompt the user (see the SKIP_WAITING message handler above).
+    const installHandler =
+      swText.match(/addEventListener\(\s*["']install["'][\s\S]*?(?=addEventListener\(|$)/)?.[0] ?? "";
     check(
-      !/addEventListener\(\s*["']install["']/.test(swText),
-      "sw.js has no auto-skipWaiting install handler (updates are user-prompted)"
+      !/skipWaiting/.test(installHandler),
+      "sw.js install handler does not auto-skipWaiting (updates are user-prompted)"
     );
 
     // @showIf + @collapsed — exercised on the example "tag" design when present.
