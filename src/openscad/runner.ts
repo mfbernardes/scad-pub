@@ -2,6 +2,14 @@
 // because callMain is blocking and cannot be interrupted in-place, a render that
 // supersedes one still in flight cancels it by terminating and respawning the
 // worker (the superseded promise rejects with SupersededError).
+//
+// Two-tier render cache: an in-memory LRU (L1, this file) in front of an
+// optional persistent IndexedDB store (L2, stlCache.ts). A render checks L1,
+// then L2, then the worker; a successful worker render is written back to both.
+// Both tiers share one content-stable key (design + sorted defines + font
+// signature + CACHE_VERSION), so hits survive reloads.
+import { CACHE_VERSION, createStlCache } from "../lib/stlCache";
+import type { StlCacheStore, StoredStl } from "../lib/stlCache";
 import type { RenderRequest, RenderResult } from "./types";
 
 export class SupersededError extends Error {
@@ -72,9 +80,14 @@ export function fontSignature(fonts: RenderRequest["userFonts"]): string {
   );
 }
 
-function cacheKey(req: Omit<RenderRequest, "id">, fontScope: number): string {
+// Content-stable cache key shared by both tiers. The font signature (not an
+// ephemeral session counter) is baked in so the key reproduces across reloads:
+// changing fonts simply yields a different key, and stale entries age out via
+// LRU instead of needing an explicit cache wipe. `version` carries the build's
+// renderHash, so a deploy that changes any render input invalidates old entries.
+function cacheKey(req: Omit<RenderRequest, "id">, version: string): string {
   const defines = Object.fromEntries(Object.entries(req.defines).sort());
-  return JSON.stringify({ design: req.design, defines, fontScope });
+  return JSON.stringify({ v: version, design: req.design, defines, fonts: fontSignature(req.userFonts) });
 }
 
 function cloneResult(result: RenderResult, id: number): RenderResult {
@@ -84,14 +97,18 @@ function cloneResult(result: RenderResult, id: number): RenderResult {
 export class OpenSCADRunner {
   private worker!: Worker;
   private nextId = 1;
+  // Id of the most recent render(); a render whose id is no longer the latest
+  // when its async L2 lookup resolves has been superseded.
+  private latestId = 0;
+  private disposed = false;
   private pending = new Map<number, Pending>();
   private inflightId: number | null = null;
   private inflightKey: string | null = null;
   private readonly cache = new Map<string, RenderResult>();
   private readonly cacheOptions: CacheOptions;
   private cacheBytes = 0;
-  private fontScope = 0;
-  private userFontsSig = "";
+  private readonly version: string;
+  private readonly store?: StlCacheStore;
   private readonly onReady?: () => void;
   private readyFired = false;
   private workerFailed = false;
@@ -102,10 +119,23 @@ export class OpenSCADRunner {
       cacheSize?: number;
       cacheBytes?: number;
       maxCacheEntryBytes?: number;
+      /** Persist renders to IndexedDB (L2). Default on where IndexedDB exists. */
+      persistentCache?: boolean;
+      /** Build content hash (schema.renderHash); namespaces both cache tiers. */
+      cacheVersion?: string;
+      /** Inject a persistent store (tests); overrides the IndexedDB default. */
+      store?: StlCacheStore;
     } = {}
   ) {
     this.onReady = opts.onReady;
     this.cacheOptions = defaultCacheOptions(opts);
+    // Combine the manual cache-format version with the build's renderHash.
+    this.version = `${CACHE_VERSION}:${opts.cacheVersion ?? ""}`;
+    this.store =
+      opts.store ??
+      (opts.persistentCache === false || typeof indexedDB === "undefined"
+        ? undefined
+        : createStlCache({ version: this.version }));
     this.spawn();
   }
 
@@ -120,16 +150,6 @@ export class OpenSCADRunner {
   private clearCache() {
     this.cache.clear();
     this.cacheBytes = 0;
-  }
-
-  private syncFontScope(req: Omit<RenderRequest, "id">): number {
-    const sig = fontSignature(req.userFonts);
-    if (sig !== this.userFontsSig) {
-      this.userFontsSig = sig;
-      this.fontScope++;
-      this.clearCache();
-    }
-    return this.fontScope;
   }
 
   private remember(key: string, result: RenderResult) {
@@ -187,7 +207,16 @@ export class OpenSCADRunner {
       if (p) {
         this.pending.delete(result.id);
         if (this.inflightId === result.id) {
-          if (this.inflightKey) this.remember(this.inflightKey, result);
+          if (this.inflightKey) {
+            this.remember(this.inflightKey, result); // L1
+            if (this.store && result.ok)
+              void this.store.put(this.inflightKey, {
+                stl: result.stl,
+                log: result.log,
+                exitCode: result.exitCode,
+                ms: result.ms,
+              }); // L2, write-through (fire-and-forget)
+          }
           this.inflightId = null;
           this.inflightKey = null;
         }
@@ -217,18 +246,46 @@ export class OpenSCADRunner {
     this.worker.terminate();
   }
 
-  render(req: Omit<RenderRequest, "id">): Promise<RenderResult> {
+  async render(req: Omit<RenderRequest, "id">): Promise<RenderResult> {
     const id = this.nextId++;
-    const key = cacheKey(req, this.syncFontScope(req));
+    this.latestId = id;
+    const key = cacheKey(req, this.version);
     // Latest-wins means every new render request supersedes the current one,
-    // even if the new result can be served from the cache.
+    // even if the new result can be served from a cache.
     if (this.inflightId !== null) this.cancelInflight();
 
+    // L1: in-memory LRU (synchronous — no await before the worker post when
+    // there's no L2 store, so the latest-wins/timing contract is unchanged).
     const cached = this.cache.get(key);
     if (cached) {
       this.cache.delete(key);
       this.cache.set(key, cached);
-      return Promise.resolve(cloneResult(cached, id));
+      return { ...cloneResult(cached, id), cached: true };
+    }
+
+    // L2: persistent store. The lookup is async, so a newer render() can land
+    // while we await it — the latestId guard rejects this one if so.
+    if (this.store) {
+      let stored: StoredStl | undefined;
+      try {
+        stored = await this.store.get(key);
+      } catch {
+        stored = undefined;
+      }
+      if (this.disposed || this.latestId !== id) throw new SupersededError();
+      if (stored) {
+        const result: RenderResult = {
+          id,
+          ok: true,
+          exitCode: stored.exitCode,
+          stl: stored.stl, // owned by this call (store.get returns a fresh copy)
+          log: stored.log,
+          ms: stored.ms,
+          cached: true,
+        };
+        this.remember(key, result); // promote into L1
+        return result;
+      }
     }
 
     if (this.workerFailed) this.spawn();
@@ -242,6 +299,7 @@ export class OpenSCADRunner {
   }
 
   dispose() {
+    this.disposed = true;
     this.worker.terminate();
     for (const p of this.pending.values()) p.reject(new SupersededError());
     this.pending.clear();

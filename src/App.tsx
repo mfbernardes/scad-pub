@@ -105,7 +105,12 @@ export default function App() {
   // Key of the last successful render, to skip redundant re-renders.
   const lastKeyRef = useRef("");
   if (!runnerRef.current)
-    runnerRef.current = new OpenSCADRunner({ onReady: () => setReady(true) });
+    runnerRef.current = new OpenSCADRunner({
+      onReady: () => setReady(true),
+      // Namespace the render cache by the build's content hash so a deploy that
+      // changes any .scad/font/feature/wasm input can't serve stale geometry.
+      cacheVersion: schema.renderHash,
+    });
 
   // Reset to defaults when switching designs — but not on the first render,
   // which must keep the values restored from the URL/last session.
@@ -161,11 +166,18 @@ export default function App() {
           userFonts,
         });
         lastKeyRef.current = r.ok ? key : "";
+        // A successful result — including one served from the persistent cache
+        // without touching the worker — means we have something to show, so drop
+        // the "loading renderer" overlay (the worker emits onReady only when it
+        // actually renders, which a cache hit skips).
+        if (r.ok) setReady(true);
         setResult(r);
         setRendering(false);
         // A heavy render auto-pauses live updates so further edits don't queue
         // long renders on every keystroke; the user renders on demand instead.
-        if (r.ok && r.ms > HEAVY_RENDER_MS && autoRenderRef.current) {
+        // A cache hit is instant regardless of the model's original render time,
+        // so it never triggers the pause (r.ms is the cached original cost).
+        if (r.ok && !r.cached && r.ms > HEAVY_RENDER_MS && autoRenderRef.current) {
           setAutoRender(false);
           setAnnouncement(
             `Large model (${r.ms} ms) — auto-render paused. Click “Render now” after edits.`

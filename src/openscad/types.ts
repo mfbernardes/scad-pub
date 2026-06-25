@@ -18,6 +18,8 @@ export interface RenderResult {
   stl: Uint8Array; // empty on failure
   log: string[];
   ms: number;
+  /** True when served from a cache (in-memory or persistent) rather than freshly rendered. */
+  cached?: boolean;
 }
 
 // ---- Parameter schema (produced by scripts/gen-schema.mjs) ----
@@ -69,6 +71,13 @@ export interface HelpSection {
 
 export interface Schema {
   generatedFrom: string;
+  /**
+   * Automatic content hash (set by gen-schema) of every render-affecting input
+   * — the mounted .scad sources, bundled fonts, render features, and the
+   * OpenSCAD wasm build. Folded into the render cache key so any of those
+   * changing in a deploy invalidates persisted geometry without a manual bump.
+   */
+  renderHash?: string;
   /** Page/header title (used as the document title and the header text). */
   title: string;
   /** Optional stable id; namespaces this configurator's browser storage so two

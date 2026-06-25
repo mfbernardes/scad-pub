@@ -23,8 +23,53 @@ import {
   statSync,
   existsSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve, relative, sep } from "node:path";
+
+// A content hash over everything that determines a render's STL output — the
+// mounted .scad sources, the bundled fonts (glyph outlines drive text geometry),
+// the always-on render features, and the OpenSCAD wasm build. Folded into the
+// render cache key (schema.renderHash) so any of these changing in a deploy
+// invalidates persisted geometry automatically, instead of relying on a manual
+// version bump. Fonts/wasm are hashed only when outPublicDir is given (the real
+// build); the fixture tests omit it and hash just the sources + features.
+function computeRenderHash({ SOURCE, scadFiles, features, fonts, outPublicDir }) {
+  const h = createHash("sha256");
+  h.update("renderhash-v1\n"); // version of this recipe itself
+  for (const rel of [...scadFiles].sort()) {
+    h.update(`scad\0${rel}\0`);
+    try {
+      h.update(readFileSync(join(SOURCE, rel)));
+    } catch {
+      /* unreadable source — its absence is itself part of the hash */
+    }
+  }
+  h.update(`features\0${[...features].sort().join(",")}\0`);
+  if (outPublicDir) {
+    for (const name of [...fonts].sort()) {
+      h.update(`font\0${name}\0`);
+      try {
+        h.update(readFileSync(join(outPublicDir, "fonts", name)));
+      } catch {
+        /* font not bundled here */
+      }
+    }
+    // fontconfig matching rules — they steer which glyphs the text() geometry uses.
+    try {
+      h.update("fonts.conf\0");
+      h.update(readFileSync(join(outPublicDir, "fonts", "fonts.conf")));
+    } catch {
+      /* no bundled fonts.conf */
+    }
+    try {
+      h.update(readFileSync(join(outPublicDir, "wasm", "openscad.wasm")));
+    } catch {
+      /* wasm fetched separately; absent during some builds */
+    }
+  }
+  return h.digest("hex").slice(0, 16);
+}
 
 const SECTION_RE = /\/\*\s*\[([^\]]+)\]\s*\*\//;
 // name = default; // [hint]
@@ -396,8 +441,17 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir })
     );
   }
 
+  const renderHash = computeRenderHash({
+    SOURCE,
+    scadFiles: [...designs.map((d) => d.file), ...assets],
+    features: FEATURES,
+    fonts: FONTS,
+    outPublicDir,
+  });
+
   const schema = {
     generatedFrom: relPosix(SOURCE) || ".",
+    renderHash,
     title: TITLE,
     id: ID,
     description: DESCRIPTION,

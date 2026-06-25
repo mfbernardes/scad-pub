@@ -304,6 +304,126 @@ test("the ready signal fires onReady exactly once", () => {
   runner.dispose();
 });
 
+// ---- Persistent L2 cache (injected store) ----
+// The runner only takes the async L2 path when a store is present; with no
+// store (as in the tests above, and in Node where IndexedDB is undefined) it
+// posts to the worker synchronously, exactly as before.
+
+const flush = () => new Promise((r) => setTimeout(r));
+
+// An in-memory stand-in for the IndexedDB-backed store, cloning on the way in
+// and out like the real one does.
+function memStore() {
+  const map = new Map();
+  return {
+    map,
+    async get(key) {
+      const v = map.get(key);
+      return v && { stl: new Uint8Array(v.stl), log: [...v.log], exitCode: v.exitCode, ms: v.ms };
+    },
+    async put(key, value) {
+      map.set(key, {
+        stl: new Uint8Array(value.stl),
+        log: [...value.log],
+        exitCode: value.exitCode,
+        ms: value.ms,
+      });
+    },
+  };
+}
+
+test("successful renders are written through to the persistent store", async () => {
+  const store = memStore();
+  const runner = new OpenSCADRunner({ store });
+  const w = newest();
+  const p = runner.render({ design: "x", defines: { a: "1" } });
+  await flush(); // the L2 miss resolves, then the worker is posted
+  w.emit(ok(w.last.id, 6));
+  await p;
+  assert.equal(store.map.size, 1);
+  runner.dispose();
+});
+
+test("an L1 miss is served from the persistent store without the worker", async () => {
+  const store = memStore();
+  // First runner renders and writes through to the shared store.
+  const a = new OpenSCADRunner({ store });
+  const wa = newest();
+  const first = a.render({ design: "x", defines: { a: "1" } });
+  await flush();
+  wa.emit(ok(wa.last.id, 6));
+  await first;
+  a.dispose();
+
+  // A fresh runner (empty L1) serves the same request from L2 — no worker post.
+  const b = new OpenSCADRunner({ store });
+  const wb = newest();
+  const cached = await b.render({ design: "x", defines: { a: "1" } });
+  assert.equal(wb.posted.length, 0);
+  assert.equal(cached.ok, true);
+  assert.equal(cached.cached, true);
+  b.dispose();
+});
+
+test("an L2 hit that resolves after a superseding render is rejected", async () => {
+  // A store whose get() is gated, so a second render can supersede the first
+  // while its L2 lookup is still pending.
+  let release;
+  const gate = new Promise((r) => (release = r));
+  const store = {
+    async get() {
+      await gate;
+      return undefined;
+    },
+    async put() {},
+  };
+  const runner = new OpenSCADRunner({ store });
+  const a = runner.render({ design: "x", defines: { a: "1" } });
+  const aRejects = assert.rejects(a, (e) => e.name === "SupersededError");
+  const b = runner.render({ design: "y", defines: { a: "2" } }); // supersedes a
+  release();
+  await aRejects;
+
+  await flush(); // b's L2 miss resolves and posts to the worker
+  const wb = newest();
+  wb.emit(ok(wb.last.id));
+  assert.equal((await b).ok, true);
+  runner.dispose();
+});
+
+test("a different cacheVersion does not reuse another build's stored entry", async () => {
+  const store = memStore();
+  const a = new OpenSCADRunner({ store, cacheVersion: "build-1" });
+  const wa = newest();
+  const first = a.render({ design: "x", defines: { a: "1" } });
+  await flush();
+  wa.emit(ok(wa.last.id, 6));
+  await first;
+  a.dispose();
+
+  // A new build (different renderHash) must re-render, not serve stale geometry.
+  const b = new OpenSCADRunner({ store, cacheVersion: "build-2" });
+  const wb = newest();
+  const p = b.render({ design: "x", defines: { a: "1" } });
+  await flush();
+  assert.equal(wb.posted.length, 1); // L2 miss under the new version -> worker
+  wb.emit(ok(wb.last.id, 6));
+  assert.equal((await p).ok, true);
+  b.dispose();
+});
+
+test("failed renders are not written to the persistent store", async () => {
+  const store = memStore();
+  const runner = new OpenSCADRunner({ store });
+  const w = newest();
+  const p = runner.render({ design: "x", defines: { a: "1" } });
+  await flush();
+  w.emit({ id: w.last.id, ok: false, exitCode: 1, stl: new Uint8Array(0), log: ["err"], ms: 1 });
+  await p;
+  assert.equal(store.map.size, 0);
+  runner.dispose();
+});
+
 test("SupersededError is exported and identifiable", () => {
   assert.equal(new SupersededError().name, "SupersededError");
 });
