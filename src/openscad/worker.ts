@@ -12,7 +12,7 @@ import { assetUrl as asset } from "../lib/assetUrl";
 
 // Persistent cache for the big, version-pinned binaries (the ~10 MB WASM and
 // the fonts), so reloads are instant and the app works offline. The cache name
-// carries the pinned OpenSCAD version (see scripts/fetch-wasm.sh) — bump it when
+// carries the pinned OpenSCAD version (see scripts/fetch-wasm.mjs) — bump it when
 // the WASM is bumped so stale binaries are evicted. The small, build-volatile
 // .scad sources are NOT cached here (they change every build).
 // Neutral, NOT namespaced per config: the WASM binary is identical across

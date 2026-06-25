@@ -26,7 +26,7 @@ jobs:
         run: npm test
 
       - name: Fetch pinned OpenSCAD WASM
-        run: ./scripts/fetch-wasm.sh
+        run: npm run wasm
 
       - name: Build
         run: npm run build
