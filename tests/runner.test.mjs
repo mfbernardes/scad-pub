@@ -191,13 +191,13 @@ test("render cache skips entries larger than maxCacheEntryBytes", async () => {
   runner.dispose();
 });
 
-test("render cache reuses entries within the same user font set", async () => {
+test("render cache reuses entries within the same user file set", async () => {
   const runner = new OpenSCADRunner();
   const w = newest();
   const req = {
     design: "x",
     defines: { a: "1" },
-    userFonts: { "user.ttf": new Uint8Array([1, 2, 3]) },
+    userFiles: { "user.ttf": new Uint8Array([1, 2, 3]) },
   };
 
   const first = runner.render(req);
@@ -211,14 +211,14 @@ test("render cache reuses entries within the same user font set", async () => {
   runner.dispose();
 });
 
-test("render cache clears when the user font set changes", async () => {
+test("render cache clears when the user file set changes", async () => {
   const runner = new OpenSCADRunner();
   const w = newest();
 
   const first = runner.render({
     design: "x",
     defines: { a: "1" },
-    userFonts: { "user.ttf": new Uint8Array([1, 2, 3]) },
+    userFiles: { "user.ttf": new Uint8Array([1, 2, 3]) },
   });
   w.emit(ok(w.last.id, 6));
   await first;
@@ -227,7 +227,7 @@ test("render cache clears when the user font set changes", async () => {
   const second = runner.render({
     design: "x",
     defines: { a: "1" },
-    userFonts: { "user.ttf": new Uint8Array([4, 5, 6]) },
+    userFiles: { "user.ttf": new Uint8Array([4, 5, 6]) },
   });
   assert.equal(w.posted.length, count + 1);
   w.emit(ok(w.last.id, 6));
@@ -235,21 +235,21 @@ test("render cache clears when the user font set changes", async () => {
   runner.dispose();
 });
 
-test("render cache clears when user font bytes mutate in place", async () => {
+test("render cache clears when user file bytes mutate in place", async () => {
   const runner = new OpenSCADRunner();
   const w = newest();
-  const fontBytes = new Uint8Array([1, 2, 3]);
+  const fileBytes = new Uint8Array([1, 2, 3]);
   const req = {
     design: "x",
     defines: { a: "1" },
-    userFonts: { "user.ttf": fontBytes },
+    userFiles: { "user.ttf": fileBytes },
   };
 
   const first = runner.render(req);
   w.emit(ok(w.last.id, 6));
   await first;
 
-  fontBytes[0] = 9;
+  fileBytes[0] = 9;
   const count = w.posted.length;
   const second = runner.render(req);
   assert.equal(w.posted.length, count + 1);

@@ -1,5 +1,5 @@
 // safeUrl.ts — gate links built from config-derived content (help text,
-// fontPrompt.url) before they reach an href. Returns the URL when its protocol
+// filePrompts[].url) before they reach an href. Returns the URL when its protocol
 // can't execute script — http:, https:, mailto:, or a relative/protocol-
 // relative reference — and undefined for anything else (javascript:, data:,
 // etc.). The config is normally trusted, so this is defence-in-depth for the

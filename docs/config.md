@@ -21,7 +21,7 @@
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
-  "fontPrompt": { "url": "…", "label": "…" },  // optional external-font prompt
+  "filePrompts": [ { "kind": "font", "url": "…", "label": "…" } ],  // optional user-supplied files
   "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
   "licenses": [ { "name": "…", "license": "…", … } ],  // optional extra open-source notices (appended)
   "designs": [
@@ -37,7 +37,7 @@
 - **`description`** / **`shortName`** / **`icon`** / **`themeColor`** / **`backgroundColor`** — `<meta>` and PWA manifest fields. `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg`.
 - **`colors`** — optional per-theme CSS colour overrides; see [Theme & colour scheme](#theme--colour-scheme).
 - **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
-- **`fontPrompt`** — see [External font prompt](#external-font-prompt-fontprompt).
+- **`filePrompts`** — see [External file prompts](#external-file-prompts-fileprompts).
 - **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
@@ -160,22 +160,37 @@ your rules win on source order — no specificity hacks needed.
 
 Load order, last wins: app bundle CSS → `colors` `<style>` → `extraCss` `<link>`.
 
-## External font prompt (`fontPrompt`)
+## External file prompts (`filePrompts`)
+
+Designs sometimes need a file the app can't bundle — a license-restricted font, an SVG to `import()`, a `surface()` height map, etc. `filePrompts` is a list of upload prompts that let the user supply such files at runtime, entirely client-side (nothing is uploaded to a server).
 
 ```jsonc
 {
-  "fontPrompt": {
-    "url": "https://example.org/MyFont.ttf",  // required: download link
-    "label": "My profile font",               // optional: friendly name
-    "family": "My Font Family",               // optional: TTF internal family name
-    "heading": "Profile font",                // optional: preset-panel group heading (default "Font")
-    "linkText": "Get My Font",                // optional: download-link text (default "Get {label}")
-    "note": "…"                               // optional: download-link tooltip
-  }
+  "filePrompts": [
+    {
+      "kind": "font",                           // "font" | "file" (default "file")
+      "url": "https://example.org/MyFont.ttf",  // optional: download link
+      "label": "My profile font",               // optional: friendly name
+      "family": "My Font Family",               // optional (fonts): internal family name, shown as a hint
+      "accept": ".ttf,.otf",                    // optional: file-picker filter (defaults to ".ttf,.otf" for fonts)
+      "heading": "Profile font",                // optional: preset-panel group heading (default "Font"/"File")
+      "linkText": "Get My Font",                // optional: download-link text (default "Get {label}")
+      "note": "…",                              // optional: download-link tooltip
+      "startup": true                           // optional: show the one-time startup modal (default true)
+    },
+    { "kind": "file", "label": "Company logo (SVG)", "accept": ".svg" }
+  ]
 }
 ```
 
-When set and the user has no font stored, a startup modal explains the font requirement, links to the download, and allows immediate TTF upload. The same link and an **Import font…** button appear in the preset panel. Uploaded fonts persist in IndexedDB. A "Don't remind me again" button suppresses the startup modal permanently. Omit `fontPrompt` and neither the modal nor the font group is shown.
+**How files are made available to OpenSCAD:**
+
+- **`kind: "font"`** — the upload is mounted where the renderer's fontconfig can find it, so `text(font = "…")` can use it. Without it, an open-license fallback font stands in (the log panel says so).
+- **`kind: "file"`** (the default) — the upload is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. Whether a file is treated as a font is decided by its extension (`.ttf`/`.otf`/`.ttc`), so a font uploaded through any prompt still lands in the font dir.
+
+Each prompt renders an **Import…** button (and a download link when `url` is set) in the preset panel. The first prompt with `startup` (the default) also shows a one-time modal on first load when the user has no files stored; a "Don't remind me again" button suppresses it permanently. Uploaded files persist in IndexedDB and are re-applied on the next visit. Omit `filePrompts` and no upload UI is shown.
+
+> The legacy single-object `fontPrompt` (a font prompt) is still accepted and mapped to one `{ "kind": "font", … }` entry.
 
 ## Help content (`help`)
 

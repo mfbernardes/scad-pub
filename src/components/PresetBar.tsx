@@ -1,10 +1,10 @@
 // PresetBar.tsx — presets dropdown combining read-only bundled presets (shipped
 // with the app, per design) and the user's own browser-local presets, plus
-// desktop-compatible parameterSets import/export and in-browser upload of an
-// external font. All copy here is config-driven (see `fontPrompt`), so the bar
-// is project-agnostic. All user storage is client-side.
+// desktop-compatible parameterSets import/export and in-browser upload of
+// external files (fonts, SVGs, …). All copy here is config-driven (see
+// `filePrompts`), so the bar is project-agnostic. All user storage is client-side.
 import { useEffect, useState } from "react";
-import type { Design, Schema } from "../openscad/types";
+import type { Design, FilePrompt } from "../openscad/types";
 import {
   deletePreset,
   listPresets,
@@ -26,11 +26,12 @@ interface Props {
   /** Read-only presets bundled with the app for this design. */
   bundled: ParsedSet[];
   onApply: (values: Values) => void;
-  onAddFont: (name: string, bytes: Uint8Array) => void;
-  /** The configured external-font prompt, or null. When set, the bar shows a
-   *  font-import button + download link (all copy from the config). */
-  fontPrompt: Schema["fontPrompt"];
-  loadedFonts: string[];
+  onAddFile: (name: string, bytes: Uint8Array) => void;
+  /** Configured external-file prompts. Each shows an import button (+ optional
+   *  download link) so users can supply fonts/SVGs/etc the designs reference. */
+  filePrompts: FilePrompt[];
+  /** Filenames of every user-supplied file currently loaded. */
+  loadedFiles: string[];
   /** The namespaced selected-preset id, owned by the app so it can be shared in
    *  the URL ("bundled:Name" / "user:Name" / ""). */
   selected: string;
@@ -47,9 +48,9 @@ export function PresetBar({
   values,
   bundled,
   onApply,
-  onAddFont,
-  fontPrompt,
-  loadedFonts,
+  onAddFile,
+  filePrompts,
+  loadedFiles,
   selected,
   onSelectedChange,
 }: Props) {
@@ -122,10 +123,17 @@ export function PresetBar({
     }
   };
 
-  const onFontFile = async (file: File) => {
+  const onUploadFile = async (file: File) => {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    onAddFont(file.name, bytes);
+    onAddFile(file.name, bytes);
   };
+
+  // Per-kind defaults for the picker filter, group heading and button verb.
+  const acceptFor = (p: FilePrompt) =>
+    p.accept ?? (p.kind === "font" ? ".ttf,.otf,font/ttf" : undefined);
+  const headingFor = (p: FilePrompt) =>
+    p.heading ?? (p.kind === "font" ? "Font" : "File");
+  const nounFor = (p: FilePrompt) => (p.kind === "font" ? "font" : "file");
 
   return (
     <div className="preset-bar">
@@ -199,36 +207,44 @@ export function PresetBar({
           <DownloadIcon size={16} /> Export
         </button>
       </div>
-      {fontPrompt && (
-        <>
-          <div className="grp-label">{fontPrompt.heading ?? "Font"}</div>
-          <div className="row btn-row">
-            <FileInput accept=".ttf,.otf,font/ttf" onFile={onFontFile}>
-              {(open) => (
-                <button
-                  type="button"
-                  className="btn-labeled"
-                  title={`Add ${fontPrompt.label ?? "the font"} (TTF/OTF) for the designs that need it`}
-                  onClick={open}
+      {filePrompts.map((fp, i) => {
+        const noun = nounFor(fp);
+        const label = fp.label ?? `the ${noun}`;
+        return (
+          <div key={i}>
+            <div className="grp-label">{headingFor(fp)}</div>
+            <div className="row btn-row">
+              <FileInput accept={acceptFor(fp)} onFile={onUploadFile}>
+                {(open) => (
+                  <button
+                    type="button"
+                    className="btn-labeled"
+                    title={`Add ${label} for the designs that need it`}
+                    onClick={open}
+                  >
+                    <UploadIcon size={16} /> Import {noun}…
+                  </button>
+                )}
+              </FileInput>
+              {fp.url && (
+                <a
+                  className="file-link"
+                  href={fp.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={fp.note ?? `Download ${label}, then add it with “Import ${noun}…”.`}
                 >
-                  <UploadIcon size={16} /> Import font…
-                </button>
+                  {fp.linkText ?? `Get ${label}`} ↗
+                </a>
               )}
-            </FileInput>
-            <a
-              className="font-link"
-              href={fontPrompt.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={fontPrompt.note ?? `Download ${fontPrompt.label ?? "the font"}, then add it with “Import font…”.`}
-            >
-              {fontPrompt.linkText ?? `Get ${fontPrompt.label ?? "the font"}`} ↗
-            </a>
-            {loadedFonts.length > 0 && (
-              <span className="hint">added: {loadedFonts.join(", ")}</span>
-            )}
+            </div>
           </div>
-        </>
+        );
+      })}
+      {filePrompts.length > 0 && loadedFiles.length > 0 && (
+        <div className="row">
+          <span className="hint">added: {loadedFiles.join(", ")}</span>
+        </div>
       )}
     </div>
   );

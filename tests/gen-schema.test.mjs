@@ -19,6 +19,7 @@ import {
   parseEnumHint,
   parseColors,
   parseLicenses,
+  parseFilePrompts,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -140,22 +141,26 @@ test("a per-theme logo with one side omitted falls back to the other", () => {
   assert.deepEqual(schema.logo, { light: "scad/logo.svg", dark: "scad/logo.svg" });
 });
 
-test("title defaults when omitted; no logo or fontPrompt by default", () => {
+test("title defaults when omitted; no logo or filePrompts by default", () => {
   const { schema } = run("widget-autodeps.config.json");
   assert.equal(typeof schema.title, "string");
   assert.equal(schema.logo, null);
-  assert.equal(schema.fontPrompt, null);
+  assert.deepEqual(schema.filePrompts, []);
 });
 
 test("config-driven features, fonts; presets auto-detected by sibling name", () => {
   const { schema, out } = run("widget.config.json");
   assert.deepEqual(schema.features, ["textmetrics"]);
   assert.deepEqual(schema.fonts, ["Foo.ttf"]);
-  assert.deepEqual(schema.fontPrompt, {
-    url: "https://example/Foo.ttf",
-    label: "Foo font",
-    family: "Foo",
-  });
+  // The fixture uses the legacy single `fontPrompt`, mapped to one font entry.
+  assert.deepEqual(schema.filePrompts, [
+    {
+      kind: "font",
+      url: "https://example/Foo.ttf",
+      label: "Foo font",
+      family: "Foo",
+    },
+  ]);
   // src/widget.json sits next to src/widget.scad, so it's bundled automatically.
   assert.deepEqual(schema.designs[0].presets, ["widget.json"]);
   assert.equal(schema.designs[0].heavy, true); // per-design heavy flag passes through
@@ -450,6 +455,54 @@ test("parseLicenses validates shape and required fields", () => {
         },
       ]),
     /'licenses\[0\]\.note' must be a string/
+  );
+});
+
+test("parseFilePrompts: array form, legacy fontPrompt, defaults and errors", () => {
+  // Absent -> [].
+  assert.deepEqual(parseFilePrompts(undefined, undefined), []);
+  // Legacy single fontPrompt -> one kind:"font" entry.
+  assert.deepEqual(
+    parseFilePrompts(undefined, { url: "https://x/f.ttf", label: "DIN" }),
+    [{ kind: "font", url: "https://x/f.ttf", label: "DIN" }]
+  );
+  // Array form: kind defaults to "file"; known string fields pass through.
+  assert.deepEqual(
+    parseFilePrompts(
+      [
+        { kind: "font", url: "https://x/f.ttf", family: "DIN 32986" },
+        { label: "Logo", accept: ".svg", url: "https://x/logo.svg" },
+      ],
+      undefined
+    ),
+    [
+      { kind: "font", url: "https://x/f.ttf", family: "DIN 32986" },
+      { kind: "file", label: "Logo", accept: ".svg", url: "https://x/logo.svg" },
+    ]
+  );
+  // The new array form wins over a legacy fontPrompt if both are present.
+  assert.deepEqual(
+    parseFilePrompts([{ kind: "file", label: "A" }], { url: "https://x/f.ttf" }),
+    [{ kind: "file", label: "A" }]
+  );
+  // startup boolean is preserved.
+  assert.deepEqual(parseFilePrompts([{ startup: false }], undefined), [
+    { kind: "file", startup: false },
+  ]);
+  // Wrong shapes -> clear errors.
+  assert.throws(() => parseFilePrompts({}, undefined), /'filePrompts' must be an array/);
+  assert.throws(() => parseFilePrompts([null], undefined), /'filePrompts\[0\]' must be an object/);
+  assert.throws(
+    () => parseFilePrompts([{ kind: "image" }], undefined),
+    /'filePrompts\[0\]\.kind' must be one of/
+  );
+  assert.throws(
+    () => parseFilePrompts([{ label: 5 }], undefined),
+    /'filePrompts\[0\]\.label' must be a string/
+  );
+  assert.throws(
+    () => parseFilePrompts([{ startup: "yes" }], undefined),
+    /'filePrompts\[0\]\.startup' must be a boolean/
   );
 });
 

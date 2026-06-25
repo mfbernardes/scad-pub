@@ -58,29 +58,29 @@ async function main() {
     console.log(`=== designs (${ids.length}): ${ids.join(", ")} ===`);
     await waitRendered(page, ids[0]);
 
-    // External-font upload prompt: shown on startup only when the config sets
-    // `fontPrompt` and no font is stored. Where enabled it must offer an upload
-    // and stay dismissed across reloads; its backdrop would block later clicks,
-    // so handle it first.
-    console.log("=== font upload prompt ===");
-    const fontDialog = page.locator('[role="dialog"][aria-label="Font upload"]');
-    await fontDialog.waitFor({ state: "visible", timeout: 2000 }).catch(() => {});
-    if (await fontDialog.count()) {
+    // External-file upload prompt: shown on startup only when the config sets a
+    // `filePrompts` entry (font, SVG, …) and no file is stored. Where enabled it
+    // must offer an upload and stay dismissed across reloads; its backdrop would
+    // block later clicks, so handle it first.
+    console.log("=== file upload prompt ===");
+    const fileDialog = page.locator('[role="dialog"][aria-label="File upload"]');
+    await fileDialog.waitFor({ state: "visible", timeout: 2000 }).catch(() => {});
+    if (await fileDialog.count()) {
       check(
-        (await fontDialog.getByText("Upload font (TTF)").count()) > 0,
-        "font prompt offers an upload"
+        (await fileDialog.locator(".modal-actions .primary").count()) > 0,
+        "file prompt offers an upload"
       );
-      await fontDialog.locator(".link-btn").click(); // "Don't remind me again"
-      await fontDialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+      await fileDialog.locator(".link-btn").click(); // "Don't remind me again"
+      await fileDialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
       await page.reload({ waitUntil: "load" });
       await waitRendered(page, ids[0]);
       await page.waitForTimeout(300); // give the (now-suppressed) prompt a chance
       check(
-        (await page.locator('[role="dialog"][aria-label="Font upload"]').count()) === 0,
-        "font prompt stays dismissed after reload"
+        (await page.locator('[role="dialog"][aria-label="File upload"]').count()) === 0,
+        "file prompt stays dismissed after reload"
       );
     } else {
-      console.log("  (no fontPrompt in this config — skipped)");
+      console.log("  (no filePrompts in this config — skipped)");
     }
 
     console.log("=== theme toggle ===");

@@ -186,18 +186,32 @@ test("validates the optional appended licenses", () => {
   );
 });
 
-test("validates the optional fontPrompt shape", () => {
-  // null/absent is fine (the default).
-  assert.doesNotThrow(() => validateSchema({ ...validBase(), fontPrompt: null }));
+test("validates the optional filePrompts shape", () => {
+  // null/absent/empty is fine (the default).
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), filePrompts: null }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), filePrompts: [] }));
   assert.doesNotThrow(() =>
     validateSchema({
       ...validBase(),
-      fontPrompt: { url: "https://x/f.ttf", label: "DIN", family: "DIN 32986" },
+      filePrompts: [
+        { kind: "font", url: "https://x/f.ttf", label: "DIN", family: "DIN 32986" },
+        { kind: "file", label: "Logo", accept: ".svg" },
+      ],
     })
   );
-  // url is required.
+  // not an array.
   assert.throws(
-    () => validateSchema({ ...validBase(), fontPrompt: { label: "DIN" } }),
-    /'fontPrompt' must be/
+    () => validateSchema({ ...validBase(), filePrompts: { kind: "font" } }),
+    /'filePrompts' must be an array/
+  );
+  // bad kind.
+  assert.throws(
+    () => validateSchema({ ...validBase(), filePrompts: [{ kind: "image" }] }),
+    /invalid 'kind'/
+  );
+  // non-string field.
+  assert.throws(
+    () => validateSchema({ ...validBase(), filePrompts: [{ label: 5 }] }),
+    /'label' must be a string/
   );
 });

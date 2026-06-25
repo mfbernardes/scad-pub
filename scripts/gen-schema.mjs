@@ -206,6 +206,45 @@ export function parseLicenses(raw) {
   });
 }
 
+// Validate and normalise the optional `filePrompts` config block: prompts that
+// nudge the user to supply external files the designs reference but the app
+// can't bundle (a license-restricted font, an SVG to import(), …). Accepts the
+// new array form, or the legacy single `fontPrompt` object (mapped to one
+// kind:"font" entry) for backward compatibility. Fails the build with a clear
+// message on a bad shape (consistent with gen-schema's other fail-fast checks).
+// Returns [] when nothing is configured.
+export function parseFilePrompts(filePrompts, legacyFontPrompt) {
+  let raw = filePrompts;
+  if (raw == null && legacyFontPrompt != null) raw = [{ ...legacyFontPrompt, kind: "font" }];
+  if (raw == null) return [];
+  if (!Array.isArray(raw))
+    throw new Error("gen-schema: 'filePrompts' must be an array of file-prompt entries");
+  const KINDS = ["font", "file"];
+  const STRINGS = ["url", "label", "family", "accept", "heading", "linkText", "note"];
+  return raw.map((entry, i) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry))
+      throw new Error(`gen-schema: 'filePrompts[${i}]' must be an object`);
+    const kind = entry.kind ?? "file";
+    if (!KINDS.includes(kind))
+      throw new Error(
+        `gen-schema: 'filePrompts[${i}].kind' must be one of ${KINDS.join(", ")}`
+      );
+    const out = { kind };
+    for (const key of STRINGS) {
+      if (entry[key] === undefined) continue;
+      if (typeof entry[key] !== "string")
+        throw new Error(`gen-schema: 'filePrompts[${i}].${key}' must be a string`);
+      out[key] = entry[key];
+    }
+    if (entry.startup !== undefined) {
+      if (typeof entry.startup !== "boolean")
+        throw new Error(`gen-schema: 'filePrompts[${i}].startup' must be a boolean`);
+      out.startup = entry.startup;
+    }
+    return out;
+  });
+}
+
 // The concise label is the first sentence of the doc block; the rest is help.
 // Split on sentence-ending .!? + whitespace + a capital/opening paren, so we
 // don't break on decimals (1.5 mm) or lowercase abbreviations (e.g., i.e.).
@@ -392,9 +431,10 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // PWA / browser chrome colours (default to the dark palette's chrome).
   const THEME_COLOR = config.themeColor ?? "#1f2229";
   const BG_COLOR = config.backgroundColor ?? "#15171c";
-  // Optional nudge to upload an external (non-bundled) font; passed through
-  // verbatim. Absent -> null -> no startup prompt.
-  const FONT_PROMPT = config.fontPrompt ?? null;
+  // Optional prompts to supply external (non-bundled) files — fonts, SVGs, etc.
+  // Validated; the legacy single `fontPrompt` object is accepted too. Absent ->
+  // [] -> no upload prompts.
+  const FILE_PROMPTS = parseFilePrompts(config.filePrompts, config.fontPrompt);
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
@@ -633,7 +673,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     logo,
     features: FEATURES,
     fonts: FONTS,
-    fontPrompt: FONT_PROMPT,
+    filePrompts: FILE_PROMPTS,
     help: HELP,
     licenses: LICENSES_EXTRA,
     assets: [...assets].sort(),
