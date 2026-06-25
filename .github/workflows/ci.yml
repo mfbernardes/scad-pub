@@ -7,7 +7,11 @@ name: CI
 # <user>.github.io/scad-pub/).
 
 on:
+  # Only build/deploy on pushes to main. Feature branches are covered by the
+  # pull_request event, so scoping push here avoids the duplicate "push" run
+  # (and its skipped deploy job) that otherwise fires alongside every PR.
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
