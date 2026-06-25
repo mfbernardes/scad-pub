@@ -3,6 +3,7 @@
 // the help text needs: blank-line-separated paragraphs, `- ` bullet lists, and
 // inline **bold**, `code`, and [text](url) links. Anything else renders as text.
 import type { ReactNode } from "react";
+import { safeUrl } from "../lib/safeUrl";
 
 // Inline: **bold**, `code`, [text](url). Split on the first matching token,
 // recurse on the rest. Order matters only for disjoint tokens, so a single pass
@@ -17,12 +18,16 @@ function inline(text: string, key: string): ReactNode[] {
     if (part.startsWith("`") && part.endsWith("`"))
       return <code key={k}>{part.slice(1, -1)}</code>;
     const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (link)
+    if (link) {
+      const href = safeUrl(link[2]);
+      // Unsafe protocol (e.g. javascript:) -> render the label as plain text.
+      if (!href) return <span key={k}>{link[1]}</span>;
       return (
-        <a key={k} href={link[2]} target="_blank" rel="noopener noreferrer">
+        <a key={k} href={href} target="_blank" rel="noopener noreferrer">
           {link[1]}
         </a>
       );
+    }
     return part;
   });
 }

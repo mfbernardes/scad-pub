@@ -22,6 +22,7 @@ import {
   copyFileSync,
   statSync,
   existsSync,
+  rmSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -29,14 +30,16 @@ import { dirname, join, resolve, relative, sep } from "node:path";
 
 // A content hash over everything that determines a render's STL output — the
 // mounted .scad sources, the bundled fonts (glyph outlines drive text geometry),
-// the always-on render features, and the OpenSCAD wasm build. Folded into the
-// render cache key (schema.renderHash) so any of these changing in a deploy
-// invalidates persisted geometry automatically, instead of relying on a manual
-// version bump. Fonts/wasm are hashed only when outPublicDir is given (the real
+// the always-on render features, the OpenSCAD wasm build, and the renderer's own
+// source (worker.ts, which fixes the OpenSCAD CLI flags — backend, export
+// format, etc.). Folded into the render cache key (schema.renderHash) so any of
+// these changing in a deploy invalidates persisted geometry automatically,
+// rather than relying on a manual CACHE_VERSION bump for renderer-code changes.
+// Fonts/wasm/renderer are hashed only when outPublicDir is given (the real
 // build); the fixture tests omit it and hash just the sources + features.
-function computeRenderHash({ SOURCE, scadFiles, features, fonts, outPublicDir }) {
+function computeRenderHash({ SOURCE, scadFiles, features, fonts, rendererFiles, outPublicDir }) {
   const h = createHash("sha256");
-  h.update("renderhash-v1\n"); // version of this recipe itself
+  h.update("renderhash-v2\n"); // version of this recipe itself
   for (const rel of [...scadFiles].sort()) {
     h.update(`scad\0${rel}\0`);
     try {
@@ -47,6 +50,17 @@ function computeRenderHash({ SOURCE, scadFiles, features, fonts, outPublicDir })
   }
   h.update(`features\0${[...features].sort().join(",")}\0`);
   if (outPublicDir) {
+    // The render contract lives in app code, not the schema: hashing the worker
+    // source means a change to its OpenSCAD flags or mounting logic invalidates
+    // stale geometry without a manual cache-version bump.
+    for (const abs of [...(rendererFiles ?? [])].sort()) {
+      h.update(`renderer\0${abs.split(/[\\/]/).pop()}\0`);
+      try {
+        h.update(readFileSync(abs));
+      } catch {
+        /* renderer source unavailable in this build context */
+      }
+    }
     for (const name of [...fonts].sort()) {
       h.update(`font\0${name}\0`);
       try {
@@ -73,8 +87,12 @@ function computeRenderHash({ SOURCE, scadFiles, features, fonts, outPublicDir })
 
 const SECTION_RE = /\/\*\s*\[([^\]]+)\]\s*\*\//;
 // name = default; // [hint]
+// The name uses OpenSCAD's identifier grammar — a letter or underscore, then
+// letters/digits/underscores — so camelCase (wallThickness), PascalCase
+// (FontSize) and leading-underscore (_offset) params are all captured, not just
+// lowercase ones. ($-prefixed special variables aren't Customizer params.)
 const PARAM_RE =
-  /^\s*([a-z][a-z0-9_]*)\s*=\s*(.*?);\s*(?:\/\/\s*\[([^\]]*)\])?\s*$/;
+  /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?);\s*(?:\/\/\s*\[([^\]]*)\])?\s*$/;
 // A leading line comment that documents the next parameter.
 const DOC_RE = /^\s*\/\/\s?(.*)$/;
 // A `use <path>` / `include <path>` dependency directive.
@@ -241,7 +259,7 @@ export function parseParams(absPath) {
  * @param {string} opts.outScadDir  Where the copied .scad/presets are written.
  * @returns {object} the schema (also written to outSchemaDir/designs.json).
  */
-export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir }) {
+export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, rendererFiles }) {
   // Fail early and clearly when a configured path doesn't exist — these are the
   // most common ways a config drifts from the designs it points at.
   const mustExist = (abs, what) => {
@@ -277,6 +295,11 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir })
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
 
+  // outScadDir is entirely generated: wipe it before repopulating so files from
+  // a previous config/build (a removed, renamed or briefly-private design or
+  // dependency) can't survive into the published tree. Recreated empty below.
+  rmSync(outScadDir, { recursive: true, force: true });
+
   // Optional header logo, per theme. `logo` may be a string (used for both
   // themes) or { light, dark } (either may be omitted -> the other is used).
   // Each referenced file is copied into the served tree; the schema records the
@@ -284,10 +307,29 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir })
   mkdirSync(outScadDir, { recursive: true });
   let logo = null;
   if (config.logo) {
+    // Map each resolved source to the URL it was copied to, so a single source
+    // used for both themes is copied once and two distinct sources never clobber
+    // each other — even when they share a basename (light/logo.svg vs
+    // dark/logo.svg), which a flat basename would silently overwrite.
+    const copiedByAbs = new Map();
+    const usedNames = new Set();
     const copyLogo = (src) => {
-      const name = src.split(/[\\/]/).pop();
-      copyFileSync(mustExist(resolve(CONFIG_DIR, src), `logo '${src}'`), join(outScadDir, name));
-      return `scad/${name}`;
+      const abs = mustExist(resolve(CONFIG_DIR, src), `logo '${src}'`);
+      const existing = copiedByAbs.get(abs);
+      if (existing) return existing;
+      let name = abs.split(/[\\/]/).pop();
+      if (usedNames.has(name)) {
+        // Same basename, different source: disambiguate with a short hash of the
+        // source path so the second logo doesn't overwrite the first.
+        const tag = createHash("sha256").update(abs).digest("hex").slice(0, 8);
+        const dot = name.lastIndexOf(".");
+        name = dot > 0 ? `${name.slice(0, dot)}-${tag}${name.slice(dot)}` : `${name}-${tag}`;
+      }
+      usedNames.add(name);
+      copyFileSync(abs, join(outScadDir, name));
+      const url = `scad/${name}`;
+      copiedByAbs.set(abs, url);
+      return url;
     };
     const entry = config.logo;
     const lightSrc = typeof entry === "string" ? entry : entry.light ?? entry.dark;
@@ -446,6 +488,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir })
     scadFiles: [...designs.map((d) => d.file), ...assets],
     features: FEATURES,
     fonts: FONTS,
+    rendererFiles,
     outPublicDir,
   });
 
@@ -503,6 +546,9 @@ function main() {
     outSchemaDir: join(WEB, "src", "generated"),
     outScadDir: join(WEB, "public", "scad"),
     outPublicDir: join(WEB, "public"),
+    // The renderer's source fixes the OpenSCAD CLI contract (flags, mounting),
+    // so its bytes belong in renderHash — a worker change invalidates the cache.
+    rendererFiles: [join(WEB, "src", "openscad", "worker.ts")],
   });
   console.log(
     `gen-schema: ${schema.designs.length} designs, ${schema.assets.length} ` +

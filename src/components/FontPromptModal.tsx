@@ -6,6 +6,7 @@
 import type { Schema } from "../openscad/types";
 import { Modal } from "./Modal";
 import { FileInput } from "./FileInput";
+import { safeUrl } from "../lib/safeUrl";
 
 type FontPrompt = NonNullable<Schema["fontPrompt"]>;
 
@@ -23,6 +24,8 @@ export function FontPromptModal({
   onClose,
 }: Props) {
   const label = prompt.label ?? "the recommended font";
+  // The download URL comes from config; only follow it if it's a safe protocol.
+  const downloadUrl = safeUrl(prompt.url);
 
   const onFontFile = async (file: File) => {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -46,9 +49,13 @@ export function FontPromptModal({
       <div className="modal-body font-prompt-body">
         <ol>
           <li>
-            <a href={prompt.url} target="_blank" rel="noopener noreferrer">
-              Download the font ↗
-            </a>{" "}
+            {downloadUrl ? (
+              <a href={downloadUrl} target="_blank" rel="noopener noreferrer">
+                Download the font ↗
+              </a>
+            ) : (
+              "Download the font"
+            )}{" "}
             from the publisher.
           </li>
           <li>Upload the TTF here — it's used immediately, nothing leaves your browser.</li>
