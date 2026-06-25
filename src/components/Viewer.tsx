@@ -70,10 +70,14 @@ function retintAutoVertices(
 
 export const Viewer = forwardRef<
   ViewerHandle,
-  { stl: Uint8Array | null; theme: string }
->(function Viewer({ stl, theme }, ref) {
+  { stl: Uint8Array | null; theme: string; designId: string }
+>(function Viewer({ stl, theme, designId }, ref) {
   const mountRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<THREE.Object3D | null>(null);
+  // The design whose geometry is currently framed. A new model for the *same*
+  // design (a parameter or preset change) keeps the user's orbit/zoom; a new
+  // design reframes from scratch. null until the first model is framed.
+  const framedDesignRef = useRef<string | null>(null);
   // Single-material geometry that tracks the theme (the STL path's one mesh).
   const themedMaterialsRef = useRef<ThemedMaterial[]>([]);
   // Per-vertex-coloured geometry (the 3MF path): the live colour attribute plus
@@ -252,15 +256,20 @@ export const Viewer = forwardRef<
     scene.add(obj);
     modelRef.current = obj;
 
-    // Frame the model from its bounding sphere.
-    const r = box.getBoundingSphere(new THREE.Sphere()).radius || 50;
-    const cam = camRef.current!;
-    const controls = controlsRef.current!;
-    const d = r * 2.6;
-    cam.position.set(d * 0.6, -d, d * 0.7);
-    controls.target.set(0, 0, 0);
-    controls.update();
-  }, [stl]);
+    // Only reframe when the design itself changed (or this is the first model);
+    // a re-render of the *same* design — a parameter or preset tweak — keeps the
+    // user's current orbit/zoom so the view doesn't jump on every edit.
+    if (framedDesignRef.current !== designId) {
+      const r = box.getBoundingSphere(new THREE.Sphere()).radius || 50;
+      const cam = camRef.current!;
+      const controls = controlsRef.current!;
+      const d = r * 2.6;
+      cam.position.set(d * 0.6, -d, d * 0.7);
+      controls.target.set(0, 0, 0);
+      controls.update();
+      framedDesignRef.current = designId;
+    }
+  }, [stl, designId]);
 
   // The WebGL canvas conveys nothing to assistive tech; the textual render
   // status/log/advisories carry the meaning instead.
