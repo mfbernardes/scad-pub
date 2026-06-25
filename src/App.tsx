@@ -462,6 +462,7 @@ export default function App() {
                   ref={viewerRef}
                   stl={result?.ok ? result.stl : null}
                   theme={theme}
+                  designId={design.id}
                 />
               </Suspense>
             </ErrorBoundary>
