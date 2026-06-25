@@ -92,6 +92,32 @@ test("validates the optional per-design collapsedSections", () => {
   assert.throws(() => validateSchema(bad), /collapsedSections/);
 });
 
+test("validates the optional colours and extraCss", () => {
+  // null/absent is fine.
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), colors: null, extraCss: null }));
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      colors: { dark: { accent: "#fff" }, light: { accent: "#000" } },
+      extraCss: "scad/theme.css",
+    })
+  );
+  // one theme present, the other omitted, is fine.
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), colors: { dark: { bg: "#000" } } }));
+  // colours must be an object of string values.
+  assert.throws(() => validateSchema({ ...validBase(), colors: [] }), /'colors' must be/);
+  assert.throws(
+    () => validateSchema({ ...validBase(), colors: { dark: { accent: 123 } } }),
+    /'colors\.dark' must be/
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), colors: { light: "#fff" } }),
+    /'colors\.light' must be/
+  );
+  // extraCss must be a string URL when present.
+  assert.throws(() => validateSchema({ ...validBase(), extraCss: 42 }), /'extraCss' must be/);
+});
+
 test("validates the optional fontPrompt shape", () => {
   // null/absent is fine (the default).
   assert.doesNotThrow(() => validateSchema({ ...validBase(), fontPrompt: null }));
