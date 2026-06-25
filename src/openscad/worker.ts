@@ -125,12 +125,17 @@ function mkdirp(FS: OpenSCADInstance["FS"], dir: string) {
 let announcedReady = false;
 
 async function render(req: RenderRequest): Promise<RenderResult> {
-  const t0 = performance.now();
   await ensureAssets();
   if (!announcedReady) {
     announcedReady = true;
     (self as DedicatedWorkerGlobalScope).postMessage({ type: "ready" });
   }
+  // Start timing only after the (one-time) asset download + WASM compile, so the
+  // reported `ms` reflects actual render cost, not the first-load download. The
+  // main thread uses this to decide a render is "heavy" and pause live updates;
+  // counting the ~10 MB download would spuriously trip that brake on the first
+  // render and silently stop parameter edits from re-rendering.
+  const t0 = performance.now();
   const factory = await factoryPromise!;
   const log: string[] = [];
   const capture = (s: string) => (line: string) => log.push(`[${s}] ${line}`);
