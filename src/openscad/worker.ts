@@ -175,16 +175,6 @@ async function render(req: RenderRequest): Promise<RenderResult> {
   for (const [name, bytes] of Object.entries(fontFiles!))
     FS.writeFile(`/fonts/${name}`, bytes);
 
-  // User-supplied files. Filenames are untrusted, so strip any path components
-  // (a name like "../x" can't escape its mount dir). Fonts go into /fonts so
-  // fontconfig (which only scans /fonts) picks them up for text(); every other
-  // file is mounted at the FS root so a design can reference it by name, e.g.
-  // `import("logo.svg")` or `surface("data.dat")`.
-  for (const [rawName, bytes] of Object.entries(req.userFiles ?? {})) {
-    const name = rawName.replace(/^.*[\\/]/, "") || "file";
-    FS.writeFile(isFontFile(name) ? `/fonts/${name}` : `/${name}`, bytes);
-  }
-
   // Write a source-relative file into the FS, creating its parent directory.
   const mount = (path: string, src: string | Uint8Array) => {
     mkdirp(FS, `/${path}`.replace(/\/[^/]*$/, ""));
@@ -194,6 +184,18 @@ async function render(req: RenderRequest): Promise<RenderResult> {
   // Shared dependency files at their source-relative paths, so each design's
   // `use`/`include` resolves exactly as it does in the source tree.
   for (const [path, src] of Object.entries(assetSources!)) mount(path, src);
+
+  // User-supplied files, mounted AFTER the bundled assets so an upload can
+  // override a default of the same name (e.g. swap the bundled emblem.svg).
+  // Filenames are untrusted, so strip any path components (a name like "../x"
+  // can't escape its mount dir). Fonts go into /fonts so fontconfig (which only
+  // scans /fonts) picks them up for text(); every other file is mounted at the
+  // FS root so a design can reference it by name, e.g. `import("logo.svg")`.
+  for (const [rawName, bytes] of Object.entries(req.userFiles ?? {})) {
+    const name = rawName.replace(/^.*[\\/]/, "") || "file";
+    FS.writeFile(isFontFile(name) ? `/fonts/${name}` : `/${name}`, bytes);
+  }
+
   // The selected design, mounted at its own source-relative path.
   const design = schema.designs.find((d) => d.id === req.design);
   if (!design) throw new Error(`unknown design: ${req.design}`);

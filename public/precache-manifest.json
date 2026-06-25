@@ -4,6 +4,7 @@
   "fonts/fonts.conf",
   "icon.svg",
   "manifest.webmanifest",
+  "scad/emblem.svg",
   "scad/tag.json",
   "scad/tag.scad",
   "wasm/openscad.js"

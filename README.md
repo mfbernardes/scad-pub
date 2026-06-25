@@ -37,7 +37,8 @@ npm run dev   # predev fetches the pinned OpenSCAD WASM and regenerates the sche
 
 ```
 examples/           self-contained example design (default source)
-  tag.scad          no library/font dependencies
+  tag.scad          embossed text (font) + an extruded SVG emblem
+  emblem.svg        default emblem the tag imports (swap via "Import file")
   tag.json          bundled presets for tag.scad
 public/
   wasm/             OpenSCAD WASM (fetched, gitignored) — scripts/fetch-wasm.mjs
