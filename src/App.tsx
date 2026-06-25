@@ -19,6 +19,7 @@ import { useServiceWorkerUpdate } from "./lib/swUpdate";
 import { ParamForm } from "./components/ParamForm";
 import { IconButton } from "./components/IconButton";
 import { PresetBar } from "./components/PresetBar";
+import { FileBar } from "./components/FileBar";
 import type { ViewerHandle } from "./components/Viewer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LogPanel } from "./components/LogPanel";
@@ -371,10 +372,6 @@ export default function App() {
             values={values}
             bundled={bundledPresets}
             onApply={(v) => setValues(v)}
-            onAddFile={addFile}
-            onClearFiles={clearImportedFiles}
-            fileImport={fileImport}
-            loadedFiles={Object.keys(userFiles)}
             selected={presetSel}
             onSelectedChange={setPresetSel}
           />
@@ -392,6 +389,12 @@ export default function App() {
             </button>
           </div>
           <ParamForm design={design} values={values} onChange={setValue} />
+          <FileBar
+            fileImport={fileImport}
+            loadedFiles={Object.keys(userFiles)}
+            onAddFile={addFile}
+            onClearFiles={clearImportedFiles}
+          />
         </aside>
 
         <section className="preview" aria-label="Preview and output">
