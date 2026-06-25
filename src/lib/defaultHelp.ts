@@ -57,14 +57,26 @@ export const DEFAULT_HELP: HelpContent = {
         "- **Save** stores the current parameters as a browser preset; **Export** saves them as an OpenSCAD `parameterSets` JSON, which also opens in the desktop OpenSCAD Customizer.",
     },
     {
-      title: "6. Export & share",
+      title: "6. Add files (fonts, SVGs…)",
+      body:
+        "Some designs reference a file the app doesn't bundle — a font, an SVG to " +
+        "`import()`, or a data file for `surface()`. When an **Import file** button " +
+        "appears at the bottom of the panel, use it to supply your own:\n\n" +
+        "- **Fonts** (`.ttf`/`.otf`) become available to `text()`; set the design's font parameter to the font's family name.\n" +
+        "- **Any other file** is referenced by its name in the design, e.g. `import(\"logo.svg\")`.\n" +
+        "- Files are stored in this browser and re-applied on your next visit; the list shows what's loaded.\n" +
+        "- **Clear** removes them all. Importing or clearing files re-renders with the new set.\n" +
+        "- Nothing is uploaded to a server — files stay on your device.",
+    },
+    {
+      title: "7. Export & share",
       body:
         "- **Export STL** — download the printable mesh for your slicer.\n" +
         "- **Save PNG** — save a snapshot of the preview.\n" +
         "- **Copy link** — copy a URL that reproduces this exact design, parameters and preset.",
     },
     {
-      title: "7. Appearance & info",
+      title: "8. Appearance & info",
       body: "The **sun/moon** button (top-right) cycles light → dark → auto. The **ⓘ** button lists open-source licenses.",
     },
     {
