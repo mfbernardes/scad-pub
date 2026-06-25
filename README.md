@@ -4,7 +4,7 @@
 
 > **AI-assisted engineering.** This project was built with heavy AI assistance. It scratches a specific personal itch and was made generic and public in case it's useful to others. It comes with no guarantees of any kind — use it as a starting point, not a finished product.
 
-ScadPub renders a fixed set of OpenSCAD models client-side via OpenSCAD-WASM and serves them as a static website. Users configure Customizer parameters, preview the result in 3D, and export STL or PNG. No server. No data upload. All storage is in the browser.
+ScadPub renders a fixed set of OpenSCAD models client-side via OpenSCAD-WASM and serves them as a static website. Users configure Customizer parameters, preview the result in 3D, and export a colour-bearing 3MF or a PNG. No server. No data upload. All storage is in the browser.
 
 A JSON config file supplies the designs, branding, and help text. Nothing project-specific is compiled in.
 
@@ -17,7 +17,7 @@ npm run dev   # predev fetches the pinned OpenSCAD WASM and regenerates the sche
 
 ## Features
 
-- **3D preview** via three.js (F6 render); STL and PNG export.
+- **3D preview** via three.js (F6 render), showing per-object colour; colour-bearing 3MF and PNG export.
 - **Parameter form** generated from OpenSCAD Customizer syntax; never drifts from the design.
 - **Conditional parameters** — `// @showIf <expr>` hides irrelevant controls. See [docs/annotations.md](docs/annotations.md).
 - **Collapsible groups** — `// @collapsed` above a section header starts it folded. See [docs/annotations.md](docs/annotations.md).
@@ -79,7 +79,7 @@ npm run dev      # predev fetches the WASM (first run only) and regenerates the 
 npm test         # unit tests (requires Node ≥ 22)
 ```
 
-Build and headless smoke test (end-to-end render, design switch, font upload, preset apply, `@showIf` visibility, share link, STL/PNG export, axe-core):
+Build and headless smoke test (end-to-end render, design switch, font upload, preset apply, `@showIf` visibility, share link, 3MF/PNG export, axe-core):
 
 ```bash
 npm run build

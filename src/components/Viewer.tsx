@@ -1,15 +1,26 @@
-// Viewer.tsx — three.js preview of the rendered STL mesh. Parses the OpenSCAD
-// STL bytes, frames the model, and offers orbit/zoom. There is no live OpenCSG
-// preview in WASM, so this shows the F6-rendered mesh.
+// Viewer.tsx — three.js preview of the rendered model. Parses the OpenSCAD
+// export and frames the model with orbit/zoom. There is no live OpenCSG preview
+// in WASM, so this shows the F6-rendered mesh. The export format is fixed at
+// build time (config -> __APP_FORMAT__): 3MF carries per-object colour from
+// `color(...)`; STL is geometry-only and shown in the theme's model colour.
+// Only the chosen format's loader is referenced, so the other tree-shakes out.
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+
+// The build-time model format (Vite define; see vite.config.ts). A literal, so
+// the unused branch below — and its loader import — drop out of the bundle.
+declare const __APP_FORMAT__: "3mf" | "stl";
 
 export interface ViewerHandle {
   /** A PNG data URL of the current view, or null if nothing is rendered. */
   snapshot: () => string | null;
 }
+
+// Material whose colour follows the theme rather than the model's own colour.
+type ThemedMaterial = THREE.MeshStandardMaterial | THREE.MeshPhongMaterial;
 
 // Read a CSS custom property as a three.js colour (so the viewer follows theme).
 function cssColor(name: string, fallback: string): THREE.Color {
@@ -17,12 +28,58 @@ function cssColor(name: string, fallback: string): THREE.Color {
   return new THREE.Color(v || fallback);
 }
 
+// OpenSCAD's *automatic* object colours — the ones it writes into the 3MF for
+// geometry the design didn't `color(...)` itself: the gold default for plain
+// objects, and the green it assigns to an uncoloured `difference()` result.
+// Geometry at one of these is treated as "uncoloured" and recoloured to the
+// theme's model colour, so plain designs still follow the light/dark theme as
+// they did on the old STL path; geometry the design coloured explicitly keeps
+// its colour. Matched in the same sRGB space the 3MF loader uses (exact match).
+const OPENSCAD_AUTO_COLORS = new Set(
+  ["#f9d72c", "#9dcb51"].map((hex) =>
+    new THREE.Color().setStyle(hex, THREE.SRGBColorSpace).getHex()
+  )
+);
+
+// Recolour, in a per-vertex colour buffer, every vertex whose *original* colour
+// was an OpenSCAD auto-colour to `theme` (leaving the design's explicit colours
+// untouched). Reads from `original` so it's idempotent across theme switches.
+// Returns whether any vertex matched. Buffer values are in three's working
+// space; getHex() maps both sides through the same conversion, so the match is
+// exact.
+const _probe = new THREE.Color();
+function retintAutoVertices(
+  attr: THREE.BufferAttribute,
+  original: Float32Array,
+  theme: THREE.Color
+): boolean {
+  const arr = attr.array as Float32Array;
+  let matched = false;
+  for (let i = 0; i < original.length; i += 3) {
+    _probe.setRGB(original[i], original[i + 1], original[i + 2]);
+    if (OPENSCAD_AUTO_COLORS.has(_probe.getHex())) {
+      arr[i] = theme.r;
+      arr[i + 1] = theme.g;
+      arr[i + 2] = theme.b;
+      matched = true;
+    }
+  }
+  if (matched) attr.needsUpdate = true;
+  return matched;
+}
+
 export const Viewer = forwardRef<
   ViewerHandle,
   { stl: Uint8Array | null; theme: string }
 >(function Viewer({ stl, theme }, ref) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const meshRef = useRef<THREE.Mesh | null>(null);
+  const modelRef = useRef<THREE.Object3D | null>(null);
+  // Single-material geometry that tracks the theme (the STL path's one mesh).
+  const themedMaterialsRef = useRef<ThemedMaterial[]>([]);
+  // Per-vertex-coloured geometry (the 3MF path): the live colour attribute plus
+  // a copy of its original colours, so a theme switch can re-tint just the
+  // vertices that carried an OpenSCAD auto-colour.
+  const themedVertexRef = useRef<{ attr: THREE.BufferAttribute; original: Float32Array }[]>([]);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const camRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
@@ -34,7 +91,7 @@ export const Viewer = forwardRef<
       const r = rendererRef.current;
       const s = sceneRef.current;
       const c = camRef.current;
-      if (!r || !s || !c || !meshRef.current) return null;
+      if (!r || !s || !c || !modelRef.current) return null;
       r.render(s, c); // refresh the preserved buffer before reading it
       return r.domElement.toDataURL("image/png");
     },
@@ -123,49 +180,80 @@ export const Viewer = forwardRef<
       grid.rotateX(Math.PI / 2);
       scene.add(grid);
       gridRef.current = grid;
-      // Recolour an already-loaded model so it follows a live theme switch.
-      if (meshRef.current) {
-        (meshRef.current.material as THREE.MeshStandardMaterial).color = cssColor(
-          "--viewer-model",
-          "#6f93ff"
-        );
-      }
+      // Recolour any uncoloured geometry so it follows a live theme switch; the
+      // model's own explicit colours are left untouched.
+      const model = cssColor("--viewer-model", "#6f93ff");
+      for (const m of themedMaterialsRef.current) m.color.copy(model);
+      for (const v of themedVertexRef.current)
+        retintAutoVertices(v.attr, v.original, model);
     });
     return () => cancelAnimationFrame(raf);
   }, [theme]);
 
-  // Swap geometry when a new STL arrives.
+  // Swap geometry when a new model arrives.
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
-    if (meshRef.current) {
-      scene.remove(meshRef.current);
-      meshRef.current.geometry.dispose();
-      (meshRef.current.material as THREE.Material).dispose();
-      meshRef.current = null;
+    if (modelRef.current) {
+      scene.remove(modelRef.current);
+      disposeObject(modelRef.current);
+      modelRef.current = null;
+      themedMaterialsRef.current = [];
+      themedVertexRef.current = [];
     }
     if (!stl || stl.length === 0) return;
 
-    const geo = new STLLoader().parse(
-      stl.buffer.slice(
-        stl.byteOffset,
-        stl.byteOffset + stl.byteLength
-      ) as ArrayBuffer
-    );
-    geo.computeVertexNormals();
-    geo.center();
-    const mat = new THREE.MeshStandardMaterial({
-      color: cssColor("--viewer-model", "#6f93ff"),
-      metalness: 0.1,
-      roughness: 0.7,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    scene.add(mesh);
-    meshRef.current = mesh;
+    const buffer = stl.buffer.slice(
+      stl.byteOffset,
+      stl.byteOffset + stl.byteLength
+    ) as ArrayBuffer;
 
-    // Frame the model.
-    geo.computeBoundingSphere();
-    const r = geo.boundingSphere?.radius ?? 50;
+    const themeColor = cssColor("--viewer-model", "#6f93ff");
+    const themedMaterials: ThemedMaterial[] = [];
+    const themedVertices: { attr: THREE.BufferAttribute; original: Float32Array }[] = [];
+    let obj: THREE.Object3D;
+
+    if (__APP_FORMAT__ === "stl") {
+      // STL is geometry-only: one mesh in the theme's model colour, like before.
+      const geo = new STLLoader().parse(buffer);
+      geo.computeVertexNormals();
+      const mat = new THREE.MeshStandardMaterial({
+        color: themeColor.clone(),
+        metalness: 0.1,
+        roughness: 0.7,
+      });
+      themedMaterials.push(mat);
+      obj = new THREE.Mesh(geo, mat);
+    } else {
+      // 3MF carries per-object colour as a per-vertex colour buffer. Recolour
+      // only the vertices left at an OpenSCAD auto-colour to the theme (keeping
+      // a copy of the originals for theme switches); explicit colours are kept.
+      obj = new ThreeMFLoader().parse(buffer);
+      obj.traverse((node) => {
+        const mesh = node as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const attr = mesh.geometry.getAttribute("color") as
+          | THREE.BufferAttribute
+          | undefined;
+        if (!attr) return;
+        const original = Float32Array.from(attr.array as Float32Array);
+        if (retintAutoVertices(attr, original, themeColor))
+          themedVertices.push({ attr, original });
+      });
+    }
+    themedMaterialsRef.current = themedMaterials;
+    themedVertexRef.current = themedVertices;
+
+    // Centre the model on the origin (the export keeps the design's own
+    // coordinates, which aren't centred).
+    const box = new THREE.Box3().setFromObject(obj);
+    const center = box.getCenter(new THREE.Vector3());
+    obj.position.sub(center);
+    scene.add(obj);
+    modelRef.current = obj;
+
+    // Frame the model from its bounding sphere.
+    const r = box.getBoundingSphere(new THREE.Sphere()).radius || 50;
     const cam = camRef.current!;
     const controls = controlsRef.current!;
     const d = r * 2.6;
@@ -179,3 +267,20 @@ export const Viewer = forwardRef<
   return <div className="viewer" ref={mountRef} aria-hidden="true" />;
   }
 );
+
+// A mesh's material(s), always as an array.
+function materialList(material: THREE.Material | THREE.Material[]): THREE.Material[] {
+  return Array.isArray(material) ? material : [material];
+}
+
+// Free the GPU resources of an object tree's meshes (geometries + materials).
+function disposeObject(root: THREE.Object3D) {
+  const materials = new Set<THREE.Material>();
+  root.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.geometry.dispose();
+    for (const m of materialList(mesh.material)) materials.add(m);
+  });
+  for (const m of materials) m.dispose();
+}

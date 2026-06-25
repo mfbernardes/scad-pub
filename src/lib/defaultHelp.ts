@@ -25,7 +25,7 @@ export interface HelpContent {
 
 export const DEFAULT_HELP: HelpContent = {
   intro:
-    "Configure a design in your browser and export a ready-to-print STL. " +
+    "Configure a design in your browser and export a ready-to-print 3MF. " +
     "Everything runs locally — your settings never leave your device, and it works offline.",
   sections: [
     {
@@ -71,7 +71,7 @@ export const DEFAULT_HELP: HelpContent = {
     {
       title: "7. Export & share",
       body:
-        "- **Export STL** — download the printable mesh for your slicer.\n" +
+        "- **Export 3MF** — download the printable mesh (with colours) for your slicer.\n" +
         "- **Save PNG** — save a snapshot of the preview.\n" +
         "- **Copy link** — copy a URL that reproduces this exact design, parameters and preset.",
     },

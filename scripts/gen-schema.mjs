@@ -37,7 +37,7 @@ import { dirname, join, resolve, relative, sep } from "node:path";
 // rather than relying on a manual CACHE_VERSION bump for renderer-code changes.
 // Fonts/wasm/renderer are hashed only when outPublicDir is given (the real
 // build); the fixture tests omit it and hash just the sources + features.
-function computeRenderHash({ SOURCE, scadFiles, features, fonts, rendererFiles, outPublicDir }) {
+function computeRenderHash({ SOURCE, scadFiles, features, format, fonts, rendererFiles, outPublicDir }) {
   const h = createHash("sha256");
   h.update("renderhash-v2\n"); // version of this recipe itself
   for (const rel of [...scadFiles].sort()) {
@@ -49,6 +49,9 @@ function computeRenderHash({ SOURCE, scadFiles, features, fonts, rendererFiles, 
     }
   }
   h.update(`features\0${[...features].sort().join(",")}\0`);
+  // The export format is an OpenSCAD output flag, so it changes the rendered
+  // bytes — fold it in so switching format invalidates persisted geometry.
+  h.update(`format\0${format}\0`);
   if (outPublicDir) {
     // The render contract lives in app code, not the schema: hashing the worker
     // source means a change to its OpenSCAD flags or mounting logic invalidates
@@ -131,6 +134,20 @@ export const COLOR_TOKENS = [
 // named colour. Forbids `;`, `{`, `}` and comment markers so a value can't break
 // out of the generated `<style>` rule it gets interpolated into.
 const COLOR_VALUE_RE = /^[#a-zA-Z0-9 ,.()%/-]+$/;
+
+// The model formats OpenSCAD can export and the viewer can parse.
+const FORMATS = ["3mf", "stl"];
+
+// Validate the optional `format` config key. "3mf" (the default) carries
+// per-object colour; "stl" is geometry-only. Fail fast on anything else.
+export function parseFormat(raw) {
+  if (raw == null) return "3mf";
+  if (!FORMATS.includes(raw))
+    throw new Error(
+      `config.format must be one of ${FORMATS.map((f) => `"${f}"`).join(", ")} (got ${JSON.stringify(raw)})`
+    );
+  return raw;
+}
 
 // Validate and normalise the optional `colors` config block into
 // { light?: {token: value}, dark?: {token: value} }. Unknown tokens and unsafe
@@ -410,6 +427,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   const SOURCE = resolve(CONFIG_DIR, config.source ?? ".");
   mustExist(SOURCE, `source directory '${config.source ?? "."}'`);
   const FEATURES = config.features ?? [];
+  const FORMAT = parseFormat(config.format);
   const FONTS = config.fonts ?? [];
   const TITLE = config.title ?? "ScadPub";
   const ID = config.id ?? "scadpub";
@@ -643,6 +661,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     SOURCE,
     scadFiles: [...designs.map((d) => d.file), ...assets],
     features: FEATURES,
+    format: FORMAT,
     fonts: FONTS,
     rendererFiles,
     outPublicDir,
@@ -658,6 +677,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     colors: COLORS,
     extraCss,
     logo,
+    format: FORMAT,
     features: FEATURES,
     fonts: FONTS,
     fileImport: FILE_IMPORT,

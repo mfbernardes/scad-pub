@@ -7,7 +7,7 @@
 
 /// <reference lib="webworker" />
 import schema from "../generated/designs.json";
-import type { RenderRequest, RenderResult } from "./types";
+import type { ModelFormat, RenderRequest, RenderResult } from "./types";
 import { assetUrl as asset } from "../lib/assetUrl";
 
 // Persistent cache for the big, version-pinned binaries (the ~10 MB WASM and
@@ -206,14 +206,38 @@ async function render(req: RenderRequest): Promise<RenderResult> {
     `${k}=${v}`,
   ]);
   const featureArgs = schema.features.map((f) => `--enable=${f}`);
+  // The export format is chosen at build time (config -> schema). 3MF carries
+  // per-object colour — OpenSCAD's manifold backend writes each `color(...)`
+  // into the 3MF, which the viewer and downstream slicers read back; STL is
+  // geometry-only (no colour). Map the format to its OpenSCAD CLI flag, output
+  // path, and any extra `-O` export options. The cast widens the JSON's literal
+  // so the comparison is legal.
+  const format = schema.format as ModelFormat;
+  const EXPORT =
+    format === "stl"
+      ? { flag: "binstl", file: "/out.stl", extra: [] as string[] }
+      : {
+          flag: "3mf",
+          file: "/out.3mf",
+          // Write per-object colour as a 3MF colour group (color-mode=model,
+          // material-type=color). This is the encoding BambuStudio / OrcaSlicer
+          // read; the default base-material palette imports without colour.
+          extra: [
+            "-O",
+            "export-3mf/color-mode=model",
+            "-O",
+            "export-3mf/material-type=color",
+          ],
+        };
   const args = [
     `/${design.file}`,
     "--backend=manifold",
-    "--export-format=binstl",
+    `--export-format=${EXPORT.flag}`,
+    ...EXPORT.extra,
     ...featureArgs,
     ...defineArgs,
     "-o",
-    "/out.stl",
+    EXPORT.file,
   ];
   log.push(`[cmd] openscad ${args.join(" ")}`);
 
@@ -225,9 +249,11 @@ async function render(req: RenderRequest): Promise<RenderResult> {
     exitCode = typeof e === "number" ? e : 1;
   }
 
+  // The exported model bytes (3MF or STL per schema.format). The field is named
+  // `stl` for historical reasons across the worker/runner/cache protocol.
   let stl: Uint8Array = new Uint8Array(0);
   try {
-    stl = FS.readFile("/out.stl");
+    stl = FS.readFile(EXPORT.file);
   } catch {
     /* no output */
   }

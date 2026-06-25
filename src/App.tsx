@@ -213,11 +213,13 @@ export default function App() {
     });
   }, []);
 
-  const exportStl = () => {
+  const exportModel = () => {
     if (!result?.ok) return;
-    const blob = new Blob([result.stl as BlobPart], { type: "model/stl" });
-    downloadBlob(blob, `${design.id}.stl`);
-    setAnnouncement(`Exported ${design.id}.stl`);
+    // result.stl carries the rendered model bytes in the build-time format
+    // (3MF is colour-bearing; STL is geometry-only). See the render worker.
+    const blob = new Blob([result.stl as BlobPart], { type: `model/${schema.format}` });
+    downloadBlob(blob, `${design.id}.${schema.format}`);
+    setAnnouncement(`Exported ${design.id}.${schema.format}`);
   };
 
   const savePng = () => {
@@ -442,8 +444,8 @@ export default function App() {
               />
               Auto-render
             </label>
-            <button onClick={exportStl} disabled={!result?.ok}>
-              <DownloadIcon size={16} /> Export STL
+            <button onClick={exportModel} disabled={!result?.ok}>
+              <DownloadIcon size={16} /> Export {schema.format.toUpperCase()}
             </button>
             <button onClick={savePng} disabled={!result?.ok}>
               <ImageIcon size={16} /> Save PNG

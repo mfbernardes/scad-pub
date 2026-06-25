@@ -2,6 +2,13 @@
 
 export type ParamValue = number | string | boolean;
 
+/**
+ * The model format OpenSCAD exports (and the viewer parses). Chosen at build
+ * time in the config; "3mf" carries per-object colour from `color(...)`, "stl"
+ * is geometry-only. Defaults to "3mf".
+ */
+export type ModelFormat = "3mf" | "stl";
+
 export interface RenderRequest {
   id: number;
   design: string; // a design id, e.g. "nameplate"
@@ -161,6 +168,8 @@ export interface Schema {
   extraCss?: string | null;
   /** Optional per-theme header logo: served-relative image URLs, or null. */
   logo: { light: string; dark: string } | null;
+  /** Model format OpenSCAD exports and the viewer parses (build-time; default "3mf"). */
+  format: ModelFormat;
   /** OpenSCAD experimental features to --enable for every render. */
   features: string[];
   /** Bundled font filenames the renderer mounts from public/fonts/. */

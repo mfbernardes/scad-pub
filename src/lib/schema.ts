@@ -71,6 +71,8 @@ export function validateSchema(raw: unknown): Schema {
     }
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
+  if (s.format !== "3mf" && s.format !== "stl")
+    fail("'format' must be \"3mf\" or \"stl\"");
   if (s.colors != null) {
     const c = s.colors as Record<string, unknown>;
     if (typeof c !== "object" || Array.isArray(c)) fail("'colors' must be an object or null");

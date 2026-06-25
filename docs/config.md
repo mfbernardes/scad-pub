@@ -20,6 +20,7 @@
   "source": "examples",           // directory of .scad designs (relative to this file)
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
+  "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
   "fileImport": true,             // optional "Import file" button for user-supplied files
   "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
@@ -33,6 +34,7 @@
 - **`source`** — directory of Customizer-style `.scad` designs, relative to this config file. Defaults to `"."`.
 - **`assets`** — files/directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph.
 - **`features`** — applied to all designs as `--enable=<feature>`.
+- **`format`** — the model format OpenSCAD exports and the viewer parses, fixed at build time. `"3mf"` (the default) carries per-object colour from each design's `color(...)` calls — shown in the preview and written into the exported file. `"stl"` is geometry-only (no colour). Changing it invalidates the render cache automatically.
 - **`id`** — namespaces localStorage, IndexedDB, and preset cache. Defaults to `"scadpub"`.
 - **`description`** / **`shortName`** / **`icon`** / **`themeColor`** / **`backgroundColor`** — `<meta>` and PWA manifest fields. `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg`.
 - **`colors`** — optional per-theme CSS colour overrides; see [Theme & colour scheme](#theme--colour-scheme).
@@ -196,7 +198,7 @@ The **Help** dialog (the **?** button) is generated from `help`. Omit it for a g
 ```jsonc
 {
   "help": {
-    "intro": "Configure a design and export an STL.",   // optional, shown at the top
+    "intro": "Configure a design and export a 3MF.",   // optional, shown at the top
     "sections": [
       { "title": "1. Pick a design", "body": "Use the **Design** dropdown…" },
       { "title": "2. Adjust parameters", "body": "The left panel lists…" }
