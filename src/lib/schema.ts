@@ -67,6 +67,22 @@ export function validateSchema(raw: unknown): Schema {
       fail("'fontPrompt' must be { url, label?, family?, heading?, linkText?, note? } or null");
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
+  if (s.colors != null) {
+    const c = s.colors as Record<string, unknown>;
+    if (typeof c !== "object" || Array.isArray(c)) fail("'colors' must be an object or null");
+    for (const theme of ["light", "dark"] as const) {
+      const t = c[theme];
+      if (t == null) continue;
+      if (
+        typeof t !== "object" ||
+        Array.isArray(t) ||
+        !Object.values(t as Record<string, unknown>).every((v) => typeof v === "string")
+      )
+        fail(`'colors.${theme}' must be an object of token: colour strings`);
+    }
+  }
+  if (s.extraCss != null && typeof s.extraCss !== "string")
+    fail("'extraCss' must be a string URL or null");
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;
     if (

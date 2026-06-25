@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { headStyleInjection } from "./src/lib/configCss";
 
 // Read the active config's generated schema (written by the predev/prebuild
 // gen-schema step) so the page chrome and storage namespace are config-driven.
@@ -10,6 +11,11 @@ function readSchema(): {
   id?: string;
   description?: string;
   themeColor?: string;
+  colors?: {
+    light?: Record<string, string>;
+    dark?: Record<string, string>;
+  } | null;
+  extraCss?: string | null;
 } {
   try {
     return JSON.parse(
@@ -23,19 +29,31 @@ function readSchema(): {
   }
 }
 
-// Inject title/description/theme-color into index.html so the page chrome is
-// config-driven (not hard-coded to one project).
+// Inject title/description/theme-color, the config colour scheme, and any
+// consumer `extraCss` into index.html so the page chrome is config-driven (not
+// hard-coded to one project). Runs with `order: "post"` so the bundled app CSS
+// <link> has already been injected: the colour <style> and the extraCss <link>
+// land *after* it, giving consumer styles the final say (the escape hatch can
+// override the app's own rules by source order, not just specificity). The CSS
+// assembly lives in src/lib/configCss.ts so it's unit-testable without Vite.
 function configHtml(s: ReturnType<typeof readSchema>): Plugin {
+  const headInjection = headStyleInjection(s);
   return {
     name: "config-html",
-    transformIndexHtml(html) {
-      return html
-        .replace(/%APP_TITLE%/g, s.title ?? "ScadPub")
-        .replace(
-          /%APP_DESCRIPTION%/g,
-          s.description ?? "Configure and export designs in your browser."
-        )
-        .replace(/%APP_THEME_COLOR%/g, s.themeColor ?? "#1f2229");
+    transformIndexHtml: {
+      order: "post",
+      handler(html) {
+        return html
+          .replace(/%APP_TITLE%/g, s.title ?? "ScadPub")
+          .replace(
+            /%APP_DESCRIPTION%/g,
+            s.description ?? "Configure and export designs in your browser."
+          )
+          .replace(/%APP_THEME_COLOR%/g, s.themeColor ?? "#1f2229")
+          // Insert before </head> via a replacer so $-sequences in colour values
+          // (there shouldn't be any) are never treated as substitution patterns.
+          .replace("</head>", () => `${headInjection}</head>`);
+      },
     },
   };
 }

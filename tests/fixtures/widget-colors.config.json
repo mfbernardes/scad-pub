@@ -1,0 +1,10 @@
+{
+  "source": "src",
+  "features": [],
+  "fonts": [],
+  "colors": {
+    "dark": { "accent": "#ff7849", "viewer-model": "#ff7849" },
+    "light": { "accent": "#b8430f" }
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

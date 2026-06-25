@@ -9,5 +9,5 @@
     "types": ["node"],
     "outDir": "./node_modules/.tmp/tsnode"
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "src/lib/configCss.ts"]
 }

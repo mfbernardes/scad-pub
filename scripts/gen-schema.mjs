@@ -102,6 +102,74 @@ const SHOWIF_RE = /^@show-?if\s+(.+)$/i;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
 
+// The CSS custom-property tokens a consumer config may override via `colors`
+// (see src/index.css), listed without the leading `--`. Overriding a token
+// outside this set is almost always a typo, so we fail the build rather than
+// silently emit a no-op rule.
+export const COLOR_TOKENS = [
+  "bg",
+  "panel",
+  "panel-2",
+  "line",
+  "text",
+  "muted",
+  "accent",
+  "accent-solid",
+  "on-accent",
+  "focus",
+  "link",
+  "warn",
+  "code-bg",
+  "overlay",
+  "viewer-bg",
+  "viewer-grid",
+  "viewer-grid-2",
+  "viewer-model",
+];
+
+// A deliberately strict CSS-colour value: hex, rgb()/rgba()/hsl()/hsla(), or a
+// named colour. Forbids `;`, `{`, `}` and comment markers so a value can't break
+// out of the generated `<style>` rule it gets interpolated into.
+const COLOR_VALUE_RE = /^[#a-zA-Z0-9 ,.()%/-]+$/;
+
+// Validate and normalise the optional `colors` config block into
+// { light?: {token: value}, dark?: {token: value} }. Unknown tokens and unsafe
+// values fail the build with a clear message (consistent with gen-schema's other
+// fail-fast checks). Colours don't affect geometry, so they're absent from
+// renderHash. Returns null when nothing valid is configured.
+export function parseColors(raw) {
+  if (raw == null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error(
+      "gen-schema: 'colors' must be an object with optional 'light' and 'dark' keys"
+    );
+  const out = {};
+  for (const theme of ["light", "dark"]) {
+    const tokens = raw[theme];
+    if (tokens == null) continue;
+    if (typeof tokens !== "object" || Array.isArray(tokens))
+      throw new Error(
+        `gen-schema: 'colors.${theme}' must be an object of token: colour pairs`
+      );
+    const cleaned = {};
+    for (const [token, value] of Object.entries(tokens)) {
+      if (!COLOR_TOKENS.includes(token))
+        throw new Error(
+          `gen-schema: unknown colour token 'colors.${theme}.${token}'.\n` +
+            `  Valid tokens: ${COLOR_TOKENS.join(", ")}`
+        );
+      if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
+        throw new Error(
+          `gen-schema: 'colors.${theme}.${token}' must be a plain CSS colour ` +
+            `(got ${JSON.stringify(value)})`
+        );
+      cleaned[token] = value.trim();
+    }
+    if (Object.keys(cleaned).length) out[theme] = cleaned;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // The concise label is the first sentence of the doc block; the rest is help.
 // Split on sentence-ending .!? + whitespace + a capital/opening paren, so we
 // don't break on decimals (1.5 mm) or lowercase abbreviations (e.g., i.e.).
@@ -294,6 +362,10 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
+  // Optional per-theme colour-scheme overrides. Validated against the known CSS
+  // tokens; emitted by vite.config.ts as a <style> block so a consumer project
+  // can restyle the app entirely from its config. Absent -> null.
+  const COLORS = parseColors(config.colors);
 
   // outScadDir is entirely generated: wipe it before repopulating so files from
   // a previous config/build (a removed, renamed or briefly-private design or
@@ -442,6 +514,24 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   }
   for (const a of assets) copyAsset(a);
 
+  // Optional raw-CSS escape hatch. Unlike `colors` — a safe, validated token map
+  // — this is a stylesheet the consumer fully controls, copied verbatim into the
+  // served tree and (see vite.config.ts) loaded *after* the app's own styles so
+  // it can override anything. It targets internal class names at the consumer's
+  // own risk: not a stable API, and not covered by the accessibility guarantees.
+  // Lives under the (gitignored, auto-wiped) scad output dir, so it never goes
+  // stale or gets committed. The schema records its served URL, or null.
+  let extraCss = null;
+  if (config.extraCss) {
+    const abs = mustExist(
+      resolve(CONFIG_DIR, config.extraCss),
+      `extraCss '${config.extraCss}'`
+    );
+    const name = abs.split(/[\\/]/).pop();
+    copyFileSync(abs, join(outScadDir, name));
+    extraCss = `scad/${name}`;
+  }
+
   // Generate the PWA manifest + app icon from the config (skipped for the
   // fixture-driven unit tests, which don't pass outPublicDir).
   if (outPublicDir) {
@@ -499,6 +589,8 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     id: ID,
     description: DESCRIPTION,
     themeColor: THEME_COLOR,
+    colors: COLORS,
+    extraCss,
     logo,
     features: FEATURES,
     fonts: FONTS,
@@ -524,6 +616,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       precache.add(logo.light);
       precache.add(logo.dark);
     }
+    if (extraCss) precache.add(extraCss);
     writeFileSync(
       join(outPublicDir, "precache-manifest.json"),
       JSON.stringify([...precache].sort(), null, 2) + "\n"

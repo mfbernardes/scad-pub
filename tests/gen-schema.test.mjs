@@ -17,6 +17,7 @@ import {
   generate,
   firstSentence,
   parseEnumHint,
+  parseColors,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -294,6 +295,76 @@ test("firstSentence does not break on decimals or abbreviations", () => {
     firstSentence("Border, i.e. the edge clearance, in mm."),
     "Border, i.e. the edge clearance, in mm."
   );
+});
+
+test("colors: per-theme overrides pass through to the schema", () => {
+  const { schema } = run("widget-colors.config.json");
+  assert.deepEqual(schema.colors, {
+    dark: { accent: "#ff7849", "viewer-model": "#ff7849" },
+    light: { accent: "#b8430f" },
+  });
+});
+
+test("colors default to null when omitted", () => {
+  const { schema } = run("widget-autodeps.config.json");
+  assert.equal(schema.colors, null);
+});
+
+test("extraCss: the stylesheet is copied and its URL recorded", () => {
+  const { schema, out } = run("widget-extracss.config.json");
+  assert.equal(schema.extraCss, "scad/extra.css");
+  assert.ok(existsSync(join(out, "scad", "extra.css")));
+});
+
+test("extraCss defaults to null when omitted", () => {
+  const { schema } = run("widget-autodeps.config.json");
+  assert.equal(schema.extraCss, null);
+});
+
+test("a missing extraCss path fails with a clear error", () => {
+  assert.throws(
+    () => run("widget-extracss-missing.config.json"),
+    /extraCss 'nope\.css' not found/
+  );
+});
+
+test("extraCss is listed in the public precache manifest", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  generate({
+    configPath: join(FIXTURES, "widget-extracss.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const precache = JSON.parse(
+    readFileSync(join(out, "public", "precache-manifest.json"), "utf-8")
+  );
+  assert.ok(precache.includes("scad/extra.css"));
+});
+
+test("parseColors validates tokens and values", () => {
+  // null / empty -> null
+  assert.equal(parseColors(undefined), null);
+  assert.equal(parseColors({}), null);
+  assert.equal(parseColors({ dark: {} }), null);
+  // trims values and keeps only the configured themes
+  assert.deepEqual(parseColors({ light: { accent: "  #fff " } }), {
+    light: { accent: "#fff" },
+  });
+  // accepts rgb()/hsl()/named colours
+  assert.deepEqual(parseColors({ dark: { bg: "rgb(10, 20, 30)" } }), {
+    dark: { bg: "rgb(10, 20, 30)" },
+  });
+  // unknown token -> clear error
+  assert.throws(() => parseColors({ dark: { accnt: "#fff" } }), /unknown colour token/);
+  // value that could break out of the <style> rule -> rejected
+  assert.throws(
+    () => parseColors({ dark: { bg: "#fff; } body { display:none" } }),
+    /plain CSS colour/
+  );
+  // wrong shapes -> errors
+  assert.throws(() => parseColors([]), /'colors' must be an object/);
+  assert.throws(() => parseColors({ dark: "#fff" }), /'colors\.dark' must be an object/);
 });
 
 test("parseEnumHint ignores single-item and non-enum hints", () => {
