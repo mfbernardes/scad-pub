@@ -7,9 +7,10 @@
   "license": "MIT",
   "scripts": {
     "gen": "node scripts/gen-schema.mjs",
-    "predev": "npm run gen",
+    "wasm": "bash scripts/fetch-wasm.sh",
+    "predev": "npm run wasm && npm run gen",
     "dev": "vite",
-    "prebuild": "npm run gen",
+    "prebuild": "npm run wasm && npm run gen",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "pretest": "npm run gen",

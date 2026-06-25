@@ -12,7 +12,21 @@ SHA256="509879dd6813f2c4e5cf2ce1da6420928ce9bb212cd08491ca5ec9d5bffc700b"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WASM_DIR="${HERE}/../public/wasm"
+STAMP="${WASM_DIR}/.version"
 mkdir -p "${WASM_DIR}"
+
+# Idempotent guard: skip the download when the binary + glue are already
+# present and were fetched for the requested version. Pass FORCE=1 to always
+# re-download. This lets the npm pre-build/pre-dev hooks call us cheaply on
+# every run — only the first run (or a version bump) hits the network.
+if [ "${FORCE:-0}" != "1" ] \
+  && [ -f "${WASM_DIR}/openscad.js" ] \
+  && [ -f "${WASM_DIR}/openscad.wasm" ] \
+  && [ -f "${STAMP}" ] \
+  && [ "$(cat "${STAMP}" 2>/dev/null)" = "${VERSION}" ]; then
+  echo "OpenSCAD WebAssembly v${VERSION} already present in public/wasm/ — skipping download." >&2
+  exit 0
+fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
@@ -50,4 +64,5 @@ fi
 
 ( cd "${TMP}" && unzip -o -q openscad-web.zip )
 cp "${TMP}/openscad.js" "${TMP}/openscad.wasm" "${WASM_DIR}/"
+printf '%s\n' "${VERSION}" > "${STAMP}"
 echo "Installed openscad.js + openscad.wasm (v${VERSION}) into public/wasm/" >&2
