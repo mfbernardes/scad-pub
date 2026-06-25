@@ -414,6 +414,17 @@ export default function App() {
         </aside>
 
         <section className="preview" aria-label="Preview and output">
+          {stalePreview && (
+            <div className="render-pending" role="status">
+              <span className="render-pending-text">
+                Auto-render is paused — the preview doesn’t reflect your latest
+                changes. Click “Render now” to update it.
+              </span>
+              <button className="primary" onClick={doRender} disabled={rendering}>
+                <PlayIcon size={16} /> Render now
+              </button>
+            </div>
+          )}
           <div className="viewer-wrap">
             <ErrorBoundary resetKey={result}>
               <Suspense fallback={null}>
@@ -435,17 +446,6 @@ export default function App() {
               </div>
             )}
           </div>
-          {stalePreview && (
-            <div className="render-pending" role="status">
-              <span className="render-pending-text">
-                Auto-render is paused — the preview doesn’t reflect your latest
-                changes. Click “Render now” to update it.
-              </span>
-              <button className="primary" onClick={doRender} disabled={rendering}>
-                <PlayIcon size={16} /> Render now
-              </button>
-            </div>
-          )}
           <div className="preview-actions">
             <button className="primary" onClick={doRender} disabled={rendering}>
               <PlayIcon size={16} /> Render now
