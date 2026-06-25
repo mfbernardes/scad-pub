@@ -18,6 +18,7 @@ import {
   firstSentence,
   parseEnumHint,
   parseColors,
+  parseLicenses,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -365,6 +366,91 @@ test("parseColors validates tokens and values", () => {
   // wrong shapes -> errors
   assert.throws(() => parseColors([]), /'colors' must be an object/);
   assert.throws(() => parseColors({ dark: "#fff" }), /'colors\.dark' must be an object/);
+});
+
+test("help: tabs pass through to the schema verbatim", () => {
+  const { schema } = run("widget-help-tabs.config.json");
+  assert.equal(schema.help.intro, "Shared intro shown above every tab.");
+  assert.equal(schema.help.tabs.length, 2);
+  assert.equal(schema.help.tabs[0].label, "Getting started");
+  assert.deepEqual(schema.help.tabs[1].sections, [
+    { title: "Material", body: "Use **PLA**." },
+    { title: "Supports", body: "Usually none needed." },
+  ]);
+});
+
+test("help defaults to null when omitted", () => {
+  const { schema } = run("widget-autodeps.config.json");
+  assert.equal(schema.help, null);
+});
+
+test("licenses: extra entries are appended, sanitised, and unknown keys dropped", () => {
+  const { schema } = run("widget-licenses.config.json");
+  assert.equal(schema.licenses.length, 2);
+  // Known fields are kept; the unrecognised "ignored" key is stripped.
+  assert.deepEqual(schema.licenses[0], {
+    name: "Acme Widget Library",
+    version: "3.1",
+    license: "MIT",
+    copyright: "Copyright (c) 2024 Acme Corp",
+    url: "https://example.com/acme",
+    licenseUrl: "https://example.com/acme/LICENSE",
+    note: "Bundled helper geometry.",
+  });
+  assert.equal(schema.licenses[1].sourceUrl, "https://example.com/widgetron/src");
+});
+
+test("licenses default to an empty array when omitted", () => {
+  const { schema } = run("widget-autodeps.config.json");
+  assert.deepEqual(schema.licenses, []);
+});
+
+test("parseLicenses validates shape and required fields", () => {
+  assert.deepEqual(parseLicenses(undefined), []);
+  assert.deepEqual(parseLicenses(null), []);
+  // a complete entry round-trips (optional fields preserved)
+  const ok = [
+    {
+      name: "Lib",
+      license: "MIT",
+      copyright: "(c) X",
+      url: "https://x",
+      licenseUrl: "https://x/LICENSE",
+      version: "1.0",
+    },
+  ];
+  assert.deepEqual(parseLicenses(ok), ok);
+  // wrong container / element shapes
+  assert.throws(() => parseLicenses({}), /'licenses' must be an array/);
+  assert.throws(() => parseLicenses([null]), /'licenses\[0\]' must be an object/);
+  // missing required field
+  assert.throws(
+    () => parseLicenses([{ name: "Lib", license: "MIT", copyright: "(c)", url: "https://x" }]),
+    /'licenses\[0\]\.licenseUrl' is required/
+  );
+  // empty required field
+  assert.throws(
+    () =>
+      parseLicenses([
+        { name: "  ", license: "MIT", copyright: "(c)", url: "https://x", licenseUrl: "https://x/L" },
+      ]),
+    /'licenses\[0\]\.name' is required/
+  );
+  // non-string optional field
+  assert.throws(
+    () =>
+      parseLicenses([
+        {
+          name: "Lib",
+          license: "MIT",
+          copyright: "(c)",
+          url: "https://x",
+          licenseUrl: "https://x/L",
+          note: 5,
+        },
+      ]),
+    /'licenses\[0\]\.note' must be a string/
+  );
 });
 
 test("parseEnumHint ignores single-item and non-enum hints", () => {

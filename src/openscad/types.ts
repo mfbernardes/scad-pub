@@ -69,6 +69,38 @@ export interface HelpSection {
   body: string;
 }
 
+/** One tab of the in-app help: a labelled group of sections with its own
+ *  optional intro. A config may supply many tabs; the Help modal renders a tab
+ *  strip when any are present. */
+export interface HelpTab {
+  /** Tab-strip label. */
+  label: string;
+  /** Optional intro paragraph shown above this tab's sections. */
+  intro?: string;
+  sections: HelpSection[];
+}
+
+/** One third-party software component and its license attribution, shown in the
+ *  open-source licenses modal. Mirrors the built-in entries in
+ *  src/lib/licenses.ts; a consumer config can APPEND more via the `licenses`
+ *  config key (the built-ins are never replaced). */
+export interface SoftwareLicense {
+  name: string;
+  version?: string;
+  /** SPDX identifier, e.g. "MIT". */
+  license: string;
+  copyright: string;
+  /** Project homepage. */
+  url: string;
+  /** Canonical license text (reproduced inline for permissive licenses). */
+  text?: string;
+  /** Where the full license / corresponding source can be obtained. */
+  licenseUrl: string;
+  /** Source location, required for copyleft (GPL) components. */
+  sourceUrl?: string;
+  note?: string;
+}
+
 export interface Schema {
   generatedFrom: string;
   /**
@@ -84,8 +116,10 @@ export interface Schema {
    *  configs on one origin don't collide. Defaults to "scadpub". */
   id?: string;
   /** Optional help content shown in the Help modal. When null, a generic,
-   *  project-agnostic default is used. */
-  help: { intro?: string; sections: HelpSection[] } | null;
+   *  project-agnostic default is used. `sections` renders as a single pane;
+   *  supplying `tabs` renders a tab strip (top-level `sections`, if any, become
+   *  a leading tab so adding tabs never drops existing content). */
+  help: { intro?: string; sections?: HelpSection[]; tabs?: HelpTab[] } | null;
   /**
    * Optional per-theme colour-scheme overrides supplied by the consumer config.
    * Keys are the CSS custom-property tokens from src/index.css (without the
@@ -130,6 +164,13 @@ export interface Schema {
     /** Optional explanatory line shown as the download-link tooltip. */
     note?: string;
   } | null;
+  /**
+   * Extra third-party software / license notices supplied by the consumer
+   * config, APPENDED after the app's built-in attributions (src/lib/licenses.ts)
+   * in the open-source licenses modal. The built-ins are never removed; a config
+   * can only add to the list. Empty when none are configured.
+   */
+  licenses: SoftwareLicense[];
   /** Source-relative paths of the shared .scad dependency files to mount. */
   assets: string[];
   designs: Design[];

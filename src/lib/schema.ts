@@ -85,16 +85,42 @@ export function validateSchema(raw: unknown): Schema {
     fail("'extraCss' must be a string URL or null");
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;
-    if (
-      typeof h !== "object" ||
-      !Array.isArray(h.sections) ||
-      !h.sections.every(
-        (x) =>
-          x && typeof (x as Record<string, unknown>).title === "string" &&
-          typeof (x as Record<string, unknown>).body === "string"
+    const isSection = (x: unknown) =>
+      !!x &&
+      typeof (x as Record<string, unknown>).title === "string" &&
+      typeof (x as Record<string, unknown>).body === "string";
+    const isSectionList = (x: unknown) => Array.isArray(x) && x.every(isSection);
+    if (typeof h !== "object" || Array.isArray(h))
+      fail("'help' must be { intro?, sections?, tabs? } or null");
+    if (h.sections !== undefined && !isSectionList(h.sections))
+      fail("'help.sections' must be an array of { title, body }");
+    if (h.tabs !== undefined) {
+      if (
+        !Array.isArray(h.tabs) ||
+        !h.tabs.every(
+          (t) =>
+            !!t &&
+            typeof (t as Record<string, unknown>).label === "string" &&
+            isSectionList((t as Record<string, unknown>).sections)
+        )
       )
-    )
-      fail("'help' must be { intro?, sections: [{ title, body }] } or null");
+        fail(
+          "'help.tabs' must be an array of { label, intro?, sections: [{ title, body }] }"
+        );
+    }
+    if (h.sections === undefined && h.tabs === undefined)
+      fail("'help' must provide 'sections' or 'tabs'");
+  }
+  if (s.licenses != null) {
+    if (!Array.isArray(s.licenses)) fail("'licenses' must be an array or null");
+    for (const l of s.licenses) {
+      if (!l || typeof l !== "object") fail("'licenses' contains a non-object");
+      const e = l as Record<string, unknown>;
+      for (const key of ["name", "license", "copyright", "url", "licenseUrl"] as const) {
+        if (typeof e[key] !== "string")
+          fail(`a license entry is missing required string '${key}'`);
+      }
+    }
   }
   return raw as Schema;
 }

@@ -7,9 +7,20 @@ export interface HelpSection {
   body: string;
 }
 
-export interface HelpContent {
+/** One tab of the Help modal: a labelled group of sections with its own intro.
+ *  A config may supply many tabs. */
+export interface HelpTab {
+  label: string;
   intro?: string;
   sections: HelpSection[];
+}
+
+export interface HelpContent {
+  intro?: string;
+  /** Single-pane sections (the default form). */
+  sections?: HelpSection[];
+  /** When present, the modal renders a tab strip; many tabs are supported. */
+  tabs?: HelpTab[];
 }
 
 export const DEFAULT_HELP: HelpContent = {
