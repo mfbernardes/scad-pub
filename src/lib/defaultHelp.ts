@@ -55,7 +55,7 @@ export const DEFAULT_HELP: HelpContent = {
       body:
         "The **presets** dropdown groups **Bundled** examples (read-only) and **Saved** presets (your own, stored in this browser).\n\n" +
         "- **This preset → Save / Delete** manages your saved presets.\n" +
-        "- **Parameter file → Export / Import…** moves settings as an OpenSCAD `parameterSets` JSON, which also opens in the desktop OpenSCAD Customizer.",
+        "- **Parameter file → Export** saves your settings as an OpenSCAD `parameterSets` JSON, which also opens in the desktop OpenSCAD Customizer.",
     },
     {
       title: "6. Export & share",

@@ -1,15 +1,14 @@
 // PresetBar.tsx — presets dropdown combining read-only bundled presets (shipped
 // with the app, per design) and the user's own browser-local presets, plus
-// desktop-compatible parameterSets import/export and a generic "Import file"
-// button for external files (fonts, SVGs, …). All copy here is config-driven
-// (see `fileImport`), so the bar is project-agnostic. All user storage is client-side.
+// desktop-compatible parameterSets export and a generic "Import file" button for
+// external files (fonts, SVGs, …). All copy here is config-driven (see
+// `fileImport`), so the bar is project-agnostic. All user storage is client-side.
 import { useEffect, useState } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import {
   deletePreset,
   listPresets,
   loadPreset,
-  parseParameterSetsFile,
   savePreset,
   toParameterSetsFile,
   type ParsedSet,
@@ -106,25 +105,6 @@ export function PresetBar({
     downloadBlob(blob, `${design.id}.json`);
   };
 
-  const onImportFile = async (file: File) => {
-    try {
-      const sets = parseParameterSetsFile(design, await file.text());
-      if (sets.length === 0) throw new Error("No parameter sets in file.");
-      // Apply the first set; if several, let the user pick.
-      let chosen = sets[0];
-      if (sets.length > 1) {
-        const name = prompt(
-          `Which set? (${sets.map((s) => s.name).join(", ")})`,
-          sets[0].name
-        );
-        chosen = sets.find((s) => s.name === name) ?? sets[0];
-      }
-      onApply(chosen.values);
-    } catch (e) {
-      alert(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
-
   const onUploadFile = async (file: File) => {
     const bytes = new Uint8Array(await file.arrayBuffer());
     onAddFile(file.name, bytes);
@@ -181,18 +161,6 @@ export function PresetBar({
       </div>
       <div className="grp-label">Parameter file</div>
       <div className="row btn-row">
-        <FileInput accept=".json,application/json" onFile={onImportFile}>
-          {(open) => (
-            <button
-              type="button"
-              className="btn-labeled"
-              title="Import a parameter file (an OpenSCAD parameterSets JSON)"
-              onClick={open}
-            >
-              <UploadIcon size={16} /> Import…
-            </button>
-          )}
-        </FileInput>
         <button
           type="button"
           className="btn-labeled"
