@@ -22,7 +22,8 @@
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
   "fontPrompt": { "url": "…", "label": "…" },  // optional external-font prompt
-  "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content
+  "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
+  "licenses": [ { "name": "…", "license": "…", … } ],  // optional extra open-source notices (appended)
   "designs": [
     { "id": "tag", "label": "Tag", "heavy": false }
   ]   // omit to auto-discover *.scad in source; presets auto-detected as <id>.json
@@ -37,7 +38,8 @@
 - **`colors`** — optional per-theme CSS colour overrides; see [Theme & colour scheme](#theme--colour-scheme).
 - **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
 - **`fontPrompt`** — see [External font prompt](#external-font-prompt-fontprompt).
-- **`help`** — `{ intro?, sections: [{ title, body }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Omit for a generic default.
+- **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
+- **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
 - Missing `source`, `assets`, design, or `logo` paths fail the build with a clear error.
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the dropdown.
@@ -174,3 +176,77 @@ Load order, last wins: app bundle CSS → `colors` `<style>` → `extraCss` `<li
 ```
 
 When set and the user has no font stored, a startup modal explains the font requirement, links to the download, and allows immediate TTF upload. The same link and an **Import font…** button appear in the preset panel. Uploaded fonts persist in IndexedDB. A "Don't remind me again" button suppresses the startup modal permanently. Omit `fontPrompt` and neither the modal nor the font group is shown.
+
+## Help content (`help`)
+
+The **Help** dialog (the **?** button) is generated from `help`. Omit it for a generic, project-agnostic default; supply it to document your own designs. `body` (and `intro`) use the same Markdown subset as everywhere else: `**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, and `- ` bullets.
+
+**Single pane** — a flat list of sections (the original form):
+
+```jsonc
+{
+  "help": {
+    "intro": "Configure a design and export an STL.",   // optional, shown at the top
+    "sections": [
+      { "title": "1. Pick a design", "body": "Use the **Design** dropdown…" },
+      { "title": "2. Adjust parameters", "body": "The left panel lists…" }
+    ]
+  }
+}
+```
+
+**Tabs** — group the guide into many tabs, each with its own content. Add a `tabs` array; a tab strip appears and each tab has a `label`, an optional `intro`, and its own `sections`:
+
+```jsonc
+{
+  "help": {
+    "intro": "Shown once above every tab.",   // optional shared intro
+    "tabs": [
+      {
+        "label": "Getting started",
+        "intro": "The basics.",               // optional per-tab intro
+        "sections": [
+          { "title": "Pick a design", "body": "Use the **Design** dropdown…" }
+        ]
+      },
+      {
+        "label": "Printing tips",
+        "sections": [
+          { "title": "Material", "body": "**PLA** works well." },
+          { "title": "Supports", "body": "Usually none are needed." }
+        ]
+      }
+    ]
+  }
+}
+```
+
+- Any number of tabs is supported; the strip is keyboard-navigable (arrow keys / Home / End) per the ARIA tabs pattern.
+- A top-level `intro` renders once above the tab strip; a per-tab `intro` renders above that tab's sections.
+- If you supply **both** top-level `sections` and `tabs`, the top-level sections become a leading **Overview** tab — so adding `tabs` to an existing single-pane help never drops the original content. To control every label yourself, put all content inside `tabs` and leave top-level `sections` out.
+
+## Open-source notices (`licenses`)
+
+The **ⓘ** button lists the third-party components ScadPub itself bundles (OpenSCAD-WASM, React, three.js, Liberation fonts) with their licenses and source links. If your deployment bundles **additional** software — an extra `.scad` library, a custom font, a vendored script — add its notice here. Entries are **appended** to the built-in list; ScadPub's own attributions are never removed.
+
+```jsonc
+{
+  "licenses": [
+    {
+      "name": "Acme Widget Library",        // required: component name
+      "license": "MIT",                      // required: SPDX identifier
+      "copyright": "Copyright (c) 2024 Acme Corp",  // required
+      "url": "https://example.com/acme",     // required: project homepage
+      "licenseUrl": "https://example.com/acme/LICENSE",  // required: where the license lives
+      "version": "3.1",                      // optional
+      "sourceUrl": "https://example.com/acme/src",  // optional (required by copyleft licenses)
+      "text": "MIT License\n\n…",            // optional: full license text, shown in a details panel
+      "note": "Bundled helper geometry."     // optional: one-line description
+    }
+  ]
+}
+```
+
+- `name`, `license`, `copyright`, `url`, and `licenseUrl` are required; the rest are optional. Unknown keys are ignored.
+- Provide `sourceUrl` for copyleft (e.g. GPL) components so the corresponding-source requirement is met. Provide `text` to reproduce a permissive license inline.
+- A malformed entry fails the build with a clear message.

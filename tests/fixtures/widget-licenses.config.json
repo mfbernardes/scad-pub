@@ -1,0 +1,26 @@
+{
+  "source": "src",
+  "features": [],
+  "fonts": [],
+  "licenses": [
+    {
+      "name": "Acme Widget Library",
+      "version": "3.1",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2024 Acme Corp",
+      "url": "https://example.com/acme",
+      "licenseUrl": "https://example.com/acme/LICENSE",
+      "note": "Bundled helper geometry.",
+      "ignored": "this unknown key is dropped"
+    },
+    {
+      "name": "Widgetron",
+      "license": "GPL-3.0-or-later",
+      "copyright": "Copyright (c) 2023 Widgetron authors",
+      "url": "https://example.com/widgetron",
+      "licenseUrl": "https://example.com/widgetron/COPYING",
+      "sourceUrl": "https://example.com/widgetron/src"
+    }
+  ],
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

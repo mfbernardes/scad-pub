@@ -30,7 +30,8 @@ npm run dev   # predev fetches the pinned OpenSCAD WASM and regenerates the sche
 - **Shareable URLs** — design, non-default parameters, and selected preset are encoded in the URL hash.
 - **Auto-render with brake** — re-renders after a debounce. Designs flagged `heavy` start in manual mode. Any render slower than ~6 s auto-pauses live updates.
 - **External font prompt** — optional `fontPrompt` config shows a startup dialog for non-bundled fonts. See [docs/config.md](docs/config.md#external-font-prompt-fontprompt).
-- **Open-source notice** — ⓘ button lists bundled third-party components with licenses and source links.
+- **Help** — `?` button shows a config-driven user guide; supports many tabs, each with its own content. See [docs/config.md](docs/config.md#help-content-help).
+- **Open-source notice** — ⓘ button lists bundled third-party components with licenses and source links; a deployment can append its own notices via config (built-ins are never removed). See [docs/config.md](docs/config.md#open-source-notices-licenses).
 
 ## Repository layout
 

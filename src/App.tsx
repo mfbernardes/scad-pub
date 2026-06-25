@@ -346,7 +346,12 @@ export default function App() {
       </header>
 
       {showHelp && <HelpModal help={schema.help} onClose={() => setShowHelp(false)} />}
-      {showLicenses && <LicensesModal onClose={() => setShowLicenses(false)} />}
+      {showLicenses && (
+        <LicensesModal
+          extra={schema.licenses}
+          onClose={() => setShowLicenses(false)}
+        />
+      )}
       {showFontPrompt && schema.fontPrompt && (
         <FontPromptModal
           prompt={schema.fontPrompt}

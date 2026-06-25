@@ -3,6 +3,7 @@
 // (attribution + license/source availability). Build-only tooling (Vite,
 // TypeScript, etc.) is not bundled into what we serve and is omitted.
 import oflText from "../licenses/OFL-1.1.txt?raw";
+import type { SoftwareLicense } from "../openscad/types";
 
 // The MIT permission notice (shared body; each component prepends its own
 // copyright line, which the license requires us to reproduce).
@@ -27,23 +28,12 @@ SOFTWARE.`;
 const mit = (copyright: string) =>
   `MIT License\n\n${copyright}\n\n${MIT_BODY}`;
 
-export interface LicenseEntry {
-  name: string;
-  version?: string;
-  license: string; // SPDX identifier
-  copyright: string;
-  /** Project homepage. */
-  url: string;
-  /** Canonical license text (for permissive licenses we can reproduce inline). */
-  text?: string;
-  /** Where the full license / corresponding source can be obtained. */
-  licenseUrl: string;
-  /** Source location, required for copyleft (GPL) components. */
-  sourceUrl?: string;
-  note?: string;
-}
+// The license-entry shape lives in the schema types (SoftwareLicense) so the
+// built-in attributions below and the consumer-appended ones from the config
+// share one definition. Kept exported under the original name for callers.
+export type LicenseEntry = SoftwareLicense;
 
-export const LICENSES: LicenseEntry[] = [
+export const LICENSES: SoftwareLicense[] = [
   {
     name: "OpenSCAD (WebAssembly build)",
     version: "2026.06.12",

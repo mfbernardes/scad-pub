@@ -118,6 +118,74 @@ test("validates the optional colours and extraCss", () => {
   assert.throws(() => validateSchema({ ...validBase(), extraCss: 42 }), /'extraCss' must be/);
 });
 
+test("validates the optional help (single-pane and tabbed) shape", () => {
+  // null/absent is fine.
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), help: null }));
+  // classic single-pane sections.
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      help: { intro: "hi", sections: [{ title: "T", body: "B" }] },
+    })
+  );
+  // tabbed help, with and without top-level sections.
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      help: { tabs: [{ label: "One", sections: [{ title: "T", body: "B" }] }] },
+    })
+  );
+  // a section missing a body is rejected.
+  assert.throws(
+    () => validateSchema({ ...validBase(), help: { sections: [{ title: "T" }] } }),
+    /'help\.sections' must be/
+  );
+  // a tab missing its sections is rejected.
+  assert.throws(
+    () => validateSchema({ ...validBase(), help: { tabs: [{ label: "One" }] } }),
+    /'help\.tabs' must be/
+  );
+  // help with neither sections nor tabs is rejected.
+  assert.throws(
+    () => validateSchema({ ...validBase(), help: { intro: "x" } }),
+    /'help' must provide/
+  );
+});
+
+test("validates the optional appended licenses", () => {
+  // null/absent/empty is fine.
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), licenses: [] }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), licenses: null }));
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      licenses: [
+        {
+          name: "Lib",
+          license: "MIT",
+          copyright: "(c) X",
+          url: "https://x",
+          licenseUrl: "https://x/LICENSE",
+        },
+      ],
+    })
+  );
+  // not an array.
+  assert.throws(
+    () => validateSchema({ ...validBase(), licenses: {} }),
+    /'licenses' must be an array/
+  );
+  // an entry missing a required field.
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        licenses: [{ name: "Lib", license: "MIT", copyright: "(c)", url: "https://x" }],
+      }),
+    /missing required string 'licenseUrl'/
+  );
+});
+
 test("validates the optional fontPrompt shape", () => {
   // null/absent is fine (the default).
   assert.doesNotThrow(() => validateSchema({ ...validBase(), fontPrompt: null }));

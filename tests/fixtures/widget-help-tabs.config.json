@@ -1,0 +1,23 @@
+{
+  "source": "src",
+  "features": [],
+  "fonts": [],
+  "help": {
+    "intro": "Shared intro shown above every tab.",
+    "tabs": [
+      {
+        "label": "Getting started",
+        "intro": "How to begin.",
+        "sections": [{ "title": "Step 1", "body": "Pick a design." }]
+      },
+      {
+        "label": "Printing",
+        "sections": [
+          { "title": "Material", "body": "Use **PLA**." },
+          { "title": "Supports", "body": "Usually none needed." }
+        ]
+      }
+    ]
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

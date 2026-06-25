@@ -522,6 +522,31 @@ select, input[type="text"], input[type="number"] {
 .modal-body { overflow-y: auto; padding: 0.5rem 1rem 1rem; }
 
 /* Help modal */
+.help-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  margin: 0.6rem 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.help-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 0.4rem 0.7rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.help-tab:hover { color: var(--text); }
+.help-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.help-tab-intro { margin: 0 0 0.6rem; color: var(--muted); font-size: 0.85rem; }
+.help-tab-intro p { margin: 0; }
+.help-tab-intro a { color: var(--link); }
 .help-body section { margin: 0.9rem 0; }
 .help-body h3 { margin: 0 0 0.25rem; font-size: 0.95rem; color: var(--accent); }
 .help-body p { margin: 0; color: var(--text); font-size: 0.88rem; line-height: 1.5; }

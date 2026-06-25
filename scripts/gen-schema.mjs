@@ -170,6 +170,42 @@ export function parseColors(raw) {
   return Object.keys(out).length ? out : null;
 }
 
+// Validate and normalise the optional `licenses` config block: extra
+// third-party software / license notices that get APPENDED (never substituted)
+// to the app's built-in open-source attributions (src/lib/licenses.ts) in the
+// in-app licenses modal. Each entry mirrors that file's shape. Required string
+// fields must be non-empty; recognised optional fields must be strings when
+// present; unknown keys are dropped. Fails the build with a clear message
+// (consistent with gen-schema's other fail-fast checks). Returns [] when unset.
+export function parseLicenses(raw) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw))
+    throw new Error(
+      "gen-schema: 'licenses' must be an array of software/license entries"
+    );
+  const REQUIRED = ["name", "license", "copyright", "url", "licenseUrl"];
+  const OPTIONAL = ["version", "text", "sourceUrl", "note"];
+  return raw.map((entry, i) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry))
+      throw new Error(`gen-schema: 'licenses[${i}]' must be an object`);
+    const out = {};
+    for (const key of REQUIRED) {
+      if (typeof entry[key] !== "string" || !entry[key].trim())
+        throw new Error(
+          `gen-schema: 'licenses[${i}].${key}' is required and must be a non-empty string`
+        );
+      out[key] = entry[key];
+    }
+    for (const key of OPTIONAL) {
+      if (entry[key] === undefined) continue;
+      if (typeof entry[key] !== "string")
+        throw new Error(`gen-schema: 'licenses[${i}].${key}' must be a string`);
+      out[key] = entry[key];
+    }
+    return out;
+  });
+}
+
 // The concise label is the first sentence of the doc block; the rest is help.
 // Split on sentence-ending .!? + whitespace + a capital/opening paren, so we
 // don't break on decimals (1.5 mm) or lowercase abbreviations (e.g., i.e.).
@@ -362,6 +398,9 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
+  // Optional extra third-party software / license notices. Validated and
+  // appended (never replacing the built-ins) by the in-app licenses modal.
+  const LICENSES_EXTRA = parseLicenses(config.licenses);
   // Optional per-theme colour-scheme overrides. Validated against the known CSS
   // tokens; emitted by vite.config.ts as a <style> block so a consumer project
   // can restyle the app entirely from its config. Absent -> null.
@@ -596,6 +635,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     fonts: FONTS,
     fontPrompt: FONT_PROMPT,
     help: HELP,
+    licenses: LICENSES_EXTRA,
     assets: [...assets].sort(),
     designs: designs.map(({ abs, ...d }) => d),
   };
