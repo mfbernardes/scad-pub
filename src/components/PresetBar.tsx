@@ -1,10 +1,9 @@
 // PresetBar.tsx — presets dropdown combining read-only bundled presets (shipped
 // with the app, per design) and the user's own browser-local presets, plus
-// desktop-compatible parameterSets export and a generic "Import file" button for
-// external files (fonts, SVGs, …). All copy here is config-driven (see
-// `fileImport`), so the bar is project-agnostic. All user storage is client-side.
+// Save and desktop-compatible parameterSets Export. (Generic file import lives
+// in FileBar, at the bottom of the panel.) All user storage is client-side.
 import { useEffect, useMemo, useState } from "react";
-import type { Design, FileImport } from "../openscad/types";
+import type { Design } from "../openscad/types";
 import {
   listPresets,
   loadPreset,
@@ -15,8 +14,7 @@ import {
 } from "../lib/presets";
 
 import { downloadBlob } from "../lib/download";
-import { FileInput } from "./FileInput";
-import { SaveIcon, TrashIcon, DownloadIcon, UploadIcon } from "./Icons";
+import { SaveIcon, DownloadIcon } from "./Icons";
 
 interface Props {
   design: Design;
@@ -24,13 +22,6 @@ interface Props {
   /** Read-only presets bundled with the app for this design. */
   bundled: ParsedSet[];
   onApply: (values: Values) => void;
-  onAddFile: (name: string, bytes: Uint8Array) => void;
-  /** Remove every imported file (and drop the render cache). */
-  onClearFiles: () => void;
-  /** Generic file-import config, or null to hide the "Import file" button. */
-  fileImport: FileImport | null;
-  /** Filenames of every user-supplied file currently loaded. */
-  loadedFiles: string[];
   /** The namespaced selected-preset id, owned by the app so it can be shared in
    *  the URL ("bundled:Name" / "user:Name" / ""). */
   selected: string;
@@ -50,10 +41,6 @@ export function PresetBar({
   values,
   bundled,
   onApply,
-  onAddFile,
-  onClearFiles,
-  fileImport,
-  loadedFiles,
   selected,
   onSelectedChange,
 }: Props) {
@@ -117,11 +104,6 @@ export function PresetBar({
     downloadBlob(blob, `${design.id}.json`);
   };
 
-  const onUploadFile = async (file: File) => {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    onAddFile(file.name, bytes);
-  };
-
   return (
     <div className="preset-bar">
       <div className="row">
@@ -174,42 +156,6 @@ export function PresetBar({
           <DownloadIcon size={16} /> Export
         </button>
       </div>
-      {fileImport && (
-        <>
-          <div className="grp-label">Files</div>
-          <div className="row btn-row">
-            <FileInput accept={fileImport.accept} onFile={onUploadFile}>
-              {(open) => (
-                <button
-                  type="button"
-                  className="btn-labeled"
-                  title={
-                    fileImport.note ??
-                    "Import a file your design references (a font, an SVG, a data file…)"
-                  }
-                  onClick={open}
-                >
-                  <UploadIcon size={16} /> {fileImport.label ?? "Import file"}…
-                </button>
-              )}
-            </FileInput>
-            <button
-              type="button"
-              className="btn-labeled"
-              title="Remove all imported files and clear the render cache"
-              onClick={onClearFiles}
-              disabled={loadedFiles.length === 0}
-            >
-              <TrashIcon size={16} /> Clear
-            </button>
-          </div>
-          {loadedFiles.length > 0 && (
-            <div className="row">
-              <span className="hint">added: {loadedFiles.join(", ")}</span>
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 }
