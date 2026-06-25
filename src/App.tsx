@@ -7,6 +7,7 @@ import { toScadExpr } from "./lib/scad";
 import {
   defaultsFor,
   fetchBundledPresets,
+  listPresets,
   type ParsedSet,
   type Values,
 } from "./lib/presets";
@@ -19,6 +20,7 @@ import { useServiceWorkerUpdate } from "./lib/swUpdate";
 import { ParamForm } from "./components/ParamForm";
 import { IconButton } from "./components/IconButton";
 import { PresetBar } from "./components/PresetBar";
+import { PresetSelect } from "./components/PresetSelect";
 import { FileBar } from "./components/FileBar";
 import type { ViewerHandle } from "./components/Viewer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -70,6 +72,11 @@ export default function App() {
   // The selected-preset id (namespaced), owned here so it rides along in the URL.
   const [presetSel, setPresetSel] = useState(initialState.preset);
   const [bundledPresets, setBundledPresets] = useState<ParsedSet[]>([]);
+  // The user's browser-local preset names for this design. Owned here so the
+  // PresetBar in the drawer and the compact topbar copy (small screens) stay in
+  // sync after a Save; re-read on design change and after saving.
+  const [userPresets, setUserPresets] = useState<string[]>(() => listPresets(design.id));
+  const refreshUserPresets = () => setUserPresets(listPresets(design.id));
   const [userFiles, setUserFiles] = useState<Record<string, Uint8Array>>({});
   const [result, setResult] = useState<RenderResult | null>(null);
   const [rendering, setRendering] = useState(false);
@@ -124,6 +131,7 @@ export default function App() {
     lastKeyRef.current = "";
     setAutoRender(!design.heavy);
     setPresetSel("");
+    setUserPresets(listPresets(design.id));
   }, [design]);
 
   // Mirror the current design + values + selected preset into the URL hash and
@@ -308,6 +316,18 @@ export default function App() {
             </select>
           </label>
         </div>
+        {/* Compact presets dropdown, shown only on small screens where the
+            parameter panel (and PresetBar) is hidden behind the hamburger. */}
+        <PresetSelect
+          className="topbar-preset"
+          design={design}
+          values={values}
+          bundled={bundledPresets}
+          userPresets={userPresets}
+          onApply={(v) => setValues(v)}
+          selected={presetSel}
+          onSelectedChange={setPresetSel}
+        />
         <span className="status" role="status" aria-live="polite">
           {rendering
             ? "Rendering…"
@@ -395,9 +415,11 @@ export default function App() {
             design={design}
             values={values}
             bundled={bundledPresets}
+            userPresets={userPresets}
             onApply={(v) => setValues(v)}
             selected={presetSel}
             onSelectedChange={setPresetSel}
+            onPresetsChange={refreshUserPresets}
           />
           <div className="form-toolbar">
             <button

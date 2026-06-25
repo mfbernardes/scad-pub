@@ -119,6 +119,11 @@ body {
 .brand-logo { height: 1.6rem; width: auto; display: block; }
 .topbar .status { margin-left: auto; color: var(--muted); }
 
+/* Compact presets dropdown in the topbar — hidden on wide screens (PresetBar in
+   the sidebar handles presets there), revealed at the hamburger breakpoint. */
+.topbar-preset { display: none; align-items: center; }
+.topbar-preset select { max-width: 11rem; }
+
 .layout { display: flex; flex: 1; min-height: 0; }
 
 .sidebar {
@@ -289,7 +294,8 @@ select, input[type="text"], input[type="number"] {
 /* Preset bar */
 .preset-bar { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
 .preset-bar .row { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
-.preset-bar select { flex: 1; min-width: 8rem; }
+.preset-bar .row > label { flex: 1; min-width: 8rem; display: flex; }
+.preset-bar select { flex: 1; min-width: 0; }
 .preset-bar .hint { color: var(--muted); font-size: 0.8rem; }
 
 /* Param form */
@@ -402,6 +408,10 @@ select, input[type="text"], input[type="number"] {
   .topbar { flex-wrap: wrap; gap: 0.6rem 1rem; }
   .topbar .status { margin-left: 0; width: 100%; }
 
+  /* Surface the presets dropdown beside the design picker, since the sidebar
+     PresetBar is now hidden behind the hamburger. */
+  .topbar-preset { display: inline-flex; }
+
   .sidebar {
     position: fixed;
     top: 0;
@@ -423,7 +433,7 @@ select, input[type="text"], input[type="number"] {
     background: rgba(0, 0, 0, 0.5);
   }
 
-  .preset-bar select { flex: 1 1 100%; }
+  .preset-bar .row > label { flex: 1 1 100%; }
 }
 
 @media (max-width: 480px) {

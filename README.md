@@ -17,7 +17,7 @@ npm run dev   # predev fetches the pinned OpenSCAD WASM and regenerates the sche
 
 ## Features
 
-- **3D preview** via three.js (F6 render), showing per-object colour; colour-bearing 3MF and PNG export.
+- **3D preview** via three.js (OpenSCAD full/manifold render), showing per-object colour; colour-bearing 3MF and PNG export.
 - **Parameter form** generated from OpenSCAD Customizer syntax; never drifts from the design.
 - **Conditional parameters** — `// @showIf <expr>` hides irrelevant controls. See [docs/annotations.md](docs/annotations.md).
 - **Collapsible groups** — `// @collapsed` above a section header starts it folded. See [docs/annotations.md](docs/annotations.md).
