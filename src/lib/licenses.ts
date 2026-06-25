@@ -1,7 +1,8 @@
-// licenses.ts — open-source attribution notice for the third-party components
-// shipped in this app. Listed to satisfy each component's license terms
-// (attribution + license/source availability). Build-only tooling (Vite,
-// TypeScript, etc.) is not bundled into what we serve and is omitted.
+// licenses.ts — open-source attribution notice for ScadPub itself and the
+// third-party components shipped in this app. Listed to satisfy each
+// component's license terms (attribution + license/source availability).
+// Build-only tooling (Vite, TypeScript, etc.) is not bundled into what we
+// serve and is omitted.
 import oflText from "../licenses/OFL-1.1.txt?raw";
 import type { SoftwareLicense } from "../openscad/types";
 
@@ -34,6 +35,20 @@ const mit = (copyright: string) =>
 export type LicenseEntry = SoftwareLicense;
 
 export const LICENSES: SoftwareLicense[] = [
+  {
+    name: "ScadPub",
+    license: "MIT",
+    copyright: "Copyright (c) 2026 Murillo Bernardes",
+    url: "https://github.com/mfbernardes/scad-pub",
+    licenseUrl: "https://github.com/mfbernardes/scad-pub/blob/main/LICENSE",
+    sourceUrl: "https://github.com/mfbernardes/scad-pub",
+    text: mit("Copyright (c) 2026 Murillo Bernardes"),
+    note:
+      "This configurator itself. ScadPub publishes OpenSCAD models as static, " +
+      "browser-based configurators; its own source is MIT-licensed and available " +
+      "at the link above. The MIT license covers ScadPub's own code only — the " +
+      "bundled components listed below carry their own terms.",
+  },
   {
     name: "OpenSCAD (WebAssembly build)",
     version: "2026.06.12",
