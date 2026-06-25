@@ -9,9 +9,9 @@
 
 /* [Tag] */
 // Width of the tag (mm).
-width = 70; // [10:1:160]
+width = 90; // [10:1:160]
 // Height of the tag (mm).
-height = 40; // [10:1:120]
+height = 45; // [10:1:120]
 // Thickness of the base plate (mm).
 thickness = 3; // [1:0.5:10]
 // Corner radius; use 0 for square corners (mm).
@@ -101,7 +101,10 @@ difference() {
         text(label, size = text_size, font = font,
              halign = "center", valign = "center");
 
+  // The hanging hole sits in the top-left corner, clear of the centred
+  // text/emblem row so it never punches through them.
   if (hole)
-    translate([width / 2 - max(hole_diameter, corner_radius) - 1, 0, -1])
-      linear_extrude(thickness + 2) circle(d = hole_diameter);
+    let (inset = max(hole_diameter, corner_radius) + 2)
+      translate([-width / 2 + inset, height / 2 - inset, -1])
+        linear_extrude(thickness + 2) circle(d = hole_diameter);
 }
