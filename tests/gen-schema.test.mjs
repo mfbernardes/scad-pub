@@ -310,6 +310,38 @@ test("colors default to null when omitted", () => {
   assert.equal(schema.colors, null);
 });
 
+test("extraCss: the stylesheet is copied and its URL recorded", () => {
+  const { schema, out } = run("widget-extracss.config.json");
+  assert.equal(schema.extraCss, "scad/extra.css");
+  assert.ok(existsSync(join(out, "scad", "extra.css")));
+});
+
+test("extraCss defaults to null when omitted", () => {
+  const { schema } = run("widget-autodeps.config.json");
+  assert.equal(schema.extraCss, null);
+});
+
+test("a missing extraCss path fails with a clear error", () => {
+  assert.throws(
+    () => run("widget-extracss-missing.config.json"),
+    /extraCss 'nope\.css' not found/
+  );
+});
+
+test("extraCss is listed in the public precache manifest", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  generate({
+    configPath: join(FIXTURES, "widget-extracss.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const precache = JSON.parse(
+    readFileSync(join(out, "public", "precache-manifest.json"), "utf-8")
+  );
+  assert.ok(precache.includes("scad/extra.css"));
+});
+
 test("parseColors validates tokens and values", () => {
   // null / empty -> null
   assert.equal(parseColors(undefined), null);

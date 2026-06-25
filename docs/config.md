@@ -15,6 +15,7 @@
     "dark":  { "accent": "#ff7849", "viewer-model": "#ff7849" },
     "light": { "accent": "#b8430f" }
   },
+  "extraCss": "theme.css",        // optional raw-CSS escape hatch (advanced)
   "logo": "logo.svg",             // header logo (omit for text title)
   "source": "examples",           // directory of .scad designs (relative to this file)
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
@@ -34,6 +35,7 @@
 - **`id`** — namespaces localStorage, IndexedDB, and preset cache. Defaults to `"scadpub"`.
 - **`description`** / **`shortName`** / **`icon`** / **`themeColor`** / **`backgroundColor`** — `<meta>` and PWA manifest fields. `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg`.
 - **`colors`** — optional per-theme CSS colour overrides; see [Theme & colour scheme](#theme--colour-scheme).
+- **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
 - **`fontPrompt`** — see [External font prompt](#external-font-prompt-fontprompt).
 - **`help`** — `{ intro?, sections: [{ title, body }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Omit for a generic default.
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
@@ -120,6 +122,41 @@ After changing colours, regenerate baselines and re-verify contrast:
 npm run vis -- --update   # regenerate visual-regression baselines
 npm run smoke             # axe-core run; 0 serious/critical = AA holds
 ```
+
+## Custom CSS (`extraCss`)
+
+When the `colors` token map isn't enough — you want different spacing, fonts,
+border-radius, logo sizing, etc. — `extraCss` is a full escape hatch: a path to a
+stylesheet (relative to the config file) that ships verbatim and loads **after**
+the app's own styles, so it can override anything.
+
+```jsonc
+{ "extraCss": "branding/theme.css" }
+```
+
+```css
+/* branding/theme.css */
+.topbar { padding: 0.4rem 1.5rem; }
+.param-group { border-radius: 14px; }
+.brand-logo { height: 2.2rem; }
+:root { --radius: 10px; }   /* you can still set custom properties here too */
+```
+
+`gen-schema` copies the file into the served tree (under the gitignored, auto-wiped
+`public/scad/`, so it never goes stale or gets committed) and records its URL;
+`vite.config.ts` injects a `<link>` after the bundled CSS. Because it loads last,
+your rules win on source order — no specificity hacks needed.
+
+> **This is an unsupported, advanced escape hatch — use `colors` first.** Unlike
+> the token map, `extraCss` targets internal class names (`.sidebar`,
+> `.param-group`, `.preview-actions .primary`, …). Those are **not a stable API**:
+> a future refactor can rename or restructure them and silently break your
+> overrides. It is also **outside the accessibility guarantees** — you can hide
+> focus rings, break contrast, or disturb layout. If you use it, pin the ScadPub
+> version you build against and re-run `npm run smoke` (0 serious/critical
+> axe-core violations) after changes. Prefer `colors` for anything it can express.
+
+Load order, last wins: app bundle CSS → `colors` `<style>` → `extraCss` `<link>`.
 
 ## External font prompt (`fontPrompt`)
 

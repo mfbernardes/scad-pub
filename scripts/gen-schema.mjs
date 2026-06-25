@@ -514,6 +514,24 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   }
   for (const a of assets) copyAsset(a);
 
+  // Optional raw-CSS escape hatch. Unlike `colors` — a safe, validated token map
+  // — this is a stylesheet the consumer fully controls, copied verbatim into the
+  // served tree and (see vite.config.ts) loaded *after* the app's own styles so
+  // it can override anything. It targets internal class names at the consumer's
+  // own risk: not a stable API, and not covered by the accessibility guarantees.
+  // Lives under the (gitignored, auto-wiped) scad output dir, so it never goes
+  // stale or gets committed. The schema records its served URL, or null.
+  let extraCss = null;
+  if (config.extraCss) {
+    const abs = mustExist(
+      resolve(CONFIG_DIR, config.extraCss),
+      `extraCss '${config.extraCss}'`
+    );
+    const name = abs.split(/[\\/]/).pop();
+    copyFileSync(abs, join(outScadDir, name));
+    extraCss = `scad/${name}`;
+  }
+
   // Generate the PWA manifest + app icon from the config (skipped for the
   // fixture-driven unit tests, which don't pass outPublicDir).
   if (outPublicDir) {
@@ -572,6 +590,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     description: DESCRIPTION,
     themeColor: THEME_COLOR,
     colors: COLORS,
+    extraCss,
     logo,
     features: FEATURES,
     fonts: FONTS,
@@ -597,6 +616,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       precache.add(logo.light);
       precache.add(logo.dark);
     }
+    if (extraCss) precache.add(extraCss);
     writeFileSync(
       join(outPublicDir, "precache-manifest.json"),
       JSON.stringify([...precache].sort(), null, 2) + "\n"

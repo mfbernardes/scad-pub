@@ -14,6 +14,7 @@ function readSchema(): {
     light?: Record<string, string>;
     dark?: Record<string, string>;
   } | null;
+  extraCss?: string | null;
 } {
   try {
     return JSON.parse(
@@ -50,23 +51,34 @@ function colorStyle(colors: ReturnType<typeof readSchema>["colors"]): string {
   return css ? `<style>\n${css}\n</style>\n` : "";
 }
 
-// Inject title/description/theme-color and any config colour scheme into
-// index.html so the page chrome is config-driven (not hard-coded to one project).
+// Inject title/description/theme-color, the config colour scheme, and any
+// consumer `extraCss` into index.html so the page chrome is config-driven (not
+// hard-coded to one project). Runs with `order: "post"` so the bundled app CSS
+// <link> has already been injected: the colour <style> and the extraCss <link>
+// land *after* it, giving consumer styles the final say (the escape hatch can
+// override the app's own rules by source order, not just specificity).
 function configHtml(s: ReturnType<typeof readSchema>): Plugin {
   const style = colorStyle(s.colors);
+  const extraLink = s.extraCss
+    ? `<link rel="stylesheet" href="${s.extraCss}" />\n`
+    : "";
+  const headInjection = style + extraLink;
   return {
     name: "config-html",
-    transformIndexHtml(html) {
-      return html
-        .replace(/%APP_TITLE%/g, s.title ?? "ScadPub")
-        .replace(
-          /%APP_DESCRIPTION%/g,
-          s.description ?? "Configure and export designs in your browser."
-        )
-        .replace(/%APP_THEME_COLOR%/g, s.themeColor ?? "#1f2229")
-        // Insert before </head> via a replacer so $-sequences in colour values
-        // (there shouldn't be any) are never treated as substitution patterns.
-        .replace("</head>", () => `${style}</head>`);
+    transformIndexHtml: {
+      order: "post",
+      handler(html) {
+        return html
+          .replace(/%APP_TITLE%/g, s.title ?? "ScadPub")
+          .replace(
+            /%APP_DESCRIPTION%/g,
+            s.description ?? "Configure and export designs in your browser."
+          )
+          .replace(/%APP_THEME_COLOR%/g, s.themeColor ?? "#1f2229")
+          // Insert before </head> via a replacer so $-sequences in colour values
+          // (there shouldn't be any) are never treated as substitution patterns.
+          .replace("</head>", () => `${headInjection}</head>`);
+      },
     },
   };
 }

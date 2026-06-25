@@ -1,0 +1,7 @@
+{
+  "source": "src",
+  "features": [],
+  "fonts": [],
+  "extraCss": "nope.css",
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

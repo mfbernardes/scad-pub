@@ -96,6 +96,13 @@ export interface Schema {
     light?: Record<string, string>;
     dark?: Record<string, string>;
   } | null;
+  /**
+   * Optional raw-CSS escape hatch: the served URL of a consumer-controlled
+   * stylesheet, loaded after the app's own CSS so it can override anything. It
+   * targets internal class names at the consumer's own risk (not a stable API,
+   * not covered by the accessibility guarantees). Null when unset.
+   */
+  extraCss?: string | null;
   /** Optional per-theme header logo: served-relative image URLs, or null. */
   logo: { light: string; dark: string } | null;
   /** OpenSCAD experimental features to --enable for every render. */

@@ -81,6 +81,8 @@ export function validateSchema(raw: unknown): Schema {
         fail(`'colors.${theme}' must be an object of token: colour strings`);
     }
   }
+  if (s.extraCss != null && typeof s.extraCss !== "string")
+    fail("'extraCss' must be a string URL or null");
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;
     if (
