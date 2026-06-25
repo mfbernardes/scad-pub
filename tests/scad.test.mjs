@@ -8,6 +8,7 @@ import {
   toScadExpr,
   toPresetString,
   fromPresetString,
+  orphanedDefines,
 } from "../src/lib/scad.ts";
 
 // Minimal param of a given type.
@@ -53,4 +54,22 @@ test("fromPresetString coerces back to the param's type", () => {
   assert.equal(fromPresetString(P("number", { default: 7 }), "nope"), 7);
   assert.equal(fromPresetString(P("enum"), "en-us"), "en-us");
   assert.equal(fromPresetString(P("string"), "hi"), "hi");
+});
+
+test("orphanedDefines flags only names the source no longer declares", () => {
+  const src = [
+    "/* [Main] */",
+    "width = 10; // [1:100]",
+    "  height = 5;", // indented assignment still counts as present
+    "label = \"hi\";",
+    "module box() { depth = width == 10 ? 1 : 2; }", // `==` is not a declaration
+  ].join("\n");
+  // present params (any order, any whitespace) are not flagged
+  assert.deepEqual(orphanedDefines(["width", "height", "label"], src), []);
+  // a removed param is flagged
+  assert.deepEqual(orphanedDefines(["width", "legacyDepth"], src), ["legacyDepth"]);
+  // a name that appears only in an `==` comparison isn't a declaration
+  assert.deepEqual(orphanedDefines(["depth"], src), ["depth"]);
+  // empty input is empty
+  assert.deepEqual(orphanedDefines([], src), []);
 });

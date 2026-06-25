@@ -15,6 +15,33 @@ export function isWaitingUpdate(state: string, hasController: boolean): boolean 
   return state === "installed" && hasController;
 }
 
+/**
+ * Nuclear escape hatch for a tab wedged on a stale build (e.g. a service worker
+ * that never activated its update). Unregisters every worker and drops the
+ * app-shell caches, then hard-reloads so index.html and its hashed chunks are
+ * refetched from the network. The big version-pinned WASM binary cache
+ * (`openscad-wasm-bin-*`, shared across deploys) is deliberately left intact so
+ * the reload doesn't re-download ~10 MB. Best-effort: it reloads regardless.
+ */
+export async function forceReload(): Promise<void> {
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if (typeof caches !== "undefined") {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.filter((k) => k.includes("-shell-")).map((k) => caches.delete(k))
+      );
+    }
+  } catch {
+    /* best-effort — reload anyway */
+  } finally {
+    location.reload();
+  }
+}
+
 export function useServiceWorkerUpdate() {
   const [updateReady, setUpdateReady] = useState(false);
   const waitingRef = useRef<ServiceWorker | null>(null);
@@ -86,7 +113,15 @@ export function useServiceWorkerUpdate() {
     else location.reload(); // no waiting worker (shouldn't happen) — hard reload
   };
 
+  // Reload onto the newest build. Prefer the graceful waiting-worker handoff;
+  // if there's no waiting worker (the running bundle is stale but the SW never
+  // staged an update), fall back to the nuclear unregister-and-reload.
+  const forceUpdate = () => {
+    if (waitingRef.current) applyUpdate();
+    else void forceReload();
+  };
+
   const dismiss = () => setUpdateReady(false);
 
-  return { updateReady, applyUpdate, dismiss };
+  return { updateReady, applyUpdate, forceUpdate, dismiss };
 }
