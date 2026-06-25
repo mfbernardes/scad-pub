@@ -1,7 +1,7 @@
 // smoke.mjs — end-to-end check of the built app in a real browser, all in one
 // process (an in-process static server for dist/ + headless Chromium). Confirms
 // the default design auto-renders, switches to the textmetrics design, exports
-// an STL via the UI, checks the textmetrics advisory surfaced, and runs axe-core
+// a 3MF via the UI, checks the textmetrics advisory surfaced, and runs axe-core
 // to guard against serious/critical accessibility regressions. Run after
 // `npm run build`.
 import { readFile, mkdtemp, stat } from "node:fs/promises";
@@ -202,16 +202,16 @@ async function main() {
     }
     if (!presetTested) console.log("  (no bundled presets in this config — skipped)");
 
-    // Export STL + PNG on the first design.
+    // Export 3MF + PNG on the first design.
     await selectDesign(page, ids[0]);
-    console.log("=== export STL ===");
-    const [stl] = await Promise.all([
+    console.log("=== export 3MF ===");
+    const [model] = await Promise.all([
       page.waitForEvent("download"),
-      page.click("button:has-text('Export STL')"),
+      page.click("button:has-text('Export 3MF')"),
     ]);
-    const stlOut = join(dir, await stl.suggestedFilename());
-    await stl.saveAs(stlOut);
-    check((await stat(stlOut)).size > 0, `${await stl.suggestedFilename()} (${(await stat(stlOut)).size} bytes)`);
+    const modelOut = join(dir, await model.suggestedFilename());
+    await model.saveAs(modelOut);
+    check((await stat(modelOut)).size > 0, `${await model.suggestedFilename()} (${(await stat(modelOut)).size} bytes)`);
 
     console.log("=== save PNG ===");
     const [png] = await Promise.all([

@@ -59,6 +59,7 @@ test("rejects malformed schemas with a descriptive error", () => {
 const validBase = () => ({
   title: "T",
   logo: null,
+  format: "3mf",
   features: [],
   fonts: [],
   assets: [],
@@ -81,6 +82,15 @@ test("validates the title and per-theme logo shape", () => {
     () => validateSchema({ ...validBase(), logo: { light: "a.svg" } }),
     /'logo' must be/
   );
+});
+
+test("validates the model format", () => {
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), format: "3mf" }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), format: "stl" }));
+  const noFormat = validBase();
+  delete noFormat.format;
+  assert.throws(() => validateSchema(noFormat), /'format' must be/);
+  assert.throws(() => validateSchema({ ...validBase(), format: "obj" }), /'format' must be/);
 });
 
 test("validates the optional per-design collapsedSections", () => {

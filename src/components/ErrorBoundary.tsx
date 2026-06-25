@@ -1,4 +1,4 @@
-// ErrorBoundary.tsx — contains rendering errors (e.g. a malformed STL or a
+// ErrorBoundary.tsx — contains rendering errors (e.g. a malformed 3MF or a
 // three.js/WebGL failure) so one bad mesh can't blank the whole app. When
 // `resetKey` changes (a new render arrives) it clears the error and retries.
 import { Component, type ReactNode } from "react";

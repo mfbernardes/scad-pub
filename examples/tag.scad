@@ -26,6 +26,9 @@ text_size = 9; // [3:0.5:30]
 text_depth = 1; // [0.4:0.1:3]
 // Font family/style. Change to an uploaded font's family, e.g. "DejaVu Sans".
 font = "Liberation Sans:style=Bold";
+// Colour of the raised text — any OpenSCAD colour name or "#rrggbb". Exported
+// into the 3MF so the viewer (and colour-capable slicers) show it.
+text_color = "#e23b3b";
 // Carve the text into the plate instead of raising it.
 engrave_text = false;
 
@@ -82,12 +85,15 @@ difference() {
   union() {
     linear_extrude(thickness) rounded_rect(width, height, corner_radius);
 
-    // Raised text / emblem stand on top of the plate.
+    // Raised text / emblem stand on top of the plate. The text gets its own
+    // colour so the export is multi-colour (the plate/emblem keep OpenSCAD's
+    // default, which the viewer tints to follow the theme).
     if (!engrave_text && label != "")
-      translate([text_x, 0, thickness])
-        linear_extrude(text_depth)
-          text(label, size = text_size, font = font,
-               halign = "center", valign = "center");
+      color(text_color)
+        translate([text_x, 0, thickness])
+          linear_extrude(text_depth)
+            text(label, size = text_size, font = font,
+                 halign = "center", valign = "center");
 
     if (show_emblem)
       translate([emblem_x, 0, thickness])

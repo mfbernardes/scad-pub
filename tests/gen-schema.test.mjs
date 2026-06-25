@@ -20,6 +20,7 @@ import {
   parseColors,
   parseLicenses,
   parseFileImport,
+  parseFormat,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -267,6 +268,26 @@ test("per-theme logos with the same basename don't overwrite each other", () => 
   // Each served file matches its own source (no overwrite).
   assert.match(readFileSync(lightAbs, "utf-8"), /#fff/);
   assert.match(readFileSync(darkAbs, "utf-8"), /#000/);
+});
+
+test("format defaults to 3mf, accepts stl, and rejects anything else", () => {
+  assert.equal(parseFormat(undefined), "3mf");
+  assert.equal(parseFormat(null), "3mf");
+  assert.equal(parseFormat("3mf"), "3mf");
+  assert.equal(parseFormat("stl"), "stl");
+  assert.throws(() => parseFormat("obj"), /config\.format must be/);
+  assert.throws(() => parseFormat("STL"), /config\.format must be/);
+});
+
+test("format is emitted to the schema and folded into renderHash", () => {
+  // Two configs identical but for `format` (widget-stl is a copy with stl): the
+  // format must reach the schema and, because it changes OpenSCAD's output, the
+  // renderHash too.
+  const a = run("widget.config.json").schema; // default -> 3mf
+  const b = run("widget-stl.config.json").schema;
+  assert.equal(a.format, "3mf");
+  assert.equal(b.format, "stl");
+  assert.notEqual(a.renderHash, b.renderHash);
 });
 
 test("renderHash folds in the renderer source so flag changes invalidate it", () => {

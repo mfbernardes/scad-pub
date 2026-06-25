@@ -9,6 +9,7 @@ import { headStyleInjection } from "./src/lib/configCss";
 function readSchema(): {
   title?: string;
   id?: string;
+  format?: "3mf" | "stl";
   description?: string;
   themeColor?: string;
   colors?: {
@@ -70,6 +71,9 @@ export default defineConfig(({ command }) => {
     define: {
       __APP_ID__: JSON.stringify(schema.id || "scadpub"),
       __APP_THEME_COLOR__: JSON.stringify(schema.themeColor || "#1f2229"),
+      // The build-time model format. A literal here lets the viewer's dead
+      // loader branch (and its loader import) tree-shake out of the bundle.
+      __APP_FORMAT__: JSON.stringify(schema.format || "3mf"),
     },
     worker: { format: "es" },
     build: {
