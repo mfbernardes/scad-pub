@@ -6,7 +6,6 @@
 import { useEffect, useState } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import {
-  deletePreset,
   listPresets,
   loadPreset,
   savePreset,
@@ -87,15 +86,6 @@ export function PresetBar({
     }
   };
 
-  const onDelete = () => {
-    // Only the user's own presets can be deleted; bundled ones are read-only.
-    if (isUser && confirm(`Delete preset "${selectedName}"?`)) {
-      deletePreset(design.id, selectedName);
-      onSelectedChange("");
-      refresh();
-    }
-  };
-
   const onExport = () => {
     const setName = selectedName || "Web preset";
     const file = toParameterSetsFile(design, setName, values);
@@ -149,18 +139,6 @@ export function PresetBar({
         >
           <SaveIcon size={16} /> Save
         </button>
-        <button
-          type="button"
-          className="btn-labeled"
-          title="Delete the selected preset (bundled presets can't be deleted)"
-          onClick={onDelete}
-          disabled={!isUser}
-        >
-          <TrashIcon size={16} /> Delete
-        </button>
-      </div>
-      <div className="grp-label">Parameter file</div>
-      <div className="row btn-row">
         <button
           type="button"
           className="btn-labeled"
