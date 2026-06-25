@@ -10,6 +10,10 @@ function readSchema(): {
   id?: string;
   description?: string;
   themeColor?: string;
+  colors?: {
+    light?: Record<string, string>;
+    dark?: Record<string, string>;
+  } | null;
 } {
   try {
     return JSON.parse(
@@ -23,9 +27,33 @@ function readSchema(): {
   }
 }
 
-// Inject title/description/theme-color into index.html so the page chrome is
-// config-driven (not hard-coded to one project).
+// Build a <style> block of the config's per-theme colour overrides, applied to
+// :root (dark) and :root[data-theme="light"]. The doubled `:root:root` bumps
+// specificity above index.css's own `:root` / `:root[data-theme="light"]` rules
+// so the overrides win regardless of stylesheet source order — Vite injects the
+// bundled CSS as a <link> whose position relative to this inline <style> isn't
+// guaranteed. Returns "" when no colours are configured.
+function colorStyle(colors: ReturnType<typeof readSchema>["colors"]): string {
+  if (!colors) return "";
+  const block = (sel: string, tokens?: Record<string, string>) => {
+    const decls = Object.entries(tokens ?? {})
+      .map(([k, v]) => `  --${k}: ${v};`)
+      .join("\n");
+    return decls ? `${sel} {\n${decls}\n}` : "";
+  };
+  const css = [
+    block(":root:root", colors.dark),
+    block(':root:root[data-theme="light"]', colors.light),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return css ? `<style>\n${css}\n</style>\n` : "";
+}
+
+// Inject title/description/theme-color and any config colour scheme into
+// index.html so the page chrome is config-driven (not hard-coded to one project).
 function configHtml(s: ReturnType<typeof readSchema>): Plugin {
+  const style = colorStyle(s.colors);
   return {
     name: "config-html",
     transformIndexHtml(html) {
@@ -35,7 +63,10 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
           /%APP_DESCRIPTION%/g,
           s.description ?? "Configure and export designs in your browser."
         )
-        .replace(/%APP_THEME_COLOR%/g, s.themeColor ?? "#1f2229");
+        .replace(/%APP_THEME_COLOR%/g, s.themeColor ?? "#1f2229")
+        // Insert before </head> via a replacer so $-sequences in colour values
+        // (there shouldn't be any) are never treated as substitution patterns.
+        .replace("</head>", () => `${style}</head>`);
     },
   };
 }

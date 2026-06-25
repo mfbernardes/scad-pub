@@ -86,6 +86,16 @@ export interface Schema {
   /** Optional help content shown in the Help modal. When null, a generic,
    *  project-agnostic default is used. */
   help: { intro?: string; sections: HelpSection[] } | null;
+  /**
+   * Optional per-theme colour-scheme overrides supplied by the consumer config.
+   * Keys are the CSS custom-property tokens from src/index.css (without the
+   * leading `--`); values are CSS colours. Emitted as a <style> block at build
+   * time (see vite.config.ts), so it's not read at runtime. Null when unset.
+   */
+  colors?: {
+    light?: Record<string, string>;
+    dark?: Record<string, string>;
+  } | null;
   /** Optional per-theme header logo: served-relative image URLs, or null. */
   logo: { light: string; dark: string } | null;
   /** OpenSCAD experimental features to --enable for every render. */
