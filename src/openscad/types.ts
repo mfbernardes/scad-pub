@@ -32,6 +32,13 @@ export interface RenderResult {
   ms: number;
   /** True when served from a cache (in-memory or persistent) rather than freshly rendered. */
   cached?: boolean;
+  /**
+   * Parameter names the request tried to define but the freshly-fetched `.scad`
+   * source no longer declares — a sign this JS bundle is stale relative to the
+   * deployed sources (see `orphanedDefines`). Present only when non-empty; the
+   * UI uses it to prompt the user to reload.
+   */
+  staleDefines?: string[];
 }
 
 // ---- Parameter schema (produced by scripts/gen-schema.mjs) ----

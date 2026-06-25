@@ -597,6 +597,11 @@ select, input[type="text"], input[type="number"] {
   color: var(--muted);
   text-decoration: underline;
 }
+/* The skew/stale-bundle variant: a warn-toned border marks it as a problem the
+   user must act on (vs. the routine "new version available" toast). */
+.update-toast.stale-toast {
+  border-color: var(--warn);
+}
 
 .modal-intro code {
   background: var(--panel-2);

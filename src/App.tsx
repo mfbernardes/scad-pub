@@ -57,7 +57,12 @@ const fileImport = schema.fileImport ?? null;
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
-  const { updateReady, applyUpdate, dismiss: dismissUpdate } = useServiceWorkerUpdate();
+  const {
+    updateReady,
+    applyUpdate,
+    forceUpdate,
+    dismiss: dismissUpdate,
+  } = useServiceWorkerUpdate();
   const [designId, setDesignId] = useState(initialState.designId);
   const design = useMemo<Design>(
     () => schema.designs.find((d) => d.id === designId)!,
@@ -75,6 +80,10 @@ export default function App() {
   const [userFiles, setUserFiles] = useState<Record<string, Uint8Array>>({});
   const [result, setResult] = useState<RenderResult | null>(null);
   const [rendering, setRendering] = useState(false);
+  // True once any render reports parameters the deployed source has dropped —
+  // i.e. this cached bundle is stale (see worker.ts's skew guard). Latched so a
+  // later cache hit (which carries no skew info) can't clear the reload prompt.
+  const [bundleStale, setBundleStale] = useState(false);
   // Key of the last *successful* render. Drives the "stale preview" notice: when
   // it differs from the current parameters' key, the preview is out of date.
   const [renderedKey, setRenderedKey] = useState("");
@@ -184,6 +193,7 @@ export default function App() {
           setRenderedKey(renderKey);
         }
         setResult(r);
+        if (r.staleDefines?.length) setBundleStale(true);
         setRendering(false);
         // A heavy render auto-pauses live updates so further edits don't queue
         // long renders on every keystroke; the user renders on demand instead.
@@ -371,16 +381,28 @@ export default function App() {
         {announcement}
       </div>
 
-      {updateReady && (
-        <div className="update-toast" role="status" aria-live="polite">
-          <span>A new version is available.</span>
-          <button className="primary" onClick={applyUpdate}>
+      {bundleStale ? (
+        // The running bundle is out of date relative to the deployed sources, so
+        // a cryptic "unknown parameter" error would otherwise surface. Prompt a
+        // forced reload instead — no "Later", since staying put keeps it broken.
+        <div className="update-toast stale-toast" role="alert">
+          <span>This page is running an outdated version. Reload to update.</span>
+          <button className="primary" onClick={forceUpdate}>
             Reload
           </button>
-          <button className="link-btn" onClick={dismissUpdate}>
-            Later
-          </button>
         </div>
+      ) : (
+        updateReady && (
+          <div className="update-toast" role="status" aria-live="polite">
+            <span>A new version is available.</span>
+            <button className="primary" onClick={applyUpdate}>
+              Reload
+            </button>
+            <button className="link-btn" onClick={dismissUpdate}>
+              Later
+            </button>
+          </div>
+        )
       )}
 
       <main className="layout">

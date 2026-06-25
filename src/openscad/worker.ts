@@ -9,6 +9,7 @@
 import schema from "../generated/designs.json";
 import type { ModelFormat, RenderRequest, RenderResult } from "./types";
 import { assetUrl as asset } from "../lib/assetUrl";
+import { orphanedDefines } from "../lib/scad";
 
 // Persistent cache for the big, version-pinned binaries (the ~10 MB WASM and
 // the fonts), so reloads are instant and the app works offline. The cache name
@@ -199,12 +200,22 @@ async function render(req: RenderRequest): Promise<RenderResult> {
   // The selected design, mounted at its own source-relative path.
   const design = schema.designs.find((d) => d.id === req.design);
   if (!design) throw new Error(`unknown design: ${req.design}`);
-  mount(design.file, await loadDesignSource(design.file));
+  const designSrc = await loadDesignSource(design.file);
+  mount(design.file, designSrc);
 
-  const defineArgs = Object.entries(req.defines).flatMap(([k, v]) => [
-    "-D",
-    `${k}=${v}`,
-  ]);
+  // Skew guard: a stale cached bundle may carry parameters the freshly-fetched
+  // source has since dropped. Don't pass those to OpenSCAD (it'd warn cryptically
+  // about an unknown variable); report them so the UI can prompt for a reload.
+  const staleDefines = orphanedDefines(Object.keys(req.defines), designSrc);
+  if (staleDefines.length)
+    log.push(
+      `[skew] this build is out of date — ignoring parameter(s) the design no ` +
+        `longer defines: ${staleDefines.join(", ")}. Reload to update.`
+    );
+
+  const defineArgs = Object.entries(req.defines).flatMap(([k, v]) =>
+    staleDefines.includes(k) ? [] : ["-D", `${k}=${v}`]
+  );
   const featureArgs = schema.features.map((f) => `--enable=${f}`);
   // The export format is chosen at build time (config -> schema). 3MF carries
   // per-object colour — OpenSCAD's manifold backend writes each `color(...)`
@@ -265,6 +276,7 @@ async function render(req: RenderRequest): Promise<RenderResult> {
     stl,
     log,
     ms: Math.round(performance.now() - t0),
+    ...(staleDefines.length ? { staleDefines } : {}),
   };
 }
 
