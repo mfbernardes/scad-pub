@@ -21,7 +21,7 @@
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
-  "fontPrompt": { "url": "…", "label": "…" },  // optional external-font prompt
+  "fileImport": true,             // optional "Import file" button for user-supplied files
   "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
   "licenses": [ { "name": "…", "license": "…", … } ],  // optional extra open-source notices (appended)
   "designs": [
@@ -37,7 +37,7 @@
 - **`description`** / **`shortName`** / **`icon`** / **`themeColor`** / **`backgroundColor`** — `<meta>` and PWA manifest fields. `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg`.
 - **`colors`** — optional per-theme CSS colour overrides; see [Theme & colour scheme](#theme--colour-scheme).
 - **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
-- **`fontPrompt`** — see [External font prompt](#external-font-prompt-fontprompt).
+- **`fileImport`** — see [Import file button](#import-file-fileimport).
 - **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
@@ -160,22 +160,32 @@ your rules win on source order — no specificity hacks needed.
 
 Load order, last wins: app bundle CSS → `colors` `<style>` → `extraCss` `<link>`.
 
-## External font prompt (`fontPrompt`)
+## Import file (`fileImport`)
+
+Designs sometimes need a file the app can't bundle — a license-restricted font, an SVG to `import()`, a `surface()` data file, etc. Setting `fileImport` adds a single **Import file** button to the preset panel that lets the user supply any such file at runtime, entirely client-side (nothing is uploaded to a server).
 
 ```jsonc
 {
-  "fontPrompt": {
-    "url": "https://example.org/MyFont.ttf",  // required: download link
-    "label": "My profile font",               // optional: friendly name
-    "family": "My Font Family",               // optional: TTF internal family name
-    "heading": "Profile font",                // optional: preset-panel group heading (default "Font")
-    "linkText": "Get My Font",                // optional: download-link text (default "Get {label}")
-    "note": "…"                               // optional: download-link tooltip
+  // Shorthand: enable with defaults (accepts any file type).
+  "fileImport": true
+
+  // …or an options object:
+  "fileImport": {
+    "accept": ".svg,.ttf,.otf",  // optional: file-picker filter (omit to accept any file)
+    "label": "Import file",      // optional: button label (default "Import file")
+    "note": "…"                  // optional: button tooltip / hint
   }
 }
 ```
 
-When set and the user has no font stored, a startup modal explains the font requirement, links to the download, and allows immediate TTF upload. The same link and an **Import font…** button appear in the preset panel. Uploaded fonts persist in IndexedDB. A "Don't remind me again" button suppresses the startup modal permanently. Omit `fontPrompt` and neither the modal nor the font group is shown.
+**How uploads are made available to OpenSCAD** — decided automatically by file extension, so one button covers both cases:
+
+- **Fonts** (`.ttf`/`.otf`/`.ttc`) are mounted where the renderer's fontconfig can find them, so `text(font = "…")` can use them. Without the expected font, an open-license fallback stands in (the log panel says so).
+- **Any other file** is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. The reference must match the uploaded file's name (use `note` to tell users which name to use).
+
+Uploaded files persist in IndexedDB and are re-applied on the next visit; the panel lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no import button is shown.
+
+> The legacy single-object `fontPrompt` is still accepted: it enables the button with a `.ttf,.otf` filter.
 
 ## Help content (`help`)
 

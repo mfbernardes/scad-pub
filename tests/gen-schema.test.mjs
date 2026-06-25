@@ -19,6 +19,7 @@ import {
   parseEnumHint,
   parseColors,
   parseLicenses,
+  parseFileImport,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -140,21 +141,22 @@ test("a per-theme logo with one side omitted falls back to the other", () => {
   assert.deepEqual(schema.logo, { light: "scad/logo.svg", dark: "scad/logo.svg" });
 });
 
-test("title defaults when omitted; no logo or fontPrompt by default", () => {
+test("title defaults when omitted; no logo or fileImport by default", () => {
   const { schema } = run("widget-autodeps.config.json");
   assert.equal(typeof schema.title, "string");
   assert.equal(schema.logo, null);
-  assert.equal(schema.fontPrompt, null);
+  assert.equal(schema.fileImport, null);
 });
 
 test("config-driven features, fonts; presets auto-detected by sibling name", () => {
   const { schema, out } = run("widget.config.json");
   assert.deepEqual(schema.features, ["textmetrics"]);
   assert.deepEqual(schema.fonts, ["Foo.ttf"]);
-  assert.deepEqual(schema.fontPrompt, {
-    url: "https://example/Foo.ttf",
-    label: "Foo font",
-    family: "Foo",
+  // The fixture uses the legacy single `fontPrompt`, mapped to the file-import
+  // button (font accept default + an "Import …" label).
+  assert.deepEqual(schema.fileImport, {
+    accept: ".ttf,.otf",
+    label: "Import Foo font",
   });
   // src/widget.json sits next to src/widget.scad, so it's bundled automatically.
   assert.deepEqual(schema.designs[0].presets, ["widget.json"]);
@@ -450,6 +452,32 @@ test("parseLicenses validates shape and required fields", () => {
         },
       ]),
     /'licenses\[0\]\.note' must be a string/
+  );
+});
+
+test("parseFileImport: true/object/legacy fontPrompt, defaults and errors", () => {
+  // Absent -> null; explicit false -> null.
+  assert.equal(parseFileImport(undefined, undefined), null);
+  assert.equal(parseFileImport(false, undefined), null);
+  // true -> defaults (an empty options object).
+  assert.deepEqual(parseFileImport(true, undefined), {});
+  // Object form: known string fields pass through; nulls/undefined dropped.
+  assert.deepEqual(
+    parseFileImport({ accept: ".svg", label: "Add SVG", note: undefined }, undefined),
+    { accept: ".svg", label: "Add SVG" }
+  );
+  // Legacy fontPrompt -> font accept default + an "Import …" label.
+  assert.deepEqual(parseFileImport(undefined, { url: "https://x/f.ttf", label: "DIN" }), {
+    accept: ".ttf,.otf",
+    label: "Import DIN",
+  });
+  // An explicit fileImport wins over a legacy fontPrompt.
+  assert.deepEqual(parseFileImport({ accept: ".svg" }, { label: "DIN" }), { accept: ".svg" });
+  // Wrong shapes -> clear errors.
+  assert.throws(() => parseFileImport([], undefined), /'fileImport' must be true/);
+  assert.throws(
+    () => parseFileImport({ accept: 5 }, undefined),
+    /'fileImport\.accept' must be a string/
   );
 });
 

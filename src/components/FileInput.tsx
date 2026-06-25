@@ -3,7 +3,8 @@
 import { useRef, type ReactNode } from "react";
 
 interface Props {
-  accept: string;
+  /** `accept` filter for the picker; omit to allow any file type. */
+  accept?: string;
   onFile: (file: File) => void;
   children: (open: () => void) => ReactNode;
 }

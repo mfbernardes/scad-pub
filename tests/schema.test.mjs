@@ -186,18 +186,24 @@ test("validates the optional appended licenses", () => {
   );
 });
 
-test("validates the optional fontPrompt shape", () => {
+test("validates the optional fileImport shape", () => {
   // null/absent is fine (the default).
-  assert.doesNotThrow(() => validateSchema({ ...validBase(), fontPrompt: null }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), fileImport: null }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), fileImport: {} }));
   assert.doesNotThrow(() =>
     validateSchema({
       ...validBase(),
-      fontPrompt: { url: "https://x/f.ttf", label: "DIN", family: "DIN 32986" },
+      fileImport: { accept: ".svg", label: "Import file", note: "any file" },
     })
   );
-  // url is required.
+  // not an object.
   assert.throws(
-    () => validateSchema({ ...validBase(), fontPrompt: { label: "DIN" } }),
-    /'fontPrompt' must be/
+    () => validateSchema({ ...validBase(), fileImport: [] }),
+    /'fileImport' must be an object/
+  );
+  // non-string field.
+  assert.throws(
+    () => validateSchema({ ...validBase(), fileImport: { accept: 5 } }),
+    /'fileImport\.accept' must be a string/
   );
 });

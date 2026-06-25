@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <!-- A simple 5-point star, used as the default emblem so the design renders
+       out of the box. Upload your own SVG and point `svg_file` at it to swap it. -->
+  <polygon fill="black"
+    points="50,5 60.6,35.4 92.8,36.1 67.1,55.6 76.5,86.4 50,68 23.5,86.4 32.9,55.6 7.2,36.1 39.4,35.4" />
+</svg>

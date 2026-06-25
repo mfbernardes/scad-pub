@@ -432,13 +432,6 @@ select, input[type="text"], input[type="number"] {
   .preview-actions button { flex: 1; }
 }
 
-.font-link {
-  color: var(--link);
-  font-size: 0.85rem;
-  text-decoration: none;
-}
-.font-link:hover { text-decoration: underline; }
-
 /* Icon buttons (preset actions, licenses, modal close). */
 .icon-btn {
   display: inline-flex;
@@ -595,12 +588,6 @@ select, input[type="text"], input[type="number"] {
   text-decoration: underline;
 }
 
-/* Font-upload prompt */
-.font-prompt-body ol { margin: 0.3rem 0 0; padding-left: 1.2rem; }
-.font-prompt-body li { margin: 0.35rem 0; font-size: 0.9rem; line-height: 1.5; }
-.font-prompt-body a { color: var(--link); }
-.font-prompt-body .hint { margin: 0.8rem 0 0; color: var(--muted); font-size: 0.82rem; }
-.font-prompt-body code,
 .modal-intro code {
   background: var(--panel-2);
   border-radius: 4px;

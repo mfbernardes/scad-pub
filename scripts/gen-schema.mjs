@@ -206,6 +206,32 @@ export function parseLicenses(raw) {
   });
 }
 
+// Validate and normalise the optional `fileImport` config block: the generic
+// "Import file" button that lets the user supply any file their designs
+// reference but the app can't bundle (a font, an SVG to import(), a surface()
+// data file, …). Accepts `true` (defaults), an options object, or the legacy
+// single `fontPrompt` object (its `accept`/`label`/`note` carry over). Fails the
+// build with a clear message on a bad shape. Returns null when not configured.
+export function parseFileImport(fileImport, legacyFontPrompt) {
+  let raw = fileImport;
+  if (raw == null && legacyFontPrompt != null) {
+    const fp = legacyFontPrompt;
+    raw = { accept: fp.accept ?? ".ttf,.otf", label: fp.label && `Import ${fp.label}`, note: fp.note };
+  }
+  if (raw == null || raw === false) return null;
+  if (raw === true) return {};
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'fileImport' must be true, an options object, or null");
+  const out = {};
+  for (const key of ["accept", "label", "note"]) {
+    if (raw[key] === undefined || raw[key] === null) continue;
+    if (typeof raw[key] !== "string")
+      throw new Error(`gen-schema: 'fileImport.${key}' must be a string`);
+    out[key] = raw[key];
+  }
+  return out;
+}
+
 // The concise label is the first sentence of the doc block; the rest is help.
 // Split on sentence-ending .!? + whitespace + a capital/opening paren, so we
 // don't break on decimals (1.5 mm) or lowercase abbreviations (e.g., i.e.).
@@ -392,9 +418,10 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // PWA / browser chrome colours (default to the dark palette's chrome).
   const THEME_COLOR = config.themeColor ?? "#1f2229";
   const BG_COLOR = config.backgroundColor ?? "#15171c";
-  // Optional nudge to upload an external (non-bundled) font; passed through
-  // verbatim. Absent -> null -> no startup prompt.
-  const FONT_PROMPT = config.fontPrompt ?? null;
+  // Optional generic file-import button (fonts, SVGs, data files, …). Validated;
+  // the legacy single `fontPrompt` object is accepted too. Absent -> null -> no
+  // import button.
+  const FILE_IMPORT = parseFileImport(config.fileImport, config.fontPrompt);
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
@@ -633,7 +660,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     logo,
     features: FEATURES,
     fonts: FONTS,
-    fontPrompt: FONT_PROMPT,
+    fileImport: FILE_IMPORT,
     help: HELP,
     licenses: LICENSES_EXTRA,
     assets: [...assets].sort(),

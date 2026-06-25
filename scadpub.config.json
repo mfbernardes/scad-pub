@@ -3,11 +3,13 @@
   "id": "scadpub",
   "description": "ScadPub publishes OpenSCAD models as static browser-based configurators.",
   "source": "examples",
+  "assets": ["emblem.svg"],
   "features": [],
   "fonts": [
     "LiberationSans-Bold.ttf",
     "LiberationSans-Regular.ttf"
   ],
+  "fileImport": true,
   "designs": [
     { "id": "tag", "label": "Tag" }
   ]

@@ -61,10 +61,14 @@ export function validateSchema(raw: unknown): Schema {
     if (typeof lg !== "object" || typeof lg.light !== "string" || typeof lg.dark !== "string")
       fail("'logo' must be { light, dark } URLs or null");
   }
-  if (s.fontPrompt != null) {
-    const fp = s.fontPrompt as Record<string, unknown>;
-    if (typeof fp !== "object" || typeof fp.url !== "string")
-      fail("'fontPrompt' must be { url, label?, family?, heading?, linkText?, note? } or null");
+  if (s.fileImport != null) {
+    if (typeof s.fileImport !== "object" || Array.isArray(s.fileImport))
+      fail("'fileImport' must be an object or null");
+    const fi = s.fileImport as Record<string, unknown>;
+    for (const key of ["accept", "label", "note"] as const) {
+      if (fi[key] !== undefined && typeof fi[key] !== "string")
+        fail(`'fileImport.${key}' must be a string`);
+    }
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
   if (s.colors != null) {

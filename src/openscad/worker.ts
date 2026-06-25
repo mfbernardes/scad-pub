@@ -108,6 +108,13 @@ async function loadDesignSource(path: string): Promise<string> {
   return designSources[path];
 }
 
+// A user file is treated as a font (mounted where fontconfig can find it) when
+// its extension is one OpenSCAD/FreeType can load. Everything else is mounted at
+// the FS root as a plain referenceable asset.
+function isFontFile(name: string): boolean {
+  return /\.(ttf|otf|ttc)$/i.test(name);
+}
+
 function mkdirp(FS: OpenSCADInstance["FS"], dir: string) {
   let cur = "";
   for (const part of dir.split("/").filter(Boolean)) {
@@ -161,16 +168,12 @@ async function render(req: RenderRequest): Promise<RenderResult> {
   const instance = await factory(opts);
   const { FS } = instance;
 
-  // Fonts (bundled Liberation + any user-supplied) and a writable cache dir.
+  // Fonts (bundled Liberation) and a writable cache dir.
   mkdirp(FS, "/fonts");
   mkdirp(FS, "/fontconfig-cache");
   FS.writeFile("/fonts/fonts.conf", fontsConf!);
   for (const [name, bytes] of Object.entries(fontFiles!))
     FS.writeFile(`/fonts/${name}`, bytes);
-  // User-supplied filenames are untrusted: strip any path components so a name
-  // like "../x.ttf" can't escape /fonts/ (fontconfig only scans /fonts anyway).
-  for (const [name, bytes] of Object.entries(req.userFonts ?? {}))
-    FS.writeFile(`/fonts/${name.replace(/^.*[\\/]/, "") || "font"}`, bytes);
 
   // Write a source-relative file into the FS, creating its parent directory.
   const mount = (path: string, src: string | Uint8Array) => {
@@ -181,6 +184,18 @@ async function render(req: RenderRequest): Promise<RenderResult> {
   // Shared dependency files at their source-relative paths, so each design's
   // `use`/`include` resolves exactly as it does in the source tree.
   for (const [path, src] of Object.entries(assetSources!)) mount(path, src);
+
+  // User-supplied files, mounted AFTER the bundled assets so an upload can
+  // override a default of the same name (e.g. swap the bundled emblem.svg).
+  // Filenames are untrusted, so strip any path components (a name like "../x"
+  // can't escape its mount dir). Fonts go into /fonts so fontconfig (which only
+  // scans /fonts) picks them up for text(); every other file is mounted at the
+  // FS root so a design can reference it by name, e.g. `import("logo.svg")`.
+  for (const [rawName, bytes] of Object.entries(req.userFiles ?? {})) {
+    const name = rawName.replace(/^.*[\\/]/, "") || "file";
+    FS.writeFile(isFontFile(name) ? `/fonts/${name}` : `/${name}`, bytes);
+  }
+
   // The selected design, mounted at its own source-relative path.
   const design = schema.designs.find((d) => d.id === req.design);
   if (!design) throw new Error(`unknown design: ${req.design}`);

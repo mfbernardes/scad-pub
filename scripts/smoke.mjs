@@ -58,29 +58,46 @@ async function main() {
     console.log(`=== designs (${ids.length}): ${ids.join(", ")} ===`);
     await waitRendered(page, ids[0]);
 
-    // External-font upload prompt: shown on startup only when the config sets
-    // `fontPrompt` and no font is stored. Where enabled it must offer an upload
-    // and stay dismissed across reloads; its backdrop would block later clicks,
-    // so handle it first.
-    console.log("=== font upload prompt ===");
-    const fontDialog = page.locator('[role="dialog"][aria-label="Font upload"]');
-    await fontDialog.waitFor({ state: "visible", timeout: 2000 }).catch(() => {});
-    if (await fontDialog.count()) {
-      check(
-        (await fontDialog.getByText("Upload font (TTF)").count()) > 0,
-        "font prompt offers an upload"
-      );
-      await fontDialog.locator(".link-btn").click(); // "Don't remind me again"
-      await fontDialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+    // Generic file import: the preset panel shows an "Import file" button when
+    // the config sets `fileImport`. Uploading a file should surface it in the
+    // "added:" hint and persist across a reload (IndexedDB).
+    console.log("=== file import ===");
+    const importBtn = page.getByRole("button", { name: /Import file/i });
+    if (await importBtn.count()) {
+      check(true, "import-file button present");
+      const input = page.locator('.preset-bar input[type="file"]').last();
+      await input.setInputFiles({
+        name: "smoke-overlay.svg",
+        mimeType: "image/svg+xml",
+        buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
+      });
+      const hint = page.locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" });
+      await hint.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+      check((await hint.count()) > 0, "uploaded file appears in the added list");
       await page.reload({ waitUntil: "load" });
       await waitRendered(page, ids[0]);
-      await page.waitForTimeout(300); // give the (now-suppressed) prompt a chance
       check(
-        (await page.locator('[role="dialog"][aria-label="Font upload"]').count()) === 0,
-        "font prompt stays dismissed after reload"
+        (await page
+          .locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" })
+          .count()) > 0,
+        "uploaded file persists across reload"
+      );
+      // Clear removes the file (and the persisted copy / render cache).
+      await page.getByRole("button", { name: /^Clear$/ }).click();
+      await page
+        .locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" })
+        .waitFor({ state: "detached", timeout: 3000 })
+        .catch(() => {});
+      await page.reload({ waitUntil: "load" });
+      await waitRendered(page, ids[0]);
+      check(
+        (await page
+          .locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" })
+          .count()) === 0,
+        "cleared file stays cleared after reload"
       );
     } else {
-      console.log("  (no fontPrompt in this config — skipped)");
+      console.log("  (no fileImport in this config — skipped)");
     }
 
     console.log("=== theme toggle ===");

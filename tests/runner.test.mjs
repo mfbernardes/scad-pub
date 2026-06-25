@@ -191,13 +191,13 @@ test("render cache skips entries larger than maxCacheEntryBytes", async () => {
   runner.dispose();
 });
 
-test("render cache reuses entries within the same user font set", async () => {
+test("render cache reuses entries within the same user file set", async () => {
   const runner = new OpenSCADRunner();
   const w = newest();
   const req = {
     design: "x",
     defines: { a: "1" },
-    userFonts: { "user.ttf": new Uint8Array([1, 2, 3]) },
+    userFiles: { "user.ttf": new Uint8Array([1, 2, 3]) },
   };
 
   const first = runner.render(req);
@@ -211,14 +211,14 @@ test("render cache reuses entries within the same user font set", async () => {
   runner.dispose();
 });
 
-test("render cache clears when the user font set changes", async () => {
+test("render cache clears when the user file set changes", async () => {
   const runner = new OpenSCADRunner();
   const w = newest();
 
   const first = runner.render({
     design: "x",
     defines: { a: "1" },
-    userFonts: { "user.ttf": new Uint8Array([1, 2, 3]) },
+    userFiles: { "user.ttf": new Uint8Array([1, 2, 3]) },
   });
   w.emit(ok(w.last.id, 6));
   await first;
@@ -227,7 +227,7 @@ test("render cache clears when the user font set changes", async () => {
   const second = runner.render({
     design: "x",
     defines: { a: "1" },
-    userFonts: { "user.ttf": new Uint8Array([4, 5, 6]) },
+    userFiles: { "user.ttf": new Uint8Array([4, 5, 6]) },
   });
   assert.equal(w.posted.length, count + 1);
   w.emit(ok(w.last.id, 6));
@@ -235,26 +235,69 @@ test("render cache clears when the user font set changes", async () => {
   runner.dispose();
 });
 
-test("render cache clears when user font bytes mutate in place", async () => {
+test("render cache clears when user file bytes mutate in place", async () => {
   const runner = new OpenSCADRunner();
   const w = newest();
-  const fontBytes = new Uint8Array([1, 2, 3]);
+  const fileBytes = new Uint8Array([1, 2, 3]);
   const req = {
     design: "x",
     defines: { a: "1" },
-    userFonts: { "user.ttf": fontBytes },
+    userFiles: { "user.ttf": fileBytes },
   };
 
   const first = runner.render(req);
   w.emit(ok(w.last.id, 6));
   await first;
 
-  fontBytes[0] = 9;
+  fileBytes[0] = 9;
   const count = w.posted.length;
   const second = runner.render(req);
   assert.equal(w.posted.length, count + 1);
   w.emit(ok(w.last.id, 6));
   await second;
+  runner.dispose();
+});
+
+test("clearCache() drops the in-memory cache so the next render re-runs", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+  const req = { design: "x", defines: { a: "1" } };
+
+  const first = runner.render(req);
+  w.emit(ok(w.last.id, 6));
+  await first;
+
+  // Without clearing, the identical req would be served from L1 (no new post).
+  runner.clearCache();
+  const count = w.posted.length;
+  const second = runner.render(req);
+  assert.equal(w.posted.length, count + 1); // cleared -> re-posted to the worker
+  w.emit(ok(w.last.id, 6));
+  await second;
+  runner.dispose();
+});
+
+test("clearCache() also clears the persistent (L2) store", async () => {
+  let cleared = 0;
+  const store = {
+    async get() {
+      return undefined;
+    },
+    async put() {},
+    async clear() {
+      cleared++;
+    },
+  };
+  const runner = new OpenSCADRunner({ store });
+  const w = newest();
+  const first = runner.render({ design: "x", defines: {} });
+  // The injected store makes render() await an async L2 lookup before posting.
+  await new Promise((r) => setTimeout(r, 0));
+  w.emit(ok(w.last.id));
+  await first;
+
+  runner.clearCache();
+  assert.equal(cleared, 1);
   runner.dispose();
 });
 

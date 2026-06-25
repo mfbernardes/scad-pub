@@ -1,10 +1,10 @@
 // PresetBar.tsx — presets dropdown combining read-only bundled presets (shipped
 // with the app, per design) and the user's own browser-local presets, plus
-// desktop-compatible parameterSets import/export and in-browser upload of an
-// external font. All copy here is config-driven (see `fontPrompt`), so the bar
-// is project-agnostic. All user storage is client-side.
+// desktop-compatible parameterSets import/export and a generic "Import file"
+// button for external files (fonts, SVGs, …). All copy here is config-driven
+// (see `fileImport`), so the bar is project-agnostic. All user storage is client-side.
 import { useEffect, useState } from "react";
-import type { Design, Schema } from "../openscad/types";
+import type { Design, FileImport } from "../openscad/types";
 import {
   deletePreset,
   listPresets,
@@ -26,11 +26,13 @@ interface Props {
   /** Read-only presets bundled with the app for this design. */
   bundled: ParsedSet[];
   onApply: (values: Values) => void;
-  onAddFont: (name: string, bytes: Uint8Array) => void;
-  /** The configured external-font prompt, or null. When set, the bar shows a
-   *  font-import button + download link (all copy from the config). */
-  fontPrompt: Schema["fontPrompt"];
-  loadedFonts: string[];
+  onAddFile: (name: string, bytes: Uint8Array) => void;
+  /** Remove every imported file (and drop the render cache). */
+  onClearFiles: () => void;
+  /** Generic file-import config, or null to hide the "Import file" button. */
+  fileImport: FileImport | null;
+  /** Filenames of every user-supplied file currently loaded. */
+  loadedFiles: string[];
   /** The namespaced selected-preset id, owned by the app so it can be shared in
    *  the URL ("bundled:Name" / "user:Name" / ""). */
   selected: string;
@@ -47,9 +49,10 @@ export function PresetBar({
   values,
   bundled,
   onApply,
-  onAddFont,
-  fontPrompt,
-  loadedFonts,
+  onAddFile,
+  onClearFiles,
+  fileImport,
+  loadedFiles,
   selected,
   onSelectedChange,
 }: Props) {
@@ -122,9 +125,9 @@ export function PresetBar({
     }
   };
 
-  const onFontFile = async (file: File) => {
+  const onUploadFile = async (file: File) => {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    onAddFont(file.name, bytes);
+    onAddFile(file.name, bytes);
   };
 
   return (
@@ -199,35 +202,40 @@ export function PresetBar({
           <DownloadIcon size={16} /> Export
         </button>
       </div>
-      {fontPrompt && (
+      {fileImport && (
         <>
-          <div className="grp-label">{fontPrompt.heading ?? "Font"}</div>
+          <div className="grp-label">Files</div>
           <div className="row btn-row">
-            <FileInput accept=".ttf,.otf,font/ttf" onFile={onFontFile}>
+            <FileInput accept={fileImport.accept} onFile={onUploadFile}>
               {(open) => (
                 <button
                   type="button"
                   className="btn-labeled"
-                  title={`Add ${fontPrompt.label ?? "the font"} (TTF/OTF) for the designs that need it`}
+                  title={
+                    fileImport.note ??
+                    "Import a file your design references (a font, an SVG, a data file…)"
+                  }
                   onClick={open}
                 >
-                  <UploadIcon size={16} /> Import font…
+                  <UploadIcon size={16} /> {fileImport.label ?? "Import file"}…
                 </button>
               )}
             </FileInput>
-            <a
-              className="font-link"
-              href={fontPrompt.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={fontPrompt.note ?? `Download ${fontPrompt.label ?? "the font"}, then add it with “Import font…”.`}
+            <button
+              type="button"
+              className="btn-labeled"
+              title="Remove all imported files and clear the render cache"
+              onClick={onClearFiles}
+              disabled={loadedFiles.length === 0}
             >
-              {fontPrompt.linkText ?? `Get ${fontPrompt.label ?? "the font"}`} ↗
-            </a>
-            {loadedFonts.length > 0 && (
-              <span className="hint">added: {loadedFonts.join(", ")}</span>
-            )}
+              <TrashIcon size={16} /> Clear
+            </button>
           </div>
+          {loadedFiles.length > 0 && (
+            <div className="row">
+              <span className="hint">added: {loadedFiles.join(", ")}</span>
+            </div>
+          )}
         </>
       )}
     </div>

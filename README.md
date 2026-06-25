@@ -23,13 +23,13 @@ npm run dev   # predev fetches the pinned OpenSCAD WASM and regenerates the sche
 - **Collapsible groups** — `// @collapsed` above a section header starts it folded. See [docs/annotations.md](docs/annotations.md).
 - **Presets** — save/load in the browser; bundled read-only presets per design; import/export OpenSCAD `parameterSets` JSON.
 - **PWA** — installable, usable offline after first visit. An in-app toast prompts reload when a new deploy is ready.
-- **Persistent fonts** — uploaded TTF/OTF fonts are stored in IndexedDB and re-applied on next visit.
+- **Persistent user files** — uploaded fonts, SVGs and other referenced files are stored in IndexedDB and re-applied on next visit.
 - **Light/dark theme** — follows OS by default; toggled in the header; persisted.
 - **Accessibility** — WCAG 2.1 AA: keyboard-trapped modals, visible focus rings, live regions, `rem`-based font size, forced-colors support, 320 px reflow. axe-core smoke test fails on any serious/critical violation.
 - **Advisories** — `echo` output and OpenSCAD warnings are shown below the preview.
 - **Shareable URLs** — design, non-default parameters, and selected preset are encoded in the URL hash.
 - **Auto-render with brake** — re-renders after a debounce. Designs flagged `heavy` start in manual mode. Any render slower than ~6 s auto-pauses live updates.
-- **External font prompt** — optional `fontPrompt` config shows a startup dialog for non-bundled fonts. See [docs/config.md](docs/config.md#external-font-prompt-fontprompt).
+- **Import file** — optional `fileImport` config adds an upload button for non-bundled files (fonts mounted for OpenSCAD; SVGs/data files referenceable in designs via `import()`/`surface()`). See [docs/config.md](docs/config.md#import-file-fileimport).
 - **Help** — `?` button shows a config-driven user guide; supports many tabs, each with its own content. See [docs/config.md](docs/config.md#help-content-help).
 - **Open-source notice** — ⓘ button lists bundled third-party components with licenses and source links; a deployment can append its own notices via config (built-ins are never removed). See [docs/config.md](docs/config.md#open-source-notices-licenses).
 
@@ -37,7 +37,8 @@ npm run dev   # predev fetches the pinned OpenSCAD WASM and regenerates the sche
 
 ```
 examples/           self-contained example design (default source)
-  tag.scad          no library/font dependencies
+  tag.scad          embossed text (font) + an extruded SVG emblem
+  emblem.svg        default emblem the tag imports (swap via "Import file")
   tag.json          bundled presets for tag.scad
 public/
   wasm/             OpenSCAD WASM (fetched, gitignored) — scripts/fetch-wasm.mjs
@@ -66,7 +67,7 @@ The OpenSCAD WASM is version-pinned in `scripts/fetch-wasm.mjs` (`OPENSCAD_VERSI
 
 ## Configuration
 
-See **[docs/config.md](docs/config.md)** for the full `scadpub.config.json` reference, including theme tokens, title/logo variants, and the external font prompt.
+See **[docs/config.md](docs/config.md)** for the full `scadpub.config.json` reference, including theme tokens, title/logo variants, and the file-import button.
 
 See **[docs/annotations.md](docs/annotations.md)** for the `@showIf` and `@collapsed` OpenSCAD annotations.
 
@@ -109,7 +110,7 @@ Serve `.wasm` files with `Content-Type: application/wasm`.
 ## Limitations
 
 - Only the Liberation font set is bundled. Designs requiring other fonts may render differently with the fallback.
-- `fontPrompt` links to an external download rather than fetching it directly; browsers block cross-origin fetches from sites that do not send `Access-Control-Allow-Origin`.
+- Imported files are referenced by name; a design's `import("x.svg")` must match the uploaded file's name. Fonts are matched by family via fontconfig, so their filename doesn't matter.
 - The in-browser preview uses the same pinned OpenSCAD version as the native CLI but is not byte-identical in all cases.
 - No live OpenCSG preview; auto-render is debounced. Large text at fine facets is slower and uses more memory.
 

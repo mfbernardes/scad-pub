@@ -6,7 +6,7 @@
 // Two-tier render cache: an in-memory LRU (L1, this file) in front of an
 // optional persistent IndexedDB store (L2, stlCache.ts). A render checks L1,
 // then L2, then the worker; a successful worker render is written back to both.
-// Both tiers share one content-stable key (design + sorted defines + font
+// Both tiers share one content-stable key (design + sorted defines + user-file
 // signature + CACHE_VERSION), so hits survive reloads.
 import { CACHE_VERSION, createStlCache } from "../lib/stlCache";
 import type { StlCacheStore, StoredStl } from "../lib/stlCache";
@@ -60,14 +60,14 @@ function defaultCacheOptions(opts: {
   return { maxEntries, maxBytes, maxEntryBytes };
 }
 
-function hasFonts(fonts: RenderRequest["userFonts"]): fonts is Record<string, Uint8Array> {
-  return Object.keys(fonts ?? {}).length > 0;
+function hasFiles(files: RenderRequest["userFiles"]): files is Record<string, Uint8Array> {
+  return Object.keys(files ?? {}).length > 0;
 }
 
-export function fontSignature(fonts: RenderRequest["userFonts"]): string {
-  if (!hasFonts(fonts)) return "";
+export function fileSignature(files: RenderRequest["userFiles"]): string {
+  if (!hasFiles(files)) return "";
   return JSON.stringify(
-    Object.entries(fonts)
+    Object.entries(files)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, bytes]) => {
         let h = 0x811c9dc5;
@@ -80,14 +80,14 @@ export function fontSignature(fonts: RenderRequest["userFonts"]): string {
   );
 }
 
-// Content-stable cache key shared by both tiers. The font signature (not an
+// Content-stable cache key shared by both tiers. The user-file signature (not an
 // ephemeral session counter) is baked in so the key reproduces across reloads:
-// changing fonts simply yields a different key, and stale entries age out via
+// changing files simply yields a different key, and stale entries age out via
 // LRU instead of needing an explicit cache wipe. `version` carries the build's
 // renderHash, so a deploy that changes any render input invalidates old entries.
 function cacheKey(req: Omit<RenderRequest, "id">, version: string): string {
   const defines = Object.fromEntries(Object.entries(req.defines).sort());
-  return JSON.stringify({ v: version, design: req.design, defines, fonts: fontSignature(req.userFonts) });
+  return JSON.stringify({ v: version, design: req.design, defines, files: fileSignature(req.userFiles) });
 }
 
 function cloneResult(result: RenderResult, id: number): RenderResult {
@@ -147,9 +147,20 @@ export class OpenSCADRunner {
     return true;
   }
 
-  private clearCache() {
+  private clearMemoryCache() {
     this.cache.clear();
     this.cacheBytes = 0;
+  }
+
+  /**
+   * Drop every cached render — the in-memory LRU (L1) and the persistent store
+   * (L2). Used when the set of user files changes (import/clear), so previously
+   * rendered geometry can't be served and the persisted cache doesn't accrete
+   * entries for file sets that no longer exist.
+   */
+  clearCache(): void {
+    this.clearMemoryCache();
+    void this.store?.clear();
   }
 
   private remember(key: string, result: RenderResult) {
@@ -303,7 +314,7 @@ export class OpenSCADRunner {
     this.worker.terminate();
     for (const p of this.pending.values()) p.reject(new SupersededError());
     this.pending.clear();
-    this.clearCache();
+    this.clearMemoryCache();
     this.inflightId = null;
     this.inflightKey = null;
   }

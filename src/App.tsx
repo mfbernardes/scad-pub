@@ -2,8 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import schemaJson from "./generated/designs.json";
 import type { Design, ParamValue, RenderResult } from "./openscad/types";
 import { validateSchema } from "./lib/schema";
-import { ns } from "./lib/appId";
-import { fontSignature, OpenSCADRunner, SupersededError } from "./openscad/runner";
+import { fileSignature, OpenSCADRunner, SupersededError } from "./openscad/runner";
 import { toScadExpr } from "./lib/scad";
 import {
   defaultsFor,
@@ -12,7 +11,7 @@ import {
   type Values,
 } from "./lib/presets";
 import { readInitialState, persistState } from "./lib/urlState";
-import { loadFonts, saveFont } from "./lib/fontStore";
+import { loadFiles, saveFile, clearFiles } from "./lib/fileStore";
 import { download, downloadBlob } from "./lib/download";
 import { assetUrl } from "./lib/assetUrl";
 import { useTheme } from "./lib/theme";
@@ -26,7 +25,6 @@ import { LogPanel } from "./components/LogPanel";
 import { Diagnostics } from "./components/Diagnostics";
 import { LicensesModal } from "./components/LicensesModal";
 import { HelpModal } from "./components/HelpModal";
-import { FontPromptModal } from "./components/FontPromptModal";
 import {
   InfoIcon,
   HelpIcon,
@@ -52,15 +50,7 @@ const schema = validateSchema(schemaJson);
 const initialState = readInitialState(schema);
 document.title = schema.title;
 
-// Persist the user's choice to stop seeing the upload-font nudge.
-const FONT_PROMPT_DISMISSED = ns("fontPrompt.dismissed");
-function fontPromptDismissed(): boolean {
-  try {
-    return localStorage.getItem(FONT_PROMPT_DISMISSED) === "1";
-  } catch {
-    return false;
-  }
-}
+const fileImport = schema.fileImport ?? null;
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
@@ -74,7 +64,7 @@ export default function App() {
   // The selected-preset id (namespaced), owned here so it rides along in the URL.
   const [presetSel, setPresetSel] = useState(initialState.preset);
   const [bundledPresets, setBundledPresets] = useState<ParsedSet[]>([]);
-  const [userFonts, setUserFonts] = useState<Record<string, Uint8Array>>({});
+  const [userFiles, setUserFiles] = useState<Record<string, Uint8Array>>({});
   const [result, setResult] = useState<RenderResult | null>(null);
   const [rendering, setRendering] = useState(false);
   // Key of the last *successful* render. Drives the "stale preview" notice: when
@@ -90,11 +80,6 @@ export default function App() {
   const [announcement, setAnnouncement] = useState("");
   const [showLicenses, setShowLicenses] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  // Startup nudge to upload the external font (see `fontPrompt`), if the config
-  // asks for one and the user has none. Gated until the persisted fonts have loaded so we
-  // don't flash it when a font is already stored.
-  const [showFontPrompt, setShowFontPrompt] = useState(false);
-  const fontPromptChecked = useRef(false);
   // Live re-render on edits. Off for designs flagged `heavy`, and auto-paused
   // after a slow render so editing a big model doesn't re-render on every keystroke.
   const [autoRender, setAutoRender] = useState(!design.heavy);
@@ -152,8 +137,8 @@ export default function App() {
     setValues((v) => ({ ...v, [name]: value }));
 
   // The OpenSCAD -D defines for the current parameters, and a content key over
-  // them (plus design + fonts). The key is shared by the render dedupe guard and
-  // the stale-preview notice, so both agree on what "unchanged" means.
+  // them (plus design + user files). The key is shared by the render dedupe guard
+  // and the stale-preview notice, so both agree on what "unchanged" means.
   const defines = useMemo(() => {
     const d: Record<string, string> = {};
     for (const p of design.params)
@@ -161,8 +146,8 @@ export default function App() {
     return d;
   }, [design, values]);
   const renderKey = useMemo(
-    () => JSON.stringify({ d: design.id, defines, f: fontSignature(userFonts) }),
-    [design.id, defines, userFonts]
+    () => JSON.stringify({ d: design.id, defines, f: fileSignature(userFiles) }),
+    [design.id, defines, userFiles]
   );
 
   // Live auto-render is off and the current parameters haven't been rendered yet
@@ -178,7 +163,7 @@ export default function App() {
         const r = await runnerRef.current!.render({
           design: design.id,
           defines,
-          userFonts,
+          userFiles,
         });
         lastKeyRef.current = r.ok ? renderKey : "";
         // A successful result — including one served from the persistent cache
@@ -208,7 +193,7 @@ export default function App() {
         setRendering(false);
       }
     },
-    [design.id, defines, userFonts, renderKey]
+    [design.id, defines, userFiles, renderKey]
   );
 
   // Debounced auto-render on any change — unless live rendering is paused.
@@ -220,17 +205,10 @@ export default function App() {
 
   useEffect(() => () => runnerRef.current?.dispose(), []);
 
-  // Restore fonts persisted from previous sessions (any uploaded TTF/OTF),
-  // then decide once whether to nudge the user to upload the external font the
-  // config expects (only when they have none and haven't dismissed it).
+  // Restore files persisted from previous sessions (uploaded fonts, SVGs, …).
   useEffect(() => {
-    loadFonts().then((f) => {
-      const hasFonts = Object.keys(f).length > 0;
-      if (hasFonts) setUserFonts((prev) => ({ ...f, ...prev }));
-      if (fontPromptChecked.current) return;
-      fontPromptChecked.current = true;
-      if (schema.fontPrompt && !hasFonts && !fontPromptDismissed())
-        setShowFontPrompt(true);
+    loadFiles().then((f) => {
+      if (Object.keys(f).length > 0) setUserFiles((prev) => ({ ...f, ...prev }));
     });
   }, []);
 
@@ -249,11 +227,24 @@ export default function App() {
     }
   };
 
-  // Add a font for this render and persist it for future sessions.
-  const addFont = (name: string, bytes: Uint8Array) => {
-    setUserFonts((f) => ({ ...f, [name]: bytes }));
-    void saveFont(name, bytes);
-    setAnnouncement(`Font added: ${name}`);
+  // Add a file for this render and persist it for future sessions. Changing the
+  // file set drops every cached STL (L1 + L2) so stale geometry can't be served.
+  const addFile = (name: string, bytes: Uint8Array) => {
+    setUserFiles((f) => ({ ...f, [name]: bytes }));
+    void saveFile(name, bytes);
+    runnerRef.current?.clearCache();
+    lastKeyRef.current = "";
+    setAnnouncement(`File added: ${name}`);
+  };
+
+  // Remove every imported file (from this session and persistent storage) and
+  // drop the render cache, so the next render runs without the cleared files.
+  const clearImportedFiles = () => {
+    setUserFiles({});
+    void clearFiles();
+    runnerRef.current?.clearCache();
+    lastKeyRef.current = "";
+    setAnnouncement("Imported files cleared");
   };
 
   // Copy a shareable link — the current design + non-default params live in the
@@ -352,22 +343,6 @@ export default function App() {
           onClose={() => setShowLicenses(false)}
         />
       )}
-      {showFontPrompt && schema.fontPrompt && (
-        <FontPromptModal
-          prompt={schema.fontPrompt}
-          onUpload={addFont}
-          onDismissForever={() => {
-            try {
-              localStorage.setItem(FONT_PROMPT_DISMISSED, "1");
-            } catch {
-              /* storage unavailable — dismiss for this session only */
-            }
-            setShowFontPrompt(false);
-          }}
-          onClose={() => setShowFontPrompt(false)}
-        />
-      )}
-
       {/* Off-screen live region for action confirmations. */}
       <div className="sr-only" role="status" aria-live="polite">
         {announcement}
@@ -396,9 +371,10 @@ export default function App() {
             values={values}
             bundled={bundledPresets}
             onApply={(v) => setValues(v)}
-            onAddFont={addFont}
-            fontPrompt={schema.fontPrompt}
-            loadedFonts={Object.keys(userFonts)}
+            onAddFile={addFile}
+            onClearFiles={clearImportedFiles}
+            fileImport={fileImport}
+            loadedFiles={Object.keys(userFiles)}
             selected={presetSel}
             onSelectedChange={setPresetSel}
           />

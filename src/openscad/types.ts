@@ -7,8 +7,13 @@ export interface RenderRequest {
   design: string; // a design id, e.g. "nameplate"
   /** Parameter overrides as { name: scadValue }. Strings already quoted. */
   defines: Record<string, string>;
-  /** Extra user-supplied fonts to mount: filename -> bytes. */
-  userFonts?: Record<string, Uint8Array>;
+  /**
+   * Extra user-supplied files to mount, keyed by filename -> bytes. Fonts
+   * (.ttf/.otf/.ttc) are mounted into the renderer's font dir so OpenSCAD's
+   * `text()` can use them; every other file is mounted at the FS root so a
+   * design can reference it by name (e.g. `import("logo.svg")`).
+   */
+  userFiles?: Record<string, Uint8Array>;
 }
 
 export interface RenderResult {
@@ -101,6 +106,23 @@ export interface SoftwareLicense {
   note?: string;
 }
 
+/**
+ * Config for the generic "Import file" button. A single control that accepts
+ * any file (or font); whether an upload is treated as a font is decided by its
+ * extension, not by config — so one button covers both cases.
+ */
+export interface FileImport {
+  /**
+   * `accept` attribute for the file picker (e.g. ".svg" or ".ttf,.otf"). Omit to
+   * accept any file type.
+   */
+  accept?: string;
+  /** Button label (default "Import file"). */
+  label?: string;
+  /** Optional tooltip / hint shown on the button. */
+  note?: string;
+}
+
 export interface Schema {
   generatedFrom: string;
   /**
@@ -144,26 +166,14 @@ export interface Schema {
   /** Bundled font filenames the renderer mounts from public/fonts/. */
   fonts: string[];
   /**
-   * Optional startup prompt nudging the user to upload an external font that
-   * the designs expect but can't be bundled (e.g. a license-restricted profile
-   * font). Shown once on startup when no user font is present, and surfaced as a
-   * download link in the preset panel. Null (the default) disables both. All
-   * copy is config-driven so this stays project-agnostic.
+   * Optional generic "Import file" control in the preset panel. Lets the user
+   * supply any file their designs reference but the app can't bundle — a font, an
+   * SVG to `import()`, a `surface()` data file, etc. Fonts (by extension) are
+   * mounted where OpenSCAD's fontconfig finds them; every other file is mounted
+   * at the render FS root so a design can reference it by name. Null/absent hides
+   * the button. All copy is config-driven so this stays project-agnostic.
    */
-  fontPrompt: {
-    /** Where to download the font (opened in a new tab). */
-    url: string;
-    /** Friendly font name, e.g. "DIN profile font" (modal title/intro). */
-    label?: string;
-    /** The font-family the designs reference, shown as a hint. */
-    family?: string;
-    /** Preset-panel group heading (default "Font"). */
-    heading?: string;
-    /** Preset-panel download-link text (default `Get ${label ?? "the font"}`). */
-    linkText?: string;
-    /** Optional explanatory line shown as the download-link tooltip. */
-    note?: string;
-  } | null;
+  fileImport: FileImport | null;
   /**
    * Extra third-party software / license notices supplied by the consumer
    * config, APPENDED after the app's built-in attributions (src/lib/licenses.ts)
