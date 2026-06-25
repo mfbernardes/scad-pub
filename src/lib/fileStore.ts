@@ -31,6 +31,14 @@ export async function deleteFile(name: string): Promise<void> {
   }
 }
 
+export async function clearFiles(): Promise<void> {
+  try {
+    await tx("readwrite", (s) => s.clear());
+  } catch {
+    /* nothing persisted to remove, or storage unavailable */
+  }
+}
+
 export async function loadFiles(): Promise<Record<string, Uint8Array>> {
   try {
     const db = await openDb();

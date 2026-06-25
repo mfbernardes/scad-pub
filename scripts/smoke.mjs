@@ -82,6 +82,20 @@ async function main() {
           .count()) > 0,
         "uploaded file persists across reload"
       );
+      // Clear removes the file (and the persisted copy / render cache).
+      await page.getByRole("button", { name: /^Clear$/ }).click();
+      await page
+        .locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" })
+        .waitFor({ state: "detached", timeout: 3000 })
+        .catch(() => {});
+      await page.reload({ waitUntil: "load" });
+      await waitRendered(page, ids[0]);
+      check(
+        (await page
+          .locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" })
+          .count()) === 0,
+        "cleared file stays cleared after reload"
+      );
     } else {
       console.log("  (no fileImport in this config — skipped)");
     }

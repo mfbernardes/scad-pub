@@ -183,7 +183,7 @@ Designs sometimes need a file the app can't bundle — a license-restricted font
 - **Fonts** (`.ttf`/`.otf`/`.ttc`) are mounted where the renderer's fontconfig can find them, so `text(font = "…")` can use them. Without the expected font, an open-license fallback stands in (the log panel says so).
 - **Any other file** is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. The reference must match the uploaded file's name (use `note` to tell users which name to use).
 
-Uploaded files persist in IndexedDB and are re-applied on the next visit; the panel lists what's currently loaded. Omit `fileImport` (or set it to `null`/`false`) and no import button is shown.
+Uploaded files persist in IndexedDB and are re-applied on the next visit; the panel lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no import button is shown.
 
 > The legacy single-object `fontPrompt` is still accepted: it enables the button with a `.ttf,.otf` filter.
 

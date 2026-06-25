@@ -27,6 +27,8 @@ interface Props {
   bundled: ParsedSet[];
   onApply: (values: Values) => void;
   onAddFile: (name: string, bytes: Uint8Array) => void;
+  /** Remove every imported file (and drop the render cache). */
+  onClearFiles: () => void;
   /** Generic file-import config, or null to hide the "Import file" button. */
   fileImport: FileImport | null;
   /** Filenames of every user-supplied file currently loaded. */
@@ -48,6 +50,7 @@ export function PresetBar({
   bundled,
   onApply,
   onAddFile,
+  onClearFiles,
   fileImport,
   loadedFiles,
   selected,
@@ -218,10 +221,21 @@ export function PresetBar({
                 </button>
               )}
             </FileInput>
-            {loadedFiles.length > 0 && (
-              <span className="hint">added: {loadedFiles.join(", ")}</span>
-            )}
+            <button
+              type="button"
+              className="btn-labeled"
+              title="Remove all imported files and clear the render cache"
+              onClick={onClearFiles}
+              disabled={loadedFiles.length === 0}
+            >
+              <TrashIcon size={16} /> Clear
+            </button>
           </div>
+          {loadedFiles.length > 0 && (
+            <div className="row">
+              <span className="hint">added: {loadedFiles.join(", ")}</span>
+            </div>
+          )}
         </>
       )}
     </div>

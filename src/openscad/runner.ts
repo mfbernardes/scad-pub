@@ -147,9 +147,20 @@ export class OpenSCADRunner {
     return true;
   }
 
-  private clearCache() {
+  private clearMemoryCache() {
     this.cache.clear();
     this.cacheBytes = 0;
+  }
+
+  /**
+   * Drop every cached render — the in-memory LRU (L1) and the persistent store
+   * (L2). Used when the set of user files changes (import/clear), so previously
+   * rendered geometry can't be served and the persisted cache doesn't accrete
+   * entries for file sets that no longer exist.
+   */
+  clearCache(): void {
+    this.clearMemoryCache();
+    void this.store?.clear();
   }
 
   private remember(key: string, result: RenderResult) {
@@ -303,7 +314,7 @@ export class OpenSCADRunner {
     this.worker.terminate();
     for (const p of this.pending.values()) p.reject(new SupersededError());
     this.pending.clear();
-    this.clearCache();
+    this.clearMemoryCache();
     this.inflightId = null;
     this.inflightKey = null;
   }

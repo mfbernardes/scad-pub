@@ -11,7 +11,7 @@ import {
   type Values,
 } from "./lib/presets";
 import { readInitialState, persistState } from "./lib/urlState";
-import { loadFiles, saveFile } from "./lib/fileStore";
+import { loadFiles, saveFile, clearFiles } from "./lib/fileStore";
 import { download, downloadBlob } from "./lib/download";
 import { assetUrl } from "./lib/assetUrl";
 import { useTheme } from "./lib/theme";
@@ -227,11 +227,24 @@ export default function App() {
     }
   };
 
-  // Add a file for this render and persist it for future sessions.
+  // Add a file for this render and persist it for future sessions. Changing the
+  // file set drops every cached STL (L1 + L2) so stale geometry can't be served.
   const addFile = (name: string, bytes: Uint8Array) => {
     setUserFiles((f) => ({ ...f, [name]: bytes }));
     void saveFile(name, bytes);
+    runnerRef.current?.clearCache();
+    lastKeyRef.current = "";
     setAnnouncement(`File added: ${name}`);
+  };
+
+  // Remove every imported file (from this session and persistent storage) and
+  // drop the render cache, so the next render runs without the cleared files.
+  const clearImportedFiles = () => {
+    setUserFiles({});
+    void clearFiles();
+    runnerRef.current?.clearCache();
+    lastKeyRef.current = "";
+    setAnnouncement("Imported files cleared");
   };
 
   // Copy a shareable link — the current design + non-default params live in the
@@ -359,6 +372,7 @@ export default function App() {
             bundled={bundledPresets}
             onApply={(v) => setValues(v)}
             onAddFile={addFile}
+            onClearFiles={clearImportedFiles}
             fileImport={fileImport}
             loadedFiles={Object.keys(userFiles)}
             selected={presetSel}
