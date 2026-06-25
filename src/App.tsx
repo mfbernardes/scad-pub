@@ -39,6 +39,8 @@ import {
   ImageIcon,
   LinkIcon,
   PlayIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
 } from "./components/Icons";
 
 // Lazy-load the three.js viewer so its (large) chunk isn't in the initial JS.
@@ -474,6 +476,28 @@ export default function App() {
                     ? "Rendering…"
                     : "Loading renderer… (one-time ~10 MB download)"}
                 </p>
+              </div>
+            )}
+            {result?.ok && (
+              <div className="viewer-controls">
+                <IconButton
+                  label="Zoom in"
+                  onClick={() => viewerRef.current?.zoomIn()}
+                >
+                  <ZoomInIcon size={18} />
+                </IconButton>
+                <IconButton
+                  label="Zoom out"
+                  onClick={() => viewerRef.current?.zoomOut()}
+                >
+                  <ZoomOutIcon size={18} />
+                </IconButton>
+                <IconButton
+                  label="Reset view"
+                  onClick={() => viewerRef.current?.resetView()}
+                >
+                  <ResetIcon size={18} />
+                </IconButton>
               </div>
             )}
           </div>
