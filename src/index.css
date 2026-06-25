@@ -239,6 +239,32 @@ body {
 }
 .preview-actions .primary:hover:not(:disabled) { border-color: var(--accent-solid); filter: brightness(1.08); }
 
+/* Stale-preview notice: shown when auto-render is paused and the rendered model
+   no longer matches the current parameters, so edits aren't silently ignored. */
+.render-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.75rem;
+  padding: 0.55rem 1rem;
+  border-top: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  background: var(--panel-2);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.render-pending-text { margin-right: auto; }
+.render-pending .primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: var(--accent-solid);
+  font-weight: 600;
+}
+.render-pending .primary:hover:not(:disabled) { border-color: var(--accent-solid); filter: brightness(1.08); }
+
 button {
   font: inherit;
   color: var(--text);

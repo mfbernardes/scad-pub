@@ -77,6 +77,9 @@ export default function App() {
   const [userFonts, setUserFonts] = useState<Record<string, Uint8Array>>({});
   const [result, setResult] = useState<RenderResult | null>(null);
   const [rendering, setRendering] = useState(false);
+  // Key of the last *successful* render. Drives the "stale preview" notice: when
+  // it differs from the current parameters' key, the preview is out of date.
+  const [renderedKey, setRenderedKey] = useState("");
   // False until the worker reports its assets (the ~10 MB WASM) are loaded.
   const [ready, setReady] = useState(false);
   // Parameter panel: a slide-in drawer on small screens (closed by default);
@@ -122,6 +125,8 @@ export default function App() {
     }
     setValues(defaultsFor(design));
     setResult(null);
+    setRenderedKey("");
+    lastKeyRef.current = "";
     setAutoRender(!design.heavy);
     setPresetSel("");
   }, [design]);
@@ -146,18 +151,28 @@ export default function App() {
   const setValue = (name: string, value: ParamValue) =>
     setValues((v) => ({ ...v, [name]: value }));
 
+  // The OpenSCAD -D defines for the current parameters, and a content key over
+  // them (plus design + fonts). The key is shared by the render dedupe guard and
+  // the stale-preview notice, so both agree on what "unchanged" means.
+  const defines = useMemo(() => {
+    const d: Record<string, string> = {};
+    for (const p of design.params)
+      d[p.name] = toScadExpr(p, values[p.name] ?? p.default);
+    return d;
+  }, [design, values]);
+  const renderKey = useMemo(
+    () => JSON.stringify({ d: design.id, defines, f: fontSignature(userFonts) }),
+    [design.id, defines, userFonts]
+  );
+
+  // Live auto-render is off and the current parameters haven't been rendered yet
+  // — the preview is stale, so prompt the user to render on demand.
+  const stalePreview = !autoRender && renderKey !== renderedKey;
+
   const doRender = useMemo(
     () => async () => {
-      const defines: Record<string, string> = {};
-      for (const p of design.params)
-        defines[p.name] = toScadExpr(p, values[p.name] ?? p.default);
-      const key = JSON.stringify({
-        d: design.id,
-        defines,
-        f: fontSignature(userFonts),
-      });
       // Memoize: nothing changed since the last successful render.
-      if (key === lastKeyRef.current) return;
+      if (renderKey === lastKeyRef.current) return;
       setRendering(true);
       try {
         const r = await runnerRef.current!.render({
@@ -165,12 +180,15 @@ export default function App() {
           defines,
           userFonts,
         });
-        lastKeyRef.current = r.ok ? key : "";
+        lastKeyRef.current = r.ok ? renderKey : "";
         // A successful result — including one served from the persistent cache
         // without touching the worker — means we have something to show, so drop
         // the "loading renderer" overlay (the worker emits onReady only when it
         // actually renders, which a cache hit skips).
-        if (r.ok) setReady(true);
+        if (r.ok) {
+          setReady(true);
+          setRenderedKey(renderKey);
+        }
         setResult(r);
         setRendering(false);
         // A heavy render auto-pauses live updates so further edits don't queue
@@ -190,7 +208,7 @@ export default function App() {
         setRendering(false);
       }
     },
-    [design, values, userFonts]
+    [design.id, defines, userFonts, renderKey]
   );
 
   // Debounced auto-render on any change — unless live rendering is paused.
@@ -417,6 +435,17 @@ export default function App() {
               </div>
             )}
           </div>
+          {stalePreview && (
+            <div className="render-pending" role="status">
+              <span className="render-pending-text">
+                Auto-render is paused — the preview doesn’t reflect your latest
+                changes. Click “Render now” to update it.
+              </span>
+              <button className="primary" onClick={doRender} disabled={rendering}>
+                <PlayIcon size={16} /> Render now
+              </button>
+            </div>
+          )}
           <div className="preview-actions">
             <button className="primary" onClick={doRender} disabled={rendering}>
               <PlayIcon size={16} /> Render now
