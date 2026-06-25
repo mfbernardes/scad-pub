@@ -2,7 +2,7 @@
 node_modules/
 dist/
 
-# Large vendored WASM binary + glue — fetched via scripts/fetch-wasm.sh
+# Large vendored WASM binary + glue — fetched via scripts/fetch-wasm.mjs
 public/wasm/
 
 # Generated from the configured design source via scripts/gen-schema.mjs

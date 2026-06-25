@@ -12,8 +12,7 @@ A JSON config file supplies the designs, branding, and help text. Nothing projec
 
 ```bash
 npm install
-./scripts/fetch-wasm.sh   # downloads the pinned OpenSCAD WASM into public/wasm/
-npm run dev               # predev regenerates the schema from the configured source
+npm run dev   # predev fetches the pinned OpenSCAD WASM and regenerates the schema
 ```
 
 ## Features
@@ -40,7 +39,7 @@ examples/           self-contained example design (default source)
   tag.scad          no library/font dependencies
   tag.json          bundled presets for tag.scad
 public/
-  wasm/             OpenSCAD WASM (fetched, gitignored) — scripts/fetch-wasm.sh
+  wasm/             OpenSCAD WASM (fetched, gitignored) — scripts/fetch-wasm.mjs
   fonts/            Liberation TTFs + fonts.conf
   scad/             designs copied for the renderer (generated, gitignored)
   manifest.webmanifest, sw.js, icon.svg
@@ -55,14 +54,14 @@ src/
   App.tsx           orchestration: debounced auto-render, export, presets
 scripts/
   gen-schema.mjs    parse Customizer params → schema + copy sources
-  fetch-wasm.sh     download the pinned OpenSCAD WASM snapshot
+  fetch-wasm.mjs    download the pinned OpenSCAD WASM snapshot (auto-run by predev/prebuild)
   smoke.mjs         headless end-to-end check of the built app
 tests/              node:test unit suite + fixtures + visual baselines
 scadpub.config.json the config: title, branding, designs, help
 .github/workflows/ci.yml  unit tests + build + headless smoke; uploads dist
 ```
 
-The OpenSCAD WASM is version-pinned in `scripts/fetch-wasm.sh` (`OPENSCAD_VERSION`) and checksum-verified. It ships Manifold and textmetrics, is single-threaded, and requires no `SharedArrayBuffer`, COOP, or COEP headers.
+The OpenSCAD WASM is version-pinned in `scripts/fetch-wasm.mjs` (`OPENSCAD_VERSION`) and checksum-verified. It ships Manifold and textmetrics, is single-threaded, and requires no `SharedArrayBuffer`, COOP, or COEP headers.
 
 ## Configuring what's bundled
 
@@ -217,8 +216,7 @@ OpenSCAD and the desktop Customizer ignore it. Collapsed parameters remain in th
 
 ```bash
 npm install
-./scripts/fetch-wasm.sh
-npm run dev
+npm run dev   # predev fetches the WASM (first run only) and regenerates the schema
 ```
 
 Unit tests (requires Node ≥ 22):

@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "gen": "node scripts/gen-schema.mjs",
-    "wasm": "bash scripts/fetch-wasm.sh",
+    "wasm": "node scripts/fetch-wasm.mjs",
     "predev": "npm run wasm && npm run gen",
     "dev": "vite",
     "prebuild": "npm run wasm && npm run gen",
@@ -30,6 +30,7 @@
     "@types/three": "^0.169.0",
     "@vitejs/plugin-react": "^6.0.2",
     "axe-core": "^4.12.1",
+    "fflate": "^0.8.3",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.48.0",
     "pngjs": "^7.0.0",
