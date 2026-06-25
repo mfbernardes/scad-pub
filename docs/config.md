@@ -21,7 +21,7 @@
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
-  "filePrompts": [ { "kind": "font", "url": "…", "label": "…" } ],  // optional user-supplied files
+  "fileImport": true,             // optional "Import file" button for user-supplied files
   "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
   "licenses": [ { "name": "…", "license": "…", … } ],  // optional extra open-source notices (appended)
   "designs": [
@@ -37,7 +37,7 @@
 - **`description`** / **`shortName`** / **`icon`** / **`themeColor`** / **`backgroundColor`** — `<meta>` and PWA manifest fields. `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg`.
 - **`colors`** — optional per-theme CSS colour overrides; see [Theme & colour scheme](#theme--colour-scheme).
 - **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
-- **`filePrompts`** — see [External file prompts](#external-file-prompts-fileprompts).
+- **`fileImport`** — see [Import file button](#import-file-fileimport).
 - **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
@@ -160,37 +160,32 @@ your rules win on source order — no specificity hacks needed.
 
 Load order, last wins: app bundle CSS → `colors` `<style>` → `extraCss` `<link>`.
 
-## External file prompts (`filePrompts`)
+## Import file (`fileImport`)
 
-Designs sometimes need a file the app can't bundle — a license-restricted font, an SVG to `import()`, a `surface()` height map, etc. `filePrompts` is a list of upload prompts that let the user supply such files at runtime, entirely client-side (nothing is uploaded to a server).
+Designs sometimes need a file the app can't bundle — a license-restricted font, an SVG to `import()`, a `surface()` data file, etc. Setting `fileImport` adds a single **Import file** button to the preset panel that lets the user supply any such file at runtime, entirely client-side (nothing is uploaded to a server).
 
 ```jsonc
 {
-  "filePrompts": [
-    {
-      "kind": "font",                           // "font" | "file" (default "file")
-      "url": "https://example.org/MyFont.ttf",  // optional: download link
-      "label": "My profile font",               // optional: friendly name
-      "family": "My Font Family",               // optional (fonts): internal family name, shown as a hint
-      "accept": ".ttf,.otf",                    // optional: file-picker filter (defaults to ".ttf,.otf" for fonts)
-      "heading": "Profile font",                // optional: preset-panel group heading (default "Font"/"File")
-      "linkText": "Get My Font",                // optional: download-link text (default "Get {label}")
-      "note": "…",                              // optional: download-link tooltip
-      "startup": true                           // optional: show the one-time startup modal (default true)
-    },
-    { "kind": "file", "label": "Company logo (SVG)", "accept": ".svg" }
-  ]
+  // Shorthand: enable with defaults (accepts any file type).
+  "fileImport": true
+
+  // …or an options object:
+  "fileImport": {
+    "accept": ".svg,.ttf,.otf",  // optional: file-picker filter (omit to accept any file)
+    "label": "Import file",      // optional: button label (default "Import file")
+    "note": "…"                  // optional: button tooltip / hint
+  }
 }
 ```
 
-**How files are made available to OpenSCAD:**
+**How uploads are made available to OpenSCAD** — decided automatically by file extension, so one button covers both cases:
 
-- **`kind: "font"`** — the upload is mounted where the renderer's fontconfig can find it, so `text(font = "…")` can use it. Without it, an open-license fallback font stands in (the log panel says so).
-- **`kind: "file"`** (the default) — the upload is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. Whether a file is treated as a font is decided by its extension (`.ttf`/`.otf`/`.ttc`), so a font uploaded through any prompt still lands in the font dir.
+- **Fonts** (`.ttf`/`.otf`/`.ttc`) are mounted where the renderer's fontconfig can find them, so `text(font = "…")` can use them. Without the expected font, an open-license fallback stands in (the log panel says so).
+- **Any other file** is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. The reference must match the uploaded file's name (use `note` to tell users which name to use).
 
-Each prompt renders an **Import…** button (and a download link when `url` is set) in the preset panel. The first prompt with `startup` (the default) also shows a one-time modal on first load when the user has no files stored; a "Don't remind me again" button suppresses it permanently. Uploaded files persist in IndexedDB and are re-applied on the next visit. Omit `filePrompts` and no upload UI is shown.
+Uploaded files persist in IndexedDB and are re-applied on the next visit; the panel lists what's currently loaded. Omit `fileImport` (or set it to `null`/`false`) and no import button is shown.
 
-> The legacy single-object `fontPrompt` (a font prompt) is still accepted and mapped to one `{ "kind": "font", … }` entry.
+> The legacy single-object `fontPrompt` is still accepted: it enables the button with a `.ttf,.otf` filter.
 
 ## Help content (`help`)
 

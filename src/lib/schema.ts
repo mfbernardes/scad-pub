@@ -61,17 +61,13 @@ export function validateSchema(raw: unknown): Schema {
     if (typeof lg !== "object" || typeof lg.light !== "string" || typeof lg.dark !== "string")
       fail("'logo' must be { light, dark } URLs or null");
   }
-  if (s.filePrompts != null) {
-    if (!Array.isArray(s.filePrompts)) fail("'filePrompts' must be an array or null");
-    for (const fp of s.filePrompts) {
-      if (!fp || typeof fp !== "object") fail("'filePrompts' contains a non-object");
-      const e = fp as Record<string, unknown>;
-      if (e.kind !== undefined && e.kind !== "font" && e.kind !== "file")
-        fail("a filePrompts entry has an invalid 'kind' (expected 'font' or 'file')");
-      for (const key of ["url", "label", "family", "accept", "heading", "linkText", "note"] as const) {
-        if (e[key] !== undefined && typeof e[key] !== "string")
-          fail(`a filePrompts entry's '${key}' must be a string`);
-      }
+  if (s.fileImport != null) {
+    if (typeof s.fileImport !== "object" || Array.isArray(s.fileImport))
+      fail("'fileImport' must be an object or null");
+    const fi = s.fileImport as Record<string, unknown>;
+    for (const key of ["accept", "label", "note"] as const) {
+      if (fi[key] !== undefined && typeof fi[key] !== "string")
+        fail(`'fileImport.${key}' must be a string`);
     }
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");

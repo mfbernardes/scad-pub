@@ -206,43 +206,30 @@ export function parseLicenses(raw) {
   });
 }
 
-// Validate and normalise the optional `filePrompts` config block: prompts that
-// nudge the user to supply external files the designs reference but the app
-// can't bundle (a license-restricted font, an SVG to import(), …). Accepts the
-// new array form, or the legacy single `fontPrompt` object (mapped to one
-// kind:"font" entry) for backward compatibility. Fails the build with a clear
-// message on a bad shape (consistent with gen-schema's other fail-fast checks).
-// Returns [] when nothing is configured.
-export function parseFilePrompts(filePrompts, legacyFontPrompt) {
-  let raw = filePrompts;
-  if (raw == null && legacyFontPrompt != null) raw = [{ ...legacyFontPrompt, kind: "font" }];
-  if (raw == null) return [];
-  if (!Array.isArray(raw))
-    throw new Error("gen-schema: 'filePrompts' must be an array of file-prompt entries");
-  const KINDS = ["font", "file"];
-  const STRINGS = ["url", "label", "family", "accept", "heading", "linkText", "note"];
-  return raw.map((entry, i) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry))
-      throw new Error(`gen-schema: 'filePrompts[${i}]' must be an object`);
-    const kind = entry.kind ?? "file";
-    if (!KINDS.includes(kind))
-      throw new Error(
-        `gen-schema: 'filePrompts[${i}].kind' must be one of ${KINDS.join(", ")}`
-      );
-    const out = { kind };
-    for (const key of STRINGS) {
-      if (entry[key] === undefined) continue;
-      if (typeof entry[key] !== "string")
-        throw new Error(`gen-schema: 'filePrompts[${i}].${key}' must be a string`);
-      out[key] = entry[key];
-    }
-    if (entry.startup !== undefined) {
-      if (typeof entry.startup !== "boolean")
-        throw new Error(`gen-schema: 'filePrompts[${i}].startup' must be a boolean`);
-      out.startup = entry.startup;
-    }
-    return out;
-  });
+// Validate and normalise the optional `fileImport` config block: the generic
+// "Import file" button that lets the user supply any file their designs
+// reference but the app can't bundle (a font, an SVG to import(), a surface()
+// data file, …). Accepts `true` (defaults), an options object, or the legacy
+// single `fontPrompt` object (its `accept`/`label`/`note` carry over). Fails the
+// build with a clear message on a bad shape. Returns null when not configured.
+export function parseFileImport(fileImport, legacyFontPrompt) {
+  let raw = fileImport;
+  if (raw == null && legacyFontPrompt != null) {
+    const fp = legacyFontPrompt;
+    raw = { accept: fp.accept ?? ".ttf,.otf", label: fp.label && `Import ${fp.label}`, note: fp.note };
+  }
+  if (raw == null || raw === false) return null;
+  if (raw === true) return {};
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'fileImport' must be true, an options object, or null");
+  const out = {};
+  for (const key of ["accept", "label", "note"]) {
+    if (raw[key] === undefined || raw[key] === null) continue;
+    if (typeof raw[key] !== "string")
+      throw new Error(`gen-schema: 'fileImport.${key}' must be a string`);
+    out[key] = raw[key];
+  }
+  return out;
 }
 
 // The concise label is the first sentence of the doc block; the rest is help.
@@ -431,10 +418,10 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // PWA / browser chrome colours (default to the dark palette's chrome).
   const THEME_COLOR = config.themeColor ?? "#1f2229";
   const BG_COLOR = config.backgroundColor ?? "#15171c";
-  // Optional prompts to supply external (non-bundled) files — fonts, SVGs, etc.
-  // Validated; the legacy single `fontPrompt` object is accepted too. Absent ->
-  // [] -> no upload prompts.
-  const FILE_PROMPTS = parseFilePrompts(config.filePrompts, config.fontPrompt);
+  // Optional generic file-import button (fonts, SVGs, data files, …). Validated;
+  // the legacy single `fontPrompt` object is accepted too. Absent -> null -> no
+  // import button.
+  const FILE_IMPORT = parseFileImport(config.fileImport, config.fontPrompt);
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
@@ -673,7 +660,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     logo,
     features: FEATURES,
     fonts: FONTS,
-    filePrompts: FILE_PROMPTS,
+    fileImport: FILE_IMPORT,
     help: HELP,
     licenses: LICENSES_EXTRA,
     assets: [...assets].sort(),

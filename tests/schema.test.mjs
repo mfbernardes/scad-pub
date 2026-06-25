@@ -186,32 +186,24 @@ test("validates the optional appended licenses", () => {
   );
 });
 
-test("validates the optional filePrompts shape", () => {
-  // null/absent/empty is fine (the default).
-  assert.doesNotThrow(() => validateSchema({ ...validBase(), filePrompts: null }));
-  assert.doesNotThrow(() => validateSchema({ ...validBase(), filePrompts: [] }));
+test("validates the optional fileImport shape", () => {
+  // null/absent is fine (the default).
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), fileImport: null }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), fileImport: {} }));
   assert.doesNotThrow(() =>
     validateSchema({
       ...validBase(),
-      filePrompts: [
-        { kind: "font", url: "https://x/f.ttf", label: "DIN", family: "DIN 32986" },
-        { kind: "file", label: "Logo", accept: ".svg" },
-      ],
+      fileImport: { accept: ".svg", label: "Import file", note: "any file" },
     })
   );
-  // not an array.
+  // not an object.
   assert.throws(
-    () => validateSchema({ ...validBase(), filePrompts: { kind: "font" } }),
-    /'filePrompts' must be an array/
-  );
-  // bad kind.
-  assert.throws(
-    () => validateSchema({ ...validBase(), filePrompts: [{ kind: "image" }] }),
-    /invalid 'kind'/
+    () => validateSchema({ ...validBase(), fileImport: [] }),
+    /'fileImport' must be an object/
   );
   // non-string field.
   assert.throws(
-    () => validateSchema({ ...validBase(), filePrompts: [{ label: 5 }] }),
-    /'label' must be a string/
+    () => validateSchema({ ...validBase(), fileImport: { accept: 5 } }),
+    /'fileImport\.accept' must be a string/
   );
 });

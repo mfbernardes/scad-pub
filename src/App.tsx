@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import schemaJson from "./generated/designs.json";
 import type { Design, ParamValue, RenderResult } from "./openscad/types";
 import { validateSchema } from "./lib/schema";
-import { ns } from "./lib/appId";
 import { fileSignature, OpenSCADRunner, SupersededError } from "./openscad/runner";
 import { toScadExpr } from "./lib/scad";
 import {
@@ -26,7 +25,6 @@ import { LogPanel } from "./components/LogPanel";
 import { Diagnostics } from "./components/Diagnostics";
 import { LicensesModal } from "./components/LicensesModal";
 import { HelpModal } from "./components/HelpModal";
-import { FilePromptModal } from "./components/FilePromptModal";
 import {
   InfoIcon,
   HelpIcon,
@@ -52,20 +50,7 @@ const schema = validateSchema(schemaJson);
 const initialState = readInitialState(schema);
 document.title = schema.title;
 
-const filePrompts = schema.filePrompts ?? [];
-// The first prompt that opts into the one-time startup modal (default: all do).
-const startupPrompt = filePrompts.find((p) => p.startup !== false) ?? null;
-
-// Persist the user's choice to stop seeing the upload-file nudge. The storage
-// key keeps its original "fontPrompt" name so prior dismissals still hold.
-const FILE_PROMPT_DISMISSED = ns("fontPrompt.dismissed");
-function filePromptDismissed(): boolean {
-  try {
-    return localStorage.getItem(FILE_PROMPT_DISMISSED) === "1";
-  } catch {
-    return false;
-  }
-}
+const fileImport = schema.fileImport ?? null;
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
@@ -95,11 +80,6 @@ export default function App() {
   const [announcement, setAnnouncement] = useState("");
   const [showLicenses, setShowLicenses] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  // Startup nudge to upload an external file (see `filePrompts`), if the config
-  // asks for one and the user has none. Gated until the persisted files have
-  // loaded so we don't flash it when a file is already stored.
-  const [showFilePrompt, setShowFilePrompt] = useState(false);
-  const filePromptChecked = useRef(false);
   // Live re-render on edits. Off for designs flagged `heavy`, and auto-paused
   // after a slow render so editing a big model doesn't re-render on every keystroke.
   const [autoRender, setAutoRender] = useState(!design.heavy);
@@ -225,17 +205,10 @@ export default function App() {
 
   useEffect(() => () => runnerRef.current?.dispose(), []);
 
-  // Restore files persisted from previous sessions (uploaded fonts, SVGs, …),
-  // then decide once whether to nudge the user to supply the external file the
-  // config expects (only when they have none and haven't dismissed it).
+  // Restore files persisted from previous sessions (uploaded fonts, SVGs, …).
   useEffect(() => {
     loadFiles().then((f) => {
-      const hasFiles = Object.keys(f).length > 0;
-      if (hasFiles) setUserFiles((prev) => ({ ...f, ...prev }));
-      if (filePromptChecked.current) return;
-      filePromptChecked.current = true;
-      if (startupPrompt && !hasFiles && !filePromptDismissed())
-        setShowFilePrompt(true);
+      if (Object.keys(f).length > 0) setUserFiles((prev) => ({ ...f, ...prev }));
     });
   }, []);
 
@@ -357,22 +330,6 @@ export default function App() {
           onClose={() => setShowLicenses(false)}
         />
       )}
-      {showFilePrompt && startupPrompt && (
-        <FilePromptModal
-          prompt={startupPrompt}
-          onUpload={addFile}
-          onDismissForever={() => {
-            try {
-              localStorage.setItem(FILE_PROMPT_DISMISSED, "1");
-            } catch {
-              /* storage unavailable — dismiss for this session only */
-            }
-            setShowFilePrompt(false);
-          }}
-          onClose={() => setShowFilePrompt(false)}
-        />
-      )}
-
       {/* Off-screen live region for action confirmations. */}
       <div className="sr-only" role="status" aria-live="polite">
         {announcement}
@@ -402,7 +359,7 @@ export default function App() {
             bundled={bundledPresets}
             onApply={(v) => setValues(v)}
             onAddFile={addFile}
-            filePrompts={filePrompts}
+            fileImport={fileImport}
             loadedFiles={Object.keys(userFiles)}
             selected={presetSel}
             onSelectedChange={setPresetSel}

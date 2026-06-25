@@ -107,33 +107,20 @@ export interface SoftwareLicense {
 }
 
 /**
- * A configurable prompt for an external file the user can supply at runtime.
- * Generic over any file type: a `font` is mounted so OpenSCAD can use it, while
- * any other `file` is mounted at the FS root for designs to reference by name.
+ * Config for the generic "Import file" button. A single control that accepts
+ * any file (or font); whether an upload is treated as a font is decided by its
+ * extension, not by config — so one button covers both cases.
  */
-export interface FilePrompt {
+export interface FileImport {
   /**
-   * "font" mounts the upload into the renderer's font dir (so `text()` can use
-   * it); "file" stores it at the FS root so a design can reference it by name
-   * (e.g. `import("logo.svg")`). Defaults to "file".
+   * `accept` attribute for the file picker (e.g. ".svg" or ".ttf,.otf"). Omit to
+   * accept any file type.
    */
-  kind: "font" | "file";
-  /** Optional download link for the file (opened in a new tab). */
-  url?: string;
-  /** Friendly name, e.g. "DIN profile font" or "Company logo (SVG)". */
-  label?: string;
-  /** The font-family the designs reference (font prompts only), shown as a hint. */
-  family?: string;
-  /** `accept` attribute for the file picker; defaults to ".ttf,.otf" for fonts. */
   accept?: string;
-  /** Preset-panel group heading (defaults to "Font" / "File"). */
-  heading?: string;
-  /** Preset-panel download-link text (default `Get ${label}`). */
-  linkText?: string;
-  /** Optional explanatory line shown as the download-link tooltip. */
+  /** Button label (default "Import file"). */
+  label?: string;
+  /** Optional tooltip / hint shown on the button. */
   note?: string;
-  /** Show the one-time startup modal for this prompt. Defaults to true. */
-  startup?: boolean;
 }
 
 export interface Schema {
@@ -179,14 +166,14 @@ export interface Schema {
   /** Bundled font filenames the renderer mounts from public/fonts/. */
   fonts: string[];
   /**
-   * Optional prompts nudging the user to supply external files the designs
-   * expect but can't be bundled — a license-restricted font, an SVG to
-   * `import()`, a data file, etc. Each prompt drives an upload control (and an
-   * optional download link) in the preset panel; the first `startup` prompt also
-   * shows a one-time modal on first load. Empty (the default) shows nothing. All
-   * copy is config-driven so this stays project-agnostic.
+   * Optional generic "Import file" control in the preset panel. Lets the user
+   * supply any file their designs reference but the app can't bundle — a font, an
+   * SVG to `import()`, a `surface()` data file, etc. Fonts (by extension) are
+   * mounted where OpenSCAD's fontconfig finds them; every other file is mounted
+   * at the render FS root so a design can reference it by name. Null/absent hides
+   * the button. All copy is config-driven so this stays project-agnostic.
    */
-  filePrompts: FilePrompt[];
+  fileImport: FileImport | null;
   /**
    * Extra third-party software / license notices supplied by the consumer
    * config, APPENDED after the app's built-in attributions (src/lib/licenses.ts)

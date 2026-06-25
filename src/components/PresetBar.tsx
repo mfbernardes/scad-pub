@@ -1,10 +1,10 @@
 // PresetBar.tsx — presets dropdown combining read-only bundled presets (shipped
 // with the app, per design) and the user's own browser-local presets, plus
-// desktop-compatible parameterSets import/export and in-browser upload of
-// external files (fonts, SVGs, …). All copy here is config-driven (see
-// `filePrompts`), so the bar is project-agnostic. All user storage is client-side.
+// desktop-compatible parameterSets import/export and a generic "Import file"
+// button for external files (fonts, SVGs, …). All copy here is config-driven
+// (see `fileImport`), so the bar is project-agnostic. All user storage is client-side.
 import { useEffect, useState } from "react";
-import type { Design, FilePrompt } from "../openscad/types";
+import type { Design, FileImport } from "../openscad/types";
 import {
   deletePreset,
   listPresets,
@@ -27,9 +27,8 @@ interface Props {
   bundled: ParsedSet[];
   onApply: (values: Values) => void;
   onAddFile: (name: string, bytes: Uint8Array) => void;
-  /** Configured external-file prompts. Each shows an import button (+ optional
-   *  download link) so users can supply fonts/SVGs/etc the designs reference. */
-  filePrompts: FilePrompt[];
+  /** Generic file-import config, or null to hide the "Import file" button. */
+  fileImport: FileImport | null;
   /** Filenames of every user-supplied file currently loaded. */
   loadedFiles: string[];
   /** The namespaced selected-preset id, owned by the app so it can be shared in
@@ -49,7 +48,7 @@ export function PresetBar({
   bundled,
   onApply,
   onAddFile,
-  filePrompts,
+  fileImport,
   loadedFiles,
   selected,
   onSelectedChange,
@@ -128,13 +127,6 @@ export function PresetBar({
     onAddFile(file.name, bytes);
   };
 
-  // Per-kind defaults for the picker filter, group heading and button verb.
-  const acceptFor = (p: FilePrompt) =>
-    p.accept ?? (p.kind === "font" ? ".ttf,.otf,font/ttf" : undefined);
-  const headingFor = (p: FilePrompt) =>
-    p.heading ?? (p.kind === "font" ? "Font" : "File");
-  const nounFor = (p: FilePrompt) => (p.kind === "font" ? "font" : "file");
-
   return (
     <div className="preset-bar">
       <div className="row">
@@ -207,44 +199,30 @@ export function PresetBar({
           <DownloadIcon size={16} /> Export
         </button>
       </div>
-      {filePrompts.map((fp, i) => {
-        const noun = nounFor(fp);
-        const label = fp.label ?? `the ${noun}`;
-        return (
-          <div key={i}>
-            <div className="grp-label">{headingFor(fp)}</div>
-            <div className="row btn-row">
-              <FileInput accept={acceptFor(fp)} onFile={onUploadFile}>
-                {(open) => (
-                  <button
-                    type="button"
-                    className="btn-labeled"
-                    title={`Add ${label} for the designs that need it`}
-                    onClick={open}
-                  >
-                    <UploadIcon size={16} /> Import {noun}…
-                  </button>
-                )}
-              </FileInput>
-              {fp.url && (
-                <a
-                  className="file-link"
-                  href={fp.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={fp.note ?? `Download ${label}, then add it with “Import ${noun}…”.`}
+      {fileImport && (
+        <>
+          <div className="grp-label">Files</div>
+          <div className="row btn-row">
+            <FileInput accept={fileImport.accept} onFile={onUploadFile}>
+              {(open) => (
+                <button
+                  type="button"
+                  className="btn-labeled"
+                  title={
+                    fileImport.note ??
+                    "Import a file your design references (a font, an SVG, a data file…)"
+                  }
+                  onClick={open}
                 >
-                  {fp.linkText ?? `Get ${label}`} ↗
-                </a>
+                  <UploadIcon size={16} /> {fileImport.label ?? "Import file"}…
+                </button>
               )}
-            </div>
+            </FileInput>
+            {loadedFiles.length > 0 && (
+              <span className="hint">added: {loadedFiles.join(", ")}</span>
+            )}
           </div>
-        );
-      })}
-      {filePrompts.length > 0 && loadedFiles.length > 0 && (
-        <div className="row">
-          <span className="hint">added: {loadedFiles.join(", ")}</span>
-        </div>
+        </>
       )}
     </div>
   );

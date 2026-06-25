@@ -8,6 +8,7 @@
     "LiberationSans-Bold.ttf",
     "LiberationSans-Regular.ttf"
   ],
+  "fileImport": true,
   "designs": [
     { "id": "tag", "label": "Tag" }
   ]

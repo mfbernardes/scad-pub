@@ -58,29 +58,32 @@ async function main() {
     console.log(`=== designs (${ids.length}): ${ids.join(", ")} ===`);
     await waitRendered(page, ids[0]);
 
-    // External-file upload prompt: shown on startup only when the config sets a
-    // `filePrompts` entry (font, SVG, …) and no file is stored. Where enabled it
-    // must offer an upload and stay dismissed across reloads; its backdrop would
-    // block later clicks, so handle it first.
-    console.log("=== file upload prompt ===");
-    const fileDialog = page.locator('[role="dialog"][aria-label="File upload"]');
-    await fileDialog.waitFor({ state: "visible", timeout: 2000 }).catch(() => {});
-    if (await fileDialog.count()) {
-      check(
-        (await fileDialog.locator(".modal-actions .primary").count()) > 0,
-        "file prompt offers an upload"
-      );
-      await fileDialog.locator(".link-btn").click(); // "Don't remind me again"
-      await fileDialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+    // Generic file import: the preset panel shows an "Import file" button when
+    // the config sets `fileImport`. Uploading a file should surface it in the
+    // "added:" hint and persist across a reload (IndexedDB).
+    console.log("=== file import ===");
+    const importBtn = page.getByRole("button", { name: /Import file/i });
+    if (await importBtn.count()) {
+      check(true, "import-file button present");
+      const input = page.locator('.preset-bar input[type="file"]').last();
+      await input.setInputFiles({
+        name: "smoke-overlay.svg",
+        mimeType: "image/svg+xml",
+        buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
+      });
+      const hint = page.locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" });
+      await hint.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+      check((await hint.count()) > 0, "uploaded file appears in the added list");
       await page.reload({ waitUntil: "load" });
       await waitRendered(page, ids[0]);
-      await page.waitForTimeout(300); // give the (now-suppressed) prompt a chance
       check(
-        (await page.locator('[role="dialog"][aria-label="File upload"]').count()) === 0,
-        "file prompt stays dismissed after reload"
+        (await page
+          .locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" })
+          .count()) > 0,
+        "uploaded file persists across reload"
       );
     } else {
-      console.log("  (no filePrompts in this config — skipped)");
+      console.log("  (no fileImport in this config — skipped)");
     }
 
     console.log("=== theme toggle ===");
