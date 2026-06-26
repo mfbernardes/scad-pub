@@ -191,6 +191,12 @@ export interface Schema {
    */
   fileImport: FileImport | null;
   /**
+   * Whether the 3D preview shows its map-style overlay controls (zoom in/out and
+   * reset view). Build-time, from the config's `viewerControls` key; defaults to
+   * true. Set false to hide them.
+   */
+  viewerControls: boolean;
+  /**
    * Extra third-party software / license notices supplied by the consumer
    * config, APPENDED after the app's built-in attributions (src/lib/licenses.ts)
    * in the open-source licenses modal. The built-ins are never removed; a config

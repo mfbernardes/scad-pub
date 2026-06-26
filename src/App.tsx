@@ -56,6 +56,8 @@ const initialState = readInitialState(schema);
 document.title = schema.title;
 
 const fileImport = schema.fileImport ?? null;
+// Map-style overlay controls on the preview; on unless the config disables them.
+const viewerControls = schema.viewerControls !== false;
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
@@ -478,7 +480,7 @@ export default function App() {
                 </p>
               </div>
             )}
-            {result?.ok && (
+            {viewerControls && result?.ok && (
               <div className="viewer-controls">
                 <IconButton
                   label="Zoom in"
