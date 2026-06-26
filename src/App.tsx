@@ -526,8 +526,8 @@ export default function App() {
               <LinkIcon size={16} /> Copy link
             </button>
           </div>
-          <Diagnostics log={result?.log ?? []} />
-          <LogPanel log={result?.log ?? []} />
+          <Diagnostics log={result?.log ?? []} notices={schema.notices ?? []} />
+          <LogPanel log={result?.log ?? []} notices={schema.notices ?? []} />
         </section>
       </main>
     </div>

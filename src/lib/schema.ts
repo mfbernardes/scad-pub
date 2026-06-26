@@ -72,6 +72,19 @@ export function validateSchema(raw: unknown): Schema {
   }
   if (s.viewerControls !== undefined && typeof s.viewerControls !== "boolean")
     fail("'viewerControls' must be a boolean");
+  if (s.notices !== undefined) {
+    if (!Array.isArray(s.notices)) fail("'notices' must be an array");
+    for (const n of s.notices) {
+      if (!n || typeof n !== "object") fail("'notices' contains a non-object");
+      const e = n as Record<string, unknown>;
+      if (typeof e.marker !== "string" || !e.marker)
+        fail("a notice category is missing required string 'marker'");
+      if (typeof e.label !== "string" || !e.label)
+        fail("a notice category is missing required string 'label'");
+      if (e.color !== undefined && typeof e.color !== "string")
+        fail("a notice 'color' must be a string");
+    }
+  }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
   if (s.format !== "3mf" && s.format !== "stl")
     fail("'format' must be \"3mf\" or \"stl\"");

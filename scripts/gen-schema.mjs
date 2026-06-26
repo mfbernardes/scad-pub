@@ -264,6 +264,55 @@ export function parseViewerControls(raw) {
   return raw;
 }
 
+// Validate and normalise the optional `notices` config block: the design-defined
+// notice categories surfaced on the "OpenSCAD output" panel. A design echoes
+// `ECHO: "<context>: <marker>: <message>"` and each configured category turns
+// matching echoes into a friendly notice and a coloured count badge. Each entry
+// is { marker (required), label?, color? }:
+//   - marker: the design-defined string matched as `: <marker>:` in an echo
+//     (e.g. "advisory", "note"); case-insensitive.
+//   - label: the badge / notice noun (e.g. "advisories"); defaults to marker.
+//   - color: an optional badge fill colour, validated as a plain CSS colour
+//     (same strictness as `colors`) so it can't break out of the inline style
+//     it gets interpolated into.
+// Notices don't affect geometry, so they're absent from renderHash. Off by
+// default: omitted (or []) -> no notice categories. OpenSCAD's own WARNING/ERROR
+// lines and assert failures stay hardcoded (see lib/diagnostics).
+export function parseNotices(raw) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw))
+    throw new Error(
+      "gen-schema: 'notices' must be an array of notice categories"
+    );
+  return raw.map((entry, i) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry))
+      throw new Error(`gen-schema: 'notices[${i}]' must be an object`);
+    if (typeof entry.marker !== "string" || !entry.marker.trim())
+      throw new Error(
+        `gen-schema: 'notices[${i}].marker' is required and must be a non-empty string`
+      );
+    const out = { marker: entry.marker.trim() };
+    if (entry.label === undefined || entry.label === null) {
+      out.label = out.marker;
+    } else if (typeof entry.label !== "string" || !entry.label.trim()) {
+      throw new Error(
+        `gen-schema: 'notices[${i}].label' must be a non-empty string`
+      );
+    } else {
+      out.label = entry.label.trim();
+    }
+    if (entry.color !== undefined && entry.color !== null) {
+      if (typeof entry.color !== "string" || !COLOR_VALUE_RE.test(entry.color.trim()))
+        throw new Error(
+          `gen-schema: 'notices[${i}].color' must be a plain CSS colour ` +
+            `(got ${JSON.stringify(entry.color)})`
+        );
+      out.color = entry.color.trim();
+    }
+    return out;
+  });
+}
+
 // The concise label is the first sentence of the doc block; the rest is help.
 // Split on sentence-ending .!? + whitespace + a capital/opening paren, so we
 // don't break on decimals (1.5 mm) or lowercase abbreviations (e.g., i.e.).
@@ -457,6 +506,9 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   const FILE_IMPORT = parseFileImport(config.fileImport, config.fontPrompt);
   // Whether the viewer shows its overlay zoom/reset controls (default false).
   const VIEWER_CONTROLS = parseViewerControls(config.viewerControls);
+  // Config-driven notice categories surfaced on the OpenSCAD output panel.
+  // Validated; off by default (omitted -> none).
+  const NOTICES = parseNotices(config.notices);
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
@@ -778,6 +830,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     fonts: FONTS,
     fileImport: FILE_IMPORT,
     viewerControls: VIEWER_CONTROLS,
+    notices: NOTICES,
     help: HELP,
     licenses: LICENSES_EXTRA,
     assets: [...assets].sort(),

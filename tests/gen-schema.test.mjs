@@ -22,6 +22,7 @@ import {
   parseFileImport,
   parseFormat,
   parseViewerControls,
+  parseNotices,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -324,6 +325,45 @@ test("viewerControls defaults to false, accepts a boolean, rejects non-booleans"
 test("viewerControls defaults to false in the emitted schema", () => {
   const { schema } = run("widget.config.json");
   assert.equal(schema.viewerControls, false);
+});
+
+test("notices are off by default (omitted -> [])", () => {
+  assert.deepEqual(parseNotices(undefined), []);
+  assert.deepEqual(parseNotices(null), []);
+  assert.deepEqual(parseNotices([]), []);
+  // The emitted schema carries an empty list when the key is omitted.
+  const { schema } = run("widget.config.json");
+  assert.deepEqual(schema.notices, []);
+});
+
+test("notices: normalises entries, defaults the label, keeps order", () => {
+  assert.deepEqual(
+    parseNotices([
+      { marker: " note ", label: "  notes  ", color: " #3b82f6 " },
+      { marker: "advisory" }, // label defaults to the marker
+    ]),
+    [
+      { marker: "note", label: "notes", color: "#3b82f6" },
+      { marker: "advisory", label: "advisory" },
+    ]
+  );
+});
+
+test("notices: validates shape, marker, label and colour", () => {
+  assert.throws(() => parseNotices({}), /'notices' must be an array/);
+  assert.throws(() => parseNotices([null]), /'notices\[0\]' must be an object/);
+  assert.throws(
+    () => parseNotices([{ label: "x" }]),
+    /'notices\[0\]\.marker' is required/
+  );
+  assert.throws(
+    () => parseNotices([{ marker: "n", label: "  " }]),
+    /'notices\[0\]\.label' must be a non-empty string/
+  );
+  assert.throws(
+    () => parseNotices([{ marker: "n", color: "#fff; } body { display:none" }]),
+    /'notices\[0\]\.color' must be a plain CSS colour/
+  );
 });
 
 test("renderHash folds in the renderer source so flag changes invalidate it", () => {

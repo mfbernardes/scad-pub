@@ -81,6 +81,36 @@ both = show_emblem && label != "";
 text_x = both ? emblem_size / 2 + 3 : 0;
 emblem_x = both ? -(width / 2) + emblem_size / 2 + 6 : 0;
 
+// --- Configurator notices --------------------------------------------------
+// Non-fatal hints surfaced in the app's "OpenSCAD output" panel as count
+// badges. The app matches the `: <marker>:` echo convention, so the `advisory`
+// and `note` markers here line up with the `notices` categories configured in
+// scadpub.config.json. Each fires only in a specific, parameter-driven case, so
+// you can trigger them from the form:
+//   • raise "Font height" past half the tag height       -> an advisory
+//   • widen the emblem past half the tag width           -> an advisory
+//   • enable "Carve the text into the plate"             -> a note
+//   • enlarge the hanging hole past a quarter the height -> a note
+if (label != "" && !engrave_text && text_size > height / 2)
+  echo("tag: advisory: the label text is tall relative to the tag and may overflow the plate");
+if (show_emblem && emblem_size > width / 2)
+  echo("tag: advisory: the emblem is wide relative to the tag and may reach the edges");
+if (label != "" && engrave_text)
+  echo("tag: note: the label is engraved into the plate rather than raised");
+if (hole && hole_diameter > height / 4)
+  echo("tag: note: the hanging hole is large and leaves little material at the corner");
+
+// --- Hard constraints (asserts) -------------------------------------------
+// Unlike the notices above, a failed assert aborts the render with an
+// `ERROR: Assertion …` (which the app counts on the "asserts" badge). These
+// guard genuinely unbuildable combinations you can reach from the form:
+//   • enable + deepen engraving past the plate thickness -> assert
+//   • enlarge the hanging hole until it won't fit the tag -> assert
+assert(!(engrave_text && label != "" && text_depth >= thickness),
+       "engraved text is deeper than the plate is thick; reduce text depth or thicken the plate");
+assert(!(hole && hole_diameter >= min(width, height) - 2 * corner_radius),
+       "the hanging hole is too large to fit the tag; shrink the hole or enlarge the tag");
+
 difference() {
   union() {
     linear_extrude(thickness) rounded_rect(width, height, corner_radius);
