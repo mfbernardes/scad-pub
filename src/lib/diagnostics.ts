@@ -42,11 +42,12 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// A line classified into a diagnostic, plus the badge it contributes to (if
-// any — warnings get a notice but no badge). `null` for plain output lines.
+// A line classified into a diagnostic, plus the key of the badge it contributes
+// to (if any — warnings get a notice but no badge). `null` for plain output
+// lines. The badge's label/colour come from the category map in countBadges, so
+// only the key is carried here.
 interface Classified extends Diagnostic {
   badgeKey?: string;
-  badgeLabel?: string;
 }
 
 // Classify one log line. Config-driven notice categories win over the hardcoded
@@ -67,7 +68,6 @@ function classify(
           text: echo[1].replace(re, ": "),
           color: n.color,
           badgeKey: `notice:${n.marker}`,
-          badgeLabel: n.label,
         };
     }
     return null;
@@ -78,7 +78,6 @@ function classify(
       level: "assert",
       text: assertM[1].trim(),
       badgeKey: "assert",
-      badgeLabel: "asserts",
     };
   const warn = line.match(WARNING_RE);
   if (warn) return { level: "warning", text: warn[1].trim() };
