@@ -61,6 +61,27 @@ async function main() {
     console.log(`=== designs (${ids.length}): ${ids.join(", ")} ===`);
     await waitRendered(page, ids[0]);
 
+    // Configurable popup (schema.popup): the example config shows a dismissible
+    // welcome notice on load. It overlays the app behind a modal backdrop that
+    // intercepts pointer events, so dismiss it before driving the UI — ticking
+    // "Don't show this again" persists the dismissal so it stays gone across the
+    // reloads the later checks perform.
+    console.log("=== welcome popup ===");
+    const popup = page.getByRole("dialog", { name: /Welcome to ScadPub/i });
+    if (await popup.count()) {
+      check(true, "welcome popup shown on load");
+      check(
+        (await popup.getByRole("link", { name: /GitHub/i }).count()) > 0,
+        "popup body renders its link"
+      );
+      await popup.getByLabel(/Don.t show this again/i).check();
+      await popup.getByRole("button", { name: /^OK$/ }).click();
+      await popup.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+      check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
+    } else {
+      console.log("  (no popup in this config — skipped)");
+    }
+
     // Generic file import: the preset panel shows an "Import file" button when
     // the config sets `fileImport`. Uploading a file should surface it in the
     // "added:" hint and persist across a reload (IndexedDB).

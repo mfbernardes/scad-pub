@@ -10,6 +10,11 @@
     "LiberationSans-Regular.ttf"
   ],
   "fileImport": true,
+  "popup": {
+    "header": "Welcome to ScadPub",
+    "body": "Configure an OpenSCAD design in your browser and export a ready-to-print model — everything runs locally.\n\nScadPub is open source: see the [project on GitHub](https://github.com/mfbernardes/scad-pub).",
+    "mode": "dismissible"
+  },
   "viewerControls": true,
   "notices": [
     { "marker": "advisory", "label": "advisories", "color": "#e0a458" },

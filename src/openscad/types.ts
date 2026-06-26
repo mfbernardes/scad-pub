@@ -154,6 +154,26 @@ export interface NoticeCategory {
   color?: string;
 }
 
+/** How often the configurable `popup` notice is shown. */
+export type PopupMode = "always" | "once" | "dismissible";
+
+/**
+ * Config for the optional notice dialog shown over the app on load. All copy is
+ * config-driven so it stays project-agnostic. `body` uses the same Markdown
+ * subset as `help` (bold, code, links, bullet lists).
+ */
+export interface PopupNotice {
+  /** Dialog header / title. */
+  header: string;
+  /** Dialog body — a Markdown-subset string (supports links). */
+  body: string;
+  /**
+   * Display policy: "always" (every visit), "once" (first visit only), or
+   * "dismissible" (every visit until the user ticks "Don't show this again").
+   */
+  mode: PopupMode;
+}
+
 export interface Schema {
   generatedFrom: string;
   /**
@@ -207,6 +227,12 @@ export interface Schema {
    * the button. All copy is config-driven so this stays project-agnostic.
    */
   fileImport: FileImport | null;
+  /**
+   * Optional notice dialog shown over the app on load (build-time, from the
+   * config's `popup` key). Its `mode` decides how often it appears. Null/absent
+   * shows no popup. All copy is config-driven so this stays project-agnostic.
+   */
+  popup: PopupNotice | null;
   /**
    * Whether the 3D preview shows its map-style overlay controls (zoom in/out and
    * reset view). Build-time, from the config's `viewerControls` key; defaults to

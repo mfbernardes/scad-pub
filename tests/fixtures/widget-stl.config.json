@@ -11,10 +11,9 @@
   "fonts": [
     "Foo.ttf"
   ],
-  "fontPrompt": {
-    "url": "https://example/Foo.ttf",
-    "label": "Foo font",
-    "family": "Foo"
+  "fileImport": {
+    "accept": ".ttf,.otf",
+    "label": "Import Foo font"
   },
   "designs": [
     {

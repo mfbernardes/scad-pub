@@ -20,6 +20,7 @@ import {
   parseColors,
   parseLicenses,
   parseFileImport,
+  parsePopup,
   parseFormat,
   parseViewerControls,
   parseNotices,
@@ -155,8 +156,7 @@ test("config-driven features, fonts; presets auto-detected by sibling name", () 
   const { schema, out } = run("widget.config.json");
   assert.deepEqual(schema.features, ["textmetrics"]);
   assert.deepEqual(schema.fonts, ["Foo.ttf"]);
-  // The fixture uses the legacy single `fontPrompt`, mapped to the file-import
-  // button (font accept default + an "Import …" label).
+  // The fixture configures the generic file-import button directly.
   assert.deepEqual(schema.fileImport, {
     accept: ".ttf,.otf",
     label: "Import Foo font",
@@ -552,29 +552,50 @@ test("parseLicenses validates shape and required fields", () => {
   );
 });
 
-test("parseFileImport: true/object/legacy fontPrompt, defaults and errors", () => {
+test("parseFileImport: true/object, defaults and errors", () => {
   // Absent -> null; explicit false -> null.
-  assert.equal(parseFileImport(undefined, undefined), null);
-  assert.equal(parseFileImport(false, undefined), null);
+  assert.equal(parseFileImport(undefined), null);
+  assert.equal(parseFileImport(false), null);
   // true -> defaults (an empty options object).
-  assert.deepEqual(parseFileImport(true, undefined), {});
+  assert.deepEqual(parseFileImport(true), {});
   // Object form: known string fields pass through; nulls/undefined dropped.
   assert.deepEqual(
-    parseFileImport({ accept: ".svg", label: "Add SVG", note: undefined }, undefined),
+    parseFileImport({ accept: ".svg", label: "Add SVG", note: undefined }),
     { accept: ".svg", label: "Add SVG" }
   );
-  // Legacy fontPrompt -> font accept default + an "Import …" label.
-  assert.deepEqual(parseFileImport(undefined, { url: "https://x/f.ttf", label: "DIN" }), {
-    accept: ".ttf,.otf",
-    label: "Import DIN",
-  });
-  // An explicit fileImport wins over a legacy fontPrompt.
-  assert.deepEqual(parseFileImport({ accept: ".svg" }, { label: "DIN" }), { accept: ".svg" });
   // Wrong shapes -> clear errors.
-  assert.throws(() => parseFileImport([], undefined), /'fileImport' must be true/);
+  assert.throws(() => parseFileImport([]), /'fileImport' must be true/);
   assert.throws(
-    () => parseFileImport({ accept: 5 }, undefined),
+    () => parseFileImport({ accept: 5 }),
     /'fileImport\.accept' must be a string/
+  );
+});
+
+test("parsePopup: defaults, modes, links and errors", () => {
+  // Absent -> null (no popup).
+  assert.equal(parsePopup(undefined), null);
+  assert.equal(parsePopup(null), null);
+  // Minimal form: mode defaults to "once".
+  assert.deepEqual(parsePopup({ header: "Hi", body: "Welcome." }), {
+    header: "Hi",
+    body: "Welcome.",
+    mode: "once",
+  });
+  // Every mode is accepted; body may carry Markdown links.
+  for (const mode of ["always", "once", "dismissible"]) {
+    assert.deepEqual(
+      parsePopup({ header: "H", body: "See [docs](https://x).", mode }),
+      { header: "H", body: "See [docs](https://x).", mode }
+    );
+  }
+  // Wrong shapes / missing required fields / bad mode -> clear errors.
+  assert.throws(() => parsePopup([]), /'popup' must be an object/);
+  assert.throws(() => parsePopup({ body: "x" }), /'popup\.header' is required/);
+  assert.throws(() => parsePopup({ header: "x" }), /'popup\.body' is required/);
+  assert.throws(() => parsePopup({ header: " ", body: "x" }), /'popup\.header' is required/);
+  assert.throws(
+    () => parsePopup({ header: "x", body: "y", mode: "sometimes" }),
+    /'popup\.mode' must be one of/
   );
 });
 

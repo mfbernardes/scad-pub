@@ -5,7 +5,7 @@
   "assets": ["lib"],
   "features": ["textmetrics"],
   "fonts": ["Foo.ttf"],
-  "fontPrompt": { "url": "https://example/Foo.ttf", "label": "Foo font", "family": "Foo" },
+  "fileImport": { "accept": ".ttf,.otf", "label": "Import Foo font" },
   "designs": [
     { "id": "widget", "label": "Widget", "heavy": true }
   ]
