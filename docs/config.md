@@ -24,6 +24,9 @@
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
   "fileImport": true,             // optional "Import file" button for user-supplied files
   "viewerControls": true,         // overlay zoom/reset buttons on the preview; default false
+  "advisories": [                 // design-defined advisory categories -> count badges; default [{ "marker": "advisory" }]
+    { "marker": "advisory", "label": "advisories", "color": "#3b82f6" }
+  ],
   "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
   "licenses": [ { "name": "…", "license": "…", … } ],  // optional extra open-source notices (appended)
   "designs": [
@@ -42,6 +45,7 @@
 - **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
 - **`fileImport`** — see [Import file button](#import-file-fileimport).
 - **`viewerControls`** — boolean, default `false`. Set to `true` to show the map-style overlay buttons on the 3D preview (zoom in, zoom out, reset view). When off, orbit/zoom by mouse or touch still works.
+- **`advisories`** — see [Advisory badges](#advisory-badges-advisories).
 - **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
@@ -190,6 +194,33 @@ Designs sometimes need a file the app can't bundle — a license-restricted font
 Uploaded files persist in IndexedDB and are re-applied on the next visit; the panel lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no import button is shown.
 
 > The legacy single-object `fontPrompt` is still accepted: it enables the button with a `.ttf,.otf` filter.
+
+## Advisory badges (`advisories`)
+
+The collapsible **OpenSCAD output** panel below the preview shows count badges for non-fatal notices your designs raise. A design surfaces a notice by `echo`-ing a string in the convention `"<context>: <marker>: <message>"`, e.g.:
+
+```scad
+echo("nameplate: advisory: tactile content sits 4.2 mm from the edge");
+```
+
+`advisories` is the build-time list of marker categories to recognise. Each matched echo becomes a friendly notice above the log (with the marker stripped: *"nameplate: tactile content sits 4.2 mm from the edge"*) and increments a coloured count badge on the panel header.
+
+```jsonc
+{
+  "advisories": [
+    { "marker": "advisory", "label": "advisories", "color": "#3b82f6" },
+    { "marker": "note",     "label": "notes",      "color": "#8b5cf6" }
+  ]
+}
+```
+
+- **`marker`** — required. The design-defined word, matched as `: <marker>:` inside an echo (case-insensitive). The first configured category that matches a line claims it.
+- **`label`** — optional badge/notice noun (e.g. `"advisories"`). Defaults to the `marker`.
+- **`color`** — optional badge fill, a plain CSS colour (hex, `rgb()/hsl()`, or a named colour). For `#rgb`/`#rrggbb` the badge text auto-switches between black and white to stay legible; other colour forms keep the default badge text, so their contrast is your responsibility (as with [`colors`](#theme--colour-scheme)). Omit to use the default accent badge styling.
+
+Omit `advisories` entirely and a single default `{ "marker": "advisory", "label": "advisories" }` category is used. An explicit `[]` disables advisory badges.
+
+> **Hardcoded, not configurable:** OpenSCAD's own `WARNING:` lines surface as warning notices, and `assert()` failures (`ERROR: Assertion …`) surface as a notice **and** an `asserts` count badge. These don't depend on `advisories`.
 
 ## Help content (`help`)
 

@@ -22,6 +22,7 @@ import {
   parseFileImport,
   parseFormat,
   parseViewerControls,
+  parseAdvisories,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -324,6 +325,51 @@ test("viewerControls defaults to false, accepts a boolean, rejects non-booleans"
 test("viewerControls defaults to false in the emitted schema", () => {
   const { schema } = run("widget.config.json");
   assert.equal(schema.viewerControls, false);
+});
+
+test("advisories default to a single 'advisory' category", () => {
+  assert.deepEqual(parseAdvisories(undefined), [
+    { marker: "advisory", label: "advisories" },
+  ]);
+  assert.deepEqual(parseAdvisories(null), [
+    { marker: "advisory", label: "advisories" },
+  ]);
+  // The default is also what the emitted schema carries when the key is omitted.
+  const { schema } = run("widget.config.json");
+  assert.deepEqual(schema.advisories, [
+    { marker: "advisory", label: "advisories" },
+  ]);
+});
+
+test("advisories: normalises entries, defaults the label, keeps order", () => {
+  assert.deepEqual(parseAdvisories([]), []);
+  assert.deepEqual(
+    parseAdvisories([
+      { marker: " note ", label: "  notes  ", color: " #3b82f6 " },
+      { marker: "advisory" }, // label defaults to the marker
+    ]),
+    [
+      { marker: "note", label: "notes", color: "#3b82f6" },
+      { marker: "advisory", label: "advisory" },
+    ]
+  );
+});
+
+test("advisories: validates shape, marker, label and colour", () => {
+  assert.throws(() => parseAdvisories({}), /'advisories' must be an array/);
+  assert.throws(() => parseAdvisories([null]), /'advisories\[0\]' must be an object/);
+  assert.throws(
+    () => parseAdvisories([{ label: "x" }]),
+    /'advisories\[0\]\.marker' is required/
+  );
+  assert.throws(
+    () => parseAdvisories([{ marker: "n", label: "  " }]),
+    /'advisories\[0\]\.label' must be a non-empty string/
+  );
+  assert.throws(
+    () => parseAdvisories([{ marker: "n", color: "#fff; } body { display:none" }]),
+    /'advisories\[0\]\.color' must be a plain CSS colour/
+  );
 });
 
 test("renderHash folds in the renderer source so flag changes invalidate it", () => {

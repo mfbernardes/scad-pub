@@ -225,6 +225,7 @@ body {
 .diag-icon { flex-shrink: 0; }
 .diag-advisory .diag-icon { color: var(--accent); }
 .diag-warning .diag-icon { color: var(--warn); }
+.diag-assert .diag-icon { color: var(--warn); }
 .diag-text { color: var(--text); }
 
 .preview-actions {
@@ -394,6 +395,10 @@ select, input[type="text"], input[type="number"] {
   padding: 0 0.5rem;
   font-size: 0.75rem;
 }
+/* The hardcoded assert badge: warning-toned, with theme-aware text kept above
+   the WCAG AA contrast threshold against --warn in both palettes. */
+.badge-assert { background: var(--warn); color: #1c1f24; }
+:root[data-theme="light"] .badge-assert { color: #ffffff; }
 .log {
   margin: 0;
   max-height: 11rem;
