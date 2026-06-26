@@ -7,8 +7,9 @@
 // For each design it parses the Customizer parameters and gathers the shared
 // .scad the renderer needs, copying them (preserving their relative paths) into
 // public/scad/ so the in-browser renderer can mount them. Dependencies come from
-// the config's `assets` list (files or whole directories, e.g. "lib"); when that
-// is omitted it falls back to following each design's `use`/`include` graph. Run
+// the config's `assets` list (files, whole directories like "lib", or globs like
+// "lib/*.scad" / "**/*.svg"); when that is omitted it falls back to following
+// each design's `use`/`include` graph. Run
 // via the `prebuild`/`predev` npm hooks so the UI never drifts from the source.
 //
 // `generate()` is exported (and pure-ish: all I/O paths are arguments) so the
@@ -523,11 +524,90 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     return out;
   };
 
-  // Expand the config's `assets`: a directory contributes all the .scad under
-  // it; a file is taken as-is. So listing "lib" bundles lib/*.scad.
+  // Every file under a directory (recursively), as source-relative POSIX paths.
+  const filesUnder = (absDir) => {
+    const out = [];
+    for (const entry of readdirSync(absDir, { withFileTypes: true })) {
+      const abs = join(absDir, entry.name);
+      if (entry.isDirectory()) out.push(...filesUnder(abs));
+      else out.push(relPosix(abs));
+    }
+    return out;
+  };
+
+  // A glob entry uses `*` or `?` wildcards rather than naming a concrete file or
+  // directory. (`[`…`]` classes aren't supported — they'd be matched literally.)
+  const isGlob = (entry) => /[*?]/.test(entry);
+
+  // Compile one glob path-segment (no slashes) to an anchored RegExp: `*` spans
+  // any run of non-separator characters, `?` a single one, everything else is a
+  // literal (regex metacharacters escaped so a pattern can't inject regex).
+  const segmentToRe = (seg) => {
+    let re = "";
+    for (const ch of seg) {
+      if (ch === "*") re += "[^/]*";
+      else if (ch === "?") re += "[^/]";
+      else re += ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    }
+    return new RegExp(`^${re}$`);
+  };
+
+  // Match files under SOURCE against a POSIX glob. `*`/`?` match within a single
+  // path segment; `**` spans zero or more directories (so `lib/**/*.scad` reaches
+  // nested files, `**/*.svg` every svg in the tree, `lib/**` every file under
+  // lib). Only files match — directories are traversed, never emitted, mirroring
+  // copyAsset which copies a file. Returns source-relative POSIX paths.
+  const globAssets = (pattern) => {
+    const segments = pattern.split("/").filter(Boolean);
+    const out = [];
+    const walk = (absDir, relParts, segIdx) => {
+      const seg = segments[segIdx];
+      const last = segIdx === segments.length - 1;
+      if (seg === "**") {
+        // Trailing `**`: every file at or below here. Otherwise `**` consumes
+        // zero directories (match the rest right here) or one+ (descend, retry).
+        if (last) {
+          for (const f of filesUnder(absDir)) out.push(f);
+          return;
+        }
+        walk(absDir, relParts, segIdx + 1);
+        for (const entry of readdirSync(absDir, { withFileTypes: true }))
+          if (entry.isDirectory())
+            walk(join(absDir, entry.name), [...relParts, entry.name], segIdx);
+        return;
+      }
+      const re = segmentToRe(seg);
+      for (const entry of readdirSync(absDir, { withFileTypes: true })) {
+        if (!re.test(entry.name)) continue;
+        const parts = [...relParts, entry.name];
+        if (last) {
+          if (entry.isFile()) out.push(parts.join("/"));
+        } else if (entry.isDirectory()) {
+          walk(join(absDir, entry.name), parts, segIdx + 1);
+        }
+      }
+    };
+    walk(SOURCE, [], 0);
+    return out;
+  };
+
+  // Expand the config's `assets`: a glob (`*`/`?`/`**`) contributes every file it
+  // matches; a directory contributes all the .scad under it; a plain file is
+  // taken as-is. So "lib" bundles lib/*.scad, "lib/*.scad" the same explicitly,
+  // and "**/*.svg" every svg in the tree.
   const expandConfiguredAssets = (entries) => {
     const set = new Set();
     for (const entry of entries) {
+      if (isGlob(entry)) {
+        const matches = globAssets(entry);
+        if (!matches.length)
+          throw new Error(
+            `gen-schema: asset pattern '${entry}' matched no files under ${SOURCE}\n` +
+              `  (referenced from ${configPath} — check its 'assets' globs)`
+          );
+        for (const f of matches) set.add(f);
+        continue;
+      }
       const abs = mustExist(resolve(SOURCE, entry), `asset '${entry}'`);
       if (statSync(abs).isDirectory()) {
         for (const f of scadFilesUnder(abs)) set.add(f);

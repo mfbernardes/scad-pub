@@ -1,0 +1,14 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "assets": [
+    "lib/*.scad",
+    "**/*.svg"
+  ],
+  "designs": [
+    {
+      "id": "widget",
+      "label": "Widget"
+    }
+  ]
+}
