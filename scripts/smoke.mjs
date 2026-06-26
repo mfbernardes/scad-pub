@@ -1,9 +1,12 @@
 // smoke.mjs — end-to-end check of the built app in a real browser, all in one
 // process (an in-process static server for dist/ + headless Chromium). Confirms
-// the default design auto-renders, switches to the textmetrics design, exports
-// a 3MF via the UI, checks the textmetrics advisory surfaced, and runs axe-core
-// to guard against serious/critical accessibility regressions. Run after
-// `npm run build`.
+// the default design auto-renders, every design in the config renders, and a 3MF
+// + PNG export work via the UI. Design-specific checks run only when that design
+// is present in the built config: the example "tag" design exercises conditional
+// visibility (@showIf/@collapsed) and the OpenSCAD-output notice/assert badges;
+// a "signage" design, when configured, exercises the textmetrics advisory and
+// @showIf arrow_style. Finally runs axe-core to guard against serious/critical
+// accessibility regressions. Run after `npm run build`.
 import { readFile, mkdtemp, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -275,6 +278,67 @@ async function main() {
       await holeRow.locator('input[type="checkbox"]').uncheck();
       await hd.first().waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
       check((await hd.count()) === 0, "hole_diameter hidden when hole off");
+
+      console.log("=== notice + assert badges on the OpenSCAD output panel (tag) ===");
+      // Start from known defaults (also re-checks `hole` toggled off above).
+      await page.click("button:has-text('Reset to defaults')");
+      await waitRendered(page, "tag");
+      // No need to expand the panel: the count badges live on the always-visible
+      // toggle button, and `.diagnostics` renders above the log regardless.
+
+      const paramRow = (name) =>
+        page.locator("label.param", {
+          has: page.locator("code.param-var", { hasText: new RegExp(`^${name}$`) }),
+        });
+      // Wait for a DOM predicate (returns false on timeout instead of throwing)
+      // — a param edit only re-renders after a debounce, and the status text can
+      // still read "Rendered" from the previous render, so we wait on the result.
+      const waitFor = async (fn) => {
+        try {
+          await page.waitForFunction(fn, { timeout: 30000 });
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      // Engraving the label trips the design's `note` category (a config-driven
+      // notice): a "notes" count badge and a matching diagnostic above the log.
+      await paramRow("engrave_text").locator('input[type="checkbox"]').check();
+      check(
+        await waitFor(() =>
+          /\d+\s*notes/.test(document.querySelector(".log-toggle")?.textContent || "")
+        ),
+        "engraving the label raises a 'notes' badge"
+      );
+      check(
+        /engraved/.test((await page.textContent(".diagnostics")) || ""),
+        "the engrave note is surfaced as a diagnostic"
+      );
+
+      // Making the engraving deeper than the plate trips a hard assert(): the
+      // render fails and the hardcoded "asserts" badge appears.
+      const setNum = async (name, value) => {
+        const input = paramRow(name).locator('input[type="number"]');
+        await input.fill(String(value));
+        await input.blur();
+      };
+      await setNum("thickness", 1);
+      await setNum("text_depth", 2);
+      check(
+        await waitFor(() =>
+          /\d+\s*asserts/.test(document.querySelector(".log-toggle")?.textContent || "")
+        ),
+        "an assert failure raises an 'asserts' badge"
+      );
+      check(
+        /Render failed/.test((await page.textContent(".status")) || ""),
+        "the failed assert render reports a render failure"
+      );
+
+      // Restore a clean, rendering state for the checks that follow.
+      await page.click("button:has-text('Reset to defaults')");
+      await waitRendered(page, "tag");
     }
 
     // textmetrics + @showIf arrow_style — exercised on "signage" when present.
