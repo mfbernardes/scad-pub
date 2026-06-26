@@ -70,14 +70,14 @@ function retintAutoVertices(
 
 export const Viewer = forwardRef<
   ViewerHandle,
-  { stl: Uint8Array | null; theme: string; designId: string }
->(function Viewer({ stl, theme, designId }, ref) {
+  { stl: Uint8Array | null; theme: string; designId: string; presetId: string }
+>(function Viewer({ stl, theme, designId, presetId }, ref) {
   const mountRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<THREE.Object3D | null>(null);
-  // The design whose geometry is currently framed. A new model for the *same*
-  // design (a parameter or preset change) keeps the user's orbit/zoom; a new
-  // design reframes from scratch. null until the first model is framed.
-  const framedDesignRef = useRef<string | null>(null);
+  // The design+preset whose geometry is currently framed. A new model from the
+  // *same* design and preset (a parameter tweak) keeps the user's orbit/zoom; a
+  // change of design or preset reframes from scratch. null until first framed.
+  const framedKeyRef = useRef<string | null>(null);
   // Single-material geometry that tracks the theme (the STL path's one mesh).
   const themedMaterialsRef = useRef<ThemedMaterial[]>([]);
   // Per-vertex-coloured geometry (the 3MF path): the live colour attribute plus
@@ -256,10 +256,14 @@ export const Viewer = forwardRef<
     scene.add(obj);
     modelRef.current = obj;
 
-    // Only reframe when the design itself changed (or this is the first model);
-    // a re-render of the *same* design — a parameter or preset tweak — keeps the
-    // user's current orbit/zoom so the view doesn't jump on every edit.
-    if (framedDesignRef.current !== designId) {
+    // Reframe when the design or preset changed (or this is the first model); a
+    // re-render from the *same* design+preset — a parameter tweak — keeps the
+    // user's current orbit/zoom so the view doesn't jump on every edit. designId
+    // and presetId are read fresh here rather than via the dep array: a preset
+    // change doesn't clear the old geometry, so reframing must wait for the new
+    // model to arrive (this effect) and use *its* bounds, not the stale ones.
+    const frameKey = `${designId}\n${presetId}`;
+    if (framedKeyRef.current !== frameKey) {
       const r = box.getBoundingSphere(new THREE.Sphere()).radius || 50;
       const cam = camRef.current!;
       const controls = controlsRef.current!;
@@ -267,9 +271,10 @@ export const Viewer = forwardRef<
       cam.position.set(d * 0.6, -d, d * 0.7);
       controls.target.set(0, 0, 0);
       controls.update();
-      framedDesignRef.current = designId;
+      framedKeyRef.current = frameKey;
     }
-  }, [stl, designId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stl]);
 
   // The WebGL canvas conveys nothing to assistive tech; the textual render
   // status/log/advisories carry the meaning instead.
