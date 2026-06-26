@@ -104,6 +104,22 @@ export const ImageIcon = ({ size = 18 }: IconProps) => (
   </svg>
 );
 
+export const ZoomInIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M21 21l-4.3-4.3" />
+    <path d="M11 8v6M8 11h6" />
+  </svg>
+);
+
+export const ZoomOutIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M21 21l-4.3-4.3" />
+    <path d="M8 11h6" />
+  </svg>
+);
+
 export const LinkIcon = ({ size = 18 }: IconProps) => (
   <svg {...base(size)}>
     <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1 1" />

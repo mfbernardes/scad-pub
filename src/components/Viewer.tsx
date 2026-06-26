@@ -17,6 +17,12 @@ declare const __APP_FORMAT__: "3mf" | "stl";
 export interface ViewerHandle {
   /** A PNG data URL of the current view, or null if nothing is rendered. */
   snapshot: () => string | null;
+  /** Re-frame the current model with the default orbit/zoom. */
+  resetView: () => void;
+  /** Dolly the camera towards the orbit target. */
+  zoomIn: () => void;
+  /** Dolly the camera away from the orbit target. */
+  zoomOut: () => void;
 }
 
 // Material whose colour follows the theme rather than the model's own colour.
@@ -89,6 +95,39 @@ export const Viewer = forwardRef<
   const controlsRef = useRef<OrbitControls | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const gridRef = useRef<THREE.GridHelper | null>(null);
+  // Bounding-sphere radius of the framed model, so "Reset view" can reproduce
+  // the default framing on demand. null until the first model is framed.
+  const frameRadiusRef = useRef<number | null>(null);
+
+  // Frame the orbit camera for a model of the given bounding-sphere radius:
+  // the default three-quarter view used when a design first loads.
+  function frameView(radius: number) {
+    const cam = camRef.current;
+    const controls = controlsRef.current;
+    if (!cam || !controls) return;
+    const d = radius * 2.6;
+    cam.position.set(d * 0.6, -d, d * 0.7);
+    controls.target.set(0, 0, 0);
+    controls.update();
+  }
+
+  // Move the camera along its line of sight to the orbit target. factor < 1
+  // dollies in (closer), > 1 dollies out, clamped to the controls' distance
+  // bounds so we never cross through the target or fly off to infinity.
+  function dolly(factor: number) {
+    const cam = camRef.current;
+    const controls = controlsRef.current;
+    if (!cam || !controls) return;
+    const offset = cam.position.clone().sub(controls.target);
+    const dist = THREE.MathUtils.clamp(
+      offset.length() * factor,
+      controls.minDistance,
+      controls.maxDistance
+    );
+    offset.setLength(dist);
+    cam.position.copy(controls.target).add(offset);
+    controls.update();
+  }
 
   useImperativeHandle(ref, () => ({
     snapshot() {
@@ -98,6 +137,15 @@ export const Viewer = forwardRef<
       if (!r || !s || !c || !modelRef.current) return null;
       r.render(s, c); // refresh the preserved buffer before reading it
       return r.domElement.toDataURL("image/png");
+    },
+    resetView() {
+      if (frameRadiusRef.current != null) frameView(frameRadiusRef.current);
+    },
+    zoomIn() {
+      dolly(0.8);
+    },
+    zoomOut() {
+      dolly(1.25);
     },
   }));
 
@@ -256,6 +304,11 @@ export const Viewer = forwardRef<
     scene.add(obj);
     modelRef.current = obj;
 
+    // Remember the model's size so "Reset view" can reproduce this framing even
+    // after the user has orbited or zoomed away.
+    const r = box.getBoundingSphere(new THREE.Sphere()).radius || 50;
+    frameRadiusRef.current = r;
+
     // Reframe when the design or preset changed (or this is the first model); a
     // re-render from the *same* design+preset — a parameter tweak — keeps the
     // user's current orbit/zoom so the view doesn't jump on every edit. designId
@@ -264,13 +317,7 @@ export const Viewer = forwardRef<
     // model to arrive (this effect) and use *its* bounds, not the stale ones.
     const frameKey = `${designId}\n${presetId}`;
     if (framedKeyRef.current !== frameKey) {
-      const r = box.getBoundingSphere(new THREE.Sphere()).radius || 50;
-      const cam = camRef.current!;
-      const controls = controlsRef.current!;
-      const d = r * 2.6;
-      cam.position.set(d * 0.6, -d, d * 0.7);
-      controls.target.set(0, 0, 0);
-      controls.update();
+      frameView(r);
       framedKeyRef.current = frameKey;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

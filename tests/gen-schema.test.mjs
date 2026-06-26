@@ -21,6 +21,7 @@ import {
   parseLicenses,
   parseFileImport,
   parseFormat,
+  parseViewerControls,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -288,6 +289,20 @@ test("format is emitted to the schema and folded into renderHash", () => {
   assert.equal(a.format, "3mf");
   assert.equal(b.format, "stl");
   assert.notEqual(a.renderHash, b.renderHash);
+});
+
+test("viewerControls defaults to false, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseViewerControls(undefined), false);
+  assert.equal(parseViewerControls(null), false);
+  assert.equal(parseViewerControls(true), true);
+  assert.equal(parseViewerControls(false), false);
+  assert.throws(() => parseViewerControls("yes"), /'viewerControls' must be a boolean/);
+  assert.throws(() => parseViewerControls(0), /'viewerControls' must be a boolean/);
+});
+
+test("viewerControls defaults to false in the emitted schema", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.viewerControls, false);
 });
 
 test("renderHash folds in the renderer source so flag changes invalidate it", () => {
