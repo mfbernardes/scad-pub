@@ -198,6 +198,27 @@ test("without `assets`, deps are discovered via use/include", () => {
   assert.deepEqual(schema.assets, ["lib/core.scad", "lib/util.scad"]);
 });
 
+test("assets: globs match files (including non-.scad, recursively)", () => {
+  const { schema, out } = run("widget-glob.config.json");
+  // "lib/*.scad" matches the two .scad but NOT lib/notes.txt; "**/*.svg"
+  // reaches the nested assets/emblem.svg anywhere in the tree.
+  assert.deepEqual(schema.assets, [
+    "assets/emblem.svg",
+    "lib/core.scad",
+    "lib/util.scad",
+  ]);
+  assert.ok(existsSync(join(out, "scad", "assets", "emblem.svg")));
+  assert.ok(existsSync(join(out, "scad", "lib", "core.scad")));
+  assert.ok(!existsSync(join(out, "scad", "lib", "notes.txt")));
+});
+
+test("assets: a glob matching nothing fails with a clear error", () => {
+  assert.throws(
+    () => run("widget-glob-empty.config.json"),
+    /asset pattern 'lib\/\*\.nope' matched no files/
+  );
+});
+
 test("schema.json is written to the output dir", () => {
   const { out } = run("widget.config.json");
   const written = JSON.parse(

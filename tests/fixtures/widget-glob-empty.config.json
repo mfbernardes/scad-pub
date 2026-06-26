@@ -1,0 +1,13 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "assets": [
+    "lib/*.nope"
+  ],
+  "designs": [
+    {
+      "id": "widget",
+      "label": "Widget"
+    }
+  ]
+}
