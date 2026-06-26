@@ -591,6 +591,38 @@ select, input[type="text"], input[type="number"] {
   font: 12px ui-monospace, monospace;
 }
 
+/* Configurable notice popup (schema.popup) */
+.notice-body p {
+  margin: 0.5rem 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.notice-body p:first-child { margin-top: 0; }
+.notice-body ul {
+  margin: 0.4rem 0;
+  padding-left: 1.1rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.notice-body a { color: var(--link); }
+.notice-body code {
+  background: var(--panel-2);
+  border-radius: 4px;
+  padding: 0 0.2rem;
+  font: 12px ui-monospace, monospace;
+}
+.notice-dismiss {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.notice-ok { margin-left: auto; }
+
 /* "New version available" toast (PWA update prompt) */
 .update-toast {
   position: fixed;

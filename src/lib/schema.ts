@@ -70,6 +70,17 @@ export function validateSchema(raw: unknown): Schema {
         fail(`'fileImport.${key}' must be a string`);
     }
   }
+  if (s.popup != null) {
+    if (typeof s.popup !== "object" || Array.isArray(s.popup))
+      fail("'popup' must be an object or null");
+    const p = s.popup as Record<string, unknown>;
+    for (const key of ["header", "body"] as const) {
+      if (typeof p[key] !== "string" || !p[key])
+        fail(`'popup.${key}' must be a non-empty string`);
+    }
+    if (!["always", "once", "dismissible"].includes(p.mode as string))
+      fail("'popup.mode' must be \"always\", \"once\" or \"dismissible\"");
+  }
   if (s.viewerControls !== undefined && typeof s.viewerControls !== "boolean")
     fail("'viewerControls' must be a boolean");
   if (s.notices !== undefined) {

@@ -217,3 +217,28 @@ test("validates the optional fileImport shape", () => {
     /'fileImport\.accept' must be a string/
   );
 });
+
+test("validates the optional popup shape", () => {
+  // null/absent is fine (the default).
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), popup: null }));
+  for (const mode of ["always", "once", "dismissible"]) {
+    assert.doesNotThrow(() =>
+      validateSchema({ ...validBase(), popup: { header: "Hi", body: "Body", mode } })
+    );
+  }
+  // not an object.
+  assert.throws(
+    () => validateSchema({ ...validBase(), popup: [] }),
+    /'popup' must be an object/
+  );
+  // missing / empty required fields.
+  assert.throws(
+    () => validateSchema({ ...validBase(), popup: { body: "x", mode: "once" } }),
+    /'popup\.header' must be a non-empty string/
+  );
+  // bad mode.
+  assert.throws(
+    () => validateSchema({ ...validBase(), popup: { header: "x", body: "y", mode: "nope" } }),
+    /'popup\.mode' must be/
+  );
+});

@@ -227,15 +227,10 @@ export function parseLicenses(raw) {
 // Validate and normalise the optional `fileImport` config block: the generic
 // "Import file" button that lets the user supply any file their designs
 // reference but the app can't bundle (a font, an SVG to import(), a surface()
-// data file, …). Accepts `true` (defaults), an options object, or the legacy
-// single `fontPrompt` object (its `accept`/`label`/`note` carry over). Fails the
+// data file, …). Accepts `true` (defaults) or an options object. Fails the
 // build with a clear message on a bad shape. Returns null when not configured.
-export function parseFileImport(fileImport, legacyFontPrompt) {
-  let raw = fileImport;
-  if (raw == null && legacyFontPrompt != null) {
-    const fp = legacyFontPrompt;
-    raw = { accept: fp.accept ?? ".ttf,.otf", label: fp.label && `Import ${fp.label}`, note: fp.note };
-  }
+export function parseFileImport(fileImport) {
+  const raw = fileImport;
   if (raw == null || raw === false) return null;
   if (raw === true) return {};
   if (typeof raw !== "object" || Array.isArray(raw))
@@ -248,6 +243,39 @@ export function parseFileImport(fileImport, legacyFontPrompt) {
     out[key] = raw[key];
   }
   return out;
+}
+
+// The display policies a `popup` may choose: shown on every visit ("always"),
+// only the first visit ("once"), or every visit until the user opts out with a
+// "Don't show this again" checkbox ("dismissible").
+export const POPUP_MODES = ["always", "once", "dismissible"];
+
+// Validate and normalise the optional `popup` config block: a notice dialog
+// shown over the app on load. `header` (dialog title) and `body` (a
+// Markdown-subset string — bold/code/links/lists, same renderer as `help`) are
+// required; `mode` (one of POPUP_MODES) chooses how often it appears and
+// defaults to "once". Purely informational, so it's absent from renderHash.
+// Returns null when not configured; fails the build with a clear message on a
+// bad shape (consistent with gen-schema's other fail-fast checks).
+export function parsePopup(raw) {
+  if (raw == null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error(
+      "gen-schema: 'popup' must be an object with 'header', 'body' and an optional 'mode'"
+    );
+  for (const key of ["header", "body"]) {
+    if (typeof raw[key] !== "string" || !raw[key].trim())
+      throw new Error(
+        `gen-schema: 'popup.${key}' is required and must be a non-empty string`
+      );
+  }
+  const mode = raw.mode ?? "once";
+  if (!POPUP_MODES.includes(mode))
+    throw new Error(
+      `gen-schema: 'popup.mode' must be one of ${POPUP_MODES.map((m) => `"${m}"`).join(", ")} ` +
+        `(got ${JSON.stringify(raw.mode)})`
+    );
+  return { header: raw.header, body: raw.body, mode };
 }
 
 // Validate the optional `viewerControls` config key: the map-style overlay
@@ -500,10 +528,12 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // PWA / browser chrome colours (default to the dark palette's chrome).
   const THEME_COLOR = config.themeColor ?? "#1f2229";
   const BG_COLOR = config.backgroundColor ?? "#15171c";
-  // Optional generic file-import button (fonts, SVGs, data files, …). Validated;
-  // the legacy single `fontPrompt` object is accepted too. Absent -> null -> no
-  // import button.
-  const FILE_IMPORT = parseFileImport(config.fileImport, config.fontPrompt);
+  // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
+  // Absent -> null -> no import button.
+  const FILE_IMPORT = parseFileImport(config.fileImport);
+  // Optional one-off notice dialog shown over the app on load. Validated; absent
+  // -> null -> no popup.
+  const POPUP = parsePopup(config.popup);
   // Whether the viewer shows its overlay zoom/reset controls (default false).
   const VIEWER_CONTROLS = parseViewerControls(config.viewerControls);
   // Config-driven notice categories surfaced on the OpenSCAD output panel.
@@ -829,6 +859,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     features: FEATURES,
     fonts: FONTS,
     fileImport: FILE_IMPORT,
+    popup: POPUP,
     viewerControls: VIEWER_CONTROLS,
     notices: NOTICES,
     help: HELP,

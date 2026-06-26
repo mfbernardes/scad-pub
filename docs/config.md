@@ -23,6 +23,7 @@
   "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
   "fileImport": true,             // optional "Import file" button for user-supplied files
+  "popup": { "header": "…", "body": "…", "mode": "once" },  // optional notice dialog on load
   "viewerControls": true,         // overlay zoom/reset buttons on the preview; default false
   "notices": [                    // design-defined log markers -> count badges (off by default)
     { "marker": "advisory", "label": "advisories", "color": "#e0a458" },
@@ -45,6 +46,7 @@
 - **`colors`** — optional per-theme CSS colour overrides; see [Theme & colour scheme](#theme--colour-scheme).
 - **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
 - **`fileImport`** — see [Import file button](#import-file-fileimport).
+- **`popup`** — optional notice dialog shown over the app on load. See [Popup notice](#popup-notice-popup).
 - **`viewerControls`** — boolean, default `false`. Set to `true` to show the map-style overlay buttons on the 3D preview (zoom in, zoom out, reset view). When off, orbit/zoom by mouse or touch still works.
 - **`notices`** — see [Notice badges](#notice-badges-notices).
 - **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
@@ -194,7 +196,28 @@ Designs sometimes need a file the app can't bundle — a license-restricted font
 
 Uploaded files persist in IndexedDB and are re-applied on the next visit; the panel lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no import button is shown.
 
-> The legacy single-object `fontPrompt` is still accepted: it enables the button with a `.ttf,.otf` filter.
+## Popup notice (`popup`)
+
+Show a one-off notice dialog over the app on load — a welcome message, a usage caveat, a link to docs or to where a required font/license can be obtained. It's a build-time setting; all copy is config-driven, so the app stays project-agnostic. Omit `popup` (the default) and nothing is shown.
+
+```jsonc
+{
+  "popup": {
+    "header": "Welcome to Tag Studio",          // required: dialog title
+    "body": "Configure a nameplate and export a 3MF.\n\nSee the [print guide](https://example.com/guide) for material tips.",  // required
+    "mode": "once"                               // optional: "always" | "once" | "dismissible" (default "once")
+  }
+}
+```
+
+- **`header`** — the dialog title.
+- **`body`** — the message, in the same Markdown subset used elsewhere (`**bold**`, `` `code` ``, `[text](url)` links, blank-line paragraphs, `- ` bullet lists). Links open in a new tab.
+- **`mode`** — how often the popup appears:
+  - **`always`** — shown on every visit. No opt-out.
+  - **`once`** (default) — shown on the first visit only; dismissing it (the **OK** button, the ✕, Escape, or clicking outside) remembers it so it won't return.
+  - **`dismissible`** — shown on every visit until the user ticks **Don't show this again**; closing without ticking the box shows it again next time.
+
+The remembered state is namespaced by the configurator's `id` and keyed by the popup's content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It's purely informational and doesn't affect renders, so it never invalidates the geometry cache.
 
 ## Notice badges (`notices`)
 

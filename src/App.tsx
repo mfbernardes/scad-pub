@@ -28,6 +28,8 @@ import { LogPanel } from "./components/LogPanel";
 import { Diagnostics } from "./components/Diagnostics";
 import { LicensesModal } from "./components/LicensesModal";
 import { HelpModal } from "./components/HelpModal";
+import { PopupModal } from "./components/PopupModal";
+import { shouldShowPopup, rememberPopup } from "./lib/popup";
 import {
   InfoIcon,
   HelpIcon,
@@ -56,6 +58,8 @@ const initialState = readInitialState(schema);
 document.title = schema.title;
 
 const fileImport = schema.fileImport ?? null;
+// Optional build-time notice dialog shown over the app on load.
+const popup = schema.popup ?? null;
 // Map-style overlay controls on the preview; off unless the config opts in.
 const viewerControls = schema.viewerControls === true;
 
@@ -101,6 +105,12 @@ export default function App() {
   const [announcement, setAnnouncement] = useState("");
   const [showLicenses, setShowLicenses] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // Configurable notice dialog: shown on load per its mode (see lib/popup.ts).
+  const [showPopup, setShowPopup] = useState(() => shouldShowPopup(popup));
+  const closePopup = (remember: boolean) => {
+    if (remember && popup) rememberPopup(popup);
+    setShowPopup(false);
+  };
   // Live re-render on edits. Off for designs flagged `heavy`, and auto-paused
   // after a slow render so editing a big model doesn't re-render on every keystroke.
   const [autoRender, setAutoRender] = useState(!design.heavy);
@@ -373,6 +383,7 @@ export default function App() {
         </IconButton>
       </header>
 
+      {showPopup && popup && <PopupModal popup={popup} onClose={closePopup} />}
       {showHelp && <HelpModal help={schema.help} onClose={() => setShowHelp(false)} />}
       {showLicenses && (
         <LicensesModal
