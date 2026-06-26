@@ -467,6 +467,7 @@ export default function App() {
                   stl={result?.ok ? result.stl : null}
                   theme={theme}
                   designId={design.id}
+                  presetId={presetSel}
                 />
               </Suspense>
             </ErrorBoundary>
