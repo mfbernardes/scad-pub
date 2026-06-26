@@ -23,6 +23,7 @@
   "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
   "fileImport": true,             // optional "Import file" button for user-supplied files
+  "viewerControls": true,         // overlay zoom/reset buttons on the preview; default false
   "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
   "licenses": [ { "name": "…", "license": "…", … } ],  // optional extra open-source notices (appended)
   "designs": [
@@ -40,6 +41,7 @@
 - **`colors`** — optional per-theme CSS colour overrides; see [Theme & colour scheme](#theme--colour-scheme).
 - **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
 - **`fileImport`** — see [Import file button](#import-file-fileimport).
+- **`viewerControls`** — boolean, default `false`. Set to `true` to show the map-style overlay buttons on the 3D preview (zoom in, zoom out, reset view). When off, orbit/zoom by mouse or touch still works.
 - **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.

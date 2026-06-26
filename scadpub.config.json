@@ -10,6 +10,7 @@
     "LiberationSans-Regular.ttf"
   ],
   "fileImport": true,
+  "viewerControls": true,
   "designs": [
     { "id": "tag", "label": "Tag" }
   ]

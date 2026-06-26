@@ -70,6 +70,8 @@ export function validateSchema(raw: unknown): Schema {
         fail(`'fileImport.${key}' must be a string`);
     }
   }
+  if (s.viewerControls !== undefined && typeof s.viewerControls !== "boolean")
+    fail("'viewerControls' must be a boolean");
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
   if (s.format !== "3mf" && s.format !== "stl")
     fail("'format' must be \"3mf\" or \"stl\"");
