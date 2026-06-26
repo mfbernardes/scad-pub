@@ -1,26 +1,26 @@
 // Diagnostics.tsx — friendly, structured notices parsed from the OpenSCAD log:
-// the designs' config-driven advisory categories, OpenSCAD's own warnings, and
+// the designs' config-driven notice categories, OpenSCAD's own warnings, and
 // assert failures, surfaced above the verbose log so they aren't missed.
 import { useMemo } from "react";
 import { parseDiagnostics, type DiagnosticLevel } from "../lib/diagnostics";
-import type { AdvisoryCategory } from "../openscad/types";
+import type { NoticeCategory } from "../openscad/types";
 
 const ICON: Record<DiagnosticLevel, string> = {
-  advisory: "ⓘ",
+  notice: "ⓘ",
   warning: "⚠",
   assert: "✗",
 };
 
 export function Diagnostics({
   log,
-  advisories,
+  notices,
 }: {
   log: string[];
-  advisories: AdvisoryCategory[];
+  notices: NoticeCategory[];
 }) {
   const items = useMemo(
-    () => parseDiagnostics(log, advisories),
-    [log, advisories]
+    () => parseDiagnostics(log, notices),
+    [log, notices]
   );
   if (!items.length) return null;
   return (

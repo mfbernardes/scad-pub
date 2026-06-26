@@ -11,6 +11,10 @@
   ],
   "fileImport": true,
   "viewerControls": true,
+  "notices": [
+    { "marker": "advisory", "label": "advisories", "color": "#e0a458" },
+    { "marker": "note", "label": "notes", "color": "#86a9ff" }
+  ],
   "designs": [
     { "id": "tag", "label": "Tag" }
   ]

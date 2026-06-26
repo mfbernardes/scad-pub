@@ -1,27 +1,27 @@
 // diagnostics.ts — turn the raw OpenSCAD worker log into friendly, structured
 // notices and the count badges shown on the "OpenSCAD output" panel.
 //
-// Advisory categories are CONFIG-DRIVEN (schema.advisories, built from the
-// config's `advisories` key): a design echoes
+// The notice categories are CONFIG-DRIVEN (schema.notices, built from the
+// config's `notices` key): a design echoes
 // `ECHO: "<context>: <marker>: <message>"` and each configured category (its
 // marker, label and optional colour) becomes a friendly notice and a coloured
 // count badge. OpenSCAD's own `WARNING:` lines and `assert()` failures
 // (`ERROR: Assertion …`) are handled in a fixed, hardcoded way: warnings surface
 // as notices; assert failures get both a notice and a count badge.
-import type { AdvisoryCategory } from "../openscad/types";
+import type { NoticeCategory } from "../openscad/types";
 
-export type DiagnosticLevel = "advisory" | "warning" | "assert";
+export type DiagnosticLevel = "notice" | "warning" | "assert";
 
 export interface Diagnostic {
   level: DiagnosticLevel;
   text: string;
-  /** Optional notice/badge colour (advisory categories only). */
+  /** Optional notice/badge colour (config-driven notice categories only). */
   color?: string;
 }
 
 /** One count badge for the OpenSCAD output panel header. */
 export interface BadgeCount {
-  /** Stable identity (`advisory:<marker>` or `assert`). */
+  /** Stable identity (`notice:<marker>` or `assert`). */
   key: string;
   /** Badge noun (e.g. "advisories", "asserts"). */
   label: string;
@@ -30,7 +30,7 @@ export interface BadgeCount {
   color?: string;
 }
 
-// An OpenSCAD echo line, e.g. `[out] ECHO: "nameplate: advisory: …"`.
+// An OpenSCAD echo line, e.g. `[out] ECHO: "tag: advisory: …"`.
 const ECHO_RE = /^\[out\]\s*ECHO:\s*"(.*)"\s*$/;
 // Hardcoded OpenSCAD diagnostics (not configurable):
 const WARNING_RE = /^\[(?:out|err)\]\s*WARNING:\s*(.*)$/;
@@ -48,25 +48,25 @@ interface Classified extends Diagnostic {
   badgeLabel?: string;
 }
 
-// Classify one log line. Config-driven advisory categories win over the
-// hardcoded rules; the first matching advisory category claims the line.
+// Classify one log line. Config-driven notice categories win over the hardcoded
+// rules; the first matching category claims the line.
 function classify(
   line: string,
-  advisories: AdvisoryCategory[]
+  notices: NoticeCategory[]
 ): Classified | null {
   const echo = line.match(ECHO_RE);
   if (echo) {
-    for (const a of advisories) {
+    for (const n of notices) {
       // Match the design's convention `: <marker>:` and strip the marker so the
-      // notice reads "nameplate: tactile content …" rather than repeating it.
-      const re = new RegExp(`:\\s*${escapeRegExp(a.marker)}:\\s*`, "i");
+      // notice reads "tag: text size is large …" rather than repeating it.
+      const re = new RegExp(`:\\s*${escapeRegExp(n.marker)}:\\s*`, "i");
       if (re.test(echo[1]))
         return {
-          level: "advisory",
+          level: "notice",
           text: echo[1].replace(re, ": "),
-          color: a.color,
-          badgeKey: `advisory:${a.marker}`,
-          badgeLabel: a.label,
+          color: n.color,
+          badgeKey: `notice:${n.marker}`,
+          badgeLabel: n.label,
         };
     }
     return null;
@@ -87,12 +87,12 @@ function classify(
 /** De-duplicated, structured notices for the Diagnostics list. */
 export function parseDiagnostics(
   log: string[],
-  advisories: AdvisoryCategory[]
+  notices: NoticeCategory[]
 ): Diagnostic[] {
   const seen = new Set<string>();
   const out: Diagnostic[] = [];
   for (const line of log) {
-    const c = classify(line, advisories);
+    const c = classify(line, notices);
     if (!c || !c.text) continue;
     const key = `${c.level}:${c.text}`;
     if (seen.has(key)) continue;
@@ -103,27 +103,28 @@ export function parseDiagnostics(
 }
 
 /**
- * Count badges for the OpenSCAD output panel: one per advisory category and one
- * for assert failures. Categories keep their configured order; the assert badge
- * comes last. Only badges with a non-zero count are returned. Counts are over
- * raw matching log lines (not de-duplicated) so repeated notices still tally.
+ * Count badges for the OpenSCAD output panel: one per configured notice category
+ * and one for assert failures. Categories keep their configured order; the
+ * assert badge comes last. Only badges with a non-zero count are returned.
+ * Counts are over raw matching log lines (not de-duplicated) so repeated notices
+ * still tally.
  */
 export function countBadges(
   log: string[],
-  advisories: AdvisoryCategory[]
+  notices: NoticeCategory[]
 ): BadgeCount[] {
   const byKey = new Map<string, BadgeCount>();
-  for (const a of advisories)
-    byKey.set(`advisory:${a.marker}`, {
-      key: `advisory:${a.marker}`,
-      label: a.label,
+  for (const n of notices)
+    byKey.set(`notice:${n.marker}`, {
+      key: `notice:${n.marker}`,
+      label: n.label,
       count: 0,
-      ...(a.color ? { color: a.color } : {}),
+      ...(n.color ? { color: n.color } : {}),
     });
   byKey.set("assert", { key: "assert", label: "asserts", count: 0 });
 
   for (const line of log) {
-    const c = classify(line, advisories);
+    const c = classify(line, notices);
     if (c?.badgeKey) {
       const badge = byKey.get(c.badgeKey);
       if (badge) badge.count++;

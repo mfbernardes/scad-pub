@@ -324,7 +324,7 @@ export const Viewer = forwardRef<
   }, [stl]);
 
   // The WebGL canvas conveys nothing to assistive tech; the textual render
-  // status/log/advisories carry the meaning instead.
+  // status/log/notices carry the meaning instead.
   return <div className="viewer" ref={mountRef} aria-hidden="true" />;
   }
 );

@@ -1,15 +1,15 @@
 // LogPanel.tsx — shows OpenSCAD's echo/stderr output, with count badges for the
-// config-driven advisory categories (each in its configured colour) and for
+// config-driven notice categories (each in its configured colour) and for
 // hardcoded assert failures.
 import { useState } from "react";
 import { countBadges } from "../lib/diagnostics";
-import type { AdvisoryCategory } from "../openscad/types";
+import type { NoticeCategory } from "../openscad/types";
 
 // Pick black or white text for a badge whose background is a config-supplied
 // colour, so the count stays legible (WCAG contrast) regardless of the hue.
 // Only #rgb / #rrggbb are parsed; other CSS colour forms fall back to the
 // default badge text colour (the consumer is responsible for its contrast,
-// like the rest of the `colors`/advisory colour config).
+// like the rest of the `colors`/notice colour config).
 function badgeTextColor(color?: string): string | undefined {
   if (!color) return undefined;
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
@@ -26,13 +26,13 @@ function badgeTextColor(color?: string): string | undefined {
 
 export function LogPanel({
   log,
-  advisories,
+  notices,
 }: {
   log: string[];
-  advisories: AdvisoryCategory[];
+  notices: NoticeCategory[];
 }) {
   const [open, setOpen] = useState(false);
-  const badges = countBadges(log, advisories);
+  const badges = countBadges(log, notices);
   return (
     <div className="log-panel">
       <button className="log-toggle" onClick={() => setOpen((o) => !o)}>

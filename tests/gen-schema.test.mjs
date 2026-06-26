@@ -22,7 +22,7 @@ import {
   parseFileImport,
   parseFormat,
   parseViewerControls,
-  parseAdvisories,
+  parseNotices,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -327,24 +327,18 @@ test("viewerControls defaults to false in the emitted schema", () => {
   assert.equal(schema.viewerControls, false);
 });
 
-test("advisories default to a single 'advisory' category", () => {
-  assert.deepEqual(parseAdvisories(undefined), [
-    { marker: "advisory", label: "advisories" },
-  ]);
-  assert.deepEqual(parseAdvisories(null), [
-    { marker: "advisory", label: "advisories" },
-  ]);
-  // The default is also what the emitted schema carries when the key is omitted.
+test("notices are off by default (omitted -> [])", () => {
+  assert.deepEqual(parseNotices(undefined), []);
+  assert.deepEqual(parseNotices(null), []);
+  assert.deepEqual(parseNotices([]), []);
+  // The emitted schema carries an empty list when the key is omitted.
   const { schema } = run("widget.config.json");
-  assert.deepEqual(schema.advisories, [
-    { marker: "advisory", label: "advisories" },
-  ]);
+  assert.deepEqual(schema.notices, []);
 });
 
-test("advisories: normalises entries, defaults the label, keeps order", () => {
-  assert.deepEqual(parseAdvisories([]), []);
+test("notices: normalises entries, defaults the label, keeps order", () => {
   assert.deepEqual(
-    parseAdvisories([
+    parseNotices([
       { marker: " note ", label: "  notes  ", color: " #3b82f6 " },
       { marker: "advisory" }, // label defaults to the marker
     ]),
@@ -355,20 +349,20 @@ test("advisories: normalises entries, defaults the label, keeps order", () => {
   );
 });
 
-test("advisories: validates shape, marker, label and colour", () => {
-  assert.throws(() => parseAdvisories({}), /'advisories' must be an array/);
-  assert.throws(() => parseAdvisories([null]), /'advisories\[0\]' must be an object/);
+test("notices: validates shape, marker, label and colour", () => {
+  assert.throws(() => parseNotices({}), /'notices' must be an array/);
+  assert.throws(() => parseNotices([null]), /'notices\[0\]' must be an object/);
   assert.throws(
-    () => parseAdvisories([{ label: "x" }]),
-    /'advisories\[0\]\.marker' is required/
+    () => parseNotices([{ label: "x" }]),
+    /'notices\[0\]\.marker' is required/
   );
   assert.throws(
-    () => parseAdvisories([{ marker: "n", label: "  " }]),
-    /'advisories\[0\]\.label' must be a non-empty string/
+    () => parseNotices([{ marker: "n", label: "  " }]),
+    /'notices\[0\]\.label' must be a non-empty string/
   );
   assert.throws(
-    () => parseAdvisories([{ marker: "n", color: "#fff; } body { display:none" }]),
-    /'advisories\[0\]\.color' must be a plain CSS colour/
+    () => parseNotices([{ marker: "n", color: "#fff; } body { display:none" }]),
+    /'notices\[0\]\.color' must be a plain CSS colour/
   );
 });
 

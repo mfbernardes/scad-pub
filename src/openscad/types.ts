@@ -138,17 +138,17 @@ export interface FileImport {
 }
 
 /**
- * One design-defined advisory category surfaced on the "OpenSCAD output" panel.
+ * One design-defined notice category surfaced on the "OpenSCAD output" panel.
  * A design echoes `ECHO: "<context>: <marker>: <message>"`; each configured
  * category turns matching echoes into a friendly notice and a coloured count
- * badge. Build-time, from the config's `advisories` key. OpenSCAD's own
+ * badge. Build-time, from the config's `notices` key. OpenSCAD's own
  * warnings/errors and assert failures are handled separately and are not
  * configurable (see src/lib/diagnostics.ts).
  */
-export interface AdvisoryCategory {
+export interface NoticeCategory {
   /** The design-defined marker, matched as `: <marker>:` within an echo. */
   marker: string;
-  /** Badge / notice noun (e.g. "advisories"). Defaults to the marker. */
+  /** Badge / notice noun (e.g. "advisories", "notes"). Defaults to the marker. */
   label: string;
   /** Optional badge fill colour (a plain CSS colour); falls back to the accent. */
   color?: string;
@@ -214,11 +214,11 @@ export interface Schema {
    */
   viewerControls: boolean;
   /**
-   * Config-driven advisory categories surfaced on the OpenSCAD output panel.
-   * Each is a design-defined marker plus its badge label and optional colour.
-   * Defaults to a single "advisory" category when the config omits the key.
+   * Config-driven notice categories surfaced on the OpenSCAD output panel. Each
+   * is a design-defined marker plus its badge label and optional colour. Empty
+   * (the default) when the config omits the `notices` key.
    */
-  advisories: AdvisoryCategory[];
+  notices: NoticeCategory[];
   /**
    * Extra third-party software / license notices supplied by the consumer
    * config, APPENDED after the app's built-in attributions (src/lib/licenses.ts)
