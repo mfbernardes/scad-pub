@@ -44,6 +44,14 @@ test("notice categories are config-driven (multiple markers, first match wins)",
   ]);
 });
 
+test("matches ECHO on stderr too (OpenSCAD-WASM routes ECHO to [err])", () => {
+  const out = parseDiagnostics(
+    ['[err] ECHO: "tag: note: the label is engraved"'],
+    NOTICES
+  );
+  assert.deepEqual(out, [{ level: "notice", text: "tag: the label is engraved" }]);
+});
+
 test("notices are off when none are configured", () => {
   const out = parseDiagnostics(
     ['[out] ECHO: "tag: advisory: ignored when no categories are configured"'],

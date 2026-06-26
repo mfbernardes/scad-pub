@@ -30,8 +30,9 @@ export interface BadgeCount {
   color?: string;
 }
 
-// An OpenSCAD echo line, e.g. `[out] ECHO: "tag: advisory: …"`.
-const ECHO_RE = /^\[out\]\s*ECHO:\s*"(.*)"\s*$/;
+// An OpenSCAD echo line, e.g. `[err] ECHO: "tag: advisory: …"`. OpenSCAD-WASM
+// routes ECHO to stderr, so accept both streams (like WARNING/ERROR below).
+const ECHO_RE = /^\[(?:out|err)\]\s*ECHO:\s*"(.*)"\s*$/;
 // Hardcoded OpenSCAD diagnostics (not configurable):
 const WARNING_RE = /^\[(?:out|err)\]\s*WARNING:\s*(.*)$/;
 // An `assert()` failure: OpenSCAD prints `ERROR: Assertion '…' failed …`.

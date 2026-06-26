@@ -100,6 +100,17 @@ if (label != "" && engrave_text)
 if (hole && hole_diameter > height / 4)
   echo("tag: note: the hanging hole is large and leaves little material at the corner");
 
+// --- Hard constraints (asserts) -------------------------------------------
+// Unlike the notices above, a failed assert aborts the render with an
+// `ERROR: Assertion …` (which the app counts on the "asserts" badge). These
+// guard genuinely unbuildable combinations you can reach from the form:
+//   • enable + deepen engraving past the plate thickness -> assert
+//   • enlarge the hanging hole until it won't fit the tag -> assert
+assert(!(engrave_text && label != "" && text_depth >= thickness),
+       "engraved text is deeper than the plate is thick; reduce text depth or thicken the plate");
+assert(!(hole && hole_diameter >= min(width, height) - 2 * corner_radius),
+       "the hanging hole is too large to fit the tag; shrink the hole or enlarge the tag");
+
 difference() {
   union() {
     linear_extrude(thickness) rounded_rect(width, height, corner_radius);
