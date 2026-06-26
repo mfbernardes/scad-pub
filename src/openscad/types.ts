@@ -193,7 +193,7 @@ export interface Schema {
   /**
    * Whether the 3D preview shows its map-style overlay controls (zoom in/out and
    * reset view). Build-time, from the config's `viewerControls` key; defaults to
-   * true. Set false to hide them.
+   * false. Set true to show them.
    */
   viewerControls: boolean;
   /**

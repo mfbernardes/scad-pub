@@ -291,18 +291,18 @@ test("format is emitted to the schema and folded into renderHash", () => {
   assert.notEqual(a.renderHash, b.renderHash);
 });
 
-test("viewerControls defaults to true, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseViewerControls(undefined), true);
-  assert.equal(parseViewerControls(null), true);
+test("viewerControls defaults to false, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseViewerControls(undefined), false);
+  assert.equal(parseViewerControls(null), false);
   assert.equal(parseViewerControls(true), true);
   assert.equal(parseViewerControls(false), false);
   assert.throws(() => parseViewerControls("yes"), /'viewerControls' must be a boolean/);
   assert.throws(() => parseViewerControls(0), /'viewerControls' must be a boolean/);
 });
 
-test("viewerControls defaults to true in the emitted schema", () => {
+test("viewerControls defaults to false in the emitted schema", () => {
   const { schema } = run("widget.config.json");
-  assert.equal(schema.viewerControls, true);
+  assert.equal(schema.viewerControls, false);
 });
 
 test("renderHash folds in the renderer source so flag changes invalidate it", () => {

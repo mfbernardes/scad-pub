@@ -250,12 +250,12 @@ export function parseFileImport(fileImport, legacyFontPrompt) {
 }
 
 // Validate the optional `viewerControls` config key: the map-style overlay
-// buttons (zoom in / zoom out / reset view) on the 3D preview. Defaults to true
-// (shown); set it to false to hide them at build time. They don't affect
+// buttons (zoom in / zoom out / reset view) on the 3D preview. Defaults to false
+// (hidden); set it to true to show them at build time. They don't affect
 // geometry, so they're absent from renderHash. Anything but a boolean fails the
 // build (consistent with gen-schema's other fail-fast checks).
 export function parseViewerControls(raw) {
-  if (raw == null) return true;
+  if (raw == null) return false;
   if (typeof raw !== "boolean")
     throw new Error(
       `gen-schema: 'viewerControls' must be a boolean (got ${JSON.stringify(raw)})`
@@ -454,7 +454,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // the legacy single `fontPrompt` object is accepted too. Absent -> null -> no
   // import button.
   const FILE_IMPORT = parseFileImport(config.fileImport, config.fontPrompt);
-  // Whether the viewer shows its overlay zoom/reset controls (default true).
+  // Whether the viewer shows its overlay zoom/reset controls (default false).
   const VIEWER_CONTROLS = parseViewerControls(config.viewerControls);
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.

@@ -56,8 +56,8 @@ const initialState = readInitialState(schema);
 document.title = schema.title;
 
 const fileImport = schema.fileImport ?? null;
-// Map-style overlay controls on the preview; on unless the config disables them.
-const viewerControls = schema.viewerControls !== false;
+// Map-style overlay controls on the preview; off unless the config opts in.
+const viewerControls = schema.viewerControls === true;
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
