@@ -2,16 +2,19 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { headStyleInjection } from "./src/lib/configCss";
 
 // Read the active config's generated schema (written by the predev/prebuild
 // gen-schema step) so the page chrome and storage namespace are config-driven.
 function readSchema(): {
   title?: string;
+  shortName?: string;
   id?: string;
   format?: "3mf" | "stl";
   description?: string;
   themeColor?: string;
+  themeColorLight?: string;
   colors?: {
     light?: Record<string, string>;
     dark?: Record<string, string>;
@@ -39,6 +42,11 @@ function readSchema(): {
 // assembly lives in src/lib/configCss.ts so it's unit-testable without Vite.
 function configHtml(s: ReturnType<typeof readSchema>): Plugin {
   const headInjection = headStyleInjection(s);
+  // Dark theme-color (used when prefers-color-scheme: dark).
+  const darkColor = s.themeColor ?? "#1f2229";
+  // Light theme-color (panel surface in light mode).
+  const lightColor = s.themeColorLight ?? "#ffffff";
+  const appleTitle = s.shortName ?? s.title ?? "ScadPub";
   return {
     name: "config-html",
     transformIndexHtml: {
@@ -50,7 +58,9 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
             /%APP_DESCRIPTION%/g,
             s.description ?? "Configure and export designs in your browser."
           )
-          .replace(/%APP_THEME_COLOR%/g, s.themeColor ?? "#1f2229")
+          .replace(/%APP_THEME_COLOR_DARK%/g, darkColor)
+          .replace(/%APP_THEME_COLOR_LIGHT%/g, lightColor)
+          .replace(/%APP_APPLE_TITLE%/g, appleTitle)
           // Insert before </head> via a replacer so $-sequences in colour values
           // (there shouldn't be any) are never treated as substitution patterns.
           .replace("</head>", () => `${headInjection}</head>`);
@@ -65,7 +75,12 @@ export default defineConfig(({ command }) => {
   const schema = readSchema();
   return {
     base: command === "build" ? process.env.BASE_PATH || "/" : "/",
-    plugins: [react(), configHtml(schema)],
+    plugins: [react(), tailwindcss(), configHtml(schema)],
+    resolve: {
+      alias: {
+        "@": fileURLToPath(new URL("./src", import.meta.url)),
+      },
+    },
     // Compile-time constants so app modules can namespace storage / set chrome
     // without importing JSON (which Node's test runner can't load untyped).
     define: {

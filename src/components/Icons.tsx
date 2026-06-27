@@ -126,3 +126,124 @@ export const LinkIcon = ({ size = 18 }: IconProps) => (
     <path d="M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7.1l1-1" />
   </svg>
 );
+
+export const ChevronLeftIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M15 18l-6-6 6-6" />
+  </svg>
+);
+
+export const ChevronRightIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M9 18l6-6-6-6" />
+  </svg>
+);
+
+export const ChevronUpIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M18 15l-6-6-6 6" />
+  </svg>
+);
+
+export const ChevronDownIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+
+export const SearchIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M21 21l-4.3-4.3" />
+  </svg>
+);
+
+export const TerminalIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M4 17l6-6-6-6" />
+    <path d="M12 19h8" />
+  </svg>
+);
+
+export const XIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M18 6 6 18M6 6l12 12" />
+  </svg>
+);
+
+export const MoreIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <circle cx="12" cy="5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="19" r="1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const MaximizeIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+    <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+    <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+    <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+  </svg>
+);
+
+export const PanelLeftIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M9 3v18" />
+  </svg>
+);
+
+export const WifiOffIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M2 2l20 20" />
+    <path d="M8.5 16.5a5 5 0 0 1 7 0" />
+    <path d="M5 12.9A10 10 0 0 1 15.8 10" />
+    <path d="M19 10.1A10 10 0 0 1 21 12" />
+    <path d="M12 20h.01" />
+  </svg>
+);
+
+export const StarIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+  </svg>
+);
+
+export const StarFilledIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path
+      d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"
+      fill="currentColor"
+      stroke="none"
+    />
+  </svg>
+);
+
+export const FolderIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+  </svg>
+);
+
+export const FileIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path d="M14 3v5h5" />
+  </svg>
+);
+
+export const MenuIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M3 6h18M3 12h18M3 18h18" />
+  </svg>
+);
+
+export const InstallIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M12 16V4" />
+    <path d="M8 12l4 4 4-4" />
+    <path d="M3 19h18" />
+  </svg>
+);

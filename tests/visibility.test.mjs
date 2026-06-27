@@ -42,3 +42,15 @@ test("isVisible: no condition is always visible; malformed fails safe", () => {
   assert.equal(isVisible({ name: "a", showIf: "back_pocket" }, V), false);
   assert.equal(isVisible({ name: "b", showIf: "string_hole" }, V), true);
 });
+
+test("evalShowIf: param name absent from values is falsy", () => {
+  // 'unknown_param' is not in V, so values[name] is undefined → falsy → false
+  assert.equal(evalShowIf("unknown_param", V), false);
+  assert.equal(evalShowIf("!unknown_param", V), true);
+});
+
+test("evalShowIf: empty/whitespace clause is truthy (always visible)", () => {
+  // An empty clause (e.g. from a trailing ||) must not hide the control.
+  assert.equal(evalShowIf("", V), true);
+  assert.equal(evalShowIf("   ", V), true);
+});

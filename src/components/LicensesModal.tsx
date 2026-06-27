@@ -3,6 +3,7 @@
 // reproducible license text where applicable, to satisfy their license terms.
 import { LICENSES } from "../lib/licenses";
 import type { SoftwareLicense } from "../openscad/types";
+import { safeUrl } from "../lib/safeUrl";
 import { Modal } from "./Modal";
 
 export function LicensesModal({
@@ -23,27 +24,33 @@ export function LicensesModal({
         listed to comply with their licenses.
       </p>
       <div className="modal-body">
-        {all.map((l, i) => (
+        {all.map((l, i) => {
+          const nameHref = safeUrl(l.url);
+          const licenseHref = safeUrl(l.licenseUrl);
+          const sourceHref = l.sourceUrl ? safeUrl(l.sourceUrl) : undefined;
+          return (
           <section className="license-entry" key={`${i}-${l.name}`}>
             <h3>
-              <a href={l.url} target="_blank" rel="noopener noreferrer">
-                {l.name}
-              </a>
+              {nameHref ? (
+                <a href={nameHref} target="_blank" rel="noopener noreferrer">{l.name}</a>
+              ) : (
+                <span>{l.name}</span>
+              )}
               {l.version && <span className="lic-version"> {l.version}</span>}
               <span className="lic-spdx">{l.license}</span>
             </h3>
             <p className="lic-copyright">{l.copyright}</p>
             {l.note && <p className="lic-note">{l.note}</p>}
             <p className="lic-links">
-              <a href={l.licenseUrl} target="_blank" rel="noopener noreferrer">
-                License text ↗
-              </a>
-              {l.sourceUrl && (
+              {licenseHref ? (
+                <a href={licenseHref} target="_blank" rel="noopener noreferrer">License text ↗</a>
+              ) : (
+                <span>License text</span>
+              )}
+              {sourceHref && (
                 <>
                   {" · "}
-                  <a href={l.sourceUrl} target="_blank" rel="noopener noreferrer">
-                    Source ↗
-                  </a>
+                  <a href={sourceHref} target="_blank" rel="noopener noreferrer">Source ↗</a>
                 </>
               )}
             </p>
@@ -54,7 +61,8 @@ export function LicensesModal({
               </details>
             )}
           </section>
-        ))}
+          );
+        })}
       </div>
     </Modal>
   );

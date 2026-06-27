@@ -60,7 +60,7 @@ export function reqToPromise<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
-/** Resolve when a readwrite transaction commits (or reject if it aborts). */
+/** Resolve when a transaction commits; reject if it aborts or errors. */
 export function txDone(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
@@ -68,3 +68,4 @@ export function txDone(tx: IDBTransaction): Promise<void> {
     tx.onabort = () => reject(tx.error);
   });
 }
+

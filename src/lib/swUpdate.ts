@@ -23,7 +23,7 @@ export function isWaitingUpdate(state: string, hasController: boolean): boolean 
  * (`openscad-wasm-bin-*`, shared across deploys) is deliberately left intact so
  * the reload doesn't re-download ~10 MB. Best-effort: it reloads regardless.
  */
-export async function forceReload(): Promise<void> {
+async function forceReload(): Promise<void> {
   try {
     if ("serviceWorker" in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();

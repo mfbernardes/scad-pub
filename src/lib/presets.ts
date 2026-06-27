@@ -108,6 +108,12 @@ export function loadPreset(designId: string, name: string): Values | null {
   return read()[designId]?.[name] ?? null;
 }
 
+/** Extract the display name from a preset ID (`type:designId:name` → `name`). */
+export function presetLabel(id: string): string {
+  const third = id.indexOf(":", id.indexOf(":") + 1);
+  return third >= 0 ? id.slice(third + 1) : id;
+}
+
 export function deletePreset(designId: string, name: string) {
   const store = read();
   if (store[designId]) {

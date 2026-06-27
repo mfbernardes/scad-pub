@@ -174,6 +174,25 @@ export interface PopupNotice {
   mode: PopupMode;
 }
 
+/** PWA manifest screenshot entry. */
+export interface ManifestScreenshot {
+  src: string;
+  sizes: string;
+  form_factor: "wide" | "narrow";
+}
+
+/** Build-time UI behaviour overrides. None affect geometry (absent from renderHash). */
+export interface UiConfig {
+  /** Which edge the parameter panel docks to on desktop (default "left"). */
+  panelSide?: "left" | "right";
+  /** Whether the panel starts open or collapsed on desktop (default "open"). */
+  panelDefault?: "open" | "collapsed";
+  /** Whether the OpenSCAD output console starts open (default "closed"). */
+  outputDefault?: "closed" | "open";
+  /** Whether to offer PWA install affordance (default "auto"). */
+  install?: "auto" | "off";
+}
+
 export interface Schema {
   generatedFrom: string;
   /**
@@ -255,4 +274,8 @@ export interface Schema {
   /** Source-relative paths of the shared .scad dependency files to mount. */
   assets: string[];
   designs: Design[];
+  /** Build-time UI behaviour overrides (panel side, default state, etc.). */
+  ui?: UiConfig;
+  /** Light-mode theme color for `<meta name="theme-color">` (default "#ffffff"). */
+  themeColorLight?: string;
 }

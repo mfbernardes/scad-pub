@@ -115,6 +115,18 @@ export function validateSchema(raw: unknown): Schema {
   }
   if (s.extraCss != null && typeof s.extraCss !== "string")
     fail("'extraCss' must be a string URL or null");
+  if (s.ui != null) {
+    if (typeof s.ui !== "object" || Array.isArray(s.ui)) fail("'ui' must be an object or null");
+    const ui = s.ui as Record<string, unknown>;
+    if (ui.panelSide !== undefined && !["left", "right"].includes(ui.panelSide as string))
+      fail("'ui.panelSide' must be \"left\" or \"right\"");
+    if (ui.panelDefault !== undefined && !["open", "collapsed"].includes(ui.panelDefault as string))
+      fail("'ui.panelDefault' must be \"open\" or \"collapsed\"");
+    if (ui.outputDefault !== undefined && !["closed", "open"].includes(ui.outputDefault as string))
+      fail("'ui.outputDefault' must be \"closed\" or \"open\"");
+    if (ui.install !== undefined && !["auto", "off"].includes(ui.install as string))
+      fail("'ui.install' must be \"auto\" or \"off\"");
+  }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;
     const isSection = (x: unknown) =>

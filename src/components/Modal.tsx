@@ -1,9 +1,10 @@
-// Modal.tsx — shared dialog shell: backdrop, focus-trapped container (useDialog
-// handles Escape + focus management), and a titled header with a close button.
-// The body is provided as children.
+// Modal.tsx — shared dialog shell built on the shadcn/ui Dialog (Radix): portal,
+// overlay, focus trap, Escape + outside-click close, and a built-in close
+// button. Keeps the legacy `.modal-head`/`.modal-body`/`.modal-actions` content
+// classes so each modal's body markup styles unchanged. Mounted only while open
+// (callers conditionally render it), so the dialog is always `open`.
 import type { ReactNode } from "react";
-import { useDialog } from "../lib/useDialog";
-import { IconButton } from "./IconButton";
+import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 
 interface Props {
   title: string;
@@ -14,29 +15,18 @@ interface Props {
 }
 
 export function Modal({ title, label, onClose, children }: Props) {
-  const dialogRef = useDialog<HTMLDivElement>(onClose);
   return (
-    <div
-      className="modal-backdrop"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={label ?? title}
-    >
-      <div
-        className="modal"
-        ref={dialogRef}
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent
+        className="flex w-[min(680px,100%)] max-h-[min(80vh,760px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[680px]"
+        aria-label={label ?? title}
+        aria-describedby={undefined}
       >
-        <header className="modal-head">
-          <h2>{title}</h2>
-          <IconButton label="Close" onClick={onClose}>
-            ✕
-          </IconButton>
-        </header>
+        <div className="modal-head">
+          <DialogTitle>{title}</DialogTitle>
+        </div>
         {children}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

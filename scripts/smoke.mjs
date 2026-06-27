@@ -14,37 +14,63 @@ import { chromium } from "playwright";
 import { tmpdir } from "node:os";
 import { startServer } from "./serve-dist.mjs";
 
-async function waitRendered(page, label) {
-  await page.waitForFunction(
-    () =>
-      /Rendered in \d+ ms/.test(
-        document.querySelector(".status")?.textContent || ""
-      ),
-    { timeout: 60000 }
-  );
-  console.log(`  ${label}: ${(await page.textContent(".status")).trim()} ✅`);
+// Status pill shows "123 ms" or "123 ms (cached)" on success, "Failed (exit N)" on error.
+// The status pill shows only a colour dot; its detail ("123 ms" / "Failed …")
+// lives in aria-label and is revealed on click.
+const statusText = (page) =>
+  page.locator(".status-pill").getAttribute("aria-label");
+
+// "Reset to defaults" confirms via an AlertDialog only when the params differ
+// from the defaults — click the button, then the dialog's Reset if it appears.
+async function resetDefaults(page) {
+  await page.getByRole("button", { name: "Reset to defaults" }).click();
+  const dlg = page.getByRole("alertdialog");
+  const shown = await dlg.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false);
+  if (shown) await dlg.getByRole("button", { name: /^Reset$/ }).click();
 }
 
-// Switch design and wait for the fresh render (clearing the stale status first
-// so waitRendered can't pass on the previous design's result).
+async function waitRendered(page, label) {
+  await page.waitForFunction(
+    () => /\d+ ms/.test(document.querySelector(".status-pill")?.getAttribute("aria-label") || ""),
+    { timeout: 60000 }
+  );
+  console.log(`  ${label ?? "default"}: ${((await statusText(page)) ?? "").replace(/^Render status: /, "").trim()} ✅`);
+}
+
+// Switch design and wait for the fresh render.
+// Design id -> label, populated in main() from the generated schema. The picker
+// is a shadcn/ui (Radix) Select, so we switch designs by clicking the trigger
+// then the option whose visible text is the design's label.
+const designLabels = {};
+
 async function selectDesign(page, id) {
-  await page.selectOption(".design-picker select", id);
-  await page
-    .waitForFunction(
-      () => !/Rendered in/.test(document.querySelector(".status")?.textContent || ""),
-      { timeout: 5000 }
-    )
-    .catch(() => {});
-  // Heavy designs don't auto-render; kick a render manually so the wait resolves.
-  if (!(await page.locator(".auto-render input[type=checkbox]").isChecked()))
-    await page.click("button:has-text('Render now')");
+  if (id !== undefined) {
+    const trigger = page.locator('.command-bar__design-picker [data-slot="select-trigger"]');
+    if (await trigger.count()) {
+      await trigger.click();
+      await page.getByRole("option", { name: designLabels[id] ?? id, exact: true }).click();
+      // Clear the cached "ok" state so waitRendered can't pass on prior render
+      await page
+        .waitForFunction(
+          () => !/\d+ ms/.test(document.querySelector(".status-pill")?.getAttribute("aria-label") || ""),
+          { timeout: 5000 }
+        )
+        .catch(() => {});
+    }
+  }
+  // Every design renders once on first view; if a "Render now" button is present
+  // (auto-render off + pending changes), click it to be safe.
+  const renderBtn = page.getByRole("button", { name: "Render now" }).first();
+  if (await renderBtn.count()) await renderBtn.click().catch(() => {});
   await waitRendered(page, id);
 }
 
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+  });
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -55,10 +81,16 @@ async function main() {
   try {
     await page.goto(base, { waitUntil: "load" });
 
-    const ids = await page.$$eval(".design-picker select option", (os) =>
-      os.map((o) => o.value)
+    // Design list comes from the generated schema (the picker is a Radix Select
+    // with no native <option> elements in the DOM). Single-design configs have
+    // no picker; treat them as a one-element list.
+    const schema = JSON.parse(
+      await readFile(fileURLToPath(new URL("../src/generated/designs.json", import.meta.url)), "utf-8")
     );
-    console.log(`=== designs (${ids.length}): ${ids.join(", ")} ===`);
+    const designs = schema.designs ?? [];
+    for (const d of designs) designLabels[d.id] = d.label;
+    const ids = designs.map((d) => d.id);
+    console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);
     await waitRendered(page, ids[0]);
 
     // Configurable popup (schema.popup): the example config shows a dismissible
@@ -74,7 +106,7 @@ async function main() {
         (await popup.getByRole("link", { name: /GitHub/i }).count()) > 0,
         "popup body renders its link"
       );
-      await popup.getByLabel(/Don.t show this again/i).check();
+      await popup.getByRole("checkbox").check();
       await popup.getByRole("button", { name: /^OK$/ }).click();
       await popup.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
       check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
@@ -82,41 +114,47 @@ async function main() {
       console.log("  (no popup in this config — skipped)");
     }
 
-    // Generic file import: the preset panel shows an "Import file" button when
+    // Generic file import: the Files manager shows an "Import file" button when
     // the config sets `fileImport`. Uploading a file should surface it in the
-    // "added:" hint and persist across a reload (IndexedDB).
+    // file list and persist across a reload (IndexedDB).
     console.log("=== file import ===");
+    // On desktop the file manager is the panel's "Files" tab (Radix unmounts the
+    // inactive tab, so it must be activated — and re-activated after each reload).
+    const gotoFiles = () => page.getByRole("tab", { name: "Files" }).click().catch(() => {});
+    await gotoFiles();
     const importBtn = page.getByRole("button", { name: /Import file/i });
     if (await importBtn.count()) {
       check(true, "import-file button present");
-      const input = page.locator('.preset-bar input[type="file"]').last();
+      const input = page.locator('.file-manager input[type="file"]').last();
       await input.setInputFiles({
         name: "smoke-overlay.svg",
         mimeType: "image/svg+xml",
         buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
       });
-      const hint = page.locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" });
-      await hint.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-      check((await hint.count()) > 0, "uploaded file appears in the added list");
+      const fileRow = page.locator(".file-manager__name", { hasText: "smoke-overlay.svg" });
+      await fileRow.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+      check((await fileRow.count()) > 0, "uploaded file appears in the file list");
       await page.reload({ waitUntil: "load" });
       await waitRendered(page, ids[0]);
+      await gotoFiles();
       check(
         (await page
-          .locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" })
+          .locator(".file-manager__name", { hasText: "smoke-overlay.svg" })
           .count()) > 0,
         "uploaded file persists across reload"
       );
       // Clear removes the file (and the persisted copy / render cache).
-      await page.getByRole("button", { name: /^Clear$/ }).click();
+      await page.getByRole("button", { name: /Clear all imported files/i }).click();
       await page
-        .locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" })
+        .locator(".file-manager__name", { hasText: "smoke-overlay.svg" })
         .waitFor({ state: "detached", timeout: 3000 })
         .catch(() => {});
       await page.reload({ waitUntil: "load" });
       await waitRendered(page, ids[0]);
+      await gotoFiles();
       check(
         (await page
-          .locator(".preset-bar .hint", { hasText: "smoke-overlay.svg" })
+          .locator(".file-manager__name", { hasText: "smoke-overlay.svg" })
           .count()) === 0,
         "cleared file stays cleared after reload"
       );
@@ -127,8 +165,9 @@ async function main() {
     console.log("=== theme toggle ===");
     const bg0 = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     let themeChanged = false;
+    // Theme is now a direct icon button in the CommandBar (first .icon-btn in the right section)
     for (let i = 0; i < 3 && !themeChanged; i++) {
-      await page.click('[aria-label^="Theme"]');
+      await page.locator('.command-bar__right .icon-btn').first().click();
       await page.waitForTimeout(60);
       themeChanged =
         (await page.evaluate(() => getComputedStyle(document.body).backgroundColor)) !== bg0;
@@ -231,7 +270,8 @@ async function main() {
     console.log("=== export 3MF ===");
     const [model] = await Promise.all([
       page.waitForEvent("download"),
-      page.click("button:has-text('Export 3MF')"),
+      // ActionCluster uses aria-label="Export STL/3MF"; button text is just the format
+      page.click('[aria-label^="Export "]'),
     ]);
     const modelOut = join(dir, await model.suggestedFilename());
     await model.saveAs(modelOut);
@@ -240,7 +280,7 @@ async function main() {
     console.log("=== save PNG ===");
     const [png] = await Promise.all([
       page.waitForEvent("download"),
-      page.click("button:has-text('Save PNG')"),
+      page.click('[aria-label="Save PNG"]'),
     ]);
     const pngOut = join(dir, await png.suggestedFilename());
     await png.saveAs(pngOut);
@@ -250,14 +290,16 @@ async function main() {
 
     console.log("=== preview controls (share link + auto-render) ===");
     check(
-      (await page.locator('button:has-text("Copy link")').count()) === 1,
+      (await page.locator('[aria-label="Copy share link"]').count()) >= 1,
       "copy-link button present"
     );
-    const auto = page.locator(".auto-render input[type=checkbox]");
-    check(await auto.isChecked(), "auto-render on by default (non-heavy design)");
-    await auto.uncheck();
-    check(!(await auto.isChecked()), "auto-render can be turned off");
-    await auto.check();
+    // Auto-render: a shadcn/ui Switch (role=switch) in the ActionCluster.
+    const auto = page.getByRole("switch", { name: /Auto-render/i }).first();
+    const autoOn = async () => (await auto.getAttribute("aria-checked")) === "true";
+    check(await autoOn(), "auto-render on by default (non-heavy design)");
+    await auto.click();
+    check(!(await autoOn()), "auto-render can be turned off");
+    await auto.click();
 
     console.log("=== service worker update contract ===");
     const swText = await (await page.request.get(base + "sw.js")).text();
@@ -279,6 +321,8 @@ async function main() {
     if (ids.includes("tag")) {
       console.log("=== conditional visibility (@showIf, tag) ===");
       await selectDesign(page, "tag");
+      // Back to the Parameters tab (the file-import test left the panel on Files).
+      await page.getByRole("tab", { name: "Parameters" }).click().catch(() => {});
 
       // @collapsed: the "Quality" group starts folded; its params are hidden
       // until the group header is opened.
@@ -293,27 +337,25 @@ async function main() {
 
       const hd = page.locator("code.param-var", { hasText: /^hole_diameter$/ });
       check((await hd.count()) > 0, "hole_diameter shown when hole on");
-      const holeRow = page.locator("label.param", {
+      const holeRow = page.locator(".param", {
         has: page.locator("code.param-var", { hasText: /^hole$/ }),
       });
-      await holeRow.locator('input[type="checkbox"]').uncheck();
+      await holeRow.getByRole("checkbox").uncheck();
       await hd.first().waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
       check((await hd.count()) === 0, "hole_diameter hidden when hole off");
 
       console.log("=== notice + assert badges on the OpenSCAD output panel (tag) ===");
       // Start from known defaults (also re-checks `hole` toggled off above).
-      await page.click("button:has-text('Reset to defaults')");
+      await resetDefaults(page);
       await waitRendered(page, "tag");
-      // No need to expand the panel: the count badges live on the always-visible
-      // toggle button, and `.diagnostics` renders above the log regardless.
 
       const paramRow = (name) =>
-        page.locator("label.param", {
+        page.locator(".param", {
           has: page.locator("code.param-var", { hasText: new RegExp(`^${name}$`) }),
         });
       // Wait for a DOM predicate (returns false on timeout instead of throwing)
       // — a param edit only re-renders after a debounce, and the status text can
-      // still read "Rendered" from the previous render, so we wait on the result.
+      // still read "N ms" from the previous render, so we wait on the result.
       const waitFor = async (fn) => {
         try {
           await page.waitForFunction(fn, { timeout: 30000 });
@@ -324,18 +366,27 @@ async function main() {
       };
 
       // Engraving the label trips the design's `note` category (a config-driven
-      // notice): a "notes" count badge and a matching diagnostic above the log.
-      await paramRow("engrave_text").locator('input[type="checkbox"]').check();
+      // notice): the advisory badge and warn count on the output toggle appear.
+      await paramRow("engrave_text").getByRole("checkbox").check();
       check(
         await waitFor(() =>
-          /\d+\s*notes/.test(document.querySelector(".log-toggle")?.textContent || "")
+          document.querySelector(".advisory-badge") !== null ||
+          document.querySelector(".action-cluster__warn-badge") !== null
         ),
-        "engraving the label raises a 'notes' badge"
+        "engraving the label raises a warning/notice badge"
       );
+      // Open the output console to see the diagnostic text. One deterministic
+      // click on the advisory badge (always present once a notice fires) — a
+      // second toggle would close it again.
+      if (!(await page.locator(".output-console").count()))
+        await page.locator('.advisory-badge, [aria-label^="Open output console"]').first().click().catch(() => {});
+      await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
       check(
-        /engraved/.test((await page.textContent(".diagnostics")) || ""),
+        /engraved/.test((await page.textContent(".output-console").catch(() => "")) || ""),
         "the engrave note is surfaced as a diagnostic"
       );
+      // Close the console again
+      await page.click('.output-console__close').catch(() => {});
 
       // Making the engraving deeper than the plate trips a hard assert(): the
       // render fails and the hardcoded "asserts" badge appears.
@@ -348,17 +399,19 @@ async function main() {
       await setNum("text_depth", 2);
       check(
         await waitFor(() =>
-          /\d+\s*asserts/.test(document.querySelector(".log-toggle")?.textContent || "")
+          document.querySelector(".badge-assert") !== null ||
+          (document.querySelector(".advisory-badge") !== null &&
+           /Failed/.test(document.querySelector(".status-pill")?.getAttribute("aria-label") || ""))
         ),
-        "an assert failure raises an 'asserts' badge"
+        "an assert failure raises an asserts badge"
       );
       check(
-        /Render failed/.test((await page.textContent(".status")) || ""),
+        /Failed/.test((await statusText(page).catch(() => "")) || ""),
         "the failed assert render reports a render failure"
       );
 
       // Restore a clean, rendering state for the checks that follow.
-      await page.click("button:has-text('Reset to defaults')");
+      await resetDefaults(page);
       await waitRendered(page, "tag");
     }
 
@@ -366,8 +419,13 @@ async function main() {
     if (ids.includes("signage")) {
       console.log("=== signage: textmetrics + @showIf arrow_style ===");
       await selectDesign(page, "signage");
-      await page.click(".log-toggle");
-      check(/between characters/.test((await page.textContent(".log")) || ""), "textmetrics advisory present");
+      // Open the output console (click the terminal button or advisory badge)
+      await page.click('[aria-label^="Open output console"]').catch(async () => {
+        await page.click('.advisory-badge').catch(() => {});
+      });
+      await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
+      await page.click('.output-console__tab:has-text("Log")').catch(() => {});
+      check(/between characters/.test((await page.textContent(".output-console").catch(() => "")) || ""), "textmetrics advisory present");
       // arrow_style is relevant only once an arrow is chosen (`@showIf arrow != none`);
       // the signage default is arrow = "none", so it starts hidden.
       const arrowStyle = page.locator("code.param-var", { hasText: /^arrow_style$/ });

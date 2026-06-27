@@ -17,10 +17,11 @@
   },
   "viewerControls": true,
   "notices": [
-    { "marker": "advisory", "label": "advisories", "color": "#e0a458" },
+    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
     { "marker": "note", "label": "notes", "color": "#86a9ff" }
   ],
   "designs": [
-    { "id": "tag", "label": "Tag" }
+    { "id": "tag", "label": "Tag" },
+    { "id": "coin", "label": "Coin" }
   ]
 }

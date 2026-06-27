@@ -115,3 +115,17 @@ test("a tampered numeric value is coerced back to a number", () => {
   globalThis.location.hash = '#d=d&v=' + encodeURIComponent('{"n":"5"}');
   assert.equal(readInitialState(schema).values.n, 5);
 });
+
+test("malformed JSON in v param silently returns defaults", () => {
+  globalThis.location.hash = '#d=d&v=' + encodeURIComponent('{not json}');
+  const r = readInitialState(schema);
+  assert.deepEqual(r.values, DEFAULTS);
+});
+
+test("unknown param keys in v diff are silently ignored", () => {
+  globalThis.location.hash = '#d=d&v=' + encodeURIComponent('{"n":7,"bogus":"x"}');
+  const r = readInitialState(schema);
+  assert.equal(r.values.n, 7);
+  assert.equal(r.values.text, "hi");
+  assert.ok(!("bogus" in r.values));
+});

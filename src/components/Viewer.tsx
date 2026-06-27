@@ -149,6 +149,11 @@ export const Viewer = forwardRef<
     },
   }));
 
+  // Tracks whether the canvas is intersecting the viewport. Used to skip
+  // renderer.render() calls when the viewer is off-screen (e.g. bottom sheet
+  // at full detent, or a background tab), saving GPU/battery.
+  const visibleRef = useRef(true);
+
   // One-time scene setup.
   useEffect(() => {
     const mount = mountRef.current!;
@@ -181,10 +186,16 @@ export const Viewer = forwardRef<
     controls.enableDamping = true;
     controlsRef.current = controls;
 
+    const io = new IntersectionObserver(
+      ([entry]) => { visibleRef.current = entry.isIntersecting; },
+      { threshold: 0 }
+    );
+    io.observe(mount);
+
     let raf = 0;
     const animate = () => {
       controls.update();
-      renderer.render(scene, cam);
+      if (visibleRef.current) renderer.render(scene, cam);
       raf = requestAnimationFrame(animate);
     };
     animate();
@@ -203,6 +214,7 @@ export const Viewer = forwardRef<
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      io.disconnect();
       controls.dispose();
       renderer.dispose();
       mount.removeChild(renderer.domElement);

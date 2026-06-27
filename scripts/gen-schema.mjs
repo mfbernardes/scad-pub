@@ -29,6 +29,15 @@ import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve, relative, sep } from "node:path";
 
+// Optional build-time SVG→PNG rasterizer (@resvg/resvg-js). Present in dev
+// builds; gracefully absent in minimal CI environments that didn't npm install.
+let Resvg = null;
+try {
+  ({ Resvg } = await import("@resvg/resvg-js"));
+} catch {
+  /* not installed — icon rasterization will be skipped */
+}
+
 // A content hash over everything that determines a render's STL output — the
 // mounted .scad sources, the bundled fonts (glyph outlines drive text geometry),
 // the always-on render features, the OpenSCAD wasm build, and the renderer's own
@@ -129,6 +138,12 @@ export const COLOR_TOKENS = [
   "viewer-grid",
   "viewer-grid-2",
   "viewer-model",
+  // Phase 1 theme-revamp tokens
+  "radius",
+  "radius-sm",
+  "glass-bg",
+  "glass-border",
+  "elevation",
 ];
 
 // A deliberately strict CSS-colour value: hex, rgb()/rgba()/hsl()/hsla(), or a
@@ -341,6 +356,42 @@ export function parseNotices(raw) {
   });
 }
 
+// Validate and normalise the optional `ui` config block: build-time UI behaviour
+// overrides. None affect geometry (absent from renderHash). Applies defaults for
+// omitted keys. Returns the defaults object when the config omits `ui` entirely.
+export function parseUi(raw) {
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto" };
+  if (raw == null) return defaults;
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'ui' must be an object");
+  const out = { ...defaults };
+  const PANEL_SIDES = ["left", "right"];
+  const PANEL_DEFAULTS = ["open", "collapsed"];
+  const OUTPUT_DEFAULTS = ["closed", "open"];
+  const INSTALL_MODES = ["auto", "off"];
+  if (raw.panelSide !== undefined) {
+    if (!PANEL_SIDES.includes(raw.panelSide))
+      throw new Error(`gen-schema: 'ui.panelSide' must be one of ${PANEL_SIDES.map((s) => `"${s}"`).join(", ")}`);
+    out.panelSide = raw.panelSide;
+  }
+  if (raw.panelDefault !== undefined) {
+    if (!PANEL_DEFAULTS.includes(raw.panelDefault))
+      throw new Error(`gen-schema: 'ui.panelDefault' must be one of ${PANEL_DEFAULTS.map((s) => `"${s}"`).join(", ")}`);
+    out.panelDefault = raw.panelDefault;
+  }
+  if (raw.outputDefault !== undefined) {
+    if (!OUTPUT_DEFAULTS.includes(raw.outputDefault))
+      throw new Error(`gen-schema: 'ui.outputDefault' must be one of ${OUTPUT_DEFAULTS.map((s) => `"${s}"`).join(", ")}`);
+    out.outputDefault = raw.outputDefault;
+  }
+  if (raw.install !== undefined) {
+    if (!INSTALL_MODES.includes(raw.install))
+      throw new Error(`gen-schema: 'ui.install' must be one of ${INSTALL_MODES.map((s) => `"${s}"`).join(", ")}`);
+    out.install = raw.install;
+  }
+  return out;
+}
+
 // The concise label is the first sentence of the doc block; the rest is help.
 // Split on sentence-ending .!? + whitespace + a capital/opening paren, so we
 // don't break on decimals (1.5 mm) or lowercase abbreviations (e.g., i.e.).
@@ -522,12 +573,15 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   const FORMAT = parseFormat(config.format);
   const FONTS = config.fonts ?? [];
   const TITLE = config.title ?? "ScadPub";
+  const SHORT_NAME = config.shortName ?? TITLE;
   const ID = config.id ?? "scadpub";
   const DESCRIPTION =
     config.description ?? "Configure and export designs in your browser.";
   // PWA / browser chrome colours (default to the dark palette's chrome).
   const THEME_COLOR = config.themeColor ?? "#1f2229";
+  const THEME_COLOR_LIGHT = config.themeColorLight ?? "#ffffff";
   const BG_COLOR = config.backgroundColor ?? "#15171c";
+  const CATEGORIES = Array.isArray(config.categories) ? config.categories : [];
   // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
   // Absent -> null -> no import button.
   const FILE_IMPORT = parseFileImport(config.fileImport);
@@ -549,6 +603,8 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // tokens; emitted by vite.config.ts as a <style> block so a consumer project
   // can restyle the app entirely from its config. Absent -> null.
   const COLORS = parseColors(config.colors);
+  // Build-time UI behaviour config (panel side, default state, etc.).
+  const UI = parseUi(config.ui);
 
   // outScadDir is entirely generated: wipe it before repopulating so files from
   // a previous config/build (a removed, renamed or briefly-private design or
@@ -798,40 +854,101 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // fixture-driven unit tests, which don't pass outPublicDir).
   if (outPublicDir) {
     mkdirSync(outPublicDir, { recursive: true });
+
+    // Build (or use the default) icon SVG source.
+    let iconSvg;
     if (config.icon) {
-      copyFileSync(
+      iconSvg = readFileSync(
         mustExist(resolve(CONFIG_DIR, config.icon), `icon '${config.icon}'`),
-        join(outPublicDir, "icon.svg")
+        "utf-8"
       );
+      copyFileSync(resolve(CONFIG_DIR, config.icon), join(outPublicDir, "icon.svg"));
     } else {
       // Neutral default icon when the config supplies none.
-      writeFileSync(
-        join(outPublicDir, "icon.svg"),
+      iconSvg =
         `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="${TITLE}">\n` +
-          `  <rect width="512" height="512" rx="96" fill="${THEME_COLOR}"/>\n` +
-          `  <rect x="150" y="150" width="212" height="212" rx="28" fill="none" stroke="#86a9ff" stroke-width="30"/>\n` +
-          `</svg>\n`
+        `  <rect width="512" height="512" rx="96" fill="${THEME_COLOR}"/>\n` +
+        `  <rect x="150" y="150" width="212" height="212" rx="28" fill="none" stroke="#86a9ff" stroke-width="30"/>\n` +
+        `</svg>\n`;
+      writeFileSync(join(outPublicDir, "icon.svg"), iconSvg);
+    }
+
+    // Maskable icon: separate source (safe-zone padded) or fall back to the
+    // main icon. The maskable PNG is rendered from this SVG.
+    let maskableSvg = iconSvg;
+    if (config.iconMaskable) {
+      maskableSvg = readFileSync(
+        mustExist(resolve(CONFIG_DIR, config.iconMaskable), `iconMaskable '${config.iconMaskable}'`),
+        "utf-8"
       );
     }
+
+    // Rasterize PNGs at build time via @resvg/resvg-js (Rust/WASM SVG renderer,
+    // no headless browser needed). Sizes: 192 & 512 for the manifest, 180 for
+    // apple-touch-icon. The maskable 512 uses the safe-zone-padded source.
+    if (Resvg) {
+      try {
+        const rasterize = (svg, size) => {
+          const r = new Resvg(svg, {
+            fitTo: { mode: "width", value: size },
+            font: { loadSystemFonts: false },
+          });
+          return r.render().asPng();
+        };
+        writeFileSync(join(outPublicDir, "icon-192.png"), rasterize(iconSvg, 192));
+        writeFileSync(join(outPublicDir, "icon-512.png"), rasterize(iconSvg, 512));
+        writeFileSync(join(outPublicDir, "icon-512-maskable.png"), rasterize(maskableSvg, 512));
+        writeFileSync(join(outPublicDir, "icon-180.png"), rasterize(iconSvg, 180));
+      } catch (err) {
+        console.warn(`gen-schema: icon rasterization failed (${err.message})`);
+        copyFileSync(join(outPublicDir, "icon.svg"), join(outPublicDir, "icon-180.png"));
+      }
+    } else {
+      // Fallback: copy SVG as apple-touch-icon placeholder when resvg unavailable.
+      copyFileSync(join(outPublicDir, "icon.svg"), join(outPublicDir, "icon-180.png"));
+    }
+
+    // Manifest screenshot entries (optional — enables rich Android install UI).
+    const screenshots = [];
+    if (Array.isArray(config.screenshots)) {
+      for (const shot of config.screenshots) {
+        if (shot.src && shot.sizes && shot.form_factor) {
+          const abs = mustExist(resolve(CONFIG_DIR, shot.src), `screenshot '${shot.src}'`);
+          const name = abs.split(/[\\/]/).pop();
+          copyFileSync(abs, join(outPublicDir, name));
+          screenshots.push({ src: name, sizes: shot.sizes, type: "image/png", form_factor: shot.form_factor });
+        }
+      }
+    }
+
+    const manifestIcons = [
+      { src: "icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
+      { src: "icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ];
+
+    const manifest = {
+      id: `/${ID}/`,
+      name: TITLE,
+      short_name: SHORT_NAME,
+      description: DESCRIPTION,
+      lang: "en",
+      dir: "ltr",
+      start_url: ".",
+      scope: ".",
+      display: "standalone",
+      background_color: BG_COLOR,
+      theme_color: THEME_COLOR,
+      launch_handler: { client_mode: "navigate-existing" },
+      icons: manifestIcons,
+    };
+    if (CATEGORIES.length) manifest.categories = CATEGORIES;
+    if (screenshots.length) manifest.screenshots = screenshots;
+
     writeFileSync(
       join(outPublicDir, "manifest.webmanifest"),
-      JSON.stringify(
-        {
-          name: TITLE,
-          short_name: config.shortName ?? TITLE,
-          description: DESCRIPTION,
-          start_url: ".",
-          scope: ".",
-          display: "standalone",
-          background_color: BG_COLOR,
-          theme_color: THEME_COLOR,
-          icons: [
-            { src: "icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" },
-          ],
-        },
-        null,
-        2
-      ) + "\n"
+      JSON.stringify(manifest, null, 2) + "\n"
     );
   }
 
@@ -849,9 +966,11 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     generatedFrom: relPosix(SOURCE) || ".",
     renderHash,
     title: TITLE,
+    shortName: SHORT_NAME,
     id: ID,
     description: DESCRIPTION,
     themeColor: THEME_COLOR,
+    themeColorLight: THEME_COLOR_LIGHT,
     colors: COLORS,
     extraCss,
     logo,
@@ -864,12 +983,17 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     notices: NOTICES,
     help: HELP,
     licenses: LICENSES_EXTRA,
+    ui: UI,
     assets: [...assets].sort(),
     designs: designs.map(({ abs, ...d }) => d),
   };
   if (outPublicDir) {
     const precache = new Set([
       "icon.svg",
+      "icon-192.png",
+      "icon-512.png",
+      "icon-512-maskable.png",
+      "icon-180.png",
       "manifest.webmanifest",
       "wasm/openscad.js",
       "fonts/fonts.conf",

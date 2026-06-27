@@ -6,6 +6,9 @@
 import { useState } from "react";
 import { Modal } from "./Modal";
 import { Markdown } from "./Markdown";
+import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
+import { Label } from "./ui/label";
 import type { PopupNotice } from "../openscad/types";
 
 export function PopupModal({
@@ -30,18 +33,17 @@ export function PopupModal({
       </div>
       <div className="modal-actions">
         {popup.mode === "dismissible" && (
-          <label className="notice-dismiss">
-            <input
-              type="checkbox"
+          <Label className="notice-dismiss cursor-pointer font-normal">
+            <Checkbox
               checked={dontShow}
-              onChange={(e) => setDontShow(e.target.checked)}
+              onCheckedChange={(v) => setDontShow(v === true)}
             />
             Don’t show this again
-          </label>
+          </Label>
         )}
-        <button className="primary notice-ok" onClick={close}>
+        <Button className="notice-ok" onClick={close}>
           OK
-        </button>
+        </Button>
       </div>
     </Modal>
   );

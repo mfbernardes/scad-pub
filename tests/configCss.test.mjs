@@ -62,3 +62,10 @@ test("headStyleInjection: extraCss alone emits just the <link>", () => {
   assert.ok(!out.includes("<style>"));
   assert.match(out, /^<link rel="stylesheet" href="scad\/theme\.css" \/>\n$/);
 });
+
+test("headStyleInjection: double-quotes in extraCss are escaped to prevent HTML injection", () => {
+  const out = headStyleInjection({ extraCss: 'evil"onload="alert(1)' });
+  // The href attribute must not contain a raw " that could break out of the attribute.
+  assert.ok(!out.includes('"onload='), "raw quote must not appear in output");
+  assert.match(out, /href="evil&quot;onload=&quot;alert\(1\)"/);
+});

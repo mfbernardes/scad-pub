@@ -1,5 +1,58 @@
+/* Cascade-layer order. `legacy` (the app's pre-port CSS) sits just below
+   `utilities` and above `base`: shadcn/ui utility classes always win where
+   applied, while legacy class rules still beat Tailwind's preflight element
+   resets, so un-ported components keep their original styling. */
+@layer theme, base, components, legacy, utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ── shadcn/ui token bridge ───────────────────────────────────────────────
+   The app's AA-tuned palette (the --bg/--panel/--text/… custom properties
+   below, switched by [data-theme="light"] and overridable per-config) stays the
+   single source of truth. Here we only map Tailwind/shadcn colour *utilities*
+   (bg-background, text-muted-foreground, border, …) onto those existing tokens
+   via @theme inline — we never redefine --muted/--accent themselves, so there's
+   no collision with the legacy names and the contrast ratios are unchanged. */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--accent-solid);
+  --color-primary-foreground: var(--on-accent);
+  --color-secondary: var(--panel-2);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--panel-2);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--panel-2);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--focus);
+  --color-warn: var(--warn);
+  --color-brand: var(--accent);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before {
+    border-color: var(--line);
+  }
+}
+
 /* Dark is the default; <html data-theme="light"> swaps the palette. The active
    theme is resolved in JS (lib/theme.ts) and set before paint (index.html). */
+@layer legacy {
 :root {
   --bg: #15171c;
   --panel: #1f2229;
@@ -13,12 +66,22 @@
   --focus: #6db0ff; /* focus-ring colour, ~7:1 vs panels (WCAG 1.4.11) */
   --link: #8ab4f8;
   --warn: #e0a458;
+  --danger: #f87171;
   --code-bg: #111317;
   --overlay: rgba(21, 23, 28, 0.72);
   --viewer-bg: #0f1115; /* deep charcoal, darker than the chrome to frame the model */
   --viewer-grid: #565f6e; /* centre axes: ~2.9:1 vs --viewer-bg for orientation */
   --viewer-grid-2: #20252e; /* grid lines: deliberately subtle */
   --viewer-model: #6f93ff; /* the rendered model's material — brand blue */
+  /* Phase 1 shape + glass tokens — configurable via colors.dark in the config */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --glass-bg: rgba(31, 34, 41, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --elevation: 0 4px 20px rgba(0, 0, 0, 0.45);
+  /* Mobile layout constants — keep in sync with AppShell.tsx MOBILE_FOOTER_HEIGHT / PEEK_HEIGHT */
+  --mobile-footer-height: 56px;
+  --mobile-peek-height: 96px;
   color-scheme: dark;
 }
 
@@ -35,12 +98,19 @@
   --focus: #2563eb;
   --link: #1558c0;
   --warn: #9a5512;
+  --danger: #c0341d;
   --code-bg: #eef1f5;
   --overlay: rgba(255, 255, 255, 0.72);
   --viewer-bg: #dde1e6; /* soft neutral grey, not a glaring white */
   --viewer-grid: #8b94a0; /* centre axes */
   --viewer-grid-2: #c4cad1; /* grid lines: subtle */
   --viewer-model: #3a5fd0; /* the rendered model's material — brand blue */
+  /* Phase 1 shape + glass tokens — lighter values for light mode */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --elevation: 0 4px 20px rgba(0, 0, 0, 0.12);
   color-scheme: light;
 }
 
@@ -58,23 +128,31 @@
 /* Windows High Contrast / forced-colors: keep colour-only cues visible. */
 @media (forced-colors: active) {
   :focus-visible { outline-color: Highlight; }
-  /* forced-colors flattens border colours — keep the spinner legible. */
   .spinner { border-color: CanvasText; border-top-color: Highlight; }
-  /* The badge's accent fill collapses to Canvas; add a border to keep it. */
   .badge { border: 1px solid CanvasText; }
 }
 
 * { box-sizing: border-box; }
 
-html, body, #root { height: 100%; margin: 0; }
+html, body { height: 100%; margin: 0; }
+/* Pull-to-refresh kills the WebGL drag gesture on mobile; disable it on the
+   outer document. touch-action:none is scoped to the canvas below. */
+html, body { overscroll-behavior: none; }
+#root {
+  /* 100dvh accounts for the shrinking URL bar on mobile; 100vh as fallback. */
+  height: 100vh;
+  height: 100dvh;
+}
 
 body {
-  /* rem so the UI scales with the user's preferred browser font size
-     (0.875rem == 14px at the default 16px). WCAG 1.4.4 Resize Text. */
   font: 0.875rem/1.45 system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ACCESSIBILITY UTILITIES
+   ═══════════════════════════════════════════════════════════════ */
 
 /* Visually hidden but available to assistive tech (live regions, etc.). */
 .sr-only {
@@ -99,69 +177,353 @@ body {
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+  touch-action: manipulation;
   transition: top 0.15s ease;
 }
 .skip-link:focus { top: 0.5rem; }
 
-.app { display: flex; flex-direction: column; height: 100%; }
+/* ═══════════════════════════════════════════════════════════════
+   BASE ELEMENT STYLES
+   ═══════════════════════════════════════════════════════════════ */
 
-.topbar {
+/* Base interactive-element styling now comes from Tailwind preflight + each
+   component's own classes (legacy class rules or shadcn/ui utilities), so the
+   old element-level button/select/input rules are gone — they used to bleed
+   into shadcn components. A cursor default is kept for un-classed buttons. */
+button { cursor: pointer; touch-action: manipulation; }
+button:disabled { cursor: default; }
+
+.primary {
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border: 1px solid var(--accent-solid);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.7rem;
+  font-weight: 600;
+}
+.primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* Brand logo (theme-switched by App via src change). */
+.brand-logo { height: 1.6rem; width: auto; display: block; }
+
+/* ═══════════════════════════════════════════════════════════════
+   APP SHELL — responsive layout
+   Desktop (≥ 860px): CommandBar + docked panel + viewer + floating controls
+   Mobile  (< 860px): full-bleed viewer + BottomSheet
+   ═══════════════════════════════════════════════════════════════ */
+
+.app-shell { height: 100%; }
+
+/* Desktop half — hidden on mobile */
+.app-shell__desktop {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Mobile half — hidden on desktop */
+.app-shell__mobile { display: none; }
+
+@media (max-width: 860px) {
+  .app-shell__desktop { display: none; }
+  .app-shell__mobile {
+    display: block;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+}
+
+/* Canvas area: row flex, holds panel + viewer side by side */
+.app-shell__canvas-area {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Right-side panel variant: reverse the row */
+.app-shell__canvas-area.panel-right { flex-direction: row-reverse; }
+
+/* Main canvas column: stacks render-pending notice + viewer-wrap + output */
+.app-shell__viewer {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative; /* anchor for ActionCluster + ViewerHUD */
+}
+
+/* Mobile: the viewer fills the visible area above the peek sheet + fixed footer,
+   so the model is framed in the remaining viewport rather than the full page
+   (its lower part would otherwise sit hidden behind the peeking sheet). */
+.app-shell__mobile-viewer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--mobile-footer-height) + var(--mobile-peek-height));
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   COMMAND BAR — floating top bar (desktop)
+   ═══════════════════════════════════════════════════════════════ */
+
+.command-bar {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding: 0.6rem 1rem;
-  background: var(--panel);
+  gap: 0.5rem;
+  padding: calc(0.5rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) 0.5rem calc(1rem + env(safe-area-inset-left, 0px));
+  background: var(--bg);
   border-bottom: 1px solid var(--line);
-}
-.topbar h1 { font-size: 1rem; margin: 0; font-weight: 600; display: flex; align-items: center; }
-/* Per-theme logo (App swaps the src on theme change). */
-.brand-logo { height: 1.6rem; width: auto; display: block; }
-.topbar .status { margin-left: auto; color: var(--muted); }
-
-/* Compact presets dropdown in the topbar — hidden on wide screens (PresetBar in
-   the sidebar handles presets there), revealed at the hamburger breakpoint. */
-.topbar-preset { display: none; align-items: center; }
-.topbar-preset select { max-width: 11rem; }
-
-.layout { display: flex; flex: 1; min-height: 0; }
-
-.sidebar {
-  width: 400px;
+  z-index: 10;
   flex-shrink: 0;
-  overflow-y: auto;
-  padding: 1rem;
+}
+
+/* Shared "pill" surface for the command-bar groups (brand, design, presets) */
+.command-bar__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.32rem 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.command-bar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.8rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+}
+.command-bar__title { font-size: 0.95rem; font-weight: 700; }
+
+.command-bar__design-picker select {
+  max-width: 12rem;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+.command-bar__design-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* Mid-dot separator between a pill's label and its value (matches the presets pill) */
+.command-bar__sep {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.command-bar__design-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Presets dropdown trigger + popover */
+.command-bar__presets { position: relative; }
+
+.command-bar__presets-btn {
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+}
+.command-bar__presets-btn:hover:not(:disabled) { border-color: var(--accent); }
+.command-bar__presets-btn .command-bar__presets-label { font-size: 0.85rem; color: var(--muted); }
+.command-bar__presets-btn .command-bar__presets-label strong { color: var(--text); font-weight: 600; }
+.command-bar__presets-btn > svg:first-child { color: var(--warn); }
+
+.command-bar__presets-popover {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  width: 22rem;
+  max-width: 90vw;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation);
+  z-index: 50;
+  overflow: hidden;
+}
+
+/* PWA install button */
+.command-bar__install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  padding: 0.34rem 0.7rem;
+  border-radius: 99px;
+}
+
+.command-bar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Status + advisory grouped into one pill */
+.command-bar__status-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.18rem 0.3rem 0.18rem 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+}
+.command-bar__status-group .status-pill {
+  background: transparent;
+  border: none;
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+  border-radius: 99px;
+}
+.command-bar__status-group .status-pill:hover { background: var(--panel-2); }
+.command-bar__right .icon-btn { border-radius: 99px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   PARAM PANEL — docked collapsible/resizable panel (desktop)
+   ═══════════════════════════════════════════════════════════════ */
+
+.param-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--panel);
   border-right: 1px solid var(--line);
-}
-
-.preview {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
   min-width: 0;
 }
+
+.param-panel--right {
+  border-right: none;
+  border-left: 1px solid var(--line);
+}
+
+/* Collapsed: zero-width flex item; button floats over the viewer */
+.param-panel-rail {
+  width: 0;
+  flex-shrink: 0;
+  overflow: visible;
+  position: relative;
+  z-index: 10;
+}
+
+/* Floating "Edit parameters" button that appears over the viewer top-left */
+.param-panel-open-btn {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.65rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--elevation);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.param-panel-open-btn:hover:not(:disabled) {
+  background: var(--panel);
+  border-color: var(--accent);
+}
+
+.param-panel--right .param-panel-open-btn {
+  left: auto;
+  right: 0.75rem;
+}
+
+/* Resize handle: 8px wide, invisible until hovered */
+.param-panel__resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.param-panel__resize-handle:hover,
+.param-panel__resize-handle:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+
+/* handle--right sits at the right edge of a left panel */
+.handle--right { right: -4px; }
+/* handle--left sits at the left edge of a right panel */
+.handle--left { left: -4px; }
+
+/* Search row inside the panel */
+.param-panel__search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.param-panel__search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--text);
+}
+
+.param-panel__search input::placeholder { color: var(--muted); }
+.param-panel__search input:focus { outline: none; }
+
+/* Scrollable parameter body */
+.param-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+  min-height: 0;
+}
+
+/* Footer with reset button */
+.param-panel__footer {
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VIEWER — the Three.js canvas container
+   ═══════════════════════════════════════════════════════════════ */
+
 .viewer-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
 .viewer { flex: 1; min-height: 0; }
-.viewer canvas { display: block; width: 100%; height: 100%; }
 
-/* Map-style overlay controls, bottom-right of the preview (zoom + reset). They
-   sit above the WebGL canvas and the loading overlay; the canvas is aria-hidden
-   but these are real, labelled buttons so the view is keyboard-operable. */
-.viewer-controls {
-  position: absolute;
-  right: 0.75rem;
-  bottom: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  z-index: 1;
-}
-.viewer-controls .icon-btn {
-  padding: 0.4rem;
-  background: var(--panel);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
+/* touch-action:none on the canvas: orbit/pan gestures need exclusive touch
+   control. Scoped here (not on html/body) so user-zoom stays intact (WCAG 1.4.4). */
+.viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
 .viewer-overlay {
   position: absolute;
@@ -176,6 +538,7 @@ body {
   font-size: 0.9rem;
   pointer-events: none;
 }
+
 .spinner {
   width: 34px;
   height: 34px;
@@ -200,44 +563,633 @@ body {
 }
 .viewer-error-detail { color: var(--muted); font-size: 0.82rem; }
 
-@media (prefers-reduced-motion: reduce) {
-  .spinner { animation-duration: 2.4s; }
-  .sidebar { transition: none; }
+/* ═══════════════════════════════════════════════════════════════
+   VIEWER HUD — zoom / reset / fullscreen (bottom-right, both layouts)
+   ═══════════════════════════════════════════════════════════════ */
+
+.viewer-hud {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  z-index: 5;
 }
 
-/* Notices / warnings parsed from the OpenSCAD log */
-.diagnostics {
-  margin: 0;
-  padding: 0.4rem 1rem;
-  list-style: none;
-  border-top: 1px solid var(--line);
-  background: var(--panel);
-  max-height: 9rem;
-  overflow-y: auto;
+/* Mobile: anchor the HUD to the upper-right, clear of the top bar + sheet. */
+@media (max-width: 860px) {
+  .app-shell__mobile .viewer-hud {
+    top: calc(env(safe-area-inset-top, 0px) + 4rem);
+    transform: none;
+  }
 }
-.diag {
+
+.viewer-hud .icon-btn {
+  padding: 0.45rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-sm);
+}
+
+.viewer-hud .icon-btn:hover:not(:disabled) { border-color: var(--accent); }
+
+/* ═══════════════════════════════════════════════════════════════
+   ACTION CLUSTER — floating bottom-center controls
+   ═══════════════════════════════════════════════════════════════ */
+
+.action-cluster {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  gap: 0.5rem;
-  align-items: baseline;
-  padding: 0.2rem 0;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.45rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation);
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.action-cluster button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   font-size: 0.82rem;
+  padding: 0.3rem 0.55rem;
+  background: transparent;
+  border-color: transparent;
 }
-.diag-icon { flex-shrink: 0; }
-.diag-notice .diag-icon { color: var(--accent); }
-.diag-warning .diag-icon { color: var(--warn); }
-.diag-assert .diag-icon { color: var(--warn); }
-.diag-text { color: var(--text); }
 
-.preview-actions {
+.action-cluster button:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--line);
+}
+
+.action-cluster__render {
+  background: var(--accent-solid) !important;
+  color: var(--on-accent) !important;
+  border-color: var(--accent-solid) !important;
+  font-weight: 600;
+}
+
+.action-cluster__render:hover:not(:disabled) {
+  filter: brightness(1.08);
+  border-color: var(--accent-solid) !important;
+}
+
+.action-cluster__auto-render {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 0.3rem 0.45rem;
+  border-radius: var(--radius-sm);
+}
+
+.action-cluster__auto-render:hover { color: var(--text); }
+
+.action-cluster__output {
+  position: relative;
+}
+
+.action-cluster__output.active {
+  background: var(--panel) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent);
+}
+
+/* Warn count badge on the output button */
+.action-cluster__warn-badge {
+  position: absolute;
+  top: -0.3rem;
+  right: -0.3rem;
+  min-width: 1.2em;
+  height: 1.2em;
+  background: var(--warn);
+  color: #1c1f24;
+  border-radius: 50%;
+  font-size: 0.68rem;
+  font-weight: 700;
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Separator between auto-render label and action buttons */
+.action-cluster__auto-render + button {
+  margin-left: 0.15rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STATUS PILL — render state chip
+   ═══════════════════════════════════════════════════════════════ */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.status-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+
+.status-pill--idle { color: var(--muted); }
+
+.status-pill--loading .status-pill__dot,
+.status-pill--rendering .status-pill__dot {
+  animation: pill-pulse 1s ease-in-out infinite;
+}
+
+.status-pill--loading .status-pill__dot { background: var(--muted); }
+.status-pill--rendering .status-pill__dot { background: var(--accent); }
+.status-pill--ok .status-pill__dot { background: #4ade80; }
+.status-pill--error .status-pill__dot { background: #f87171; }
+.status-pill--error { color: #f87171; }
+
+@keyframes pill-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ADVISORY BADGE — ⚠ N warning count button
+   ═══════════════════════════════════════════════════════════════ */
+
+.advisory-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  background: var(--warn);
+  color: #1c1f24;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+:root[data-theme="light"] .advisory-badge { color: #ffffff; }
+.advisory-badge:hover:not(:disabled) { filter: brightness(1.1); border-color: transparent; }
+
+/* ═══════════════════════════════════════════════════════════════
+   OUTPUT CONSOLE — Advisories + Log tabs drawer
+   ═══════════════════════════════════════════════════════════════ */
+
+.output-console {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  max-height: 14rem;
+  flex-shrink: 0;
+}
+
+.output-console__header {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.output-console__close {
+  margin: 0.25rem 0.4rem 0.25rem auto;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.output-console__body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.output-console__diag-list {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  list-style: none;
+}
+
+.output-console__empty {
+  padding: 0.5rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* On mobile the output console drops from the top (just under the top bar) so it
+   stays visible alongside the bottom sheet — even when the sheet is expanded over
+   the lower half — rather than being hidden behind it. */
+.app-shell__mobile > .output-console {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(env(safe-area-inset-top, 0px) + 3rem);
+  bottom: auto;
+  z-index: 25;
+  max-height: 45vh;
+  box-shadow: var(--elevation);
+  border-top: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PRESET PICKER — searchable presets (panel popover + sheet tab)
+   ═══════════════════════════════════════════════════════════════ */
+
+.preset-picker {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Search field */
+.preset-picker__search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.preset-picker__search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--text);
+}
+.preset-picker__search input::placeholder { color: var(--muted); }
+.preset-picker__search input:focus { outline: none; }
+
+/* Sections list */
+.preset-picker__sections {
+  overflow-y: auto;
+  max-height: 18rem;
+  padding: 0.25rem 0.25rem 0.5rem;
+}
+
+.preset-picker__section-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0.5rem 0 0.2rem;
+  padding: 0 0.4rem;
+  font-weight: 600;
+}
+
+.preset-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.preset-picker__item {
+  display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.6rem 1rem;
-  border-top: 1px solid var(--line);
-  background: var(--panel);
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
 }
-.preview-actions .auto-render {
+
+.preset-picker__item:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: transparent;
+}
+
+.preset-picker__item.selected {
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--on-accent);
+}
+
+/* Recent-row star marker */
+.preset-picker__star {
+  display: inline-flex;
+  color: var(--warn);
+  flex-shrink: 0;
+}
+.preset-picker__item.selected .preset-picker__star { color: var(--on-accent); }
+
+/* Section bullet dots */
+.preset-picker__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.preset-picker__dot--bundled { background: var(--accent); }
+.preset-picker__dot--user { background: var(--muted); }
+.preset-picker__item.selected .preset-picker__dot { background: var(--on-accent); }
+
+.preset-picker__user-item {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.preset-picker__user-item .preset-picker__item { flex: 1; min-width: 0; }
+
+.preset-picker__delete {
+  flex-shrink: 0;
+  color: var(--warn);
+  background: transparent;
+  border-color: transparent;
+}
+
+.preset-picker__delete:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: transparent;
+  color: var(--warn);
+}
+
+.preset-picker__empty {
+  padding: 0.5rem 0.6rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* "Save current as preset" row at the bottom of the picker */
+.preset-picker__save {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.5rem 0.6rem;
+  border-top: 1px solid var(--line);
+}
+.preset-picker__save input { flex: 1; min-width: 0; }
+
+/* Popover wrapper (desktop docked panel) */
+.preset-picker-popover {
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.preset-picker-popover__header {
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0.5rem 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.preset-picker-popover__title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  flex: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE TOP BAR — full-width bar with brand, design picker, badges
+   ═══════════════════════════════════════════════════════════════ */
+
+.mobile-top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: calc(env(safe-area-inset-top, 0px) + 0.4rem) 0.75rem 0.4rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--glass-border);
+  z-index: 10;
+  min-height: 48px;
+}
+
+.mobile-top-bar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.mobile-top-bar__brand .brand-logo { height: 1.3rem; }
+
+.mobile-top-bar__design {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.55rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+}
+.mobile-top-bar__design select {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  max-width: 7rem;
+}
+.mobile-top-bar__design-name {
+  padding: 0.3rem 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mobile-top-bar .advisory-badge { margin-left: auto; }
+.mobile-top-bar .icon-btn { border-radius: 99px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE FOOTER — fixed actions bar below the bottom sheet
+   ═══════════════════════════════════════════════════════════════ */
+
+.mobile-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--mobile-footer-height);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.75rem calc(env(safe-area-inset-bottom, 0px) + 0.35rem) 0.75rem;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  z-index: 28;
+}
+
+.mobile-footer__render {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.mobile-footer__output,
+.mobile-footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.55rem;
+  white-space: nowrap;
+}
+
+.mobile-footer__output.active {
+  background: var(--panel-2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOTTOM SHEET — persistent detented sheet for mobile
+   Detents: peek (72 px) / half (~52 vh) / full (100 vh)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Scrim visible only at Full detent */
+.sheet-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 29;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  border-radius: var(--radius) var(--radius) 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Pad past the iOS gesture bar */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Drag handle — full width, tap cycles detents */
+.sheet-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 0 0.5rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sheet-handle__bar {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background 0.12s;
+}
+
+.sheet-handle:hover .sheet-handle__bar,
+.sheet-handle:focus-visible .sheet-handle__bar {
+  background: var(--muted);
+}
+
+.sheet-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Sheet content: scrollable area shown at Half/Full */
+.sheet-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Sticky footer inside sheet content */
+.sheet-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SHEET TABS — Parameters / Presets / Files inside the sheet
+   ═══════════════════════════════════════════════════════════════ */
+
+.sheet-tabs {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.sheet-tabs__body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sheet-tabs__params { padding: 0.5rem 0.75rem; }
+
+/* Auto-render label (used in sheet footer and previously in preview-actions) */
+.auto-render {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -246,84 +1198,22 @@ body {
   cursor: pointer;
   user-select: none;
 }
-/* Push the export/share actions to the right of the render controls. */
-.preview-actions .auto-render { margin-right: auto; }
-/* Action-bar buttons carry a leading icon; Render now is the primary CTA. */
-.preview-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.preview-actions button svg { flex: 0 0 auto; }
-.preview-actions .primary {
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  border-color: var(--accent-solid);
-  font-weight: 600;
-}
-.preview-actions .primary:hover:not(:disabled) { border-color: var(--accent-solid); filter: brightness(1.08); }
 
-/* Stale-preview notice: shown when auto-render is paused and the rendered model
-   no longer matches the current parameters, so edits aren't silently ignored. */
-.render-pending {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem 0.75rem;
-  padding: 0.55rem 1rem;
-  border-bottom: 1px solid var(--line);
-  border-left: 3px solid var(--accent-solid);
-  background: var(--panel-2);
-  font-size: 0.85rem;
-  color: var(--text);
-}
-.render-pending-text { margin-right: auto; }
-.render-pending .primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  border-color: var(--accent-solid);
-  font-weight: 600;
-}
-.render-pending .primary:hover:not(:disabled) { border-color: var(--accent-solid); filter: brightness(1.08); }
+.auto-render:hover { color: var(--text); }
 
-button {
-  font: inherit;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 0.35rem 0.7rem;
-  cursor: pointer;
-}
-button:hover:not(:disabled) { border-color: var(--accent); }
-button:disabled { opacity: 0.5; cursor: default; }
+/* ═══════════════════════════════════════════════════════════════
+   PARAM FORM — accordion groups, param rows, controls
+   ═══════════════════════════════════════════════════════════════ */
 
-select, input[type="text"], input[type="number"] {
-  font: inherit;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 0.3rem 0.4rem;
-}
+.param-form { /* groups live here */ }
 
-/* Preset bar */
-.preset-bar { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
-.preset-bar .row { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
-.preset-bar .row > label { flex: 1; min-width: 8rem; display: flex; }
-.preset-bar select { flex: 1; min-width: 0; }
-.preset-bar .hint { color: var(--muted); font-size: 0.8rem; }
-
-/* Param form */
 .param-group {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   margin: 0 0 0.8rem;
   padding: 0 0.7rem;
 }
+
 .param-group > summary {
   display: flex;
   align-items: center;
@@ -332,7 +1222,7 @@ select, input[type="text"], input[type="number"] {
   font-weight: 600;
   padding: 0.55rem 0.2rem;
   cursor: pointer;
-  list-style: none; /* hide the default marker; use our own caret below */
+  list-style: none;
   user-select: none;
 }
 .param-group > summary::-webkit-details-marker { display: none; }
@@ -349,56 +1239,126 @@ select, input[type="text"], input[type="number"] {
 }
 .param-group[open] > summary::before { transform: rotate(90deg); }
 .param-group > summary:focus-visible { outline: 2px solid var(--focus); border-radius: 4px; }
-/* Collapse the bottom padding when folded so closed groups are compact. */
 .param-group[open] { padding-bottom: 0.5rem; }
-@media (prefers-reduced-motion: reduce) {
-  .param-group > summary::before { transition: none; }
-}
+
 .param {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
   margin: 0.7rem 0;
 }
+
 .param-label {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 0.5rem;
 }
+
 .param-desc { color: var(--text); }
+
 .param-var {
   color: var(--muted);
   font: 11px ui-monospace, monospace;
   flex-shrink: 0;
 }
+
 .control-row { display: flex; gap: 0.5rem; align-items: center; }
 .control-row input[type="range"] { flex: 1; min-width: 0; }
 .control-row input[type="number"] { width: 5rem; }
 .param select, .param input[type="text"] { width: 100%; }
 .param input[type="checkbox"] { align-self: flex-start; }
 
-/* Log panel */
-.log-panel { background: var(--panel); border-top: 1px solid var(--line); }
-.log-toggle {
-  width: 100%;
-  text-align: left;
-  border: none;
-  border-radius: 0;
-  background: transparent;
+/* ═══════════════════════════════════════════════════════════════
+   FILE MANAGER — imported-files list (Files tab + panel footer)
+   ═══════════════════════════════════════════════════════════════ */
+
+.file-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0.75rem;
 }
+
+.file-manager__intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.file-manager__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.file-manager__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.file-manager__item > svg { color: var(--accent); flex-shrink: 0; }
+
+.file-manager__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.file-manager__size {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.file-manager__remove {
+  flex-shrink: 0;
+  color: var(--accent);
+  background: transparent;
+  border-color: transparent;
+}
+.file-manager__remove:hover:not(:disabled) { background: var(--panel); border-color: var(--line); }
+
+.file-manager__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.55rem;
+  font-size: 0.88rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILITY — badges, icon buttons, labelled buttons
+   ═══════════════════════════════════════════════════════════════ */
+
 .badge {
-  margin-left: 0.5rem;
+  margin-left: 0.35rem;
   background: var(--accent-solid);
   color: var(--on-accent);
-  border-radius: 10px;
-  padding: 0 0.5rem;
+  border-radius: var(--radius-sm);
+  padding: 0 0.4rem;
   font-size: 0.75rem;
+  font-weight: 600;
 }
-/* The hardcoded assert badge: warning-toned, with theme-aware text kept above
-   the WCAG AA contrast threshold against --warn in both palettes. */
+
 .badge-assert { background: var(--warn); color: #1c1f24; }
 :root[data-theme="light"] .badge-assert { color: #ffffff; }
+
 .log {
   margin: 0;
   max-height: 11rem;
@@ -410,97 +1370,34 @@ select, input[type="text"], input[type="number"] {
   white-space: pre-wrap;
 }
 
-/* Hamburger toggle, drawer backdrop and close button: shown only on small
-   screens (see the media query below). */
-.menu-toggle,
-.sidebar-close,
-.backdrop { display: none; }
-.menu-toggle {
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 0.3rem 0.6rem;
-}
-.sidebar-close { align-self: flex-end; margin-bottom: 0.5rem; }
-
-/* ---- Responsive: the panel becomes a slide-in drawer on narrow screens,
-   closed by default; the preview fills the area behind it. ---- */
-@media (max-width: 820px) {
-  .menu-toggle { display: inline-flex; }
-  .sidebar-close { display: inline-flex; }
-
-  .topbar { flex-wrap: wrap; gap: 0.6rem 1rem; }
-  .topbar .status { margin-left: 0; width: 100%; }
-
-  /* Surface the presets dropdown beside the design picker, since the sidebar
-     PresetBar is now hidden behind the hamburger. */
-  .topbar-preset { display: inline-flex; }
-
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: min(420px, 88vw);
-    z-index: 50;
-    border-right: 1px solid var(--line);
-    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.5);
-    transform: translateX(-100%);
-    transition: transform 0.22s ease;
-  }
-  .app.menu-open .sidebar { transform: translateX(0); }
-  .app.menu-open .backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    background: rgba(0, 0, 0, 0.5);
-  }
-
-  .preset-bar .row > label { flex: 1 1 100%; }
+.diag {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.2rem 0;
+  font-size: 0.82rem;
 }
 
-@media (max-width: 480px) {
-  .topbar { padding: 0.5rem 0.75rem; }
-  .preview-actions { padding: 0.5rem 0.75rem; }
-  .preview-actions button { flex: 1; }
-}
+.diag-icon { flex-shrink: 0; }
+.diag-notice .diag-icon { color: var(--accent); }
+.diag-warning .diag-icon { color: var(--warn); }
+.diag-assert .diag-icon { color: var(--warn); }
+.diag-text { color: var(--text); }
 
-/* Icon buttons (preset actions, licenses, modal close). */
+/* Icon buttons (close, zoom, collapse, etc.) */
 .icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0.35rem;
   line-height: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
 }
-.icon-row { gap: 0.5rem; }
-.licenses-btn { padding: 0.3rem; }
 
-/* Labelled buttons (icon + text), used in the preset/font groups. */
-.btn-labeled {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.btn-labeled svg { flex: 0 0 auto; }
-/* A row of labelled buttons. */
-.btn-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.2rem;
-}
-/* Small heading above each button group. */
-.grp-label {
-  color: var(--muted);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 0.55rem 0 0.2rem;
-}
-/* Quiet "Reset to defaults" link at the top of the parameter form. */
-.form-toolbar { display: flex; justify-content: flex-end; margin: 0.2rem 0 0.6rem; }
+.icon-btn:hover:not(:disabled) { border-color: var(--accent); }
+
+/* Quiet "Reset to defaults" link */
 .reset-link {
   display: inline-flex;
   align-items: center;
@@ -509,21 +1406,16 @@ select, input[type="text"], input[type="number"] {
   border: none;
   color: var(--muted);
   padding: 0.25rem 0.3rem;
+  font-size: 0.85rem;
 }
+
 .reset-link svg { flex: 0 0 auto; }
 .reset-link:hover:not(:disabled) { color: var(--text); border: none; }
 
-/* Licenses modal */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.6);
-}
+/* ═══════════════════════════════════════════════════════════════
+   MODALS — licenses, help, popup notice
+   ═══════════════════════════════════════════════════════════════ */
+
 .modal {
   display: flex;
   flex-direction: column;
@@ -531,9 +1423,10 @@ select, input[type="text"], input[type="number"] {
   max-height: min(80vh, 760px);
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation);
 }
+
 .modal-head {
   display: flex;
   align-items: center;
@@ -541,35 +1434,33 @@ select, input[type="text"], input[type="number"] {
   padding: 0.8rem 1rem;
   border-bottom: 1px solid var(--line);
 }
+
 .modal-head h2 { margin: 0; font-size: 1.05rem; }
+
 .modal-intro { margin: 0.8rem 1rem 0; color: var(--muted); font-size: 0.85rem; }
 .modal-intro p { margin: 0; }
 .modal-intro a, .license-entry a { color: var(--link); }
 .modal-body { overflow-y: auto; padding: 0.5rem 1rem 1rem; }
 
-/* Help modal */
-.help-tabs {
+.modal-intro code,
+.help-body code,
+.notice-body code,
+.lic-text code {
+  background: var(--panel-2);
+  border-radius: var(--radius-sm);
+  padding: 0 0.2rem;
+  font: 12px ui-monospace, monospace;
+}
+
+.modal-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.15rem;
-  margin: 0.6rem 1rem 0;
-  border-bottom: 1px solid var(--line);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem 1rem;
 }
-.help-tab {
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  padding: 0.4rem 0.7rem;
-  color: var(--muted);
-  font-size: 0.88rem;
-  cursor: pointer;
-}
-.help-tab:hover { color: var(--text); }
-.help-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
+
+/* Help modal */
 .help-tab-intro { margin: 0 0 0.6rem; color: var(--muted); font-size: 0.85rem; }
 .help-tab-intro p { margin: 0; }
 .help-tab-intro a { color: var(--link); }
@@ -584,20 +1475,9 @@ select, input[type="text"], input[type="number"] {
   line-height: 1.5;
 }
 .help-body li { margin: 0.2rem 0; }
-.help-body code {
-  background: var(--panel-2);
-  border-radius: 4px;
-  padding: 0 0.2rem;
-  font: 12px ui-monospace, monospace;
-}
 
-/* Configurable notice popup (schema.popup) */
-.notice-body p {
-  margin: 0.5rem 0;
-  color: var(--text);
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
+/* Notice popup */
+.notice-body p { margin: 0.5rem 0; color: var(--text); font-size: 0.9rem; line-height: 1.5; }
 .notice-body p:first-child { margin-top: 0; }
 .notice-body ul {
   margin: 0.4rem 0;
@@ -607,12 +1487,7 @@ select, input[type="text"], input[type="number"] {
   line-height: 1.5;
 }
 .notice-body a { color: var(--link); }
-.notice-body code {
-  background: var(--panel-2);
-  border-radius: 4px;
-  padding: 0 0.2rem;
-  font: 12px ui-monospace, monospace;
-}
+
 .notice-dismiss {
   display: flex;
   align-items: center;
@@ -621,69 +1496,10 @@ select, input[type="text"], input[type="number"] {
   font-size: 0.85rem;
   cursor: pointer;
 }
+
 .notice-ok { margin-left: auto; }
 
-/* "New version available" toast (PWA update prompt) */
-.update-toast {
-  position: fixed;
-  z-index: 200;
-  left: 50%;
-  bottom: 1rem;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  max-width: calc(100vw - 2rem);
-  padding: 0.55rem 0.6rem 0.55rem 0.9rem;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
-  font-size: 0.88rem;
-}
-.update-toast .primary {
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  border-color: var(--accent-solid);
-}
-.update-toast .link-btn {
-  background: none;
-  border: none;
-  color: var(--muted);
-  text-decoration: underline;
-}
-/* The skew/stale-bundle variant: a warn-toned border marks it as a problem the
-   user must act on (vs. the routine "new version available" toast). */
-.update-toast.stale-toast {
-  border-color: var(--warn);
-}
-
-.modal-intro code {
-  background: var(--panel-2);
-  border-radius: 4px;
-  padding: 0 0.2rem;
-  font: 12px ui-monospace, monospace;
-}
-.modal-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0 1rem 1rem;
-}
-.modal-actions .primary {
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  border-color: var(--accent-solid);
-}
-.modal-actions .link-btn {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: var(--muted);
-  text-decoration: underline;
-}
-
+/* Licenses */
 .license-entry { padding: 0.8rem 0; border-top: 1px solid var(--line); }
 .license-entry:first-child { border-top: none; }
 .license-entry h3 {
@@ -699,7 +1515,7 @@ select, input[type="text"], input[type="number"] {
   margin-left: auto;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 0 0.5rem;
   font: 11px ui-monospace, monospace;
   color: var(--accent);
@@ -715,8 +1531,20 @@ select, input[type="text"], input[type="number"] {
   overflow: auto;
   padding: 0.6rem 0.8rem;
   background: var(--code-bg);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font: 11px/1.45 ui-monospace, monospace;
   color: var(--muted);
   white-space: pre-wrap;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATIONS + MOTION PREFERENCES
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+  .bottom-sheet { transition: none !important; }
+  .param-group > summary::before { transition: none; }
+  .status-pill__dot { animation: none !important; }
+}
+} /* end @layer legacy */

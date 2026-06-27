@@ -6,6 +6,7 @@ import {
   defaultsFor,
   toParameterSetsFile,
   parseParameterSetsFile,
+  presetLabel,
 } from "../src/lib/presets.ts";
 
 const p = (name, type, def, extra = {}) => ({
@@ -74,4 +75,18 @@ test("parse overlays defaults and ignores unknown keys", () => {
 
 test("parse rejects a file without parameterSets", () => {
   assert.throws(() => parseParameterSetsFile(design, "{}"), /parameterSets/);
+});
+
+test("presetLabel extracts the name from type:designId:name", () => {
+  assert.equal(presetLabel("bundled:d:My Preset"), "My Preset");
+  assert.equal(presetLabel("user:tag:Small"), "Small");
+});
+
+test("presetLabel preserves colons within the name", () => {
+  assert.equal(presetLabel("user:d:a:b"), "a:b");
+});
+
+test("presetLabel falls back to the full id when there is no second colon", () => {
+  assert.equal(presetLabel("nocolon"), "nocolon");
+  assert.equal(presetLabel("type:d"), "type:d");
 });

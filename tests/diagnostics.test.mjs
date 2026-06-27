@@ -4,7 +4,7 @@
 // warnings and assert failures are hardcoded.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseDiagnostics, countBadges } from "../src/lib/diagnostics.ts";
+import { parseDiagnostics, countBadges, badgeTextColor } from "../src/lib/diagnostics.ts";
 
 // A sample notice config (what a consumer's `notices` key would produce).
 const NOTICES = [
@@ -123,4 +123,29 @@ test("countBadges omits categories with no matches", () => {
     countBadges(['[out] ECHO: "x: note: only one"'], NOTICES),
     [{ key: "notice:note", label: "notes", count: 1 }]
   );
+});
+
+test("badgeTextColor: white text on dark backgrounds", () => {
+  assert.equal(badgeTextColor("#000000"), "#fff");
+  assert.equal(badgeTextColor("#000"), "#fff");
+  assert.equal(badgeTextColor("#1a1a2e"), "#fff");
+  assert.equal(badgeTextColor("#e0a458"), "#000"); // amber — luminance > 0.4
+});
+
+test("badgeTextColor: black text on light backgrounds", () => {
+  assert.equal(badgeTextColor("#ffffff"), "#000");
+  assert.equal(badgeTextColor("#fff"), "#000");
+  assert.equal(badgeTextColor("#f5f5f5"), "#000");
+});
+
+test("badgeTextColor: undefined/invalid input returns undefined", () => {
+  assert.equal(badgeTextColor(undefined), undefined);
+  assert.equal(badgeTextColor(""), undefined);
+  assert.equal(badgeTextColor("red"), undefined);       // named colour
+  assert.equal(badgeTextColor("rgb(0,0,0)"), undefined); // functional form
+  assert.equal(badgeTextColor("#gggggg"), undefined);   // invalid hex digits
+});
+
+test("badgeTextColor: trims leading/trailing whitespace before parsing", () => {
+  assert.equal(badgeTextColor("  #000  "), "#fff");
 });

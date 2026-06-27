@@ -41,8 +41,9 @@ export function colorStyle(colors: ConfigChrome["colors"]): string {
 // override the colour tokens) on source order alone. Returns "" when neither is
 // configured.
 export function headStyleInjection(chrome: ConfigChrome): string {
-  const link = chrome.extraCss
-    ? `<link rel="stylesheet" href="${chrome.extraCss}" />\n`
+  const safeHref = chrome.extraCss
+    ? chrome.extraCss.replace(/&/g, "&amp;").replace(/"/g, "&quot;")
     : "";
+  const link = safeHref ? `<link rel="stylesheet" href="${safeHref}" />\n` : "";
   return colorStyle(chrome.colors) + link;
 }

@@ -1,14 +1,28 @@
 // ParamForm.tsx — renders the design's Customizer parameters grouped by section,
-// driven entirely by the generated schema.
-import { useEffect, useState } from "react";
+// driven entirely by the generated schema. Controls are shadcn/ui (Radix):
+// Slider + Input for numbers, Checkbox for booleans, Select for enums, Input for
+// strings. Each control carries an aria-label (its description) for its name.
+import { memo, useEffect, useMemo, useState } from "react";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { isVisible } from "../lib/visibility";
+import { Slider } from "./ui/slider";
+import { Input } from "./ui/input";
+import { Checkbox } from "./ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 
 interface Props {
   design: Design;
   values: Values;
   onChange: (name: string, value: ParamValue) => void;
+  /** Optional search query to filter visible parameters by name/description. */
+  search?: string;
 }
 
 function committedNumber(param: Extract<Param, { type: "number" }>, value: ParamValue): number {
@@ -31,10 +45,12 @@ function clampNumber(param: Extract<Param, { type: "number" }>, value: number): 
 function NumberControl({
   param,
   value,
+  label,
   onChange,
 }: {
   param: Extract<Param, { type: "number" }>;
   value: ParamValue;
+  label: string;
   onChange: (v: ParamValue) => void;
 }) {
   const committed = committedNumber(param, value);
@@ -45,9 +61,7 @@ function NumberControl({
     setDraft(String(committed));
   }, [committed]);
 
-  const commitRange = (raw: string) => {
-    const n = finiteDraft(raw);
-    if (n === null) return;
+  const commitRange = (n: number) => {
     const v = clampNumber(param, n);
     setDraft(String(v));
     onChange(v);
@@ -56,21 +70,24 @@ function NumberControl({
   return (
     <div className="control-row">
       {hasRange && (
-        <input
-          type="range"
+        <Slider
+          className="flex-1"
           min={param.min}
           max={param.max}
-          step={param.step ?? "any"}
-          value={committed}
-          onChange={(e) => commitRange(e.target.value)}
+          step={param.step ?? 1}
+          value={[committed]}
+          onValueChange={([v]) => commitRange(v)}
+          aria-label={label}
         />
       )}
-      <input
+      <Input
         type="number"
+        className="w-20"
         min={param.min}
         max={param.max}
         step={param.step ?? "any"}
         value={draft}
+        aria-label={label}
         onChange={(e) => {
           const raw = e.target.value;
           setDraft(raw);
@@ -91,76 +108,105 @@ function NumberControl({
 function Control({
   param,
   value,
+  label,
   onChange,
 }: {
   param: Param;
   value: ParamValue;
+  label: string;
   onChange: (v: ParamValue) => void;
 }) {
   switch (param.type) {
     case "number":
-      return <NumberControl param={param} value={value} onChange={onChange} />;
+      return <NumberControl param={param} value={value} label={label} onChange={onChange} />;
     case "boolean":
       return (
-        <input
-          type="checkbox"
+        <Checkbox
           checked={Boolean(value)}
-          onChange={(e) => onChange(e.target.checked)}
+          onCheckedChange={(v) => onChange(v === true)}
+          aria-label={label}
         />
       );
     case "enum":
       return (
-        <select value={String(value)} onChange={(e) => onChange(e.target.value)}>
-          {param.choices.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-        </select>
+        <Select value={String(value)} onValueChange={(v) => onChange(v)}>
+          <SelectTrigger className="w-full" aria-label={label}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {param.choices.map((c) => (
+              <SelectItem key={c.value} value={c.value}>
+                {c.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
     case "string":
       return (
-        <input
+        <Input
           type="text"
           value={String(value)}
+          aria-label={label}
           onChange={(e) => onChange(e.target.value)}
         />
       );
   }
 }
 
-export function ParamForm({ design, values, onChange }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "" }: Props) {
+  const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
-  // collapsible (native <details>), so long forms stay manageable.
-  const collapsed = new Set(design.collapsedSections ?? []);
-  return (
-    <div className="param-form">
-      {design.sections.map((section) => {
+  // collapsible (native <details>), so long forms stay manageable. Recompute
+  // visible groups only when the design, values or query change — not on every
+  // unrelated render (e.g. a sibling re-render).
+  const groups = useMemo(() => {
+    const collapsed = new Set(design.collapsedSections ?? []);
+    return design.sections
+      .map((section) => ({
+        section,
         // Hide parameters whose @showIf condition is currently false, and drop
         // a section that ends up with no visible parameters.
-        const params = design.params.filter(
-          (p) => p.section === section && isVisible(p, values)
-        );
-        if (params.length === 0) return null;
+        params: design.params.filter(
+          (p) =>
+            p.section === section &&
+            isVisible(p, values) &&
+            (!q ||
+              p.name.toLowerCase().includes(q) ||
+              p.description.toLowerCase().includes(q))
+        ),
+        // Force open when search is active (expand all matching groups).
+        startOpen: q ? true : !collapsed.has(section),
+      }))
+      .filter((g) => g.params.length > 0);
+  }, [design, values, q]);
+
+  return (
+    <div className="param-form">
+      {groups.map(({ section, params, startOpen }) => {
         return (
-          <details className="param-group" key={section} open={!collapsed.has(section)}>
+          <details className="param-group" key={section} open={startOpen}>
             <summary>{section}</summary>
-            {params.map((p) => (
-              <label className="param" key={p.name} title={p.help || p.description}>
-                <span className="param-label">
-                  <span className="param-desc">{p.description || p.name}</span>
-                  {p.description && <code className="param-var">{p.name}</code>}
-                </span>
-                <Control
-                  param={p}
-                  value={values[p.name]}
-                  onChange={(v) => onChange(p.name, v)}
-                />
-              </label>
-            ))}
+            {params.map((p) => {
+              const label = p.description || p.name;
+              return (
+                <div className="param" key={p.name} title={p.help || p.description}>
+                  <span className="param-label">
+                    <span className="param-desc">{label}</span>
+                    {p.description && <code className="param-var">{p.name}</code>}
+                  </span>
+                  <Control
+                    param={p}
+                    value={values[p.name]}
+                    label={label}
+                    onChange={(v) => onChange(p.name, v)}
+                  />
+                </div>
+              );
+            })}
           </details>
         );
       })}
     </div>
   );
-}
+});

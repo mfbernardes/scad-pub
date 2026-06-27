@@ -2,11 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="%APP_DESCRIPTION%" />
     <!-- theme-color, title and description are injected from the active config at
          build time (see the configHtml plugin in vite.config.ts). -->
-    <meta name="theme-color" content="%APP_THEME_COLOR%" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="%APP_THEME_COLOR_DARK%" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="%APP_THEME_COLOR_LIGHT%" />
+    <!-- Apple PWA meta tags -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="%APP_APPLE_TITLE%" />
     <!-- Apply the saved/auto theme before first paint to avoid a flash. -->
     <script>
       (function () {
@@ -23,7 +29,7 @@
     </script>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="icon.svg" />
-    <link rel="apple-touch-icon" href="icon.svg" />
+    <link rel="apple-touch-icon" href="icon-180.png" />
     <title>%APP_TITLE%</title>
   </head>
   <body>
