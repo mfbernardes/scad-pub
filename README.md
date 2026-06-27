@@ -22,13 +22,14 @@ npm run dev   # predev fetches the pinned OpenSCAD WASM and regenerates the sche
 - **Parameter form** generated from OpenSCAD Customizer syntax; never drifts from the design.
 - **Conditional parameters** — `// @showIf <expr>` hides irrelevant controls. See [docs/annotations.md](docs/annotations.md).
 - **Collapsible groups** — `// @collapsed` above a section header starts it folded. See [docs/annotations.md](docs/annotations.md).
-- **Presets** — save/load in the browser; bundled read-only presets per design; import/export OpenSCAD `parameterSets` JSON.
-- **PWA** — installable, usable offline after first visit. An in-app toast prompts reload when a new deploy is ready.
+- **Presets** — searchable picker with Recent / Bundled / Yours sections; save/load in the browser; bundled read-only presets per design; import/export OpenSCAD `parameterSets` JSON.
+- **Responsive UI** — full-bleed 3D canvas with a docked, resizable parameter panel on desktop and a persistent, detented bottom sheet on mobile. Built on [shadcn/ui](https://ui.shadcn.com/) (Radix primitives + Tailwind v4) over the existing AA-tuned colour tokens.
+- **PWA** — installable and usable offline after first visit; the service worker precaches the shell, WASM and runtime assets. The install affordance is demoted: it appears only when the browser offers it, plus a one-time post-export hint — never a standing button. A persistent offline indicator and a reload toast (on a new deploy) keep state clear. Build-time generated icons (incl. a maskable icon and iOS launch screens) and, on Android, per-design app shortcuts. See [docs/config.md](docs/config.md#ui-behaviour--pwa).
 - **Persistent user files** — uploaded fonts, SVGs and other referenced files are stored in IndexedDB and re-applied on next visit.
 - **Light/dark theme** — follows OS by default; toggled in the header; persisted.
 - **Accessibility** — WCAG 2.1 AA: keyboard-trapped modals, visible focus rings, live regions, `rem`-based font size, forced-colors support, 320 px reflow. axe-core smoke test fails on any serious/critical violation.
-- **Advisories** — `echo` output and OpenSCAD warnings are shown below the preview.
-- **Shareable URLs** — design, non-default parameters, and selected preset are encoded in the URL hash.
+- **Notices & log** — OpenSCAD `echo` notices, warnings and `assert` failures are parsed into an **Output console** (a count badge by the status dot opens it); the raw log sits one tab over. Config-driven notice categories become coloured badges. See [docs/config.md](docs/config.md#notice-badges-notices).
+- **Share & export** — design, non-default parameters, and selected preset are encoded in the URL hash. On devices that support the Web Share API, the Share button and the model export hand off to the native share sheet (otherwise: copy link / download a colour-bearing 3MF or PNG).
 - **Auto-render with brake** — re-renders after a debounce. Designs flagged `heavy` start in manual mode. Any render slower than ~6 s auto-pauses live updates.
 - **Import file** — optional `fileImport` config adds an upload button for non-bundled files (fonts mounted for OpenSCAD; SVGs/data files referenceable in designs via `import()`/`surface()`). See [docs/config.md](docs/config.md#import-file-fileimport).
 - **Help** — `?` button shows a config-driven user guide; supports many tabs, each with its own content. See [docs/config.md](docs/config.md#help-content-help).
@@ -45,18 +46,21 @@ public/
   wasm/             OpenSCAD WASM (fetched, gitignored) — scripts/fetch-wasm.mjs
   fonts/            Liberation TTFs + fonts.conf
   scad/             designs copied for the renderer (generated, gitignored)
-  manifest.webmanifest, sw.js, icon.svg
+  sw.js             service worker (precaches the shell + runtime assets)
+  manifest.webmanifest, icon*.svg/png, apple-splash-*.png, precache-manifest.json  (generated, gitignored)
 src/
   openscad/
     worker.ts       runs OpenSCAD off the main thread
     runner.ts       main-thread client (latest-wins; cancels superseded renders)
     types.ts        worker protocol + parameter schema types
-  components/       Viewer (three.js), ParamForm, PresetBar, modals
-  lib/              value formatting, presets, URL state, validation
+  components/       AppShell (responsive layout), CommandBar, ParamPanel, BottomSheet,
+                    Viewer (three.js), ParamForm, PresetPicker, OutputConsole, modals;
+                    ui/ — shadcn primitives (Radix + Tailwind)
+  lib/              value formatting, presets, URL state, validation, PWA/share hooks
   generated/        designs.json (from scripts/gen-schema.mjs, gitignored)
   App.tsx           orchestration: debounced auto-render, export, presets
 scripts/
-  gen-schema.mjs    parse Customizer params → schema + copy sources
+  gen-schema.mjs    parse Customizer params → schema + copy sources + PWA manifest/icons
   fetch-wasm.mjs    download the pinned OpenSCAD WASM snapshot (auto-run by predev/prebuild)
   smoke.mjs         headless end-to-end check of the built app
 tests/              node:test unit suite + fixtures + visual baselines

@@ -41,8 +41,8 @@
     { "name": "Open Tag", "short_name": "Tag", "url": "./#d=tag" }
   ],
   "notices": [                    // design-defined log markers -> count badges (off by default)
-    { "marker": "advisory", "label": "advisories", "color": "#e0a458" },
-    { "marker": "note",     "label": "notes",      "color": "#86a9ff" }
+    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
+    { "marker": "note",  "label": "notes",  "color": "#86a9ff" }
   ],
   "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
   "licenses": [ { "name": "…", "license": "…", … } ],  // optional extra open-source notices (appended)
@@ -69,7 +69,7 @@
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
 - Missing `source`, `assets`, design, or `logo` paths fail the build with a clear error.
-- **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the dropdown.
+- **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.
 
 ## Title & logo
 
@@ -177,8 +177,8 @@ the app's own styles, so it can override anything.
 your rules win on source order — no specificity hacks needed.
 
 > **This is an unsupported, advanced escape hatch — use `colors` first.** Unlike
-> the token map, `extraCss` targets internal class names (`.sidebar`,
-> `.param-group`, `.preview-actions .primary`, …). Those are **not a stable API**:
+> the token map, `extraCss` targets internal class names (`.param-panel`,
+> `.param-group`, `.action-cluster`, …). Those are **not a stable API**:
 > a future refactor can rename or restructure them and silently break your
 > overrides. It is also **outside the accessibility guarantees** — you can hide
 > focus rings, break contrast, or disturb layout. If you use it, pin the ScadPub
@@ -260,7 +260,7 @@ An optional object (validated as a unit; defaults applied when absent). None of 
 The collapsible **OpenSCAD output** panel below the preview can show count badges for non-fatal messages your designs emit. A design surfaces a message by `echo`-ing a string in the convention `"<context>: <marker>: <message>"`, where `<marker>` is any word **you** choose — there is nothing special about any particular marker. For example:
 
 ```scad
-echo("tag: advisory: the label text is tall and may overflow the plate");
+echo("tag: alert: the label text is tall and may overflow the plate");
 echo("tag: note: the label is engraved into the plate rather than raised");
 ```
 
@@ -269,17 +269,17 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 ```jsonc
 {
   "notices": [
-    { "marker": "advisory", "label": "advisories", "color": "#e0a458" },
-    { "marker": "note",     "label": "notes",      "color": "#86a9ff" }
+    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
+    { "marker": "note",  "label": "notes",  "color": "#86a9ff" }
   ]
 }
 ```
 
 - **`marker`** — required. The design-defined word, matched as `: <marker>:` inside an echo (case-insensitive). The first configured category that matches a line claims it.
-- **`label`** — optional badge noun (e.g. `"advisories"`). Defaults to the `marker`.
+- **`label`** — optional badge noun (e.g. `"alerts"`). Defaults to the `marker`.
 - **`color`** — optional badge fill, a plain CSS colour (hex, `rgb()/hsl()`, or a named colour). For `#rgb`/`#rrggbb` the badge text auto-switches between black and white to stay legible; other colour forms keep the default badge text, so their contrast is your responsibility (as with [`colors`](#theme--colour-scheme)). Omit to use the default accent badge styling.
 
-**Off by default:** omit `notices` (or set it to `[]`) and no marker categories are recognised — design echoes appear only in the raw log. The bundled example config (`scadpub.config.json`) opts in with `advisory` and `note` categories, and the example `tag` design echoes them in specific, parameter-driven situations so you can see the badges appear.
+**Off by default:** omit `notices` (or set it to `[]`) and no marker categories are recognised — design echoes appear only in the raw log. The bundled example config (`scadpub.config.json`) opts in with `alert` and `note` categories, and the example `tag` design echoes them in specific, parameter-driven situations so you can see the badges appear.
 
 > **Hardcoded, not configurable:** OpenSCAD's own `WARNING:` lines surface as warning messages, and `assert()` failures (`ERROR: Assertion …`) surface as a message **and** an `asserts` count badge. These work regardless of `notices`.
 
