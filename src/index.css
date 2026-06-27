@@ -1199,7 +1199,54 @@ button:disabled { cursor: default; }
   gap: 0.5rem;
 }
 
+/* Label text + its optional info button, kept together on the left so the
+   var-name code stays pinned to the right edge. */
+.param-label__main {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
 .param-desc { color: var(--text); }
+
+.param-help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  /* Align the icon's optical centre with the baseline text. */
+  align-self: center;
+  border-radius: 4px;
+  line-height: 0;
+}
+
+.param-help-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.param-help-btn:hover,
+.param-help-btn:focus-visible {
+  color: var(--accent);
+}
+
+.param-help-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.param-help-popover {
+  color: var(--text);
+  line-height: 1.45;
+  /* Help is plain text joined from the source comment; wrap long words. */
+  overflow-wrap: anywhere;
+}
 
 .param-var {
   color: var(--muted);
