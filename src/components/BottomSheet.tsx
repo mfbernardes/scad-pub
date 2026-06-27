@@ -16,6 +16,8 @@ export type SheetDetent = "peek" | "half" | "full";
 const DETENT_ORDER: SheetDetent[] = ["peek", "half", "full"];
 // Slightly above 50% to clear browser chrome at the bottom.
 const HALF_VH_RATIO = 0.52;
+// Movement (px) past which a pointer interaction counts as a drag, not a tap.
+const DRAG_THRESHOLD = 6;
 
 function halfH(inset: number) { return Math.round((window.innerHeight - inset) * HALF_VH_RATIO); }
 function fullH(inset: number) { return window.innerHeight - inset; }
@@ -32,6 +34,8 @@ export function BottomSheet({ children, peekHeight = 72, bottomInset = 0 }: Prop
   const [detent, setDetent] = useState<SheetDetent>("peek");
   const dragStart = useRef<{ y: number; height: number } | null>(null);
   const dragPointerId = useRef<number | null>(null);
+  // Whether the current interaction moved enough to be a drag (vs a tap).
+  const draggedRef = useRef(false);
   const [dragging, setDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
@@ -73,18 +77,29 @@ export function BottomSheet({ children, peekHeight = 72, bottomInset = 0 }: Prop
     if (detentRef.current === "peek") setDetent("half");
   }, []);
 
+  // Tap cycles detents — but only when the pointer didn't drag (a drag already
+  // snapped on pointer-up, and the browser still fires a click afterwards).
+  const onHandleClick = useCallback(() => {
+    if (draggedRef.current) { draggedRef.current = false; return; }
+    cycleDetent();
+  }, [cycleDetent]);
+
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0 || dragPointerId.current !== null) return;
     dragPointerId.current = e.pointerId;
+    draggedRef.current = false;
     dragStart.current = { y: e.clientY, height: heightFor(detentRef.current) };
     setDragging(true);
-    (e.target as Element).setPointerCapture(e.pointerId);
+    // Capture on the handle itself so move/up keep arriving even off-element.
+    e.currentTarget.setPointerCapture(e.pointerId);
   }, [heightFor]);
 
   // onPointerMove only reads refs — no state deps at all.
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragStart.current || e.pointerId !== dragPointerId.current) return;
-    setDragOffset(dragStart.current.y - e.clientY);
+    const offset = dragStart.current.y - e.clientY;
+    if (Math.abs(offset) > DRAG_THRESHOLD) draggedRef.current = true;
+    setDragOffset(offset);
   }, []);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
@@ -159,7 +174,7 @@ export function BottomSheet({ children, peekHeight = 72, bottomInset = 0 }: Prop
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          onClick={cycleDetent}
+          onClick={onHandleClick}
           onKeyDown={onHandleKeyDown}
         >
           <div className="sheet-handle__bar" aria-hidden />

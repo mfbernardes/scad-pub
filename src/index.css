@@ -1093,6 +1093,8 @@ button:disabled { cursor: default; }
   border-radius: 2px;
   background: var(--line);
   transition: background 0.12s;
+  /* Purely visual — let the handle (touch-action: none) own the pointer gesture. */
+  pointer-events: none;
 }
 
 .sheet-handle:hover .sheet-handle__bar,
