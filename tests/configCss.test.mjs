@@ -38,6 +38,28 @@ test("colorStyle emits only the themes that are present", () => {
   assert.ok(!/:root:root \{/.test(lightOnly));
 });
 
+test("colorStyle drops tokens that could break out of the <style> block", () => {
+  // A </style> breakout and CSS-rule injection are both rejected, leaving no block.
+  assert.equal(colorStyle({ dark: { accent: "</style><script>alert(1)</script>" } }), "");
+  assert.equal(colorStyle({ dark: { accent: "red; } body { display: none }" } }), "");
+  // An unsafe token name is dropped too (contains : } and spaces).
+  assert.equal(colorStyle({ dark: { "x: red } html {}": "#fff" } }), "");
+  // A valid token alongside an unsafe one keeps only the valid one.
+  const css = colorStyle({ dark: { accent: "#fff", bad: "</style>" } });
+  assert.match(css, /--accent: #fff;/);
+  assert.ok(!css.includes("--bad"), "the unsafe token must not be emitted");
+});
+
+test("colorStyle accepts the usual CSS colour forms", () => {
+  const css = colorStyle({
+    dark: { a: "#abc", b: "rgb(255, 0, 0)", c: "oklch(0.7 0.1 30)", d: "var(--x)" },
+  });
+  assert.match(css, /--a: #abc;/);
+  assert.match(css, /--b: rgb\(255, 0, 0\);/);
+  assert.match(css, /--c: oklch\(0\.7 0\.1 30\);/);
+  assert.match(css, /--d: var\(--x\);/);
+});
+
 test("headStyleInjection: nothing configured -> empty string", () => {
   assert.equal(headStyleInjection({}), "");
   assert.equal(headStyleInjection({ colors: null, extraCss: null }), "");

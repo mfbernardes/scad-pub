@@ -247,7 +247,7 @@ An optional object (validated as a unit; defaults applied when absent). None of 
 
 ### PWA manifest
 
-`gen-schema` writes `public/manifest.webmanifest`, rasterizes the `icon` SVG to PNGs (192/512, a 512 maskable, and a 180 `apple-touch-icon`) via `@resvg/resvg-js`, and generates per-device iOS launch images (`apple-touch-startup-image`). The following keys feed the manifest:
+`gen-schema` writes `public/manifest.webmanifest` (always including a `launch_handler` so an already-open install is reused rather than re-launched). When the optional `@resvg/resvg-js` rasterizer is installed it also rasterizes the `icon` SVG to PNGs (192/512, a 512 maskable, and a 180 `apple-touch-icon`) and generates the per-device iOS launch images (`apple-touch-startup-image`); without it the PNGs fall back to the SVG and the iOS splash images are skipped. The following keys feed the manifest:
 
 - **`themeColorLight`** — light-scheme `<meta name="theme-color">` (default `"#ffffff"`); the dark value comes from `themeColor`.
 - **`categories`** — optional array of [manifest categories](https://developer.mozilla.org/docs/Web/Manifest/categories).
