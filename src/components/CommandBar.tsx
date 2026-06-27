@@ -4,6 +4,7 @@
 import { memo, useState } from "react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
+import type { BadgeCount } from "../lib/diagnostics";
 import { presetLabel } from "../lib/presets";
 import { StatusPill } from "./StatusPill";
 import { AdvisoryBadge } from "./AdvisoryBadge";
@@ -37,7 +38,7 @@ interface Props {
   rendering: boolean;
   ready: boolean;
   result: RenderResult | null;
-  advisoryCount: number;
+  badges: BadgeCount[];
   canInstall: boolean;
   onInstall: () => void;
   onDesignChange: (id: string) => void;
@@ -64,7 +65,7 @@ export const CommandBar = memo(function CommandBar({
   rendering,
   ready,
   result,
-  advisoryCount,
+  badges,
   canInstall,
   onInstall,
   onDesignChange,
@@ -143,7 +144,7 @@ export const CommandBar = memo(function CommandBar({
         {/* Status + advisory badge, grouped */}
         <div className="command-bar__status-group">
           <StatusPill rendering={rendering} ready={ready} result={result} />
-          <AdvisoryBadge count={advisoryCount} onClick={onShowOutput} />
+          <AdvisoryBadge badges={badges} onClick={onShowOutput} />
         </div>
 
         {/* Action icons */}

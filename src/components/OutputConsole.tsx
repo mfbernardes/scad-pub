@@ -2,10 +2,10 @@
 // Opened via the AdvisoryBadge or the Output button. Diagnostics/badges are
 // computed once by the parent (AppShell) and passed in.
 import { useState } from "react";
-import { badgeTextColor, type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
+import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
-import { Badge } from "./ui/badge";
+import { CountBadges } from "./CountBadges";
 import { IconButton } from "./IconButton";
 import { XIcon } from "./Icons";
 
@@ -31,16 +31,7 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose }: Props
           <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
             <TabsTrigger value="advisories" className={cn(underlineTabTrigger, "px-3")}>
               Notices
-              {badges.map((b) => (
-                <Badge
-                  key={b.key}
-                  variant={b.key === "assert" ? "destructive" : "warn"}
-                  className={`ml-1 px-2 min-w-5 justify-center${b.key === "assert" ? " badge-assert" : ""}`}
-                  style={b.color ? { background: b.color, color: badgeTextColor(b.color) } : undefined}
-                >
-                  {b.count}
-                </Badge>
-              ))}
+              <CountBadges badges={badges} />
             </TabsTrigger>
             <TabsTrigger value="log" className={cn(underlineTabTrigger, "px-3")}>
               Log

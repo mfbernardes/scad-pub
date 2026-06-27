@@ -166,7 +166,7 @@ export const AppShell = memo(function AppShell({
           rendering={rendering}
           ready={ready}
           result={result}
-          advisoryCount={advisoryCount}
+          badges={badges}
           canInstall={canInstall}
           onInstall={onInstall}
           onDesignChange={onDesignChange}
@@ -297,7 +297,7 @@ export const AppShell = memo(function AppShell({
             ) : (
               <span className="mobile-top-bar__design-name">{design.label}</span>
             )}
-            <AdvisoryBadge count={advisoryCount} onClick={toggleOutput} />
+            <AdvisoryBadge badges={badges} onClick={toggleOutput} />
             <IconButton label="Help" title="Help & keyboard shortcuts" onClick={onShowHelp}>
               <HelpIcon size={16} />
             </IconButton>

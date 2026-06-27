@@ -1,24 +1,27 @@
-// AdvisoryBadge.tsx — compact ⚠ N badge shown when the OpenSCAD log has
-// notices/warnings/asserts worth the user's attention. Clicking it opens the
-// Output console. The count is computed once by the parent (see AppShell) so
-// it stays in sync with the output-console toggle badge.
+// AdvisoryBadge.tsx — compact, clickable notice indicator in the top bar. Shows
+// the same per-category, config-coloured count chips as the OutputConsole (via
+// CountBadges) so the two always match; clicking opens the Output console.
+import { CountBadges } from "./CountBadges";
+import type { BadgeCount } from "../lib/diagnostics";
+
 interface Props {
-  count: number;
+  badges: BadgeCount[];
   onClick: () => void;
   className?: string;
 }
 
-export function AdvisoryBadge({ count, onClick, className = "" }: Props) {
-  if (count === 0) return null;
+export function AdvisoryBadge({ badges, onClick, className = "" }: Props) {
+  const total = badges.reduce((sum, b) => sum + b.count, 0);
+  if (total === 0) return null;
 
   return (
     <button
       className={`advisory-badge ${className}`.trim()}
       onClick={onClick}
-      aria-label={`${count} ${count === 1 ? "notice" : "notices"} — open output console`}
+      aria-label={`${total} ${total === 1 ? "notice" : "notices"} — open output console`}
       title="Open output console"
     >
-      ⚠ {count}
+      <CountBadges badges={badges} />
     </button>
   );
 }
