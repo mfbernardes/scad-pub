@@ -3,12 +3,14 @@
 // Slider + Input for numbers, Checkbox for booleans, Select for enums, Input for
 // strings. Each control carries an aria-label (its description) for its name.
 import { memo, useEffect, useMemo, useState } from "react";
+import { Info as InfoIcon } from "lucide-react";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { isVisible } from "../lib/visibility";
 import { Slider } from "./ui/slider";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import {
   Select,
   SelectContent,
@@ -156,6 +158,28 @@ function Control({
   }
 }
 
+// Surfaces a parameter's full help text in a tap/click popover next to its
+// label. The detail was previously reachable only through the hover-only
+// `title` tooltip, which is invisible on touch devices.
+function ParamHelp({ help, label }: { help: string; label: string }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="param-help-btn"
+          aria-label={`Help for ${label}`}
+        >
+          <InfoIcon aria-hidden="true" focusable="false" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="param-help-popover w-64 max-w-[80vw] p-3 text-sm">
+        {help}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = true }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
@@ -191,10 +215,16 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
             <summary>{section}</summary>
             {params.map((p) => {
               const label = p.description || p.name;
+              // `help` is the full comment block; its first sentence is the
+              // label, so only offer the popover when it carries extra detail.
+              const hasHelp = Boolean(p.help) && p.help !== label;
               return (
-                <div className="param" key={p.name} title={p.help || p.description}>
+                <div className="param" key={p.name}>
                   <span className="param-label">
-                    <span className="param-desc">{label}</span>
+                    <span className="param-label__main">
+                      <span className="param-desc">{label}</span>
+                      {hasHelp && <ParamHelp help={p.help} label={label} />}
+                    </span>
                     {showVarName && p.description && <code className="param-var">{p.name}</code>}
                   </span>
                   <Control
