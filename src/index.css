@@ -1151,6 +1151,13 @@ button:disabled { cursor: default; }
 
 .param-form { /* groups live here */ }
 
+.param-form__empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 1.25rem 0.25rem;
+  text-align: center;
+}
+
 .param-group {
   border: 1px solid var(--line);
   border-radius: var(--radius);
