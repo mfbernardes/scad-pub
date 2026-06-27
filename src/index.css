@@ -81,7 +81,7 @@
   --elevation: 0 4px 20px rgba(0, 0, 0, 0.45);
   /* Mobile layout constants — keep in sync with AppShell.tsx MOBILE_FOOTER_HEIGHT / PEEK_HEIGHT */
   --mobile-footer-height: 56px;
-  --mobile-peek-height: 96px;
+  --mobile-peek-height: 60px;
   color-scheme: dark;
 }
 

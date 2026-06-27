@@ -8,7 +8,9 @@ import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
 import type { ViewerHandle } from "./Viewer";
 
-const PEEK_HEIGHT = 96;
+// Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
+// ending at the tab underline — no sliver of the tab's content.
+const PEEK_HEIGHT = 60;
 const MOBILE_FOOTER_HEIGHT = 56;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
 const EMPTY_LOG: string[] = [];
