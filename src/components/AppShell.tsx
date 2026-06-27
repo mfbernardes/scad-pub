@@ -19,6 +19,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionCluster } from "./ActionCluster";
+import { ActionButtons } from "./ActionButtons";
 import { ViewerHUD } from "./ViewerHUD";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, detentHeight, type SheetDetent } from "./BottomSheet";
@@ -26,19 +27,10 @@ import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
 import { IconButton } from "./IconButton";
 import { ResetButton } from "./ResetButton";
-import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 import { Spinner } from "./ui/spinner";
-import {
-  CircleHelp as HelpIcon,
-  Info as InfoIcon,
-  Play as PlayIcon,
-  Terminal as TerminalIcon,
-  Link2 as LinkIcon,
-  Download as DownloadIcon,
-  Image as ImageIcon,
-} from "lucide-react";
+import { CircleHelp as HelpIcon, Info as InfoIcon } from "lucide-react";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { assetUrl } from "../lib/assetUrl";
 import { useAppActions } from "../lib/appActions";
@@ -350,39 +342,17 @@ export const AppShell = memo(function AppShell({
 
         {/* Fixed footer: primary actions always accessible outside the sheet */}
         <div className="mobile-footer">
-          {!autoRender && stalePreview && (
-            <Button
-              className="mobile-footer__render"
-              onClick={actions.render}
-              disabled={rendering}
-              aria-label="Render now"
-            >
-              <PlayIcon size={16} fill="currentColor" /> Render
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            onClick={actions.exportModel}
-            disabled={!result?.ok}
-            aria-label={`Export ${schema.format.toUpperCase()}`}
-          >
-            <DownloadIcon size={16} /> {schema.format.toUpperCase()}
-          </Button>
-          <Button variant="outline" onClick={handleSavePng} disabled={!result?.ok} aria-label="Save PNG">
-            <ImageIcon size={16} /> PNG
-          </Button>
-          <Button variant="outline" onClick={actions.copyLink} aria-label="Copy share link">
-            <LinkIcon size={16} /> Share
-          </Button>
-          <Button
-            variant="outline"
-            className={`mobile-footer__output${outputOpen ? " active" : ""}`}
-            onClick={toggleOutput}
-            aria-label={`${outputOpen ? "Close" : "Open"} output console`}
-            aria-pressed={outputOpen}
-          >
-            <TerminalIcon size={16} /> Output
-          </Button>
+          <ActionButtons
+            compact
+            rendering={rendering}
+            autoRender={autoRender}
+            stalePreview={stalePreview}
+            hasResult={!!result?.ok}
+            modelFormat={schema.format}
+            outputOpen={outputOpen}
+            onSavePng={handleSavePng}
+            onToggleOutput={toggleOutput}
+          />
         </div>
 
         <ViewerHUD
