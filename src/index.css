@@ -1013,6 +1013,9 @@ button:disabled { cursor: default; }
   height: var(--mobile-footer-height);
   display: flex;
   align-items: center;
+  /* Centre the actions; `safe` keeps the first button reachable (not clipped)
+     if they ever overflow a very narrow phone. */
+  justify-content: safe center;
   gap: 0.3rem;
   padding: 0 calc(0.6rem + env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 0.35rem) calc(0.6rem + env(safe-area-inset-left, 0px));
   background: var(--panel);
