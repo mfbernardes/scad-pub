@@ -23,7 +23,6 @@ import { ViewerHUD } from "./ViewerHUD";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, detentHeight, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
-import { AdvisoryBadge } from "./AdvisoryBadge";
 import { DesignPicker } from "./DesignPicker";
 import { IconButton } from "./IconButton";
 import { ResetButton } from "./ResetButton";
@@ -141,8 +140,8 @@ export const AppShell = memo(function AppShell({
     [userFiles]
   );
 
-  // Parse the log once here; AdvisoryBadge, the Output toggle badge and the
-  // OutputConsole all read the same derived data instead of re-parsing it.
+  // Parse the log once here; the OutputConsole (Notices tab count chips) reads
+  // this derived data instead of re-parsing it.
   const diagnostics = useMemo(() => parseDiagnostics(log, notices), [log, notices]);
   const badges = useMemo(() => countBadges(log, notices), [log, notices]);
 
@@ -166,14 +165,16 @@ export const AppShell = memo(function AppShell({
     else openOutput();
   }, [openOutput]);
 
-  // Auto-open the console on mobile when a render surfaces notices/warnings/
-  // asserts (only on the empty→non-empty transition, so a manual close sticks).
+  // Auto-open the console when a render surfaces notices/warnings/asserts
+  // (only on the empty→non-empty transition, so a manual close sticks).
+  // Same behaviour on desktop and mobile — the console surfaces notices, so
+  // neither top bar carries a badge.
   const hadDiagnostics = useRef(false);
   useEffect(() => {
     const has = diagnostics.length > 0;
-    if (isMobile && has && !hadDiagnostics.current) openOutput();
+    if (has && !hadDiagnostics.current) openOutput();
     hadDiagnostics.current = has;
-  }, [diagnostics, isMobile, openOutput]);
+  }, [diagnostics, openOutput]);
 
   // Place the mobile console just above the sheet's current top.
   const mobileConsoleStyle = {
@@ -202,7 +203,6 @@ export const AppShell = memo(function AppShell({
           rendering={rendering}
           ready={ready}
           result={result}
-          badges={badges}
           canInstall={canInstall}
           onInstall={onInstall}
           onDesignChange={onDesignChange}
@@ -212,7 +212,6 @@ export const AppShell = memo(function AppShell({
           onCycleTheme={onCycleTheme}
           onShowHelp={onShowHelp}
           onShowLicenses={onShowLicenses}
-          onShowOutput={toggleOutput}
         />
 
         <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
@@ -334,7 +333,6 @@ export const AppShell = memo(function AppShell({
               )}
             </div>
             <div className="mobile-top-bar__right">
-              <AdvisoryBadge badges={badges} onClick={toggleOutput} />
               <IconButton label="Help" title="Help & keyboard shortcuts" onClick={onShowHelp}>
                 <HelpIcon size={16} />
               </IconButton>

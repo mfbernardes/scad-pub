@@ -1,6 +1,7 @@
 // OutputConsole.tsx — bottom drawer with Notices + Log tabs (shadcn/ui Tabs).
-// Opened via the AdvisoryBadge or the Output button. Diagnostics/badges are
-// computed once by the parent (AppShell) and passed in.
+// Auto-opens when a render first surfaces a notice/assert; also toggled by the
+// Output button. Diagnostics/badges are computed once by the parent (AppShell)
+// and passed in.
 import { useState, type CSSProperties } from "react";
 import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";

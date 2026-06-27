@@ -1,6 +1,6 @@
 // CountBadges — the per-category notice/assert count chips, coloured by the
-// config (each notice category's `color`). Shared by the top-bar AdvisoryBadge
-// and the OutputConsole so both show identical, config-coloured badges.
+// config (each notice category's `color`). Shown in the OutputConsole's
+// Notices tab.
 import { Badge } from "./ui/badge";
 import { badgeTextColor, type BadgeCount } from "../lib/diagnostics";
 

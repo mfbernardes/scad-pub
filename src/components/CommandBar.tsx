@@ -1,13 +1,12 @@
 // CommandBar.tsx — top bar: brand, design picker (shadcn Select), presets
-// dropdown (shadcn Popover), status + advisory badge, action icons
-// (theme / help / licenses), optional PWA install.
+// dropdown (shadcn Popover), status, action icons (theme / help / licenses),
+// optional PWA install. Notices surface via the auto-opening output console,
+// so the bar carries no advisory badge.
 import { memo, useState } from "react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
-import type { BadgeCount } from "../lib/diagnostics";
 import { presetLabel } from "../lib/presets";
 import { StatusPill } from "./StatusPill";
-import { AdvisoryBadge } from "./AdvisoryBadge";
 import { IconButton } from "./IconButton";
 import { PresetPicker } from "./PresetPicker";
 import { DesignPicker } from "./DesignPicker";
@@ -38,7 +37,6 @@ interface Props {
   rendering: boolean;
   ready: boolean;
   result: RenderResult | null;
-  badges: BadgeCount[];
   canInstall: boolean;
   onInstall: () => void;
   onDesignChange: (id: string) => void;
@@ -48,7 +46,6 @@ interface Props {
   onCycleTheme: () => void;
   onShowHelp: () => void;
   onShowLicenses: () => void;
-  onShowOutput: () => void;
 }
 
 export const CommandBar = memo(function CommandBar({
@@ -65,7 +62,6 @@ export const CommandBar = memo(function CommandBar({
   rendering,
   ready,
   result,
-  badges,
   canInstall,
   onInstall,
   onDesignChange,
@@ -75,7 +71,6 @@ export const CommandBar = memo(function CommandBar({
   onCycleTheme,
   onShowHelp,
   onShowLicenses,
-  onShowOutput,
 }: Props) {
   const [showPresets, setShowPresets] = useState(false);
   const currentDesign = designs.find((d) => d.id === designId);
@@ -141,11 +136,7 @@ export const CommandBar = memo(function CommandBar({
       </div>
 
       <div className="command-bar__right">
-        {/* Status + advisory badge, grouped */}
-        <div className="command-bar__status-group">
-          <StatusPill rendering={rendering} ready={ready} result={result} />
-          <AdvisoryBadge badges={badges} onClick={onShowOutput} />
-        </div>
+        <StatusPill rendering={rendering} ready={ready} result={result} />
 
         {/* Action icons */}
         <IconButton label={themeLabel} title={themeLabel} onClick={onCycleTheme}>

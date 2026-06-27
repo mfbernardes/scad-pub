@@ -20,6 +20,17 @@ import { startServer } from "./serve-dist.mjs";
 const statusText = (page) =>
   page.locator(".status-pill").getAttribute("aria-label");
 
+// Ensure the output console is open. It auto-opens when a render first surfaces
+// a notice/assert, but a manual close (or a notice present before this point)
+// means it may be shut — so click the Output toggle when it's not already open.
+// The toggle's label is "Open output console" while closed.
+async function openConsole(page) {
+  if (await page.locator(".output-console").count()) return;
+  // Desktop toggle (the mobile footer's twin is CSS-hidden at this viewport).
+  await page.locator('.action-cluster__output[aria-label="Open output console"]').click().catch(() => {});
+  await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
+}
+
 // "Reset to defaults" confirms via an AlertDialog only when the params differ
 // from the defaults — click the button, then the dialog's Reset if it appears.
 async function resetDefaults(page) {
@@ -366,23 +377,14 @@ async function main() {
       };
 
       // Engraving the label trips the design's `note` category (a config-driven
-      // notice): the advisory badge and warn count on the output toggle appear.
+      // notice). The console auto-opens on the first notice; open it explicitly
+      // in case it was already showing earlier notices (no badge in the top bar).
       await paramRow("engrave_text").getByRole("checkbox").check();
+      await openConsole(page);
       check(
         await waitFor(() =>
-          document.querySelector(".advisory-badge") !== null ||
-          document.querySelector(".action-cluster__warn-badge") !== null
+          /engraved/.test(document.querySelector(".output-console")?.textContent || "")
         ),
-        "engraving the label raises a warning/notice badge"
-      );
-      // Open the output console to see the diagnostic text. One deterministic
-      // click on the advisory badge (always present once a notice fires) — a
-      // second toggle would close it again.
-      if (!(await page.locator(".output-console").count()))
-        await page.locator('.advisory-badge, [aria-label^="Open output console"]').first().click().catch(() => {});
-      await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
-      check(
-        /engraved/.test((await page.textContent(".output-console").catch(() => "")) || ""),
         "the engrave note is surfaced as a diagnostic"
       );
       // Close the console again
@@ -399,15 +401,15 @@ async function main() {
       await setNum("text_depth", 2);
       check(
         await waitFor(() =>
-          document.querySelector(".badge-assert") !== null ||
-          (document.querySelector(".advisory-badge") !== null &&
-           /Failed/.test(document.querySelector(".status-pill")?.getAttribute("aria-label") || ""))
+          /Failed/.test(document.querySelector(".status-pill")?.getAttribute("aria-label") || "")
         ),
-        "an assert failure raises an asserts badge"
-      );
-      check(
-        /Failed/.test((await statusText(page).catch(() => "")) || ""),
         "the failed assert render reports a render failure"
+      );
+      // The console surfaces the assert as an "asserts" count badge in its header.
+      await openConsole(page);
+      check(
+        await waitFor(() => document.querySelector(".badge-assert") !== null),
+        "an assert failure raises an asserts badge"
       );
 
       // Restore a clean, rendering state for the checks that follow.
@@ -419,11 +421,8 @@ async function main() {
     if (ids.includes("signage")) {
       console.log("=== signage: textmetrics + @showIf arrow_style ===");
       await selectDesign(page, "signage");
-      // Open the output console (click the terminal button or advisory badge)
-      await page.click('[aria-label^="Open output console"]').catch(async () => {
-        await page.click('.advisory-badge').catch(() => {});
-      });
-      await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
+      // Open the output console and switch to the Log tab.
+      await openConsole(page);
       await page.click('.output-console__tab:has-text("Log")').catch(() => {});
       check(/between characters/.test((await page.textContent(".output-console").catch(() => "")) || ""), "textmetrics advisory present");
       // arrow_style is relevant only once an arrow is chosen (`@showIf arrow != none`);
