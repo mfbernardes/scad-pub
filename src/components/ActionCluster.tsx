@@ -19,8 +19,6 @@ interface Props {
   stalePreview?: boolean;
   hasResult: boolean;
   modelFormat: string;
-  /** Notices/warnings/asserts worth surfacing — badged on the Output toggle. */
-  advisoryCount: number;
   outputOpen: boolean;
   onRender: () => void;
   onExport: () => void;
@@ -37,7 +35,6 @@ export const ActionCluster = memo(function ActionCluster({
   stalePreview = false,
   hasResult,
   modelFormat,
-  advisoryCount,
   outputOpen,
   onRender,
   onExport,
@@ -85,13 +82,12 @@ export const ActionCluster = memo(function ActionCluster({
       <Button
         size="sm"
         variant="ghost"
-        className={`action-cluster__output relative${outputOpen ? " active" : ""}`}
+        className={`action-cluster__output${outputOpen ? " active" : ""}`}
         onClick={onToggleOutput}
-        aria-label={`${outputOpen ? "Close" : "Open"} output console${advisoryCount ? ` (${advisoryCount} notice${advisoryCount !== 1 ? "s" : ""})` : ""}`}
+        aria-label={`${outputOpen ? "Close" : "Open"} output console`}
         aria-pressed={outputOpen}
       >
         <TerminalIcon size={16} />
-        {advisoryCount > 0 && <span className="action-cluster__warn-badge">{advisoryCount}</span>}
       </Button>
     </div>
   );

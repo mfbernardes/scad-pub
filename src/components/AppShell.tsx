@@ -136,7 +136,6 @@ export const AppShell = memo(function AppShell({
   // OutputConsole all read the same derived data instead of re-parsing it.
   const diagnostics = useMemo(() => parseDiagnostics(log, notices), [log, notices]);
   const badges = useMemo(() => countBadges(log, notices), [log, notices]);
-  const advisoryCount = diagnostics.length;
 
   const handleSavePng = useCallback(() => {
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
@@ -227,7 +226,6 @@ export const AppShell = memo(function AppShell({
                 stalePreview={stalePreview}
                 hasResult={!!result?.ok}
                 modelFormat={schema.format}
-                advisoryCount={advisoryCount}
                 outputOpen={outputOpen}
                 onRender={onRender}
                 onExport={onExport}
