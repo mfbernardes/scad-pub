@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { ns } from "../lib/appId";
+import { useAppActions } from "../lib/appActions";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { IconButton } from "./IconButton";
@@ -38,11 +39,6 @@ interface Props {
   loadedFiles: LoadedFile[];
   panelSide: "left" | "right";
   panelDefaultOpen: boolean;
-  onChange: (name: string, value: import("../openscad/types").ParamValue) => void;
-  onReset: () => void;
-  onAddFile: (name: string, bytes: Uint8Array) => void;
-  onRemoveFile: (name: string) => void;
-  onClearFiles: () => void;
 }
 
 export function ParamPanel({
@@ -52,12 +48,8 @@ export function ParamPanel({
   loadedFiles,
   panelSide,
   panelDefaultOpen,
-  onChange,
-  onReset,
-  onAddFile,
-  onRemoveFile,
-  onClearFiles,
 }: Props) {
+  const { change, reset, addFile, removeFile, clearFiles } = useAppActions();
   const [open, setOpen] = useState(() => {
     try {
       const v = localStorage.getItem(PANEL_OPEN_KEY);
@@ -209,7 +201,7 @@ export function ParamPanel({
             )}
           </div>
           <div className="param-panel__body">
-            <ParamForm design={design} values={values} onChange={onChange} search={debouncedSearch} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} />
           </div>
         </TabsContent>
 
@@ -218,16 +210,16 @@ export function ParamPanel({
             <FileBar
               fileImport={fileImport}
               loadedFiles={loadedFiles}
-              onAddFile={onAddFile}
-              onRemoveFile={onRemoveFile}
-              onClearFiles={onClearFiles}
+              onAddFile={addFile}
+              onRemoveFile={removeFile}
+              onClearFiles={clearFiles}
             />
           </TabsContent>
         )}
       </Tabs>
 
       <div className="param-panel__footer">
-        <ResetButton design={design} values={values} onReset={onReset} className="reset-link">
+        <ResetButton design={design} values={values} onReset={reset} className="reset-link">
           <ResetIcon size={14} /> Reset to defaults
         </ResetButton>
       </div>

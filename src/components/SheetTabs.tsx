@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
+import { useAppActions } from "../lib/appActions";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
@@ -19,13 +20,6 @@ interface Props {
   selected: string;
   fileImport: FileImport | null;
   loadedFiles: LoadedFile[];
-  onChange: (name: string, value: import("../openscad/types").ParamValue) => void;
-  onApply: (v: Values) => void;
-  onSelectedChange: (id: string) => void;
-  onPresetsChange: () => void;
-  onAddFile: (name: string, bytes: Uint8Array) => void;
-  onRemoveFile: (name: string) => void;
-  onClearFiles: () => void;
   /** Called when a tab is tapped — used to raise a collapsed (peek) sheet. */
   onActivate?: () => void;
 }
@@ -38,15 +32,10 @@ export function SheetTabs({
   selected,
   fileImport,
   loadedFiles,
-  onChange,
-  onApply,
-  onSelectedChange,
-  onPresetsChange,
-  onAddFile,
-  onRemoveFile,
-  onClearFiles,
   onActivate,
 }: Props) {
+  const { change, applyPreset, selectedPresetChange, presetsChange, addFile, removeFile, clearFiles } =
+    useAppActions();
   const hasFiles = fileImport != null;
   // Presets first (and the default tab) on mobile, then Parameters, then Files.
   const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
@@ -70,7 +59,7 @@ export function SheetTabs({
       <div className="sheet-tabs__body">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <div className="sheet-tabs__params">
-            <ParamForm design={design} values={values} onChange={onChange} />
+            <ParamForm design={design} values={values} onChange={change} />
           </div>
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
@@ -80,9 +69,9 @@ export function SheetTabs({
             userPresets={userPresets}
             selected={selected}
             values={values}
-            onApply={onApply}
-            onSelectedChange={onSelectedChange}
-            onPresetsChange={onPresetsChange}
+            onApply={applyPreset}
+            onSelectedChange={selectedPresetChange}
+            onPresetsChange={presetsChange}
             inline
           />
         </TabsContent>
@@ -91,9 +80,9 @@ export function SheetTabs({
             <FileBar
               fileImport={fileImport}
               loadedFiles={loadedFiles}
-              onAddFile={onAddFile}
-              onRemoveFile={onRemoveFile}
-              onClearFiles={onClearFiles}
+              onAddFile={addFile}
+              onRemoveFile={removeFile}
+              onClearFiles={clearFiles}
             />
           </TabsContent>
         )}

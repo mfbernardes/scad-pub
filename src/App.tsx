@@ -21,6 +21,7 @@ import { useInstallPrompt } from "./lib/useInstallPrompt";
 import { useOnline } from "./lib/useOnline";
 import { ns } from "./lib/appId";
 import { toast } from "sonner";
+import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/ui/sonner";
 import { LicensesModal } from "./components/LicensesModal";
@@ -295,6 +296,29 @@ export default function App() {
   const showHelpModal = useCallback(() => setShowHelp(true), []);
   const showLicensesModal = useCallback(() => setShowLicenses(true), []);
 
+  // The app-level action bundle, read via useAppActions() by the panels. Rebuilt
+  // each render; the provider keeps a stable identity so consumers don't churn.
+  const actions: AppActions = {
+    install: promptInstall,
+    designChange: setDesignId,
+    change: setValue,
+    applyPreset: setValues,
+    selectedPresetChange: setPresetSel,
+    presetsChange: refreshUserPresets,
+    render: doRender,
+    exportModel,
+    savePng,
+    copyLink,
+    reset: handleReset,
+    addFile,
+    removeFile,
+    clearFiles: clearImportedFiles,
+    autoRenderChange: setAutoRender,
+    cycleTheme,
+    showHelp: showHelpModal,
+    showLicenses: showLicensesModal,
+  };
+
   // Stale-bundle (hard) and service-worker-update (soft) notices as Sonner
   // toasts. Stable ids keep them from stacking; they persist until acted on.
   useEffect(() => {
@@ -337,42 +361,26 @@ export default function App() {
 
       <Toaster theme={theme} />
 
-      <AppShell
-        schema={schema}
-        design={design}
-        designs={schema.designs}
-        values={values}
-        bundled={bundledPresets}
-        userPresets={userPresets}
-        selectedPreset={presetSel}
-        userFiles={userFiles}
-        result={result}
-        rendering={rendering}
-        ready={ready}
-        autoRender={autoRender}
-        stalePreview={stalePreview}
-        theme={theme}
-        themeMode={themeMode}
-        canInstall={canInstall}
-        onInstall={promptInstall}
-        onDesignChange={setDesignId}
-        onChange={setValue}
-        onApplyPreset={setValues}
-        onSelectedPresetChange={setPresetSel}
-        onPresetsChange={refreshUserPresets}
-        onRender={doRender}
-        onExport={exportModel}
-        onSavePng={savePng}
-        onCopyLink={copyLink}
-        onReset={handleReset}
-        onAddFile={addFile}
-        onRemoveFile={removeFile}
-        onClearFiles={clearImportedFiles}
-        onAutoRenderChange={setAutoRender}
-        onCycleTheme={cycleTheme}
-        onShowHelp={showHelpModal}
-        onShowLicenses={showLicensesModal}
-      />
+      <AppActionsProvider actions={actions}>
+        <AppShell
+          schema={schema}
+          design={design}
+          designs={schema.designs}
+          values={values}
+          bundled={bundledPresets}
+          userPresets={userPresets}
+          selectedPreset={presetSel}
+          userFiles={userFiles}
+          result={result}
+          rendering={rendering}
+          ready={ready}
+          autoRender={autoRender}
+          stalePreview={stalePreview}
+          theme={theme}
+          themeMode={themeMode}
+          canInstall={canInstall}
+        />
+      </AppActionsProvider>
     </>
   );
 }

@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { assetUrl } from "../lib/assetUrl";
+import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
 import { useViewportHeight } from "../lib/useViewportHeight";
 
@@ -65,24 +66,6 @@ interface Props {
   theme: "dark" | "light";
   themeMode: "light" | "dark" | "auto";
   canInstall: boolean;
-  onInstall: () => void;
-  onDesignChange: (id: string) => void;
-  onChange: (name: string, value: import("../openscad/types").ParamValue) => void;
-  onApplyPreset: (v: Values) => void;
-  onSelectedPresetChange: (id: string) => void;
-  onPresetsChange: () => void;
-  onRender: () => void;
-  onExport: () => void;
-  onSavePng: (url: string) => void;
-  onCopyLink: () => void;
-  onReset: () => void;
-  onAddFile: (name: string, bytes: Uint8Array) => void;
-  onRemoveFile: (name: string) => void;
-  onClearFiles: () => void;
-  onAutoRenderChange: (v: boolean) => void;
-  onCycleTheme: () => void;
-  onShowHelp: () => void;
-  onShowLicenses: () => void;
 }
 
 export const AppShell = memo(function AppShell({
@@ -102,25 +85,8 @@ export const AppShell = memo(function AppShell({
   theme,
   themeMode,
   canInstall,
-  onInstall,
-  onDesignChange,
-  onChange,
-  onApplyPreset,
-  onSelectedPresetChange,
-  onPresetsChange,
-  onRender,
-  onExport,
-  onSavePng,
-  onCopyLink,
-  onReset,
-  onAddFile,
-  onRemoveFile,
-  onClearFiles,
-  onAutoRenderChange,
-  onCycleTheme,
-  onShowHelp,
-  onShowLicenses,
 }: Props) {
+  const actions = useAppActions();
   const desktopViewerRef = useRef<ViewerHandle>(null);
   const mobileViewerRef = useRef<ViewerHandle>(null);
   // Only the active layout mounts a Viewer (the other layout is CSS-hidden), so
@@ -155,8 +121,8 @@ export const AppShell = memo(function AppShell({
 
   const handleSavePng = useCallback(() => {
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
-    if (url) onSavePng(url);
-  }, [isMobile, onSavePng]);
+    if (url) actions.savePng(url);
+  }, [isMobile, actions]);
 
   // A full sheet would cover the console — drop it to half to make room.
   const reduceSheetIfFull = useCallback(() => {
@@ -212,14 +178,6 @@ export const AppShell = memo(function AppShell({
           ready={ready}
           result={result}
           canInstall={canInstall}
-          onInstall={onInstall}
-          onDesignChange={onDesignChange}
-          onApplyPreset={onApplyPreset}
-          onSelectedPresetChange={onSelectedPresetChange}
-          onPresetsChange={onPresetsChange}
-          onCycleTheme={onCycleTheme}
-          onShowHelp={onShowHelp}
-          onShowLicenses={onShowLicenses}
         />
 
         <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
@@ -231,11 +189,6 @@ export const AppShell = memo(function AppShell({
             loadedFiles={loadedFiles}
             panelSide={panelSide}
             panelDefaultOpen={panelDefaultOpen}
-            onChange={onChange}
-            onReset={onReset}
-            onAddFile={onAddFile}
-            onRemoveFile={onRemoveFile}
-            onClearFiles={onClearFiles}
           />
 
           {/* Canvas */}
@@ -271,12 +224,8 @@ export const AppShell = memo(function AppShell({
                 hasResult={!!result?.ok}
                 modelFormat={schema.format}
                 outputOpen={outputOpen}
-                onRender={onRender}
-                onExport={onExport}
                 onSavePng={handleSavePng}
-                onCopyLink={onCopyLink}
                 onToggleOutput={toggleOutput}
-                onAutoRenderChange={onAutoRenderChange}
                 className="action-cluster--desktop"
               />
               <ViewerHUD
@@ -335,16 +284,16 @@ export const AppShell = memo(function AppShell({
             </span>
             <div className="mobile-top-bar__center">
               {designs.length > 1 ? (
-                <DesignPicker designs={designs} value={design.id} onChange={onDesignChange} />
+                <DesignPicker designs={designs} value={design.id} onChange={actions.designChange} />
               ) : (
                 <span className="mobile-top-bar__design-name">{design.label}</span>
               )}
             </div>
             <div className="mobile-top-bar__right">
-              <IconButton label="Help" title="Help & keyboard shortcuts" onClick={onShowHelp}>
+              <IconButton label="Help" title="Help & keyboard shortcuts" onClick={actions.showHelp}>
                 <HelpIcon size={16} />
               </IconButton>
-              <IconButton label="About & licenses" title="About & licenses" onClick={onShowLicenses}>
+              <IconButton label="About & licenses" title="About & licenses" onClick={actions.showLicenses}>
                 <InfoIcon size={16} />
               </IconButton>
             </div>
@@ -380,22 +329,15 @@ export const AppShell = memo(function AppShell({
                 selected={selectedPreset}
                 fileImport={fileImport}
                 loadedFiles={loadedFiles}
-                onChange={onChange}
-                onApply={onApplyPreset}
-                onSelectedChange={onSelectedPresetChange}
-                onPresetsChange={onPresetsChange}
-                onAddFile={onAddFile}
-                onRemoveFile={onRemoveFile}
-                onClearFiles={onClearFiles}
                 onActivate={expand}
               />
               {detent !== "peek" && (
                 <div className="sheet-footer">
                   <Label className="auto-render cursor-pointer font-normal" title="Re-render automatically as parameters change">
-                    <Switch checked={autoRender} onCheckedChange={onAutoRenderChange} aria-label="Auto-render" />
+                    <Switch checked={autoRender} onCheckedChange={actions.autoRenderChange} aria-label="Auto-render" />
                     Auto-render
                   </Label>
-                  <ResetButton design={design} values={values} onReset={onReset} className="reset-link ml-auto">Reset</ResetButton>
+                  <ResetButton design={design} values={values} onReset={actions.reset} className="reset-link ml-auto">Reset</ResetButton>
                 </div>
               )}
             </div>
@@ -407,7 +349,7 @@ export const AppShell = memo(function AppShell({
           {!autoRender && stalePreview && (
             <Button
               className="mobile-footer__render"
-              onClick={onRender}
+              onClick={actions.render}
               disabled={rendering}
               aria-label="Render now"
             >
@@ -416,7 +358,7 @@ export const AppShell = memo(function AppShell({
           )}
           <Button
             variant="outline"
-            onClick={onExport}
+            onClick={actions.exportModel}
             disabled={!result?.ok}
             aria-label={`Export ${schema.format.toUpperCase()}`}
           >
@@ -425,7 +367,7 @@ export const AppShell = memo(function AppShell({
           <Button variant="outline" onClick={handleSavePng} disabled={!result?.ok} aria-label="Save PNG">
             <ImageIcon size={16} /> PNG
           </Button>
-          <Button variant="outline" onClick={onCopyLink} aria-label="Copy share link">
+          <Button variant="outline" onClick={actions.copyLink} aria-label="Copy share link">
             <LinkIcon size={16} /> Share
           </Button>
           <Button

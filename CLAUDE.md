@@ -47,6 +47,8 @@ Two files, a strict client/worker split (`src/openscad/`):
 
 `App.tsx` orchestrates: debounced auto-render, the "heavy render" brake (renders slower than `HEAVY_RENDER_MS` ≈ 6 s auto-pause live updates; designs flagged `heavy` start in manual mode), export (native Web Share where available, else download), presets, fonts, URL state, theme, and the PWA install/offline notices. `AppShell.tsx` owns the responsive layout (desktop docked `ParamPanel` / mobile `BottomSheet`) as a pure view extraction — all state stays in `App.tsx`; only the active layout mounts a `Viewer` (`useIsMobile`), which is lazy-loaded to keep three.js out of the initial JS chunk.
 
+The **action callbacks** (render, export, value/preset changes, file imports, theme, …) flow through the `AppActions` context (`src/lib/appActions.ts`) instead of being drilled prop-by-prop through `AppShell`: `App` builds the bundle and `<AppActionsProvider>` wraps the shell; the panels (`CommandBar`, `ParamPanel`, `ActionCluster`, `SheetTabs`) read what they need via `useAppActions()`. The provider hands out a **stable** context value backed by a ref, so a consumer never re-renders when a callback's identity changes yet always invokes `App`'s latest implementation. Data (and genuinely local glue like the PNG-snapshot handler, which needs the viewer ref) still flow as props.
+
 ## Conventions
 
 - **Tests import TypeScript source directly.** `tests/register-ts.mjs` + `ts-resolve.mjs` register a Node loader hook that resolves the app's extensionless relative imports (e.g. `./scad`) to `.ts` and uses Node's built-in type-stripping. This is why app code uses extensionless relative imports and why `node:test` runs without a bundler.

@@ -6,6 +6,7 @@ import { memo, useState } from "react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import { presetLabel } from "../lib/presets";
+import { useAppActions } from "../lib/appActions";
 import { StatusPill } from "./StatusPill";
 import { IconButton } from "./IconButton";
 import { PresetPicker } from "./PresetPicker";
@@ -38,14 +39,6 @@ interface Props {
   ready: boolean;
   result: RenderResult | null;
   canInstall: boolean;
-  onInstall: () => void;
-  onDesignChange: (id: string) => void;
-  onApplyPreset: (v: Values) => void;
-  onSelectedPresetChange: (id: string) => void;
-  onPresetsChange: () => void;
-  onCycleTheme: () => void;
-  onShowHelp: () => void;
-  onShowLicenses: () => void;
 }
 
 export const CommandBar = memo(function CommandBar({
@@ -63,15 +56,17 @@ export const CommandBar = memo(function CommandBar({
   ready,
   result,
   canInstall,
-  onInstall,
-  onDesignChange,
-  onApplyPreset,
-  onSelectedPresetChange,
-  onPresetsChange,
-  onCycleTheme,
-  onShowHelp,
-  onShowLicenses,
 }: Props) {
+  const {
+    install,
+    designChange,
+    applyPreset,
+    selectedPresetChange,
+    presetsChange,
+    cycleTheme,
+    showHelp,
+    showLicenses,
+  } = useAppActions();
   const [showPresets, setShowPresets] = useState(false);
   const currentDesign = designs.find((d) => d.id === designId);
 
@@ -97,7 +92,7 @@ export const CommandBar = memo(function CommandBar({
         <span className="command-bar__design-label">Design</span>
         <span className="command-bar__sep" aria-hidden="true">·</span>
         {designs.length > 1 ? (
-          <DesignPicker designs={designs} value={designId} onChange={onDesignChange} />
+          <DesignPicker designs={designs} value={designId} onChange={designChange} />
         ) : (
           <span className="command-bar__design-name">{currentDesign?.label ?? designId}</span>
         )}
@@ -126,9 +121,9 @@ export const CommandBar = memo(function CommandBar({
             userPresets={userPresets}
             selected={selectedPreset}
             values={values}
-            onApply={onApplyPreset}
-            onSelectedChange={onSelectedPresetChange}
-            onPresetsChange={onPresetsChange}
+            onApply={applyPreset}
+            onSelectedChange={selectedPresetChange}
+            onPresetsChange={presetsChange}
             onClose={() => setShowPresets(false)}
           />
         </PopoverContent>
@@ -139,13 +134,13 @@ export const CommandBar = memo(function CommandBar({
         <StatusPill rendering={rendering} ready={ready} result={result} />
 
         {/* Action icons */}
-        <IconButton label={themeLabel} title={themeLabel} onClick={onCycleTheme}>
+        <IconButton label={themeLabel} title={themeLabel} onClick={cycleTheme}>
           {themeIcon}
         </IconButton>
-        <IconButton label="Help" title="Help & keyboard shortcuts" onClick={onShowHelp}>
+        <IconButton label="Help" title="Help & keyboard shortcuts" onClick={showHelp}>
           <HelpIcon size={16} />
         </IconButton>
-        <IconButton label="Open-source licenses" title="Open-source licenses" onClick={onShowLicenses}>
+        <IconButton label="Open-source licenses" title="Open-source licenses" onClick={showLicenses}>
           <InfoIcon size={16} />
         </IconButton>
 
@@ -154,7 +149,7 @@ export const CommandBar = memo(function CommandBar({
           <Button
             size="sm"
             className="command-bar__install-btn"
-            onClick={onInstall}
+            onClick={install}
             title="Install as app"
           >
             <InstallIcon size={14} />
