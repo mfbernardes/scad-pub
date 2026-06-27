@@ -174,13 +174,6 @@ export interface PopupNotice {
   mode: PopupMode;
 }
 
-/** PWA manifest screenshot entry. */
-export interface ManifestScreenshot {
-  src: string;
-  sizes: string;
-  form_factor: "wide" | "narrow";
-}
-
 /** Build-time UI behaviour overrides. None affect geometry (absent from renderHash). */
 export interface UiConfig {
   /** Which edge the parameter panel docks to on desktop (default "left"). */
