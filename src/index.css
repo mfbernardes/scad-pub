@@ -824,6 +824,17 @@ button:disabled { cursor: default; }
   flex-direction: column;
 }
 
+/* Inline (mobile sheet): fill the tab height so the list grows and the
+   "Save current as…" row pins to the bottom — no dead space below it. */
+.preset-picker--inline {
+  flex: 1;
+  min-height: 0;
+}
+.preset-picker--inline .preset-picker__sections {
+  flex: 1;
+  max-height: none;
+}
+
 /* Sections list */
 .preset-picker__sections {
   overflow-y: auto;
@@ -908,6 +919,7 @@ button:disabled { cursor: default; }
   align-items: center;
   padding: 0.5rem 0.6rem;
   border-top: 1px solid var(--line);
+  flex-shrink: 0;
 }
 .preset-picker__save input { flex: 1; min-width: 0; }
 
@@ -1133,11 +1145,18 @@ button:disabled { cursor: default; }
 
 .sheet-tabs__body {
   flex: 1;
-  overflow-y: auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.sheet-tabs__params { padding: 0.5rem 0.75rem; }
+/* Params scroll inside their tab so the tab fills the sheet height. */
+.sheet-tabs__params {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+}
 
 /* Auto-render label (used in sheet footer and previously in preview-actions) */
 .auto-render {

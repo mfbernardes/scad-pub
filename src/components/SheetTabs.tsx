@@ -68,12 +68,12 @@ export function SheetTabs({
         ))}
       </TabsList>
       <div className="sheet-tabs__body">
-        <TabsContent value="params" className="mt-0">
+        <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <div className="sheet-tabs__params">
             <ParamForm design={design} values={values} onChange={onChange} />
           </div>
         </TabsContent>
-        <TabsContent value="presets" className="mt-0">
+        <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetPicker
             design={design}
             bundled={bundled}
@@ -87,7 +87,7 @@ export function SheetTabs({
           />
         </TabsContent>
         {hasFiles && (
-          <TabsContent value="files" className="mt-0">
+          <TabsContent value="files" className="mt-0 min-h-0 flex-1 overflow-y-auto">
             <FileBar
               fileImport={fileImport}
               loadedFiles={loadedFiles}

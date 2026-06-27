@@ -88,7 +88,7 @@ export function PresetPicker({
   };
 
   const content = (
-    <div className="preset-picker">
+    <div className={`preset-picker${inline ? " preset-picker--inline" : ""}`}>
       <div className="preset-picker__sections" ref={sectionsRef} onKeyDown={onListKeyDown}>
         {bundled.length > 0 && (
           <section>
