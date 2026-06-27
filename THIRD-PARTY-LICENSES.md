@@ -18,6 +18,12 @@ regardless of the licenses below.
 | **OpenSCAD-WASM** (`openscad.js`, `openscad.wasm`) | **GPL-2.0-or-later** (effective floor GPLv3 via CGAL) | https://github.com/openscad/openscad — official snapshots at https://files.openscad.org/snapshots/ |
 | React, react-dom, scheduler, loose-envify, js-tokens | MIT | https://github.com/facebook/react |
 | three.js | MIT | https://github.com/mrdoob/three.js |
+| Radix UI primitives (`@radix-ui/react-*`: dialog, alert-dialog, popover, select, tabs, slider, switch, checkbox, label, slot) | MIT | https://github.com/radix-ui/primitives |
+| lucide-react (icons) | ISC | https://github.com/lucide-icons/lucide |
+| sonner (toasts) | MIT | https://github.com/emilkowalski/sonner |
+| clsx | MIT | https://github.com/lukeed/clsx |
+| tailwind-merge | MIT | https://github.com/dcastil/tailwind-merge |
+| class-variance-authority | Apache-2.0 | https://github.com/joe-bell/cva |
 | Liberation fonts (Sans / Mono) | OFL-1.1 | https://github.com/liberationfonts/liberation-fonts |
 
 ### The OpenSCAD-WASM (GPL) obligation
@@ -44,4 +50,6 @@ code or your `.scad` models.
 
 These run at build and test time and are not part of the published site, so they
 do not constrain the output: vite, @vitejs/plugin-react (MIT), TypeScript,
-Playwright (Apache-2.0), axe-core (MPL-2.0), pixelmatch (ISC), pngjs (MIT).
+Tailwind CSS + `@tailwindcss/vite` + `tw-animate-css` (MIT, generate the
+stylesheet), `@resvg/resvg-js` (MPL-2.0, rasterizes the PWA icons), Playwright
+(Apache-2.0), axe-core (MPL-2.0), pixelmatch (ISC), pngjs (MIT).

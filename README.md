@@ -18,17 +18,17 @@ npm run dev   # predev fetches the pinned OpenSCAD WASM and regenerates the sche
 ## Features
 
 - **3D preview** via three.js (OpenSCAD full/manifold render), showing per-object colour; mouse/touch orbit and zoom; colour-bearing 3MF and PNG export.
-- **Viewer controls** — optional map-style overlay buttons on the preview (zoom in, zoom out, reset view), off by default; enable with `"viewerControls": true`. See [docs/config.md](docs/config.md#configuration-reference).
+- **Viewer controls** — map-style overlay buttons on the preview (zoom in, zoom out, reset view, plus a fullscreen toggle in a browser tab), shown once a render succeeds. Mouse/touch orbit and zoom work regardless.
 - **Parameter form** generated from OpenSCAD Customizer syntax; never drifts from the design.
 - **Conditional parameters** — `// @showIf <expr>` hides irrelevant controls. See [docs/annotations.md](docs/annotations.md).
 - **Collapsible groups** — `// @collapsed` above a section header starts it folded. See [docs/annotations.md](docs/annotations.md).
-- **Presets** — searchable picker with Recent / Bundled / Yours sections; save/load in the browser; bundled read-only presets per design; import/export OpenSCAD `parameterSets` JSON.
+- **Presets** — a picker with **Bundled** (read-only, shipped per design) and **Yours** (saved in the browser) sections; save the current parameters as a named preset. Bundled presets use OpenSCAD's `parameterSets` JSON format, so they round-trip with the desktop Customizer.
 - **Responsive UI** — full-bleed 3D canvas with a docked, resizable parameter panel on desktop and a persistent, detented bottom sheet on mobile. Built on [shadcn/ui](https://ui.shadcn.com/) (Radix primitives + Tailwind v4) over the existing AA-tuned colour tokens.
 - **PWA** — installable and usable offline after first visit; the service worker precaches the shell, WASM and runtime assets. The install affordance is demoted: it appears only when the browser offers it, plus a one-time post-export hint — never a standing button. A persistent offline indicator and a reload toast (on a new deploy) keep state clear. Build-time generated icons (incl. a maskable icon and iOS launch screens) and, on Android, per-design app shortcuts. See [docs/config.md](docs/config.md#ui-behaviour--pwa).
 - **Persistent user files** — uploaded fonts, SVGs and other referenced files are stored in IndexedDB and re-applied on next visit.
 - **Light/dark theme** — follows OS by default; toggled in the header; persisted.
 - **Accessibility** — WCAG 2.1 AA: keyboard-trapped modals, visible focus rings, live regions, `rem`-based font size, forced-colors support, 320 px reflow. axe-core smoke test fails on any serious/critical violation.
-- **Notices & log** — OpenSCAD `echo` notices, warnings and `assert` failures are parsed into an **Output console** (a count badge by the status dot opens it); the raw log sits one tab over. Config-driven notice categories become coloured badges. See [docs/config.md](docs/config.md#notice-badges-notices).
+- **Notices & log** — OpenSCAD `echo` notices, warnings and `assert` failures are parsed into an **Output console**, opened from the **Output** button in the action row (it also auto-opens the first time a render surfaces a notice or assert). Its Notices tab lists them with per-category coloured count badges; the raw log sits one tab over. See [docs/config.md](docs/config.md#notice-badges-notices).
 - **Share & export** — design, non-default parameters, and selected preset are encoded in the URL hash. On devices that support the Web Share API, the Share button and the model export hand off to the native share sheet (otherwise: copy link / download a colour-bearing 3MF or PNG).
 - **Auto-render with brake** — re-renders after a debounce. Designs flagged `heavy` start in manual mode. Any render slower than ~6 s auto-pauses live updates.
 - **Import file** — optional `fileImport` config adds an upload button for non-bundled files (fonts mounted for OpenSCAD; SVGs/data files referenceable in designs via `import()`/`surface()`). See [docs/config.md](docs/config.md#import-file-fileimport).
@@ -123,6 +123,6 @@ Serve `.wasm` files with `Content-Type: application/wasm`.
 
 ScadPub source code: **MIT** (see [LICENSE](LICENSE)).
 
-Bundled third-party components: React and three.js (MIT), Liberation fonts (OFL-1.1), OpenSCAD-WASM (GPL-2.0-or-later). ScadPub invokes OpenSCAD-WASM as a separate WebAssembly module; its GPL applies only to that component. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) and the in-app **ⓘ** panel (`src/lib/licenses.ts`).
+Bundled third-party components include React, three.js, and the shadcn/ui stack (Radix UI, lucide-react, sonner, and small Tailwind helpers) — MIT, except lucide-react (ISC) and class-variance-authority (Apache-2.0); the Liberation fonts (OFL-1.1); and OpenSCAD-WASM (GPL-2.0-or-later). ScadPub invokes OpenSCAD-WASM as a separate WebAssembly module; its GPL applies only to that component. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for the full list, and the in-app **ⓘ** panel (`src/lib/licenses.ts`) for the core attributions.
 
 The `.scad` files you bundle are input data to OpenSCAD, not a derivative of it.

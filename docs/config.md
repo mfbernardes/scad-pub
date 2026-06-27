@@ -95,8 +95,10 @@ A consumer project can recolour the whole app from its config with the optional
 ```
 
 - Each key is a CSS token from the table below, **without** the leading `--`.
-- Each value is any plain CSS colour (`#rrggbb`, `rgb()/rgba()`, `hsl()/hsla()`, a
-  named colour). Values containing `;`/`{`/`}` are rejected so a config can't break
+- Each value is a plain CSS value. For the colour tokens that's a colour
+  (`#rrggbb`, `rgb()/rgba()`, `hsl()/hsla()`, a named colour); the design tokens
+  take their own units (a length for `radius`/`radius-sm`, a `box-shadow` for
+  `elevation`). Values containing `;`/`{`/`}` are rejected so a config can't break
   the generated stylesheet.
 - `light` and `dark` are independent; omit either to leave that theme at its
   default, and omit any token to keep its built-in value.
@@ -118,7 +120,8 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
   --accent-solid: #2f55ff;
   --on-accent: #ffffff;
   /* --bg, --panel, --panel-2, --line, --text, --muted, --focus, --link, --warn,
-     --code-bg, --overlay, --viewer-bg/-grid/-grid-2, --viewer-model */
+     --code-bg, --overlay, --glass-bg, --glass-border, --elevation,
+     --radius, --radius-sm, --viewer-bg/-grid/-grid-2, --viewer-model */
 }
 :root[data-theme="light"] {
   --accent: #1d4ed8;
@@ -138,6 +141,11 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--focus` | keyboard focus ring |
 | `--link` | hyperlinks |
 | `--warn` | warning text/icons |
+| `--code-bg` | code and log backgrounds (output console, inline code) |
+| `--overlay` | modal/dialog scrim backdrop |
+| `--glass-bg` / `--glass-border` | translucent "glass" surfaces: command bar, sheets, viewer HUD |
+| `--elevation` | drop shadow on raised surfaces (a `box-shadow`, not a colour) |
+| `--radius` / `--radius-sm` | corner radius, base and small (a length, not a colour) |
 | `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid |
 | `--viewer-model` | rendered model material colour |
 
@@ -262,7 +270,7 @@ echo("tag: alert: the label text is tall and may overflow the plate");
 echo("tag: note: the label is engraved into the plate rather than raised");
 ```
 
-`notices` is the build-time list of marker categories to recognise. Each matched echo becomes a friendly message above the log (with the marker stripped: *"tag: the label text is tall and may overflow the plate"*) and increments a coloured count badge on the panel header.
+`notices` is the build-time list of marker categories to recognise. Each matched echo becomes a friendly message in the console's **Notices** tab (with the marker stripped: *"tag: the label text is tall and may overflow the plate"*) and increments a coloured count badge on that tab.
 
 ```jsonc
 {
