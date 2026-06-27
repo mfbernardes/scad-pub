@@ -8,7 +8,7 @@
 // then L2, then the worker; a successful worker render is written back to both.
 // Both tiers share one content-stable key (design + sorted defines + user-file
 // signature + CACHE_VERSION), so hits survive reloads.
-import { CACHE_VERSION, createStlCache } from "../lib/stlCache";
+import { CACHE_VERSION, MB, createStlCache } from "../lib/stlCache";
 import type { StlCacheStore, StoredStl } from "../lib/stlCache";
 import type { RenderRequest, RenderResult } from "./types";
 
@@ -25,7 +25,6 @@ interface Pending {
 }
 
 const DEFAULT_CACHE_SIZE = 16;
-const MB = 1024 * 1024;
 
 interface CacheOptions {
   maxEntries: number;

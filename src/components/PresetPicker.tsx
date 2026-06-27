@@ -6,6 +6,7 @@ import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import { deletePreset, loadPreset, savePreset } from "../lib/presets";
 import { Button } from "./ui/button";
+import { IconButton } from "./IconButton";
 import { Input } from "./ui/input";
 import { X as XIcon } from "lucide-react";
 
@@ -171,9 +172,9 @@ export function PresetPicker({
       <div className="preset-picker-popover__header">
         <span className="preset-picker-popover__title">Presets</span>
         {onClose && (
-          <button className="icon-btn" onClick={onClose} aria-label="Close presets">
+          <IconButton label="Close presets" onClick={onClose}>
             <XIcon size={16} />
-          </button>
+          </IconButton>
         )}
       </div>
       {content}
