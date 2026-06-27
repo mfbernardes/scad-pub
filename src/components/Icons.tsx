@@ -29,22 +29,6 @@ export const DownloadIcon = ({ size = 18 }: IconProps) => (
   </svg>
 );
 
-export const UploadIcon = ({ size = 18 }: IconProps) => (
-  <svg {...base(size)}>
-    <path d="M12 21V9" />
-    <path d="M7 14l5-5 5 5" />
-    <path d="M5 3h14" />
-  </svg>
-);
-
-export const SaveIcon = ({ size = 18 }: IconProps) => (
-  <svg {...base(size)}>
-    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
-    <path d="M17 21v-8H7v8" />
-    <path d="M7 3v5h8" />
-  </svg>
-);
-
 export const TrashIcon = ({ size = 18 }: IconProps) => (
   <svg {...base(size)}>
     <path d="M3 6h18" />
@@ -171,53 +155,12 @@ export const XIcon = ({ size = 18 }: IconProps) => (
   </svg>
 );
 
-export const MoreIcon = ({ size = 18 }: IconProps) => (
-  <svg {...base(size)}>
-    <circle cx="12" cy="5" r="1" fill="currentColor" stroke="none" />
-    <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
-    <circle cx="12" cy="19" r="1" fill="currentColor" stroke="none" />
-  </svg>
-);
-
 export const MaximizeIcon = ({ size = 18 }: IconProps) => (
   <svg {...base(size)}>
     <path d="M8 3H5a2 2 0 0 0-2 2v3" />
     <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
     <path d="M3 16v3a2 2 0 0 0 2 2h3" />
     <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
-  </svg>
-);
-
-export const PanelLeftIcon = ({ size = 18 }: IconProps) => (
-  <svg {...base(size)}>
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <path d="M9 3v18" />
-  </svg>
-);
-
-export const WifiOffIcon = ({ size = 18 }: IconProps) => (
-  <svg {...base(size)}>
-    <path d="M2 2l20 20" />
-    <path d="M8.5 16.5a5 5 0 0 1 7 0" />
-    <path d="M5 12.9A10 10 0 0 1 15.8 10" />
-    <path d="M19 10.1A10 10 0 0 1 21 12" />
-    <path d="M12 20h.01" />
-  </svg>
-);
-
-export const StarIcon = ({ size = 18 }: IconProps) => (
-  <svg {...base(size)}>
-    <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
-  </svg>
-);
-
-export const StarFilledIcon = ({ size = 18 }: IconProps) => (
-  <svg {...base(size)}>
-    <path
-      d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"
-      fill="currentColor"
-      stroke="none"
-    />
   </svg>
 );
 
