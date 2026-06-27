@@ -15,23 +15,40 @@ export type SheetDetent = "peek" | "half" | "full";
 
 const DETENT_ORDER: SheetDetent[] = ["peek", "half", "full"];
 // Slightly above 50% to clear browser chrome at the bottom.
-const HALF_VH_RATIO = 0.52;
+export const HALF_VH_RATIO = 0.52;
 // Movement (px) past which a pointer interaction counts as a drag, not a tap.
 const DRAG_THRESHOLD = 6;
 
 function halfH(inset: number) { return Math.round((window.innerHeight - inset) * HALF_VH_RATIO); }
 function fullH(inset: number) { return window.innerHeight - inset; }
 
+/** Pixel height of a detent — shared with AppShell so it can sit the output
+ *  console just above the sheet. */
+export function detentHeight(
+  detent: SheetDetent,
+  bottomInset: number,
+  peekHeight: number,
+  innerHeight: number
+): number {
+  if (detent === "peek") return peekHeight;
+  if (detent === "half") return Math.round((innerHeight - bottomInset) * HALF_VH_RATIO);
+  return innerHeight - bottomInset;
+}
+
 interface Props {
   children: (detent: SheetDetent, expand: () => void) => ReactNode;
+  /** Current detent (controlled by the parent). */
+  detent: SheetDetent;
+  onDetentChange: (d: SheetDetent) => void;
   /** Height in px of the "Peek" state (handle + header row). */
   peekHeight?: number;
   /** Height in px of any fixed content below the sheet (e.g. mobile footer). */
   bottomInset?: number;
 }
 
-export function BottomSheet({ children, peekHeight = 72, bottomInset = 0 }: Props) {
-  const [detent, setDetent] = useState<SheetDetent>("peek");
+export function BottomSheet({ children, detent, onDetentChange, peekHeight = 72, bottomInset = 0 }: Props) {
+  // Detent is controlled by the parent; setDetent forwards to it.
+  const setDetent = onDetentChange;
   const dragStart = useRef<{ y: number; height: number } | null>(null);
   const dragPointerId = useRef<number | null>(null);
   // Whether the current interaction moved enough to be a drag (vs a tap).

@@ -2,7 +2,7 @@
 //   Desktop (≥ 860px): CommandBar + docked ParamPanel + ActionCluster + ViewerHUD
 //   Mobile (< 860px):  full-bleed viewer + top bar + BottomSheet + fixed footer
 // All state/logic stays in App.tsx; this is a pure view extraction.
-import { lazy, memo, Suspense, useCallback, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
@@ -21,7 +21,7 @@ import { ParamPanel } from "./ParamPanel";
 import { ActionCluster } from "./ActionCluster";
 import { ViewerHUD } from "./ViewerHUD";
 import { OutputConsole } from "./OutputConsole";
-import { BottomSheet } from "./BottomSheet";
+import { BottomSheet, detentHeight, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { AdvisoryBadge } from "./AdvisoryBadge";
 import { DesignPicker } from "./DesignPicker";
@@ -35,6 +35,7 @@ import { HelpIcon, InfoIcon, PlayIcon, TerminalIcon, LinkIcon, DownloadIcon, Ima
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { assetUrl } from "../lib/assetUrl";
 import { useIsMobile } from "../lib/useIsMobile";
+import { useViewportHeight } from "../lib/useViewportHeight";
 
 const Viewer = lazy(() =>
   import("./Viewer").then((m) => ({ default: m.Viewer }))
@@ -118,9 +119,15 @@ export const AppShell = memo(function AppShell({
   // Only the active layout mounts a Viewer (the other layout is CSS-hidden), so
   // we never run two three.js renderers / RAF loops / STL parses at once.
   const isMobile = useIsMobile();
+  const viewportH = useViewportHeight();
   const [outputOpen, setOutputOpen] = useState(
     schema.ui?.outputDefault === "open"
   );
+  const outputOpenRef = useRef(outputOpen);
+  outputOpenRef.current = outputOpen;
+  // Sheet detent lives here so the output console can sit just above the sheet
+  // and so opening the console can shrink a full sheet to make room.
+  const [sheetDetent, setSheetDetent] = useState<SheetDetent>("peek");
 
   const ui = schema.ui ?? {};
   const panelSide = ui.panelSide ?? "left";
@@ -144,7 +151,35 @@ export const AppShell = memo(function AppShell({
     if (url) onSavePng(url);
   }, [isMobile, onSavePng]);
 
-  const toggleOutput = useCallback(() => setOutputOpen((o) => !o), []);
+  // A full sheet would cover the console — drop it to half to make room.
+  const reduceSheetIfFull = useCallback(() => {
+    setSheetDetent((d) => (d === "full" ? "half" : d));
+  }, []);
+
+  const openOutput = useCallback(() => {
+    setOutputOpen(true);
+    reduceSheetIfFull();
+  }, [reduceSheetIfFull]);
+
+  const toggleOutput = useCallback(() => {
+    if (outputOpenRef.current) setOutputOpen(false);
+    else openOutput();
+  }, [openOutput]);
+
+  // Auto-open the console on mobile when a render surfaces notices/warnings/
+  // asserts (only on the empty→non-empty transition, so a manual close sticks).
+  const hadDiagnostics = useRef(false);
+  useEffect(() => {
+    const has = diagnostics.length > 0;
+    if (isMobile && has && !hadDiagnostics.current) openOutput();
+    hadDiagnostics.current = has;
+  }, [diagnostics, isMobile, openOutput]);
+
+  // Place the mobile console just above the sheet's current top.
+  const mobileConsoleStyle = {
+    top: "auto" as const,
+    bottom: MOBILE_FOOTER_HEIGHT + detentHeight(sheetDetent, MOBILE_FOOTER_HEIGHT, PEEK_HEIGHT, viewportH),
+  };
 
   return (
     <div className="app-shell">
@@ -310,17 +345,20 @@ export const AppShell = memo(function AppShell({
           </div>
         </div>
 
-        {/* Output console (mobile — floats above sheet) */}
+        {/* Output console (mobile — sits just above the bottom sheet) */}
         <OutputConsole
           log={log}
           diagnostics={diagnostics}
           badges={badges}
           open={outputOpen}
           onClose={() => setOutputOpen(false)}
+          style={mobileConsoleStyle}
         />
 
         {/* Persistent bottom sheet */}
         <BottomSheet
+          detent={sheetDetent}
+          onDetentChange={setSheetDetent}
           peekHeight={PEEK_HEIGHT}
           bottomInset={MOBILE_FOOTER_HEIGHT}
         >

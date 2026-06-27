@@ -805,14 +805,13 @@ button:disabled { cursor: default; }
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(env(safe-area-inset-top, 0px) + 3rem);
-  bottom: auto;
+  /* top/bottom set inline so it sits just above the sheet's current top */
   z-index: 25;
   max-height: 45vh;
   box-shadow: var(--elevation);
-  border-top: none;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0 0 var(--radius) var(--radius);
+  border-top: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════

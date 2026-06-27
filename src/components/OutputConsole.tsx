@@ -1,7 +1,7 @@
 // OutputConsole.tsx — bottom drawer with Notices + Log tabs (shadcn/ui Tabs).
 // Opened via the AdvisoryBadge or the Output button. Diagnostics/badges are
 // computed once by the parent (AppShell) and passed in.
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
@@ -17,15 +17,17 @@ interface Props {
   badges: BadgeCount[];
   open: boolean;
   onClose: () => void;
+  /** Inline positioning (mobile sits it just above the bottom sheet). */
+  style?: CSSProperties;
 }
 
-export function OutputConsole({ log, diagnostics, badges, open, onClose }: Props) {
+export function OutputConsole({ log, diagnostics, badges, open, onClose, style }: Props) {
   const [tab, setTab] = useState("advisories");
 
   if (!open) return null;
 
   return (
-    <div className="output-console" role="region" aria-label="OpenSCAD output">
+    <div className="output-console" role="region" aria-label="OpenSCAD output" style={style}>
       <Tabs value={tab} onValueChange={setTab} className="gap-0">
         <div className="output-console__header">
           <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
