@@ -83,18 +83,26 @@ emblem_x = both ? -(width / 2) + emblem_size / 2 + 6 : 0;
 
 // --- Configurator notices --------------------------------------------------
 // Non-fatal hints surfaced in the app's "OpenSCAD output" panel as count
-// badges. The app matches the `: <marker>:` echo convention, so the `advisory`
+// badges. The app matches the `: <marker>:` echo convention, so the `alert`
 // and `note` markers here line up with the `notices` categories configured in
 // scadpub.config.json. Each fires only in a specific, parameter-driven case, so
 // you can trigger them from the form:
-//   • raise "Font height" past half the tag height       -> an advisory
-//   • widen the emblem past half the tag width           -> an advisory
+//   • raise "Font height" past half the tag height       -> an alert
+//   • widen the emblem past half the tag width           -> an alert
 //   • enable "Carve the text into the plate"             -> a note
 //   • enlarge the hanging hole past a quarter the height -> a note
+// The first two below fire for the shipped defaults, so the OpenSCAD-output
+// badges are populated out of the box (an amber alert + a blue note):
+//   • showing both an emblem and a label at once          -> an alert
+//   • including a hanging hole                             -> a note
+if (show_emblem && label != "")
+  echo("tag: alert: showing both an emblem and a label — check they don't crowd the plate");
+if (hole)
+  echo("tag: note: a hanging hole is included; turn off \"Add a hole\" for a solid tag");
 if (label != "" && !engrave_text && text_size > height / 2)
-  echo("tag: advisory: the label text is tall relative to the tag and may overflow the plate");
+  echo("tag: alert: the label text is tall relative to the tag and may overflow the plate");
 if (show_emblem && emblem_size > width / 2)
-  echo("tag: advisory: the emblem is wide relative to the tag and may reach the edges");
+  echo("tag: alert: the emblem is wide relative to the tag and may reach the edges");
 if (label != "" && engrave_text)
   echo("tag: note: the label is engraved into the plate rather than raised");
 if (hole && hole_diameter > height / 4)

@@ -22,7 +22,6 @@ import {
   parseFileImport,
   parsePopup,
   parseFormat,
-  parseViewerControls,
   parseNotices,
 } from "../scripts/gen-schema.mjs";
 
@@ -257,6 +256,75 @@ test("public precache manifest lists generated runtime assets", () => {
   assert.ok(!precache.includes("wasm/openscad.wasm"));
 });
 
+test("manifest carries the PWA install fields (id, launch_handler, maskable icon)", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  generate({
+    configPath: join(FIXTURES, "widget.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  assert.equal(manifest.id, "/scadpub/");
+  assert.deepEqual(manifest.launch_handler, { client_mode: "navigate-existing" });
+  assert.ok(
+    manifest.icons.some((i) => i.purpose === "maskable" && i.type === "image/png"),
+    "a maskable PNG icon must be present"
+  );
+  // Single-design configs derive no shortcuts.
+  assert.equal(manifest.shortcuts, undefined);
+});
+
+test("config shortcuts are validated and folded into the manifest", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  generate({
+    configPath: join(FIXTURES, "widget-shortcuts.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  // The well-formed shortcut is kept; the entry missing a url is dropped.
+  assert.deepEqual(manifest.shortcuts, [
+    { name: "Open help", short_name: "Help", url: "./#help" },
+  ]);
+});
+
+test("rejects a PWA colour that isn't a safe CSS colour string", () => {
+  // themeColor/themeColorLight/backgroundColor are interpolated into generated
+  // SVG/HTML, so they must pass the same COLOR_VALUE_RE as every other colour.
+  assert.throws(() => run("widget-bad-color.config.json"), /'themeColor' must be a CSS colour/);
+});
+
+test("rejects a design id with unsafe characters", () => {
+  assert.throws(() => run("widget-bad-id.config.json"), /design id .* must match/);
+});
+
+test("iOS splash images are generated and described in the schema", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const schema = generate({
+    configPath: join(FIXTURES, "widget.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  // Resvg is a devDependency, so splashes are generated in this test env.
+  assert.ok(Array.isArray(schema.appleSplash) && schema.appleSplash.length > 0);
+  for (const sp of schema.appleSplash) {
+    assert.match(sp.media, /orientation: portrait/);
+    assert.ok(existsSync(join(out, "public", sp.href)), `${sp.href} should exist on disk`);
+  }
+  // And every splash is precached for offline launch.
+  const precache = JSON.parse(
+    readFileSync(join(out, "public", "precache-manifest.json"), "utf-8")
+  );
+  for (const sp of schema.appleSplash) assert.ok(precache.includes(sp.href));
+});
+
 test("regenerating cleans the scad output dir so removed files don't linger", () => {
   // outScadDir is entirely generated; a file from a prior config/build must not
   // survive a regenerate (otherwise a removed/renamed design could still ship).
@@ -313,18 +381,38 @@ test("format is emitted to the schema and folded into renderHash", () => {
   assert.notEqual(a.renderHash, b.renderHash);
 });
 
-test("viewerControls defaults to false, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseViewerControls(undefined), false);
-  assert.equal(parseViewerControls(null), false);
-  assert.equal(parseViewerControls(true), true);
-  assert.equal(parseViewerControls(false), false);
-  assert.throws(() => parseViewerControls("yes"), /'viewerControls' must be a boolean/);
-  assert.throws(() => parseViewerControls(0), /'viewerControls' must be a boolean/);
+test("renderHash is stable for an unchanged config (so a rebuild doesn't bust the cache)", () => {
+  // The whole point of renderHash is to invalidate persisted geometry only when
+  // a render input actually changes. A non-deterministic hash would needlessly
+  // re-render everything on every deploy — pin determinism here.
+  assert.equal(run("widget.config.json").schema.renderHash, run("widget.config.json").schema.renderHash);
 });
 
-test("viewerControls defaults to false in the emitted schema", () => {
-  const { schema } = run("widget.config.json");
-  assert.equal(schema.viewerControls, false);
+test("renderHash folds in the render features so an --enable change invalidates it", () => {
+  // widget-features is widget plus one extra OpenSCAD feature; features are
+  // passed as --enable flags and change the geometry, so the hash must move.
+  const a = run("widget.config.json").schema;
+  const b = run("widget-features.config.json").schema;
+  assert.deepEqual(a.features, ["textmetrics"]);
+  assert.deepEqual(b.features, ["textmetrics", "lazy-union"]);
+  assert.notEqual(a.renderHash, b.renderHash);
+});
+
+test("renderHash folds in the bundled font set (glyph outlines drive text geometry)", () => {
+  // widget-fonts swaps Foo.ttf for Bar.ttf; a different font yields different
+  // text() geometry, so swapping it must invalidate cached renders. Note the
+  // font set only enters the hash in a real build (outPublicDir present) — the
+  // bare run() helper omits it — so generate with a public dir here.
+  const hashWithFonts = (config) => {
+    const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+    return generate({
+      configPath: join(FIXTURES, config),
+      outSchemaDir: join(out, "schema"),
+      outScadDir: join(out, "public", "scad"),
+      outPublicDir: join(out, "public"),
+    }).renderHash;
+  };
+  assert.notEqual(hashWithFonts("widget.config.json"), hashWithFonts("widget-fonts.config.json"));
 });
 
 test("notices are off by default (omitted -> [])", () => {

@@ -29,11 +29,6 @@ SOFTWARE.`;
 const mit = (copyright: string) =>
   `MIT License\n\n${copyright}\n\n${MIT_BODY}`;
 
-// The license-entry shape lives in the schema types (SoftwareLicense) so the
-// built-in attributions below and the consumer-appended ones from the config
-// share one definition. Kept exported under the original name for callers.
-export type LicenseEntry = SoftwareLicense;
-
 export const LICENSES: SoftwareLicense[] = [
   {
     name: "ScadPub",

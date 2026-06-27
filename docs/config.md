@@ -24,10 +24,24 @@
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
   "fileImport": true,             // optional "Import file" button for user-supplied files
   "popup": { "header": "…", "body": "…", "mode": "once" },  // optional notice dialog on load
-  "viewerControls": true,         // overlay zoom/reset buttons on the preview; default false
+  "ui": {                         // optional UI behaviour (see "UI behaviour" below)
+    "panelSide": "left",          // desktop dock edge: "left" | "right"
+    "panelDefault": "open",       // first-load desktop panel: "open" | "collapsed"
+    "outputDefault": "closed",    // OpenSCAD output console: "closed" | "open"
+    "install": "auto"             // PWA install affordance: "auto" | "off"
+  },
+  "themeColorLight": "#ffffff",   // light-scheme browser-chrome colour (default "#ffffff")
+  "categories": ["productivity", "graphics"],  // optional PWA manifest categories
+  "iconMaskable": "branding/icon-maskable.svg", // optional maskable icon (defaults to `icon`)
+  "screenshots": [                // optional, for the Android rich install UI
+    { "src": "shot-narrow.png", "sizes": "390x844", "form_factor": "narrow" }
+  ],
+  "shortcuts": [                  // optional app shortcuts (auto-derived per design if omitted)
+    { "name": "Open Tag", "short_name": "Tag", "url": "./#d=tag" }
+  ],
   "notices": [                    // design-defined log markers -> count badges (off by default)
-    { "marker": "advisory", "label": "advisories", "color": "#e0a458" },
-    { "marker": "note",     "label": "notes",      "color": "#86a9ff" }
+    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
+    { "marker": "note",  "label": "notes",  "color": "#86a9ff" }
   ],
   "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
   "licenses": [ { "name": "…", "license": "…", … } ],  // optional extra open-source notices (appended)
@@ -47,13 +61,13 @@
 - **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
 - **`fileImport`** — see [Import file button](#import-file-fileimport).
 - **`popup`** — optional notice dialog shown over the app on load. See [Popup notice](#popup-notice-popup).
-- **`viewerControls`** — boolean, default `false`. Set to `true` to show the map-style overlay buttons on the 3D preview (zoom in, zoom out, reset view). When off, orbit/zoom by mouse or touch still works.
+- **`ui`** / PWA manifest keys — see [UI behaviour & PWA](#ui-behaviour--pwa).
 - **`notices`** — see [Notice badges](#notice-badges-notices).
 - **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
 - Missing `source`, `assets`, design, or `logo` paths fail the build with a clear error.
-- **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the dropdown.
+- **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.
 
 ## Title & logo
 
@@ -81,8 +95,10 @@ A consumer project can recolour the whole app from its config with the optional
 ```
 
 - Each key is a CSS token from the table below, **without** the leading `--`.
-- Each value is any plain CSS colour (`#rrggbb`, `rgb()/rgba()`, `hsl()/hsla()`, a
-  named colour). Values containing `;`/`{`/`}` are rejected so a config can't break
+- Each value is a plain CSS value. For the colour tokens that's a colour
+  (`#rrggbb`, `rgb()/rgba()`, `hsl()/hsla()`, a named colour); the design tokens
+  take their own units (a length for `radius`/`radius-sm`, a `box-shadow` for
+  `elevation`). Values containing `;`/`{`/`}` are rejected so a config can't break
   the generated stylesheet.
 - `light` and `dark` are independent; omit either to leave that theme at its
   default, and omit any token to keep its built-in value.
@@ -104,7 +120,8 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
   --accent-solid: #2f55ff;
   --on-accent: #ffffff;
   /* --bg, --panel, --panel-2, --line, --text, --muted, --focus, --link, --warn,
-     --code-bg, --overlay, --viewer-bg/-grid/-grid-2, --viewer-model */
+     --code-bg, --overlay, --glass-bg, --glass-border, --elevation,
+     --radius, --radius-sm, --viewer-bg/-grid/-grid-2, --viewer-model */
 }
 :root[data-theme="light"] {
   --accent: #1d4ed8;
@@ -124,6 +141,11 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--focus` | keyboard focus ring |
 | `--link` | hyperlinks |
 | `--warn` | warning text/icons |
+| `--code-bg` | code and log backgrounds (output console, inline code) |
+| `--overlay` | modal/dialog scrim backdrop |
+| `--glass-bg` / `--glass-border` | translucent "glass" surfaces: command bar, sheets, viewer HUD |
+| `--elevation` | drop shadow on raised surfaces (a `box-shadow`, not a colour) |
+| `--radius` / `--radius-sm` | corner radius, base and small (a length, not a colour) |
 | `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid |
 | `--viewer-model` | rendered model material colour |
 
@@ -161,8 +183,8 @@ the app's own styles, so it can override anything.
 your rules win on source order — no specificity hacks needed.
 
 > **This is an unsupported, advanced escape hatch — use `colors` first.** Unlike
-> the token map, `extraCss` targets internal class names (`.sidebar`,
-> `.param-group`, `.preview-actions .primary`, …). Those are **not a stable API**:
+> the token map, `extraCss` targets internal class names (`.param-panel`,
+> `.param-group`, `.action-cluster`, …). Those are **not a stable API**:
 > a future refactor can rename or restructure them and silently break your
 > overrides. It is also **outside the accessibility guarantees** — you can hide
 > focus rings, break contrast, or disturb layout. If you use it, pin the ScadPub
@@ -219,31 +241,51 @@ Show a one-off notice dialog over the app on load — a welcome message, a usage
 
 The remembered state is namespaced by the configurator's `id` and keyed by the popup's content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It's purely informational and doesn't affect renders, so it never invalidates the geometry cache.
 
+## UI behaviour & PWA
+
+### `ui`
+An optional object (validated as a unit; defaults applied when absent). None of these affect geometry, so they never invalidate the render cache.
+
+- **`panelSide`** — `"left"` (default) or `"right"`: which edge the desktop parameter panel docks against.
+- **`panelDefault`** — `"open"` (default) or `"collapsed"`: the first-load desktop panel state (the user's later choice persists per browser).
+- **`outputDefault`** — `"closed"` (default) or `"open"`: whether the OpenSCAD output console starts open.
+- **`install`** — `"auto"` (default) or `"off"`: when `"off"`, no PWA install affordance is offered even on browsers that support it.
+
+### PWA manifest
+
+`gen-schema` writes `public/manifest.webmanifest` (always including a `launch_handler` so an already-open install is reused rather than re-launched). When the optional `@resvg/resvg-js` rasterizer is installed it also rasterizes the `icon` SVG to PNGs (192/512, a 512 maskable, and a 180 `apple-touch-icon`) and generates the per-device iOS launch images (`apple-touch-startup-image`); without it the PNGs fall back to the SVG and the iOS splash images are skipped. The following keys feed the manifest:
+
+- **`themeColorLight`** — light-scheme `<meta name="theme-color">` (default `"#ffffff"`); the dark value comes from `themeColor`.
+- **`categories`** — optional array of [manifest categories](https://developer.mozilla.org/docs/Web/Manifest/categories).
+- **`iconMaskable`** — optional separate SVG (safe-zone padded) for the maskable icon; defaults to `icon`.
+- **`screenshots`** — optional `[{ src, sizes, form_factor }]` for the richer Android install UI (`form_factor`: `"wide"` or `"narrow"`).
+- **`shortcuts`** — optional `[{ name, short_name?, url }]` app shortcuts (Android long-press / desktop jump list). If omitted and the config has **more than one design**, a shortcut per design is derived automatically, deep-linking to it (`./#d=<id>`).
+
 ## Notice badges (`notices`)
 
 The collapsible **OpenSCAD output** panel below the preview can show count badges for non-fatal messages your designs emit. A design surfaces a message by `echo`-ing a string in the convention `"<context>: <marker>: <message>"`, where `<marker>` is any word **you** choose — there is nothing special about any particular marker. For example:
 
 ```scad
-echo("tag: advisory: the label text is tall and may overflow the plate");
+echo("tag: alert: the label text is tall and may overflow the plate");
 echo("tag: note: the label is engraved into the plate rather than raised");
 ```
 
-`notices` is the build-time list of marker categories to recognise. Each matched echo becomes a friendly message above the log (with the marker stripped: *"tag: the label text is tall and may overflow the plate"*) and increments a coloured count badge on the panel header.
+`notices` is the build-time list of marker categories to recognise. Each matched echo becomes a friendly message in the console's **Notices** tab (with the marker stripped: *"tag: the label text is tall and may overflow the plate"*) and increments a coloured count badge on that tab.
 
 ```jsonc
 {
   "notices": [
-    { "marker": "advisory", "label": "advisories", "color": "#e0a458" },
-    { "marker": "note",     "label": "notes",      "color": "#86a9ff" }
+    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
+    { "marker": "note",  "label": "notes",  "color": "#86a9ff" }
   ]
 }
 ```
 
 - **`marker`** — required. The design-defined word, matched as `: <marker>:` inside an echo (case-insensitive). The first configured category that matches a line claims it.
-- **`label`** — optional badge noun (e.g. `"advisories"`). Defaults to the `marker`.
+- **`label`** — optional badge noun (e.g. `"alerts"`). Defaults to the `marker`.
 - **`color`** — optional badge fill, a plain CSS colour (hex, `rgb()/hsl()`, or a named colour). For `#rgb`/`#rrggbb` the badge text auto-switches between black and white to stay legible; other colour forms keep the default badge text, so their contrast is your responsibility (as with [`colors`](#theme--colour-scheme)). Omit to use the default accent badge styling.
 
-**Off by default:** omit `notices` (or set it to `[]`) and no marker categories are recognised — design echoes appear only in the raw log. The bundled example config (`scadpub.config.json`) opts in with `advisory` and `note` categories, and the example `tag` design echoes them in specific, parameter-driven situations so you can see the badges appear.
+**Off by default:** omit `notices` (or set it to `[]`) and no marker categories are recognised — design echoes appear only in the raw log. The bundled example config (`scadpub.config.json`) opts in with `alert` and `note` categories, and the example `tag` design echoes them in specific, parameter-driven situations so you can see the badges appear.
 
 > **Hardcoded, not configurable:** OpenSCAD's own `WARNING:` lines surface as warning messages, and `assert()` failures (`ERROR: Assertion …`) surface as a message **and** an `asserts` count badge. These work regardless of `notices`.
 

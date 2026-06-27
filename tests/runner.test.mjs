@@ -337,6 +337,23 @@ test("worker errors reject the active render and recover on the next render", as
   runner.dispose();
 });
 
+test("a worker message error rejects the active render and recovers next render", async () => {
+  // A structured-clone failure surfaces as onmessageerror; it must reject the
+  // in-flight render (not hang) and leave the runner able to render again.
+  const runner = new OpenSCADRunner();
+  const w0 = newest();
+  const render = runner.render({ design: "x", defines: {} });
+  w0.emitMessageError();
+  await assert.rejects(render, /message error/);
+
+  const next = runner.render({ design: "y", defines: {} });
+  const w1 = newest();
+  assert.notStrictEqual(w1, w0);
+  w1.emit(ok(w1.last.id));
+  assert.equal((await next).ok, true);
+  runner.dispose();
+});
+
 test("the ready signal fires onReady exactly once", () => {
   let ready = 0;
   const runner = new OpenSCADRunner({ onReady: () => ready++ });

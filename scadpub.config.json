@@ -15,12 +15,13 @@
     "body": "Configure an OpenSCAD design in your browser and export a ready-to-print model — everything runs locally.\n\nScadPub is open source: see the [project on GitHub](https://github.com/mfbernardes/scad-pub).",
     "mode": "dismissible"
   },
-  "viewerControls": true,
+  "ui": { "install": "off" },
   "notices": [
-    { "marker": "advisory", "label": "advisories", "color": "#e0a458" },
+    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
     { "marker": "note", "label": "notes", "color": "#86a9ff" }
   ],
   "designs": [
-    { "id": "tag", "label": "Tag" }
+    { "id": "tag", "label": "Tag" },
+    { "id": "coin", "label": "Coin" }
   ]
 }

@@ -3,9 +3,10 @@
 // config's `help`, so no design-specific copy is baked into the app. A config
 // may group its guide into many tabs (`help.tabs`); without tabs it renders as
 // a single pane exactly as before.
-import { useRef, useState, type KeyboardEvent } from "react";
 import { Modal } from "./Modal";
 import { Markdown } from "./Markdown";
+import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
+import { cn } from "../lib/utils";
 import {
   DEFAULT_HELP,
   type HelpContent,
@@ -38,63 +39,27 @@ function HelpSections({
   );
 }
 
-/** Tab strip + active panel, following the ARIA tabs pattern (roving tabindex,
- *  arrow/Home/End keyboard navigation). */
+/** Tab strip + panels, built on the shared Radix Tabs primitive (which provides
+ *  the full ARIA tabs pattern — roving tabindex, arrow/Home/End nav — for free). */
 function HelpTabs({ tabs }: { tabs: HelpTab[] }) {
-  const [active, setActive] = useState(0);
-  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  const onKeyDown = (e: KeyboardEvent) => {
-    const last = tabs.length - 1;
-    let next = active;
-    if (e.key === "ArrowRight") next = active === last ? 0 : active + 1;
-    else if (e.key === "ArrowLeft") next = active === 0 ? last : active - 1;
-    else if (e.key === "Home") next = 0;
-    else if (e.key === "End") next = last;
-    else return;
-    e.preventDefault();
-    setActive(next);
-    tabRefs.current[next]?.focus();
-  };
-
-  const cur = tabs[active];
   return (
-    <>
-      <div
-        className="help-tabs"
-        role="tablist"
+    <Tabs defaultValue="0" className="gap-0">
+      <TabsList
+        className="mx-4 mt-2 h-auto w-auto flex-wrap justify-start rounded-none border-0 border-b bg-transparent p-0"
         aria-label="Help topics"
-        onKeyDown={onKeyDown}
       >
         {tabs.map((t, i) => (
-          <button
-            key={i}
-            type="button"
-            role="tab"
-            id={`help-tab-${i}`}
-            aria-selected={i === active}
-            aria-controls={`help-panel-${i}`}
-            tabIndex={i === active ? 0 : -1}
-            className={i === active ? "help-tab active" : "help-tab"}
-            ref={(el) => {
-              tabRefs.current[i] = el;
-            }}
-            onClick={() => setActive(i)}
-          >
+          <TabsTrigger key={i} value={String(i)} className={cn(underlineTabTrigger, "px-3")}>
             {t.label}
-          </button>
+          </TabsTrigger>
         ))}
-      </div>
-      <div
-        className="modal-body help-body"
-        role="tabpanel"
-        id={`help-panel-${active}`}
-        aria-labelledby={`help-tab-${active}`}
-        tabIndex={0}
-      >
-        <HelpSections intro={cur.intro} sections={cur.sections} />
-      </div>
-    </>
+      </TabsList>
+      {tabs.map((t, i) => (
+        <TabsContent key={i} value={String(i)} className="modal-body help-body mt-0" tabIndex={0}>
+          <HelpSections intro={t.intro} sections={t.sections} />
+        </TabsContent>
+      ))}
+    </Tabs>
   );
 }
 

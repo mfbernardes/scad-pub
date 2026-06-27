@@ -174,6 +174,18 @@ export interface PopupNotice {
   mode: PopupMode;
 }
 
+/** Build-time UI behaviour overrides. None affect geometry (absent from renderHash). */
+export interface UiConfig {
+  /** Which edge the parameter panel docks to on desktop (default "left"). */
+  panelSide?: "left" | "right";
+  /** Whether the panel starts open or collapsed on desktop (default "open"). */
+  panelDefault?: "open" | "collapsed";
+  /** Whether the OpenSCAD output console starts open (default "closed"). */
+  outputDefault?: "closed" | "open";
+  /** Whether to offer PWA install affordance (default "auto"). */
+  install?: "auto" | "off";
+}
+
 export interface Schema {
   generatedFrom: string;
   /**
@@ -234,12 +246,6 @@ export interface Schema {
    */
   popup: PopupNotice | null;
   /**
-   * Whether the 3D preview shows its map-style overlay controls (zoom in/out and
-   * reset view). Build-time, from the config's `viewerControls` key; defaults to
-   * false. Set true to show them.
-   */
-  viewerControls: boolean;
-  /**
    * Config-driven notice categories surfaced on the OpenSCAD output panel. Each
    * is a design-defined marker plus its badge label and optional colour. Empty
    * (the default) when the config omits the `notices` key.
@@ -255,4 +261,11 @@ export interface Schema {
   /** Source-relative paths of the shared .scad dependency files to mount. */
   assets: string[];
   designs: Design[];
+  /** Build-time UI behaviour overrides (panel side, default state, etc.). */
+  ui?: UiConfig;
+  /** Light-mode theme color for `<meta name="theme-color">` (default "#ffffff"). */
+  themeColorLight?: string;
+  /** iOS standalone launch images (apple-touch-startup-image), generated when a
+   *  build-time rasterizer is available. Injected into index.html by vite. */
+  appleSplash?: { href: string; media: string }[];
 }

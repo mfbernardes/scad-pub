@@ -76,8 +76,15 @@ function retintAutoVertices(
 
 export const Viewer = forwardRef<
   ViewerHandle,
-  { stl: Uint8Array | null; theme: string; designId: string; presetId: string }
->(function Viewer({ stl, theme, designId, presetId }, ref) {
+  {
+    stl: Uint8Array | null;
+    theme: string;
+    designId: string;
+    presetId: string;
+    /** Whether a preset change reframes the camera (desktop) or keeps it (mobile). */
+    reframeOnPreset?: boolean;
+  }
+>(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true }, ref) {
   const mountRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<THREE.Object3D | null>(null);
   // The design+preset whose geometry is currently framed. A new model from the
@@ -149,6 +156,11 @@ export const Viewer = forwardRef<
     },
   }));
 
+  // Tracks whether the canvas is intersecting the viewport. Used to skip
+  // renderer.render() calls when the viewer is off-screen (e.g. bottom sheet
+  // at full detent, or a background tab), saving GPU/battery.
+  const visibleRef = useRef(true);
+
   // One-time scene setup.
   useEffect(() => {
     const mount = mountRef.current!;
@@ -181,10 +193,16 @@ export const Viewer = forwardRef<
     controls.enableDamping = true;
     controlsRef.current = controls;
 
+    const io = new IntersectionObserver(
+      ([entry]) => { visibleRef.current = entry.isIntersecting; },
+      { threshold: 0 }
+    );
+    io.observe(mount);
+
     let raf = 0;
     const animate = () => {
       controls.update();
-      renderer.render(scene, cam);
+      if (visibleRef.current) renderer.render(scene, cam);
       raf = requestAnimationFrame(animate);
     };
     animate();
@@ -203,6 +221,7 @@ export const Viewer = forwardRef<
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      io.disconnect();
       controls.dispose();
       renderer.dispose();
       mount.removeChild(renderer.domElement);
@@ -309,13 +328,14 @@ export const Viewer = forwardRef<
     const r = box.getBoundingSphere(new THREE.Sphere()).radius || 50;
     frameRadiusRef.current = r;
 
-    // Reframe when the design or preset changed (or this is the first model); a
-    // re-render from the *same* design+preset — a parameter tweak — keeps the
-    // user's current orbit/zoom so the view doesn't jump on every edit. designId
-    // and presetId are read fresh here rather than via the dep array: a preset
-    // change doesn't clear the old geometry, so reframing must wait for the new
-    // model to arrive (this effect) and use *its* bounds, not the stale ones.
-    const frameKey = `${designId}\n${presetId}`;
+    // Reframe when the design changed — and, on desktop (reframeOnPreset), when
+    // the preset changed too — or on the first model. A re-render from the same
+    // framing key (e.g. a parameter tweak, or a preset change on mobile) keeps
+    // the user's current orbit/zoom so the view doesn't jump. designId/presetId
+    // are read fresh here rather than via the dep array: a preset change doesn't
+    // clear the old geometry, so reframing must wait for the new model to arrive
+    // (this effect) and use *its* bounds, not the stale ones.
+    const frameKey = reframeOnPreset ? `${designId}\n${presetId}` : designId;
     if (framedKeyRef.current !== frameKey) {
       frameView(r);
       framedKeyRef.current = frameKey;

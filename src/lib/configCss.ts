@@ -14,6 +14,16 @@ export interface ConfigChrome {
   extraCss?: string | null;
 }
 
+// Safe shapes for an interpolated token name / colour value. The value set
+// mirrors gen-schema.mjs's COLOR_VALUE_RE; both exclude the structural
+// characters (`; { } < > " '`) that could end the declaration, close the rule,
+// or break out of the <style> element. gen-schema already validates the
+// config's `colors` before they reach designs.json, so this is defence-in-depth
+// that also keeps colorStyle safe when called standalone — any token whose name
+// or value falls outside these sets is dropped rather than emitted.
+const SAFE_NAME = /^[A-Za-z0-9_-]+$/;
+const SAFE_VALUE = /^[#a-zA-Z0-9 ,.()%/-]+$/;
+
 // A <style> block of the per-theme colour overrides, applied to :root (dark) and
 // :root[data-theme="light"]. The doubled `:root:root` bumps specificity above
 // index.css's own `:root` / `:root[data-theme="light"]` rules so the overrides
@@ -22,6 +32,7 @@ export function colorStyle(colors: ConfigChrome["colors"]): string {
   if (!colors) return "";
   const block = (sel: string, tokens?: Record<string, string>) => {
     const decls = Object.entries(tokens ?? {})
+      .filter(([k, v]) => SAFE_NAME.test(k) && SAFE_VALUE.test(v))
       .map(([k, v]) => `  --${k}: ${v};`)
       .join("\n");
     return decls ? `${sel} {\n${decls}\n}` : "";
@@ -41,8 +52,9 @@ export function colorStyle(colors: ConfigChrome["colors"]): string {
 // override the colour tokens) on source order alone. Returns "" when neither is
 // configured.
 export function headStyleInjection(chrome: ConfigChrome): string {
-  const link = chrome.extraCss
-    ? `<link rel="stylesheet" href="${chrome.extraCss}" />\n`
+  const safeHref = chrome.extraCss
+    ? chrome.extraCss.replace(/&/g, "&amp;").replace(/"/g, "&quot;")
     : "";
+  const link = safeHref ? `<link rel="stylesheet" href="${safeHref}" />\n` : "";
   return colorStyle(chrome.colors) + link;
 }
