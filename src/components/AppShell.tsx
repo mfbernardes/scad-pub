@@ -279,7 +279,7 @@ export const AppShell = memo(function AppShell({
             )}
           </div>
 
-          {/* Mobile top bar */}
+          {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
           <div className="mobile-top-bar">
             <span className="mobile-top-bar__brand">
               {schema.logo ? (
@@ -288,20 +288,22 @@ export const AppShell = memo(function AppShell({
                 schema.title
               )}
             </span>
-            {designs.length > 1 ? (
-              <div className="mobile-top-bar__design">
+            <div className="mobile-top-bar__center">
+              {designs.length > 1 ? (
                 <DesignPicker designs={designs} value={design.id} onChange={onDesignChange} />
-              </div>
-            ) : (
-              <span className="mobile-top-bar__design-name">{design.label}</span>
-            )}
-            <AdvisoryBadge badges={badges} onClick={toggleOutput} />
-            <IconButton label="Help" title="Help & keyboard shortcuts" onClick={onShowHelp}>
-              <HelpIcon size={16} />
-            </IconButton>
-            <IconButton label="About & licenses" title="About & licenses" onClick={onShowLicenses}>
-              <InfoIcon size={16} />
-            </IconButton>
+              ) : (
+                <span className="mobile-top-bar__design-name">{design.label}</span>
+              )}
+            </div>
+            <div className="mobile-top-bar__right">
+              <AdvisoryBadge badges={badges} onClick={toggleOutput} />
+              <IconButton label="Help" title="Help & keyboard shortcuts" onClick={onShowHelp}>
+                <HelpIcon size={16} />
+              </IconButton>
+              <IconButton label="About & licenses" title="About & licenses" onClick={onShowLicenses}>
+                <InfoIcon size={16} />
+              </IconButton>
+            </div>
           </div>
         </div>
 

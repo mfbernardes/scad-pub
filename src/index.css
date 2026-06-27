@@ -939,7 +939,9 @@ button:disabled { cursor: default; }
   top: 0;
   left: 0;
   right: 0;
-  display: flex;
+  display: grid;
+  /* brand (left) | design (centred) | actions (right) — mirrors the desktop bar */
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 0.5rem;
   padding: calc(env(safe-area-inset-top, 0px) + 0.4rem) calc(0.75rem + env(safe-area-inset-right, 0px)) 0.4rem calc(0.75rem + env(safe-area-inset-left, 0px));
@@ -959,21 +961,18 @@ button:disabled { cursor: default; }
   font-size: 0.92rem;
   font-weight: 700;
   white-space: nowrap;
+  justify-self: start;
+  min-width: 0;
+  overflow: hidden;
 }
 .mobile-top-bar__brand .brand-logo { height: 1.3rem; }
 
-.mobile-top-bar__design {
+/* Centered design picker (mirrors the desktop command bar) */
+.mobile-top-bar__center {
   display: inline-flex;
   align-items: center;
-}
-.mobile-top-bar__design select {
-  background: transparent;
-  border: none;
-  padding: 0;
-  color: var(--text);
-  font-size: 0.85rem;
-  font-weight: 600;
-  max-width: 7rem;
+  justify-self: center;
+  min-width: 0;
 }
 .mobile-top-bar__design-name {
   padding: 0.3rem 0.2rem;
@@ -982,7 +981,12 @@ button:disabled { cursor: default; }
   white-space: nowrap;
 }
 
-.mobile-top-bar .advisory-badge { margin-left: auto; }
+.mobile-top-bar__right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-self: end;
+}
 .mobile-top-bar .icon-btn { border-radius: var(--radius-sm); }
 
 /* ═══════════════════════════════════════════════════════════════
