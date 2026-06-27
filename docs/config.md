@@ -24,7 +24,6 @@
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
   "fileImport": true,             // optional "Import file" button for user-supplied files
   "popup": { "header": "…", "body": "…", "mode": "once" },  // optional notice dialog on load
-  "viewerControls": true,         // overlay zoom/reset buttons on the preview; default false
   "ui": {                         // optional UI behaviour (see "UI behaviour" below)
     "panelSide": "left",          // desktop dock edge: "left" | "right"
     "panelDefault": "open",       // first-load desktop panel: "open" | "collapsed"
@@ -62,7 +61,6 @@
 - **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
 - **`fileImport`** — see [Import file button](#import-file-fileimport).
 - **`popup`** — optional notice dialog shown over the app on load. See [Popup notice](#popup-notice-popup).
-- **`viewerControls`** — boolean, default `false`. Set to `true` to show the map-style overlay buttons on the 3D preview (zoom in, zoom out, reset view). When off, orbit/zoom by mouse or touch still works.
 - **`ui`** / PWA manifest keys — see [UI behaviour & PWA](#ui-behaviour--pwa).
 - **`notices`** — see [Notice badges](#notice-badges-notices).
 - **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).

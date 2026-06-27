@@ -22,7 +22,6 @@ import {
   parseFileImport,
   parsePopup,
   parseFormat,
-  parseViewerControls,
   parseNotices,
 } from "../scripts/gen-schema.mjs";
 
@@ -414,20 +413,6 @@ test("renderHash folds in the bundled font set (glyph outlines drive text geomet
     }).renderHash;
   };
   assert.notEqual(hashWithFonts("widget.config.json"), hashWithFonts("widget-fonts.config.json"));
-});
-
-test("viewerControls defaults to false, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseViewerControls(undefined), false);
-  assert.equal(parseViewerControls(null), false);
-  assert.equal(parseViewerControls(true), true);
-  assert.equal(parseViewerControls(false), false);
-  assert.throws(() => parseViewerControls("yes"), /'viewerControls' must be a boolean/);
-  assert.throws(() => parseViewerControls(0), /'viewerControls' must be a boolean/);
-});
-
-test("viewerControls defaults to false in the emitted schema", () => {
-  const { schema } = run("widget.config.json");
-  assert.equal(schema.viewerControls, false);
 });
 
 test("notices are off by default (omitted -> [])", () => {

@@ -301,20 +301,6 @@ export function parsePopup(raw) {
   return { header: raw.header, body: raw.body, mode };
 }
 
-// Validate the optional `viewerControls` config key: the map-style overlay
-// buttons (zoom in / zoom out / reset view) on the 3D preview. Defaults to false
-// (hidden); set it to true to show them at build time. They don't affect
-// geometry, so they're absent from renderHash. Anything but a boolean fails the
-// build (consistent with gen-schema's other fail-fast checks).
-export function parseViewerControls(raw) {
-  if (raw == null) return false;
-  if (typeof raw !== "boolean")
-    throw new Error(
-      `gen-schema: 'viewerControls' must be a boolean (got ${JSON.stringify(raw)})`
-    );
-  return raw;
-}
-
 // Validate and normalise the optional `notices` config block: the design-defined
 // notice categories surfaced on the "OpenSCAD output" panel. A design echoes
 // `ECHO: "<context>: <marker>: <message>"` and each configured category turns
@@ -606,8 +592,6 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Optional one-off notice dialog shown over the app on load. Validated; absent
   // -> null -> no popup.
   const POPUP = parsePopup(config.popup);
-  // Whether the viewer shows its overlay zoom/reset controls (default false).
-  const VIEWER_CONTROLS = parseViewerControls(config.viewerControls);
   // Config-driven notice categories surfaced on the OpenSCAD output panel.
   // Validated; off by default (omitted -> none).
   const NOTICES = parseNotices(config.notices);
@@ -1072,7 +1056,6 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     fonts: FONTS,
     fileImport: FILE_IMPORT,
     popup: POPUP,
-    viewerControls: VIEWER_CONTROLS,
     notices: NOTICES,
     help: HELP,
     licenses: LICENSES_EXTRA,

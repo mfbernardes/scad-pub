@@ -81,8 +81,6 @@ export function validateSchema(raw: unknown): Schema {
     if (!["always", "once", "dismissible"].includes(p.mode as string))
       fail("'popup.mode' must be \"always\", \"once\" or \"dismissible\"");
   }
-  if (s.viewerControls !== undefined && typeof s.viewerControls !== "boolean")
-    fail("'viewerControls' must be a boolean");
   if (s.notices !== undefined) {
     if (!Array.isArray(s.notices)) fail("'notices' must be an array");
     for (const n of s.notices) {

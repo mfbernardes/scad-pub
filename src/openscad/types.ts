@@ -246,12 +246,6 @@ export interface Schema {
    */
   popup: PopupNotice | null;
   /**
-   * Whether the 3D preview shows its map-style overlay controls (zoom in/out and
-   * reset view). Build-time, from the config's `viewerControls` key; defaults to
-   * false. Set true to show them.
-   */
-  viewerControls: boolean;
-  /**
    * Config-driven notice categories surfaced on the OpenSCAD output panel. Each
    * is a design-defined marker plus its badge label and optional colour. Empty
    * (the default) when the config omits the `notices` key.
