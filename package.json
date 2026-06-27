@@ -16,7 +16,8 @@
     "pretest": "npm run gen",
     "test": "node --import ./tests/register-ts.mjs --test \"tests/*.test.mjs\"",
     "smoke": "node scripts/smoke.mjs",
-    "vis": "node scripts/screenshots.mjs"
+    "vis": "node scripts/screenshots.mjs",
+    "screens": "node scripts/capture-screens.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.17",

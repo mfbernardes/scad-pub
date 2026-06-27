@@ -14,6 +14,7 @@ npm run build      # gen-schema (via prebuild) + tsc -b + vite build -> dist/
 npm run smoke      # headless end-to-end check of the BUILT app (needs npm run build first)
 npm run vis        # visual regression vs tests/screenshots/ baselines
 npm run vis -- --update   # rewrite visual baselines
+npm run screens    # capture every view (desktop + mobile) of the BUILT app -> screenshots/scadpub-screenshots.zip
 ```
 
 - **Single test:** `node --import ./tests/register-ts.mjs --test --test-name-pattern "<name>" "tests/<file>.test.mjs"`, or point the glob at one file.
