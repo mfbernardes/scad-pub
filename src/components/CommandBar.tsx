@@ -97,8 +97,9 @@ export const CommandBar = memo(function CommandBar({
         )}
       </div>
 
-      {/* Design picker — always visible */}
-      <div className="command-bar__design-picker">
+      {/* Design picker + presets, centered in the bar */}
+      <div className="command-bar__center">
+        <div className="command-bar__design-picker">
         <span className="command-bar__design-label">Design</span>
         <span className="command-bar__sep" aria-hidden="true">·</span>
         {designs.length > 1 ? (
@@ -139,6 +140,7 @@ export const CommandBar = memo(function CommandBar({
           />
         </PopoverContent>
       </Popover>
+      </div>
 
       <div className="command-bar__right">
         {/* Status + advisory badge, grouped */}
