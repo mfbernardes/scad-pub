@@ -14,6 +14,7 @@ import {
 import { readInitialState, persistState } from "./lib/urlState";
 import { loadFiles, saveFile, deleteFile, clearFiles } from "./lib/fileStore";
 import { download, downloadBlob } from "./lib/download";
+import { shareUrl, shareFile } from "./lib/share";
 import { useTheme } from "./lib/theme";
 import { useServiceWorkerUpdate } from "./lib/swUpdate";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
@@ -217,11 +218,20 @@ export default function App() {
     });
   }, [canInstall, promptInstall]);
 
-  const exportModel = useCallback(() => {
+  const exportModel = useCallback(async () => {
     if (!result?.ok) return;
-    const blob = new Blob([result.stl as BlobPart], { type: `model/${schema.format}` });
-    downloadBlob(blob, `${design.id}.${schema.format}`);
-    setAnnouncement(`Exported ${design.id}.${schema.format}`);
+    const name = `${design.id}.${schema.format}`;
+    const type = `model/${schema.format}`;
+    // Prefer the native share sheet on capable devices (send straight to a
+    // slicer / Files / AirDrop); fall back to a plain download otherwise.
+    const outcome = await shareFile(new File([result.stl as BlobPart], name, { type }), name);
+    if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
+    if (outcome === "shared") {
+      setAnnouncement(`Shared ${name}`);
+    } else {
+      downloadBlob(new Blob([result.stl as BlobPart], { type }), name);
+      setAnnouncement(`Exported ${name}`);
+    }
     offerInstallHint();
   }, [result, design.id, offerInstallHint]);
 
@@ -259,8 +269,12 @@ export default function App() {
   }, []);
 
   const copyLink = useCallback(async () => {
+    const url = location.href;
+    // Native share sheet where available (mobile); otherwise copy to clipboard.
+    const outcome = await shareUrl(url, schema.title);
+    if (outcome === "shared" || outcome === "cancelled") return;
     try {
-      await navigator.clipboard.writeText(location.href);
+      await navigator.clipboard.writeText(url);
       setAnnouncement("Copied share link");
     } catch {
       setAnnouncement("Couldn't copy — copy the URL from the address bar");
