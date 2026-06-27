@@ -1,13 +1,14 @@
-// capture-screens.mjs — capture a screenshot of every ScadPub view at both the
-// desktop and mobile layouts, then bundle them into a single zip.
+// capture-screens.mjs — capture a screenshot of every ScadPub view, in both
+// the light and dark themes, at the desktop and mobile layouts, then bundle
+// them into a single zip.
 //
 // Serves the BUILT app (run `npm run build` first), drives headless Chromium
-// through each view (welcome popup, both designs, presets, parameters, output
-// console, help + licenses dialogs) at a desktop and a phone viewport, writes
-// the PNGs under screenshots/captures/{desktop,mobile}/ and zips them to
-// screenshots/scadpub-screenshots.zip. Output lives under the gitignored
-// screenshots/ dir. Needs Chromium (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or a
-// `playwright install chromium`).
+// through each view at a desktop and a phone viewport for each theme, writes the
+// PNGs under screenshots/captures/<viewport>/<theme>/ and zips them to
+// screenshots/scadpub-screenshots.zip. On mobile it also walks the bottom sheet
+// through all three detents (peek/half/full) and each of its tabs (Presets,
+// Parameters, Files). Output lives under the gitignored screenshots/ dir. Needs
+// Chromium (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or a `playwright install chromium`).
 import { mkdirSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -16,6 +17,8 @@ import { startServer } from "./serve-dist.mjs";
 
 const OUT_DIR = fileURLToPath(new URL("../screenshots/captures", import.meta.url));
 const ZIP_PATH = fileURLToPath(new URL("../screenshots/scadpub-screenshots.zip", import.meta.url));
+
+const THEMES = ["light", "dark"];
 
 // Desktop (CommandBar + docked panel) vs mobile (top bar + bottom sheet). The
 // 860px breakpoint in useIsMobile decides which layout mounts.
@@ -68,25 +71,29 @@ async function sheetTo(page, target) {
   }
 }
 
+async function closeConsole(page) {
+  // Both layouts render an .output-console (one is CSS-hidden), so target the
+  // visible one to avoid a strict-mode multiple-match on the close button.
+  const close = page.locator(".output-console__close:visible").first();
+  if (await close.count()) {
+    await close.click().catch(() => {});
+    await sleep(200);
+  }
+}
+
 async function closeDialog(page) {
   await page.keyboard.press("Escape").catch(() => {});
   await page.waitForSelector('[role="dialog"]', { state: "detached", timeout: 3000 }).catch(() => {});
   await sleep(150);
 }
 
-async function captureViewport(browser, kind, base, theme) {
-  const dir = `${OUT_DIR}/${kind}`;
+async function captureViewport(context, base, kind, theme) {
+  const dir = `${OUT_DIR}/${kind}/${theme}`;
   mkdirSync(dir, { recursive: true });
-  const vp = VIEWPORTS[kind];
-  const context = await browser.newContext({
-    viewport: { width: vp.width, height: vp.height },
-    deviceScaleFactor: vp.deviceScaleFactor,
-    isMobile: vp.isMobile,
-    hasTouch: vp.isMobile,
-  });
   const page = await context.newPage();
 
-  // Establish the origin, force the theme, reload so it applies before paint.
+  // Establish the origin (localStorage isn't available on about:blank), force
+  // the theme, then reload so it applies before paint.
   await page.goto(base, { waitUntil: "load" });
   await page.evaluate((t) => localStorage.setItem("scadpub.theme", t), theme);
   await page.reload({ waitUntil: "load" });
@@ -102,7 +109,7 @@ async function captureViewport(browser, kind, base, theme) {
     await sleep(250);
   }
 
-  // 2. Landing view — Tag design.
+  // 2. Landing view — Tag design (the console auto-opens on its default notices).
   await shot(page, dir, "02-home-tag");
 
   // 3. Coin design.
@@ -110,18 +117,29 @@ async function captureViewport(browser, kind, base, theme) {
   await shot(page, dir, "03-design-coin");
   await selectDesign(page, kind, "Tag");
 
-  // 4. Parameters + presets.
   if (kind === "mobile") {
+    // 4. Bottom-sheet drawer in each detent, then each tab at full height.
+    // Returning to Tag re-auto-opens the console on its notices; wait for that,
+    // then close it so the drawer-position shots show a clean canvas.
+    await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
+    await closeConsole(page);
+    await sheetTo(page, "peek");
+    await shot(page, dir, "04-drawer-peek");
+    await sheetTo(page, "half");
+    await shot(page, dir, "05-drawer-half");
     await sheetTo(page, "full");
-    await page.getByRole("tab", { name: "Parameters" }).click().catch(() => {});
-    await sleep(250);
-    await shot(page, dir, "04-parameters");
-    await page.getByRole("tab", { name: "Presets" }).click().catch(() => {});
-    await sleep(250);
-    await shot(page, dir, "05-presets");
+    for (const [n, tab] of [
+      ["06", "Presets"],
+      ["07", "Parameters"],
+      ["08", "Files"],
+    ]) {
+      await page.getByRole("tab", { name: tab }).click().catch(() => {});
+      await sleep(250);
+      await shot(page, dir, `${n}-tab-${tab.toLowerCase()}`);
+    }
     await sheetTo(page, "peek");
   } else {
-    // Desktop parameters are always docked (visible in 02); capture the presets popover.
+    // 4. Desktop parameters are always docked (visible in 02); capture the presets popover.
     await page.locator(".command-bar__presets-btn").click().catch(() => {});
     await sleep(300);
     await shot(page, dir, "04-presets");
@@ -129,35 +147,36 @@ async function captureViewport(browser, kind, base, theme) {
     await sleep(200);
   }
 
-  // 6. Output console.
+  // 9 / 5. Output console.
   const outputSel =
     kind === "mobile"
       ? '.mobile-footer__output[aria-label="Open output console"]'
       : '.action-cluster__output[aria-label="Open output console"]';
+  const consoleName = kind === "mobile" ? "09-output-console" : "05-output-console";
   await page.locator(outputSel).click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 5000 }).catch(() => {});
   await sleep(300);
-  await shot(page, dir, "06-output-console");
-  await page.locator(".output-console__close").click().catch(() => {});
-  await sleep(200);
+  await shot(page, dir, consoleName);
+  await closeConsole(page);
 
-  // 7. Help dialog.
+  // Help + About dialogs.
+  const helpName = kind === "mobile" ? "10-help" : "06-help";
+  const aboutName = kind === "mobile" ? "11-about-licenses" : "07-about-licenses";
   await page.getByRole("button", { name: kind === "mobile" ? "Help" : "Help & keyboard shortcuts" })
     .first().click().catch(() => {});
   await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
   await sleep(300);
-  await shot(page, dir, "07-help");
+  await shot(page, dir, helpName);
   await closeDialog(page);
 
-  // 8. About & licenses dialog.
   await page.getByRole("button", { name: kind === "mobile" ? "About & licenses" : "Open-source licenses" })
     .first().click().catch(() => {});
   await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
   await sleep(300);
-  await shot(page, dir, "08-about-licenses");
+  await shot(page, dir, aboutName);
   await closeDialog(page);
 
-  await context.close();
+  await page.close();
 }
 
 async function main() {
@@ -170,8 +189,19 @@ async function main() {
   });
   try {
     for (const kind of Object.keys(VIEWPORTS)) {
-      console.log(`=== ${kind} ===`);
-      await captureViewport(browser, kind, base, "light");
+      const vp = VIEWPORTS[kind];
+      for (const theme of THEMES) {
+        console.log(`=== ${kind} / ${theme} ===`);
+        // Fresh context per theme: clean storage so the welcome popup shows again.
+        const context = await browser.newContext({
+          viewport: { width: vp.width, height: vp.height },
+          deviceScaleFactor: vp.deviceScaleFactor,
+          isMobile: vp.isMobile,
+          hasTouch: vp.isMobile,
+        });
+        await captureViewport(context, base, kind, theme);
+        await context.close();
+      }
     }
   } finally {
     await browser.close();
