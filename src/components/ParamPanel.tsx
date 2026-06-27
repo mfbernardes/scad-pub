@@ -194,9 +194,9 @@ export function ParamPanel({
               aria-label="Search parameters"
             />
             {search && (
-              <button className="icon-btn" onClick={() => setSearch("")} aria-label="Clear search">
+              <IconButton label="Clear search" onClick={() => setSearch("")}>
                 <XIcon size={14} />
-              </button>
+              </IconButton>
             )}
           </div>
           <div className="param-panel__body">

@@ -19,9 +19,10 @@ const DARK_THEME_COLOR =
 // index.html — which can't import the appId — must read the same key.
 const KEY = "scadpub.theme";
 const ORDER: ThemeMode[] = ["auto", "light", "dark"];
+const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 function systemDark(): boolean {
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
+  return window.matchMedia?.(DARK_QUERY).matches ?? true;
 }
 
 export function resolveTheme(mode: ThemeMode): Theme {
@@ -58,7 +59,7 @@ export function useTheme() {
     }
     if (mode !== "auto") return;
     // In auto mode, track OS changes live.
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const mq = window.matchMedia(DARK_QUERY);
     const onChange = () => apply(resolveTheme("auto"));
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
