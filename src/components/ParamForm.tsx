@@ -23,6 +23,8 @@ interface Props {
   onChange: (name: string, value: ParamValue) => void;
   /** Optional search query to filter visible parameters by name/description. */
   search?: string;
+  /** Show the underlying OpenSCAD variable name beside each label (default true). */
+  showVarName?: boolean;
 }
 
 function committedNumber(param: Extract<Param, { type: "number" }>, value: ParamValue): number {
@@ -154,7 +156,7 @@ function Control({
   }
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "" }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = true }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
@@ -193,7 +195,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                 <div className="param" key={p.name} title={p.help || p.description}>
                   <span className="param-label">
                     <span className="param-desc">{label}</span>
-                    {p.description && <code className="param-var">{p.name}</code>}
+                    {showVarName && p.description && <code className="param-var">{p.name}</code>}
                   </span>
                   <Control
                     param={p}

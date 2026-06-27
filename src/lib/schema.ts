@@ -124,6 +124,8 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.outputDefault' must be \"closed\" or \"open\"");
     if (ui.install !== undefined && !["auto", "off"].includes(ui.install as string))
       fail("'ui.install' must be \"auto\" or \"off\"");
+    if (ui.showVarName !== undefined && typeof ui.showVarName !== "boolean")
+      fail("'ui.showVarName' must be a boolean");
   }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;

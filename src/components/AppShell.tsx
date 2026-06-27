@@ -100,6 +100,7 @@ export const AppShell = memo(function AppShell({
   const ui = schema.ui ?? {};
   const panelSide = ui.panelSide ?? "left";
   const panelDefaultOpen = (ui.panelDefault ?? "open") === "open";
+  const showVarName = ui.showVarName !== false;
 
   const log = result?.log ?? EMPTY_LOG;
   const notices = schema.notices ?? [];
@@ -184,6 +185,7 @@ export const AppShell = memo(function AppShell({
             loadedFiles={loadedFiles}
             panelSide={panelSide}
             panelDefaultOpen={panelDefaultOpen}
+            showVarName={showVarName}
           />
 
           {/* Canvas */}
@@ -326,6 +328,7 @@ export const AppShell = memo(function AppShell({
                 fileImport={fileImport}
                 loadedFiles={loadedFiles}
                 onActivate={expand}
+                showVarName={showVarName}
               />
               {detent !== "peek" && (
                 <div className="sheet-footer">

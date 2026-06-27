@@ -184,6 +184,12 @@ export interface UiConfig {
   outputDefault?: "closed" | "open";
   /** Whether to offer PWA install affordance (default "auto"). */
   install?: "auto" | "off";
+  /**
+   * Whether each parameter control shows the underlying OpenSCAD variable name
+   * alongside its label (default true). Shown as visually-secondary monospace
+   * text; set false to hide it entirely.
+   */
+  showVarName?: boolean;
 }
 
 export interface Schema {

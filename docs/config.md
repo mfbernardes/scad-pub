@@ -28,7 +28,8 @@
     "panelSide": "left",          // desktop dock edge: "left" | "right"
     "panelDefault": "open",       // first-load desktop panel: "open" | "collapsed"
     "outputDefault": "closed",    // OpenSCAD output console: "closed" | "open"
-    "install": "auto"             // PWA install affordance: "auto" | "off"
+    "install": "auto",            // PWA install affordance: "auto" | "off"
+    "showVarName": true           // show OpenSCAD variable names by parameters: true | false
   },
   "themeColorLight": "#ffffff",   // light-scheme browser-chrome colour (default "#ffffff")
   "categories": ["productivity", "graphics"],  // optional PWA manifest categories
@@ -250,6 +251,7 @@ An optional object (validated as a unit; defaults applied when absent). None of 
 - **`panelDefault`** — `"open"` (default) or `"collapsed"`: the first-load desktop panel state (the user's later choice persists per browser).
 - **`outputDefault`** — `"closed"` (default) or `"open"`: whether the OpenSCAD output console starts open.
 - **`install`** — `"auto"` (default) or `"off"`: when `"off"`, no PWA install affordance is offered even on browsers that support it.
+- **`showVarName`** — `true` (default) or `false`: whether each parameter control shows the underlying OpenSCAD variable name beside its label. Shown as visually-secondary monospace text; set `false` to hide it.
 
 ### PWA manifest
 
