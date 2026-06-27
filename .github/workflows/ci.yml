@@ -1,15 +1,15 @@
 name: CI
 
 # ScadPub is a standalone static site: this workflow builds the configured
-# designs, runs the unit + headless end-to-end (smoke + axe) checks, and deploys
-# to GitHub Pages on every push to main. Set the BASE_PATH repo variable to the
-# subpath you serve it under ("/" for a domain root, "/scad-pub/" for
-# <user>.github.io/scad-pub/).
+# designs and runs the unit + headless end-to-end (smoke + axe) checks on every
+# push to main and on every pull request. Deployment to GitHub Pages lives in a
+# separate workflow (deploy.yml) that only runs on main, so it never appears as
+# a check on PRs. Set the BASE_PATH repo variable to the subpath you serve it
+# under ("/" for a domain root, "/scad-pub/" for <user>.github.io/scad-pub/).
 
 on:
-  # Only build/deploy on pushes to main. Feature branches are covered by the
-  # pull_request event, so scoping push here avoids the duplicate "push" run
-  # (and its skipped deploy job) that otherwise fires alongside every PR.
+  # Build/test on pushes to main and on pull requests. Scoping push to main
+  # avoids a duplicate "push" run firing alongside every PR.
   push:
     branches: [main]
   pull_request:
@@ -48,24 +48,3 @@ jobs:
         with:
           name: scadpub-dist
           path: dist
-
-      - name: Upload Pages artifact
-        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

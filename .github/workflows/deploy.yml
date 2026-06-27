@@ -1,0 +1,52 @@
+name: Deploy
+
+# Deploys the built static site to GitHub Pages. This is intentionally a
+# separate workflow from CI: it only runs on main (and manual dispatch), so a
+# deploy job never shows up — or blocks — as a check on pull requests. The build
+# steps mirror CI's; CI still gates merges via the pull_request event.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow only one concurrent deployment, skipping runs queued between the one
+# in progress and the latest, without cancelling the in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Fetch pinned OpenSCAD WASM
+        run: npm run wasm
+
+      - name: Build
+        run: npm run build
+        env:
+          BASE_PATH: ${{ vars.BASE_PATH || '/' }}
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
