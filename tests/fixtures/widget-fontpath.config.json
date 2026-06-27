@@ -1,0 +1,10 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "assets": ["lib"],
+  "features": ["textmetrics"],
+  "fonts": ["fonts/Bar.ttf"],
+  "designs": [
+    { "id": "widget", "label": "Widget" }
+  ]
+}

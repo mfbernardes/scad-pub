@@ -180,6 +180,13 @@ test("group defaults to null when unset", () => {
   assert.equal(schema.designs[0].group, null);
 });
 
+test("a source-relative font path is referenced by basename", () => {
+  // A design repo can bundle its own font by giving a path into the source tree;
+  // the schema (and /fonts URL) reference it by basename.
+  const { schema } = run("widget-fontpath.config.json");
+  assert.deepEqual(schema.fonts, ["Bar.ttf"]);
+});
+
 test("source defaults to '.' (designs beside the config) when omitted", () => {
   // default-source.config.json sets no `source`; mini.scad sits next to it.
   const { schema } = run("default-source.config.json");
