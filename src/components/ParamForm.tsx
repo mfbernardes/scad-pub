@@ -197,9 +197,13 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
           (p) =>
             p.section === section &&
             isVisible(p, values) &&
+            // Match the variable name, the label, and the full help text, so a
+            // term that only appears in the detail (surfaced via the info
+            // popover) is still findable.
             (!q ||
               p.name.toLowerCase().includes(q) ||
-              p.description.toLowerCase().includes(q))
+              p.description.toLowerCase().includes(q) ||
+              p.help.toLowerCase().includes(q))
         ),
         // Force open when search is active (expand all matching groups).
         startOpen: q ? true : !collapsed.has(section),
@@ -209,6 +213,11 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
 
   return (
     <div className="param-form">
+      {groups.length === 0 && (
+        <p className="param-form__empty">
+          {q ? `No parameters match “${search}”.` : "This design has no parameters."}
+        </p>
+      )}
       {groups.map(({ section, params, startOpen }) => {
         return (
           <details className="param-group" key={section} open={startOpen}>
