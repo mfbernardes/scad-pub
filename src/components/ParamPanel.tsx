@@ -40,6 +40,8 @@ interface Props {
   loadedFiles: LoadedFile[];
   panelSide: "left" | "right";
   panelDefaultOpen: boolean;
+  /** Show the underlying OpenSCAD variable name beside each label. */
+  showVarName: boolean;
 }
 
 export function ParamPanel({
@@ -49,6 +51,7 @@ export function ParamPanel({
   loadedFiles,
   panelSide,
   panelDefaultOpen,
+  showVarName,
 }: Props) {
   const { change, reset, addFile, removeFile, clearFiles } = useAppActions();
   const [open, setOpen] = useState(() => {
@@ -197,7 +200,7 @@ export function ParamPanel({
             )}
           </div>
           <div className="param-panel__body">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} />
           </div>
         </TabsContent>
 

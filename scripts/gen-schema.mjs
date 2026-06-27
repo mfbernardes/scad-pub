@@ -354,7 +354,7 @@ export function parseNotices(raw) {
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto" };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: true };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -382,6 +382,11 @@ export function parseUi(raw) {
     if (!INSTALL_MODES.includes(raw.install))
       throw new Error(`gen-schema: 'ui.install' must be one of ${INSTALL_MODES.map((s) => `"${s}"`).join(", ")}`);
     out.install = raw.install;
+  }
+  if (raw.showVarName !== undefined) {
+    if (typeof raw.showVarName !== "boolean")
+      throw new Error("gen-schema: 'ui.showVarName' must be a boolean");
+    out.showVarName = raw.showVarName;
   }
   return out;
 }

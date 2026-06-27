@@ -23,6 +23,7 @@ import {
   parsePopup,
   parseFormat,
   parseNotices,
+  parseUi,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -413,6 +414,15 @@ test("renderHash folds in the bundled font set (glyph outlines drive text geomet
     }).renderHash;
   };
   assert.notEqual(hashWithFonts("widget.config.json"), hashWithFonts("widget-fonts.config.json"));
+});
+
+test("ui.showVarName defaults to true, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).showVarName, true);
+  assert.equal(parseUi({}).showVarName, true);
+  assert.equal(parseUi({ showVarName: true }).showVarName, true);
+  assert.equal(parseUi({ showVarName: false }).showVarName, false);
+  assert.throws(() => parseUi({ showVarName: "yes" }), /'ui\.showVarName' must be a boolean/);
+  assert.throws(() => parseUi({ showVarName: 1 }), /'ui\.showVarName' must be a boolean/);
 });
 
 test("notices are off by default (omitted -> [])", () => {

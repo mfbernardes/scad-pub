@@ -22,6 +22,8 @@ interface Props {
   loadedFiles: LoadedFile[];
   /** Called when a tab is tapped — used to raise a collapsed (peek) sheet. */
   onActivate?: () => void;
+  /** Show the underlying OpenSCAD variable name beside each label (default true). */
+  showVarName?: boolean;
 }
 
 export function SheetTabs({
@@ -33,6 +35,7 @@ export function SheetTabs({
   fileImport,
   loadedFiles,
   onActivate,
+  showVarName = true,
 }: Props) {
   const { change, applyPreset, selectedPresetChange, presetsChange, addFile, removeFile, clearFiles } =
     useAppActions();
@@ -59,7 +62,7 @@ export function SheetTabs({
       <div className="sheet-tabs__body">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <div className="sheet-tabs__params">
-            <ParamForm design={design} values={values} onChange={change} />
+            <ParamForm design={design} values={values} onChange={change} showVarName={showVarName} />
           </div>
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
