@@ -8,6 +8,7 @@ import type { Design, FileImport } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
+import { useDebounce } from "../lib/useDebounce";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { IconButton } from "./IconButton";
@@ -67,13 +68,8 @@ export function ParamPanel({
     }
   });
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 150);
   const [panelTab, setPanelTab] = useState<"params" | "files">("params");
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 150);
-    return () => clearTimeout(t);
-  }, [search]);
 
   const dragging = useRef(false);
   const startX = useRef(0);
