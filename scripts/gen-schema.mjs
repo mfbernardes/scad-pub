@@ -807,6 +807,8 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
         file: d.file ?? `${d.id}.scad`,
         // Heavy designs skip the debounced auto-render (the user renders on demand).
         heavy: d.heavy ?? false,
+        // Optional dropdown grouping header (designs sharing a group cluster).
+        group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
       }));
     }
     return readdirSync(SOURCE)
@@ -814,7 +816,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       .sort()
       .map((f) => {
         const id = f.replace(/\.scad$/, "");
-        return { id, label: humanize(id), file: f, heavy: false };
+        return { id, label: humanize(id), file: f, heavy: false, group: null };
       });
   };
 

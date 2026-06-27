@@ -76,6 +76,9 @@ export interface Design {
   presets: string[];
   /** Slow to render: skip the debounced auto-render and render on demand. */
   heavy?: boolean;
+  /** Optional dropdown grouping label; designs sharing a group cluster under a
+   *  header in the design picker. Null/absent designs render ungrouped. */
+  group?: string | null;
   sections: string[];
   /** Section names that start collapsed (from a `// @collapsed` annotation). */
   collapsedSections?: string[];
