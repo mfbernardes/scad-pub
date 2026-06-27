@@ -35,7 +35,7 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose }: Props
                 <Badge
                   key={b.key}
                   variant={b.key === "assert" ? "destructive" : "warn"}
-                  className={`ml-1 px-1.5${b.key === "assert" ? " badge-assert" : ""}`}
+                  className={`ml-1 px-2 min-w-5 justify-center${b.key === "assert" ? " badge-assert" : ""}`}
                   style={b.color ? { background: b.color, color: badgeTextColor(b.color) } : undefined}
                 >
                   {b.count}
