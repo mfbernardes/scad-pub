@@ -29,7 +29,7 @@ import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 import { Spinner } from "./ui/spinner";
-import { HelpIcon, InfoIcon, PlayIcon, TerminalIcon, LinkIcon } from "./Icons";
+import { HelpIcon, InfoIcon, PlayIcon, TerminalIcon, LinkIcon, DownloadIcon, ImageIcon } from "./Icons";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { assetUrl } from "../lib/assetUrl";
 import { useIsMobile } from "../lib/useIsMobile";
@@ -365,9 +365,23 @@ export const AppShell = memo(function AppShell({
               disabled={rendering}
               aria-label="Render now"
             >
-              <PlayIcon size={16} /> Render now
+              <PlayIcon size={16} /> Render
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={onExport}
+            disabled={!result?.ok}
+            aria-label={`Export ${schema.format.toUpperCase()}`}
+          >
+            <DownloadIcon size={16} /> {schema.format.toUpperCase()}
+          </Button>
+          <Button variant="outline" onClick={handleSavePng} disabled={!result?.ok} aria-label="Save PNG">
+            <ImageIcon size={16} /> PNG
+          </Button>
+          <Button variant="outline" onClick={onCopyLink} aria-label="Copy share link">
+            <LinkIcon size={16} /> Share
+          </Button>
           <Button
             variant="outline"
             className={`mobile-footer__output${outputOpen ? " active" : ""}`}
@@ -376,9 +390,6 @@ export const AppShell = memo(function AppShell({
             aria-pressed={outputOpen}
           >
             <TerminalIcon size={16} /> Output
-          </Button>
-          <Button variant="outline" onClick={onCopyLink} aria-label="Copy share link">
-            <LinkIcon size={16} /> Share
           </Button>
         </div>
 
