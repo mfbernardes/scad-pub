@@ -21,7 +21,7 @@
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
-  "fonts": ["LiberationSans-Regular.ttf"],  // fonts mounted from public/fonts/
+  "fonts": ["LiberationSans-Regular.ttf"],  // fonts to mount; a basename already in public/fonts/, or a path into `source` to bundle
   "fileImport": true,             // optional "Import file" button for user-supplied files
   "popup": { "header": "…", "body": "…", "mode": "once" },  // optional notice dialog on load
   "ui": {                         // optional UI behaviour (see "UI behaviour" below)
