@@ -257,6 +257,65 @@ test("public precache manifest lists generated runtime assets", () => {
   assert.ok(!precache.includes("wasm/openscad.wasm"));
 });
 
+test("manifest carries the PWA install fields (id, launch_handler, maskable icon)", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  generate({
+    configPath: join(FIXTURES, "widget.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  assert.equal(manifest.id, "/scadpub/");
+  assert.deepEqual(manifest.launch_handler, { client_mode: "navigate-existing" });
+  assert.ok(
+    manifest.icons.some((i) => i.purpose === "maskable" && i.type === "image/png"),
+    "a maskable PNG icon must be present"
+  );
+  // Single-design configs derive no shortcuts.
+  assert.equal(manifest.shortcuts, undefined);
+});
+
+test("config shortcuts are validated and folded into the manifest", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  generate({
+    configPath: join(FIXTURES, "widget-shortcuts.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  // The well-formed shortcut is kept; the entry missing a url is dropped.
+  assert.deepEqual(manifest.shortcuts, [
+    { name: "Open help", short_name: "Help", url: "./#help" },
+  ]);
+});
+
+test("iOS splash images are generated and described in the schema", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const schema = generate({
+    configPath: join(FIXTURES, "widget.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  // Resvg is a devDependency, so splashes are generated in this test env.
+  assert.ok(Array.isArray(schema.appleSplash) && schema.appleSplash.length > 0);
+  for (const sp of schema.appleSplash) {
+    assert.match(sp.media, /orientation: portrait/);
+    assert.ok(existsSync(join(out, "public", sp.href)), `${sp.href} should exist on disk`);
+  }
+  // And every splash is precached for offline launch.
+  const precache = JSON.parse(
+    readFileSync(join(out, "public", "precache-manifest.json"), "utf-8")
+  );
+  for (const sp of schema.appleSplash) assert.ok(precache.includes(sp.href));
+});
+
 test("regenerating cleans the scad output dir so removed files don't linger", () => {
   // outScadDir is entirely generated; a file from a prior config/build must not
   // survive a regenerate (otherwise a removed/renamed design could still ship).

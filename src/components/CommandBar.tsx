@@ -1,7 +1,7 @@
 // CommandBar.tsx — top bar: brand, design picker (shadcn Select), presets
 // dropdown (shadcn Popover), status + advisory badge, action icons
 // (theme / help / licenses), optional PWA install.
-import { memo, useState, useEffect, useCallback } from "react";
+import { memo, useState } from "react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import { presetLabel } from "../lib/presets";
@@ -25,11 +25,6 @@ import {
 } from "./Icons";
 import { assetUrl } from "../lib/assetUrl";
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
-
 interface Props {
   schema: Schema;
   designs: Design[];
@@ -45,6 +40,8 @@ interface Props {
   ready: boolean;
   result: RenderResult | null;
   advisoryCount: number;
+  canInstall: boolean;
+  onInstall: () => void;
   onDesignChange: (id: string) => void;
   onApplyPreset: (v: Values) => void;
   onSelectedPresetChange: (id: string) => void;
@@ -70,6 +67,8 @@ export const CommandBar = memo(function CommandBar({
   ready,
   result,
   advisoryCount,
+  canInstall,
+  onInstall,
   onDesignChange,
   onApplyPreset,
   onSelectedPresetChange,
@@ -79,25 +78,8 @@ export const CommandBar = memo(function CommandBar({
   onShowLicenses,
   onShowOutput,
 }: Props) {
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPresets, setShowPresets] = useState(false);
   const currentDesign = designs.find((d) => d.id === designId);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setInstallPrompt(e as BeforeInstallPromptEvent);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
-
-  const handleInstall = useCallback(async () => {
-    if (!installPrompt) return;
-    await installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === "accepted") setInstallPrompt(null);
-  }, [installPrompt]);
 
   const themeIcon = themeMode === "light" ? <SunIcon size={16} /> : themeMode === "dark" ? <MoonIcon size={16} /> : <AutoThemeIcon size={16} />;
   const themeLabel = themeMode === "light" ? "Switch to dark theme" : themeMode === "dark" ? "Switch to auto theme" : "Switch to light theme";
@@ -177,11 +159,11 @@ export const CommandBar = memo(function CommandBar({
         </IconButton>
 
         {/* PWA install (when the browser offers it and the config allows it) */}
-        {installPrompt && schema.ui?.install !== "off" && (
+        {canInstall && schema.ui?.install !== "off" && (
           <Button
             size="sm"
             className="command-bar__install-btn rounded-full"
-            onClick={handleInstall}
+            onClick={onInstall}
             title="Install as app"
           >
             <InstallIcon size={14} />

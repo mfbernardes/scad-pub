@@ -4,10 +4,12 @@
 // Non-modal at Peek/Half (canvas stays interactive); scrim only at Full.
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { tapFeedback } from "../lib/haptics";
 
 export type SheetDetent = "peek" | "half" | "full";
 
@@ -36,6 +38,14 @@ export function BottomSheet({ children, peekHeight = 72, bottomInset = 0 }: Prop
   // Refs so stable callbacks can read current values without deps.
   const detentRef = useRef(detent);
   detentRef.current = detent;
+
+  // A short haptic tick whenever the sheet settles on a new detent (drag-snap,
+  // tap-cycle or keyboard) — Android only; silent on iOS / reduced-motion.
+  const didMount = useRef(false);
+  useEffect(() => {
+    if (didMount.current) tapFeedback();
+    else didMount.current = true;
+  }, [detent]);
   const peekHeightRef = useRef(peekHeight);
   peekHeightRef.current = peekHeight;
   const bottomInsetRef = useRef(bottomInset);

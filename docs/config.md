@@ -25,6 +25,21 @@
   "fileImport": true,             // optional "Import file" button for user-supplied files
   "popup": { "header": "…", "body": "…", "mode": "once" },  // optional notice dialog on load
   "viewerControls": true,         // overlay zoom/reset buttons on the preview; default false
+  "ui": {                         // optional UI behaviour (see "UI behaviour" below)
+    "panelSide": "left",          // desktop dock edge: "left" | "right"
+    "panelDefault": "open",       // first-load desktop panel: "open" | "collapsed"
+    "outputDefault": "closed",    // OpenSCAD output console: "closed" | "open"
+    "install": "auto"             // PWA install affordance: "auto" | "off"
+  },
+  "themeColorLight": "#ffffff",   // light-scheme browser-chrome colour (default "#ffffff")
+  "categories": ["productivity", "graphics"],  // optional PWA manifest categories
+  "iconMaskable": "branding/icon-maskable.svg", // optional maskable icon (defaults to `icon`)
+  "screenshots": [                // optional, for the Android rich install UI
+    { "src": "shot-narrow.png", "sizes": "390x844", "form_factor": "narrow" }
+  ],
+  "shortcuts": [                  // optional app shortcuts (auto-derived per design if omitted)
+    { "name": "Open Tag", "short_name": "Tag", "url": "./#d=tag" }
+  ],
   "notices": [                    // design-defined log markers -> count badges (off by default)
     { "marker": "advisory", "label": "advisories", "color": "#e0a458" },
     { "marker": "note",     "label": "notes",      "color": "#86a9ff" }
@@ -48,6 +63,7 @@
 - **`fileImport`** — see [Import file button](#import-file-fileimport).
 - **`popup`** — optional notice dialog shown over the app on load. See [Popup notice](#popup-notice-popup).
 - **`viewerControls`** — boolean, default `false`. Set to `true` to show the map-style overlay buttons on the 3D preview (zoom in, zoom out, reset view). When off, orbit/zoom by mouse or touch still works.
+- **`ui`** / PWA manifest keys — see [UI behaviour & PWA](#ui-behaviour--pwa).
 - **`notices`** — see [Notice badges](#notice-badges-notices).
 - **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
@@ -218,6 +234,26 @@ Show a one-off notice dialog over the app on load — a welcome message, a usage
   - **`dismissible`** — shown on every visit until the user ticks **Don't show this again**; closing without ticking the box shows it again next time.
 
 The remembered state is namespaced by the configurator's `id` and keyed by the popup's content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It's purely informational and doesn't affect renders, so it never invalidates the geometry cache.
+
+## UI behaviour & PWA
+
+### `ui`
+An optional object (validated as a unit; defaults applied when absent). None of these affect geometry, so they never invalidate the render cache.
+
+- **`panelSide`** — `"left"` (default) or `"right"`: which edge the desktop parameter panel docks against.
+- **`panelDefault`** — `"open"` (default) or `"collapsed"`: the first-load desktop panel state (the user's later choice persists per browser).
+- **`outputDefault`** — `"closed"` (default) or `"open"`: whether the OpenSCAD output console starts open.
+- **`install`** — `"auto"` (default) or `"off"`: when `"off"`, no PWA install affordance is offered even on browsers that support it.
+
+### PWA manifest
+
+`gen-schema` writes `public/manifest.webmanifest`, rasterizes the `icon` SVG to PNGs (192/512, a 512 maskable, and a 180 `apple-touch-icon`) via `@resvg/resvg-js`, and generates per-device iOS launch images (`apple-touch-startup-image`). The following keys feed the manifest:
+
+- **`themeColorLight`** — light-scheme `<meta name="theme-color">` (default `"#ffffff"`); the dark value comes from `themeColor`.
+- **`categories`** — optional array of [manifest categories](https://developer.mozilla.org/docs/Web/Manifest/categories).
+- **`iconMaskable`** — optional separate SVG (safe-zone padded) for the maskable icon; defaults to `icon`.
+- **`screenshots`** — optional `[{ src, sizes, form_factor }]` for the richer Android install UI (`form_factor`: `"wide"` or `"narrow"`).
+- **`shortcuts`** — optional `[{ name, short_name?, url }]` app shortcuts (Android long-press / desktop jump list). If omitted and the config has **more than one design**, a shortcut per design is derived automatically, deep-linking to it (`./#d=<id>`).
 
 ## Notice badges (`notices`)
 

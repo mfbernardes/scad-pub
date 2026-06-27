@@ -16,6 +16,9 @@ import { loadFiles, saveFile, deleteFile, clearFiles } from "./lib/fileStore";
 import { download, downloadBlob } from "./lib/download";
 import { useTheme } from "./lib/theme";
 import { useServiceWorkerUpdate } from "./lib/swUpdate";
+import { useInstallPrompt } from "./lib/useInstallPrompt";
+import { useOnline } from "./lib/useOnline";
+import { ns } from "./lib/appId";
 import { toast } from "sonner";
 import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/ui/sonner";
@@ -32,9 +35,13 @@ const initialState = readInitialState(schema);
 document.title = schema.title;
 
 const popup = schema.popup ?? null;
+const installMode = schema.ui?.install ?? "auto";
+const INSTALL_HINT_KEY = ns("install.hint.seen");
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
+  const { canInstall, promptInstall } = useInstallPrompt();
+  const online = useOnline();
   const {
     updateReady,
     applyUpdate,
@@ -190,12 +197,33 @@ export default function App() {
     });
   }, []);
 
+  // One-time, post-export install nudge: only when the browser actually offers
+  // install, the config allows it, and we haven't shown it before. Demoted per
+  // the UX plan — never a standing prompt.
+  const offerInstallHint = useCallback(() => {
+    if (!canInstall || installMode === "off") return;
+    try {
+      if (localStorage.getItem(INSTALL_HINT_KEY)) return;
+      localStorage.setItem(INSTALL_HINT_KEY, "1");
+    } catch {
+      /* storage unavailable — skip the hint rather than risk repeating it */
+      return;
+    }
+    toast("Install this configurator for quick, offline access?", {
+      id: "install-hint",
+      duration: 12000,
+      action: { label: "Install", onClick: () => void promptInstall() },
+      cancel: { label: "Not now", onClick: () => {} },
+    });
+  }, [canInstall, promptInstall]);
+
   const exportModel = useCallback(() => {
     if (!result?.ok) return;
     const blob = new Blob([result.stl as BlobPart], { type: `model/${schema.format}` });
     downloadBlob(blob, `${design.id}.${schema.format}`);
     setAnnouncement(`Exported ${design.id}.${schema.format}`);
-  }, [result, design.id]);
+    offerInstallHint();
+  }, [result, design.id, offerInstallHint]);
 
   const savePng = useCallback((url: string) => {
     download(url, `${design.id}.png`);
@@ -264,6 +292,17 @@ export default function App() {
       });
   }, [updateReady, bundleStale, applyUpdate, dismissUpdate]);
 
+  // Offline indicator: a persistent (but reassuring) toast while offline, since
+  // the cached WASM means rendering and export keep working. Clears on reconnect.
+  useEffect(() => {
+    if (!online)
+      toast("You're offline — rendering and export still work.", {
+        id: "offline",
+        duration: Infinity,
+      });
+    else toast.dismiss("offline");
+  }, [online]);
+
   return (
     <>
       {showPopup && popup && <PopupModal popup={popup} onClose={closePopup} />}
@@ -290,6 +329,8 @@ export default function App() {
         stalePreview={stalePreview}
         theme={theme}
         themeMode={themeMode}
+        canInstall={canInstall}
+        onInstall={promptInstall}
         onDesignChange={setDesignId}
         onChange={setValue}
         onApplyPreset={setValues}

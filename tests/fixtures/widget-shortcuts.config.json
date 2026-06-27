@@ -1,0 +1,16 @@
+{
+  "title": "Widget Studio",
+  "logo": "logo.svg",
+  "source": "src",
+  "assets": ["lib"],
+  "features": ["textmetrics"],
+  "fonts": ["Foo.ttf"],
+  "fileImport": { "accept": ".ttf,.otf", "label": "Import Foo font" },
+  "shortcuts": [
+    { "name": "Open help", "short_name": "Help", "url": "./#help" },
+    { "name": "Bad entry without url" }
+  ],
+  "designs": [
+    { "id": "widget", "label": "Widget", "heavy": true }
+  ]
+}

@@ -54,6 +54,8 @@ interface Props {
   stalePreview: boolean;
   theme: "dark" | "light";
   themeMode: "light" | "dark" | "auto";
+  canInstall: boolean;
+  onInstall: () => void;
   onDesignChange: (id: string) => void;
   onChange: (name: string, value: import("../openscad/types").ParamValue) => void;
   onApplyPreset: (v: Values) => void;
@@ -89,6 +91,8 @@ export const AppShell = memo(function AppShell({
   stalePreview,
   theme,
   themeMode,
+  canInstall,
+  onInstall,
   onDesignChange,
   onChange,
   onApplyPreset,
@@ -163,6 +167,8 @@ export const AppShell = memo(function AppShell({
           ready={ready}
           result={result}
           advisoryCount={advisoryCount}
+          canInstall={canInstall}
+          onInstall={onInstall}
           onDesignChange={onDesignChange}
           onApplyPreset={onApplyPreset}
           onSelectedPresetChange={onSelectedPresetChange}

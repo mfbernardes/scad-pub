@@ -20,6 +20,7 @@ function readSchema(): {
     dark?: Record<string, string>;
   } | null;
   extraCss?: string | null;
+  appleSplash?: { href: string; media: string }[];
 } {
   try {
     return JSON.parse(
@@ -47,6 +48,10 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
   // Light theme-color (panel surface in light mode).
   const lightColor = s.themeColorLight ?? "#ffffff";
   const appleTitle = s.shortName ?? s.title ?? "ScadPub";
+  // iOS launch images — one <link> per generated splash (empty string when none).
+  const appleSplashLinks = (s.appleSplash ?? [])
+    .map((sp) => `<link rel="apple-touch-startup-image" media="${sp.media}" href="${sp.href}" />`)
+    .join("\n    ");
   return {
     name: "config-html",
     transformIndexHtml: {
@@ -61,6 +66,7 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
           .replace(/%APP_THEME_COLOR_DARK%/g, darkColor)
           .replace(/%APP_THEME_COLOR_LIGHT%/g, lightColor)
           .replace(/%APP_APPLE_TITLE%/g, appleTitle)
+          .replace(/%APP_APPLE_SPLASH%/g, () => appleSplashLinks)
           // Insert before </head> via a replacer so $-sequences in colour values
           // (there shouldn't be any) are never treated as substitution patterns.
           .replace("</head>", () => `${headInjection}</head>`);

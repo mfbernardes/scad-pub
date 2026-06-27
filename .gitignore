@@ -21,6 +21,12 @@ src/generated/
 # Generated PWA assets (from the active config via gen-schema)
 public/manifest.webmanifest
 public/icon.svg
+public/icon-180.png
+public/icon-192.png
+public/icon-512.png
+public/icon-512-maskable.png
+public/apple-splash-*.png
+public/precache-manifest.json
 
 # Playwright artifacts (if a contributor runs `playwright test`)
 /test-results/

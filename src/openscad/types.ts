@@ -278,4 +278,7 @@ export interface Schema {
   ui?: UiConfig;
   /** Light-mode theme color for `<meta name="theme-color">` (default "#ffffff"). */
   themeColorLight?: string;
+  /** iOS standalone launch images (apple-touch-startup-image), generated when a
+   *  build-time rasterizer is available. Injected into index.html by vite. */
+  appleSplash?: { href: string; media: string }[];
 }

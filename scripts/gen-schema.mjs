@@ -850,6 +850,10 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     extraCss = `scad/${name}`;
   }
 
+  // iOS standalone launch images (apple-touch-startup-image). Populated below
+  // when a rasterizer is available; injected into index.html by vite.
+  let appleSplash = [];
+
   // Generate the PWA manifest + app icon from the config (skipped for the
   // fixture-driven unit tests, which don't pass outPublicDir).
   if (outPublicDir) {
@@ -908,6 +912,44 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       copyFileSync(join(outPublicDir, "icon.svg"), join(outPublicDir, "icon-180.png"));
     }
 
+    // iOS standalone launch ("splash") images. iOS only shows one whose media
+    // query matches the device exactly, so emit a portrait PNG (the icon centred
+    // on the background colour) per common iPhone resolution. Generated only when
+    // the rasterizer is present; each becomes an <link rel="apple-touch-startup-image">.
+    if (Resvg) {
+      // device px width × height, devicePixelRatio — current/common iPhones.
+      const DEVICES = [
+        [1290, 2796, 3], [1179, 2556, 3], [1284, 2778, 3], [1170, 2532, 3],
+        [1125, 2436, 3], [828, 1792, 2], [750, 1334, 2],
+      ];
+      const toPng = (svg, width) =>
+        new Resvg(svg, { fitTo: { mode: "width", value: width }, font: { loadSystemFonts: false } }).render().asPng();
+      try {
+        for (const [w, h, dpr] of DEVICES) {
+          const s = Math.round(Math.min(w, h) * 0.32);
+          const x = Math.round((w - s) / 2);
+          const y = Math.round((h - s) / 2);
+          const iconB64 = toPng(iconSvg, s).toString("base64");
+          const splashSvg =
+            `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+            `<rect width="${w}" height="${h}" fill="${BG_COLOR}"/>` +
+            `<image x="${x}" y="${y}" width="${s}" height="${s}" ` +
+            `href="data:image/png;base64,${iconB64}"/></svg>`;
+          const href = `apple-splash-${w}x${h}.png`;
+          writeFileSync(join(outPublicDir, href), toPng(splashSvg, w));
+          appleSplash.push({
+            href,
+            media:
+              `(device-width: ${w / dpr}px) and (device-height: ${h / dpr}px) ` +
+              `and (-webkit-device-pixel-ratio: ${dpr}) and (orientation: portrait)`,
+          });
+        }
+      } catch (err) {
+        console.warn(`gen-schema: splash generation failed (${err.message})`);
+        appleSplash = [];
+      }
+    }
+
     // Manifest screenshot entries (optional — enables rich Android install UI).
     const screenshots = [];
     if (Array.isArray(config.screenshots)) {
@@ -928,6 +970,26 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       { src: "icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ];
 
+    // App shortcuts (Android long-press / desktop jump list). Author-provided
+    // `shortcuts` win; otherwise, with multiple designs, derive one per design
+    // that deep-links to it (#d=<id>, the same hash readInitialState parses).
+    let shortcuts = [];
+    if (Array.isArray(config.shortcuts)) {
+      shortcuts = config.shortcuts
+        .filter((sc) => sc && typeof sc.name === "string" && typeof sc.url === "string")
+        .map((sc) => ({
+          name: sc.name,
+          ...(sc.short_name ? { short_name: sc.short_name } : {}),
+          url: sc.url,
+        }));
+    } else if (designs.length > 1) {
+      shortcuts = designs.map((d) => ({
+        name: d.label,
+        short_name: d.label,
+        url: `./#d=${d.id}`,
+      }));
+    }
+
     const manifest = {
       id: `/${ID}/`,
       name: TITLE,
@@ -945,6 +1007,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     };
     if (CATEGORIES.length) manifest.categories = CATEGORIES;
     if (screenshots.length) manifest.screenshots = screenshots;
+    if (shortcuts.length) manifest.shortcuts = shortcuts;
 
     writeFileSync(
       join(outPublicDir, "manifest.webmanifest"),
@@ -971,6 +1034,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     description: DESCRIPTION,
     themeColor: THEME_COLOR,
     themeColorLight: THEME_COLOR_LIGHT,
+    appleSplash,
     colors: COLORS,
     extraCss,
     logo,
@@ -998,6 +1062,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       "wasm/openscad.js",
       "fonts/fonts.conf",
     ]);
+    for (const splash of appleSplash) precache.add(splash.href);
     for (const font of FONTS) precache.add(`fonts/${font}`);
     for (const asset of assets) precache.add(`scad/${asset}`);
     for (const d of schema.designs) {
