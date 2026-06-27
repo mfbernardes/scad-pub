@@ -235,9 +235,19 @@ export default function App() {
     offerInstallHint();
   }, [result, design.id, offerInstallHint]);
 
-  const savePng = useCallback((url: string) => {
-    download(url, `${design.id}.png`);
-    setAnnouncement(`Saved ${design.id}.png`);
+  const savePng = useCallback(async (url: string) => {
+    const name = `${design.id}.png`;
+    // The snapshot is a data: URL — turn it into a File so it can go to the
+    // native share sheet (like the model export); fall back to a download.
+    const blob = await (await fetch(url)).blob();
+    const outcome = await shareFile(new File([blob], name, { type: blob.type || "image/png" }), name);
+    if (outcome === "cancelled") return;
+    if (outcome === "shared") {
+      setAnnouncement(`Shared ${name}`);
+    } else {
+      download(url, name);
+      setAnnouncement(`Saved ${name}`);
+    }
   }, [design.id]);
 
   const addFile = useCallback((name: string, bytes: Uint8Array) => {
