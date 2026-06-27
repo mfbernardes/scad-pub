@@ -7,7 +7,14 @@
 // (the config's `id`) on the worker URL, so two configs on one origin don't share
 // a shell cache. Falls back to a neutral name if registered without it.
 const NS = new URL(self.location.href).searchParams.get("ns") || "scadpub";
-const CACHE = `${NS}-shell-v1`;
+// Per-build version, stamped into the shipped sw.js by the `sw-version` Vite
+// plugin (vite.config.ts). It changes every deploy so the browser sees a *new*
+// worker and can prompt "update available" — a byte-identical sw.js would never
+// trigger that, leaving users to reload manually. It also names the shell cache,
+// so a new build's `activate` clears the previous one. The literal placeholder
+// survives in dev, where the worker isn't registered anyway.
+const VERSION = "__SW_VERSION__";
+const CACHE = `${NS}-shell-${VERSION}`;
 const SHELL_KEY = "app-shell";
 const SCOPE_URL = self.registration.scope;
 

@@ -34,3 +34,12 @@ test("service worker only excludes wasm binaries from shell caching", () => {
   assert.match(text, /pathname\.endsWith\(["']\.wasm["']\)/);
   assert.doesNotMatch(text, /pathname\.includes\(["']\/wasm\/["']\)/);
 });
+
+test("service worker carries a build-stamped version so updates are detectable", () => {
+  // The `sw-version` Vite plugin replaces this placeholder per build, changing
+  // sw.js's bytes each deploy so the browser installs a new worker and the
+  // "update available" prompt can fire. A static sw.js would never trigger it.
+  const text = swText();
+  assert.match(text, /__SW_VERSION__/);
+  assert.match(text, /shell-\$\{VERSION\}/);
+});

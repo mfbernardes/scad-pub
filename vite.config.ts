@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
@@ -78,13 +80,48 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
   };
 }
 
+// Stamp a per-build version into the shipped service worker. sw.js lives in
+// public/ (copied verbatim), so without this every deploy ships a byte-identical
+// sw.js — the browser never detects a new worker and the "update available"
+// prompt never fires (src/lib/swUpdate.ts only flags an update when a *new* worker
+// reaches `waiting`). The version is a hash of every emitted, content-hashed
+// chunk/asset filename, so any code or asset change bumps it; it replaces the
+// `__SW_VERSION__` placeholder in dist/sw.js after the bundle is written.
+function swVersion(): Plugin {
+  let outDir = "dist";
+  let version = "dev";
+  return {
+    name: "sw-version",
+    apply: "build",
+    configResolved(c) {
+      outDir = c.build.outDir;
+    },
+    generateBundle(_options, bundle) {
+      version = createHash("sha256")
+        .update(Object.keys(bundle).sort().join("\n"))
+        .digest("hex")
+        .slice(0, 16);
+    },
+    closeBundle() {
+      const swPath = resolve(outDir, "sw.js");
+      try {
+        const src = readFileSync(swPath, "utf-8");
+        if (src.includes("__SW_VERSION__"))
+          writeFileSync(swPath, src.replace(/__SW_VERSION__/g, version));
+      } catch {
+        /* no sw.js in this build (e.g. a non-default target) — skip */
+      }
+    },
+  };
+}
+
 // Defaults to serving at the domain root. Set BASE_PATH to the subpath your
 // host serves the app under (e.g. "/app/" for example.com/app/). Dev uses "/".
 export default defineConfig(({ command }) => {
   const schema = readSchema();
   return {
     base: command === "build" ? process.env.BASE_PATH || "/" : "/",
-    plugins: [react(), tailwindcss(), configHtml(schema)],
+    plugins: [react(), tailwindcss(), configHtml(schema), swVersion()],
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
