@@ -7,6 +7,8 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { headStyleInjection } from "./src/lib/configCss";
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 // Read the active config's generated schema (written by the predev/prebuild
 // gen-schema step) so the page chrome and storage namespace are config-driven.
 function readSchema(): {
@@ -121,7 +123,7 @@ export default defineConfig(({ command }) => {
   const schema = readSchema();
   return {
     base: command === "build" ? process.env.BASE_PATH || "/" : "/",
-    plugins: [react(), tailwindcss(), configHtml(schema), swVersion()],
+    plugins: [react(), tailwindcss(), configHtml(schema), swVersion(), cloudflare()],
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
