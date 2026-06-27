@@ -1046,8 +1046,9 @@ button:disabled { cursor: default; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* Pad past the iOS gesture bar */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* No safe-area padding here: the sheet sits above the always-present mobile
+     footer, which already clears the iOS gesture bar. Padding it would shrink
+     the fixed-height peek detent and clip the tab row on devices with an inset. */
 }
 
 /* Drag handle — full width, tap cycles detents */

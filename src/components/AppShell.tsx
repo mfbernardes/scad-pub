@@ -101,6 +101,9 @@ export const AppShell = memo(function AppShell({
   // Sheet detent lives here so the output console can sit just above the sheet
   // and so opening the console can shrink a full sheet to make room.
   const [sheetDetent, setSheetDetent] = useState<SheetDetent>("peek");
+  // Effective peek height, measured by the sheet from its header (handle + tab
+  // row) so the console sits just above the collapsed sheet on any device.
+  const [peekPx, setPeekPx] = useState(PEEK_HEIGHT);
 
   const ui = schema.ui ?? {};
   const panelSide = ui.panelSide ?? "left";
@@ -153,7 +156,7 @@ export const AppShell = memo(function AppShell({
   // Place the mobile console just above the sheet's current top.
   const mobileConsoleStyle = {
     top: "auto" as const,
-    bottom: MOBILE_FOOTER_HEIGHT + detentHeight(sheetDetent, MOBILE_FOOTER_HEIGHT, PEEK_HEIGHT, viewportH),
+    bottom: MOBILE_FOOTER_HEIGHT + detentHeight(sheetDetent, MOBILE_FOOTER_HEIGHT, peekPx, viewportH),
   };
 
   return (
@@ -316,6 +319,7 @@ export const AppShell = memo(function AppShell({
           onDetentChange={setSheetDetent}
           peekHeight={PEEK_HEIGHT}
           bottomInset={MOBILE_FOOTER_HEIGHT}
+          onPeekHeightChange={setPeekPx}
         >
           {(detent, expand) => (
             // The tab bar shows at every detent (including peek); tapping a tab

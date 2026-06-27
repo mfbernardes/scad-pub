@@ -5,6 +5,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -40,15 +41,32 @@ interface Props {
   /** Current detent (controlled by the parent). */
   detent: SheetDetent;
   onDetentChange: (d: SheetDetent) => void;
-  /** Height in px of the "Peek" state (handle + header row). */
+  /** Fallback px height of the "Peek" state, used until the real header (drag
+   *  handle + tab row) is measured. The measured value wins so the peek detent
+   *  shows the whole tab row on any device/font size. */
   peekHeight?: number;
   /** Height in px of any fixed content below the sheet (e.g. mobile footer). */
   bottomInset?: number;
+  /** Reports the effective (measured) peek height so the parent can sit content
+   *  just above the collapsed sheet. */
+  onPeekHeightChange?: (px: number) => void;
 }
 
-export function BottomSheet({ children, detent, onDetentChange, peekHeight = 72, bottomInset = 0 }: Props) {
+export function BottomSheet({
+  children,
+  detent,
+  onDetentChange,
+  peekHeight = 72,
+  bottomInset = 0,
+  onPeekHeightChange,
+}: Props) {
   // Detent is controlled by the parent; setDetent forwards to it.
   const setDetent = onDetentChange;
+  // The sheet root, used to measure the natural peek height (handle + tab row).
+  const sheetRef = useRef<HTMLDivElement>(null);
+  // Measured px from the sheet's top edge down to the bottom of the tab row;
+  // null until first layout, when it replaces the peekHeight fallback.
+  const [autoPeek, setAutoPeek] = useState<number | null>(null);
   const dragStart = useRef<{ y: number; height: number } | null>(null);
   const dragPointerId = useRef<number | null>(null);
   // Whether the current interaction moved enough to be a drag (vs a tap).
@@ -67,10 +85,42 @@ export function BottomSheet({ children, detent, onDetentChange, peekHeight = 72,
     if (didMount.current) tapFeedback();
     else didMount.current = true;
   }, [detent]);
-  const peekHeightRef = useRef(peekHeight);
-  peekHeightRef.current = peekHeight;
+  // Effective peek height: the measured header height, or the fallback prop
+  // until the first measurement lands.
+  const effectivePeek = autoPeek ?? peekHeight;
+  const peekHeightRef = useRef(effectivePeek);
+  peekHeightRef.current = effectivePeek;
   const bottomInsetRef = useRef(bottomInset);
   bottomInsetRef.current = bottomInset;
+
+  // Measure the header (drag handle + tab row) and use that as the peek height,
+  // so the collapsed sheet always shows the whole tab row regardless of device
+  // safe-area insets or font scaling. getBoundingClientRect reports the full
+  // layout box even while the body is clipped by the peek height.
+  useLayoutEffect(() => {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const measure = () => {
+      const tabs = sheet.querySelector('[role="tablist"]') as HTMLElement | null;
+      if (!tabs) return;
+      const px = Math.ceil(
+        tabs.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top
+      );
+      if (px > 0) setAutoPeek(px);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(sheet);
+    const tabs = sheet.querySelector('[role="tablist"]');
+    if (tabs) ro.observe(tabs);
+    return () => ro.disconnect();
+  }, []);
+
+  // Report the effective peek height up so the parent can position the output
+  // console just above the collapsed sheet.
+  useEffect(() => {
+    onPeekHeightChange?.(effectivePeek);
+  }, [effectivePeek, onPeekHeightChange]);
 
   // heightFor reads peekHeight from a ref so this can have empty deps and stay stable.
   const heightFor = useCallback((d: SheetDetent): number => {
@@ -172,6 +222,7 @@ export function BottomSheet({ children, detent, onDetentChange, peekHeight = 72,
         />
       )}
       <div
+        ref={sheetRef}
         className={`bottom-sheet bottom-sheet--${detent}${dragging ? " is-dragging" : ""}`}
         style={{
           height: displayH,
