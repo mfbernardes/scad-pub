@@ -56,6 +56,24 @@ test("fromPresetString coerces back to the param's type", () => {
   assert.equal(fromPresetString(P("string"), "hi"), "hi");
 });
 
+test("fromPresetString clamps numbers to the declared range", () => {
+  const ranged = P("number", { default: 5, min: 0, max: 10 });
+  assert.equal(fromPresetString(ranged, "50"), 10); // above max → clamped
+  assert.equal(fromPresetString(ranged, "-5"), 0); //  below min → clamped
+  assert.equal(fromPresetString(ranged, "7"), 7); //   in range → unchanged
+  assert.equal(fromPresetString(P("number", { default: 5 }), "50"), 50); // no range → unchanged
+});
+
+test("fromPresetString rejects enum values outside the declared choices", () => {
+  const choices = [
+    { value: "a", label: "A" },
+    { value: "b", label: "B" },
+  ];
+  const e = P("enum", { default: "a", choices });
+  assert.equal(fromPresetString(e, "b"), "b"); //   valid choice kept
+  assert.equal(fromPresetString(e, "zzz"), "a"); // invalid → default
+});
+
 test("orphanedDefines flags only names the source no longer declares", () => {
   const src = [
     "/* [Main] */",

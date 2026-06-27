@@ -31,16 +31,31 @@ export function toPresetString(param: Param, value: ParamValue): string {
   return String(value);
 }
 
-/** Parse a parameterSets string back into a typed value for the given param. */
+/**
+ * Parse a parameterSets string back into a typed value for the given param,
+ * validating it against the schema. Values come from sharable URL hashes,
+ * localStorage and imported preset files, so an out-of-range number or an enum
+ * value outside the declared choices is rejected (falls back to the default /
+ * clamped to range) — matching what the UI controls themselves enforce.
+ */
 export function fromPresetString(param: Param, raw: string): ParamValue {
   switch (param.type) {
     case "number": {
       const n = Number(raw);
-      return Number.isNaN(n) ? param.default : n;
+      if (Number.isNaN(n)) return param.default;
+      let v = n;
+      if (param.min !== undefined) v = Math.max(param.min, v);
+      if (param.max !== undefined) v = Math.min(param.max, v);
+      return v;
     }
     case "boolean":
       return raw === "true" || raw === "1";
     case "enum":
+      // Reject values outside the declared choices. (When choices are absent —
+      // only the synthetic params in tests — accept the raw value.)
+      return !param.choices || param.choices.some((c) => c.value === raw)
+        ? raw
+        : param.default;
     case "string":
       return raw;
   }
