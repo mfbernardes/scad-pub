@@ -1,10 +1,12 @@
 // ViewerHUD.tsx — floating viewer controls: zoom, reset, and (in a browser tab)
-// fullscreen. The fullscreen toggle is hidden when running as an installed PWA,
-// where the app is already its own window.
+// fullscreen. The fullscreen toggle is shown only where it actually works: not
+// in an installed PWA (already its own window), and not where the Fullscreen
+// API is unsupported (e.g. iOS Safari, which only fullscreens <video>).
 import type { ViewerHandle } from "./Viewer";
 import { IconButton } from "./IconButton";
 import { ZoomInIcon, ZoomOutIcon, ResetIcon, MaximizeIcon } from "./Icons";
 import { useStandalone } from "../lib/useStandalone";
+import { fullscreenSupported } from "../lib/fullscreen";
 
 interface Props {
   viewerRef: React.RefObject<ViewerHandle | null>;
@@ -13,6 +15,7 @@ interface Props {
 
 export function ViewerHUD({ viewerRef, visible }: Props) {
   const standalone = useStandalone();
+  const canFullscreen = !standalone && fullscreenSupported();
   if (!visible) return null;
 
   const toggleFullscreen = () => {
@@ -35,9 +38,9 @@ export function ViewerHUD({ viewerRef, visible }: Props) {
       <IconButton label="Reset view" onClick={() => viewerRef.current?.resetView()}>
         <ResetIcon size={18} />
       </IconButton>
-      {/* Fullscreen only makes sense in a browser tab — an installed PWA is
-          already its own window. */}
-      {!standalone && (
+      {/* Fullscreen only where it works: a browser tab (not an installed PWA)
+          on a browser that supports the Fullscreen API. */}
+      {canFullscreen && (
         <IconButton label="Toggle fullscreen" onClick={toggleFullscreen}>
           <MaximizeIcon size={18} />
         </IconButton>
