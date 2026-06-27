@@ -98,7 +98,7 @@ export const CommandBar = memo(function CommandBar({
       </div>
 
       {/* Design picker — always visible */}
-      <div className="command-bar__pill command-bar__design-picker">
+      <div className="command-bar__design-picker">
         <span className="command-bar__design-label">Design</span>
         <span className="command-bar__sep" aria-hidden="true">·</span>
         {designs.length > 1 ? (
@@ -112,7 +112,7 @@ export const CommandBar = memo(function CommandBar({
       <Popover open={showPresets} onOpenChange={setShowPresets}>
         <PopoverTrigger asChild>
           <button
-            className="command-bar__pill command-bar__presets-btn"
+            className="command-bar__presets-btn"
             aria-label={`Presets${presetName ? ` — ${presetName}` : ""}`}
           >
             {presetName ? <StarFilledIcon size={14} /> : <StarIcon size={14} />}
@@ -162,7 +162,7 @@ export const CommandBar = memo(function CommandBar({
         {canInstall && schema.ui?.install !== "off" && (
           <Button
             size="sm"
-            className="command-bar__install-btn rounded-full"
+            className="command-bar__install-btn"
             onClick={onInstall}
             title="Install as app"
           >

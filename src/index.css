@@ -282,15 +282,11 @@ button:disabled { cursor: default; }
   flex-shrink: 0;
 }
 
-/* Shared "pill" surface for the command-bar groups (brand, design, presets) */
-.command-bar__pill {
+/* Flat, unboxed design + presets controls (no pill chrome). */
+.command-bar__design-picker {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.32rem 0.7rem;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 99px;
   white-space: nowrap;
 }
 
@@ -298,10 +294,7 @@ button:disabled { cursor: default; }
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.3rem 0.8rem;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 99px;
+  padding: 0.2rem;
 }
 .command-bar__title { font-size: 0.95rem; font-weight: 700; }
 
@@ -333,11 +326,19 @@ button:disabled { cursor: default; }
 .command-bar__presets { position: relative; }
 
 .command-bar__presets-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.45rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
   cursor: pointer;
   color: var(--text);
   font: inherit;
 }
-.command-bar__presets-btn:hover:not(:disabled) { border-color: var(--accent); }
+.command-bar__presets-btn:hover:not(:disabled) { background: var(--panel-2); }
 .command-bar__presets-btn .command-bar__presets-label { font-size: 0.85rem; color: var(--muted); }
 .command-bar__presets-btn .command-bar__presets-label strong { color: var(--text); font-weight: 600; }
 .command-bar__presets-btn > svg:first-child { color: var(--warn); }
@@ -363,7 +364,6 @@ button:disabled { cursor: default; }
   gap: 0.35rem;
   font-size: 0.82rem;
   padding: 0.34rem 0.7rem;
-  border-radius: 99px;
 }
 
 .command-bar__right {
@@ -373,25 +373,21 @@ button:disabled { cursor: default; }
   gap: 0.4rem;
 }
 
-/* Status + advisory grouped into one pill */
+/* Status + advisory: flat, no pill box */
 .command-bar__status-group {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.18rem 0.3rem 0.18rem 0.5rem;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 99px;
 }
 .command-bar__status-group .status-pill {
   background: transparent;
   border: none;
   padding: 0.25rem 0.4rem;
   cursor: pointer;
-  border-radius: 99px;
+  border-radius: var(--radius-sm);
 }
 .command-bar__status-group .status-pill:hover { background: var(--panel-2); }
-.command-bar__right .icon-btn { border-radius: 99px; }
+.command-bar__right .icon-btn { border-radius: var(--radius-sm); }
 
 /* ═══════════════════════════════════════════════════════════════
    PARAM PANEL — docked collapsible/resizable panel (desktop)
@@ -704,12 +700,12 @@ button:disabled { cursor: default; }
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 99px;
+  padding: 0.2rem 0.4rem;
+  border-radius: var(--radius-sm);
   font-size: 0.78rem;
   font-weight: 500;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
+  background: transparent;
+  border: 1px solid transparent;
   white-space: nowrap;
   line-height: 1.3;
 }
@@ -964,10 +960,7 @@ button:disabled { cursor: default; }
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.3rem 0.7rem;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 99px;
+  padding: 0.3rem 0.2rem;
   font-size: 0.92rem;
   font-weight: 700;
   white-space: nowrap;
@@ -977,10 +970,6 @@ button:disabled { cursor: default; }
 .mobile-top-bar__design {
   display: inline-flex;
   align-items: center;
-  padding: 0.28rem 0.55rem;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 99px;
 }
 .mobile-top-bar__design select {
   background: transparent;
@@ -992,17 +981,14 @@ button:disabled { cursor: default; }
   max-width: 7rem;
 }
 .mobile-top-bar__design-name {
-  padding: 0.3rem 0.7rem;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 99px;
+  padding: 0.3rem 0.2rem;
   font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .mobile-top-bar .advisory-badge { margin-left: auto; }
-.mobile-top-bar .icon-btn { border-radius: 99px; }
+.mobile-top-bar .icon-btn { border-radius: var(--radius-sm); }
 
 /* ═══════════════════════════════════════════════════════════════
    MOBILE FOOTER — fixed actions bar below the bottom sheet
