@@ -382,6 +382,40 @@ test("format is emitted to the schema and folded into renderHash", () => {
   assert.notEqual(a.renderHash, b.renderHash);
 });
 
+test("renderHash is stable for an unchanged config (so a rebuild doesn't bust the cache)", () => {
+  // The whole point of renderHash is to invalidate persisted geometry only when
+  // a render input actually changes. A non-deterministic hash would needlessly
+  // re-render everything on every deploy — pin determinism here.
+  assert.equal(run("widget.config.json").schema.renderHash, run("widget.config.json").schema.renderHash);
+});
+
+test("renderHash folds in the render features so an --enable change invalidates it", () => {
+  // widget-features is widget plus one extra OpenSCAD feature; features are
+  // passed as --enable flags and change the geometry, so the hash must move.
+  const a = run("widget.config.json").schema;
+  const b = run("widget-features.config.json").schema;
+  assert.deepEqual(a.features, ["textmetrics"]);
+  assert.deepEqual(b.features, ["textmetrics", "lazy-union"]);
+  assert.notEqual(a.renderHash, b.renderHash);
+});
+
+test("renderHash folds in the bundled font set (glyph outlines drive text geometry)", () => {
+  // widget-fonts swaps Foo.ttf for Bar.ttf; a different font yields different
+  // text() geometry, so swapping it must invalidate cached renders. Note the
+  // font set only enters the hash in a real build (outPublicDir present) — the
+  // bare run() helper omits it — so generate with a public dir here.
+  const hashWithFonts = (config) => {
+    const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+    return generate({
+      configPath: join(FIXTURES, config),
+      outSchemaDir: join(out, "schema"),
+      outScadDir: join(out, "public", "scad"),
+      outPublicDir: join(out, "public"),
+    }).renderHash;
+  };
+  assert.notEqual(hashWithFonts("widget.config.json"), hashWithFonts("widget-fonts.config.json"));
+});
+
 test("viewerControls defaults to false, accepts a boolean, rejects non-booleans", () => {
   assert.equal(parseViewerControls(undefined), false);
   assert.equal(parseViewerControls(null), false);

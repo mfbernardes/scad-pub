@@ -111,9 +111,36 @@ test("no hash and no store -> first design's defaults", () => {
   assert.deepEqual(r.values, DEFAULTS);
 });
 
+test("the URL hash wins over a stored session when both are present", () => {
+  // Persist one session to localStorage, then load with a *different* hash: the
+  // shared-link hash must take precedence so a link reproduces its exact config.
+  persistState(design, { text: "stored", n: 99, b: true });
+  globalThis.location.hash = "#d=d&v=" + encodeURIComponent('{"text":"linked"}');
+  const r = readInitialState(schema);
+  assert.equal(r.values.text, "linked"); // from the hash
+  assert.equal(r.values.n, 2); // hash diff didn't set n -> back to default, not the stored 99
+});
+
 test("a tampered numeric value is coerced back to a number", () => {
   globalThis.location.hash = '#d=d&v=' + encodeURIComponent('{"n":"5"}');
   assert.equal(readInitialState(schema).values.n, 5);
+});
+
+test("tampered boolean/string values are coerced to each param's type", () => {
+  globalThis.location.hash =
+    "#d=d&v=" + encodeURIComponent('{"b":"true","text":"x"}');
+  const r = readInitialState(schema);
+  assert.equal(r.values.b, true); // "true" -> boolean true
+  assert.equal(typeof r.values.b, "boolean");
+  assert.equal(r.values.text, "x");
+});
+
+test("a corrupt stored session falls back to defaults (no throw)", () => {
+  globalThis.localStorage.setItem("scadpub.session.v1", "{not json");
+  globalThis.location.hash = "";
+  const r = readInitialState(schema);
+  assert.equal(r.designId, "d");
+  assert.deepEqual(r.values, DEFAULTS);
 });
 
 test("malformed JSON in v param silently returns defaults", () => {

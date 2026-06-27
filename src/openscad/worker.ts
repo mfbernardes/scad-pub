@@ -10,6 +10,7 @@ import schema from "../generated/designs.json";
 import type { ModelFormat, RenderRequest, RenderResult } from "./types";
 import { assetUrl as asset } from "../lib/assetUrl";
 import { orphanedDefines } from "../lib/scad";
+import { buildOpenscadArgs, exportFor, userFileMountPath } from "./renderArgs";
 
 // Persistent cache for the big, version-pinned binaries (the ~10 MB WASM and
 // the fonts), so reloads are instant and the app works offline. The cache name
@@ -109,13 +110,6 @@ async function loadDesignSource(path: string): Promise<string> {
   return designSources[path];
 }
 
-// A user file is treated as a font (mounted where fontconfig can find it) when
-// its extension is one OpenSCAD/FreeType can load. Everything else is mounted at
-// the FS root as a plain referenceable asset.
-function isFontFile(name: string): boolean {
-  return /\.(ttf|otf|ttc)$/i.test(name);
-}
-
 function mkdirp(FS: OpenSCADInstance["FS"], dir: string) {
   let cur = "";
   for (const part of dir.split("/").filter(Boolean)) {
@@ -192,10 +186,8 @@ async function render(req: RenderRequest): Promise<RenderResult> {
   // can't escape its mount dir). Fonts go into /fonts so fontconfig (which only
   // scans /fonts) picks them up for text(); every other file is mounted at the
   // FS root so a design can reference it by name, e.g. `import("logo.svg")`.
-  for (const [rawName, bytes] of Object.entries(req.userFiles ?? {})) {
-    const name = rawName.replace(/^.*[\\/]/, "") || "file";
-    FS.writeFile(isFontFile(name) ? `/fonts/${name}` : `/${name}`, bytes);
-  }
+  for (const [rawName, bytes] of Object.entries(req.userFiles ?? {}))
+    FS.writeFile(userFileMountPath(rawName), bytes);
 
   // The selected design, mounted at its own source-relative path.
   const design = schema.designs.find((d) => d.id === req.design);
@@ -213,43 +205,16 @@ async function render(req: RenderRequest): Promise<RenderResult> {
         `longer defines: ${staleDefines.join(", ")}. Reload to update.`
     );
 
-  const defineArgs = Object.entries(req.defines).flatMap(([k, v]) =>
-    staleDefines.includes(k) ? [] : ["-D", `${k}=${v}`]
-  );
-  const featureArgs = schema.features.map((f) => `--enable=${f}`);
-  // The export format is chosen at build time (config -> schema). 3MF carries
-  // per-object colour — OpenSCAD's manifold backend writes each `color(...)`
-  // into the 3MF, which the viewer and downstream slicers read back; STL is
-  // geometry-only (no colour). Map the format to its OpenSCAD CLI flag, output
-  // path, and any extra `-O` export options. The cast widens the JSON's literal
-  // so the comparison is legal.
+  // The cast widens the JSON's literal so the comparison is legal.
   const format = schema.format as ModelFormat;
-  const EXPORT =
-    format === "stl"
-      ? { flag: "binstl", file: "/out.stl", extra: [] as string[] }
-      : {
-          flag: "3mf",
-          file: "/out.3mf",
-          // Write per-object colour as a 3MF colour group (color-mode=model,
-          // material-type=color). This is the encoding BambuStudio / OrcaSlicer
-          // read; the default base-material palette imports without colour.
-          extra: [
-            "-O",
-            "export-3mf/color-mode=model",
-            "-O",
-            "export-3mf/material-type=color",
-          ],
-        };
-  const args = [
-    `/${design.file}`,
-    "--backend=manifold",
-    `--export-format=${EXPORT.flag}`,
-    ...EXPORT.extra,
-    ...featureArgs,
-    ...defineArgs,
-    "-o",
-    EXPORT.file,
-  ];
+  const EXPORT = exportFor(format);
+  const args = buildOpenscadArgs({
+    designFile: design.file,
+    format,
+    features: schema.features,
+    defines: req.defines,
+    staleDefines,
+  });
   log.push(`[cmd] openscad ${args.join(" ")}`);
 
   let exitCode = 0;

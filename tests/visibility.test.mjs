@@ -49,6 +49,16 @@ test("evalShowIf: param name absent from values is falsy", () => {
   assert.equal(evalShowIf("!unknown_param", V), true);
 });
 
+test("evalShowIf: relational operators (<, >, >=) are NOT supported", () => {
+  // The evaluator only understands == / != / bare-bool / !; a relational clause
+  // isn't a recognised comparison and isn't a known param name, so it reads as a
+  // falsy lookup and hides the control. Pinned so the limitation is intentional —
+  // if `>` support is ever added, this test should be updated deliberately.
+  assert.equal(evalShowIf("char_size > 10", V), false);
+  assert.equal(evalShowIf("char_size >= 10", V), false);
+  assert.equal(evalShowIf("char_size < 99", V), false);
+});
+
 test("evalShowIf: empty/whitespace clause is truthy (always visible)", () => {
   // An empty clause (e.g. from a trailing ||) must not hide the control.
   assert.equal(evalShowIf("", V), true);

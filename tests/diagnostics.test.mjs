@@ -96,6 +96,23 @@ test("de-duplicates repeated notices", () => {
   assert.equal(parseDiagnostics([line, line], NOTICES).length, 1);
 });
 
+test("a marker with regex metacharacters is matched literally, not as a pattern", () => {
+  // Markers are config-supplied and interpolated into a RegExp; they must be
+  // escaped so e.g. "a.b" matches "a.b" and not "axb", and "(note)" is literal.
+  const markers = [{ marker: "a.b", label: "ab" }, { marker: "(note)", label: "n" }];
+  assert.deepEqual(
+    parseDiagnostics(['[out] ECHO: "tag: a.b: matched"'], markers),
+    [{ level: "notice", text: "tag: matched" }]
+  );
+  // The metachar must be literal: "axb" must NOT match the "a.b" marker.
+  assert.deepEqual(parseDiagnostics(['[out] ECHO: "tag: axb: nope"'], markers), []);
+  // Parentheses in the marker are literal too.
+  assert.deepEqual(
+    parseDiagnostics(['[out] ECHO: "tag: (note): hi"'], markers),
+    [{ level: "notice", text: "tag: hi" }]
+  );
+});
+
 test("returns nothing for a clean log", () => {
   assert.deepEqual(
     parseDiagnostics(["[cmd] openscad", '[out] ECHO: "ok"'], NOTICES),
