@@ -19,8 +19,6 @@ import {
   HelpIcon,
   InfoIcon,
   InstallIcon,
-  StarIcon,
-  StarFilledIcon,
   ChevronDownIcon,
 } from "./Icons";
 import { assetUrl } from "../lib/assetUrl";
@@ -116,7 +114,6 @@ export const CommandBar = memo(function CommandBar({
             className="command-bar__presets-btn"
             aria-label={`Presets${presetName ? ` — ${presetName}` : ""}`}
           >
-            {presetName ? <StarFilledIcon size={14} /> : <StarIcon size={14} />}
             <span className="command-bar__presets-label">
               Presets{presetName ? <> · <strong>{presetName}</strong></> : ""}
             </span>
