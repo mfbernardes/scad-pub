@@ -4,7 +4,7 @@
 // API is unsupported (e.g. iOS Safari, which only fullscreens <video>).
 import type { ViewerHandle } from "./Viewer";
 import { IconButton } from "./IconButton";
-import { ZoomInIcon, ZoomOutIcon, ResetIcon, MaximizeIcon } from "./Icons";
+import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, Maximize as MaximizeIcon } from "lucide-react";
 import { useStandalone } from "../lib/useStandalone";
 import { fullscreenSupported } from "../lib/fullscreen";
 

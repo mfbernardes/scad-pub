@@ -5,12 +5,12 @@ import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 import {
-  PlayIcon,
-  DownloadIcon,
-  ImageIcon,
-  LinkIcon,
-  TerminalIcon,
-} from "./Icons";
+  Play as PlayIcon,
+  Download as DownloadIcon,
+  Image as ImageIcon,
+  Link2 as LinkIcon,
+  Terminal as TerminalIcon,
+} from "lucide-react";
 
 interface Props {
   rendering: boolean;
@@ -61,7 +61,7 @@ export const ActionCluster = memo(function ActionCluster({
           disabled={rendering}
           aria-label="Render now"
         >
-          <PlayIcon size={16} /> Render now
+          <PlayIcon size={16} fill="currentColor" /> Render now
         </Button>
       )}
       <Button

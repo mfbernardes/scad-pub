@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from ".
 import { cn } from "../lib/utils";
 import { CountBadges } from "./CountBadges";
 import { IconButton } from "./IconButton";
-import { XIcon } from "./Icons";
+import { X as XIcon } from "lucide-react";
 
 const ICON: Record<DiagnosticLevel, string> = { notice: "ⓘ", warning: "⚠", assert: "✗" };
 

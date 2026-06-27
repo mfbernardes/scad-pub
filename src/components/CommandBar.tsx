@@ -13,14 +13,14 @@ import { DesignPicker } from "./DesignPicker";
 import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import {
-  SunIcon,
-  MoonIcon,
-  AutoThemeIcon,
-  HelpIcon,
-  InfoIcon,
-  InstallIcon,
-  ChevronDownIcon,
-} from "./Icons";
+  Sun as SunIcon,
+  Moon as MoonIcon,
+  SunMoon as AutoThemeIcon,
+  CircleHelp as HelpIcon,
+  Info as InfoIcon,
+  HardDriveDownload as InstallIcon,
+  ChevronDown as ChevronDownIcon,
+} from "lucide-react";
 import { assetUrl } from "../lib/assetUrl";
 
 interface Props {

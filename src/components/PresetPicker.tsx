@@ -7,7 +7,7 @@ import type { ParsedSet, Values } from "../lib/presets";
 import { deletePreset, loadPreset, savePreset } from "../lib/presets";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { XIcon } from "./Icons";
+import { X as XIcon } from "lucide-react";
 
 interface Props {
   design: Design;

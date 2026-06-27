@@ -7,7 +7,7 @@ import type { FileImport } from "../openscad/types";
 import { FileInput } from "./FileInput";
 import { IconButton } from "./IconButton";
 import { Button } from "./ui/button";
-import { FolderIcon, TrashIcon, FileIcon, XIcon } from "./Icons";
+import { Folder as FolderIcon, Trash2 as TrashIcon, File as FileIcon, X as XIcon } from "lucide-react";
 
 /** A user-imported file, with its byte size for display. */
 export type LoadedFile = { name: string; size: number };

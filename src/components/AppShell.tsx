@@ -30,7 +30,15 @@ import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 import { Spinner } from "./ui/spinner";
-import { HelpIcon, InfoIcon, PlayIcon, TerminalIcon, LinkIcon, DownloadIcon, ImageIcon } from "./Icons";
+import {
+  CircleHelp as HelpIcon,
+  Info as InfoIcon,
+  Play as PlayIcon,
+  Terminal as TerminalIcon,
+  Link2 as LinkIcon,
+  Download as DownloadIcon,
+  Image as ImageIcon,
+} from "lucide-react";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { assetUrl } from "../lib/assetUrl";
 import { useIsMobile } from "../lib/useIsMobile";
@@ -403,7 +411,7 @@ export const AppShell = memo(function AppShell({
               disabled={rendering}
               aria-label="Render now"
             >
-              <PlayIcon size={16} /> Render
+              <PlayIcon size={16} fill="currentColor" /> Render
             </Button>
           )}
           <Button

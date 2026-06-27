@@ -14,13 +14,13 @@ import { ResetButton } from "./ResetButton";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
-  ResetIcon,
-  SearchIcon,
-  XIcon,
-  MenuIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-} from "./Icons";
+  RotateCcw as ResetIcon,
+  Search as SearchIcon,
+  X as XIcon,
+  Menu as MenuIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+} from "lucide-react";
 
 const panelTabClass = cn(underlineTabTrigger, "flex-1");
 
