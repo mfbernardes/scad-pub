@@ -207,7 +207,7 @@ export const AppShell = memo(function AppShell({
               {(!ready || (rendering && !result)) && (
                 <div className="viewer-overlay">
                   <Spinner className="size-9 text-muted-foreground" />
-                  <p>{ready ? "Rendering…" : "Loading renderer… (one-time ~10 MB download)"}</p>
+                  <p>{ready ? "Rendering…" : "Loading renderer…"}</p>
                 </div>
               )}
 
@@ -265,7 +265,7 @@ export const AppShell = memo(function AppShell({
             {(!ready || (rendering && !result)) && (
               <div className="viewer-overlay">
                 <Spinner className="size-9 text-muted-foreground" />
-                <p>{ready ? "Rendering…" : "Loading renderer… (~10 MB)"}</p>
+                <p>{ready ? "Rendering…" : "Loading renderer…"}</p>
               </div>
             )}
           </div>
