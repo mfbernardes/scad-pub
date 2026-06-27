@@ -581,7 +581,8 @@ button:disabled { cursor: default; }
 
 .viewer-hud {
   position: absolute;
-  right: 0.75rem;
+  /* Clear a camera island on the right edge in landscape (notched phones). */
+  right: calc(0.75rem + env(safe-area-inset-right, 0px));
   top: 50%;
   bottom: auto;
   transform: translateY(-50%);
@@ -617,7 +618,7 @@ button:disabled { cursor: default; }
 
 .action-cluster {
   position: absolute;
-  bottom: 0.75rem;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -963,7 +964,7 @@ button:disabled { cursor: default; }
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: calc(env(safe-area-inset-top, 0px) + 0.4rem) 0.75rem 0.4rem;
+  padding: calc(env(safe-area-inset-top, 0px) + 0.4rem) calc(0.75rem + env(safe-area-inset-right, 0px)) 0.4rem calc(0.75rem + env(safe-area-inset-left, 0px));
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -1019,7 +1020,7 @@ button:disabled { cursor: default; }
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0 0.75rem calc(env(safe-area-inset-bottom, 0px) + 0.35rem) 0.75rem;
+  padding: 0 calc(0.75rem + env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 0.35rem) calc(0.75rem + env(safe-area-inset-left, 0px));
   background: var(--panel);
   border-top: 1px solid var(--line);
   z-index: 28;
