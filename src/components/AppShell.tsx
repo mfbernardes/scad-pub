@@ -267,6 +267,7 @@ export const AppShell = memo(function AppShell({
                     theme={theme}
                     designId={design.id}
                     presetId={selectedPreset}
+                    reframeOnPreset={false}
                   />
                 )}
               </Suspense>
