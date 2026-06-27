@@ -16,6 +16,7 @@
     "mode": "dismissible"
   },
   "viewerControls": true,
+  "ui": { "install": "off" },
   "notices": [
     { "marker": "alert", "label": "alerts", "color": "#e0a458" },
     { "marker": "note", "label": "notes", "color": "#86a9ff" }
