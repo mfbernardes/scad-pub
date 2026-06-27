@@ -1215,7 +1215,10 @@ button:disabled { cursor: default; }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  padding: 0;
+  /* Keep the 15px glyph but give it a >=24px tap target (WCAG 2.2 target size);
+     the negative margin absorbs the padding so the row layout is unchanged. */
+  padding: 5px;
+  margin: -5px;
   background: none;
   border: none;
   color: var(--muted);
