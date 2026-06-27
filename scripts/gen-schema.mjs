@@ -151,6 +151,14 @@ export const COLOR_TOKENS = [
 // out of the generated `<style>` rule it gets interpolated into.
 const COLOR_VALUE_RE = /^[#a-zA-Z0-9 ,.()%/-]+$/;
 
+// Escape a value for safe interpolation into generated XML/SVG attribute text.
+const xmlEscape = (s) =>
+  String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
 // The model formats OpenSCAD can export and the viewer can parse.
 const FORMATS = ["3mf", "stl"];
 
@@ -578,9 +586,19 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   const DESCRIPTION =
     config.description ?? "Configure and export designs in your browser.";
   // PWA / browser chrome colours (default to the dark palette's chrome).
+  // Validated like every other colour input (COLOR_VALUE_RE) so they stay safe
+  // when interpolated into generated SVG/HTML attributes below.
   const THEME_COLOR = config.themeColor ?? "#1f2229";
   const THEME_COLOR_LIGHT = config.themeColorLight ?? "#ffffff";
   const BG_COLOR = config.backgroundColor ?? "#15171c";
+  for (const [key, val] of [
+    ["themeColor", THEME_COLOR],
+    ["themeColorLight", THEME_COLOR_LIGHT],
+    ["backgroundColor", BG_COLOR],
+  ]) {
+    if (typeof val !== "string" || !COLOR_VALUE_RE.test(val.trim()))
+      throw new Error(`gen-schema: '${key}' must be a CSS colour string (got ${JSON.stringify(val)})`);
+  }
   const CATEGORIES = Array.isArray(config.categories) ? config.categories : [];
   // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
   // Absent -> null -> no import button.
@@ -780,11 +798,22 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     return deps;
   };
 
+  // A design id namespaces storage and is interpolated into a default filename
+  // (`${id}.scad`), the URL deep link (`#d=${id}`) and manifest shortcuts, so
+  // restrict it to a safe, path/URL-friendly character set.
+  const checkId = (id) => {
+    if (typeof id !== "string" || !/^[A-Za-z0-9._-]+$/.test(id))
+      throw new Error(
+        `gen-schema: design id ${JSON.stringify(id)} must match [A-Za-z0-9._-]+`
+      );
+    return id;
+  };
+
   // The design list from the config, or auto-discovered root .scad files.
   const resolveDesigns = () => {
     if (Array.isArray(config.designs) && config.designs.length) {
       return config.designs.map((d) => ({
-        id: d.id,
+        id: checkId(d.id),
         label: d.label ?? humanize(d.id),
         file: d.file ?? `${d.id}.scad`,
         // Heavy designs skip the debounced auto-render (the user renders on demand).
@@ -870,7 +899,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     } else {
       // Neutral default icon when the config supplies none.
       iconSvg =
-        `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="${TITLE}">\n` +
+        `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="${xmlEscape(TITLE)}">\n` +
         `  <rect width="512" height="512" rx="96" fill="${THEME_COLOR}"/>\n` +
         `  <rect x="150" y="150" width="212" height="212" rx="28" fill="none" stroke="#86a9ff" stroke-width="30"/>\n` +
         `</svg>\n`;
@@ -887,18 +916,20 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       );
     }
 
-    // Rasterize PNGs at build time via @resvg/resvg-js (Rust/WASM SVG renderer,
-    // no headless browser needed). Sizes: 192 & 512 for the manifest, 180 for
+    // Single SVG→PNG rasterizer (@resvg/resvg-js — Rust/WASM, no headless
+    // browser) shared by the icon and the iOS splash generation below. Null when
+    // the optional dep is absent, in which case both fall back to copying the SVG.
+    const rasterize = Resvg
+      ? (svg, width) =>
+          new Resvg(svg, { fitTo: { mode: "width", value: width }, font: { loadSystemFonts: false } })
+            .render()
+            .asPng()
+      : null;
+
+    // Rasterize PNGs at build time. Sizes: 192 & 512 for the manifest, 180 for
     // apple-touch-icon. The maskable 512 uses the safe-zone-padded source.
-    if (Resvg) {
+    if (rasterize) {
       try {
-        const rasterize = (svg, size) => {
-          const r = new Resvg(svg, {
-            fitTo: { mode: "width", value: size },
-            font: { loadSystemFonts: false },
-          });
-          return r.render().asPng();
-        };
         writeFileSync(join(outPublicDir, "icon-192.png"), rasterize(iconSvg, 192));
         writeFileSync(join(outPublicDir, "icon-512.png"), rasterize(iconSvg, 512));
         writeFileSync(join(outPublicDir, "icon-512-maskable.png"), rasterize(maskableSvg, 512));
@@ -916,27 +947,25 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     // query matches the device exactly, so emit a portrait PNG (the icon centred
     // on the background colour) per common iPhone resolution. Generated only when
     // the rasterizer is present; each becomes an <link rel="apple-touch-startup-image">.
-    if (Resvg) {
+    if (rasterize) {
       // device px width × height, devicePixelRatio — current/common iPhones.
       const DEVICES = [
         [1290, 2796, 3], [1179, 2556, 3], [1284, 2778, 3], [1170, 2532, 3],
         [1125, 2436, 3], [828, 1792, 2], [750, 1334, 2],
       ];
-      const toPng = (svg, width) =>
-        new Resvg(svg, { fitTo: { mode: "width", value: width }, font: { loadSystemFonts: false } }).render().asPng();
       try {
         for (const [w, h, dpr] of DEVICES) {
           const s = Math.round(Math.min(w, h) * 0.32);
           const x = Math.round((w - s) / 2);
           const y = Math.round((h - s) / 2);
-          const iconB64 = toPng(iconSvg, s).toString("base64");
+          const iconB64 = rasterize(iconSvg, s).toString("base64");
           const splashSvg =
             `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
             `<rect width="${w}" height="${h}" fill="${BG_COLOR}"/>` +
             `<image x="${x}" y="${y}" width="${s}" height="${s}" ` +
             `href="data:image/png;base64,${iconB64}"/></svg>`;
           const href = `apple-splash-${w}x${h}.png`;
-          writeFileSync(join(outPublicDir, href), toPng(splashSvg, w));
+          writeFileSync(join(outPublicDir, href), rasterize(splashSvg, w));
           appleSplash.push({
             href,
             media:

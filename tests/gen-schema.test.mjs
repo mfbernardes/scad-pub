@@ -295,6 +295,16 @@ test("config shortcuts are validated and folded into the manifest", () => {
   ]);
 });
 
+test("rejects a PWA colour that isn't a safe CSS colour string", () => {
+  // themeColor/themeColorLight/backgroundColor are interpolated into generated
+  // SVG/HTML, so they must pass the same COLOR_VALUE_RE as every other colour.
+  assert.throws(() => run("widget-bad-color.config.json"), /'themeColor' must be a CSS colour/);
+});
+
+test("rejects a design id with unsafe characters", () => {
+  assert.throws(() => run("widget-bad-id.config.json"), /design id .* must match/);
+});
+
 test("iOS splash images are generated and described in the schema", () => {
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   const schema = generate({

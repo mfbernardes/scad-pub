@@ -221,15 +221,15 @@ export default function App() {
   const exportModel = useCallback(async () => {
     if (!result?.ok) return;
     const name = `${design.id}.${schema.format}`;
-    const type = `model/${schema.format}`;
+    const blob = new Blob([result.stl as BlobPart], { type: `model/${schema.format}` });
     // Prefer the native share sheet on capable devices (send straight to a
     // slicer / Files / AirDrop); fall back to a plain download otherwise.
-    const outcome = await shareFile(new File([result.stl as BlobPart], name, { type }), name);
+    const outcome = await shareFile(new File([blob], name, { type: blob.type }), name);
     if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
     if (outcome === "shared") {
       setAnnouncement(`Shared ${name}`);
     } else {
-      downloadBlob(new Blob([result.stl as BlobPart], { type }), name);
+      downloadBlob(blob, name);
       setAnnouncement(`Exported ${name}`);
     }
     offerInstallHint();

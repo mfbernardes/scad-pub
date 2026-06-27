@@ -49,6 +49,9 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
   const lightColor = s.themeColorLight ?? "#ffffff";
   const appleTitle = s.shortName ?? s.title ?? "ScadPub";
   // iOS launch images — one <link> per generated splash (empty string when none).
+  // `media`/`href` are fully derived by gen-schema from a fixed device table
+  // (integers) and the `apple-splash-<w>x<h>.png` filename — no config/user input
+  // reaches them, so the raw attribute interpolation below is safe.
   const appleSplashLinks = (s.appleSplash ?? [])
     .map((sp) => `<link rel="apple-touch-startup-image" media="${sp.media}" href="${sp.href}" />`)
     .join("\n    ");
