@@ -164,6 +164,7 @@ test("config-driven features, fonts; presets auto-detected by sibling name", () 
   // src/widget.json sits next to src/widget.scad, so it's bundled automatically.
   assert.deepEqual(schema.designs[0].presets, ["widget.json"]);
   assert.equal(schema.designs[0].heavy, true); // per-design heavy flag passes through
+  assert.equal(schema.designs[0].group, "Gadgets"); // dropdown group passes through
   // preset + design files copied into the output scad tree
   assert.ok(existsSync(join(out, "scad", "widget.scad")));
   assert.ok(existsSync(join(out, "scad", "widget.json")));
@@ -172,6 +173,11 @@ test("config-driven features, fonts; presets auto-detected by sibling name", () 
 test("heavy defaults to false when unset", () => {
   const { schema } = run("widget-autodeps.config.json");
   assert.equal(schema.designs[0].heavy, false);
+});
+
+test("group defaults to null when unset", () => {
+  const { schema } = run("widget-autodeps.config.json");
+  assert.equal(schema.designs[0].group, null);
 });
 
 test("source defaults to '.' (designs beside the config) when omitted", () => {
