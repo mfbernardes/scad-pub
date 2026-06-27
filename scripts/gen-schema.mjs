@@ -570,7 +570,20 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   mustExist(SOURCE, `source directory '${config.source ?? "."}'`);
   const FEATURES = config.features ?? [];
   const FORMAT = parseFormat(config.format);
-  const FONTS = config.fonts ?? [];
+  // Fonts are referenced by basename under /fonts. An entry is either a font
+  // already present in public/fonts (the Liberation fallbacks that ship with the
+  // app) or a path into the source tree (a design repo bundling its own font),
+  // which we copy into public/fonts so it is served like the rest.
+  const FONTS = (config.fonts ?? []).map((entry) => {
+    const name = String(entry).split(/[\\/]/).pop();
+    const srcAbs = resolve(SOURCE, entry);
+    if (outPublicDir && existsSync(srcAbs) && statSync(srcAbs).isFile()) {
+      const dest = join(outPublicDir, "fonts", name);
+      mkdirSync(dirname(dest), { recursive: true });
+      copyFileSync(srcAbs, dest);
+    }
+    return name;
+  });
   const TITLE = config.title ?? "ScadPub";
   const SHORT_NAME = config.shortName ?? TITLE;
   const ID = config.id ?? "scadpub";
