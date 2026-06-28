@@ -279,9 +279,10 @@ export const AppShell = memo(function AppShell({
                 visible={!!result?.ok}
               />
 
-              {/* Ambient "what size will it print?" readout — bottom-left, the
-                  one free corner (HUD right, action cluster centre, stale banner
-                  top). Measured from the mesh, never part of the export. */}
+              {/* Ambient "what size will it print?" readout — top-left, mirroring
+                  the HUD on the right. A bottom corner gets overrun by the centre
+                  action cluster as it widens; the top edge stays clear. Measured
+                  from the mesh, never part of the export. */}
               <SizeReadout size={measured} stale={stalePreview} />
             </div>
 
@@ -335,7 +336,7 @@ export const AppShell = memo(function AppShell({
               onRender={actions.render}
             />
 
-            {/* Print-size readout — bottom-left, above the peeking sheet. */}
+            {/* Print-size readout — top-left, below the floating top bar. */}
             <SizeReadout size={measured} stale={stalePreview} />
           </div>
 
