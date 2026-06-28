@@ -5,6 +5,7 @@
 // stored client-side and mounted by the renderer.
 import type { FileImport } from "../openscad/types";
 import { FileInput } from "./FileInput";
+import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
 import { Button } from "./ui/button";
 import { Folder as FolderIcon, Trash2 as TrashIcon, File as FileIcon, X as XIcon } from "lucide-react";
@@ -40,10 +41,14 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
 
   return (
     <div className="file-manager">
-      <p className="file-manager__intro">
-        {fileImport.note ??
-          "Fonts, SVGs & data files referenced by this design. Stored on-device and re-applied next visit."}
-      </p>
+      <div className="file-manager__intro">
+        <Markdown
+          body={
+            fileImport.note ??
+            "Fonts, SVGs & data files referenced by this design. Stored on-device and re-applied next visit."
+          }
+        />
+      </div>
 
       {loadedFiles.length > 0 && (
         <ul className="file-manager__list">
@@ -71,10 +76,7 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
             type="button"
             variant="outline"
             className="file-manager__action w-full"
-            title={
-              fileImport.note ??
-              "Import a file your design references (a font, an SVG, a data file…)"
-            }
+            title="Import a file your design references (a font, an SVG, a data file…)"
             onClick={open}
           >
             <FolderIcon size={16} /> {fileImport.label ?? "Import file"}…
