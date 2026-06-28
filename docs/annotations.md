@@ -39,3 +39,15 @@ mounting = "none"; // [none, screw, countersunk]
 ```
 
 Collapsed parameters remain in the DOM and are still sent to OpenSCAD.
+
+## Font selectors (`// @font`)
+
+Mark a string parameter as a font-family selector so the UI can check its value against the available font set (bundled fonts ∪ imported ones, matched by family name) and offer an inline import / fallback affordance when the family isn't loaded:
+
+```scad
+// Lettering face.
+// @font
+font = "DIN 32986 Taktil Positiv:style=Regular";
+```
+
+A parameter whose name is `font` or ends in `_font` is detected automatically, so the annotation is only needed for differently-named string params. It applies to **free-text** string params only — a `// [..]` enum dropdown of fixed font choices isn't checked (its options are pre-vetted). See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.

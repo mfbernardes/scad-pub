@@ -214,10 +214,25 @@ Designs sometimes need a file the app can't bundle — a license-restricted font
 
 **How uploads are made available to OpenSCAD** — decided automatically by file extension, so one button covers both cases:
 
-- **Fonts** (`.ttf`/`.otf`/`.ttc`) are mounted where the renderer's fontconfig can find them, so `text(font = "…")` can use them. Without the expected font, an open-license fallback stands in (the log panel says so).
+- **Fonts** (`.ttf`/`.otf`/`.ttc`) are mounted where the renderer's fontconfig can find them, so `text(font = "…")` can use them. They're matched by their **embedded family name**, not the filename — so a renamed file still resolves.
 - **Any other file** is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. The reference must match the uploaded file's name (use `note` to tell users which name to use).
 
 Uploaded files persist in IndexedDB and are re-applied on the next visit; the panel lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no import button is shown.
+
+## Fonts (`fonts`, `fontFallback`)
+
+`fonts` lists the font files the renderer bundles and mounts (a basename already in `public/fonts/`, or a path into `source` to copy one in). Their embedded family names are read at build time, so the app knows the authoritative available set.
+
+A parameter that selects a font — named `font`/`*_font`, or annotated `// @font` (see [annotations](annotations.md#font-selectors--font)) — is checked against that set (bundled **∪** any imported fonts, matched by family name). When the selected family isn't loaded, the control shows a non-alarming inline hint with **Import font…** and a one-click **Use \<bundled family\>** fallback — so availability is known immediately, without needing a render to find out. (A family that *is* loaded never warns.)
+
+```jsonc
+{
+  "fonts": ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf"],
+  "fontFallback": "Liberation Mono"  // optional, see below
+}
+```
+
+**`fontFallback`** (optional) pins a deterministic last-resort family in the generated `fonts.conf`. Without it, once a user imports a font, Fontconfig can pick that font as the global default for any *unmatched* family — making OpenSCAD's own substitution unpredictable. Set `fontFallback` to a **bundled** family that you **don't** offer as a selectable lettering choice (e.g. a monospace face), and any absent family deterministically falls back to it instead. Omit it for the default (no fallback rule).
 
 ## Popup notice (`popup`)
 

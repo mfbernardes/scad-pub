@@ -3,10 +3,13 @@
 // Slider + Input for numbers, Checkbox for booleans, Select for enums, Input for
 // strings. Each control carries an aria-label (its description) for its name.
 import { memo, useEffect, useMemo, useState } from "react";
-import { Info as InfoIcon } from "lucide-react";
+import { Info as InfoIcon, Upload as UploadIcon } from "lucide-react";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { isVisible } from "../lib/visibility";
+import { familyOf, normalizeFamily, withFamily } from "../lib/fonts";
+import { useAppActions } from "../lib/appActions";
+import { FileInput } from "./FileInput";
 import { Slider } from "./ui/slider";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
@@ -27,6 +30,62 @@ interface Props {
   search?: string;
   /** Show the underlying OpenSCAD variable name beside each label (default true). */
   showVarName?: boolean;
+  /**
+   * Normalised set of font families the renderer can use (bundled ∪ imported).
+   * When provided and non-empty, a `font` parameter whose family isn't in it
+   * shows an inline "not loaded" hint with import / fallback actions. Omitted or
+   * empty → no font checking (we can't be authoritative, so we don't warn).
+   */
+  availableFontFamilies?: Set<string>;
+  /** A bundled family offered as a one-click fallback for a missing font. */
+  fontSuggestion?: string | null;
+}
+
+// Inline, non-alarming hint shown under a `font` control when the selected
+// family isn't loaded. Offers the two actions that actually fix it: import the
+// real font, or switch to an available bundled family — so availability is
+// communicated immediately, without needing a render to find out.
+function FontMissingHint({
+  family,
+  value,
+  suggestion,
+  onUse,
+}: {
+  family: string;
+  value: string;
+  suggestion?: string | null;
+  onUse: (next: string) => void;
+}) {
+  const { addFile } = useAppActions();
+  const canSuggest = suggestion && normalizeFamily(suggestion) !== normalizeFamily(family);
+  return (
+    <div className="font-missing" role="status">
+      <span className="font-missing__text">
+        “{family}” isn’t loaded — text may render in another font.
+      </span>
+      <div className="font-missing__actions">
+        <FileInput
+          accept=".ttf,.otf,.ttc"
+          onFile={async (file) => addFile(file.name, new Uint8Array(await file.arrayBuffer()))}
+        >
+          {(open) => (
+            <button type="button" className="font-missing__btn" onClick={open}>
+              <UploadIcon size={13} aria-hidden="true" /> Import font…
+            </button>
+          )}
+        </FileInput>
+        {canSuggest && (
+          <button
+            type="button"
+            className="font-missing__btn"
+            onClick={() => onUse(withFamily(value, suggestion!))}
+          >
+            Use {suggestion}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function committedNumber(param: Extract<Param, { type: "number" }>, value: ParamValue): number {
@@ -180,7 +239,7 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = true }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = true, availableFontFamilies, fontSuggestion }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
@@ -227,6 +286,17 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               // `help` is the full comment block; its first sentence is the
               // label, so only offer the popover when it carries extra detail.
               const hasHelp = Boolean(p.help) && p.help !== label;
+              const value = values[p.name];
+              // A font selector whose family isn't in the known-available set.
+              // Only checked when we actually have a set to check against, so an
+              // unknown set never produces a false "not loaded" warning.
+              const fontValue =
+                p.type === "string" && p.isFont ? String(value ?? "") : null;
+              const fontMissing =
+                fontValue !== null &&
+                availableFontFamilies !== undefined &&
+                availableFontFamilies.size > 0 &&
+                !availableFontFamilies.has(normalizeFamily(familyOf(fontValue)));
               return (
                 <div className="param" key={p.name}>
                   <span className="param-label">
@@ -238,10 +308,18 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                   </span>
                   <Control
                     param={p}
-                    value={values[p.name]}
+                    value={value}
                     label={label}
                     onChange={(v) => onChange(p.name, v)}
                   />
+                  {fontMissing && (
+                    <FontMissingHint
+                      family={familyOf(fontValue!)}
+                      value={fontValue!}
+                      suggestion={fontSuggestion}
+                      onUse={(next) => onChange(p.name, next)}
+                    />
+                  )}
                 </div>
               );
             })}

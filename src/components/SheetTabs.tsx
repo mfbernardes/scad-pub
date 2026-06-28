@@ -24,6 +24,10 @@ interface Props {
   selected: string;
   fileImport: FileImport | null;
   loadedFiles: LoadedFile[];
+  /** Font families the renderer can use (normalised), for the missing-font hint. */
+  availableFontFamilies?: Set<string>;
+  /** A bundled family to offer as a one-click fallback for a missing font. */
+  fontSuggestion?: string | null;
   /** Called when a tab is tapped — used to raise a collapsed (peek) sheet. */
   onActivate?: () => void;
   /** Show the underlying OpenSCAD variable name beside each label (default true). */
@@ -39,6 +43,8 @@ export function SheetTabs({
   selected,
   fileImport,
   loadedFiles,
+  availableFontFamilies,
+  fontSuggestion,
   onActivate,
   showVarName = true,
   autoRender,
@@ -77,7 +83,7 @@ export function SheetTabs({
       <div className="sheet-tabs__body">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <div className="sheet-tabs__params">
-            <ParamForm design={design} values={values} onChange={change} showVarName={showVarName} />
+            <ParamForm design={design} values={values} onChange={change} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} />
           </div>
           {/* Auto-render + Reset are parameter-scoped, so they pin to the bottom
               of this tab only — not on Presets/Files (mirrors the desktop panel). */}
