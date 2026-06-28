@@ -405,11 +405,16 @@ export const Viewer = forwardRef<
     themedMaterialsRef.current = themedMaterials;
     themedVertexRef.current = themedVertices;
 
-    // Centre the model on the origin (the export keeps the design's own
-    // coordinates, which aren't centred).
+    // Centre the model over the origin in X/Y, but rest its base on the z=0
+    // grid plane rather than centring in Z (the export keeps the design's own
+    // coordinates, which aren't centred). OpenSCAD designs are modelled with
+    // their base on z=0; centring all three axes sank them half-way through the
+    // grid, so keep Z anchored to the model's lowest point instead.
     const box = new THREE.Box3().setFromObject(obj);
     const center = box.getCenter(new THREE.Vector3());
-    obj.position.sub(center);
+    obj.position.x -= center.x;
+    obj.position.y -= center.y;
+    obj.position.z -= box.min.z;
     scene.add(obj);
     modelRef.current = obj;
 
