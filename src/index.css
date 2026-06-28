@@ -838,33 +838,33 @@ button:disabled { cursor: default; }
   margin: 0;
 }
 
-/* On mobile the output console is a dismissible overlay that slides up OVER the
-   bottom sheet (covering its tabs), anchored just above the fixed action footer,
-   with a scrim behind it — so it reads as one focused panel instead of a thin
-   strip wedged between the viewer and the sheet's tab bar. */
+/* On mobile the output console is a dismissible overlay that slides up just
+   above the COLLAPSED (peek) sheet — so the sheet's Presets/Parameters/Files tab
+   row stays visible and tappable beneath it — with a scrim dimming only the
+   viewer above. Opening it collapses the sheet to peek; tapping a sheet tab
+   raises the sheet and closes the overlay, so the two never overlap. */
 .app-shell__mobile > .output-console {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: var(--mobile-footer-height);
+  bottom: calc(var(--mobile-footer-height) + var(--mobile-peek-height));
   top: auto;
   z-index: 32;
-  max-height: 60vh;
+  max-height: 55vh;
   box-shadow: var(--elevation);
   border-top: 1px solid var(--line);
   border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
 }
 
-/* Dim the viewer + sheet behind the overlay; tap to dismiss. Sits above the
-   sheet (z 30) and below the console (z 32), and clears the footer so primary
-   actions stay live. */
+/* Dim the viewer behind the overlay; tap to dismiss. Stops above the peek sheet
+   + footer so the sheet tabs and primary actions stay live and undimmed. */
 .output-console__scrim {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  bottom: var(--mobile-footer-height);
+  bottom: calc(var(--mobile-footer-height) + var(--mobile-peek-height));
   z-index: 31;
   background: rgba(0, 0, 0, 0.4);
 }

@@ -113,10 +113,22 @@ export const AppShell = memo(function AppShell({
     if (url) actions.savePng(url);
   }, [isMobile, actions]);
 
-  const openOutput = useCallback(() => setOutputOpen(true), []);
+  // Open the overlay and collapse the sheet to peek, so the overlay's fixed
+  // anchor (just above the peek tab row) never overlaps an expanded sheet.
+  const openOutput = useCallback(() => {
+    setOutputOpen(true);
+    setSheetDetent("peek");
+  }, []);
 
   const toggleOutput = useCallback(() => {
-    setOutputOpen((o) => !o);
+    if (outputOpenRef.current) setOutputOpen(false);
+    else openOutput();
+  }, [openOutput]);
+
+  // Raising the sheet (tapping a tab) would slide up into the overlay — close it.
+  const expandSheet = useCallback((expand: () => void) => {
+    setOutputOpen(false);
+    expand();
   }, []);
 
   // Auto-open the console when a render surfaces notices/warnings/asserts
@@ -330,7 +342,7 @@ export const AppShell = memo(function AppShell({
                 selected={selectedPreset}
                 fileImport={fileImport}
                 loadedFiles={loadedFiles}
-                onActivate={expand}
+                onActivate={() => expandSheet(expand)}
                 showVarName={showVarName}
                 autoRender={autoRender}
               />
