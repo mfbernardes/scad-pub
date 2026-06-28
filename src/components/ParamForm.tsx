@@ -46,17 +46,15 @@ interface Props {
 // real font, or switch to an available bundled family — so availability is
 // communicated immediately, without needing a render to find out.
 function FontMissingHint({
-  value,
-  suggestion,
+  family,
+  fallback,
   onUse,
 }: {
-  value: string;
-  suggestion?: string | null;
+  family: string;
+  fallback: { value: string; label: string } | null;
   onUse: (next: string) => void;
 }) {
   const { addFile } = useAppActions();
-  const family = familyOf(value);
-  const canSuggest = suggestion && normalizeFamily(suggestion) !== normalizeFamily(family);
   return (
     <div className="font-missing" role="status">
       <span className="font-missing__text">
@@ -73,13 +71,13 @@ function FontMissingHint({
             </button>
           )}
         </FileInput>
-        {canSuggest && (
+        {fallback && (
           <button
             type="button"
             className="font-missing__btn"
-            onClick={() => onUse(withFamily(value, suggestion!))}
+            onClick={() => onUse(fallback.value)}
           >
-            Use {suggestion}
+            Use {fallback.label}
           </button>
         )}
       </div>
@@ -87,17 +85,40 @@ function FontMissingHint({
   );
 }
 
-// The value of a font selector whose family isn't loaded, else null. Only
-// flagged when an authoritative available set is provided and non-empty, so an
-// unknown set never produces a false "not loaded" warning.
+// The value of a font selector whose family isn't loaded, else null. A font
+// selector is a string or enum (dropdown) param flagged `isFont`. Only checked
+// when an authoritative available set is provided and non-empty, so an unknown
+// set never produces a false "not loaded" warning.
 function missingFont(
   param: Param,
   value: ParamValue,
   available: Set<string> | undefined
 ): string | null {
-  if (param.type !== "string" || !param.isFont || !available?.size) return null;
+  const isFontParam = (param.type === "string" || param.type === "enum") && param.isFont;
+  if (!isFontParam || !available?.size) return null;
   const v = String(value ?? "");
   return available.has(normalizeFamily(familyOf(v))) ? null : v;
+}
+
+// A one-click replacement whose family is loaded, or null when none fits. For an
+// enum the result must be a listed choice (the dropdown can't show an off-list
+// value), so pick the first choice whose family is available; for free text,
+// graft the suggested bundled family onto the current value.
+function fontFallback(
+  param: Param,
+  value: string,
+  available: Set<string> | undefined,
+  suggestion: string | null | undefined
+): { value: string; label: string } | null {
+  if (param.type === "enum") {
+    const choice = param.choices.find((c) =>
+      available?.has(normalizeFamily(familyOf(c.value)))
+    );
+    return choice ? { value: choice.value, label: familyOf(choice.value) } : null;
+  }
+  if (suggestion && normalizeFamily(suggestion) !== normalizeFamily(familyOf(value)))
+    return { value: withFamily(value, suggestion), label: suggestion };
+  return null;
 }
 
 function committedNumber(param: Extract<Param, { type: "number" }>, value: ParamValue): number {
@@ -317,8 +338,8 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                   />
                   {missingFontValue !== null && (
                     <FontMissingHint
-                      value={missingFontValue}
-                      suggestion={fontSuggestion}
+                      family={familyOf(missingFontValue)}
+                      fallback={fontFallback(p, missingFontValue, availableFontFamilies, fontSuggestion)}
                       onUse={(next) => onChange(p.name, next)}
                     />
                   )}

@@ -63,7 +63,18 @@ export type Param = ParamBase &
   (
     | { type: "number"; default: number; min?: number; max?: number; step?: number }
     | { type: "boolean"; default: boolean }
-    | { type: "enum"; default: string; choices: EnumChoice[] }
+    | {
+        type: "enum";
+        default: string;
+        choices: EnumChoice[];
+        /**
+         * This dropdown selects an OpenSCAD `font` family. Set by gen-schema from an
+         * explicit `// @font` annotation. Lets a design keep the native `// [...]`
+         * dropdown (rendered by the desktop Customizer) while still getting the
+         * in-app availability check / import affordance — see the `string` member.
+         */
+        isFont?: boolean;
+      }
     | {
         type: "string";
         default: string;
