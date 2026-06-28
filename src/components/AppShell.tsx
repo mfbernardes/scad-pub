@@ -273,7 +273,14 @@ export const AppShell = memo(function AppShell({
       </div>
 
       {/* ── Mobile layout (hidden on desktop via CSS) ── */}
-      <div className="app-shell__mobile">
+      {/* data-viewer-follow drives the viewer's bottom edge: "peek" keeps it
+          above the collapsed sheet, "half" raises it above the settled half
+          sheet. Keyed off the *settled* detent (not the live drag), and full
+          freezes at the half position. See .app-shell__mobile-viewer in CSS. */}
+      <div
+        className="app-shell__mobile"
+        data-viewer-follow={sheetDetent === "peek" ? "peek" : "half"}
+      >
         {/* Full-bleed viewer */}
         <div className="app-shell__mobile-viewer">
           <div className="viewer-wrap">

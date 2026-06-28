@@ -264,7 +264,12 @@ button:disabled { cursor: default; }
 
 /* Mobile: the viewer fills the visible area above the peek sheet + fixed footer,
    so the model is framed in the remaining viewport rather than the full page
-   (its lower part would otherwise sit hidden behind the peeking sheet). */
+   (its lower part would otherwise sit hidden behind the peeking sheet). When the
+   sheet settles at half (or full), the canvas eases up to sit above the half
+   sheet instead — the Viewer's ResizeObserver reframes the model into the new
+   box. It only follows the *settled* detent (driven by data-viewer-follow on the
+   mobile root), not the live drag, so there's no per-frame resize while dragging.
+   The 0.28s easing mirrors the sheet's own height transition (.bottom-sheet). */
 .app-shell__mobile-viewer {
   position: absolute;
   top: 0;
@@ -273,6 +278,17 @@ button:disabled { cursor: default; }
   bottom: calc(var(--mobile-footer-total) + var(--mobile-peek-height));
   display: flex;
   flex-direction: column;
+  transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Settled at half/full: sit above the half sheet. The 0.52 ratio and the
+   (viewport − footer) base mirror BottomSheet's halfH (HALF_VH_RATIO). Full
+   freezes here rather than shrinking to nothing — the sheet covers the canvas
+   and the Viewer pauses rendering off-screen anyway. */
+.app-shell__mobile[data-viewer-follow="half"] .app-shell__mobile-viewer {
+  bottom: calc(
+    var(--mobile-footer-total) + (100dvh - var(--mobile-footer-total)) * 0.52
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1731,6 +1747,7 @@ button:disabled { cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation-duration: 2.4s; }
   .bottom-sheet { transition: none !important; }
+  .app-shell__mobile-viewer { transition: none !important; }
   .param-group > summary::before { transition: none; }
   .status-pill__dot { animation: none !important; }
 }
