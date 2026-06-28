@@ -1,6 +1,6 @@
 # OpenSCAD annotations
 
-ScadPub adds two comment annotations that `gen-schema.mjs` parses. Both are invisible to OpenSCAD and the desktop Customizer.
+ScadPub adds three comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
 
 ## Conditional parameters (`// @showIf`)
 

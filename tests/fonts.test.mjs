@@ -7,11 +7,11 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   fontFamilyNames,
-  isFontFile,
   familyOf,
   withFamily,
   normalizeFamily,
 } from "../src/lib/fonts.ts";
+import { fontFamilyNames as genFontFamilyNames } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FONTS = join(HERE, "..", "public", "fonts");
@@ -29,12 +29,21 @@ test("fontFamilyNames returns [] for non-font bytes rather than throwing", () =>
   assert.deepEqual(fontFamilyNames(new Uint8Array(0)), []);
 });
 
-test("isFontFile matches by extension, case-insensitively", () => {
-  assert.ok(isFontFile("MyFont.ttf"));
-  assert.ok(isFontFile("MyFont.OTF"));
-  assert.ok(isFontFile("collection.ttc"));
-  assert.ok(!isFontFile("logo.svg"));
-  assert.ok(!isFontFile("data.json"));
+// The browser parser (src/lib/fonts.ts) and the build-time parser
+// (scripts/gen-schema.mjs) are duplicated because the build can't import TS.
+// They MUST agree, or the app's availability check desyncs from schema data.
+test("the app and gen-schema font parsers produce identical families", () => {
+  for (const file of ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf"]) {
+    const bytes = readFileSync(join(FONTS, file));
+    assert.deepEqual(
+      fontFamilyNames(new Uint8Array(bytes)),
+      genFontFamilyNames(bytes),
+      `parsers disagree on ${file}`
+    );
+  }
+  // Agree on the failure path too.
+  const junk = new Uint8Array([1, 2, 3, 4, 5]);
+  assert.deepEqual(fontFamilyNames(junk), genFontFamilyNames(Buffer.from(junk)));
 });
 
 test("familyOf strips fontconfig properties", () => {

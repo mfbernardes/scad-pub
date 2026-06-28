@@ -78,11 +78,6 @@ export function fontFamilyNames(bytes: Uint8Array): string[] {
   }
 }
 
-/** Filenames OpenSCAD's fontconfig can scan for a usable font face. */
-export function isFontFile(name: string): boolean {
-  return /\.(ttf|otf|ttc)$/i.test(name);
-}
-
 /**
  * The family portion of an OpenSCAD `font` value — everything before the first
  * Fontconfig property (`:style=…`, `:weight=…`), trimmed. `"Brand Display:style=Bold"`

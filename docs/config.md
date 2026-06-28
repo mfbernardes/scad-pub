@@ -227,7 +227,8 @@ A string parameter annotated `// @font` (see [annotations](annotations.md#font-s
 
 ```jsonc
 {
-  "fonts": ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf"],
+  // Bundle the fallback face too — fontFallback must name a family you bundle.
+  "fonts": ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf", "LiberationMono-Regular.ttf"],
   "fontFallback": "Liberation Mono"  // optional, see below
 }
 ```

@@ -46,17 +46,16 @@ interface Props {
 // real font, or switch to an available bundled family — so availability is
 // communicated immediately, without needing a render to find out.
 function FontMissingHint({
-  family,
   value,
   suggestion,
   onUse,
 }: {
-  family: string;
   value: string;
   suggestion?: string | null;
   onUse: (next: string) => void;
 }) {
   const { addFile } = useAppActions();
+  const family = familyOf(value);
   const canSuggest = suggestion && normalizeFamily(suggestion) !== normalizeFamily(family);
   return (
     <div className="font-missing" role="status">
@@ -86,6 +85,19 @@ function FontMissingHint({
       </div>
     </div>
   );
+}
+
+// The value of a font selector whose family isn't loaded, else null. Only
+// flagged when an authoritative available set is provided and non-empty, so an
+// unknown set never produces a false "not loaded" warning.
+function missingFont(
+  param: Param,
+  value: ParamValue,
+  available: Set<string> | undefined
+): string | null {
+  if (param.type !== "string" || !param.isFont || !available?.size) return null;
+  const v = String(value ?? "");
+  return available.has(normalizeFamily(familyOf(v))) ? null : v;
 }
 
 function committedNumber(param: Extract<Param, { type: "number" }>, value: ParamValue): number {
@@ -287,16 +299,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               // label, so only offer the popover when it carries extra detail.
               const hasHelp = Boolean(p.help) && p.help !== label;
               const value = values[p.name];
-              // A font selector whose family isn't in the known-available set.
-              // Only checked when we actually have a set to check against, so an
-              // unknown set never produces a false "not loaded" warning.
-              const fontValue =
-                p.type === "string" && p.isFont ? String(value ?? "") : null;
-              const fontMissing =
-                fontValue !== null &&
-                availableFontFamilies !== undefined &&
-                availableFontFamilies.size > 0 &&
-                !availableFontFamilies.has(normalizeFamily(familyOf(fontValue)));
+              const missingFontValue = missingFont(p, value, availableFontFamilies);
               return (
                 <div className="param" key={p.name}>
                   <span className="param-label">
@@ -312,10 +315,9 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                     label={label}
                     onChange={(v) => onChange(p.name, v)}
                   />
-                  {fontMissing && (
+                  {missingFontValue !== null && (
                     <FontMissingHint
-                      family={familyOf(fontValue!)}
-                      value={fontValue!}
+                      value={missingFontValue}
                       suggestion={fontSuggestion}
                       onUse={(next) => onChange(p.name, next)}
                     />

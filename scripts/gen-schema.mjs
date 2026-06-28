@@ -162,13 +162,16 @@ const xmlEscape = (s) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-// Extract the family names embedded in a font file's `name` table (mirrors
-// src/lib/fonts.ts, which does the same in the browser for user-imported fonts).
-// Used to record each bundled font's real family so the app can decide font
-// availability by family name rather than filename. Returns [] for anything it
-// can't parse, so a malformed font never breaks the build.
+// Extract the family names embedded in a font file's `name` table. This MUST
+// stay byte-for-byte equivalent to `fontFamilyNames` in src/lib/fonts.ts, which
+// does the same in the browser for user-imported fonts — the app compares a
+// design's font against this build-time data, so the two parsers disagreeing
+// would desync the availability check (a cross-check test guards it). It's
+// duplicated rather than shared because gen-schema runs as plain Node ESM with
+// no TS loader, so it can't import the app's .ts module at build time. Returns
+// [] for anything it can't parse, so a malformed font never breaks the build.
 const FONT_FAMILY_NAME_IDS = [16, 1]; // 16 = typographic family, 1 = legacy family
-function fontFamilyNames(buf) {
+export function fontFamilyNames(buf) {
   try {
     const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
     const latin1 = (start, len) => {
