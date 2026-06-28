@@ -612,6 +612,34 @@ button:disabled { cursor: default; }
 .viewer-hud .icon-btn:hover:not(:disabled) { border-color: var(--accent); }
 
 /* ═══════════════════════════════════════════════════════════════
+   SIZE READOUT — ambient "what size will it print?" chip (bottom-left)
+   ═══════════════════════════════════════════════════════════════ */
+
+.size-readout {
+  position: absolute;
+  left: calc(0.75rem + env(safe-area-inset-left, 0px));
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-sm);
+  pointer-events: none; /* purely informative — never intercept orbit gestures */
+  z-index: 5;
+}
+
+/* Preview out of date: dim + italic so a stale figure never reads as current. */
+.size-readout--stale {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    ACTION CLUSTER — floating bottom-center controls
    ═══════════════════════════════════════════════════════════════ */
 
