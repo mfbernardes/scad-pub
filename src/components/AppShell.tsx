@@ -133,16 +133,20 @@ export const AppShell = memo(function AppShell({
     if (d !== "peek") setOutputOpen(false);
   }, []);
 
-  // Auto-open the console when a render surfaces notices/warnings/asserts
-  // (only on the empty→non-empty transition, so a manual close sticks).
-  // Same behaviour on desktop and mobile — the console surfaces notices, so
-  // neither top bar carries a badge.
+  // Surface diagnostics per layout, on the diagnostics-present transition:
+  //  • Desktop: auto-open the inline console when notices first appear.
+  //  • Mobile: don't auto-pop the overlay (the footer Output button carries a
+  //    count badge instead) — but auto-hide it when notices clear.
   const hadDiagnostics = useRef(false);
   useEffect(() => {
     const has = diagnostics.length > 0;
-    if (has && !hadDiagnostics.current) openOutput();
+    if (isMobile) {
+      if (!has && hadDiagnostics.current) setOutputOpen(false);
+    } else if (has && !hadDiagnostics.current) {
+      openOutput();
+    }
     hadDiagnostics.current = has;
-  }, [diagnostics, openOutput]);
+  }, [diagnostics, isMobile, openOutput]);
 
   return (
     <div className="app-shell">
@@ -359,6 +363,7 @@ export const AppShell = memo(function AppShell({
             hasResult={!!result?.ok}
             modelFormat={schema.format}
             outputOpen={outputOpen}
+            outputBadge={diagnostics.length}
             onSavePng={handleSavePng}
             onToggleOutput={toggleOutput}
           />

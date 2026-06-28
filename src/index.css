@@ -1102,16 +1102,33 @@ button:disabled { cursor: default; }
   white-space: nowrap;
 }
 
-/* The console toggle is a utility, not a file action: icon-only, no grow. */
+/* The console toggle is a utility, not a file action: icon-only, no grow.
+   Position context for the notice-count badge. */
 .mobile-footer__output {
   flex: 0 0 auto !important;
   width: var(--mobile-footer-height);
+  position: relative;
 }
 
 .mobile-footer__output.active {
   background: var(--panel-2);
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Pending-notices indicator on the Output toggle (mobile): a small dot in the
+   corner — clear of the icon — so the console needn't pop open to announce them.
+   The exact count stays in the button's accessible label. */
+.output-toggle-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-solid);
+  box-shadow: 0 0 0 2px var(--panel);
+  pointer-events: none;
 }
 
 /* Vertical rule fencing the console toggle off from the file actions. */
