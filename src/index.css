@@ -838,20 +838,35 @@ button:disabled { cursor: default; }
   margin: 0;
 }
 
-/* On mobile the output console drops from the top (just under the top bar) so it
-   stays visible alongside the bottom sheet — even when the sheet is expanded over
-   the lower half — rather than being hidden behind it. */
+/* On mobile the output console is a dismissible overlay that slides up OVER the
+   bottom sheet (covering its tabs), anchored just above the fixed action footer,
+   with a scrim behind it — so it reads as one focused panel instead of a thin
+   strip wedged between the viewer and the sheet's tab bar. */
 .app-shell__mobile > .output-console {
   position: absolute;
   left: 0;
   right: 0;
-  /* top/bottom set inline so it sits just above the sheet's current top */
-  z-index: 25;
-  max-height: 45vh;
+  bottom: var(--mobile-footer-height);
+  top: auto;
+  z-index: 32;
+  max-height: 60vh;
   box-shadow: var(--elevation);
   border-top: 1px solid var(--line);
   border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
+}
+
+/* Dim the viewer + sheet behind the overlay; tap to dismiss. Sits above the
+   sheet (z 30) and below the console (z 32), and clears the footer so primary
+   actions stay live. */
+.output-console__scrim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--mobile-footer-height);
+  z-index: 31;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 /* ═══════════════════════════════════════════════════════════════
