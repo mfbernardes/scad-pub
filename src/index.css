@@ -662,10 +662,6 @@ button:disabled { cursor: default; }
   border-color: var(--accent-solid) !important;
 }
 
-.action-cluster__output {
-  position: relative;
-}
-
 .action-cluster__output.active {
   background: var(--panel) !important;
   border-color: var(--accent) !important;
@@ -1102,12 +1098,10 @@ button:disabled { cursor: default; }
   white-space: nowrap;
 }
 
-/* The console toggle is a utility, not a file action: icon-only, no grow.
-   Position context for the notice-count badge. */
+/* The console toggle is a utility, not a file action: icon-only, no grow. */
 .mobile-footer__output {
   flex: 0 0 auto !important;
   width: var(--mobile-footer-height);
-  position: relative;
 }
 
 .mobile-footer__output.active {
@@ -1116,13 +1110,16 @@ button:disabled { cursor: default; }
   color: var(--accent);
 }
 
-/* Pending-notices indicator on the Output toggle (mobile): a small dot in the
-   corner — clear of the icon — so the console needn't pop open to announce them.
-   The exact count stays in the button's accessible label. */
+/* Pending-notices indicator on the Output toggle (both layouts): a small dot in
+   the corner — clear of the icon — so the console needn't pop open to announce
+   notices. The ring keeps it legible over the icon/background. */
+.action-cluster__output,
+.mobile-footer__output { position: relative; }
+
 .output-toggle-dot {
   position: absolute;
-  top: 7px;
-  right: 7px;
+  top: 4px;
+  right: 4px;
   width: 8px;
   height: 8px;
   border-radius: 50%;

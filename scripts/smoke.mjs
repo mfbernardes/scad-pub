@@ -27,7 +27,7 @@ const statusText = (page) =>
 async function openConsole(page) {
   if (await page.locator(".output-console").count()) return;
   // Desktop toggle (the mobile footer's twin is CSS-hidden at this viewport).
-  await page.locator('.action-cluster__output[aria-label="Open output console"]').click().catch(() => {});
+  await page.locator('.action-cluster__output[aria-label^="Open output console"]').click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
 }
 

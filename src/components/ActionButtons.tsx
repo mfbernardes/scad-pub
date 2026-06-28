@@ -24,8 +24,8 @@ interface Props {
   outputOpen: boolean;
   onSavePng: () => void;
   onToggleOutput: () => void;
-  /** Count of pending notices/warnings — shown as a badge on the Output toggle. */
-  outputBadge?: number;
+  /** Show a dot on the Output toggle when there are pending notices/warnings. */
+  hasNotices?: boolean;
   /** Compact = the mobile footer: shorter labels, outline secondaries, full size. */
   compact?: boolean;
 }
@@ -36,7 +36,7 @@ export function ActionButtons({
   outputOpen,
   onSavePng,
   onToggleOutput,
-  outputBadge = 0,
+  hasNotices = false,
   compact = false,
 }: Props) {
   const { exportModel, copyLink } = useAppActions();
@@ -70,15 +70,12 @@ export function ActionButtons({
         variant={secondary}
         className={`${prefix}__output${outputOpen ? " active" : ""}`}
         onClick={onToggleOutput}
-        aria-label={
-          `${outputOpen ? "Close" : "Open"} output console` +
-          (outputBadge > 0 ? `, ${outputBadge} notice${outputBadge === 1 ? "" : "s"}` : "")
-        }
+        aria-label={`${outputOpen ? "Close" : "Open"} output console${hasNotices ? " (new notices)" : ""}`}
         aria-pressed={outputOpen}
         title="Output console"
       >
         <TerminalIcon size={16} />
-        {outputBadge > 0 && <span className="output-toggle-dot" aria-hidden="true" />}
+        {hasNotices && <span className="output-toggle-dot" aria-hidden="true" />}
       </Button>
     </>
   );

@@ -133,20 +133,14 @@ export const AppShell = memo(function AppShell({
     if (d !== "peek") setOutputOpen(false);
   }, []);
 
-  // Surface diagnostics per layout, on the diagnostics-present transition:
-  //  • Desktop: auto-open the inline console when notices first appear.
-  //  • Mobile: don't auto-pop the overlay (the footer Output button carries a
-  //    count badge instead) — but auto-hide it when notices clear.
-  const hadDiagnostics = useRef(false);
+  // Notices are surfaced by the dot on the Output toggle, not by auto-popping the
+  // console. We only auto-hide a console that's open once its notices clear.
+  const hasNotices = diagnostics.length > 0;
+  const hadNotices = useRef(false);
   useEffect(() => {
-    const has = diagnostics.length > 0;
-    if (isMobile) {
-      if (!has && hadDiagnostics.current) setOutputOpen(false);
-    } else if (has && !hadDiagnostics.current) {
-      openOutput();
-    }
-    hadDiagnostics.current = has;
-  }, [diagnostics, isMobile, openOutput]);
+    if (!hasNotices && hadNotices.current) setOutputOpen(false);
+    hadNotices.current = hasNotices;
+  }, [hasNotices]);
 
   return (
     <div className="app-shell">
@@ -226,6 +220,7 @@ export const AppShell = memo(function AppShell({
                 hasResult={!!result?.ok}
                 modelFormat={schema.format}
                 outputOpen={outputOpen}
+                hasNotices={hasNotices}
                 onSavePng={handleSavePng}
                 onToggleOutput={toggleOutput}
                 className="action-cluster--desktop"
@@ -363,7 +358,7 @@ export const AppShell = memo(function AppShell({
             hasResult={!!result?.ok}
             modelFormat={schema.format}
             outputOpen={outputOpen}
-            outputBadge={diagnostics.length}
+            hasNotices={hasNotices}
             onSavePng={handleSavePng}
             onToggleOutput={toggleOutput}
           />
