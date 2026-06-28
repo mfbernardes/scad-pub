@@ -39,8 +39,10 @@ export const ActionCluster = memo(function ActionCluster({
         title="Re-render automatically as you change parameters"
       >
         <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Auto-render" />
-        Auto
+        Auto-render
       </Label>
+      {/* Divider fences the render-mode setting off from the actions. */}
+      <span className="action-cluster__divider" aria-hidden="true" />
       <ActionButtons
         rendering={rendering}
         autoRender={autoRender}

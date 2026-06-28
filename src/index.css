@@ -645,14 +645,16 @@ button:disabled { cursor: default; }
   border-color: var(--line);
 }
 
-.action-cluster__render {
+/* The single filled primary (Render when pending, else Export). The accent
+   fill is what makes "the action that matters" pop out of the ghost row. */
+.action-cluster__primary {
   background: var(--accent-solid) !important;
   color: var(--on-accent) !important;
   border-color: var(--accent-solid) !important;
   font-weight: 600;
 }
 
-.action-cluster__render:hover:not(:disabled) {
+.action-cluster__primary:hover:not(:disabled) {
   filter: brightness(1.08);
   border-color: var(--accent-solid) !important;
 }
@@ -681,9 +683,13 @@ button:disabled { cursor: default; }
   color: var(--accent);
 }
 
-/* Separator between auto-render label and action buttons */
-.action-cluster__auto-render + button {
-  margin-left: 0.15rem;
+/* Thin vertical rule separating the cluster's three zones:
+   [ Auto-render ] · [ Render/Export · PNG · Share ] · [ Output ] */
+.action-cluster__divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 0.2rem 0.2rem;
+  background: var(--line);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -996,13 +1002,22 @@ button:disabled { cursor: default; }
   z-index: 28;
 }
 
-.mobile-footer__render {
+/* The filled primary (Render when pending, else Export) leads the footer and
+   takes extra width so the action that matters reads first. */
+.mobile-footer__primary {
+  flex: 1.6 !important;
   font-weight: 600;
   font-size: 0.88rem;
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: var(--accent-solid);
 }
 
-/* Each action grows to share the footer width equally. */
-.mobile-footer__output,
+.mobile-footer__primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+/* Text actions grow to share the remaining width. */
 .mobile-footer button {
   flex: 1;
   min-width: 0;
@@ -1015,10 +1030,25 @@ button:disabled { cursor: default; }
   white-space: nowrap;
 }
 
+/* The console toggle is a utility, not a file action: icon-only, no grow. */
+.mobile-footer__output {
+  flex: 0 0 auto !important;
+  width: var(--mobile-footer-height);
+}
+
 .mobile-footer__output.active {
   background: var(--panel-2);
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Vertical rule fencing the console toggle off from the file actions. */
+.mobile-footer__divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 0.5rem 0.15rem;
+  background: var(--line);
+  flex: 0 0 auto;
 }
 
 /* ═══════════════════════════════════════════════════════════════
