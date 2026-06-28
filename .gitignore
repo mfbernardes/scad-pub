@@ -8,6 +8,8 @@ public/wasm/
 # Generated from the configured design source via scripts/gen-schema.mjs
 public/scad/
 src/generated/
+# fontconfig config is generated (carries the optional fontFallback rule)
+public/fonts/fonts.conf
 
 # Render outputs
 *.stl

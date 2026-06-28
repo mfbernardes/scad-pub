@@ -8,6 +8,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  copyFileSync,
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,6 +25,9 @@ import {
   parseFormat,
   parseNotices,
   parseUi,
+  parseParams,
+  parseFontFallback,
+  renderFontsConf,
 } from "../scripts/gen-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -716,4 +720,97 @@ test("parseEnumHint ignores single-item and non-enum hints", () => {
     { value: "a", label: "a" },
     { value: "b", label: "b" },
   ]);
+});
+
+// --- Font handling (availability check, fallback rule) ---
+
+// parseParams reads a real file, so write a tiny .scad to a temp dir.
+function paramsOf(scad) {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-font-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(file, scad);
+  try {
+    return parseParams(file).params;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("only a string param with an explicit @font is flagged isFont", () => {
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Body face.\n` +
+      `// @font\n` +
+      `body = "Some Family";\n` +
+      `// A conventional name is NOT auto-detected — annotation is required.\n` +
+      `font = "Liberation Sans:style=Bold";\n` +
+      `// Heading face.\n` +
+      `label_font = "Mono";\n` +
+      `// A @font on a dropdown stays a plain enum (not free text).\n` +
+      `// @font\n` +
+      `picker = "A"; // ["A", "B"]\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.body.isFont, true); // `@font` annotation on a string param
+  // The @font line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.body.help.includes("@font"));
+  // No annotation -> not flagged, regardless of the parameter name.
+  assert.equal(byName.font.isFont, undefined);
+  assert.equal(byName.label_font.isFont, undefined);
+  // @font on an enum dropdown is ignored (the type isn't string).
+  assert.equal(byName.picker.type, "enum");
+  assert.equal(byName.picker.isFont, undefined);
+});
+
+test("parseFontFallback accepts a trimmed string or null; rejects empty", () => {
+  assert.equal(parseFontFallback(undefined), null);
+  assert.equal(parseFontFallback(null), null);
+  assert.equal(parseFontFallback("  Liberation Mono  "), "Liberation Mono");
+  assert.throws(() => parseFontFallback(""), /'fontFallback' must be a non-empty string/);
+  assert.throws(() => parseFontFallback(42), /'fontFallback' must be a non-empty string/);
+});
+
+test("renderFontsConf emits the base dirs, and a weak fallback only when set", () => {
+  const base = renderFontsConf(null);
+  assert.ok(base.includes("<dir>/fonts</dir>"));
+  assert.ok(base.includes("<cachedir>/fontconfig-cache</cachedir>"));
+  assert.ok(!base.includes("<match"));
+
+  const withFallback = renderFontsConf("Liberation Mono");
+  assert.ok(withFallback.includes('<edit name="family" mode="append_last" binding="weak">'));
+  assert.ok(withFallback.includes("<string>Liberation Mono</string>"));
+
+  // The family is XML-escaped so it can't break out of the rule.
+  assert.ok(renderFontsConf("A & B").includes("<string>A &amp; B</string>"));
+});
+
+test("a real build records the bundled fonts' embedded families + writes fonts.conf", () => {
+  // A real build (outPublicDir present) copies each bundled font into the served
+  // tree and parses its embedded family. Build a self-contained source dir with a
+  // real TTF so the copy + parse path is exercised end-to-end.
+  const REAL_TTF = join(HERE, "..", "public", "fonts", "LiberationSans-Regular.ttf");
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-src-"));
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-pub-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// Font.\nfont = "Liberation Sans";\n`);
+  copyFileSync(REAL_TTF, join(src, "Face.ttf"));
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: ".",
+      fonts: ["Face.ttf"],
+      fontFallback: "Liberation Sans",
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+  const schema = generate({
+    configPath: join(src, "c.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  assert.deepEqual(schema.fontFamilies, ["Liberation Sans"]);
+  // fonts.conf is generated into the served tree, with the configured fallback.
+  const conf = readFileSync(join(out, "public", "fonts", "fonts.conf"), "utf-8");
+  assert.ok(conf.includes("<string>Liberation Sans</string>"));
 });

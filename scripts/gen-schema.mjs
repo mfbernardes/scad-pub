@@ -112,6 +112,9 @@ const DOC_RE = /^\s*\/\/\s?(.*)$/;
 const DEP_RE = /^\s*(?:use|include)\s*<([^>]+)>/;
 // `@showIf <expr>` directive inside a param's doc block (conditional visibility).
 const SHOWIF_RE = /^@show-?if\s+(.+)$/i;
+// `@font` directive: marks a string parameter as a font-family selector, so the
+// UI can check its value against the available font set. Invisible to OpenSCAD.
+const FONT_ANNOT_RE = /^@font\s*$/i;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
 
@@ -158,6 +161,103 @@ const xmlEscape = (s) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+
+// Extract the family names embedded in a font file's `name` table. This MUST
+// stay byte-for-byte equivalent to `fontFamilyNames` in src/lib/fonts.ts, which
+// does the same in the browser for user-imported fonts — the app compares a
+// design's font against this build-time data, so the two parsers disagreeing
+// would desync the availability check (a cross-check test guards it). It's
+// duplicated rather than shared because gen-schema runs as plain Node ESM with
+// no TS loader, so it can't import the app's .ts module at build time. Returns
+// [] for anything it can't parse, so a malformed font never breaks the build.
+const FONT_FAMILY_NAME_IDS = [16, 1]; // 16 = typographic family, 1 = legacy family
+export function fontFamilyNames(buf) {
+  try {
+    const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    const latin1 = (start, len) => {
+      let s = "";
+      for (let i = 0; i < len; i++) s += String.fromCharCode(view.getUint8(start + i));
+      return s;
+    };
+    const utf16be = (start, len) => {
+      let s = "";
+      for (let i = 0; i + 1 < len; i += 2) s += String.fromCharCode(view.getUint16(start + i));
+      return s;
+    };
+    const out = new Set();
+    const fromSfnt = (sfntOffset) => {
+      const numTables = view.getUint16(sfntOffset + 4);
+      let nameOffset = -1;
+      for (let i = 0; i < numTables; i++) {
+        const rec = sfntOffset + 12 + i * 16;
+        if (latin1(rec, 4) === "name") {
+          nameOffset = view.getUint32(rec + 8);
+          break;
+        }
+      }
+      if (nameOffset < 0) return;
+      const count = view.getUint16(nameOffset + 2);
+      const stringBase = nameOffset + view.getUint16(nameOffset + 4);
+      for (let i = 0; i < count; i++) {
+        const rec = nameOffset + 6 + i * 12;
+        const platformID = view.getUint16(rec);
+        const nameID = view.getUint16(rec + 6);
+        if (!FONT_FAMILY_NAME_IDS.includes(nameID)) continue;
+        const len = view.getUint16(rec + 8);
+        const off = stringBase + view.getUint16(rec + 10);
+        if (off + len > view.byteLength) continue;
+        const str = platformID === 1 ? latin1(off, len) : utf16be(off, len);
+        const trimmed = str.trim();
+        if (trimmed) out.add(trimmed);
+      }
+    };
+    if (latin1(0, 4) === "ttcf") {
+      const numFonts = view.getUint32(8);
+      for (let i = 0; i < numFonts; i++) fromSfnt(view.getUint32(12 + i * 4));
+    } else {
+      fromSfnt(0);
+    }
+    return [...out];
+  } catch {
+    return [];
+  }
+}
+
+// Validate the optional `fontFallback` config key: a family name pinned as the
+// deterministic last-resort match in fonts.conf so an imported font can never
+// become Fontconfig's global default fallback. Must be a bundled family that
+// isn't offered as a selectable lettering font. Absent -> null -> no rule.
+export function parseFontFallback(raw) {
+  if (raw == null) return null;
+  if (typeof raw !== "string" || !raw.trim())
+    throw new Error(
+      `gen-schema: 'fontFallback' must be a non-empty string (got ${JSON.stringify(raw)})`
+    );
+  return raw.trim();
+}
+
+// The fontconfig config the renderer mounts at /fonts/fonts.conf. Optionally
+// pins a weak last-resort family so an unmatched/absent family resolves to a
+// deterministic bundled face instead of whatever Fontconfig last scanned (which
+// can be a user-imported font) — keeping OpenSCAD's own substitution stable.
+export function renderFontsConf(fallback) {
+  const rule = fallback
+    ? `  <match target="pattern">\n` +
+      `    <edit name="family" mode="append_last" binding="weak">\n` +
+      `      <string>${xmlEscape(fallback)}</string>\n` +
+      `    </edit>\n` +
+      `  </match>\n`
+    : "";
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">\n` +
+    `<fontconfig>\n` +
+    `  <dir>/fonts</dir>\n` +
+    `  <cachedir>/fontconfig-cache</cachedir>\n` +
+    rule +
+    `</fontconfig>\n`
+  );
+}
 
 // The model formats OpenSCAD can export and the viewer can parse.
 const FORMATS = ["3mf", "stl"];
@@ -480,6 +580,7 @@ export function parseParams(absPath) {
   let section = null;
   let pendingDoc = [];
   let pendingShowIf = null;
+  let pendingFont = false;
   // Set by a `// @collapsed` line; consumed by the next section header.
   let pendingSectionCollapsed = false;
   const params = [];
@@ -488,6 +589,7 @@ export function parseParams(absPath) {
   const reset = () => {
     pendingDoc = [];
     pendingShowIf = null;
+    pendingFont = false;
     pendingSectionCollapsed = false;
   };
   for (const line of lines) {
@@ -520,6 +622,9 @@ export function parseParams(absPath) {
       const help = trimmed.join(" ");
       const p = inferParam(name, def, hint, firstSentence(help), help, section);
       if (pendingShowIf) p.showIf = pendingShowIf;
+      // Flag font-family selectors: a string param with an explicit `@font`
+      // annotation. The availability check then runs against the known font set.
+      if (p.type === "string" && pendingFont) p.isFont = true;
       params.push(p);
       reset();
       continue;
@@ -530,6 +635,7 @@ export function parseParams(absPath) {
       // label/help; it drives conditional visibility in the UI instead.
       const showIf = dm[1].trim().match(SHOWIF_RE);
       if (showIf) pendingShowIf = showIf[1].trim();
+      else if (FONT_ANNOT_RE.test(dm[1].trim())) pendingFont = true;
       else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {
       // keep doc across blank lines
@@ -584,6 +690,38 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     }
     return name;
   });
+  // The fontconfig config the renderer mounts. Optionally pins a weak last-resort
+  // fallback family (config.fontFallback) so an imported font can't hijack
+  // Fontconfig's global default. Generated into the served tree (and hashed into
+  // renderHash) so the matching rules stay config-driven, not hand-maintained.
+  const FONT_FALLBACK = parseFontFallback(config.fontFallback);
+  if (outPublicDir) {
+    mkdirSync(join(outPublicDir, "fonts"), { recursive: true });
+    writeFileSync(join(outPublicDir, "fonts", "fonts.conf"), renderFontsConf(FONT_FALLBACK));
+  }
+  // The bundled fonts' real embedded family names, so the app can decide font
+  // availability by family rather than filename. Read from the copied files in
+  // the served tree; only meaningful in a real build (outPublicDir present).
+  const FONT_FAMILIES = [];
+  if (outPublicDir) {
+    const seen = new Set();
+    for (const name of FONTS) {
+      let buf;
+      try {
+        buf = readFileSync(join(outPublicDir, "fonts", name));
+      } catch {
+        continue; // font not bundled here (e.g. a fixture's placeholder name)
+      }
+      for (const fam of fontFamilyNames(buf)) {
+        const key = fam.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          FONT_FAMILIES.push(fam);
+        }
+      }
+    }
+    FONT_FAMILIES.sort((a, b) => a.localeCompare(b));
+  }
   const TITLE = config.title ?? "ScadPub";
   const SHORT_NAME = config.shortName ?? TITLE;
   const ID = config.id ?? "scadpub";
@@ -1074,6 +1212,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     format: FORMAT,
     features: FEATURES,
     fonts: FONTS,
+    fontFamilies: FONT_FAMILIES,
     fileImport: FILE_IMPORT,
     popup: POPUP,
     notices: NOTICES,

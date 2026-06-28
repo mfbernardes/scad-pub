@@ -44,7 +44,7 @@ examples/           self-contained example design (default source)
   tag.json          bundled presets for tag.scad
 public/
   wasm/             OpenSCAD WASM (fetched, gitignored) — scripts/fetch-wasm.mjs
-  fonts/            Liberation TTFs + fonts.conf
+  fonts/            Liberation TTFs (tracked); fonts.conf (generated, gitignored)
   scad/             designs copied for the renderer (generated, gitignored)
   sw.js             service worker (precaches the shell + runtime assets)
   manifest.webmanifest, icon*.svg/png, apple-splash-*.png, precache-manifest.json  (generated, gitignored)

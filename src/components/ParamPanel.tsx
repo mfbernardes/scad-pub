@@ -40,6 +40,10 @@ interface Props {
   values: Values;
   fileImport: FileImport | null;
   loadedFiles: LoadedFile[];
+  /** Font families the renderer can use (normalised), for the missing-font hint. */
+  availableFontFamilies?: Set<string>;
+  /** A bundled family to offer as a one-click fallback for a missing font. */
+  fontSuggestion?: string | null;
   panelSide: "left" | "right";
   panelDefaultOpen: boolean;
   /** Show the underlying OpenSCAD variable name beside each label. */
@@ -52,6 +56,8 @@ export function ParamPanel({
   values,
   fileImport,
   loadedFiles,
+  availableFontFamilies,
+  fontSuggestion,
   panelSide,
   panelDefaultOpen,
   showVarName,
@@ -204,7 +210,7 @@ export function ParamPanel({
             )}
           </div>
           <div className="param-panel__body">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} />
           </div>
         </TabsContent>
 

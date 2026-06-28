@@ -32,6 +32,8 @@ import { ThemeToggle } from "./ThemeToggle";
 import { Spinner } from "./ui/spinner";
 import { CircleHelp as HelpIcon, Info as InfoIcon } from "lucide-react";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
+import { fontFamilyNames, normalizeFamily } from "../lib/fonts";
+import { isFontFile } from "../openscad/renderArgs";
 import { assetUrl } from "../lib/assetUrl";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
@@ -105,6 +107,22 @@ export const AppShell = memo(function AppShell({
     [userFiles]
   );
 
+  // The set of font families the renderer can actually use: bundled families
+  // (parsed at build time) plus the embedded families of any imported font.
+  // Normalised for case/space-insensitive matching. The font controls compare a
+  // design's `font` value against this to flag a missing family (see ParamForm).
+  const availableFontFamilies = useMemo(() => {
+    const set = new Set((schema.fontFamilies ?? []).map(normalizeFamily));
+    for (const [name, bytes] of Object.entries(userFiles)) {
+      if (isFontFile(name))
+        for (const fam of fontFamilyNames(bytes)) set.add(normalizeFamily(fam));
+    }
+    return set;
+  }, [schema.fontFamilies, userFiles]);
+  // A bundled family to offer as a one-click fallback when the selected font
+  // isn't loaded. Always available, so it can never itself be missing.
+  const fontSuggestion = (schema.fontFamilies ?? [])[0] ?? null;
+
   // Parse the log once here; the OutputConsole (Notices tab count chips) reads
   // this derived data instead of re-parsing it.
   const diagnostics = useMemo(() => parseDiagnostics(log, notices), [log, notices]);
@@ -176,6 +194,8 @@ export const AppShell = memo(function AppShell({
             values={values}
             fileImport={fileImport}
             loadedFiles={loadedFiles}
+            availableFontFamilies={availableFontFamilies}
+            fontSuggestion={fontSuggestion}
             panelSide={panelSide}
             panelDefaultOpen={panelDefaultOpen}
             showVarName={showVarName}
@@ -347,6 +367,8 @@ export const AppShell = memo(function AppShell({
                 selected={selectedPreset}
                 fileImport={fileImport}
                 loadedFiles={loadedFiles}
+                availableFontFamilies={availableFontFamilies}
+                fontSuggestion={fontSuggestion}
                 onActivate={expand}
                 showVarName={showVarName}
                 autoRender={autoRender}

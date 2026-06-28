@@ -89,7 +89,7 @@ async function main() {
   page.on("pageerror", (e) => errors.push(e.message));
   let failures = 0;
   const check = (ok, msg) => console.log(`  ${ok ? "✅" : (failures++, "❌")} ${msg}`);
-  const dir = await mkdtemp(join(tmpdir(), "taktil-smoke-"));
+  const dir = await mkdtemp(join(tmpdir(), "scadpub-smoke-"));
 
   try {
     await page.goto(base, { waitUntil: "load" });

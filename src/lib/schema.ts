@@ -52,6 +52,11 @@ export function validateSchema(raw: unknown): Schema {
   for (const key of ["features", "fonts", "assets"] as const) {
     if (!Array.isArray(s[key])) fail(`'${key}' must be an array`);
   }
+  if (
+    s.fontFamilies !== undefined &&
+    (!Array.isArray(s.fontFamilies) || !s.fontFamilies.every((f) => typeof f === "string"))
+  )
+    fail("'fontFamilies' must be an array of strings");
   if (!Array.isArray(s.designs) || s.designs.length === 0)
     fail("'designs' must be a non-empty array");
   for (const d of s.designs) checkDesign(d);

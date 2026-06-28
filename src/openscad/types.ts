@@ -64,7 +64,18 @@ export type Param = ParamBase &
     | { type: "number"; default: number; min?: number; max?: number; step?: number }
     | { type: "boolean"; default: boolean }
     | { type: "enum"; default: string; choices: EnumChoice[] }
-    | { type: "string"; default: string; raw?: boolean }
+    | {
+        type: "string";
+        default: string;
+        raw?: boolean;
+        /**
+         * This string selects an OpenSCAD `font` family. Set by gen-schema from an
+         * explicit `// @font` annotation. The UI checks its value against the
+         * available font set (bundled ∪ imported) and offers an import / fallback
+         * affordance when the family isn't loaded.
+         */
+        isFont?: boolean;
+      }
   );
 
 export interface Design {
@@ -239,6 +250,14 @@ export interface Schema {
   features: string[];
   /** Bundled font filenames the renderer mounts from public/fonts/. */
   fonts: string[];
+  /**
+   * Embedded family names of the bundled fonts (extracted from their `name`
+   * tables at build time). The app matches a design's `font` parameter against
+   * this set (plus the families of any user-imported fonts) to decide
+   * availability — by real family name, not filename. Empty when no bundled
+   * font's family could be read.
+   */
+  fontFamilies: string[];
   /**
    * Optional generic "Import file" control in the preset panel. Lets the user
    * supply any file their designs reference but the app can't bundle — a font, an

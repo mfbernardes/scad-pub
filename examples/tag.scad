@@ -25,6 +25,7 @@ text_size = 9; // [3:0.5:30]
 // How far the text stands out from (or sinks into) the plate (mm).
 text_depth = 1; // [0.4:0.1:3]
 // Font family/style. Change to an uploaded font's family, e.g. "DejaVu Sans".
+// @font
 font = "Liberation Sans:style=Bold";
 // Colour of the raised text — any OpenSCAD colour name or "#rrggbb". Exported
 // into the 3MF so the viewer (and colour-capable slicers) show it.

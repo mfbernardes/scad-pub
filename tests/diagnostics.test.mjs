@@ -70,11 +70,11 @@ test("a marker only matches when configured", () => {
 
 test("captures WARNING lines from stdout or stderr (hardcoded)", () => {
   const out = parseDiagnostics(
-    ["[err] WARNING: Can't open font 'DIN', using fallback"],
+    ["[err] WARNING: Can't open font 'Brand Display', using fallback"],
     []
   );
   assert.deepEqual(out, [
-    { level: "warning", text: "Can't open font 'DIN', using fallback" },
+    { level: "warning", text: "Can't open font 'Brand Display', using fallback" },
   ]);
 });
 

@@ -1,6 +1,6 @@
 # OpenSCAD annotations
 
-ScadPub adds two comment annotations that `gen-schema.mjs` parses. Both are invisible to OpenSCAD and the desktop Customizer.
+ScadPub adds three comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
 
 ## Conditional parameters (`// @showIf`)
 
@@ -39,3 +39,15 @@ mounting = "none"; // [none, screw, countersunk]
 ```
 
 Collapsed parameters remain in the DOM and are still sent to OpenSCAD.
+
+## Font selectors (`// @font`)
+
+Mark a string parameter as a font-family selector so the UI can check its value against the available font set (bundled fonts ∪ imported ones, matched by family name) and offer an inline import / fallback affordance when the family isn't loaded:
+
+```scad
+// Lettering face.
+// @font
+font = "Brand Display:style=Regular";
+```
+
+The annotation is required — there's no name-based auto-detection, so a string param is only treated as a font selector when you mark it `// @font`. It applies to **free-text** string params only; a `// [..]` enum dropdown of fixed font choices is left alone (its options are pre-vetted). See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.

@@ -1313,6 +1313,56 @@ button:disabled { cursor: default; }
   gap: 0.5rem;
 }
 
+/* Inline "font isn't loaded" hint under a font control (see ParamForm). Subtle,
+   not alarming: a panel-toned card with the theme's warn-coloured edge (the same
+   amber as stale-state pills and warning diagnostics) and two action links. */
+.font-missing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.1rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius-sm);
+}
+
+.font-missing__text {
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.font-missing__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+}
+
+.font-missing__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 2px 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.font-missing__btn:hover {
+  text-decoration: underline;
+}
+
+.font-missing__btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Label text + its optional info button, kept together on the left so the
    var-name code stays pinned to the right edge. */
 .param-label__main {

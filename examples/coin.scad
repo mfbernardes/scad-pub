@@ -20,8 +20,11 @@ label = "ScadPub";
 text_size = 7; // [3:0.5:20]
 // How far the text stands out from (or sinks into) the face (mm).
 text_depth = 0.8; // [0.2:0.1:3]
-// Font family / style.
-font = "Liberation Sans:style=Bold";
+// Font family / style. Defaults to a font ScadPub doesn't bundle, to
+// demonstrate the "font isn't loaded" hint — import it (or click the bundled
+// fallback the hint offers) to render the real face.
+// @font
+font = "DejaVu Sans:style=Bold";
 // Colour of the raised text in the export.
 text_color = "#e23b3b";
 // Carve the text into the face instead of raising it.
