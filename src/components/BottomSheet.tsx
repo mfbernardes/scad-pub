@@ -50,6 +50,10 @@ interface Props {
   /** Reports the effective (measured) peek height so the parent can sit content
    *  just above the collapsed sheet. */
   onPeekHeightChange?: (px: number) => void;
+  /** Reports the sheet's live displayed height (px) and whether it's mid-drag,
+   *  so the parent can size the viewer to follow the sheet in real time. Fires
+   *  every drag frame and on each settle. */
+  onFollow?: (heightPx: number, dragging: boolean) => void;
 }
 
 export function BottomSheet({
@@ -59,6 +63,7 @@ export function BottomSheet({
   peekHeight = 72,
   bottomInset = 0,
   onPeekHeightChange,
+  onFollow,
 }: Props) {
   // Detent is controlled by the parent; setDetent forwards to it.
   const setDetent = onDetentChange;
@@ -209,6 +214,12 @@ export function BottomSheet({
   const displayH = dragging
     ? Math.max(peekHeightRef.current, Math.min(fullH(bottomInsetRef.current), currentH + dragOffset))
     : currentH;
+
+  // Report the live height + drag state up so the viewer can follow the sheet.
+  // Runs every drag frame (displayH changes with dragOffset) and on each settle.
+  useEffect(() => {
+    onFollow?.(displayH, dragging);
+  }, [displayH, dragging, onFollow]);
 
   return (
     <>

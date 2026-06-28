@@ -23,7 +23,7 @@ import { ActionButtons } from "./ActionButtons";
 import { StaleBanner } from "./StaleBanner";
 import { ViewerHUD } from "./ViewerHUD";
 import { OutputConsole } from "./OutputConsole";
-import { BottomSheet, type SheetDetent } from "./BottomSheet";
+import { BottomSheet, HALF_VH_RATIO, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
 import { IconButton } from "./IconButton";
@@ -83,6 +83,9 @@ export const AppShell = memo(function AppShell({
   const actions = useAppActions();
   const desktopViewerRef = useRef<ViewerHandle>(null);
   const mobileViewerRef = useRef<ViewerHandle>(null);
+  // The mobile layout root — its --sheet-follow-h CSS var sizes the viewer so it
+  // tracks the sheet live (see handleSheetFollow / .app-shell__mobile-viewer).
+  const mobileRootRef = useRef<HTMLDivElement>(null);
   // Only the active layout mounts a Viewer (the other layout is CSS-hidden), so
   // we never run two three.js renderers / RAF loops / STL parses at once.
   const isMobile = useIsMobile();
@@ -159,6 +162,24 @@ export const AppShell = memo(function AppShell({
     setSheetDetent(d);
     if (d !== "peek") setOutputOpen(false);
   }, []);
+
+  // Size the mobile viewer to follow the sheet's live height: write the sheet
+  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge. The
+  // Viewer's RAF resize loop reframes the model into the new box. Capped at the
+  // half height so dragging on to full doesn't shrink the canvas to nothing (the
+  // sheet covers it and the Viewer pauses rendering off-screen there anyway).
+  // While dragging, the viewer's bottom transition is disabled so it tracks the
+  // finger 1:1; on release the snap eases (see .app-shell__mobile-viewer in CSS).
+  const handleSheetFollow = useCallback(
+    (heightPx: number, dragging: boolean) => {
+      const el = mobileRootRef.current;
+      if (!el) return;
+      const half = (window.innerHeight - footerInset) * HALF_VH_RATIO;
+      el.style.setProperty("--sheet-follow-h", `${Math.round(Math.min(heightPx, half))}px`);
+      el.dataset.sheetDragging = dragging ? "true" : "false";
+    },
+    [footerInset]
+  );
 
   // Notices are surfaced by the dot on the Output toggle, not by auto-popping the
   // console. We only auto-hide a console that's open once its notices clear.
@@ -273,14 +294,10 @@ export const AppShell = memo(function AppShell({
       </div>
 
       {/* ── Mobile layout (hidden on desktop via CSS) ── */}
-      {/* data-viewer-follow drives the viewer's bottom edge: "peek" keeps it
-          above the collapsed sheet, "half" raises it above the settled half
-          sheet. Keyed off the *settled* detent (not the live drag), and full
-          freezes at the half position. See .app-shell__mobile-viewer in CSS. */}
-      <div
-        className="app-shell__mobile"
-        data-viewer-follow={sheetDetent === "peek" ? "peek" : "half"}
-      >
+      {/* --sheet-follow-h (set live by handleSheetFollow) sizes the viewer so its
+          bottom edge tracks the sheet; data-sheet-dragging toggles the easing.
+          See .app-shell__mobile-viewer in CSS. */}
+      <div className="app-shell__mobile" ref={mobileRootRef}>
         {/* Full-bleed viewer */}
         <div className="app-shell__mobile-viewer">
           <div className="viewer-wrap">
@@ -365,6 +382,7 @@ export const AppShell = memo(function AppShell({
         <BottomSheet
           detent={sheetDetent}
           onDetentChange={handleDetentChange}
+          onFollow={handleSheetFollow}
           peekHeight={PEEK_HEIGHT}
           bottomInset={footerInset}
         >
