@@ -14,6 +14,11 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 // the unused branch below — and its loader import — drop out of the bundle.
 declare const __APP_FORMAT__: "3mf" | "stl";
 
+// Build-time toggle (Vite define; see vite.config.ts / config `restOnGrid`).
+// true rests the model's base on the z=0 grid; false (the default) centres it
+// on the origin in all three axes. A literal, so the unused branch drops out.
+declare const __APP_REST_ON_GRID__: boolean;
+
 // Axis-aligned bounding-box size of the rendered model, in millimetres (the
 // design's own units, kept 1:1 by the loaders). Reported via Viewer's onMeasure.
 export interface Dimensions {
@@ -336,16 +341,21 @@ export const Viewer = forwardRef<
     themedMaterialsRef.current = themedMaterials;
     themedVertexRef.current = themedVertices;
 
-    // Centre the model over the origin in X/Y, but rest its base on the z=0
-    // grid plane rather than centring in Z (the export keeps the design's own
-    // coordinates, which aren't centred). OpenSCAD designs are modelled with
-    // their base on z=0; centring all three axes sank them half-way through the
-    // grid, so keep Z anchored to the model's lowest point instead.
+    // Position the model. The export keeps the design's own coordinates, which
+    // aren't centred. By default we centre on the origin in all three axes. When
+    // the build opts in via `restOnGrid`, we instead centre in X/Y and anchor Z
+    // to the model's lowest point so the base rests on the z=0 grid — OpenSCAD
+    // designs are modelled with their base on z=0, and centring in Z sinks them
+    // half-way through the grid.
     const box = new THREE.Box3().setFromObject(obj);
     const center = box.getCenter(new THREE.Vector3());
-    obj.position.x -= center.x;
-    obj.position.y -= center.y;
-    obj.position.z -= box.min.z;
+    if (__APP_REST_ON_GRID__) {
+      obj.position.x -= center.x;
+      obj.position.y -= center.y;
+      obj.position.z -= box.min.z;
+    } else {
+      obj.position.sub(center);
+    }
     scene.add(obj);
     modelRef.current = obj;
 

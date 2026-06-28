@@ -16,6 +16,7 @@ function readSchema(): {
   shortName?: string;
   id?: string;
   format?: "3mf" | "stl";
+  restOnGrid?: boolean;
   description?: string;
   themeColor?: string;
   themeColorLight?: string;
@@ -137,6 +138,10 @@ export default defineConfig(({ command }) => {
       // The build-time model format. A literal here lets the viewer's dead
       // loader branch (and its loader import) tree-shake out of the bundle.
       __APP_FORMAT__: JSON.stringify(schema.format || "3mf"),
+      // Whether the viewer rests a model's base on the z=0 grid (true) or
+      // centres it on the origin in all three axes (false, the default). A
+      // literal so the unused centring branch in the viewer drops out.
+      __APP_REST_ON_GRID__: JSON.stringify(schema.restOnGrid ?? false),
     },
     worker: { format: "es" },
     build: {
