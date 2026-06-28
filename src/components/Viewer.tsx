@@ -199,28 +199,33 @@ export const Viewer = forwardRef<
     );
     io.observe(mount);
 
+    // Resize from inside the RAF loop so the drawing buffer is resized and
+    // re-rendered in the same frame: setSize() clears the canvas, and resizing
+    // out-of-band (e.g. an async ResizeObserver) left a blank frame before the
+    // next render, which flickered while the bottom sheet animated the viewer's
+    // height. Polling the mount size each frame is cheap — the read only forces
+    // layout when something actually changed it (e.g. a sheet drag).
+    let lastW = 0;
+    let lastH = 0;
     let raf = 0;
     const animate = () => {
       controls.update();
+      const w = mount.clientWidth;
+      const h = mount.clientHeight;
+      if (w !== lastW || h !== lastH) {
+        renderer.setSize(w, h, false);
+        cam.aspect = w / Math.max(1, h);
+        cam.updateProjectionMatrix();
+        lastW = w;
+        lastH = h;
+      }
       if (visibleRef.current) renderer.render(scene, cam);
       raf = requestAnimationFrame(animate);
     };
     animate();
 
-    const resize = () => {
-      const w = mount.clientWidth;
-      const h = mount.clientHeight;
-      renderer.setSize(w, h, false);
-      cam.aspect = w / Math.max(1, h);
-      cam.updateProjectionMatrix();
-    };
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(mount);
-
     return () => {
       cancelAnimationFrame(raf);
-      ro.disconnect();
       io.disconnect();
       controls.dispose();
       renderer.dispose();

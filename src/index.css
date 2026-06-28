@@ -262,17 +262,36 @@ button:disabled { cursor: default; }
   position: relative; /* anchor for ActionCluster + ViewerHUD */
 }
 
-/* Mobile: the viewer fills the visible area above the peek sheet + fixed footer,
-   so the model is framed in the remaining viewport rather than the full page
-   (its lower part would otherwise sit hidden behind the peeking sheet). */
+/* Mobile: the viewer fills the visible area above the sheet + fixed footer, so
+   the model is framed in the remaining viewport rather than the full page (its
+   lower part would otherwise sit hidden behind the sheet). The canvas follows
+   the sheet live: --sheet-follow-h (the sheet's current height, set by AppShell
+   from BottomSheet's drag) drives the bottom edge, and the Viewer's RAF loop
+   reframes the model into the new box. It falls back to the peek height before
+   the first drag, and is capped at the half height (the 0.52 ratio mirrors
+   BottomSheet's halfH) so dragging on to full doesn't shrink the canvas to
+   nothing — the sheet covers it and the Viewer pauses rendering off-screen. */
 .app-shell__mobile-viewer {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  bottom: calc(var(--mobile-footer-total) + var(--mobile-peek-height));
+  bottom: calc(
+    var(--mobile-footer-total) +
+    min(
+      var(--sheet-follow-h, var(--mobile-peek-height)),
+      (100dvh - var(--mobile-footer-total)) * 0.52
+    )
+  );
   display: flex;
   flex-direction: column;
+  /* Eases the snap when the sheet settles (mirrors .bottom-sheet's transition).
+     Disabled mid-drag below so the canvas tracks the finger 1:1. */
+  transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.app-shell__mobile[data-sheet-dragging="true"] .app-shell__mobile-viewer {
+  transition: none;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1731,6 +1750,7 @@ button:disabled { cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation-duration: 2.4s; }
   .bottom-sheet { transition: none !important; }
+  .app-shell__mobile-viewer { transition: none !important; }
   .param-group > summary::before { transition: none; }
   .status-pill__dot { animation: none !important; }
 }

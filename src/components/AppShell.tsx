@@ -83,6 +83,9 @@ export const AppShell = memo(function AppShell({
   const actions = useAppActions();
   const desktopViewerRef = useRef<ViewerHandle>(null);
   const mobileViewerRef = useRef<ViewerHandle>(null);
+  // The mobile layout root — its --sheet-follow-h CSS var sizes the viewer so it
+  // tracks the sheet live (see handleSheetFollow / .app-shell__mobile-viewer).
+  const mobileRootRef = useRef<HTMLDivElement>(null);
   // Only the active layout mounts a Viewer (the other layout is CSS-hidden), so
   // we never run two three.js renderers / RAF loops / STL parses at once.
   const isMobile = useIsMobile();
@@ -158,6 +161,18 @@ export const AppShell = memo(function AppShell({
   const handleDetentChange = useCallback((d: SheetDetent) => {
     setSheetDetent(d);
     if (d !== "peek") setOutputOpen(false);
+  }, []);
+
+  // Size the mobile viewer to follow the sheet's live height: write the sheet
+  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge (the
+  // Viewer's RAF loop reframes the model into the new box). The CSS caps it at
+  // the half height, and data-sheet-dragging toggles the easing — see
+  // .app-shell__mobile-viewer.
+  const handleSheetFollow = useCallback((heightPx: number, dragging: boolean) => {
+    const el = mobileRootRef.current;
+    if (!el) return;
+    el.style.setProperty("--sheet-follow-h", `${Math.round(heightPx)}px`);
+    el.dataset.sheetDragging = dragging ? "true" : "false";
   }, []);
 
   // Notices are surfaced by the dot on the Output toggle, not by auto-popping the
@@ -273,7 +288,10 @@ export const AppShell = memo(function AppShell({
       </div>
 
       {/* ── Mobile layout (hidden on desktop via CSS) ── */}
-      <div className="app-shell__mobile">
+      {/* --sheet-follow-h (set live by handleSheetFollow) sizes the viewer so its
+          bottom edge tracks the sheet; data-sheet-dragging toggles the easing.
+          See .app-shell__mobile-viewer in CSS. */}
+      <div className="app-shell__mobile" ref={mobileRootRef}>
         {/* Full-bleed viewer */}
         <div className="app-shell__mobile-viewer">
           <div className="viewer-wrap">
@@ -358,6 +376,7 @@ export const AppShell = memo(function AppShell({
         <BottomSheet
           detent={sheetDetent}
           onDetentChange={handleDetentChange}
+          onFollow={handleSheetFollow}
           peekHeight={PEEK_HEIGHT}
           bottomInset={footerInset}
         >
