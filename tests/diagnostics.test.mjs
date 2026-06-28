@@ -8,7 +8,7 @@ import { parseDiagnostics, countBadges, badgeTextColor } from "../src/lib/diagno
 
 // A sample notice config (what a consumer's `notices` key would produce).
 const NOTICES = [
-  { marker: "advisory", label: "advisories", color: "#e0a458" },
+  { marker: "alert", label: "alerts", color: "#e0a458" },
   { marker: "note", label: "notes" },
 ];
 
@@ -16,7 +16,7 @@ test("extracts notices and strips the marker", () => {
   const out = parseDiagnostics(
     [
       "[cmd] openscad /tag.scad ...",
-      '[out] ECHO: "tag: advisory: the label text is tall and may overflow"',
+      '[out] ECHO: "tag: alert: the label text is tall and may overflow"',
       '[out] ECHO: "some unrelated echo"',
     ],
     NOTICES
@@ -34,7 +34,7 @@ test("notice categories are config-driven (multiple markers, first match wins)",
   const out = parseDiagnostics(
     [
       '[out] ECHO: "tag: note: the label is engraved"',
-      '[out] ECHO: "tag: advisory: the emblem is wide"',
+      '[out] ECHO: "tag: alert: the emblem is wide"',
     ],
     NOTICES
   );
@@ -54,7 +54,7 @@ test("matches ECHO on stderr too (OpenSCAD-WASM routes ECHO to [err])", () => {
 
 test("notices are off when none are configured", () => {
   const out = parseDiagnostics(
-    ['[out] ECHO: "tag: advisory: ignored when no categories are configured"'],
+    ['[out] ECHO: "tag: alert: ignored when no categories are configured"'],
     []
   );
   assert.deepEqual(out, []);
@@ -92,7 +92,7 @@ test("captures assert failures as a hardcoded diagnostic", () => {
 });
 
 test("de-duplicates repeated notices", () => {
-  const line = '[out] ECHO: "x: advisory: only 8 mm between modalities"';
+  const line = '[out] ECHO: "x: alert: only 8 mm between modalities"';
   assert.equal(parseDiagnostics([line, line], NOTICES).length, 1);
 });
 
@@ -122,14 +122,14 @@ test("returns nothing for a clean log", () => {
 
 test("countBadges tallies per category (raw counts, config order) plus asserts", () => {
   const log = [
-    '[out] ECHO: "a: advisory: one"',
-    '[out] ECHO: "a: advisory: two"',
+    '[out] ECHO: "a: alert: one"',
+    '[out] ECHO: "a: alert: two"',
     '[out] ECHO: "b: note: three"',
     "[err] WARNING: ignored for badges",
     "[err] ERROR: Assertion 'x' failed in file f.scad, line 1",
   ];
   assert.deepEqual(countBadges(log, NOTICES), [
-    { key: "notice:advisory", label: "advisories", count: 2, color: "#e0a458" },
+    { key: "notice:alert", label: "alerts", count: 2, color: "#e0a458" },
     { key: "notice:note", label: "notes", count: 1 },
     { key: "assert", label: "asserts", count: 1 },
   ]);

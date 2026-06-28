@@ -317,16 +317,6 @@ button:disabled { cursor: default; }
   font-weight: 600;
   color: var(--text);
 }
-.command-bar__design-label {
-  font-size: 0.82rem;
-  color: var(--muted);
-  white-space: nowrap;
-}
-/* Mid-dot separator between a pill's label and its value (matches the presets pill) */
-.command-bar__sep {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
 .command-bar__design-name {
   font-size: 0.88rem;
   font-weight: 600;
@@ -774,7 +764,7 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   OUTPUT CONSOLE — Advisories + Log tabs drawer
+   OUTPUT CONSOLE — Notices + Log tabs drawer
    ═══════════════════════════════════════════════════════════════ */
 
 .output-console {

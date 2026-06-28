@@ -1,7 +1,7 @@
 // CommandBar.tsx — top bar: brand, design picker (shadcn Select), presets
 // dropdown (shadcn Popover), status, action icons (theme / help / licenses),
 // optional PWA install. Notices surface via the auto-opening output console,
-// so the bar carries no advisory badge.
+// so the bar carries no notice badge.
 import { memo, useState } from "react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
@@ -91,8 +91,6 @@ export const CommandBar = memo(function CommandBar({
       {/* Design picker + presets, centered in the bar */}
       <div className="command-bar__center">
         <div className="command-bar__design-picker">
-        <span className="command-bar__design-label">Design</span>
-        <span className="command-bar__sep" aria-hidden="true">·</span>
         {designs.length > 1 ? (
           <DesignPicker designs={designs} value={designId} onChange={designChange} />
         ) : (

@@ -151,7 +151,7 @@ export interface FileImport {
 export interface NoticeCategory {
   /** The design-defined marker, matched as `: <marker>:` within an echo. */
   marker: string;
-  /** Badge / notice noun (e.g. "advisories", "notes"). Defaults to the marker. */
+  /** Badge / notice noun (e.g. "alerts", "notes"). Defaults to the marker. */
   label: string;
   /** Optional badge fill colour (a plain CSS colour); falls back to the accent. */
   color?: string;

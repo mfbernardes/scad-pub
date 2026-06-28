@@ -4,7 +4,7 @@
 // + PNG export work via the UI. Design-specific checks run only when that design
 // is present in the built config: the example "tag" design exercises conditional
 // visibility (@showIf/@collapsed) and the OpenSCAD-output notice/assert badges;
-// a "signage" design, when configured, exercises the textmetrics advisory and
+// a "signage" design, when configured, exercises the textmetrics notice and
 // @showIf arrow_style. Finally runs axe-core to guard against serious/critical
 // accessibility regressions. Run after `npm run build`.
 import { readFile, mkdtemp, stat } from "node:fs/promises";
@@ -426,7 +426,7 @@ async function main() {
       // Open the output console and switch to the Log tab.
       await openConsole(page);
       await page.click('.output-console__tab:has-text("Log")').catch(() => {});
-      check(/between characters/.test((await page.textContent(".output-console").catch(() => "")) || ""), "textmetrics advisory present");
+      check(/between characters/.test((await page.textContent(".output-console").catch(() => "")) || ""), "textmetrics notice present");
       // arrow_style is relevant only once an arrow is chosen (`@showIf arrow != none`);
       // the signage default is arrow = "none", so it starts hidden.
       const arrowStyle = page.locator("code.param-var", { hasText: /^arrow_style$/ });

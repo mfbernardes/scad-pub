@@ -307,8 +307,8 @@ export function parsePopup(raw) {
 // matching echoes into a friendly notice and a coloured count badge. Each entry
 // is { marker (required), label?, color? }:
 //   - marker: the design-defined string matched as `: <marker>:` in an echo
-//     (e.g. "advisory", "note"); case-insensitive.
-//   - label: the badge / notice noun (e.g. "advisories"); defaults to marker.
+//     (e.g. "alert", "note"); case-insensitive.
+//   - label: the badge / notice noun (e.g. "alerts"); defaults to marker.
 //   - color: an optional badge fill colour, validated as a plain CSS colour
 //     (same strictness as `colors`) so it can't break out of the inline style
 //     it gets interpolated into.
