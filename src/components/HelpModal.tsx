@@ -42,8 +42,11 @@ function HelpSections({
 /** Tab strip + panels, built on the shared Radix Tabs primitive (which provides
  *  the full ARIA tabs pattern — roving tabindex, arrow/Home/End nav — for free). */
 function HelpTabs({ tabs }: { tabs: HelpTab[] }) {
+  // `min-h-0 flex-1` lets this tab block fill the dialog's remaining height and,
+  // crucially, shrink below its content — otherwise the default `min-height:auto`
+  // makes it grow past the dialog, which clips (rather than scrolls) long tabs.
   return (
-    <Tabs defaultValue="0" className="gap-0">
+    <Tabs defaultValue="0" className="min-h-0 flex-1 gap-0">
       <TabsList
         className="mx-4 mt-2 h-auto w-auto flex-wrap justify-start rounded-none border-0 border-b bg-transparent p-0"
         aria-label="Help topics"
@@ -55,7 +58,14 @@ function HelpTabs({ tabs }: { tabs: HelpTab[] }) {
         ))}
       </TabsList>
       {tabs.map((t, i) => (
-        <TabsContent key={i} value={String(i)} className="modal-body help-body mt-0" tabIndex={0}>
+        <TabsContent
+          key={i}
+          value={String(i)}
+          // `min-h-0` + the `.modal-body` `overflow-y:auto` make each tab scroll
+          // its own content within the constrained `Tabs` height above.
+          className="modal-body help-body mt-0 min-h-0"
+          tabIndex={0}
+        >
           <HelpSections intro={t.intro} sections={t.sections} />
         </TabsContent>
       ))}
