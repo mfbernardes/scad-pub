@@ -612,6 +612,45 @@ button:disabled { cursor: default; }
 .viewer-hud .icon-btn:hover:not(:disabled) { border-color: var(--accent); }
 
 /* ═══════════════════════════════════════════════════════════════
+   SIZE READOUT — ambient "what size will it print?" chip (top-left)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Top-left, mirroring the HUD on the right. The top edge only ever holds the
+   (centred, transient) stale banner, so this never collides — unlike a bottom
+   corner, which the centre action cluster overruns as it widens on small
+   desktops. */
+.size-readout {
+  position: absolute;
+  left: calc(0.75rem + env(safe-area-inset-left, 0px));
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-sm);
+  pointer-events: none; /* purely informative — never intercept orbit gestures */
+  z-index: 5;
+}
+
+/* Preview out of date: dim + italic so a stale figure never reads as current. */
+.size-readout--stale {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+/* Mobile: drop below the floating top bar (and any notch), level with the HUD. */
+@media (max-width: 860px) {
+  .app-shell__mobile .size-readout {
+    top: calc(env(safe-area-inset-top, 0px) + 4rem);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    ACTION CLUSTER — floating bottom-center controls
    ═══════════════════════════════════════════════════════════════ */
 

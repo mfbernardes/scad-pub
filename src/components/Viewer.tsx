@@ -14,6 +14,14 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 // the unused branch below — and its loader import — drop out of the bundle.
 declare const __APP_FORMAT__: "3mf" | "stl";
 
+// Axis-aligned bounding-box size of the rendered model, in millimetres (the
+// design's own units, kept 1:1 by the loaders). Reported via Viewer's onMeasure.
+export interface Dimensions {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface ViewerHandle {
   /** A PNG data URL of the current view, or null if nothing is rendered. */
   snapshot: () => string | null;
@@ -83,8 +91,13 @@ export const Viewer = forwardRef<
     presetId: string;
     /** Whether a preset change reframes the camera (desktop) or keeps it (mobile). */
     reframeOnPreset?: boolean;
+    /** Reports the model's bounding-box size in mm (null when geometry clears). */
+    onMeasure?: (size: Dimensions | null) => void;
   }
->(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true }, ref) {
+>(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, onMeasure }, ref) {
+  // Keep the latest onMeasure without re-running the [stl]-only geometry effect.
+  const onMeasureRef = useRef(onMeasure);
+  onMeasureRef.current = onMeasure;
   const mountRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<THREE.Object3D | null>(null);
   // The design+preset whose geometry is currently framed. A new model from the
@@ -277,7 +290,10 @@ export const Viewer = forwardRef<
       themedMaterialsRef.current = [];
       themedVertexRef.current = [];
     }
-    if (!stl || stl.length === 0) return;
+    if (!stl || stl.length === 0) {
+      onMeasureRef.current?.(null);
+      return;
+    }
 
     const buffer = stl.buffer.slice(
       stl.byteOffset,
@@ -327,6 +343,12 @@ export const Viewer = forwardRef<
     obj.position.sub(center);
     scene.add(obj);
     modelRef.current = obj;
+
+    // Report the printed bounding-box size (mm). Measured from the loaded mesh,
+    // wholly downstream of the exported bytes, so it's informative only and never
+    // part of the print. Translation-invariant, so the centring above is moot.
+    const size = box.getSize(new THREE.Vector3());
+    onMeasureRef.current?.({ x: size.x, y: size.y, z: size.z });
 
     // Remember the model's size so "Reset view" can reproduce this framing even
     // after the user has orbited or zoomed away.

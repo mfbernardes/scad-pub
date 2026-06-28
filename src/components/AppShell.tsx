@@ -6,7 +6,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState
 import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
-import type { ViewerHandle } from "./Viewer";
+import type { ViewerHandle, Dimensions } from "./Viewer";
 
 // Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
 // ending at the tab underline — no sliver of the tab's content.
@@ -22,6 +22,7 @@ import { ActionCluster } from "./ActionCluster";
 import { ActionButtons } from "./ActionButtons";
 import { StaleBanner } from "./StaleBanner";
 import { ViewerHUD } from "./ViewerHUD";
+import { SizeReadout } from "./SizeReadout";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
@@ -89,6 +90,9 @@ export const AppShell = memo(function AppShell({
   // Only the active layout mounts a Viewer (the other layout is CSS-hidden), so
   // we never run two three.js renderers / RAF loops / STL parses at once.
   const isMobile = useIsMobile();
+  // The active Viewer's bounding-box size (mm), reported via onMeasure. Local
+  // viewer glue like the PNG-snapshot handler — it needs the viewer, not App.
+  const [measured, setMeasured] = useState<Dimensions | null>(null);
   // The fixed footer reserves the iOS home-indicator inset below its buttons (see
   // .mobile-footer / --mobile-footer-total in index.css), so the sheet must sit
   // above the footer's *full* height — its 56px button band plus that inset —
@@ -236,6 +240,7 @@ export const AppShell = memo(function AppShell({
                       theme={theme}
                       designId={design.id}
                       presetId={selectedPreset}
+                      onMeasure={setMeasured}
                     />
                   )}
                 </Suspense>
@@ -273,6 +278,12 @@ export const AppShell = memo(function AppShell({
                 viewerRef={desktopViewerRef}
                 visible={!!result?.ok}
               />
+
+              {/* Ambient "what size will it print?" readout — top-left, mirroring
+                  the HUD on the right. A bottom corner gets overrun by the centre
+                  action cluster as it widens; the top edge stays clear. Measured
+                  from the mesh, never part of the export. */}
+              <SizeReadout size={measured} stale={stalePreview} />
             </div>
 
             {/* Output console — inline below viewer */}
@@ -305,6 +316,7 @@ export const AppShell = memo(function AppShell({
                     designId={design.id}
                     presetId={selectedPreset}
                     reframeOnPreset={false}
+                    onMeasure={setMeasured}
                   />
                 )}
               </Suspense>
@@ -323,6 +335,9 @@ export const AppShell = memo(function AppShell({
               stalePreview={stalePreview}
               onRender={actions.render}
             />
+
+            {/* Print-size readout — top-left, below the floating top bar. */}
+            <SizeReadout size={measured} stale={stalePreview} />
           </div>
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
