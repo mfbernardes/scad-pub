@@ -1112,6 +1112,39 @@ button:disabled { cursor: default; }
   pointer-events: none;
 }
 
+/* Pending-notices count on the output toggle — a real number in a warn pill,
+   clearer than a bare dot. Inline on desktop (beside the "Output" label),
+   pinned to the corner on the mobile icon-only button. */
+.output-notice-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--warn);
+  color: #1c1f24;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-theme="light"] .output-notice-count { color: #ffffff; }
+
+.output-notice-count--corner {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  box-shadow: 0 0 0 2px var(--panel);
+  pointer-events: none;
+}
+
+/* When notices are pending the whole toggle reads as "attention" (warn-tinted),
+   not just decorated with a badge. */
+.action-cluster__output.has-notices,
+.mobile-footer__output.has-notices { color: var(--warn); }
+
 /* Vertical rule fencing the console toggle off from the file actions. */
 .mobile-footer__divider {
   align-self: stretch;

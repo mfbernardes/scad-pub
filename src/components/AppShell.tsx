@@ -235,6 +235,7 @@ export const AppShell = memo(function AppShell({
                 modelFormat={schema.format}
                 outputOpen={outputOpen}
                 hasNotices={hasNotices}
+                noticeCount={diagnostics.length}
                 onSavePng={handleSavePng}
                 onToggleOutput={toggleOutput}
                 className="action-cluster--desktop"
@@ -377,6 +378,7 @@ export const AppShell = memo(function AppShell({
             modelFormat={schema.format}
             outputOpen={outputOpen}
             hasNotices={hasNotices}
+            noticeCount={diagnostics.length}
             onSavePng={handleSavePng}
             onToggleOutput={toggleOutput}
           />
