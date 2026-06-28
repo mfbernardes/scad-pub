@@ -50,4 +50,14 @@ Mark a string parameter as a font-family selector so the UI can check its value 
 font = "Brand Display:style=Regular";
 ```
 
-The annotation is required — there's no name-based auto-detection, so a string param is only treated as a font selector when you mark it `// @font`. It applies to **free-text** string params only; a `// [..]` enum dropdown of fixed font choices is left alone (its options are pre-vetted). See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.
+The annotation is required — there's no name-based auto-detection, so a param is only treated as a font selector when you mark it `// @font`.
+
+It applies to both **free-text** string params and `// [..]` enum **dropdowns** of fixed font choices:
+
+```scad
+// Lettering face.
+// @font
+font = "DIN 32986:style=Regular"; // ["DIN 32986:style=Regular", "Liberation Sans:style=Bold"]
+```
+
+Annotating the dropdown lets a design keep the native OpenSCAD `// [..]` choice list — which the **desktop** Customizer renders as a dropdown — while still getting the in-app availability check and import affordance when a chosen face (e.g. a not-bundled, license-restricted font) isn't loaded. For a flagged dropdown the one-click fallback switches to the first listed choice whose family *is* loaded (an off-list value can't be shown in a dropdown). See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.

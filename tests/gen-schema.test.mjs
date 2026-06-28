@@ -736,7 +736,7 @@ function paramsOf(scad) {
   }
 }
 
-test("only a string param with an explicit @font is flagged isFont", () => {
+test("only a string or enum param with an explicit @font is flagged isFont", () => {
   const params = paramsOf(
     `/* [Main] */\n` +
       `// Body face.\n` +
@@ -746,9 +746,11 @@ test("only a string param with an explicit @font is flagged isFont", () => {
       `font = "Liberation Sans:style=Bold";\n` +
       `// Heading face.\n` +
       `label_font = "Mono";\n` +
-      `// A @font on a dropdown stays a plain enum (not free text).\n` +
+      `// A @font on a dropdown keeps the enum and is flagged for the font check.\n` +
       `// @font\n` +
-      `picker = "A"; // ["A", "B"]\n`
+      `picker = "A"; // ["A", "B"]\n` +
+      `// A dropdown without @font is a plain enum.\n` +
+      `mode = "x"; // ["x", "y"]\n`
   );
   const byName = Object.fromEntries(params.map((p) => [p.name, p]));
   assert.equal(byName.body.isFont, true); // `@font` annotation on a string param
@@ -757,9 +759,13 @@ test("only a string param with an explicit @font is flagged isFont", () => {
   // No annotation -> not flagged, regardless of the parameter name.
   assert.equal(byName.font.isFont, undefined);
   assert.equal(byName.label_font.isFont, undefined);
-  // @font on an enum dropdown is ignored (the type isn't string).
+  // @font on an enum dropdown keeps the enum type AND flags it, so a design can
+  // keep the desktop Customizer dropdown and still get the in-app font check.
   assert.equal(byName.picker.type, "enum");
-  assert.equal(byName.picker.isFont, undefined);
+  assert.equal(byName.picker.isFont, true);
+  // A dropdown without @font stays an unflagged plain enum.
+  assert.equal(byName.mode.type, "enum");
+  assert.equal(byName.mode.isFont, undefined);
 });
 
 test("parseFontFallback accepts a trimmed string or null; rejects empty", () => {

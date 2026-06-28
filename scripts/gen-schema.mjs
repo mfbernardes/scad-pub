@@ -112,8 +112,8 @@ const DOC_RE = /^\s*\/\/\s?(.*)$/;
 const DEP_RE = /^\s*(?:use|include)\s*<([^>]+)>/;
 // `@showIf <expr>` directive inside a param's doc block (conditional visibility).
 const SHOWIF_RE = /^@show-?if\s+(.+)$/i;
-// `@font` directive: marks a string parameter as a font-family selector, so the
-// UI can check its value against the available font set. Invisible to OpenSCAD.
+// `@font` directive: marks a string or enum parameter as a font-family selector,
+// so the UI can check its value against the available font set. Invisible to OpenSCAD.
 const FONT_ANNOT_RE = /^@font\s*$/i;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
@@ -622,9 +622,13 @@ export function parseParams(absPath) {
       const help = trimmed.join(" ");
       const p = inferParam(name, def, hint, firstSentence(help), help, section);
       if (pendingShowIf) p.showIf = pendingShowIf;
-      // Flag font-family selectors: a string param with an explicit `@font`
-      // annotation. The availability check then runs against the known font set.
-      if (p.type === "string" && pendingFont) p.isFont = true;
+      // Flag font-family selectors: a free-text string OR an enum (dropdown)
+      // param with an explicit `@font` annotation. The availability check then
+      // runs against the known font set. Enums are included so a design can keep
+      // the native OpenSCAD `// [...]` dropdown (which the desktop Customizer
+      // renders) and still get the in-app import / fallback affordance.
+      if ((p.type === "string" || p.type === "enum") && pendingFont)
+        p.isFont = true;
       params.push(p);
       reset();
       continue;
