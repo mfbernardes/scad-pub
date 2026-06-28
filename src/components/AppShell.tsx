@@ -125,10 +125,12 @@ export const AppShell = memo(function AppShell({
     else openOutput();
   }, [openOutput]);
 
-  // Raising the sheet (tapping a tab) would slide up into the overlay — close it.
-  const expandSheet = useCallback((expand: () => void) => {
-    setOutputOpen(false);
-    expand();
+  // Raising the sheet off peek (dragging the handle OR tapping a tab) would slide
+  // its content up under the overlay — close the overlay on any such change so
+  // the two are never shown at once.
+  const handleDetentChange = useCallback((d: SheetDetent) => {
+    setSheetDetent(d);
+    if (d !== "peek") setOutputOpen(false);
   }, []);
 
   // Auto-open the console when a render surfaces notices/warnings/asserts
@@ -325,7 +327,7 @@ export const AppShell = memo(function AppShell({
         {/* Persistent bottom sheet */}
         <BottomSheet
           detent={sheetDetent}
-          onDetentChange={setSheetDetent}
+          onDetentChange={handleDetentChange}
           peekHeight={PEEK_HEIGHT}
           bottomInset={MOBILE_FOOTER_HEIGHT}
         >
@@ -342,7 +344,7 @@ export const AppShell = memo(function AppShell({
                 selected={selectedPreset}
                 fileImport={fileImport}
                 loadedFiles={loadedFiles}
-                onActivate={() => expandSheet(expand)}
+                onActivate={expand}
                 showVarName={showVarName}
                 autoRender={autoRender}
               />
