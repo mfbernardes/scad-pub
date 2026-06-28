@@ -27,11 +27,7 @@ async function cleanupOldCaches() {
   const keys = await caches.keys();
   await Promise.all(
     keys
-      .filter(
-        (k) =>
-          (k.startsWith("openscad-wasm-bin-") || k.startsWith("taktildots-bin-")) &&
-          k !== BIN_CACHE
-      )
+      .filter((k) => k.startsWith("openscad-wasm-bin-") && k !== BIN_CACHE)
       .map((k) => caches.delete(k))
   );
 }
