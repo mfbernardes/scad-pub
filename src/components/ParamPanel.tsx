@@ -229,7 +229,7 @@ export function ParamPanel({
           Auto-render
         </Label>
         <ResetButton design={design} values={values} onReset={reset} className="reset-link ml-auto">
-          <ResetIcon size={14} /> Reset
+          <ResetIcon size={14} /> Reset to defaults
         </ResetButton>
       </div>
     </aside>

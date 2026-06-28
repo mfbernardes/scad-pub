@@ -1499,6 +1499,8 @@ button:disabled { cursor: default; }
 
 .reset-link svg { flex: 0 0 auto; }
 .reset-link:hover:not(:disabled) { color: var(--text); border: none; }
+/* Inert when parameters already match the defaults — nothing to reset. */
+.reset-link:disabled { opacity: 0.4; cursor: default; }
 
 /* ═══════════════════════════════════════════════════════════════
    MODALS — licenses, help, popup notice

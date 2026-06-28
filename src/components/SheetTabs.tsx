@@ -85,7 +85,7 @@ export function SheetTabs({
               <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Auto-render" />
               Auto-render
             </Label>
-            <ResetButton design={design} values={values} onReset={reset} className="reset-link ml-auto">Reset</ResetButton>
+            <ResetButton design={design} values={values} onReset={reset} className="reset-link ml-auto">Reset to defaults</ResetButton>
           </div>
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
