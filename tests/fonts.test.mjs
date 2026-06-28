@@ -38,14 +38,14 @@ test("isFontFile matches by extension, case-insensitively", () => {
 });
 
 test("familyOf strips fontconfig properties", () => {
-  assert.equal(familyOf("DIN 32986 Taktil Positiv:style=Regular"), "DIN 32986 Taktil Positiv");
+  assert.equal(familyOf("Brand Display Pro:style=Regular"), "Brand Display Pro");
   assert.equal(familyOf("  Liberation Sans  "), "Liberation Sans");
   assert.equal(familyOf("Mono"), "Mono");
 });
 
 test("withFamily swaps the family but keeps the style properties", () => {
-  assert.equal(withFamily("DIN Pro:style=Bold", "Liberation Sans"), "Liberation Sans:style=Bold");
-  assert.equal(withFamily("DIN Pro", "Liberation Sans"), "Liberation Sans");
+  assert.equal(withFamily("Brand Display:style=Bold", "Liberation Sans"), "Liberation Sans:style=Bold");
+  assert.equal(withFamily("Brand Display", "Liberation Sans"), "Liberation Sans");
 });
 
 test("normalizeFamily is case- and whitespace-insensitive", () => {

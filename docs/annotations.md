@@ -47,7 +47,7 @@ Mark a string parameter as a font-family selector so the UI can check its value 
 ```scad
 // Lettering face.
 // @font
-font = "DIN 32986 Taktil Positiv:style=Regular";
+font = "Brand Display:style=Regular";
 ```
 
 The annotation is required — there's no name-based auto-detection, so a string param is only treated as a font selector when you mark it `// @font`. It applies to **free-text** string params only; a `// [..]` enum dropdown of fixed font choices is left alone (its options are pre-vetted). See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.

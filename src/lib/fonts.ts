@@ -85,8 +85,8 @@ export function isFontFile(name: string): boolean {
 
 /**
  * The family portion of an OpenSCAD `font` value — everything before the first
- * Fontconfig property (`:style=…`, `:weight=…`), trimmed. `"DIN Pro:style=Bold"`
- * → `"DIN Pro"`.
+ * Fontconfig property (`:style=…`, `:weight=…`), trimmed. `"Brand Display:style=Bold"`
+ * → `"Brand Display"`.
  */
 export function familyOf(fontValue: string): string {
   const colon = fontValue.indexOf(":");
