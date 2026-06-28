@@ -1456,6 +1456,22 @@ button:disabled { cursor: default; }
   line-height: 1.4;
 }
 
+.file-manager__intro :is(p, ul) {
+  margin: 0;
+}
+
+.file-manager__intro :is(p, ul) + :is(p, ul) {
+  margin-top: 0.5rem;
+}
+
+.file-manager__intro ul {
+  padding-left: 1.1rem;
+}
+
+.file-manager__intro a {
+  color: var(--link);
+}
+
 .file-manager__list {
   list-style: none;
   margin: 0;
@@ -1634,7 +1650,7 @@ button:disabled { cursor: default; }
 /* Help modal */
 .help-tab-intro { margin: 0 0 0.6rem; color: var(--muted); font-size: 0.85rem; }
 .help-tab-intro p { margin: 0; }
-.help-tab-intro a { color: var(--link); }
+.help-tab-intro a, .help-body a { color: var(--link); }
 .help-body section { margin: 0.9rem 0; }
 .help-body h3 { margin: 0 0 0.25rem; font-size: 0.95rem; color: var(--accent); }
 .help-body p { margin: 0; color: var(--text); font-size: 0.88rem; line-height: 1.5; }

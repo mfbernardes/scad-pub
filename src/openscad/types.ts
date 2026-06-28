@@ -158,7 +158,10 @@ export interface FileImport {
   accept?: string;
   /** Button label (default "Import file"). */
   label?: string;
-  /** Optional tooltip / hint shown on the button. */
+  /**
+   * Optional help text shown above the file list. Rendered as a Markdown
+   * subset (paragraphs, bullet lists, **bold**, `code`, links).
+   */
   note?: string;
 }
 

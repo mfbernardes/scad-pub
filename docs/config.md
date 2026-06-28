@@ -207,10 +207,12 @@ Designs sometimes need a file the app can't bundle — a license-restricted font
   "fileImport": {
     "accept": ".svg,.ttf,.otf",  // optional: file-picker filter (omit to accept any file)
     "label": "Import file",      // optional: button label (default "Import file")
-    "note": "…"                  // optional: button tooltip / hint
+    "note": "…"                  // optional: help text shown above the file list (Markdown)
   }
 }
 ```
+
+`note` is rendered as a small Markdown subset (paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`) — the same renderer used for help and popup content.
 
 **How uploads are made available to OpenSCAD** — decided automatically by file extension, so one button covers both cases:
 
