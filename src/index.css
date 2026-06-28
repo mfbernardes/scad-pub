@@ -1314,7 +1314,8 @@ button:disabled { cursor: default; }
 }
 
 /* Inline "font isn't loaded" hint under a font control (see ParamForm). Subtle,
-   not alarming: a panel-toned card with a warn-coloured edge and two actions. */
+   not alarming: a panel-toned card with an accent edge (matching its action
+   links) so it reads as an actionable nudge, not a warning. */
 .font-missing {
   display: flex;
   flex-direction: column;
@@ -1323,7 +1324,7 @@ button:disabled { cursor: default; }
   padding: 0.5rem 0.6rem;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--warn);
+  border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
 }
 
