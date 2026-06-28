@@ -69,10 +69,10 @@ export type Param = ParamBase &
         default: string;
         raw?: boolean;
         /**
-         * This string selects an OpenSCAD `font` family. Set by gen-schema from a
-         * `// @font` annotation or a `font`-suffixed parameter name. The UI checks
-         * its value against the available font set (bundled ∪ imported) and offers
-         * an import / fallback affordance when the family isn't loaded.
+         * This string selects an OpenSCAD `font` family. Set by gen-schema from an
+         * explicit `// @font` annotation. The UI checks its value against the
+         * available font set (bundled ∪ imported) and offers an import / fallback
+         * affordance when the family isn't loaded.
          */
         isFont?: boolean;
       }
