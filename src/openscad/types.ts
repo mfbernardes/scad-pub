@@ -378,6 +378,12 @@ export interface Schema {
   logo: { light: string; dark: string } | null;
   /** Model format OpenSCAD exports and the viewer parses (build-time; default "3mf"). */
   format: ModelFormat;
+  /**
+   * When true, the viewer rests a loaded model's base on the z=0 grid (centred
+   * in X/Y only); when false (the default) it centres the model on the origin in
+   * all three axes. Build-time, display-only — it doesn't affect the export.
+   */
+  restOnGrid: boolean;
   /** OpenSCAD experimental features to --enable for every render. */
   features: string[];
   /** Optional build-time render tuning (heavy-render threshold + cache sizing).

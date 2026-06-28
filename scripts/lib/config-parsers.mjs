@@ -99,6 +99,20 @@ export function parseFormat(raw) {
   return raw;
 }
 
+// Validate the optional `restOnGrid` config key. When true the viewer rests a
+// loaded model's base on the z=0 grid (X/Y centred); when false (the default)
+// it centres the model on the origin in all three axes, as it always has. This
+// only affects how the viewer frames the geometry, not the exported bytes, so
+// it stays out of renderHash.
+export function parseRestOnGrid(raw) {
+  if (raw == null) return false;
+  if (typeof raw !== "boolean")
+    throw new Error(
+      `config.restOnGrid must be a boolean (got ${JSON.stringify(raw)})`
+    );
+  return raw;
+}
+
 // Validate and normalise the optional `colors` config block into
 // { light?: {token: value}, dark?: {token: value} }. Unknown tokens and unsafe
 // values fail the build with a clear message (consistent with gen-schema's other
