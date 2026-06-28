@@ -37,8 +37,10 @@ export function ResetButton({ design, values, onReset, className, children }: Pr
       <button
         type="button"
         className={className}
-        title="Reset all parameters to this design's defaults"
-        onClick={() => (dirty ? setOpen(true) : onReset())}
+        aria-label="Reset to defaults"
+        title={dirty ? "Reset all parameters to this design's defaults" : "Parameters are already at their defaults"}
+        disabled={!dirty}
+        onClick={() => setOpen(true)}
       >
         {children}
       </button>

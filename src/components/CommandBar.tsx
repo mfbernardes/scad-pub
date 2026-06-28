@@ -38,6 +38,7 @@ interface Props {
   rendering: boolean;
   ready: boolean;
   result: RenderResult | null;
+  stalePreview: boolean;
   canInstall: boolean;
 }
 
@@ -55,6 +56,7 @@ export const CommandBar = memo(function CommandBar({
   rendering,
   ready,
   result,
+  stalePreview,
   canInstall,
 }: Props) {
   const {
@@ -131,7 +133,7 @@ export const CommandBar = memo(function CommandBar({
       </div>
 
       <div className="command-bar__right">
-        <StatusPill rendering={rendering} ready={ready} result={result} />
+        <StatusPill rendering={rendering} ready={ready} result={result} stale={stalePreview} />
 
         {/* Action icons */}
         <IconButton label={themeLabel} title={themeLabel} onClick={cycleTheme}>

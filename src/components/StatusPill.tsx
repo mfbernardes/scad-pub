@@ -9,13 +9,15 @@ interface Props {
   rendering: boolean;
   ready: boolean;
   result: RenderResult | null;
+  /** Auto-render off AND params changed since the last render — preview is out of date. */
+  stale?: boolean;
   className?: string;
 }
 
-export function StatusPill({ rendering, ready, result, className = "" }: Props) {
+export function StatusPill({ rendering, ready, result, stale = false, className = "" }: Props) {
   const [open, setOpen] = useState(false);
   let text: string;
-  let state: "idle" | "loading" | "rendering" | "ok" | "error";
+  let state: "idle" | "loading" | "rendering" | "ok" | "error" | "stale";
 
   if (!ready) {
     text = "Loading renderer…";
@@ -23,6 +25,11 @@ export function StatusPill({ rendering, ready, result, className = "" }: Props) 
   } else if (rendering) {
     text = "Rendering…";
     state = "rendering";
+  } else if (stale) {
+    // The preview no longer matches the controls — surfaced before "ok" so a
+    // happy green "214 ms" never masks unrendered changes.
+    text = "Preview out of date";
+    state = "stale";
   } else if (!result) {
     text = "Idle";
     state = "idle";

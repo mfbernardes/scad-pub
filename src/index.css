@@ -516,6 +516,9 @@ button:disabled { cursor: default; }
 
 /* Footer with reset button */
 .param-panel__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.4rem 0.75rem;
   border-top: 1px solid var(--line);
   flex-shrink: 0;
@@ -645,34 +648,18 @@ button:disabled { cursor: default; }
   border-color: var(--line);
 }
 
-.action-cluster__render {
+/* The single filled primary (Render when pending, else Export). The accent
+   fill is what makes "the action that matters" pop out of the ghost row. */
+.action-cluster__primary {
   background: var(--accent-solid) !important;
   color: var(--on-accent) !important;
   border-color: var(--accent-solid) !important;
   font-weight: 600;
 }
 
-.action-cluster__render:hover:not(:disabled) {
+.action-cluster__primary:hover:not(:disabled) {
   filter: brightness(1.08);
   border-color: var(--accent-solid) !important;
-}
-
-.action-cluster__auto-render {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.82rem;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-  padding: 0.3rem 0.45rem;
-  border-radius: var(--radius-sm);
-}
-
-.action-cluster__auto-render:hover { color: var(--text); }
-
-.action-cluster__output {
-  position: relative;
 }
 
 .action-cluster__output.active {
@@ -681,9 +668,78 @@ button:disabled { cursor: default; }
   color: var(--accent);
 }
 
-/* Separator between auto-render label and action buttons */
-.action-cluster__auto-render + button {
-  margin-left: 0.15rem;
+/* Thin vertical rule fencing the Output toggle off from the file actions:
+   [ Export · PNG · Share ] · [ Output ] */
+.action-cluster__divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 0.2rem 0.2rem;
+  background: var(--line);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STALE BANNER — "preview out of date" alert over the viewer
+   ═══════════════════════════════════════════════════════════════ */
+
+.stale-banner {
+  position: absolute;
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation);
+  z-index: 11;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.stale-banner:hover:not(:disabled) { border-color: var(--accent); }
+.stale-banner:hover:not(:disabled) .stale-banner__cta { filter: brightness(1.08); }
+
+.stale-banner--busy {
+  cursor: default;
+  color: var(--muted);
+  padding-right: 0.7rem;
+}
+
+/* Amber pulsing dot — "attention, but not an error". */
+.stale-banner__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  flex-shrink: 0;
+  animation: pill-pulse 1.4s ease-in-out infinite;
+}
+
+/* The render call-to-action, rendered as a solid accent chip inside the pill. */
+.stale-banner__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+/* Mobile: drop below the floating top bar (and any notch). */
+@media (max-width: 860px) {
+  .app-shell__mobile .stale-banner {
+    top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -715,13 +771,16 @@ button:disabled { cursor: default; }
 .status-pill--idle { color: var(--muted); }
 
 .status-pill--loading .status-pill__dot,
-.status-pill--rendering .status-pill__dot {
+.status-pill--rendering .status-pill__dot,
+.status-pill--stale .status-pill__dot {
   animation: pill-pulse 1s ease-in-out infinite;
 }
 
 .status-pill--loading .status-pill__dot { background: var(--muted); }
 .status-pill--rendering .status-pill__dot { background: var(--accent); }
 .status-pill--ok .status-pill__dot { background: #4ade80; }
+.status-pill--stale .status-pill__dot { background: var(--warn); }
+.status-pill--stale { color: var(--warn); }
 .status-pill--error .status-pill__dot { background: #f87171; }
 .status-pill--error { color: #f87171; }
 
@@ -775,20 +834,35 @@ button:disabled { cursor: default; }
   margin: 0;
 }
 
-/* On mobile the output console drops from the top (just under the top bar) so it
-   stays visible alongside the bottom sheet — even when the sheet is expanded over
-   the lower half — rather than being hidden behind it. */
+/* On mobile the output console is a dismissible overlay that slides up just
+   above the COLLAPSED (peek) sheet — so the sheet's Presets/Parameters/Files tab
+   row stays visible and tappable beneath it — with a scrim dimming only the
+   viewer above. Opening it collapses the sheet to peek; tapping a sheet tab
+   raises the sheet and closes the overlay, so the two never overlap. */
 .app-shell__mobile > .output-console {
   position: absolute;
   left: 0;
   right: 0;
-  /* top/bottom set inline so it sits just above the sheet's current top */
-  z-index: 25;
-  max-height: 45vh;
+  bottom: calc(var(--mobile-footer-height) + var(--mobile-peek-height));
+  top: auto;
+  z-index: 32;
+  max-height: 55vh;
   box-shadow: var(--elevation);
   border-top: 1px solid var(--line);
   border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
+}
+
+/* Dim the viewer behind the overlay; tap to dismiss. Stops above the peek sheet
+   + footer so the sheet tabs and primary actions stay live and undimmed. */
+.output-console__scrim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--mobile-footer-height) + var(--mobile-peek-height));
+  z-index: 31;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -996,13 +1070,22 @@ button:disabled { cursor: default; }
   z-index: 28;
 }
 
-.mobile-footer__render {
+/* The filled primary (Render when pending, else Export) leads the footer and
+   takes extra width so the action that matters reads first. */
+.mobile-footer__primary {
+  flex: 1.6 !important;
   font-weight: 600;
   font-size: 0.88rem;
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: var(--accent-solid);
 }
 
-/* Each action grows to share the footer width equally. */
-.mobile-footer__output,
+.mobile-footer__primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+/* Text actions grow to share the remaining width. */
 .mobile-footer button {
   flex: 1;
   min-width: 0;
@@ -1015,10 +1098,43 @@ button:disabled { cursor: default; }
   white-space: nowrap;
 }
 
+/* The console toggle is a utility, not a file action: icon-only, no grow. */
+.mobile-footer__output {
+  flex: 0 0 auto !important;
+  width: var(--mobile-footer-height);
+}
+
 .mobile-footer__output.active {
   background: var(--panel-2);
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Pending-notices indicator on the Output toggle (both layouts): a small dot in
+   the corner — clear of the icon — so the console needn't pop open to announce
+   notices. The ring keeps it legible over the icon/background. */
+.action-cluster__output,
+.mobile-footer__output { position: relative; }
+
+.output-toggle-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-solid);
+  box-shadow: 0 0 0 2px var(--panel);
+  pointer-events: none;
+}
+
+/* Vertical rule fencing the console toggle off from the file actions. */
+.mobile-footer__divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 0.5rem 0.15rem;
+  background: var(--line);
+  flex: 0 0 auto;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1412,6 +1528,8 @@ button:disabled { cursor: default; }
 
 .reset-link svg { flex: 0 0 auto; }
 .reset-link:hover:not(:disabled) { color: var(--text); border: none; }
+/* Inert when parameters already match the defaults — nothing to reset. */
+.reset-link:disabled { opacity: 0.4; cursor: default; }
 
 /* ═══════════════════════════════════════════════════════════════
    MODALS — licenses, help, popup notice

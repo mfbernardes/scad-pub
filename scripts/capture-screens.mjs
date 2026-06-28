@@ -150,8 +150,8 @@ async function captureViewport(context, base, kind, theme) {
   // 9 / 5. Output console.
   const outputSel =
     kind === "mobile"
-      ? '.mobile-footer__output[aria-label="Open output console"]'
-      : '.action-cluster__output[aria-label="Open output console"]';
+      ? '.mobile-footer__output[aria-label^="Open output console"]'
+      : '.action-cluster__output[aria-label^="Open output console"]';
   const consoleName = kind === "mobile" ? "09-output-console" : "05-output-console";
   await page.locator(outputSel).click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 5000 }).catch(() => {});

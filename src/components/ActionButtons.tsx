@@ -1,12 +1,17 @@
-// ActionButtons.tsx — the shared Render / Export / PNG / Share / Output row,
-// rendered in both the desktop ActionCluster (roomy, ghost) and the mobile
-// footer (compact, outline). Render/Export/Share come from the AppActions
-// context; the PNG snapshot and output toggle are AppShell-local glue (they
-// need the viewer ref / console state) and stay props.
+// ActionButtons.tsx — the shared output row, rendered in both the desktop
+// ActionCluster (roomy) and the mobile footer (compact). Export/Share come from
+// the AppActions context; the PNG snapshot and output toggle are AppShell-local
+// glue (they need the viewer ref / console state) and stay props.
+//
+// This row is now purely about getting a result OUT: Export is the filled
+// primary (the app's reason to exist), PNG and Share are quiet secondaries, and
+// the Output console toggle is a utility fenced off with a divider. Render-mode
+// (auto-render) and the "needs re-render" call-to-action live elsewhere — the
+// params footer and the viewer's StaleBanner respectively — so this bar has a
+// single, stable shape that never lurches between auto and manual modes.
 import { useAppActions } from "../lib/appActions";
 import { Button } from "./ui/button";
 import {
-  Play as PlayIcon,
   Download as DownloadIcon,
   Image as ImageIcon,
   Link2 as LinkIcon,
@@ -14,73 +19,63 @@ import {
 } from "lucide-react";
 
 interface Props {
-  rendering: boolean;
-  autoRender: boolean;
-  stalePreview: boolean;
   hasResult: boolean;
   modelFormat: string;
   outputOpen: boolean;
   onSavePng: () => void;
   onToggleOutput: () => void;
-  /** Compact = the mobile footer: shorter labels, outline variant, full size. */
+  /** Show a dot on the Output toggle when there are pending notices/warnings. */
+  hasNotices?: boolean;
+  /** Compact = the mobile footer: shorter labels, outline secondaries, full size. */
   compact?: boolean;
 }
 
 export function ActionButtons({
-  rendering,
-  autoRender,
-  stalePreview,
   hasResult,
   modelFormat,
   outputOpen,
   onSavePng,
   onToggleOutput,
+  hasNotices = false,
   compact = false,
 }: Props) {
-  const { render, exportModel, copyLink } = useAppActions();
+  const { exportModel, copyLink } = useAppActions();
   const prefix = compact ? "mobile-footer" : "action-cluster";
-  const variant = compact ? "outline" : "ghost";
+  const secondary = compact ? "outline" : "ghost";
   const size = compact ? undefined : "sm";
   const fmt = modelFormat.toUpperCase();
 
   return (
     <>
-      {!autoRender && stalePreview && (
-        <Button
-          size={size}
-          className={`${prefix}__render`}
-          onClick={render}
-          disabled={rendering}
-          aria-label="Render now"
-        >
-          <PlayIcon size={16} fill="currentColor" /> {compact ? "Render" : "Render now"}
-        </Button>
-      )}
       <Button
         size={size}
-        variant={variant}
+        variant="default"
+        className={`${prefix}__primary`}
         onClick={exportModel}
         disabled={!hasResult}
         aria-label={`Export ${fmt}`}
       >
         <DownloadIcon size={16} /> {compact ? fmt : `Export ${fmt}`}
       </Button>
-      <Button size={size} variant={variant} onClick={onSavePng} disabled={!hasResult} aria-label="Save PNG">
+      <Button size={size} variant={secondary} onClick={onSavePng} disabled={!hasResult} aria-label="Save PNG">
         <ImageIcon size={16} /> PNG
       </Button>
-      <Button size={size} variant={variant} onClick={copyLink} aria-label="Copy share link">
+      <Button size={size} variant={secondary} onClick={copyLink} aria-label="Copy share link">
         <LinkIcon size={16} /> Share
       </Button>
+      {/* Divider fences the console toggle off from the produce-a-file actions. */}
+      <span className={`${prefix}__divider`} aria-hidden="true" />
       <Button
-        size={size}
-        variant={variant}
+        size={compact ? "icon" : size}
+        variant={secondary}
         className={`${prefix}__output${outputOpen ? " active" : ""}`}
         onClick={onToggleOutput}
-        aria-label={`${outputOpen ? "Close" : "Open"} output console`}
+        aria-label={`${outputOpen ? "Close" : "Open"} output console${hasNotices ? " (new notices)" : ""}`}
         aria-pressed={outputOpen}
+        title="Output console"
       >
         <TerminalIcon size={16} />
-        {compact && " Output"}
+        {hasNotices && <span className="output-toggle-dot" aria-hidden="true" />}
       </Button>
     </>
   );

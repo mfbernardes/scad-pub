@@ -13,6 +13,8 @@ import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { IconButton } from "./IconButton";
 import { ResetButton } from "./ResetButton";
+import { Switch } from "./ui/switch";
+import { Label } from "./ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
@@ -42,6 +44,7 @@ interface Props {
   panelDefaultOpen: boolean;
   /** Show the underlying OpenSCAD variable name beside each label. */
   showVarName: boolean;
+  autoRender: boolean;
 }
 
 export function ParamPanel({
@@ -52,8 +55,9 @@ export function ParamPanel({
   panelSide,
   panelDefaultOpen,
   showVarName,
+  autoRender,
 }: Props) {
-  const { change, reset, addFile, removeFile, clearFiles } = useAppActions();
+  const { change, reset, addFile, removeFile, clearFiles, autoRenderChange } = useAppActions();
   const [open, setOpen] = useState(() => {
     try {
       const v = localStorage.getItem(PANEL_OPEN_KEY);
@@ -218,7 +222,13 @@ export function ParamPanel({
       </Tabs>
 
       <div className="param-panel__footer">
-        <ResetButton design={design} values={values} onReset={reset} className="reset-link">
+        {/* Auto-render lives here, with the params it governs, rather than in the
+            output toolbar: it's a render-mode setting that's rarely toggled. */}
+        <Label className="auto-render cursor-pointer font-normal" title="Re-render automatically as parameters change">
+          <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Auto-render" />
+          Auto-render
+        </Label>
+        <ResetButton design={design} values={values} onReset={reset} className="reset-link ml-auto">
           <ResetIcon size={14} /> Reset to defaults
         </ResetButton>
       </div>

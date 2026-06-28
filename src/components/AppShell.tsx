@@ -20,22 +20,19 @@ import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionCluster } from "./ActionCluster";
 import { ActionButtons } from "./ActionButtons";
+import { StaleBanner } from "./StaleBanner";
 import { ViewerHUD } from "./ViewerHUD";
 import { OutputConsole } from "./OutputConsole";
-import { BottomSheet, detentHeight, type SheetDetent } from "./BottomSheet";
+import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
 import { IconButton } from "./IconButton";
-import { ResetButton } from "./ResetButton";
-import { Switch } from "./ui/switch";
-import { Label } from "./ui/label";
 import { Spinner } from "./ui/spinner";
 import { CircleHelp as HelpIcon, Info as InfoIcon } from "lucide-react";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { assetUrl } from "../lib/assetUrl";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
-import { useViewportHeight } from "../lib/useViewportHeight";
 
 const Viewer = lazy(() =>
   import("./Viewer").then((m) => ({ default: m.Viewer }))
@@ -84,18 +81,14 @@ export const AppShell = memo(function AppShell({
   // Only the active layout mounts a Viewer (the other layout is CSS-hidden), so
   // we never run two three.js renderers / RAF loops / STL parses at once.
   const isMobile = useIsMobile();
-  const viewportH = useViewportHeight();
   const [outputOpen, setOutputOpen] = useState(
     schema.ui?.outputDefault === "open"
   );
   const outputOpenRef = useRef(outputOpen);
   outputOpenRef.current = outputOpen;
-  // Sheet detent lives here so the output console can sit just above the sheet
-  // and so opening the console can shrink a full sheet to make room.
+  // Sheet detent state (peek/half/full). On mobile the output overlay now covers
+  // the sheet, so it no longer has to be positioned relative to the detent.
   const [sheetDetent, setSheetDetent] = useState<SheetDetent>("peek");
-  // Effective peek height, measured by the sheet from its header (handle + tab
-  // row) so the console sits just above the collapsed sheet on any device.
-  const [peekPx, setPeekPx] = useState(PEEK_HEIGHT);
 
   const ui = schema.ui ?? {};
   const panelSide = ui.panelSide ?? "left";
@@ -120,37 +113,34 @@ export const AppShell = memo(function AppShell({
     if (url) actions.savePng(url);
   }, [isMobile, actions]);
 
-  // A full sheet would cover the console — drop it to half to make room.
-  const reduceSheetIfFull = useCallback(() => {
-    setSheetDetent((d) => (d === "full" ? "half" : d));
-  }, []);
-
+  // Open the overlay and collapse the sheet to peek, so the overlay's fixed
+  // anchor (just above the peek tab row) never overlaps an expanded sheet.
   const openOutput = useCallback(() => {
     setOutputOpen(true);
-    reduceSheetIfFull();
-  }, [reduceSheetIfFull]);
+    setSheetDetent("peek");
+  }, []);
 
   const toggleOutput = useCallback(() => {
     if (outputOpenRef.current) setOutputOpen(false);
     else openOutput();
   }, [openOutput]);
 
-  // Auto-open the console when a render surfaces notices/warnings/asserts
-  // (only on the empty→non-empty transition, so a manual close sticks).
-  // Same behaviour on desktop and mobile — the console surfaces notices, so
-  // neither top bar carries a badge.
-  const hadDiagnostics = useRef(false);
-  useEffect(() => {
-    const has = diagnostics.length > 0;
-    if (has && !hadDiagnostics.current) openOutput();
-    hadDiagnostics.current = has;
-  }, [diagnostics, openOutput]);
+  // Raising the sheet off peek (dragging the handle OR tapping a tab) would slide
+  // its content up under the overlay — close the overlay on any such change so
+  // the two are never shown at once.
+  const handleDetentChange = useCallback((d: SheetDetent) => {
+    setSheetDetent(d);
+    if (d !== "peek") setOutputOpen(false);
+  }, []);
 
-  // Place the mobile console just above the sheet's current top.
-  const mobileConsoleStyle = {
-    top: "auto" as const,
-    bottom: MOBILE_FOOTER_HEIGHT + detentHeight(sheetDetent, MOBILE_FOOTER_HEIGHT, peekPx, viewportH),
-  };
+  // Notices are surfaced by the dot on the Output toggle, not by auto-popping the
+  // console. We only auto-hide a console that's open once its notices clear.
+  const hasNotices = diagnostics.length > 0;
+  const hadNotices = useRef(false);
+  useEffect(() => {
+    if (!hasNotices && hadNotices.current) setOutputOpen(false);
+    hadNotices.current = hasNotices;
+  }, [hasNotices]);
 
   return (
     <div className="app-shell">
@@ -173,6 +163,7 @@ export const AppShell = memo(function AppShell({
           rendering={rendering}
           ready={ready}
           result={result}
+          stalePreview={stalePreview}
           canInstall={canInstall}
         />
 
@@ -186,6 +177,7 @@ export const AppShell = memo(function AppShell({
             panelSide={panelSide}
             panelDefaultOpen={panelDefaultOpen}
             showVarName={showVarName}
+            autoRender={autoRender}
           />
 
           {/* Canvas */}
@@ -211,16 +203,24 @@ export const AppShell = memo(function AppShell({
                 </div>
               )}
 
+              {/* "Preview out of date" alert — the manual-mode signal that the
+                  canvas no longer matches the controls. Top-centre, where the eye
+                  already is, instead of relying on a toolbar button. */}
+              <StaleBanner
+                autoRender={autoRender}
+                rendering={rendering}
+                stalePreview={stalePreview}
+                onRender={actions.render}
+              />
+
               {/* Floating controls live inside viewer-wrap so they hover over the
                   canvas — which shrinks when the output console docks below it —
                   rather than overlapping the console's notices. */}
               <ActionCluster
-                rendering={rendering}
-                autoRender={autoRender}
-                stalePreview={stalePreview}
                 hasResult={!!result?.ok}
                 modelFormat={schema.format}
                 outputOpen={outputOpen}
+                hasNotices={hasNotices}
                 onSavePng={handleSavePng}
                 onToggleOutput={toggleOutput}
                 className="action-cluster--desktop"
@@ -268,6 +268,14 @@ export const AppShell = memo(function AppShell({
                 <p>{ready ? "Rendering…" : "Loading renderer…"}</p>
               </div>
             )}
+
+            {/* "Preview out of date" alert (manual mode) — same signal as desktop. */}
+            <StaleBanner
+              autoRender={autoRender}
+              rendering={rendering}
+              stalePreview={stalePreview}
+              onRender={actions.render}
+            />
           </div>
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
@@ -297,27 +305,35 @@ export const AppShell = memo(function AppShell({
           </div>
         </div>
 
-        {/* Output console (mobile — sits just above the bottom sheet) */}
+        {/* Output console (mobile — slides up over the sheet as a dismissible
+            overlay, with a scrim so it reads as a distinct layer, not another
+            band stacked above the sheet). */}
+        {outputOpen && (
+          <div
+            className="output-console__scrim"
+            onClick={() => setOutputOpen(false)}
+            aria-hidden="true"
+          />
+        )}
         <OutputConsole
           log={log}
           diagnostics={diagnostics}
           badges={badges}
           open={outputOpen}
           onClose={() => setOutputOpen(false)}
-          style={mobileConsoleStyle}
         />
 
         {/* Persistent bottom sheet */}
         <BottomSheet
           detent={sheetDetent}
-          onDetentChange={setSheetDetent}
+          onDetentChange={handleDetentChange}
           peekHeight={PEEK_HEIGHT}
           bottomInset={MOBILE_FOOTER_HEIGHT}
-          onPeekHeightChange={setPeekPx}
         >
-          {(detent, expand) => (
+          {(_detent, expand) => (
             // The tab bar shows at every detent (including peek); tapping a tab
-            // raises a collapsed sheet. The footer only shows once expanded.
+            // raises a collapsed sheet. Auto-render + Reset are param-scoped, so
+            // they live inside the Parameters tab (SheetTabs), not here.
             <div className="sheet-content" id="params">
               <SheetTabs
                 design={design}
@@ -329,16 +345,8 @@ export const AppShell = memo(function AppShell({
                 loadedFiles={loadedFiles}
                 onActivate={expand}
                 showVarName={showVarName}
+                autoRender={autoRender}
               />
-              {detent !== "peek" && (
-                <div className="sheet-footer">
-                  <Label className="auto-render cursor-pointer font-normal" title="Re-render automatically as parameters change">
-                    <Switch checked={autoRender} onCheckedChange={actions.autoRenderChange} aria-label="Auto-render" />
-                    Auto-render
-                  </Label>
-                  <ResetButton design={design} values={values} onReset={actions.reset} className="reset-link ml-auto">Reset</ResetButton>
-                </div>
-              )}
             </div>
           )}
         </BottomSheet>
@@ -347,12 +355,10 @@ export const AppShell = memo(function AppShell({
         <div className="mobile-footer">
           <ActionButtons
             compact
-            rendering={rendering}
-            autoRender={autoRender}
-            stalePreview={stalePreview}
             hasResult={!!result?.ok}
             modelFormat={schema.format}
             outputOpen={outputOpen}
+            hasNotices={hasNotices}
             onSavePng={handleSavePng}
             onToggleOutput={toggleOutput}
           />
