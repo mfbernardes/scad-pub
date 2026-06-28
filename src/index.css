@@ -82,6 +82,14 @@
   /* Mobile layout constants — keep in sync with AppShell.tsx MOBILE_FOOTER_HEIGHT / PEEK_HEIGHT */
   --mobile-footer-height: 56px;
   --mobile-peek-height: 60px;
+  /* iOS home-indicator inset. The footer's *total* height is its button band
+     plus this inset, so the buttons keep their full height and nothing is laid
+     under the gesture bar. Everything stacked above the footer (sheet, viewer,
+     output console) anchors to --mobile-footer-total, and AppShell mirrors the
+     same sum (MOBILE_FOOTER_HEIGHT + useSafeAreaBottom) for the sheet geometry.
+     Off-iOS the inset is 0, so the total collapses back to the button band. */
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --mobile-footer-total: calc(var(--mobile-footer-height) + var(--safe-area-bottom));
   color-scheme: dark;
 }
 
@@ -262,7 +270,7 @@ button:disabled { cursor: default; }
   top: 0;
   left: 0;
   right: 0;
-  bottom: calc(var(--mobile-footer-height) + var(--mobile-peek-height));
+  bottom: calc(var(--mobile-footer-total) + var(--mobile-peek-height));
   display: flex;
   flex-direction: column;
 }
@@ -817,7 +825,7 @@ button:disabled { cursor: default; }
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(var(--mobile-footer-height) + var(--mobile-peek-height));
+  bottom: calc(var(--mobile-footer-total) + var(--mobile-peek-height));
   top: auto;
   z-index: 32;
   max-height: 55vh;
@@ -834,7 +842,7 @@ button:disabled { cursor: default; }
   top: 0;
   left: 0;
   right: 0;
-  bottom: calc(var(--mobile-footer-height) + var(--mobile-peek-height));
+  bottom: calc(var(--mobile-footer-total) + var(--mobile-peek-height));
   z-index: 31;
   background: rgba(0, 0, 0, 0.4);
 }
@@ -1034,11 +1042,14 @@ button:disabled { cursor: default; }
   bottom: 0;
   left: 0;
   right: 0;
-  height: var(--mobile-footer-height);
+  /* Total height = the 56px button band + the home-indicator inset, with the
+     inset reserved as bottom padding so the buttons keep their full height and
+     sit clear of the gesture bar (rather than being crushed inside a fixed box). */
+  height: var(--mobile-footer-total);
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0 calc(0.6rem + env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 0.35rem) calc(0.6rem + env(safe-area-inset-left, 0px));
+  padding: 0 calc(0.6rem + env(safe-area-inset-right, 0px)) calc(var(--safe-area-bottom) + 0.35rem) calc(0.6rem + env(safe-area-inset-left, 0px));
   background: var(--panel);
   border-top: 1px solid var(--line);
   z-index: 28;

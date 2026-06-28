@@ -37,6 +37,7 @@ import { isFontFile } from "../openscad/renderArgs";
 import { assetUrl } from "../lib/assetUrl";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
+import { useSafeAreaBottom } from "../lib/useSafeAreaBottom";
 
 const Viewer = lazy(() =>
   import("./Viewer").then((m) => ({ default: m.Viewer }))
@@ -85,6 +86,12 @@ export const AppShell = memo(function AppShell({
   // Only the active layout mounts a Viewer (the other layout is CSS-hidden), so
   // we never run two three.js renderers / RAF loops / STL parses at once.
   const isMobile = useIsMobile();
+  // The fixed footer reserves the iOS home-indicator inset below its buttons (see
+  // .mobile-footer / --mobile-footer-total in index.css), so the sheet must sit
+  // above the footer's *full* height — its 56px button band plus that inset —
+  // for its JS geometry to match the CSS layout. Off-iOS the inset is 0.
+  const safeAreaBottom = useSafeAreaBottom();
+  const footerInset = MOBILE_FOOTER_HEIGHT + safeAreaBottom;
   const [outputOpen, setOutputOpen] = useState(
     schema.ui?.outputDefault === "open"
   );
@@ -352,7 +359,7 @@ export const AppShell = memo(function AppShell({
           detent={sheetDetent}
           onDetentChange={handleDetentChange}
           peekHeight={PEEK_HEIGHT}
-          bottomInset={MOBILE_FOOTER_HEIGHT}
+          bottomInset={footerInset}
         >
           {(_detent, expand) => (
             // The tab bar shows at every detent (including peek); tapping a tab
