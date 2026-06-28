@@ -27,9 +27,6 @@ import { BottomSheet, detentHeight, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
 import { IconButton } from "./IconButton";
-import { ResetButton } from "./ResetButton";
-import { Switch } from "./ui/switch";
-import { Label } from "./ui/label";
 import { Spinner } from "./ui/spinner";
 import { CircleHelp as HelpIcon, Info as InfoIcon } from "lucide-react";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
@@ -333,9 +330,10 @@ export const AppShell = memo(function AppShell({
           bottomInset={MOBILE_FOOTER_HEIGHT}
           onPeekHeightChange={setPeekPx}
         >
-          {(detent, expand) => (
+          {(_detent, expand) => (
             // The tab bar shows at every detent (including peek); tapping a tab
-            // raises a collapsed sheet. The footer only shows once expanded.
+            // raises a collapsed sheet. Auto-render + Reset are param-scoped, so
+            // they live inside the Parameters tab (SheetTabs), not here.
             <div className="sheet-content" id="params">
               <SheetTabs
                 design={design}
@@ -347,16 +345,8 @@ export const AppShell = memo(function AppShell({
                 loadedFiles={loadedFiles}
                 onActivate={expand}
                 showVarName={showVarName}
+                autoRender={autoRender}
               />
-              {detent !== "peek" && (
-                <div className="sheet-footer">
-                  <Label className="auto-render cursor-pointer font-normal" title="Re-render automatically as parameters change">
-                    <Switch checked={autoRender} onCheckedChange={actions.autoRenderChange} aria-label="Auto-render" />
-                    Auto-render
-                  </Label>
-                  <ResetButton design={design} values={values} onReset={actions.reset} className="reset-link ml-auto">Reset</ResetButton>
-                </div>
-              )}
             </div>
           )}
         </BottomSheet>

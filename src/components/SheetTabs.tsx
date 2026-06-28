@@ -7,6 +7,9 @@ import { useAppActions } from "../lib/appActions";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
+import { ResetButton } from "./ResetButton";
+import { Switch } from "./ui/switch";
+import { Label } from "./ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 
@@ -24,6 +27,7 @@ interface Props {
   onActivate?: () => void;
   /** Show the underlying OpenSCAD variable name beside each label (default true). */
   showVarName?: boolean;
+  autoRender: boolean;
 }
 
 export function SheetTabs({
@@ -36,9 +40,19 @@ export function SheetTabs({
   loadedFiles,
   onActivate,
   showVarName = true,
+  autoRender,
 }: Props) {
-  const { change, applyPreset, selectedPresetChange, presetsChange, addFile, removeFile, clearFiles } =
-    useAppActions();
+  const {
+    change,
+    applyPreset,
+    selectedPresetChange,
+    presetsChange,
+    addFile,
+    removeFile,
+    clearFiles,
+    reset,
+    autoRenderChange,
+  } = useAppActions();
   const hasFiles = fileImport != null;
   // Presets first (and the default tab) on mobile, then Parameters, then Files.
   const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
@@ -63,6 +77,15 @@ export function SheetTabs({
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <div className="sheet-tabs__params">
             <ParamForm design={design} values={values} onChange={change} showVarName={showVarName} />
+          </div>
+          {/* Auto-render + Reset are parameter-scoped, so they pin to the bottom
+              of this tab only — not on Presets/Files (mirrors the desktop panel). */}
+          <div className="sheet-footer">
+            <Label className="auto-render cursor-pointer font-normal" title="Re-render automatically as parameters change">
+              <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Auto-render" />
+              Auto-render
+            </Label>
+            <ResetButton design={design} values={values} onReset={reset} className="reset-link ml-auto">Reset</ResetButton>
           </div>
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
