@@ -9,7 +9,6 @@ interface Props {
   hasResult: boolean;
   modelFormat: string;
   outputOpen: boolean;
-  hasNotices: boolean;
   noticeCount: number;
   /** PNG snapshot needs the active viewer ref, so this glue stays a prop. */
   onSavePng: () => void;
@@ -21,7 +20,6 @@ export const ActionCluster = memo(function ActionCluster({
   hasResult,
   modelFormat,
   outputOpen,
-  hasNotices,
   noticeCount,
   onSavePng,
   onToggleOutput,
@@ -33,7 +31,6 @@ export const ActionCluster = memo(function ActionCluster({
         hasResult={hasResult}
         modelFormat={modelFormat}
         outputOpen={outputOpen}
-        hasNotices={hasNotices}
         noticeCount={noticeCount}
         onSavePng={onSavePng}
         onToggleOutput={onToggleOutput}

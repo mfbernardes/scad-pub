@@ -25,9 +25,7 @@ interface Props {
   outputOpen: boolean;
   onSavePng: () => void;
   onToggleOutput: () => void;
-  /** Show a dot on the Output toggle when there are pending notices/warnings. */
-  hasNotices?: boolean;
-  /** How many notices/warnings are pending — shown as a count badge. */
+  /** How many notices/warnings are pending — shown as a count badge when > 0. */
   noticeCount?: number;
   /** Compact = the mobile footer: shorter labels, outline secondaries, full size. */
   compact?: boolean;
@@ -39,7 +37,6 @@ export function ActionButtons({
   outputOpen,
   onSavePng,
   onToggleOutput,
-  hasNotices = false,
   noticeCount = 0,
   compact = false,
 }: Props) {
@@ -48,6 +45,7 @@ export function ActionButtons({
   const secondary = compact ? "outline" : "ghost";
   const size = compact ? undefined : "sm";
   const fmt = modelFormat.toUpperCase();
+  const hasNotices = noticeCount > 0;
   // A bell (ringing when notices are pending) reads far more clearly to a maker
   // than the old `>_` terminal glyph — and a real count badge beats a bare dot.
   const BellGlyph = hasNotices ? BellRingIcon : BellIcon;
