@@ -21,7 +21,7 @@ interface Props {
 }
 
 export function OutputConsole({ log, diagnostics, badges, open, onClose }: Props) {
-  const [tab, setTab] = useState("advisories");
+  const [tab, setTab] = useState("notices");
 
   if (!open) return null;
 
@@ -30,7 +30,7 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose }: Props
       <Tabs value={tab} onValueChange={setTab} className="gap-0">
         <div className="output-console__header">
           <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
-            <TabsTrigger value="advisories" className={cn(underlineTabTrigger, "px-3")}>
+            <TabsTrigger value="notices" className={cn(underlineTabTrigger, "px-3")}>
               Notices
               <CountBadges badges={badges} />
             </TabsTrigger>
@@ -43,7 +43,7 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose }: Props
           </IconButton>
         </div>
         <div className="output-console__body">
-          <TabsContent value="advisories" className="mt-0">
+          <TabsContent value="notices" className="mt-0">
             {diagnostics.length ? (
               <ul className="output-console__diag-list" aria-live="polite">
                 {diagnostics.map((d, i) => (

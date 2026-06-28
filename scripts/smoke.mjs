@@ -4,7 +4,7 @@
 // + PNG export work via the UI. Design-specific checks run only when that design
 // is present in the built config: the example "tag" design exercises conditional
 // visibility (@showIf/@collapsed) and the OpenSCAD-output notice/assert badges;
-// a "signage" design, when configured, exercises the textmetrics advisory and
+// a "signage" design, when configured, exercises the textmetrics notice and
 // @showIf arrow_style. Finally runs axe-core to guard against serious/critical
 // accessibility regressions. Run after `npm run build`.
 import { readFile, mkdtemp, stat } from "node:fs/promises";
@@ -17,8 +17,10 @@ import { startServer } from "./serve-dist.mjs";
 // Status pill shows "123 ms" or "123 ms (cached)" on success, "Failed (exit N)" on error.
 // The status pill shows only a colour dot; its detail ("123 ms" / "Failed …")
 // lives in aria-label and is revealed on click.
+// Both layouts render a status pill (the inactive one is CSS-hidden but still in
+// the DOM), and both carry the same aria-label — so read the first match.
 const statusText = (page) =>
-  page.locator(".status-pill").getAttribute("aria-label");
+  page.locator(".status-pill").first().getAttribute("aria-label");
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
@@ -424,7 +426,7 @@ async function main() {
       // Open the output console and switch to the Log tab.
       await openConsole(page);
       await page.click('.output-console__tab:has-text("Log")').catch(() => {});
-      check(/between characters/.test((await page.textContent(".output-console").catch(() => "")) || ""), "textmetrics advisory present");
+      check(/between characters/.test((await page.textContent(".output-console").catch(() => "")) || ""), "textmetrics notice present");
       // arrow_style is relevant only once an arrow is chosen (`@showIf arrow != none`);
       // the signage default is arrow = "none", so it starts hidden.
       const arrowStyle = page.locator("code.param-var", { hasText: /^arrow_style$/ });

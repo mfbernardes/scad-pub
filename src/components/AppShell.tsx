@@ -27,6 +27,8 @@ import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
 import { IconButton } from "./IconButton";
+import { StatusPill } from "./StatusPill";
+import { ThemeToggle } from "./ThemeToggle";
 import { Spinner } from "./ui/spinner";
 import { CircleHelp as HelpIcon, Info as InfoIcon } from "lucide-react";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
@@ -220,7 +222,7 @@ export const AppShell = memo(function AppShell({
                 hasResult={!!result?.ok}
                 modelFormat={schema.format}
                 outputOpen={outputOpen}
-                hasNotices={hasNotices}
+                noticeCount={diagnostics.length}
                 onSavePng={handleSavePng}
                 onToggleOutput={toggleOutput}
                 className="action-cluster--desktop"
@@ -295,6 +297,8 @@ export const AppShell = memo(function AppShell({
               )}
             </div>
             <div className="mobile-top-bar__right">
+              <StatusPill rendering={rendering} ready={ready} result={result} stale={stalePreview} />
+              <ThemeToggle mode={themeMode} onCycle={actions.cycleTheme} />
               <IconButton label="Help" title="Help & keyboard shortcuts" onClick={actions.showHelp}>
                 <HelpIcon size={16} />
               </IconButton>
@@ -358,7 +362,7 @@ export const AppShell = memo(function AppShell({
             hasResult={!!result?.ok}
             modelFormat={schema.format}
             outputOpen={outputOpen}
-            hasNotices={hasNotices}
+            noticeCount={diagnostics.length}
             onSavePng={handleSavePng}
             onToggleOutput={toggleOutput}
           />

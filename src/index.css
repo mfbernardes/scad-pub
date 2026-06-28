@@ -284,8 +284,6 @@ button:disabled { cursor: default; }
   flex-shrink: 0;
 }
 
-.command-bar__brand { justify-self: start; }
-
 /* Centered design + presets group */
 .command-bar__center {
   display: inline-flex;
@@ -307,6 +305,7 @@ button:disabled { cursor: default; }
   align-items: center;
   gap: 0.45rem;
   padding: 0.2rem;
+  justify-self: start;
 }
 .command-bar__title { font-size: 0.95rem; font-weight: 700; }
 
@@ -318,25 +317,14 @@ button:disabled { cursor: default; }
   font-weight: 600;
   color: var(--text);
 }
-.command-bar__design-label {
-  font-size: 0.82rem;
-  color: var(--muted);
-  white-space: nowrap;
-}
-/* Mid-dot separator between a pill's label and its value (matches the presets pill) */
-.command-bar__sep {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
 .command-bar__design-name {
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--text);
 }
 
-/* Presets dropdown trigger + popover */
-.command-bar__presets { position: relative; }
-
+/* Presets dropdown trigger (the popover surface itself is a Radix portal styled
+   by the shadcn PopoverContent defaults — bg/border/radius/shadow/position). */
 .command-bar__presets-btn {
   display: inline-flex;
   align-items: center;
@@ -353,20 +341,6 @@ button:disabled { cursor: default; }
 .command-bar__presets-btn:hover:not(:disabled) { background: var(--panel-2); }
 .command-bar__presets-btn .command-bar__presets-label { font-size: 0.85rem; color: var(--muted); }
 .command-bar__presets-btn .command-bar__presets-label strong { color: var(--text); font-weight: 600; }
-
-.command-bar__presets-popover {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  left: 0;
-  width: 22rem;
-  max-width: 90vw;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--elevation);
-  z-index: 50;
-  overflow: hidden;
-}
 
 /* PWA install button */
 .command-bar__install-btn {
@@ -790,7 +764,7 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   OUTPUT CONSOLE — Advisories + Log tabs drawer
+   OUTPUT CONSOLE — Notices + Log tabs drawer
    ═══════════════════════════════════════════════════════════════ */
 
 .output-console {
@@ -1110,23 +1084,42 @@ button:disabled { cursor: default; }
   color: var(--accent);
 }
 
-/* Pending-notices indicator on the Output toggle (both layouts): a small dot in
-   the corner — clear of the icon — so the console needn't pop open to announce
-   notices. The ring keeps it legible over the icon/background. */
+/* Anchor for the corner-pinned notice count on the icon-only mobile toggle. */
 .action-cluster__output,
 .mobile-footer__output { position: relative; }
 
-.output-toggle-dot {
+/* Pending-notices count on the output toggle — a real number in a warn pill,
+   clearer than a bare dot. Inline on desktop (beside the "Output" label),
+   pinned to the corner on the mobile icon-only button. */
+.output-notice-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--warn);
+  color: #1c1f24;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-theme="light"] .output-notice-count { color: #ffffff; }
+
+.output-notice-count--corner {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent-solid);
+  top: 2px;
+  right: 2px;
   box-shadow: 0 0 0 2px var(--panel);
   pointer-events: none;
 }
+
+/* When notices are pending the whole toggle reads as "attention" (warn-tinted),
+   not just decorated with a badge. */
+.action-cluster__output.has-notices,
+.mobile-footer__output.has-notices { color: var(--warn); }
 
 /* Vertical rule fencing the console toggle off from the file actions. */
 .mobile-footer__divider {
@@ -1265,8 +1258,6 @@ button:disabled { cursor: default; }
    PARAM FORM — accordion groups, param rows, controls
    ═══════════════════════════════════════════════════════════════ */
 
-.param-form { /* groups live here */ }
-
 .param-form__empty {
   color: var(--muted);
   font-size: 0.9rem;
@@ -1382,7 +1373,7 @@ button:disabled { cursor: default; }
 
 .control-row { display: flex; gap: 0.5rem; align-items: center; }
 .control-row input[type="range"] { flex: 1; min-width: 0; }
-.control-row input[type="number"] { width: 5rem; }
+/* Number-input width comes from the `w-20` utility on the control itself. */
 .param select, .param input[type="text"] { width: 100%; }
 .param input[type="checkbox"] { align-self: flex-start; }
 

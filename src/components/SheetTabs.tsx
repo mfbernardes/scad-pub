@@ -12,6 +12,7 @@ import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
+import { RotateCcw as ResetIcon } from "lucide-react";
 
 type Tab = "params" | "presets" | "files";
 
@@ -85,7 +86,9 @@ export function SheetTabs({
               <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Auto-render" />
               Auto-render
             </Label>
-            <ResetButton design={design} values={values} onReset={reset} className="reset-link ml-auto">Reset to defaults</ResetButton>
+            <ResetButton design={design} values={values} onReset={reset} className="reset-link ml-auto">
+              <ResetIcon size={14} /> Reset to defaults
+            </ResetButton>
           </div>
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">

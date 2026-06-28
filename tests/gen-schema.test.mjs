@@ -451,11 +451,11 @@ test("notices: normalises entries, defaults the label, keeps order", () => {
   assert.deepEqual(
     parseNotices([
       { marker: " note ", label: "  notes  ", color: " #3b82f6 " },
-      { marker: "advisory" }, // label defaults to the marker
+      { marker: "alert" }, // label defaults to the marker
     ]),
     [
       { marker: "note", label: "notes", color: "#3b82f6" },
-      { marker: "advisory", label: "advisory" },
+      { marker: "alert", label: "alert" },
     ]
   );
 });

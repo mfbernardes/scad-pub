@@ -15,7 +15,8 @@ import {
   Download as DownloadIcon,
   Image as ImageIcon,
   Link2 as LinkIcon,
-  Terminal as TerminalIcon,
+  Bell as BellIcon,
+  BellRing as BellRingIcon,
 } from "lucide-react";
 
 interface Props {
@@ -24,8 +25,8 @@ interface Props {
   outputOpen: boolean;
   onSavePng: () => void;
   onToggleOutput: () => void;
-  /** Show a dot on the Output toggle when there are pending notices/warnings. */
-  hasNotices?: boolean;
+  /** How many notices/warnings are pending — shown as a count badge when > 0. */
+  noticeCount?: number;
   /** Compact = the mobile footer: shorter labels, outline secondaries, full size. */
   compact?: boolean;
 }
@@ -36,7 +37,7 @@ export function ActionButtons({
   outputOpen,
   onSavePng,
   onToggleOutput,
-  hasNotices = false,
+  noticeCount = 0,
   compact = false,
 }: Props) {
   const { exportModel, copyLink } = useAppActions();
@@ -44,6 +45,10 @@ export function ActionButtons({
   const secondary = compact ? "outline" : "ghost";
   const size = compact ? undefined : "sm";
   const fmt = modelFormat.toUpperCase();
+  const hasNotices = noticeCount > 0;
+  // A bell (ringing when notices are pending) reads far more clearly to a maker
+  // than the old `>_` terminal glyph — and a real count badge beats a bare dot.
+  const BellGlyph = hasNotices ? BellRingIcon : BellIcon;
 
   return (
     <>
@@ -68,14 +73,24 @@ export function ActionButtons({
       <Button
         size={compact ? "icon" : size}
         variant={secondary}
-        className={`${prefix}__output${outputOpen ? " active" : ""}`}
+        className={`${prefix}__output${outputOpen ? " active" : ""}${hasNotices ? " has-notices" : ""}`}
         onClick={onToggleOutput}
-        aria-label={`${outputOpen ? "Close" : "Open"} output console${hasNotices ? " (new notices)" : ""}`}
+        aria-label={`${outputOpen ? "Close" : "Open"} output console${
+          hasNotices ? ` (${noticeCount} notice${noticeCount === 1 ? "" : "s"})` : ""
+        }`}
         aria-pressed={outputOpen}
-        title="Output console"
+        title="Output console — notices & log"
       >
-        <TerminalIcon size={16} />
-        {hasNotices && <span className="output-toggle-dot" aria-hidden="true" />}
+        <BellGlyph size={16} />
+        {!compact && "Output"}
+        {hasNotices && (
+          <span
+            className={`output-notice-count${compact ? " output-notice-count--corner" : ""}`}
+            aria-hidden="true"
+          >
+            {noticeCount}
+          </span>
+        )}
       </Button>
     </>
   );

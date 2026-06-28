@@ -1,7 +1,7 @@
 // CommandBar.tsx — top bar: brand, design picker (shadcn Select), presets
 // dropdown (shadcn Popover), status, action icons (theme / help / licenses),
 // optional PWA install. Notices surface via the auto-opening output console,
-// so the bar carries no advisory badge.
+// so the bar carries no notice badge.
 import { memo, useState } from "react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
@@ -11,12 +11,10 @@ import { StatusPill } from "./StatusPill";
 import { IconButton } from "./IconButton";
 import { PresetPicker } from "./PresetPicker";
 import { DesignPicker } from "./DesignPicker";
+import { ThemeToggle } from "./ThemeToggle";
 import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import {
-  Sun as SunIcon,
-  Moon as MoonIcon,
-  SunMoon as AutoThemeIcon,
   CircleHelp as HelpIcon,
   Info as InfoIcon,
   HardDriveDownload as InstallIcon,
@@ -72,9 +70,6 @@ export const CommandBar = memo(function CommandBar({
   const [showPresets, setShowPresets] = useState(false);
   const currentDesign = designs.find((d) => d.id === designId);
 
-  const themeIcon = themeMode === "light" ? <SunIcon size={16} /> : themeMode === "dark" ? <MoonIcon size={16} /> : <AutoThemeIcon size={16} />;
-  const themeLabel = themeMode === "light" ? "Switch to dark theme" : themeMode === "dark" ? "Switch to auto theme" : "Switch to light theme";
-
   const presetName = selectedPreset ? presetLabel(selectedPreset) : "";
 
   return (
@@ -91,8 +86,6 @@ export const CommandBar = memo(function CommandBar({
       {/* Design picker + presets, centered in the bar */}
       <div className="command-bar__center">
         <div className="command-bar__design-picker">
-        <span className="command-bar__design-label">Design</span>
-        <span className="command-bar__sep" aria-hidden="true">·</span>
         {designs.length > 1 ? (
           <DesignPicker designs={designs} value={designId} onChange={designChange} />
         ) : (
@@ -136,9 +129,7 @@ export const CommandBar = memo(function CommandBar({
         <StatusPill rendering={rendering} ready={ready} result={result} stale={stalePreview} />
 
         {/* Action icons */}
-        <IconButton label={themeLabel} title={themeLabel} onClick={cycleTheme}>
-          {themeIcon}
-        </IconButton>
+        <ThemeToggle mode={themeMode} onCycle={cycleTheme} />
         <IconButton label="Help" title="Help & keyboard shortcuts" onClick={showHelp}>
           <HelpIcon size={16} />
         </IconButton>
