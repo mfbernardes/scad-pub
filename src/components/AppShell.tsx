@@ -20,6 +20,7 @@ import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionCluster } from "./ActionCluster";
 import { ActionButtons } from "./ActionButtons";
+import { StaleBanner } from "./StaleBanner";
 import { ViewerHUD } from "./ViewerHUD";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, detentHeight, type SheetDetent } from "./BottomSheet";
@@ -173,6 +174,7 @@ export const AppShell = memo(function AppShell({
           rendering={rendering}
           ready={ready}
           result={result}
+          stalePreview={stalePreview}
           canInstall={canInstall}
         />
 
@@ -186,6 +188,7 @@ export const AppShell = memo(function AppShell({
             panelSide={panelSide}
             panelDefaultOpen={panelDefaultOpen}
             showVarName={showVarName}
+            autoRender={autoRender}
           />
 
           {/* Canvas */}
@@ -211,13 +214,20 @@ export const AppShell = memo(function AppShell({
                 </div>
               )}
 
+              {/* "Preview out of date" alert — the manual-mode signal that the
+                  canvas no longer matches the controls. Top-centre, where the eye
+                  already is, instead of relying on a toolbar button. */}
+              <StaleBanner
+                autoRender={autoRender}
+                rendering={rendering}
+                stalePreview={stalePreview}
+                onRender={actions.render}
+              />
+
               {/* Floating controls live inside viewer-wrap so they hover over the
                   canvas — which shrinks when the output console docks below it —
                   rather than overlapping the console's notices. */}
               <ActionCluster
-                rendering={rendering}
-                autoRender={autoRender}
-                stalePreview={stalePreview}
                 hasResult={!!result?.ok}
                 modelFormat={schema.format}
                 outputOpen={outputOpen}
@@ -268,6 +278,14 @@ export const AppShell = memo(function AppShell({
                 <p>{ready ? "Rendering…" : "Loading renderer…"}</p>
               </div>
             )}
+
+            {/* "Preview out of date" alert (manual mode) — same signal as desktop. */}
+            <StaleBanner
+              autoRender={autoRender}
+              rendering={rendering}
+              stalePreview={stalePreview}
+              onRender={actions.render}
+            />
           </div>
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
@@ -347,9 +365,6 @@ export const AppShell = memo(function AppShell({
         <div className="mobile-footer">
           <ActionButtons
             compact
-            rendering={rendering}
-            autoRender={autoRender}
-            stalePreview={stalePreview}
             hasResult={!!result?.ok}
             modelFormat={schema.format}
             outputOpen={outputOpen}

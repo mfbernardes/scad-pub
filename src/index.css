@@ -516,6 +516,9 @@ button:disabled { cursor: default; }
 
 /* Footer with reset button */
 .param-panel__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.4rem 0.75rem;
   border-top: 1px solid var(--line);
   flex-shrink: 0;
@@ -659,20 +662,6 @@ button:disabled { cursor: default; }
   border-color: var(--accent-solid) !important;
 }
 
-.action-cluster__auto-render {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.82rem;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-  padding: 0.3rem 0.45rem;
-  border-radius: var(--radius-sm);
-}
-
-.action-cluster__auto-render:hover { color: var(--text); }
-
 .action-cluster__output {
   position: relative;
 }
@@ -683,13 +672,78 @@ button:disabled { cursor: default; }
   color: var(--accent);
 }
 
-/* Thin vertical rule separating the cluster's three zones:
-   [ Auto-render ] · [ Render/Export · PNG · Share ] · [ Output ] */
+/* Thin vertical rule fencing the Output toggle off from the file actions:
+   [ Export · PNG · Share ] · [ Output ] */
 .action-cluster__divider {
   align-self: stretch;
   width: 1px;
   margin: 0.2rem 0.2rem;
   background: var(--line);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STALE BANNER — "preview out of date" alert over the viewer
+   ═══════════════════════════════════════════════════════════════ */
+
+.stale-banner {
+  position: absolute;
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation);
+  z-index: 11;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.stale-banner:hover:not(:disabled) { border-color: var(--accent); }
+.stale-banner:hover:not(:disabled) .stale-banner__cta { filter: brightness(1.08); }
+
+.stale-banner--busy {
+  cursor: default;
+  color: var(--muted);
+  padding-right: 0.7rem;
+}
+
+/* Amber pulsing dot — "attention, but not an error". */
+.stale-banner__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  flex-shrink: 0;
+  animation: pill-pulse 1.4s ease-in-out infinite;
+}
+
+/* The render call-to-action, rendered as a solid accent chip inside the pill. */
+.stale-banner__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+/* Mobile: drop below the floating top bar (and any notch). */
+@media (max-width: 860px) {
+  .app-shell__mobile .stale-banner {
+    top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -721,13 +775,16 @@ button:disabled { cursor: default; }
 .status-pill--idle { color: var(--muted); }
 
 .status-pill--loading .status-pill__dot,
-.status-pill--rendering .status-pill__dot {
+.status-pill--rendering .status-pill__dot,
+.status-pill--stale .status-pill__dot {
   animation: pill-pulse 1s ease-in-out infinite;
 }
 
 .status-pill--loading .status-pill__dot { background: var(--muted); }
 .status-pill--rendering .status-pill__dot { background: var(--accent); }
 .status-pill--ok .status-pill__dot { background: #4ade80; }
+.status-pill--stale .status-pill__dot { background: var(--warn); }
+.status-pill--stale { color: var(--warn); }
 .status-pill--error .status-pill__dot { background: #f87171; }
 .status-pill--error { color: #f87171; }
 
