@@ -21,6 +21,7 @@ text_size = 7; // [3:0.5:20]
 // How far the text stands out from (or sinks into) the face (mm).
 text_depth = 0.8; // [0.2:0.1:3]
 // Font family / style.
+// @font
 font = "Liberation Sans:style=Bold";
 // Colour of the raised text in the export.
 text_color = "#e23b3b";

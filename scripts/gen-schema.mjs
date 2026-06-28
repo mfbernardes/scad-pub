@@ -115,10 +115,6 @@ const SHOWIF_RE = /^@show-?if\s+(.+)$/i;
 // `@font` directive: marks a string parameter as a font-family selector, so the
 // UI can check its value against the available font set. Invisible to OpenSCAD.
 const FONT_ANNOT_RE = /^@font\s*$/i;
-// A string parameter is also treated as a font selector when its name is `font`
-// or ends in `_font`/`Font` (e.g. `label_font`) — the common OpenSCAD idiom — so
-// existing designs get the affordance without an annotation.
-const FONT_NAME_RE = /(^|_)fonts?$|[a-z]Fonts?$/;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
 
@@ -623,10 +619,9 @@ export function parseParams(absPath) {
       const help = trimmed.join(" ");
       const p = inferParam(name, def, hint, firstSentence(help), help, section);
       if (pendingShowIf) p.showIf = pendingShowIf;
-      // Flag font-family selectors (string params only): an explicit `@font`
-      // annotation, or the conventional `font` / `*_font` parameter name.
-      if (p.type === "string" && (pendingFont || FONT_NAME_RE.test(name)))
-        p.isFont = true;
+      // Flag font-family selectors: a string param with an explicit `@font`
+      // annotation. The availability check then runs against the known font set.
+      if (p.type === "string" && pendingFont) p.isFont = true;
       params.push(p);
       reset();
       continue;

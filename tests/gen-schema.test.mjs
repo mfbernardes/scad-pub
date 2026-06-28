@@ -736,32 +736,29 @@ function paramsOf(scad) {
   }
 }
 
-test("string font selectors are flagged isFont (by name and by @font)", () => {
+test("only a string param with an explicit @font is flagged isFont", () => {
   const params = paramsOf(
     `/* [Main] */\n` +
-      `// Font family.\n` +
-      `font = "Liberation Sans:style=Bold";\n` +
-      `// Heading face.\n` +
-      `label_font = "Mono";\n` +
       `// Body face.\n` +
       `// @font\n` +
       `body = "Some Family";\n` +
-      `// Plate thickness.\n` +
-      `thickness = 2; // [1:6]\n` +
-      `// Font size (a number, not a selector).\n` +
-      `FontSize = 10;\n` +
-      `// A font dropdown, not free text.\n` +
+      `// A conventional name is NOT auto-detected — annotation is required.\n` +
+      `font = "Liberation Sans:style=Bold";\n` +
+      `// Heading face.\n` +
+      `label_font = "Mono";\n` +
+      `// A @font on a dropdown stays a plain enum (not free text).\n` +
+      `// @font\n` +
       `picker = "A"; // ["A", "B"]\n`
   );
   const byName = Object.fromEntries(params.map((p) => [p.name, p]));
-  assert.equal(byName.font.isFont, true);
-  assert.equal(byName.label_font.isFont, true); // `*_font` name
-  assert.equal(byName.body.isFont, true); // `@font` annotation
+  assert.equal(byName.body.isFont, true); // `@font` annotation on a string param
   // The @font line is consumed, not leaked into the help/label text.
   assert.ok(!byName.body.help.includes("@font"));
-  // A numeric param and an enum dropdown are never flagged, even if font-ish.
-  assert.equal(byName.thickness.isFont, undefined);
-  assert.equal(byName.FontSize.isFont, undefined);
+  // No annotation -> not flagged, regardless of the parameter name.
+  assert.equal(byName.font.isFont, undefined);
+  assert.equal(byName.label_font.isFont, undefined);
+  // @font on an enum dropdown is ignored (the type isn't string).
+  assert.equal(byName.picker.type, "enum");
   assert.equal(byName.picker.isFont, undefined);
 });
 
