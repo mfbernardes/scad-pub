@@ -199,30 +199,25 @@ export const Viewer = forwardRef<
     );
     io.observe(mount);
 
-    // Apply resizes inside the RAF loop rather than directly in the observer, so
-    // the drawing buffer is resized and re-rendered in the *same* frame.
-    // setSize() clears the canvas; resizing from the (async) observer left an
-    // empty frame before the next render, which flickered while the bottom sheet
-    // smoothly animated the viewer's height. The observer only flags the new
-    // size; the loop reads it and renders together.
-    let pendingW = mount.clientWidth;
-    let pendingH = mount.clientHeight;
-    let needsResize = true;
-    const ro = new ResizeObserver(() => {
-      pendingW = mount.clientWidth;
-      pendingH = mount.clientHeight;
-      needsResize = true;
-    });
-    ro.observe(mount);
-
+    // Resize from inside the RAF loop so the drawing buffer is resized and
+    // re-rendered in the same frame: setSize() clears the canvas, and resizing
+    // out-of-band (e.g. an async ResizeObserver) left a blank frame before the
+    // next render, which flickered while the bottom sheet animated the viewer's
+    // height. Polling the mount size each frame is cheap — the read only forces
+    // layout when something actually changed it (e.g. a sheet drag).
+    let lastW = 0;
+    let lastH = 0;
     let raf = 0;
     const animate = () => {
       controls.update();
-      if (needsResize) {
-        renderer.setSize(pendingW, pendingH, false);
-        cam.aspect = pendingW / Math.max(1, pendingH);
+      const w = mount.clientWidth;
+      const h = mount.clientHeight;
+      if (w !== lastW || h !== lastH) {
+        renderer.setSize(w, h, false);
+        cam.aspect = w / Math.max(1, h);
         cam.updateProjectionMatrix();
-        needsResize = false;
+        lastW = w;
+        lastH = h;
       }
       if (visibleRef.current) renderer.render(scene, cam);
       raf = requestAnimationFrame(animate);
@@ -231,7 +226,6 @@ export const Viewer = forwardRef<
 
     return () => {
       cancelAnimationFrame(raf);
-      ro.disconnect();
       io.disconnect();
       controls.dispose();
       renderer.dispose();

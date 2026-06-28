@@ -23,7 +23,7 @@ import { ActionButtons } from "./ActionButtons";
 import { StaleBanner } from "./StaleBanner";
 import { ViewerHUD } from "./ViewerHUD";
 import { OutputConsole } from "./OutputConsole";
-import { BottomSheet, HALF_VH_RATIO, type SheetDetent } from "./BottomSheet";
+import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
 import { IconButton } from "./IconButton";
@@ -164,22 +164,16 @@ export const AppShell = memo(function AppShell({
   }, []);
 
   // Size the mobile viewer to follow the sheet's live height: write the sheet
-  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge. The
-  // Viewer's RAF resize loop reframes the model into the new box. Capped at the
-  // half height so dragging on to full doesn't shrink the canvas to nothing (the
-  // sheet covers it and the Viewer pauses rendering off-screen there anyway).
-  // While dragging, the viewer's bottom transition is disabled so it tracks the
-  // finger 1:1; on release the snap eases (see .app-shell__mobile-viewer in CSS).
-  const handleSheetFollow = useCallback(
-    (heightPx: number, dragging: boolean) => {
-      const el = mobileRootRef.current;
-      if (!el) return;
-      const half = (window.innerHeight - footerInset) * HALF_VH_RATIO;
-      el.style.setProperty("--sheet-follow-h", `${Math.round(Math.min(heightPx, half))}px`);
-      el.dataset.sheetDragging = dragging ? "true" : "false";
-    },
-    [footerInset]
-  );
+  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge (the
+  // Viewer's RAF loop reframes the model into the new box). The CSS caps it at
+  // the half height, and data-sheet-dragging toggles the easing — see
+  // .app-shell__mobile-viewer.
+  const handleSheetFollow = useCallback((heightPx: number, dragging: boolean) => {
+    const el = mobileRootRef.current;
+    if (!el) return;
+    el.style.setProperty("--sheet-follow-h", `${Math.round(heightPx)}px`);
+    el.dataset.sheetDragging = dragging ? "true" : "false";
+  }, []);
 
   // Notices are surfaced by the dot on the Output toggle, not by auto-popping the
   // console. We only auto-hide a console that's open once its notices clear.
