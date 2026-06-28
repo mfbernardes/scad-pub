@@ -17,8 +17,10 @@ import { startServer } from "./serve-dist.mjs";
 // Status pill shows "123 ms" or "123 ms (cached)" on success, "Failed (exit N)" on error.
 // The status pill shows only a colour dot; its detail ("123 ms" / "Failed …")
 // lives in aria-label and is revealed on click.
+// Both layouts render a status pill (the inactive one is CSS-hidden but still in
+// the DOM), and both carry the same aria-label — so read the first match.
 const statusText = (page) =>
-  page.locator(".status-pill").getAttribute("aria-label");
+  page.locator(".status-pill").first().getAttribute("aria-label");
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)

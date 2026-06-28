@@ -27,8 +27,15 @@ import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
 import { IconButton } from "./IconButton";
+import { StatusPill } from "./StatusPill";
 import { Spinner } from "./ui/spinner";
-import { CircleHelp as HelpIcon, Info as InfoIcon } from "lucide-react";
+import {
+  CircleHelp as HelpIcon,
+  Info as InfoIcon,
+  Sun as SunIcon,
+  Moon as MoonIcon,
+  SunMoon as AutoThemeIcon,
+} from "lucide-react";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { assetUrl } from "../lib/assetUrl";
 import { useAppActions } from "../lib/appActions";
@@ -89,6 +96,13 @@ export const AppShell = memo(function AppShell({
   // Sheet detent state (peek/half/full). On mobile the output overlay now covers
   // the sheet, so it no longer has to be positioned relative to the detent.
   const [sheetDetent, setSheetDetent] = useState<SheetDetent>("peek");
+
+  // Theme cycle icon/label (light → dark → auto), mirrored from the desktop
+  // CommandBar so the mobile top bar offers the same control.
+  const themeIcon =
+    themeMode === "light" ? <SunIcon size={16} /> : themeMode === "dark" ? <MoonIcon size={16} /> : <AutoThemeIcon size={16} />;
+  const themeLabel =
+    themeMode === "light" ? "Switch to dark theme" : themeMode === "dark" ? "Switch to auto theme" : "Switch to light theme";
 
   const ui = schema.ui ?? {};
   const panelSide = ui.panelSide ?? "left";
@@ -295,6 +309,10 @@ export const AppShell = memo(function AppShell({
               )}
             </div>
             <div className="mobile-top-bar__right">
+              <StatusPill rendering={rendering} ready={ready} result={result} stale={stalePreview} />
+              <IconButton label={themeLabel} title={themeLabel} onClick={actions.cycleTheme}>
+                {themeIcon}
+              </IconButton>
               <IconButton label="Help" title="Help & keyboard shortcuts" onClick={actions.showHelp}>
                 <HelpIcon size={16} />
               </IconButton>

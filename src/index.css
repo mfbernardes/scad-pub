@@ -284,8 +284,6 @@ button:disabled { cursor: default; }
   flex-shrink: 0;
 }
 
-.command-bar__brand { justify-self: start; }
-
 /* Centered design + presets group */
 .command-bar__center {
   display: inline-flex;
@@ -307,6 +305,7 @@ button:disabled { cursor: default; }
   align-items: center;
   gap: 0.45rem;
   padding: 0.2rem;
+  justify-self: start;
 }
 .command-bar__title { font-size: 0.95rem; font-weight: 700; }
 
@@ -334,9 +333,8 @@ button:disabled { cursor: default; }
   color: var(--text);
 }
 
-/* Presets dropdown trigger + popover */
-.command-bar__presets { position: relative; }
-
+/* Presets dropdown trigger (the popover surface itself is a Radix portal styled
+   by the shadcn PopoverContent defaults — bg/border/radius/shadow/position). */
 .command-bar__presets-btn {
   display: inline-flex;
   align-items: center;
@@ -353,20 +351,6 @@ button:disabled { cursor: default; }
 .command-bar__presets-btn:hover:not(:disabled) { background: var(--panel-2); }
 .command-bar__presets-btn .command-bar__presets-label { font-size: 0.85rem; color: var(--muted); }
 .command-bar__presets-btn .command-bar__presets-label strong { color: var(--text); font-weight: 600; }
-
-.command-bar__presets-popover {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  left: 0;
-  width: 22rem;
-  max-width: 90vw;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--elevation);
-  z-index: 50;
-  overflow: hidden;
-}
 
 /* PWA install button */
 .command-bar__install-btn {
@@ -1051,6 +1035,16 @@ button:disabled { cursor: default; }
 }
 .mobile-top-bar .icon-btn { border-radius: var(--radius-sm); }
 
+/* Flat status chip in the mobile top bar (matches the desktop command bar). */
+.mobile-top-bar__right .status-pill {
+  background: transparent;
+  border: none;
+  padding: 0.25rem 0.3rem;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.mobile-top-bar__right .status-pill:hover { background: var(--panel-2); }
+
 /* ═══════════════════════════════════════════════════════════════
    MOBILE FOOTER — fixed actions bar below the bottom sheet
    ═══════════════════════════════════════════════════════════════ */
@@ -1265,8 +1259,6 @@ button:disabled { cursor: default; }
    PARAM FORM — accordion groups, param rows, controls
    ═══════════════════════════════════════════════════════════════ */
 
-.param-form { /* groups live here */ }
-
 .param-form__empty {
   color: var(--muted);
   font-size: 0.9rem;
@@ -1382,7 +1374,7 @@ button:disabled { cursor: default; }
 
 .control-row { display: flex; gap: 0.5rem; align-items: center; }
 .control-row input[type="range"] { flex: 1; min-width: 0; }
-.control-row input[type="number"] { width: 5rem; }
+/* Number-input width comes from the `w-20` utility on the control itself. */
 .param select, .param input[type="text"] { width: 100%; }
 .param input[type="checkbox"] { align-self: flex-start; }
 
