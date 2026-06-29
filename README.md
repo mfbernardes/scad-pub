@@ -18,7 +18,7 @@ npm run dev   # predev fetches the pinned OpenSCAD WASM and regenerates the sche
 ## Features
 
 - **3D preview** via three.js (OpenSCAD full/manifold render), showing per-object colour; mouse/touch orbit and zoom; colour-bearing 3MF and PNG export.
-- **Viewer controls** — map-style overlay buttons on the preview (zoom in, zoom out, reset view, a dimensions toggle, plus a fullscreen toggle in a browser tab), shown once a render succeeds. Mouse/touch orbit and zoom work regardless.
+- **Viewer controls** — map-style overlay buttons on the preview (a view picker for standard camera angles, zoom in, zoom out, reset view, a dimensions toggle, plus a fullscreen toggle in a browser tab), shown once a render succeeds. Mouse/touch orbit and zoom work regardless.
 - **Dimensions overlay** — the ruler button draws W×D×H callouts around the model and shows a per-design info panel of parameter values (any param marked `// @info`). See [docs/annotations.md](docs/annotations.md).
 - **Parameter form** generated from OpenSCAD Customizer syntax; never drifts from the design.
 - **Conditional parameters** — `// @showIf <expr>` hides irrelevant controls. See [docs/annotations.md](docs/annotations.md).

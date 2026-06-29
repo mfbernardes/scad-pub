@@ -10,6 +10,7 @@ import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildDimensions, type DimensionsGroup } from "./dimensions";
+import { VIEW_DIRECTIONS, DEFAULT_VIEW, type ViewName } from "./views";
 
 // The build-time model format (Vite define; see vite.config.ts). A literal, so
 // the unused branch below — and its loader import — drop out of the bundle.
@@ -26,8 +27,10 @@ export interface Dimensions {
 export interface ViewerHandle {
   /** A PNG data URL of the current view, or null if nothing is rendered. */
   snapshot: () => string | null;
-  /** Re-frame the current model with the default orbit/zoom. */
+  /** Re-frame the current model with the default orbit/zoom for the active view. */
   resetView: () => void;
+  /** Snap the camera to a named standard view (re-applies even if unchanged). */
+  setView: (view: ViewName) => void;
   /** Dolly the camera towards the orbit target. */
   zoomIn: () => void;
   /** Dolly the camera away from the orbit target. */
@@ -94,10 +97,16 @@ export const Viewer = forwardRef<
     reframeOnPreset?: boolean;
     /** Overlay arrowed dimension lines (W × D × H) around the model's bounding box. */
     showDimensions?: boolean;
+    /** The standard camera view to frame new models / Reset view with. */
+    view?: ViewName;
     /** Reports the model's bounding-box size in mm (null when geometry clears). */
     onMeasure?: (size: Dimensions | null) => void;
   }
->(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, onMeasure }, ref) {
+>(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, view = DEFAULT_VIEW, onMeasure }, ref) {
+  // Latest selected view, read inside the [stl]-only reframe effect and the
+  // imperative handle without re-running them.
+  const viewRef = useRef(view);
+  viewRef.current = view;
   // Keep the latest onMeasure without re-running the [stl]-only geometry effect.
   const onMeasureRef = useRef(onMeasure);
   onMeasureRef.current = onMeasure;
@@ -127,14 +136,25 @@ export const Viewer = forwardRef<
   // the default framing on demand. null until the first model is framed.
   const frameRadiusRef = useRef<number | null>(null);
 
-  // Frame the orbit camera for a model of the given bounding-sphere radius:
-  // the default three-quarter view used when a design first loads.
-  function frameView(radius: number) {
+  // Frame the orbit camera for a model of the given bounding-sphere radius, from
+  // the named standard view (default = the current one). The camera's up stays
+  // +Z for every view (set once at init), so OrbitControls keeps orbiting
+  // correctly; only the look-from direction changes.
+  function frameView(radius: number, name: ViewName = viewRef.current) {
     const cam = camRef.current;
     const controls = controlsRef.current;
     if (!cam || !controls) return;
-    const d = radius * 2.6;
-    cam.position.set(d * 0.6, -d, d * 0.7);
+    if (name === "isometric") {
+      // The long-standing default three-quarter framing, kept pixel-exact.
+      const d = radius * 2.6;
+      cam.position.set(d * 0.6, -d, d * 0.7);
+    } else {
+      const [x, y, z] = VIEW_DIRECTIONS[name];
+      cam.position
+        .set(x, y, z)
+        .normalize()
+        .multiplyScalar(radius * 3.4);
+    }
     controls.target.set(0, 0, 0);
     controls.update();
   }
@@ -187,6 +207,10 @@ export const Viewer = forwardRef<
     },
     resetView() {
       if (frameRadiusRef.current != null) frameView(frameRadiusRef.current);
+    },
+    setView(name) {
+      viewRef.current = name; // stick for the next new-model reframe
+      if (frameRadiusRef.current != null) frameView(frameRadiusRef.current, name);
     },
     zoomIn() {
       dolly(0.8);

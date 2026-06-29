@@ -589,6 +589,7 @@ button:disabled { cursor: default; }
   transform: translateY(-50%);
   display: flex;
   flex-direction: column;
+  align-items: flex-end; /* keep fixed-width icon buttons hugging the right edge */
   gap: 0.35rem;
   z-index: 5;
 }
@@ -617,6 +618,54 @@ button:disabled { cursor: default; }
    reads at a glance against the otherwise-uniform HUD buttons. */
 .viewer-hud .icon-btn--active {
   border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* View-picker trigger while its menu is open: same accent cue as an active toggle. */
+.viewer-hud .icon-btn[data-state="open"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* View picker — the popover menu opened from the HUD's view button. The compact
+   width/padding come from Tailwind on the content; rows are icon-aligned. */
+.view-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.view-picker__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.view-picker__item:hover,
+.view-picker__item:focus-visible {
+  background: var(--panel-2);
+}
+
+.view-picker__item--active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Fixed-width slot so labels align whether or not the row is checkmarked. */
+.view-picker__check {
+  display: inline-flex;
+  width: 1rem;
+  flex-shrink: 0;
   color: var(--accent);
 }
 

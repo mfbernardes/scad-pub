@@ -22,6 +22,7 @@ import { ActionCluster } from "./ActionCluster";
 import { ActionButtons } from "./ActionButtons";
 import { StaleBanner } from "./StaleBanner";
 import { ViewerHUD } from "./ViewerHUD";
+import { DEFAULT_VIEW, type ViewName } from "./views";
 import { DimensionInfo } from "./DimensionInfo";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, type SheetDetent } from "./BottomSheet";
@@ -102,6 +103,10 @@ export const AppShell = memo(function AppShell({
   // choice survives a desktop⇄mobile breakpoint switch.
   const [showDimensions, setShowDimensions] = useState(false);
   const toggleDimensions = useCallback(() => setShowDimensions((v) => !v), []);
+  // The active camera view. Driving it as state (shared across layouts) keeps the
+  // picker's highlight and a freshly-mounted Viewer in step; the imperative snap
+  // below re-applies it on every pick, including the current one.
+  const [view, setView] = useState<ViewName>(DEFAULT_VIEW);
   // The fixed footer reserves the iOS home-indicator inset below its buttons (see
   // .mobile-footer / --mobile-footer-total in index.css), so the sheet must sit
   // above the footer's *full* height — its 56px button band plus that inset —
@@ -159,6 +164,13 @@ export const AppShell = memo(function AppShell({
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
     if (url) actions.savePng(url);
   }, [isMobile, actions]);
+
+  // Snap the active viewer to a view and remember it (the prop keeps a
+  // freshly-mounted viewer in step; the imperative call re-applies on every pick).
+  const handleSelectView = useCallback((next: ViewName) => {
+    setView(next);
+    (isMobile ? mobileViewerRef : desktopViewerRef).current?.setView(next);
+  }, [isMobile]);
 
   // Open the overlay and collapse the sheet to peek, so the overlay's fixed
   // anchor (just above the peek tab row) never overlaps an expanded sheet.
@@ -254,6 +266,7 @@ export const AppShell = memo(function AppShell({
                       designId={design.id}
                       presetId={selectedPreset}
                       showDimensions={showDimensions}
+                      view={view}
                       onMeasure={setMeasured}
                     />
                   )}
@@ -294,6 +307,8 @@ export const AppShell = memo(function AppShell({
                 measure={showMeasure}
                 showDimensions={showDimensions}
                 onToggleDimensions={toggleDimensions}
+                view={view}
+                onSelectView={handleSelectView}
               />
 
               {/* Measurements panel — top-left, mirroring the HUD on the right.
@@ -336,6 +351,7 @@ export const AppShell = memo(function AppShell({
                     presetId={selectedPreset}
                     reframeOnPreset={false}
                     showDimensions={showDimensions}
+                    view={view}
                     onMeasure={setMeasured}
                   />
                 )}
@@ -460,6 +476,8 @@ export const AppShell = memo(function AppShell({
           measure={showMeasure}
           showDimensions={showDimensions}
           onToggleDimensions={toggleDimensions}
+          view={view}
+          onSelectView={handleSelectView}
         />
       </div>
     </div>

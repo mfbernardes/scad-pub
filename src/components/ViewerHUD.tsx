@@ -4,6 +4,8 @@
 // API is unsupported (e.g. iOS Safari, which only fullscreens <video>).
 import type { ViewerHandle } from "./Viewer";
 import { IconButton } from "./IconButton";
+import { ViewPicker } from "./ViewPicker";
+import type { ViewName } from "./views";
 import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, Maximize as MaximizeIcon, Ruler as RulerIcon } from "lucide-react";
 import { useStandalone } from "../lib/useStandalone";
 import { fullscreenSupported } from "../lib/fullscreen";
@@ -17,9 +19,13 @@ interface Props {
   showDimensions: boolean;
   /** Toggle the dimension overlay on/off. */
   onToggleDimensions: () => void;
+  /** The active camera view (checkmarked in the view picker). */
+  view: ViewName;
+  /** Snap to a standard camera view. */
+  onSelectView: (view: ViewName) => void;
 }
 
-export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions }: Props) {
+export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, view, onSelectView }: Props) {
   const standalone = useStandalone();
   const canFullscreen = !standalone && fullscreenSupported();
   if (!visible) return null;
@@ -35,6 +41,7 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
 
   return (
     <div className="viewer-hud">
+      <ViewPicker view={view} onSelect={onSelectView} />
       <IconButton label="Zoom in" onClick={() => viewerRef.current?.zoomIn()}>
         <ZoomInIcon size={18} />
       </IconButton>
