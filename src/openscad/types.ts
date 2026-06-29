@@ -260,7 +260,7 @@ export interface Schema {
    *  project-agnostic default is used. `sections` renders as a single pane;
    *  supplying `tabs` renders a tab strip (top-level `sections`, if any, become
    *  a leading tab so adding tabs never drops existing content). */
-  help: { intro?: string; sections?: HelpSection[]; tabs?: HelpTab[] } | null;
+  help: { title?: string; intro?: string; sections?: HelpSection[]; tabs?: HelpTab[] } | null;
   /**
    * Optional per-theme colour-scheme overrides supplied by the consumer config.
    * Keys are the CSS custom-property tokens from src/index.css (without the

@@ -153,7 +153,9 @@ export function validateSchema(raw: unknown): Schema {
       typeof (x as Record<string, unknown>).body === "string";
     const isSectionList = (x: unknown) => Array.isArray(x) && x.every(isSection);
     if (typeof h !== "object" || Array.isArray(h))
-      fail("'help' must be { intro?, sections?, tabs? } or null");
+      fail("'help' must be { title?, intro?, sections?, tabs? } or null");
+    if (h.title !== undefined && typeof h.title !== "string")
+      fail("'help.title' must be a string");
     if (h.sections !== undefined && !isSectionList(h.sections))
       fail("'help.sections' must be an array of { title, body }");
     if (h.tabs !== undefined) {

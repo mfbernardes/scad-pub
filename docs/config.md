@@ -70,7 +70,7 @@
 - **`popup`** — optional notice dialog shown over the app on load. See [Popup notice](#popup-notice-popup).
 - **`ui`** / PWA manifest keys — see [UI behaviour & PWA](#ui-behaviour--pwa).
 - **`notices`** — see [Notice badges](#notice-badges-notices).
-- **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
+- **`help`** — `{ title?, intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
 - Missing `source`, `assets`, design, or `logo` paths fail the build with a clear error.
@@ -325,11 +325,14 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 
 The **Help** dialog (the **?** button) is generated from `help`. Omit it for a generic, project-agnostic default; supply it to document your own designs. `body` (and `intro`) use the same Markdown subset as everywhere else: `**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, and `- ` bullets.
 
+An optional **`title`** sets the dialog heading (default `"How to use this configurator"`).
+
 **Single pane** — a flat list of sections (the original form):
 
 ```jsonc
 {
   "help": {
+    "title": "User guide",                             // optional dialog heading
     "intro": "Configure a design and export a 3MF.",   // optional, shown at the top
     "sections": [
       { "title": "1. Pick a design", "body": "Use the **Design** dropdown…" },
