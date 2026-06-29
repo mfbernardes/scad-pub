@@ -49,6 +49,8 @@ interface Props {
   design: Design;
   designs: Design[];
   values: Values;
+  /** Values behind the current render — what the measurements panel reads. */
+  renderedValues: Values;
   bundled: ParsedSet[];
   userPresets: string[];
   selectedPreset: string;
@@ -68,6 +70,7 @@ export const AppShell = memo(function AppShell({
   design,
   designs,
   values,
+  renderedValues,
   bundled,
   userPresets,
   selectedPreset,
@@ -293,7 +296,7 @@ export const AppShell = memo(function AppShell({
                   any per-design @info values. Measured from the mesh, never part of
                   the export. */}
               {showDimensions && measured && (
-                <DimensionInfo design={design} size={measured} values={values} stale={stalePreview} />
+                <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} />
               )}
             </div>
 
@@ -351,7 +354,7 @@ export const AppShell = memo(function AppShell({
             {/* Measurements panel — top-left, below the floating top bar; shown
                 only while dimensions are on (bounding box + per-design @info). */}
             {showDimensions && measured && (
-              <DimensionInfo design={design} size={measured} values={values} stale={stalePreview} />
+              <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} />
             )}
           </div>
 

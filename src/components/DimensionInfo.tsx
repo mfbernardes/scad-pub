@@ -13,9 +13,11 @@ interface Props {
   design: Design;
   /** Bounding-box size in millimetres (the headline "Dimensions" line). */
   size: Dimensions;
-  /** Current parameter values from the controls. */
+  /** Values behind the current render — not the live controls — so the figures
+   *  change in step with the measured geometry, only once a render lands. */
   values: Values;
-  /** Params changed since the last render — the figures may not match the model. */
+  /** Render is behind the controls (manual mode) — the figures, like the model,
+   *  don't yet reflect the latest edits. */
   stale?: boolean;
 }
 
@@ -24,8 +26,8 @@ function mm(n: number): string {
   return (Math.round(n * 10) / 10).toFixed(1);
 }
 
-// Format a parameter's live value for display, appending the optional `@info`
-// unit. Returns null when there's nothing worth showing (e.g. an empty string).
+// Format a parameter's value for display, appending the optional `@info` unit.
+// Returns null when there's nothing worth showing (e.g. an empty string).
 function formatValue(param: Param, values: Values): string | null {
   const raw = values[param.name] ?? param.default;
   const unit = param.info?.unit ? ` ${param.info.unit}` : "";

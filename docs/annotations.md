@@ -64,7 +64,7 @@ Annotating the dropdown lets a design keep the native OpenSCAD `// [..]` choice 
 
 ## Viewer info (`// @info`)
 
-Mark a parameter with `// @info` to surface its live value in the viewer's info panel, which appears beneath the size readout while the **dimensions** overlay is toggled on (the ruler button). Each design chooses its own fields, so the panel is model-specific:
+Mark a parameter with `// @info` to surface its value in the viewer's measurements panel, which appears while the **dimensions** overlay is toggled on (the ruler button). The panel always leads with the model's bounding box (`Dimensions  W × D × H mm`); annotated parameters follow beneath it. Each design chooses its own fields, so the panel is model-specific:
 
 ```scad
 // Text to emboss on the tag.
@@ -84,4 +84,4 @@ The text after `@info` is optional:
 | `// @info Label` | a custom `Label` + value |
 | `// @info Label \| mm` | a custom `Label` + value with the unit `mm` appended |
 
-Values are read live from the controls and formatted by type (booleans as Yes/No, enums by their choice label, empty strings are omitted). A line inherits its parameter's `// @showIf`, so it disappears when that control is hidden. Like the size readout, the panel is purely informative and never part of the exported model.
+Values reflect the **rendered** model, not the live controls — a line updates only once a render finishes, in step with the bounding box — and are formatted by type (booleans as Yes/No, enums by their choice label, empty strings are omitted). A line inherits its parameter's `// @showIf`, so it disappears when that control is hidden. The panel is purely informative and never part of the exported model.
