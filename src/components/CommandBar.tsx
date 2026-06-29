@@ -38,6 +38,8 @@ interface Props {
   result: RenderResult | null;
   stalePreview: boolean;
   canInstall: boolean;
+  /** Configurable label for the presets control (default "Presets"). */
+  presetsLabel?: string;
 }
 
 export const CommandBar = memo(function CommandBar({
@@ -56,6 +58,7 @@ export const CommandBar = memo(function CommandBar({
   result,
   stalePreview,
   canInstall,
+  presetsLabel = "Presets",
 }: Props) {
   const {
     install,
@@ -98,10 +101,10 @@ export const CommandBar = memo(function CommandBar({
         <PopoverTrigger asChild>
           <button
             className="command-bar__presets-btn"
-            aria-label={`Presets${presetName ? ` — ${presetName}` : ""}`}
+            aria-label={`${presetsLabel}${presetName ? ` — ${presetName}` : ""}`}
           >
             <span className="command-bar__presets-label">
-              Presets{presetName ? <> · <strong>{presetName}</strong></> : ""}
+              {presetsLabel}{presetName ? <> · <strong>{presetName}</strong></> : ""}
             </span>
             <ChevronDownIcon size={14} />
           </button>
@@ -120,6 +123,7 @@ export const CommandBar = memo(function CommandBar({
             onSelectedChange={selectedPresetChange}
             onPresetsChange={presetsChange}
             onClose={() => setShowPresets(false)}
+            presetsLabel={presetsLabel}
           />
         </PopoverContent>
       </Popover>

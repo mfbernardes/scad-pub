@@ -236,6 +236,10 @@ export interface UiConfig {
   reset?: boolean;
   /** Whether the viewer's zoom in/out buttons are offered (default false). */
   zoom?: boolean;
+  /** Label for the "Presets" tab/section (default "Presets"). */
+  presetsLabel?: string;
+  /** Label for the "Parameters" tab/section (default "Parameters"). */
+  parametersLabel?: string;
 }
 
 export interface Schema {

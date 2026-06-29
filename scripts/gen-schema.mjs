@@ -459,7 +459,7 @@ export function parseNotices(raw) {
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: true, measure: true, viewPicker: true, reset: true, zoom: false };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: true, measure: true, viewPicker: true, reset: true, zoom: false, presetsLabel: "Presets", parametersLabel: "Parameters" };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -512,6 +512,13 @@ export function parseUi(raw) {
     if (typeof raw.zoom !== "boolean")
       throw new Error("gen-schema: 'ui.zoom' must be a boolean");
     out.zoom = raw.zoom;
+  }
+  for (const key of ["presetsLabel", "parametersLabel"]) {
+    if (raw[key] !== undefined) {
+      if (typeof raw[key] !== "string" || !raw[key].trim())
+        throw new Error(`gen-schema: 'ui.${key}' must be a non-empty string`);
+      out[key] = raw[key].trim();
+    }
   }
   return out;
 }

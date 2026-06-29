@@ -126,6 +126,9 @@ export const AppShell = memo(function AppShell({
   const panelSide = ui.panelSide ?? "left";
   const panelDefaultOpen = (ui.panelDefault ?? "open") === "open";
   const showVarName = ui.showVarName !== false;
+  // Configurable tab/section labels (default to the built-in names).
+  const presetsLabel = ui.presetsLabel ?? "Presets";
+  const parametersLabel = ui.parametersLabel ?? "Parameters";
   // Whether the viewer offers the measure (dimensions) toggle. Off hides the HUD
   // ruler button; the overlay + panel are only reachable through it, so they
   // stay hidden too.
@@ -242,6 +245,7 @@ export const AppShell = memo(function AppShell({
           result={result}
           stalePreview={stalePreview}
           canInstall={canInstall}
+          presetsLabel={presetsLabel}
         />
 
         <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
@@ -257,6 +261,7 @@ export const AppShell = memo(function AppShell({
             panelDefaultOpen={panelDefaultOpen}
             showVarName={showVarName}
             autoRender={autoRender}
+            parametersLabel={parametersLabel}
           />
 
           {/* Canvas */}
@@ -461,6 +466,8 @@ export const AppShell = memo(function AppShell({
                 onActivate={expand}
                 showVarName={showVarName}
                 autoRender={autoRender}
+                presetsLabel={presetsLabel}
+                parametersLabel={parametersLabel}
               />
             </div>
           )}

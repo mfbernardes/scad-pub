@@ -475,6 +475,15 @@ test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () =>
   assert.throws(() => parseUi({ zoom: 1 }), /'ui\.zoom' must be a boolean/);
 });
 
+test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
+  assert.equal(parseUi(undefined).presetsLabel, "Presets");
+  assert.equal(parseUi(undefined).parametersLabel, "Parameters");
+  assert.equal(parseUi({ presetsLabel: "  Styles  " }).presetsLabel, "Styles");
+  assert.equal(parseUi({ parametersLabel: "Options" }).parametersLabel, "Options");
+  assert.throws(() => parseUi({ presetsLabel: "  " }), /'ui\.presetsLabel' must be a non-empty string/);
+  assert.throws(() => parseUi({ parametersLabel: 5 }), /'ui\.parametersLabel' must be a non-empty string/);
+});
+
 test("notices are off by default (omitted -> [])", () => {
   assert.deepEqual(parseNotices(undefined), []);
   assert.deepEqual(parseNotices(null), []);

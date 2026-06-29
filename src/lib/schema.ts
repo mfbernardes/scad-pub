@@ -141,6 +141,9 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.reset' must be a boolean");
     if (ui.zoom !== undefined && typeof ui.zoom !== "boolean")
       fail("'ui.zoom' must be a boolean");
+    for (const key of ["presetsLabel", "parametersLabel"] as const)
+      if (ui[key] !== undefined && typeof ui[key] !== "string")
+        fail(`'ui.${key}' must be a string`);
   }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;

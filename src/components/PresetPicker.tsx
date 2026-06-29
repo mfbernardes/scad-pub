@@ -23,6 +23,8 @@ interface Props {
   /** When true, renders inline (no popover wrapper). Used in mobile sheet tabs. */
   inline?: boolean;
   onClose?: () => void;
+  /** Popover title/aria-label (default "Presets"). */
+  presetsLabel?: string;
 }
 
 export function PresetPicker({
@@ -36,6 +38,7 @@ export function PresetPicker({
   onPresetsChange,
   inline = false,
   onClose,
+  presetsLabel = "Presets",
 }: Props) {
   const [saveName, setSaveName] = useState("");
   const sectionsRef = useRef<HTMLDivElement>(null);
@@ -168,9 +171,9 @@ export function PresetPicker({
   if (inline) return content;
 
   return (
-    <div className="preset-picker-popover" role="dialog" aria-label="Presets">
+    <div className="preset-picker-popover" role="dialog" aria-label={presetsLabel}>
       <div className="preset-picker-popover__header">
-        <span className="preset-picker-popover__title">Presets</span>
+        <span className="preset-picker-popover__title">{presetsLabel}</span>
         {onClose && (
           <IconButton label="Close presets" onClick={onClose}>
             <XIcon size={16} />

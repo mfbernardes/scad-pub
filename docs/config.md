@@ -33,7 +33,9 @@
     "measure": true,              // viewer measure (dimensions) toggle: true | false
     "viewPicker": true,           // viewer view picker (camera angles): true | false
     "reset": true,                // viewer "reset view" button: true | false
-    "zoom": false                 // viewer zoom in/out buttons: true | false (default false)
+    "zoom": false,                // viewer zoom in/out buttons: true | false (default false)
+    "presetsLabel": "Presets",    // label for the Presets tab/section
+    "parametersLabel": "Parameters" // label for the Parameters tab/section
   },
   "themeColorLight": "#ffffff",   // light-scheme browser-chrome colour (default "#ffffff")
   "categories": ["productivity", "graphics"],  // optional PWA manifest categories
@@ -278,6 +280,8 @@ An optional object (validated as a unit; defaults applied when absent). None of 
 - **`viewPicker`** — `true` (default) or `false`: whether the viewer offers the view picker — the cube button whose menu snaps the camera to standard angles (Isometric, Top, Front, …). Set `false` to hide it.
 - **`reset`** — `true` (default) or `false`: whether the viewer offers the "reset view" button (re-frames the model in the current view). Mouse/touch orbit and zoom still work regardless.
 - **`zoom`** — `false` (default) or `true`: whether the viewer offers the zoom in/out buttons. Off by default since mouse-wheel / pinch zoom already works; set `true` to show the two buttons.
+- **`presetsLabel`** — string (default `"Presets"`): the label shown for the Presets tab/section (the mobile sheet tab, the desktop presets dropdown, and the presets popover title).
+- **`parametersLabel`** — string (default `"Parameters"`): the label shown for the Parameters tab/section (the mobile sheet tab and the desktop parameter panel).
 
 ### PWA manifest
 
