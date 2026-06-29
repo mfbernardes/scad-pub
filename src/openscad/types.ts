@@ -230,6 +230,8 @@ export interface UiConfig {
    * measurements/@info panel, which are only reachable through that toggle.
    */
   measure?: boolean;
+  /** Whether the viewer's view picker (camera-angle menu) is offered (default true). */
+  viewPicker?: boolean;
 }
 
 export interface Schema {

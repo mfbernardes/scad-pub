@@ -19,13 +19,15 @@ interface Props {
   showDimensions: boolean;
   /** Toggle the dimension overlay on/off. */
   onToggleDimensions: () => void;
+  /** Whether the view picker (camera-angle menu) is offered (config ui.viewPicker). */
+  viewPicker: boolean;
   /** The active camera view (checkmarked in the view picker). */
   view: ViewName;
   /** Snap to a standard camera view. */
   onSelectView: (view: ViewName) => void;
 }
 
-export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, view, onSelectView }: Props) {
+export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, view, onSelectView }: Props) {
   const standalone = useStandalone();
   const canFullscreen = !standalone && fullscreenSupported();
   if (!visible) return null;
@@ -41,7 +43,7 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
 
   return (
     <div className="viewer-hud">
-      <ViewPicker view={view} onSelect={onSelectView} />
+      {viewPicker && <ViewPicker view={view} onSelect={onSelectView} />}
       <IconButton label="Zoom in" onClick={() => viewerRef.current?.zoomIn()}>
         <ZoomInIcon size={18} />
       </IconButton>

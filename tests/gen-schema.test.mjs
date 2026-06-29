@@ -451,6 +451,14 @@ test("ui.measure defaults to true, accepts a boolean, rejects non-booleans", () 
   assert.throws(() => parseUi({ measure: 0 }), /'ui\.measure' must be a boolean/);
 });
 
+test("ui.viewPicker defaults to true, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).viewPicker, true);
+  assert.equal(parseUi({}).viewPicker, true);
+  assert.equal(parseUi({ viewPicker: false }).viewPicker, false);
+  assert.throws(() => parseUi({ viewPicker: "no" }), /'ui\.viewPicker' must be a boolean/);
+  assert.throws(() => parseUi({ viewPicker: 1 }), /'ui\.viewPicker' must be a boolean/);
+});
+
 test("notices are off by default (omitted -> [])", () => {
   assert.deepEqual(parseNotices(undefined), []);
   assert.deepEqual(parseNotices(null), []);
