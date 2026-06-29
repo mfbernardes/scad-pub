@@ -224,6 +224,12 @@ export interface UiConfig {
    * text; set false to hide it entirely.
    */
   showVarName?: boolean;
+  /**
+   * Whether the viewer's measure (dimensions) toggle is offered (default true).
+   * Set false to hide the ruler button — and with it the W×D×H overlay and the
+   * measurements/@info panel, which are only reachable through that toggle.
+   */
+  measure?: boolean;
 }
 
 export interface Schema {

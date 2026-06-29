@@ -133,6 +133,8 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.install' must be \"auto\" or \"off\"");
     if (ui.showVarName !== undefined && typeof ui.showVarName !== "boolean")
       fail("'ui.showVarName' must be a boolean");
+    if (ui.measure !== undefined && typeof ui.measure !== "boolean")
+      fail("'ui.measure' must be a boolean");
   }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;

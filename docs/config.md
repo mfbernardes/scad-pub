@@ -29,7 +29,8 @@
     "panelDefault": "open",       // first-load desktop panel: "open" | "collapsed"
     "outputDefault": "closed",    // OpenSCAD output console: "closed" | "open"
     "install": "auto",            // PWA install affordance: "auto" | "off"
-    "showVarName": true           // show OpenSCAD variable names by parameters: true | false
+    "showVarName": true,          // show OpenSCAD variable names by parameters: true | false
+    "measure": true               // viewer measure (dimensions) toggle: true | false
   },
   "themeColorLight": "#ffffff",   // light-scheme browser-chrome colour (default "#ffffff")
   "categories": ["productivity", "graphics"],  // optional PWA manifest categories
@@ -270,6 +271,7 @@ An optional object (validated as a unit; defaults applied when absent). None of 
 - **`outputDefault`** — `"closed"` (default) or `"open"`: whether the OpenSCAD output console starts open.
 - **`install`** — `"auto"` (default) or `"off"`: when `"off"`, no PWA install affordance is offered even on browsers that support it.
 - **`showVarName`** — `true` (default) or `false`: whether each parameter control shows the underlying OpenSCAD variable name beside its label. Shown as visually-secondary monospace text; set `false` to hide it.
+- **`measure`** — `true` (default) or `false`: whether the viewer offers the measure (dimensions) toggle — the ruler button that draws the W×D×H overlay and shows the measurements/`@info` panel. Set `false` to hide the button entirely (the overlay and panel are only reachable through it).
 
 ### PWA manifest
 

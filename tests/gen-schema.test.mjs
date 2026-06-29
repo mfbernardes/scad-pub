@@ -442,6 +442,15 @@ test("ui.showVarName defaults to true, accepts a boolean, rejects non-booleans",
   assert.throws(() => parseUi({ showVarName: 1 }), /'ui\.showVarName' must be a boolean/);
 });
 
+test("ui.measure defaults to true, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).measure, true);
+  assert.equal(parseUi({}).measure, true);
+  assert.equal(parseUi({ measure: true }).measure, true);
+  assert.equal(parseUi({ measure: false }).measure, false);
+  assert.throws(() => parseUi({ measure: "no" }), /'ui\.measure' must be a boolean/);
+  assert.throws(() => parseUi({ measure: 0 }), /'ui\.measure' must be a boolean/);
+});
+
 test("notices are off by default (omitted -> [])", () => {
   assert.deepEqual(parseNotices(undefined), []);
   assert.deepEqual(parseNotices(null), []);

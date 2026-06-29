@@ -121,6 +121,10 @@ export const AppShell = memo(function AppShell({
   const panelSide = ui.panelSide ?? "left";
   const panelDefaultOpen = (ui.panelDefault ?? "open") === "open";
   const showVarName = ui.showVarName !== false;
+  // Whether the viewer offers the measure (dimensions) toggle. Off hides the HUD
+  // ruler button; the overlay + panel are only reachable through it, so they
+  // stay hidden too.
+  const showMeasure = ui.measure !== false;
 
   const log = result?.log ?? EMPTY_LOG;
   const notices = schema.notices ?? [];
@@ -287,6 +291,7 @@ export const AppShell = memo(function AppShell({
               <ViewerHUD
                 viewerRef={desktopViewerRef}
                 visible={!!result?.ok}
+                measure={showMeasure}
                 showDimensions={showDimensions}
                 onToggleDimensions={toggleDimensions}
               />
@@ -452,6 +457,7 @@ export const AppShell = memo(function AppShell({
         <ViewerHUD
           viewerRef={mobileViewerRef}
           visible={!!result?.ok}
+          measure={showMeasure}
           showDimensions={showDimensions}
           onToggleDimensions={toggleDimensions}
         />
