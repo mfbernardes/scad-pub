@@ -459,7 +459,7 @@ export function parseNotices(raw) {
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: true, measure: true, viewPicker: true };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: true, measure: true, viewPicker: true, reset: true };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -502,6 +502,11 @@ export function parseUi(raw) {
     if (typeof raw.viewPicker !== "boolean")
       throw new Error("gen-schema: 'ui.viewPicker' must be a boolean");
     out.viewPicker = raw.viewPicker;
+  }
+  if (raw.reset !== undefined) {
+    if (typeof raw.reset !== "boolean")
+      throw new Error("gen-schema: 'ui.reset' must be a boolean");
+    out.reset = raw.reset;
   }
   return out;
 }

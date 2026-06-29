@@ -232,6 +232,8 @@ export interface UiConfig {
   measure?: boolean;
   /** Whether the viewer's view picker (camera-angle menu) is offered (default true). */
   viewPicker?: boolean;
+  /** Whether the viewer's "reset view" button is offered (default true). */
+  reset?: boolean;
 }
 
 export interface Schema {

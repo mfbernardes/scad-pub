@@ -137,6 +137,8 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.measure' must be a boolean");
     if (ui.viewPicker !== undefined && typeof ui.viewPicker !== "boolean")
       fail("'ui.viewPicker' must be a boolean");
+    if (ui.reset !== undefined && typeof ui.reset !== "boolean")
+      fail("'ui.reset' must be a boolean");
   }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;

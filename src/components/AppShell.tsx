@@ -132,6 +132,8 @@ export const AppShell = memo(function AppShell({
   const showMeasure = ui.measure !== false;
   // Whether the viewer offers the view picker (camera-angle menu).
   const showViewPicker = ui.viewPicker !== false;
+  // Whether the viewer offers the "reset view" button.
+  const showReset = ui.reset !== false;
 
   const log = result?.log ?? EMPTY_LOG;
   const notices = schema.notices ?? [];
@@ -310,6 +312,7 @@ export const AppShell = memo(function AppShell({
                 showDimensions={showDimensions}
                 onToggleDimensions={toggleDimensions}
                 viewPicker={showViewPicker}
+                reset={showReset}
                 view={view}
                 onSelectView={handleSelectView}
               />
@@ -480,6 +483,7 @@ export const AppShell = memo(function AppShell({
           showDimensions={showDimensions}
           onToggleDimensions={toggleDimensions}
           viewPicker={showViewPicker}
+          reset={showReset}
           view={view}
           onSelectView={handleSelectView}
         />

@@ -21,13 +21,15 @@ interface Props {
   onToggleDimensions: () => void;
   /** Whether the view picker (camera-angle menu) is offered (config ui.viewPicker). */
   viewPicker: boolean;
+  /** Whether the "reset view" button is offered (config ui.reset). */
+  reset: boolean;
   /** The active camera view (checkmarked in the view picker). */
   view: ViewName;
   /** Snap to a standard camera view. */
   onSelectView: (view: ViewName) => void;
 }
 
-export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, view, onSelectView }: Props) {
+export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, reset, view, onSelectView }: Props) {
   const standalone = useStandalone();
   const canFullscreen = !standalone && fullscreenSupported();
   if (!visible) return null;
@@ -50,9 +52,11 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
       <IconButton label="Zoom out" onClick={() => viewerRef.current?.zoomOut()}>
         <ZoomOutIcon size={18} />
       </IconButton>
-      <IconButton label="Reset view" onClick={() => viewerRef.current?.resetView()}>
-        <ResetIcon size={18} />
-      </IconButton>
+      {reset && (
+        <IconButton label="Reset view" onClick={() => viewerRef.current?.resetView()}>
+          <ResetIcon size={18} />
+        </IconButton>
+      )}
       {measure && (
         <IconButton
           label={showDimensions ? "Hide dimensions" : "Show dimensions"}
