@@ -134,6 +134,8 @@ export const AppShell = memo(function AppShell({
   const showViewPicker = ui.viewPicker !== false;
   // Whether the viewer offers the "reset view" button.
   const showReset = ui.reset !== false;
+  // Whether the viewer offers the zoom in/out buttons (off by default).
+  const showZoom = ui.zoom === true;
 
   const log = result?.log ?? EMPTY_LOG;
   const notices = schema.notices ?? [];
@@ -313,6 +315,7 @@ export const AppShell = memo(function AppShell({
                 onToggleDimensions={toggleDimensions}
                 viewPicker={showViewPicker}
                 reset={showReset}
+                zoom={showZoom}
                 view={view}
                 onSelectView={handleSelectView}
               />
@@ -484,6 +487,7 @@ export const AppShell = memo(function AppShell({
           onToggleDimensions={toggleDimensions}
           viewPicker={showViewPicker}
           reset={showReset}
+          zoom={showZoom}
           view={view}
           onSelectView={handleSelectView}
         />

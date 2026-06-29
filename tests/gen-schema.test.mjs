@@ -467,6 +467,14 @@ test("ui.reset defaults to true, accepts a boolean, rejects non-booleans", () =>
   assert.throws(() => parseUi({ reset: 1 }), /'ui\.reset' must be a boolean/);
 });
 
+test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).zoom, false);
+  assert.equal(parseUi({}).zoom, false);
+  assert.equal(parseUi({ zoom: true }).zoom, true);
+  assert.throws(() => parseUi({ zoom: "no" }), /'ui\.zoom' must be a boolean/);
+  assert.throws(() => parseUi({ zoom: 1 }), /'ui\.zoom' must be a boolean/);
+});
+
 test("notices are off by default (omitted -> [])", () => {
   assert.deepEqual(parseNotices(undefined), []);
   assert.deepEqual(parseNotices(null), []);

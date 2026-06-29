@@ -234,6 +234,8 @@ export interface UiConfig {
   viewPicker?: boolean;
   /** Whether the viewer's "reset view" button is offered (default true). */
   reset?: boolean;
+  /** Whether the viewer's zoom in/out buttons are offered (default false). */
+  zoom?: boolean;
 }
 
 export interface Schema {

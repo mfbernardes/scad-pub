@@ -32,7 +32,8 @@
     "showVarName": true,          // show OpenSCAD variable names by parameters: true | false
     "measure": true,              // viewer measure (dimensions) toggle: true | false
     "viewPicker": true,           // viewer view picker (camera angles): true | false
-    "reset": true                 // viewer "reset view" button: true | false
+    "reset": true,                // viewer "reset view" button: true | false
+    "zoom": false                 // viewer zoom in/out buttons: true | false (default false)
   },
   "themeColorLight": "#ffffff",   // light-scheme browser-chrome colour (default "#ffffff")
   "categories": ["productivity", "graphics"],  // optional PWA manifest categories
@@ -276,6 +277,7 @@ An optional object (validated as a unit; defaults applied when absent). None of 
 - **`measure`** — `true` (default) or `false`: whether the viewer offers the measure (dimensions) toggle — the ruler button that draws the W×D×H overlay and shows the measurements/`@info` panel. Set `false` to hide the button entirely (the overlay and panel are only reachable through it).
 - **`viewPicker`** — `true` (default) or `false`: whether the viewer offers the view picker — the cube button whose menu snaps the camera to standard angles (Isometric, Top, Front, …). Set `false` to hide it.
 - **`reset`** — `true` (default) or `false`: whether the viewer offers the "reset view" button (re-frames the model in the current view). Mouse/touch orbit and zoom still work regardless.
+- **`zoom`** — `false` (default) or `true`: whether the viewer offers the zoom in/out buttons. Off by default since mouse-wheel / pinch zoom already works; set `true` to show the two buttons.
 
 ### PWA manifest
 

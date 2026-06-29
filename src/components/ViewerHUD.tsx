@@ -23,13 +23,15 @@ interface Props {
   viewPicker: boolean;
   /** Whether the "reset view" button is offered (config ui.reset). */
   reset: boolean;
+  /** Whether the zoom in/out buttons are offered (config ui.zoom). */
+  zoom: boolean;
   /** The active camera view (checkmarked in the view picker). */
   view: ViewName;
   /** Snap to a standard camera view. */
   onSelectView: (view: ViewName) => void;
 }
 
-export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, reset, view, onSelectView }: Props) {
+export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, reset, zoom, view, onSelectView }: Props) {
   const standalone = useStandalone();
   const canFullscreen = !standalone && fullscreenSupported();
   if (!visible) return null;
@@ -46,12 +48,16 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
   return (
     <div className="viewer-hud">
       {viewPicker && <ViewPicker view={view} onSelect={onSelectView} />}
-      <IconButton label="Zoom in" onClick={() => viewerRef.current?.zoomIn()}>
-        <ZoomInIcon size={18} />
-      </IconButton>
-      <IconButton label="Zoom out" onClick={() => viewerRef.current?.zoomOut()}>
-        <ZoomOutIcon size={18} />
-      </IconButton>
+      {zoom && (
+        <>
+          <IconButton label="Zoom in" onClick={() => viewerRef.current?.zoomIn()}>
+            <ZoomInIcon size={18} />
+          </IconButton>
+          <IconButton label="Zoom out" onClick={() => viewerRef.current?.zoomOut()}>
+            <ZoomOutIcon size={18} />
+          </IconButton>
+        </>
+      )}
       {reset && (
         <IconButton label="Reset view" onClick={() => viewerRef.current?.resetView()}>
           <ResetIcon size={18} />
