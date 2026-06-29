@@ -115,6 +115,10 @@ const SHOWIF_RE = /^@show-?if\s+(.+)$/i;
 // `@font` directive: marks a string or enum parameter as a font-family selector,
 // so the UI can check its value against the available font set. Invisible to OpenSCAD.
 const FONT_ANNOT_RE = /^@font\s*$/i;
+// `@info [Label [| unit]]` directive: surface this parameter's live value in the
+// viewer's dimension info panel. The optional text is a custom label, and an
+// optional `| unit` suffix is appended to the value. Invisible to OpenSCAD.
+const INFO_RE = /^@info\b\s*(.*)$/i;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
 
@@ -582,6 +586,8 @@ export function parseParams(absPath) {
   let pendingDoc = [];
   let pendingShowIf = null;
   let pendingFont = false;
+  // Set by an `// @info [Label | unit]` line; consumed by the next parameter.
+  let pendingInfo = null;
   // Set by a `// @collapsed` line; consumed by the next section header.
   let pendingSectionCollapsed = false;
   const params = [];
@@ -591,6 +597,7 @@ export function parseParams(absPath) {
     pendingDoc = [];
     pendingShowIf = null;
     pendingFont = false;
+    pendingInfo = null;
     pendingSectionCollapsed = false;
   };
   for (const line of lines) {
@@ -630,6 +637,8 @@ export function parseParams(absPath) {
       // renders) and still get the in-app import / fallback affordance.
       if ((p.type === "string" || p.type === "enum") && pendingFont)
         p.isFont = true;
+      // Surface this param's value in the viewer info panel (see `// @info`).
+      if (pendingInfo) p.info = pendingInfo;
       params.push(p);
       reset();
       continue;
@@ -639,9 +648,16 @@ export function parseParams(absPath) {
       // Pull `@showIf <expr>` out of the doc block so it doesn't pollute the
       // label/help; it drives conditional visibility in the UI instead.
       const showIf = dm[1].trim().match(SHOWIF_RE);
+      const info = dm[1].trim().match(INFO_RE);
       if (showIf) pendingShowIf = showIf[1].trim();
       else if (FONT_ANNOT_RE.test(dm[1].trim())) pendingFont = true;
-      else pendingDoc.push(dm[1]);
+      else if (info) {
+        // `@info`, `@info Label`, or `@info Label | unit` — split on a single
+        // pipe; empty parts become null (label falls back to the param's own
+        // description in the UI).
+        const [label, unit] = info[1].split("|").map((s) => s.trim());
+        pendingInfo = { label: label || null, unit: unit || null };
+      } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {
       // keep doc across blank lines
     } else {

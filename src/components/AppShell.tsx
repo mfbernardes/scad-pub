@@ -23,6 +23,7 @@ import { ActionButtons } from "./ActionButtons";
 import { StaleBanner } from "./StaleBanner";
 import { ViewerHUD } from "./ViewerHUD";
 import { SizeReadout } from "./SizeReadout";
+import { DimensionInfo } from "./DimensionInfo";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
@@ -291,8 +292,14 @@ export const AppShell = memo(function AppShell({
               {/* Ambient "what size will it print?" readout — top-left, mirroring
                   the HUD on the right. A bottom corner gets overrun by the centre
                   action cluster as it widens; the top edge stays clear. Measured
-                  from the mesh, never part of the export. */}
-              <SizeReadout size={measured} stale={stalePreview} />
+                  from the mesh, never part of the export. The per-design @info
+                  panel stacks beneath it, but only while dimensions are shown. */}
+              <div className="viewer-readouts">
+                <SizeReadout size={measured} stale={stalePreview} />
+                {showDimensions && measured && (
+                  <DimensionInfo design={design} values={values} stale={stalePreview} />
+                )}
+              </div>
             </div>
 
             {/* Output console — inline below viewer */}
@@ -346,8 +353,14 @@ export const AppShell = memo(function AppShell({
               onRender={actions.render}
             />
 
-            {/* Print-size readout — top-left, below the floating top bar. */}
-            <SizeReadout size={measured} stale={stalePreview} />
+            {/* Print-size readout — top-left, below the floating top bar; the
+                per-design @info panel stacks beneath it while dimensions show. */}
+            <div className="viewer-readouts">
+              <SizeReadout size={measured} stale={stalePreview} />
+              {showDimensions && measured && (
+                <DimensionInfo design={design} values={values} stale={stalePreview} />
+              )}
+            </div>
           </div>
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}

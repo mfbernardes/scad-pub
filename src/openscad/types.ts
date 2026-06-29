@@ -57,6 +57,12 @@ export interface ParamBase {
   help: string;
   /** Optional `@showIf` expression: the control is shown only when it's true. */
   showIf?: string;
+  /**
+   * Optional `@info` annotation: surface this parameter's live value in the
+   * viewer's dimension info panel. `label` overrides the displayed name (null →
+   * fall back to `description`); `unit` is appended to the value (null → none).
+   */
+  info?: { label: string | null; unit: string | null };
 }
 
 export type Param = ParamBase &

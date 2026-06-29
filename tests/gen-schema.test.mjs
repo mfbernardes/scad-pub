@@ -768,6 +768,35 @@ test("only a string or enum param with an explicit @font is flagged isFont", () 
   assert.equal(byName.mode.isFont, undefined);
 });
 
+test("@info marks a param for the viewer panel, with optional label + unit", () => {
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Engraved text.\n` +
+      `// @info\n` +
+      `label = "Hi";\n` +
+      `// Font height.\n` +
+      `// @info Text height | mm\n` +
+      `text_size = 9; // [3:0.5:30]\n` +
+      `// Plain param, no annotation.\n` +
+      `width = 10; // [1:1:50]\n` +
+      `// Custom label only.\n` +
+      `// @info Diameter\n` +
+      `dia = 5;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  // Bare `@info`: flagged, label/unit null (UI falls back to the description).
+  assert.deepEqual(byName.label.info, { label: null, unit: null });
+  // The annotation line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.label.help.includes("@info"));
+  assert.equal(byName.label.description, "Engraved text.");
+  // Custom label + unit, split on the single pipe.
+  assert.deepEqual(byName.text_size.info, { label: "Text height", unit: "mm" });
+  // Custom label only.
+  assert.deepEqual(byName.dia.info, { label: "Diameter", unit: null });
+  // No annotation -> no info field.
+  assert.equal(byName.width.info, undefined);
+});
+
 test("parseFontFallback accepts a trimmed string or null; rejects empty", () => {
   assert.equal(parseFontFallback(undefined), null);
   assert.equal(parseFontFallback(null), null);

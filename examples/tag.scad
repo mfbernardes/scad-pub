@@ -19,8 +19,10 @@ corner_radius = 4; // [0:0.5:20]
 
 /* [Text] */
 // Text to emboss on the tag. Leave empty for none.
+// @info Engraved text
 label = "ScadPub";
 // Font height (mm).
+// @info Text height | mm
 text_size = 9; // [3:0.5:30]
 // How far the text stands out from (or sinks into) the plate (mm).
 text_depth = 1; // [0.4:0.1:3]

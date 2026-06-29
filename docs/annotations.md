@@ -1,6 +1,6 @@
 # OpenSCAD annotations
 
-ScadPub adds three comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
+ScadPub adds four comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
 
 ## Conditional parameters (`// @showIf`)
 
@@ -61,3 +61,27 @@ font = "DIN 32986:style=Regular"; // ["DIN 32986:style=Regular", "Liberation San
 ```
 
 Annotating the dropdown lets a design keep the native OpenSCAD `// [..]` choice list — which the **desktop** Customizer renders as a dropdown — while still getting the in-app availability check and import affordance when a chosen face (e.g. a not-bundled, license-restricted font) isn't loaded. For a flagged dropdown the one-click fallback switches to the first listed choice whose family *is* loaded (an off-list value can't be shown in a dropdown). See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.
+
+## Viewer info (`// @info`)
+
+Mark a parameter with `// @info` to surface its live value in the viewer's info panel, which appears beneath the size readout while the **dimensions** overlay is toggled on (the ruler button). Each design chooses its own fields, so the panel is model-specific:
+
+```scad
+// Text to emboss on the tag.
+// @info Engraved text
+label = "ScadPub";
+
+// Font height (mm).
+// @info Text height | mm
+text_size = 9; // [3:0.5:30]
+```
+
+The text after `@info` is optional:
+
+| Form | Shows |
+|---|---|
+| `// @info` | the parameter's own label (its first doc sentence) + value |
+| `// @info Label` | a custom `Label` + value |
+| `// @info Label \| mm` | a custom `Label` + value with the unit `mm` appended |
+
+Values are read live from the controls and formatted by type (booleans as Yes/No, enums by their choice label, empty strings are omitted). A line inherits its parameter's `// @showIf`, so it disappears when that control is hidden. Like the size readout, the panel is purely informative and never part of the exported model.

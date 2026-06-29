@@ -22,6 +22,8 @@ function checkParam(p: unknown, designId: string): void {
   if (param.type === "enum" && !Array.isArray(param.choices))
     fail(`${at} is an enum without choices`);
   if (param.default === undefined) fail(`${at} has no default`);
+  if (param.info !== undefined && (typeof param.info !== "object" || param.info === null))
+    fail(`${at} has a non-object info annotation`);
 }
 
 function checkDesign(d: unknown): void {
