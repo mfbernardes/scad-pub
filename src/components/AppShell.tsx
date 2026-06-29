@@ -22,7 +22,6 @@ import { ActionCluster } from "./ActionCluster";
 import { ActionButtons } from "./ActionButtons";
 import { StaleBanner } from "./StaleBanner";
 import { ViewerHUD } from "./ViewerHUD";
-import { SizeReadout } from "./SizeReadout";
 import { DimensionInfo } from "./DimensionInfo";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, type SheetDetent } from "./BottomSheet";
@@ -94,10 +93,10 @@ export const AppShell = memo(function AppShell({
   // The active Viewer's bounding-box size (mm), reported via onMeasure. Local
   // viewer glue like the PNG-snapshot handler — it needs the viewer, not App.
   const [measured, setMeasured] = useState<Dimensions | null>(null);
-  // Whether the viewer overlays arrowed W×D×H dimension lines on the model. Off
-  // by default (the SizeReadout chip already gives the numbers); the HUD ruler
-  // toggle turns the full CAD-style callouts on. Shared across both layouts so
-  // the choice survives a desktop⇄mobile breakpoint switch.
+  // Whether the viewer overlays arrowed W×D×H dimension lines on the model, plus
+  // the top-left measurements panel (bounding box + per-design @info). Off by
+  // default; the HUD ruler toggle turns it on. Shared across both layouts so the
+  // choice survives a desktop⇄mobile breakpoint switch.
   const [showDimensions, setShowDimensions] = useState(false);
   const toggleDimensions = useCallback(() => setShowDimensions((v) => !v), []);
   // The fixed footer reserves the iOS home-indicator inset below its buttons (see
@@ -289,17 +288,13 @@ export const AppShell = memo(function AppShell({
                 onToggleDimensions={toggleDimensions}
               />
 
-              {/* Ambient "what size will it print?" readout — top-left, mirroring
-                  the HUD on the right. A bottom corner gets overrun by the centre
-                  action cluster as it widens; the top edge stays clear. Measured
-                  from the mesh, never part of the export. The per-design @info
-                  panel stacks beneath it, but only while dimensions are shown. */}
-              <div className="viewer-readouts">
-                <SizeReadout size={measured} stale={stalePreview} />
-                {showDimensions && measured && (
-                  <DimensionInfo design={design} values={values} stale={stalePreview} />
-                )}
-              </div>
+              {/* Measurements panel — top-left, mirroring the HUD on the right.
+                  Shown only while dimensions are on: the bounding box headline plus
+                  any per-design @info values. Measured from the mesh, never part of
+                  the export. */}
+              {showDimensions && measured && (
+                <DimensionInfo design={design} size={measured} values={values} stale={stalePreview} />
+              )}
             </div>
 
             {/* Output console — inline below viewer */}
@@ -353,14 +348,11 @@ export const AppShell = memo(function AppShell({
               onRender={actions.render}
             />
 
-            {/* Print-size readout — top-left, below the floating top bar; the
-                per-design @info panel stacks beneath it while dimensions show. */}
-            <div className="viewer-readouts">
-              <SizeReadout size={measured} stale={stalePreview} />
-              {showDimensions && measured && (
-                <DimensionInfo design={design} values={values} stale={stalePreview} />
-              )}
-            </div>
+            {/* Measurements panel — top-left, below the floating top bar; shown
+                only while dimensions are on (bounding box + per-design @info). */}
+            {showDimensions && measured && (
+              <DimensionInfo design={design} size={measured} values={values} stale={stalePreview} />
+            )}
           </div>
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}

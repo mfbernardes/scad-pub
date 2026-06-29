@@ -621,42 +621,19 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   VIEWER READOUTS — size chip + per-design @info panel (top-left stack)
+   DIMENSION INFO — measurements panel (top-left, with the dimensions overlay)
    ═══════════════════════════════════════════════════════════════ */
 
-/* Top-left column, mirroring the HUD on the right. The top edge only ever holds
-   the (centred, transient) stale banner, so this never collides — unlike a
-   bottom corner, which the centre action cluster overruns as it widens on small
-   desktops. The size chip sits at the top; the @info panel stacks beneath it
-   while dimensions are shown. */
-.viewer-readouts {
+/* Top-left, mirroring the HUD on the right. The top edge only ever holds the
+   (centred, transient) stale banner, so this never collides — unlike a bottom
+   corner, which the centre action cluster overruns as it widens on small
+   desktops. The headline "Dimensions" row sits on top; per-design @info rows
+   follow beneath a divider. */
+.dimension-info {
   position: absolute;
   left: calc(0.75rem + env(safe-area-inset-left, 0px));
   top: calc(0.75rem + env(safe-area-inset-top, 0px));
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.4rem;
-  pointer-events: none; /* purely informative — never intercept orbit gestures */
   z-index: 5;
-}
-
-.size-readout {
-  padding: 0.3rem 0.55rem;
-  font-size: 0.8rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  border-radius: var(--radius-sm);
-}
-
-/* Per-design parameter facts (the `// @info` panel). Same glass treatment as the
-   size chip; rows are "label: value" pairs. */
-.dimension-info {
   margin: 0;
   padding: 0.35rem 0.55rem;
   font-size: 0.8rem;
@@ -670,26 +647,42 @@ button:disabled { cursor: default; }
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  pointer-events: none; /* purely informative — never intercept orbit gestures */
 }
 
 .dimension-info__row {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
   justify-content: space-between;
+  align-items: baseline;
 }
 
 .dimension-info__row dt {
   color: var(--muted);
+  flex: 0 1 auto;
 }
 
 .dimension-info__row dd {
   margin: 0;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  word-break: break-word;
+}
+
+/* Divider under the bounding-box headline when @info rows follow it. */
+.dimension-info__row--primary:not(:last-child) {
+  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.15rem;
+}
+
+.dimension-info__row--primary dt {
+  font-weight: 600;
+  color: var(--text);
 }
 
 /* Preview out of date: dim + italic so a stale figure never reads as current. */
-.size-readout--stale,
 .dimension-info--stale {
   opacity: 0.55;
   font-style: italic;
@@ -697,7 +690,7 @@ button:disabled { cursor: default; }
 
 /* Mobile: drop below the floating top bar (and any notch), level with the HUD. */
 @media (max-width: 860px) {
-  .app-shell__mobile .viewer-readouts {
+  .app-shell__mobile .dimension-info {
     top: calc(env(safe-area-inset-top, 0px) + 4rem);
   }
 }

@@ -1,19 +1,27 @@
-// DimensionInfo.tsx — companion to SizeReadout shown only while the dimension
-// overlay is on. Surfaces a per-design set of parameter values (those the design
-// marked with a `// @info` annotation in its .scad source) as a small glass
-// panel, so the viewer can show model-specific facts (e.g. the engraved text, a
-// font height) alongside the W×D×H callouts. Values are read live from the
-// controls; like SizeReadout it's purely informative and never part of a print.
+// DimensionInfo.tsx — the viewer's measurements panel, shown while the dimension
+// overlay is on. Its first line is always the model's bounding box (W × D × H,
+// in mm); beneath it sit any per-design facts the design marked with a `// @info`
+// annotation in its .scad source (e.g. the engraved text, a font height). Both
+// the box and the values are measured/read downstream of the export — purely
+// informative, never part of a print.
 import type { Design, Param } from "../openscad/types";
+import type { Dimensions } from "./Viewer";
 import type { Values } from "../lib/presets";
 import { isVisible } from "../lib/visibility";
 
 interface Props {
   design: Design;
+  /** Bounding-box size in millimetres (the headline "Dimensions" line). */
+  size: Dimensions;
   /** Current parameter values from the controls. */
   values: Values;
   /** Params changed since the last render — the figures may not match the model. */
   stale?: boolean;
+}
+
+// One millimetre figure, always with at least one decimal (90 → "90.0").
+function mm(n: number): string {
+  return (Math.round(n * 10) / 10).toFixed(1);
 }
 
 // Format a parameter's live value for display, appending the optional `@info`
@@ -37,10 +45,10 @@ function formatValue(param: Param, values: Values): string | null {
   }
 }
 
-export function DimensionInfo({ design, values, stale = false }: Props) {
-  // Only params flagged `// @info`, still visible under their @showIf (if any),
-  // and with a non-empty formatted value.
-  const lines = design.params
+export function DimensionInfo({ design, size, values, stale = false }: Props) {
+  // The headline bounding box, then any params flagged `// @info` that are still
+  // visible under their @showIf (if any) and have a non-empty formatted value.
+  const infoLines = design.params
     .filter((p) => p.info && isVisible(p, values))
     .map((p) => ({
       name: p.name,
@@ -49,14 +57,16 @@ export function DimensionInfo({ design, values, stale = false }: Props) {
     }))
     .filter((l): l is { name: string; label: string; value: string } => l.value !== null);
 
-  if (lines.length === 0) return null;
-
   return (
     <dl
       className={`dimension-info${stale ? " dimension-info--stale" : ""}`}
-      aria-label="Model details"
+      aria-label="Model measurements"
     >
-      {lines.map((l) => (
+      <div className="dimension-info__row dimension-info__row--primary">
+        <dt>Dimensions</dt>
+        <dd>{`${mm(size.x)} × ${mm(size.y)} × ${mm(size.z)} mm`}</dd>
+      </div>
+      {infoLines.map((l) => (
         <div className="dimension-info__row" key={l.name}>
           <dt>{l.label}</dt>
           <dd>{l.value}</dd>
