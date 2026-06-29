@@ -9,6 +9,7 @@ import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { buildDimensions, type DimensionsGroup } from "./dimensions";
 
 // The build-time model format (Vite define; see vite.config.ts). A literal, so
 // the unused branch below — and its loader import — drop out of the bundle.
@@ -91,10 +92,12 @@ export const Viewer = forwardRef<
     presetId: string;
     /** Whether a preset change reframes the camera (desktop) or keeps it (mobile). */
     reframeOnPreset?: boolean;
+    /** Overlay arrowed dimension lines (W × D × H) around the model's bounding box. */
+    showDimensions?: boolean;
     /** Reports the model's bounding-box size in mm (null when geometry clears). */
     onMeasure?: (size: Dimensions | null) => void;
   }
->(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, onMeasure }, ref) {
+>(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, onMeasure }, ref) {
   // Keep the latest onMeasure without re-running the [stl]-only geometry effect.
   const onMeasureRef = useRef(onMeasure);
   onMeasureRef.current = onMeasure;
@@ -115,6 +118,11 @@ export const Viewer = forwardRef<
   const controlsRef = useRef<OrbitControls | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const gridRef = useRef<THREE.GridHelper | null>(null);
+  // The current model's bounding-box size (mm), so the dimension overlay can be
+  // rebuilt on a toggle/theme change without re-parsing geometry. null when empty.
+  const modelSizeRef = useRef<THREE.Vector3 | null>(null);
+  // The live dimension-annotation overlay (see dimensions.ts), or null when off.
+  const dimGroupRef = useRef<DimensionsGroup | null>(null);
   // Bounding-sphere radius of the framed model, so "Reset view" can reproduce
   // the default framing on demand. null until the first model is framed.
   const frameRadiusRef = useRef<number | null>(null);
@@ -129,6 +137,25 @@ export const Viewer = forwardRef<
     cam.position.set(d * 0.6, -d, d * 0.7);
     controls.target.set(0, 0, 0);
     controls.update();
+  }
+
+  // Rebuild the dimension overlay from the current model size + theme, matching
+  // the `show` flag: removes any existing overlay first (disposing its GPU
+  // resources), then adds a fresh one when shown and a model is loaded. Cheap
+  // line/sprite geometry, so a full rebuild on toggle/theme/resize is fine.
+  function syncDimensions(show: boolean) {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (dimGroupRef.current) {
+      scene.remove(dimGroupRef.current);
+      dimGroupRef.current.dispose();
+      dimGroupRef.current = null;
+    }
+    const size = modelSizeRef.current;
+    if (!show || !size) return;
+    const group = buildDimensions(size, cssColor("--viewer-dim", "#86a9ff"));
+    scene.add(group);
+    dimGroupRef.current = group;
   }
 
   // Move the camera along its line of sight to the orbit target. factor < 1
@@ -241,6 +268,7 @@ export const Viewer = forwardRef<
       cancelAnimationFrame(raf);
       io.disconnect();
       controls.dispose();
+      dimGroupRef.current?.dispose();
       renderer.dispose();
       mount.removeChild(renderer.domElement);
     };
@@ -275,9 +303,17 @@ export const Viewer = forwardRef<
       for (const m of themedMaterialsRef.current) m.color.copy(model);
       for (const v of themedVertexRef.current)
         retintAutoVertices(v.attr, v.original, model);
+      // Re-tint the dimension overlay too (rebuilt with the new --viewer-dim).
+      if (dimGroupRef.current) syncDimensions(true);
     });
     return () => cancelAnimationFrame(raf);
   }, [theme]);
+
+  // Show/hide the dimension overlay on toggle (geometry stays put).
+  useEffect(() => {
+    syncDimensions(showDimensions);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDimensions]);
 
   // Swap geometry when a new model arrives.
   useEffect(() => {
@@ -291,6 +327,8 @@ export const Viewer = forwardRef<
       themedVertexRef.current = [];
     }
     if (!stl || stl.length === 0) {
+      modelSizeRef.current = null;
+      syncDimensions(false); // drop any overlay when geometry clears
       onMeasureRef.current?.(null);
       return;
     }
@@ -348,6 +386,8 @@ export const Viewer = forwardRef<
     // wholly downstream of the exported bytes, so it's informative only and never
     // part of the print. Translation-invariant, so the centring above is moot.
     const size = box.getSize(new THREE.Vector3());
+    modelSizeRef.current = size.clone();
+    syncDimensions(showDimensions); // refresh the overlay for the new bounds
     onMeasureRef.current?.({ x: size.x, y: size.y, z: size.z });
 
     // Remember the model's size so "Reset view" can reproduce this framing even

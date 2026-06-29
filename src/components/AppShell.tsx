@@ -93,6 +93,12 @@ export const AppShell = memo(function AppShell({
   // The active Viewer's bounding-box size (mm), reported via onMeasure. Local
   // viewer glue like the PNG-snapshot handler — it needs the viewer, not App.
   const [measured, setMeasured] = useState<Dimensions | null>(null);
+  // Whether the viewer overlays arrowed W×D×H dimension lines on the model. Off
+  // by default (the SizeReadout chip already gives the numbers); the HUD ruler
+  // toggle turns the full CAD-style callouts on. Shared across both layouts so
+  // the choice survives a desktop⇄mobile breakpoint switch.
+  const [showDimensions, setShowDimensions] = useState(false);
+  const toggleDimensions = useCallback(() => setShowDimensions((v) => !v), []);
   // The fixed footer reserves the iOS home-indicator inset below its buttons (see
   // .mobile-footer / --mobile-footer-total in index.css), so the sheet must sit
   // above the footer's *full* height — its 56px button band plus that inset —
@@ -240,6 +246,7 @@ export const AppShell = memo(function AppShell({
                       theme={theme}
                       designId={design.id}
                       presetId={selectedPreset}
+                      showDimensions={showDimensions}
                       onMeasure={setMeasured}
                     />
                   )}
@@ -277,6 +284,8 @@ export const AppShell = memo(function AppShell({
               <ViewerHUD
                 viewerRef={desktopViewerRef}
                 visible={!!result?.ok}
+                showDimensions={showDimensions}
+                onToggleDimensions={toggleDimensions}
               />
 
               {/* Ambient "what size will it print?" readout — top-left, mirroring
@@ -316,6 +325,7 @@ export const AppShell = memo(function AppShell({
                     designId={design.id}
                     presetId={selectedPreset}
                     reframeOnPreset={false}
+                    showDimensions={showDimensions}
                     onMeasure={setMeasured}
                   />
                 )}
@@ -434,6 +444,8 @@ export const AppShell = memo(function AppShell({
         <ViewerHUD
           viewerRef={mobileViewerRef}
           visible={!!result?.ok}
+          showDimensions={showDimensions}
+          onToggleDimensions={toggleDimensions}
         />
       </div>
     </div>
