@@ -13,8 +13,10 @@ width = 90; // [10:1:160]
 // Height of the tag (mm).
 height = 45; // [10:1:120]
 // Thickness of the base plate (mm).
+// @info Plate thickness | mm
 thickness = 3; // [1:0.5:10]
 // Corner radius; use 0 for square corners (mm).
+// @info Corner radius | mm
 corner_radius = 4; // [0:0.5:20]
 
 /* [Text] */
@@ -28,9 +30,11 @@ text_size = 9; // [3:0.5:30]
 text_depth = 1; // [0.4:0.1:3]
 // Font family/style. Change to an uploaded font's family, e.g. "DejaVu Sans".
 // @font
+// @info Font
 font = "Liberation Sans:style=Bold";
 // Colour of the raised text — any OpenSCAD colour name or "#rrggbb". Exported
 // into the 3MF so the viewer (and colour-capable slicers) show it.
+// @info Text colour
 text_color = "#e23b3b";
 // Carve the text into the plate instead of raising it.
 engrave_text = false;
@@ -54,6 +58,7 @@ emblem_height = 1.5; // [0.4:0.1:5]
 hole = true;
 // Hole diameter (mm). Only used when the hole is enabled.
 // @showIf hole
+// @info Hole diameter | mm
 hole_diameter = 5; // [2:0.5:15]
 
 // @collapsed

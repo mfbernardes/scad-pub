@@ -628,7 +628,8 @@ button:disabled { cursor: default; }
    (centred, transient) stale banner, so this never collides — unlike a bottom
    corner, which the centre action cluster overruns as it widens on small
    desktops. The headline "Dimensions" row sits on top; per-design @info rows
-   follow beneath a divider. */
+   follow. When the list is long it scrolls inside a capped height rather than
+   running off the canvas. */
 .dimension-info {
   position: absolute;
   left: calc(0.75rem + env(safe-area-inset-left, 0px));
@@ -636,6 +637,12 @@ button:disabled { cursor: default; }
   z-index: 5;
   margin: 0;
   padding: 0.35rem 0.55rem;
+  max-width: min(20rem, calc(100% - 1.5rem));
+  /* Cap to the canvas height (minus the top/bottom margins); the rest scrolls. */
+  max-height: calc(100% - 1.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   font-size: 0.8rem;
   color: var(--muted);
   background: var(--glass-bg);
@@ -647,7 +654,9 @@ button:disabled { cursor: default; }
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  pointer-events: none; /* purely informative — never intercept orbit gestures */
+  /* Interactive only so the list can scroll; the rest of the canvas stays
+     orbit-able because the panel is a small corner element. */
+  pointer-events: auto;
 }
 
 .dimension-info__row {
@@ -688,10 +697,12 @@ button:disabled { cursor: default; }
   font-style: italic;
 }
 
-/* Mobile: drop below the floating top bar (and any notch), level with the HUD. */
+/* Mobile: drop below the floating top bar (and any notch), level with the HUD,
+   and shrink the height cap to match the smaller offset. */
 @media (max-width: 860px) {
   .app-shell__mobile .dimension-info {
     top: calc(env(safe-area-inset-top, 0px) + 4rem);
+    max-height: calc(100% - env(safe-area-inset-top, 0px) - 4.75rem);
   }
 }
 
