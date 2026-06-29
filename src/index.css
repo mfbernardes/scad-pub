@@ -73,6 +73,7 @@
   --viewer-grid: #565f6e; /* centre axes: ~2.9:1 vs --viewer-bg for orientation */
   --viewer-grid-2: #20252e; /* grid lines: deliberately subtle */
   --viewer-model: #6f93ff; /* the rendered model's material — brand blue */
+  --viewer-dim: #cfe0ff; /* dimension callouts — bright, contrasts the blue model */
   /* Phase 1 shape + glass tokens — configurable via colors.dark in the config */
   --radius: 10px;
   --radius-sm: 6px;
@@ -113,6 +114,7 @@
   --viewer-grid: #8b94a0; /* centre axes */
   --viewer-grid-2: #c4cad1; /* grid lines: subtle */
   --viewer-model: #3a5fd0; /* the rendered model's material — brand blue */
+  --viewer-dim: #b8281a; /* dimension callouts — warm contrast against the blue model */
   /* Phase 1 shape + glass tokens — lighter values for light mode */
   --radius: 10px;
   --radius-sm: 6px;
@@ -610,6 +612,13 @@ button:disabled { cursor: default; }
 }
 
 .viewer-hud .icon-btn:hover:not(:disabled) { border-color: var(--accent); }
+
+/* Active toggle (e.g. dimensions shown): accent border + tint so the on-state
+   reads at a glance against the otherwise-uniform HUD buttons. */
+.viewer-hud .icon-btn--active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
 /* ═══════════════════════════════════════════════════════════════
    SIZE READOUT — ambient "what size will it print?" chip (top-left)

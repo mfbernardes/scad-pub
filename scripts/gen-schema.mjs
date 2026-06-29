@@ -141,6 +141,7 @@ export const COLOR_TOKENS = [
   "viewer-grid",
   "viewer-grid-2",
   "viewer-model",
+  "viewer-dim",
   // Phase 1 theme-revamp tokens
   "radius",
   "radius-sm",
