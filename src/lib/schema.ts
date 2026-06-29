@@ -22,6 +22,8 @@ function checkParam(p: unknown, designId: string): void {
   if (param.type === "enum" && !Array.isArray(param.choices))
     fail(`${at} is an enum without choices`);
   if (param.default === undefined) fail(`${at} has no default`);
+  if (param.info !== undefined && (typeof param.info !== "object" || param.info === null))
+    fail(`${at} has a non-object info annotation`);
 }
 
 function checkDesign(d: unknown): void {
@@ -131,6 +133,17 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.install' must be \"auto\" or \"off\"");
     if (ui.showVarName !== undefined && typeof ui.showVarName !== "boolean")
       fail("'ui.showVarName' must be a boolean");
+    if (ui.measure !== undefined && typeof ui.measure !== "boolean")
+      fail("'ui.measure' must be a boolean");
+    if (ui.viewPicker !== undefined && typeof ui.viewPicker !== "boolean")
+      fail("'ui.viewPicker' must be a boolean");
+    if (ui.reset !== undefined && typeof ui.reset !== "boolean")
+      fail("'ui.reset' must be a boolean");
+    if (ui.zoom !== undefined && typeof ui.zoom !== "boolean")
+      fail("'ui.zoom' must be a boolean");
+    for (const key of ["presetsLabel", "parametersLabel"] as const)
+      if (ui[key] !== undefined && typeof ui[key] !== "string")
+        fail(`'ui.${key}' must be a string`);
   }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;
@@ -140,7 +153,9 @@ export function validateSchema(raw: unknown): Schema {
       typeof (x as Record<string, unknown>).body === "string";
     const isSectionList = (x: unknown) => Array.isArray(x) && x.every(isSection);
     if (typeof h !== "object" || Array.isArray(h))
-      fail("'help' must be { intro?, sections?, tabs? } or null");
+      fail("'help' must be { title?, intro?, sections?, tabs? } or null");
+    if (h.title !== undefined && typeof h.title !== "string")
+      fail("'help.title' must be a string");
     if (h.sections !== undefined && !isSectionList(h.sections))
       fail("'help.sections' must be an array of { title, body }");
     if (h.tabs !== undefined) {

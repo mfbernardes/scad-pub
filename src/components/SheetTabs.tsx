@@ -33,6 +33,9 @@ interface Props {
   /** Show the underlying OpenSCAD variable name beside each label (default true). */
   showVarName?: boolean;
   autoRender: boolean;
+  /** Configurable tab labels (default "Presets" / "Parameters"). */
+  presetsLabel?: string;
+  parametersLabel?: string;
 }
 
 export function SheetTabs({
@@ -48,6 +51,8 @@ export function SheetTabs({
   onActivate,
   showVarName = true,
   autoRender,
+  presetsLabel = "Presets",
+  parametersLabel = "Parameters",
 }: Props) {
   const {
     change,
@@ -76,7 +81,7 @@ export function SheetTabs({
       <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
         {tabs.map((t) => (
           <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
-            {t === "params" ? "Parameters" : t === "presets" ? "Presets" : "Files"}
+            {t === "params" ? parametersLabel : t === "presets" ? presetsLabel : "Files"}
           </TabsTrigger>
         ))}
       </TabsList>

@@ -442,6 +442,48 @@ test("ui.showVarName defaults to true, accepts a boolean, rejects non-booleans",
   assert.throws(() => parseUi({ showVarName: 1 }), /'ui\.showVarName' must be a boolean/);
 });
 
+test("ui.measure defaults to true, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).measure, true);
+  assert.equal(parseUi({}).measure, true);
+  assert.equal(parseUi({ measure: true }).measure, true);
+  assert.equal(parseUi({ measure: false }).measure, false);
+  assert.throws(() => parseUi({ measure: "no" }), /'ui\.measure' must be a boolean/);
+  assert.throws(() => parseUi({ measure: 0 }), /'ui\.measure' must be a boolean/);
+});
+
+test("ui.viewPicker defaults to true, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).viewPicker, true);
+  assert.equal(parseUi({}).viewPicker, true);
+  assert.equal(parseUi({ viewPicker: false }).viewPicker, false);
+  assert.throws(() => parseUi({ viewPicker: "no" }), /'ui\.viewPicker' must be a boolean/);
+  assert.throws(() => parseUi({ viewPicker: 1 }), /'ui\.viewPicker' must be a boolean/);
+});
+
+test("ui.reset defaults to true, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).reset, true);
+  assert.equal(parseUi({}).reset, true);
+  assert.equal(parseUi({ reset: false }).reset, false);
+  assert.throws(() => parseUi({ reset: "no" }), /'ui\.reset' must be a boolean/);
+  assert.throws(() => parseUi({ reset: 1 }), /'ui\.reset' must be a boolean/);
+});
+
+test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).zoom, false);
+  assert.equal(parseUi({}).zoom, false);
+  assert.equal(parseUi({ zoom: true }).zoom, true);
+  assert.throws(() => parseUi({ zoom: "no" }), /'ui\.zoom' must be a boolean/);
+  assert.throws(() => parseUi({ zoom: 1 }), /'ui\.zoom' must be a boolean/);
+});
+
+test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
+  assert.equal(parseUi(undefined).presetsLabel, "Presets");
+  assert.equal(parseUi(undefined).parametersLabel, "Parameters");
+  assert.equal(parseUi({ presetsLabel: "  Styles  " }).presetsLabel, "Styles");
+  assert.equal(parseUi({ parametersLabel: "Options" }).parametersLabel, "Options");
+  assert.throws(() => parseUi({ presetsLabel: "  " }), /'ui\.presetsLabel' must be a non-empty string/);
+  assert.throws(() => parseUi({ parametersLabel: 5 }), /'ui\.parametersLabel' must be a non-empty string/);
+});
+
 test("notices are off by default (omitted -> [])", () => {
   assert.deepEqual(parseNotices(undefined), []);
   assert.deepEqual(parseNotices(null), []);
@@ -766,6 +808,35 @@ test("only a string or enum param with an explicit @font is flagged isFont", () 
   // A dropdown without @font stays an unflagged plain enum.
   assert.equal(byName.mode.type, "enum");
   assert.equal(byName.mode.isFont, undefined);
+});
+
+test("@info marks a param for the viewer panel, with optional label + unit", () => {
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Engraved text.\n` +
+      `// @info\n` +
+      `label = "Hi";\n` +
+      `// Font height.\n` +
+      `// @info Text height | mm\n` +
+      `text_size = 9; // [3:0.5:30]\n` +
+      `// Plain param, no annotation.\n` +
+      `width = 10; // [1:1:50]\n` +
+      `// Custom label only.\n` +
+      `// @info Diameter\n` +
+      `dia = 5;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  // Bare `@info`: flagged, label/unit null (UI falls back to the description).
+  assert.deepEqual(byName.label.info, { label: null, unit: null });
+  // The annotation line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.label.help.includes("@info"));
+  assert.equal(byName.label.description, "Engraved text.");
+  // Custom label + unit, split on the single pipe.
+  assert.deepEqual(byName.text_size.info, { label: "Text height", unit: "mm" });
+  // Custom label only.
+  assert.deepEqual(byName.dia.info, { label: "Diameter", unit: null });
+  // No annotation -> no info field.
+  assert.equal(byName.width.info, undefined);
 });
 
 test("parseFontFallback accepts a trimmed string or null; rejects empty", () => {

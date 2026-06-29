@@ -16,6 +16,8 @@ export interface HelpTab {
 }
 
 export interface HelpContent {
+  /** Heading shown at the top of the Help modal (default "How to use this configurator"). */
+  title?: string;
   intro?: string;
   /** Single-pane sections (the default form). */
   sections?: HelpSection[];

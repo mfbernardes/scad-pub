@@ -22,7 +22,8 @@ import { ActionCluster } from "./ActionCluster";
 import { ActionButtons } from "./ActionButtons";
 import { StaleBanner } from "./StaleBanner";
 import { ViewerHUD } from "./ViewerHUD";
-import { SizeReadout } from "./SizeReadout";
+import { DEFAULT_VIEW, type ViewName } from "./views";
+import { DimensionInfo } from "./DimensionInfo";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
@@ -49,6 +50,8 @@ interface Props {
   design: Design;
   designs: Design[];
   values: Values;
+  /** Values behind the current render — what the measurements panel reads. */
+  renderedValues: Values;
   bundled: ParsedSet[];
   userPresets: string[];
   selectedPreset: string;
@@ -68,6 +71,7 @@ export const AppShell = memo(function AppShell({
   design,
   designs,
   values,
+  renderedValues,
   bundled,
   userPresets,
   selectedPreset,
@@ -93,12 +97,16 @@ export const AppShell = memo(function AppShell({
   // The active Viewer's bounding-box size (mm), reported via onMeasure. Local
   // viewer glue like the PNG-snapshot handler — it needs the viewer, not App.
   const [measured, setMeasured] = useState<Dimensions | null>(null);
-  // Whether the viewer overlays arrowed W×D×H dimension lines on the model. Off
-  // by default (the SizeReadout chip already gives the numbers); the HUD ruler
-  // toggle turns the full CAD-style callouts on. Shared across both layouts so
-  // the choice survives a desktop⇄mobile breakpoint switch.
+  // Whether the viewer overlays arrowed W×D×H dimension lines on the model, plus
+  // the top-left measurements panel (bounding box + per-design @info). Off by
+  // default; the HUD ruler toggle turns it on. Shared across both layouts so the
+  // choice survives a desktop⇄mobile breakpoint switch.
   const [showDimensions, setShowDimensions] = useState(false);
   const toggleDimensions = useCallback(() => setShowDimensions((v) => !v), []);
+  // The active camera view. Driving it as state (shared across layouts) keeps the
+  // picker's highlight and a freshly-mounted Viewer in step; the imperative snap
+  // below re-applies it on every pick, including the current one.
+  const [view, setView] = useState<ViewName>(DEFAULT_VIEW);
   // The fixed footer reserves the iOS home-indicator inset below its buttons (see
   // .mobile-footer / --mobile-footer-total in index.css), so the sheet must sit
   // above the footer's *full* height — its 56px button band plus that inset —
@@ -118,6 +126,19 @@ export const AppShell = memo(function AppShell({
   const panelSide = ui.panelSide ?? "left";
   const panelDefaultOpen = (ui.panelDefault ?? "open") === "open";
   const showVarName = ui.showVarName !== false;
+  // Configurable tab/section labels (default to the built-in names).
+  const presetsLabel = ui.presetsLabel ?? "Presets";
+  const parametersLabel = ui.parametersLabel ?? "Parameters";
+  // Whether the viewer offers the measure (dimensions) toggle. Off hides the HUD
+  // ruler button; the overlay + panel are only reachable through it, so they
+  // stay hidden too.
+  const showMeasure = ui.measure !== false;
+  // Whether the viewer offers the view picker (camera-angle menu).
+  const showViewPicker = ui.viewPicker !== false;
+  // Whether the viewer offers the "reset view" button.
+  const showReset = ui.reset !== false;
+  // Whether the viewer offers the zoom in/out buttons (off by default).
+  const showZoom = ui.zoom === true;
 
   const log = result?.log ?? EMPTY_LOG;
   const notices = schema.notices ?? [];
@@ -152,6 +173,13 @@ export const AppShell = memo(function AppShell({
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
     if (url) actions.savePng(url);
   }, [isMobile, actions]);
+
+  // Snap the active viewer to a view and remember it (the prop keeps a
+  // freshly-mounted viewer in step; the imperative call re-applies on every pick).
+  const handleSelectView = useCallback((next: ViewName) => {
+    setView(next);
+    (isMobile ? mobileViewerRef : desktopViewerRef).current?.setView(next);
+  }, [isMobile]);
 
   // Open the overlay and collapse the sheet to peek, so the overlay's fixed
   // anchor (just above the peek tab row) never overlaps an expanded sheet.
@@ -217,6 +245,7 @@ export const AppShell = memo(function AppShell({
           result={result}
           stalePreview={stalePreview}
           canInstall={canInstall}
+          presetsLabel={presetsLabel}
         />
 
         <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
@@ -232,6 +261,7 @@ export const AppShell = memo(function AppShell({
             panelDefaultOpen={panelDefaultOpen}
             showVarName={showVarName}
             autoRender={autoRender}
+            parametersLabel={parametersLabel}
           />
 
           {/* Canvas */}
@@ -247,6 +277,7 @@ export const AppShell = memo(function AppShell({
                       designId={design.id}
                       presetId={selectedPreset}
                       showDimensions={showDimensions}
+                      view={view}
                       onMeasure={setMeasured}
                     />
                   )}
@@ -284,15 +315,23 @@ export const AppShell = memo(function AppShell({
               <ViewerHUD
                 viewerRef={desktopViewerRef}
                 visible={!!result?.ok}
+                measure={showMeasure}
                 showDimensions={showDimensions}
                 onToggleDimensions={toggleDimensions}
+                viewPicker={showViewPicker}
+                reset={showReset}
+                zoom={showZoom}
+                view={view}
+                onSelectView={handleSelectView}
               />
 
-              {/* Ambient "what size will it print?" readout — top-left, mirroring
-                  the HUD on the right. A bottom corner gets overrun by the centre
-                  action cluster as it widens; the top edge stays clear. Measured
-                  from the mesh, never part of the export. */}
-              <SizeReadout size={measured} stale={stalePreview} />
+              {/* Measurements panel — top-left, mirroring the HUD on the right.
+                  Shown only while dimensions are on: the bounding box headline plus
+                  any per-design @info values. Measured from the mesh, never part of
+                  the export. */}
+              {showDimensions && measured && (
+                <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} />
+              )}
             </div>
 
             {/* Output console — inline below viewer */}
@@ -326,6 +365,7 @@ export const AppShell = memo(function AppShell({
                     presetId={selectedPreset}
                     reframeOnPreset={false}
                     showDimensions={showDimensions}
+                    view={view}
                     onMeasure={setMeasured}
                   />
                 )}
@@ -346,8 +386,11 @@ export const AppShell = memo(function AppShell({
               onRender={actions.render}
             />
 
-            {/* Print-size readout — top-left, below the floating top bar. */}
-            <SizeReadout size={measured} stale={stalePreview} />
+            {/* Measurements panel — top-left, below the floating top bar; shown
+                only while dimensions are on (bounding box + per-design @info). */}
+            {showDimensions && measured && (
+              <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} />
+            )}
           </div>
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
@@ -423,6 +466,8 @@ export const AppShell = memo(function AppShell({
                 onActivate={expand}
                 showVarName={showVarName}
                 autoRender={autoRender}
+                presetsLabel={presetsLabel}
+                parametersLabel={parametersLabel}
               />
             </div>
           )}
@@ -444,8 +489,14 @@ export const AppShell = memo(function AppShell({
         <ViewerHUD
           viewerRef={mobileViewerRef}
           visible={!!result?.ok}
+          measure={showMeasure}
           showDimensions={showDimensions}
           onToggleDimensions={toggleDimensions}
+          viewPicker={showViewPicker}
+          reset={showReset}
+          zoom={showZoom}
+          view={view}
+          onSelectView={handleSelectView}
         />
       </div>
     </div>

@@ -4,6 +4,8 @@
 // API is unsupported (e.g. iOS Safari, which only fullscreens <video>).
 import type { ViewerHandle } from "./Viewer";
 import { IconButton } from "./IconButton";
+import { ViewPicker } from "./ViewPicker";
+import type { ViewName } from "./views";
 import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, Maximize as MaximizeIcon, Ruler as RulerIcon } from "lucide-react";
 import { useStandalone } from "../lib/useStandalone";
 import { fullscreenSupported } from "../lib/fullscreen";
@@ -11,13 +13,25 @@ import { fullscreenSupported } from "../lib/fullscreen";
 interface Props {
   viewerRef: React.RefObject<ViewerHandle | null>;
   visible: boolean;
+  /** Whether the measure (dimensions) toggle button is offered (config ui.measure). */
+  measure: boolean;
   /** Whether the bounding-box dimension overlay is currently shown. */
   showDimensions: boolean;
   /** Toggle the dimension overlay on/off. */
   onToggleDimensions: () => void;
+  /** Whether the view picker (camera-angle menu) is offered (config ui.viewPicker). */
+  viewPicker: boolean;
+  /** Whether the "reset view" button is offered (config ui.reset). */
+  reset: boolean;
+  /** Whether the zoom in/out buttons are offered (config ui.zoom). */
+  zoom: boolean;
+  /** The active camera view (checkmarked in the view picker). */
+  view: ViewName;
+  /** Snap to a standard camera view. */
+  onSelectView: (view: ViewName) => void;
 }
 
-export function ViewerHUD({ viewerRef, visible, showDimensions, onToggleDimensions }: Props) {
+export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, reset, zoom, view, onSelectView }: Props) {
   const standalone = useStandalone();
   const canFullscreen = !standalone && fullscreenSupported();
   if (!visible) return null;
@@ -33,23 +47,32 @@ export function ViewerHUD({ viewerRef, visible, showDimensions, onToggleDimensio
 
   return (
     <div className="viewer-hud">
-      <IconButton label="Zoom in" onClick={() => viewerRef.current?.zoomIn()}>
-        <ZoomInIcon size={18} />
-      </IconButton>
-      <IconButton label="Zoom out" onClick={() => viewerRef.current?.zoomOut()}>
-        <ZoomOutIcon size={18} />
-      </IconButton>
-      <IconButton label="Reset view" onClick={() => viewerRef.current?.resetView()}>
-        <ResetIcon size={18} />
-      </IconButton>
-      <IconButton
-        label={showDimensions ? "Hide dimensions" : "Show dimensions"}
-        onClick={onToggleDimensions}
-        pressed={showDimensions}
-        className={showDimensions ? "icon-btn--active" : undefined}
-      >
-        <RulerIcon size={18} />
-      </IconButton>
+      {viewPicker && <ViewPicker view={view} onSelect={onSelectView} />}
+      {zoom && (
+        <>
+          <IconButton label="Zoom in" onClick={() => viewerRef.current?.zoomIn()}>
+            <ZoomInIcon size={18} />
+          </IconButton>
+          <IconButton label="Zoom out" onClick={() => viewerRef.current?.zoomOut()}>
+            <ZoomOutIcon size={18} />
+          </IconButton>
+        </>
+      )}
+      {reset && (
+        <IconButton label="Reset view" onClick={() => viewerRef.current?.resetView()}>
+          <ResetIcon size={18} />
+        </IconButton>
+      )}
+      {measure && (
+        <IconButton
+          label={showDimensions ? "Hide dimensions" : "Show dimensions"}
+          onClick={onToggleDimensions}
+          pressed={showDimensions}
+          className={showDimensions ? "icon-btn--active" : undefined}
+        >
+          <RulerIcon size={18} />
+        </IconButton>
+      )}
       {/* Fullscreen only where it works: a browser tab (not an installed PWA)
           on a browser that supports the Fullscreen API. */}
       {canFullscreen && (

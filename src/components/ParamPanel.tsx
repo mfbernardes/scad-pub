@@ -49,6 +49,8 @@ interface Props {
   /** Show the underlying OpenSCAD variable name beside each label. */
   showVarName: boolean;
   autoRender: boolean;
+  /** Configurable label for the Parameters tab/panel (default "Parameters"). */
+  parametersLabel?: string;
 }
 
 export function ParamPanel({
@@ -62,6 +64,7 @@ export function ParamPanel({
   panelDefaultOpen,
   showVarName,
   autoRender,
+  parametersLabel = "Parameters",
 }: Props) {
   const { change, reset, addFile, removeFile, clearFiles, autoRenderChange } = useAppActions();
   const [open, setOpen] = useState(() => {
@@ -145,7 +148,7 @@ export function ParamPanel({
       className={`param-panel ${side}`}
       style={{ width }}
       id="params"
-      aria-label="Parameters"
+      aria-label={parametersLabel}
     >
       {/* Drag handle for resize */}
       <div
@@ -177,7 +180,7 @@ export function ParamPanel({
         <div className="flex shrink-0 items-stretch border-b">
           {fileImport ? (
             <TabsList className="flex-1 rounded-none border-0 bg-transparent p-0">
-              <TabsTrigger value="params" className={panelTabClass}>Parameters</TabsTrigger>
+              <TabsTrigger value="params" className={panelTabClass}>{parametersLabel}</TabsTrigger>
               <TabsTrigger value="files" className={panelTabClass}>Files</TabsTrigger>
             </TabsList>
           ) : (

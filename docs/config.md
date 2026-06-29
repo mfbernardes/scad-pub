@@ -29,7 +29,13 @@
     "panelDefault": "open",       // first-load desktop panel: "open" | "collapsed"
     "outputDefault": "closed",    // OpenSCAD output console: "closed" | "open"
     "install": "auto",            // PWA install affordance: "auto" | "off"
-    "showVarName": true           // show OpenSCAD variable names by parameters: true | false
+    "showVarName": true,          // show OpenSCAD variable names by parameters: true | false
+    "measure": true,              // viewer measure (dimensions) toggle: true | false
+    "viewPicker": true,           // viewer view picker (camera angles): true | false
+    "reset": true,                // viewer "reset view" button: true | false
+    "zoom": false,                // viewer zoom in/out buttons: true | false (default false)
+    "presetsLabel": "Presets",    // label for the Presets tab/section
+    "parametersLabel": "Parameters" // label for the Parameters tab/section
   },
   "themeColorLight": "#ffffff",   // light-scheme browser-chrome colour (default "#ffffff")
   "categories": ["productivity", "graphics"],  // optional PWA manifest categories
@@ -64,7 +70,7 @@
 - **`popup`** — optional notice dialog shown over the app on load. See [Popup notice](#popup-notice-popup).
 - **`ui`** / PWA manifest keys — see [UI behaviour & PWA](#ui-behaviour--pwa).
 - **`notices`** — see [Notice badges](#notice-badges-notices).
-- **`help`** — `{ intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
+- **`help`** — `{ title?, intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 - **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
 - Missing `source`, `assets`, design, or `logo` paths fail the build with a clear error.
@@ -270,6 +276,12 @@ An optional object (validated as a unit; defaults applied when absent). None of 
 - **`outputDefault`** — `"closed"` (default) or `"open"`: whether the OpenSCAD output console starts open.
 - **`install`** — `"auto"` (default) or `"off"`: when `"off"`, no PWA install affordance is offered even on browsers that support it.
 - **`showVarName`** — `true` (default) or `false`: whether each parameter control shows the underlying OpenSCAD variable name beside its label. Shown as visually-secondary monospace text; set `false` to hide it.
+- **`measure`** — `true` (default) or `false`: whether the viewer offers the measure (dimensions) toggle — the ruler button that draws the W×D×H overlay and shows the measurements/`@info` panel. Set `false` to hide the button entirely (the overlay and panel are only reachable through it).
+- **`viewPicker`** — `true` (default) or `false`: whether the viewer offers the view picker — the cube button whose menu snaps the camera to standard angles (Isometric, Top, Front, …). Set `false` to hide it.
+- **`reset`** — `true` (default) or `false`: whether the viewer offers the "reset view" button (re-frames the model in the current view). Mouse/touch orbit and zoom still work regardless.
+- **`zoom`** — `false` (default) or `true`: whether the viewer offers the zoom in/out buttons. Off by default since mouse-wheel / pinch zoom already works; set `true` to show the two buttons.
+- **`presetsLabel`** — string (default `"Presets"`): the label shown for the Presets tab/section (the mobile sheet tab, the desktop presets dropdown, and the presets popover title).
+- **`parametersLabel`** — string (default `"Parameters"`): the label shown for the Parameters tab/section (the mobile sheet tab and the desktop parameter panel).
 
 ### PWA manifest
 
@@ -313,11 +325,14 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 
 The **Help** dialog (the **?** button) is generated from `help`. Omit it for a generic, project-agnostic default; supply it to document your own designs. `body` (and `intro`) use the same Markdown subset as everywhere else: `**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, and `- ` bullets.
 
+An optional **`title`** sets the dialog heading (default `"How to use this configurator"`).
+
 **Single pane** — a flat list of sections (the original form):
 
 ```jsonc
 {
   "help": {
+    "title": "User guide",                             // optional dialog heading
     "intro": "Configure a design and export a 3MF.",   // optional, shown at the top
     "sections": [
       { "title": "1. Pick a design", "body": "Use the **Design** dropdown…" },

@@ -1,8 +1,9 @@
 // dimensions.ts — builds a 3D dimension-annotation overlay for the viewer: an
 // extension line + arrow-tipped dimension line + billboarded "NN.N mm" label for
-// each axis of a centred model's bounding box (width × depth × height). Like
-// SizeReadout, the figures are measured from the loaded mesh's bounds — wholly
-// downstream of the exported geometry, purely informative, never part of a print.
+// each axis of a centred model's bounding box (width × depth × height). Like the
+// DimensionInfo panel, the figures are measured from the loaded mesh's bounds —
+// wholly downstream of the exported geometry, purely informative, never part of a
+// print.
 //
 // The model is centred on the origin by the Viewer, so it spans [-s/2, +s/2] on
 // each axis; every annotation is derived from the half-extents below.

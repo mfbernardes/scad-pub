@@ -115,6 +115,10 @@ const SHOWIF_RE = /^@show-?if\s+(.+)$/i;
 // `@font` directive: marks a string or enum parameter as a font-family selector,
 // so the UI can check its value against the available font set. Invisible to OpenSCAD.
 const FONT_ANNOT_RE = /^@font\s*$/i;
+// `@info [Label [| unit]]` directive: surface this parameter's live value in the
+// viewer's dimension info panel. The optional text is a custom label, and an
+// optional `| unit` suffix is appended to the value. Invisible to OpenSCAD.
+const INFO_RE = /^@info\b\s*(.*)$/i;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
 
@@ -455,7 +459,7 @@ export function parseNotices(raw) {
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: true };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: true, measure: true, viewPicker: true, reset: true, zoom: false, presetsLabel: "Presets", parametersLabel: "Parameters" };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -488,6 +492,33 @@ export function parseUi(raw) {
     if (typeof raw.showVarName !== "boolean")
       throw new Error("gen-schema: 'ui.showVarName' must be a boolean");
     out.showVarName = raw.showVarName;
+  }
+  if (raw.measure !== undefined) {
+    if (typeof raw.measure !== "boolean")
+      throw new Error("gen-schema: 'ui.measure' must be a boolean");
+    out.measure = raw.measure;
+  }
+  if (raw.viewPicker !== undefined) {
+    if (typeof raw.viewPicker !== "boolean")
+      throw new Error("gen-schema: 'ui.viewPicker' must be a boolean");
+    out.viewPicker = raw.viewPicker;
+  }
+  if (raw.reset !== undefined) {
+    if (typeof raw.reset !== "boolean")
+      throw new Error("gen-schema: 'ui.reset' must be a boolean");
+    out.reset = raw.reset;
+  }
+  if (raw.zoom !== undefined) {
+    if (typeof raw.zoom !== "boolean")
+      throw new Error("gen-schema: 'ui.zoom' must be a boolean");
+    out.zoom = raw.zoom;
+  }
+  for (const key of ["presetsLabel", "parametersLabel"]) {
+    if (raw[key] !== undefined) {
+      if (typeof raw[key] !== "string" || !raw[key].trim())
+        throw new Error(`gen-schema: 'ui.${key}' must be a non-empty string`);
+      out[key] = raw[key].trim();
+    }
   }
   return out;
 }
@@ -582,6 +613,8 @@ export function parseParams(absPath) {
   let pendingDoc = [];
   let pendingShowIf = null;
   let pendingFont = false;
+  // Set by an `// @info [Label | unit]` line; consumed by the next parameter.
+  let pendingInfo = null;
   // Set by a `// @collapsed` line; consumed by the next section header.
   let pendingSectionCollapsed = false;
   const params = [];
@@ -591,6 +624,7 @@ export function parseParams(absPath) {
     pendingDoc = [];
     pendingShowIf = null;
     pendingFont = false;
+    pendingInfo = null;
     pendingSectionCollapsed = false;
   };
   for (const line of lines) {
@@ -630,6 +664,8 @@ export function parseParams(absPath) {
       // renders) and still get the in-app import / fallback affordance.
       if ((p.type === "string" || p.type === "enum") && pendingFont)
         p.isFont = true;
+      // Surface this param's value in the viewer info panel (see `// @info`).
+      if (pendingInfo) p.info = pendingInfo;
       params.push(p);
       reset();
       continue;
@@ -639,9 +675,16 @@ export function parseParams(absPath) {
       // Pull `@showIf <expr>` out of the doc block so it doesn't pollute the
       // label/help; it drives conditional visibility in the UI instead.
       const showIf = dm[1].trim().match(SHOWIF_RE);
+      const info = dm[1].trim().match(INFO_RE);
       if (showIf) pendingShowIf = showIf[1].trim();
       else if (FONT_ANNOT_RE.test(dm[1].trim())) pendingFont = true;
-      else pendingDoc.push(dm[1]);
+      else if (info) {
+        // `@info`, `@info Label`, or `@info Label | unit` — split on a single
+        // pipe; empty parts become null (label falls back to the param's own
+        // description in the UI).
+        const [label, unit] = info[1].split("|").map((s) => s.trim());
+        pendingInfo = { label: label || null, unit: unit || null };
+      } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {
       // keep doc across blank lines
     } else {

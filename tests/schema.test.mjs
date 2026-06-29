@@ -145,6 +145,21 @@ test("validates the optional help (single-pane and tabbed) shape", () => {
       help: { tabs: [{ label: "One", sections: [{ title: "T", body: "B" }] }] },
     })
   );
+  // an optional modal title is accepted alongside content, rejected if non-string.
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      help: { title: "User guide", sections: [{ title: "T", body: "B" }] },
+    })
+  );
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        help: { title: 5, sections: [{ title: "T", body: "B" }] },
+      }),
+    /'help\.title' must be a string/
+  );
   // a section missing a body is rejected.
   assert.throws(
     () => validateSchema({ ...validBase(), help: { sections: [{ title: "T" }] } }),

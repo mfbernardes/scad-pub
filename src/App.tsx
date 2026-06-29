@@ -65,6 +65,10 @@ export default function App() {
   const [rendering, setRendering] = useState(false);
   const [bundleStale, setBundleStale] = useState(false);
   const [renderedKey, setRenderedKey] = useState("");
+  // The parameter values behind the *current* render, captured when it finishes.
+  // The viewer's measurements panel reads these (not the live controls) so its
+  // figures only change once a render lands, in step with the measured geometry.
+  const [renderedValues, setRenderedValues] = useState<Values>(initialState.values);
   const [ready, setReady] = useState(false);
   // Transient user-facing confirmations (export done, link copied, …) go through
   // Sonner toasts, which provide their own polite live region for a11y. A shared
@@ -153,6 +157,9 @@ export default function App() {
         if (r.ok) {
           setReady(true);
           setRenderedKey(renderKey);
+          // Snapshot the values this render was built from (defines derives from
+          // them, so doRender is recreated whenever they change) for the panel.
+          setRenderedValues(values);
         }
         setResult(r);
         if (!r.ok)
@@ -174,7 +181,7 @@ export default function App() {
         setRendering(false);
       }
     },
-    [design.id, defines, userFiles, renderKey]
+    [design.id, defines, userFiles, renderKey, values]
   );
 
   useEffect(() => {
@@ -367,6 +374,7 @@ export default function App() {
           design={design}
           designs={schema.designs}
           values={values}
+          renderedValues={renderedValues}
           bundled={bundledPresets}
           userPresets={userPresets}
           selectedPreset={presetSel}

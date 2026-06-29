@@ -57,6 +57,12 @@ export interface ParamBase {
   help: string;
   /** Optional `@showIf` expression: the control is shown only when it's true. */
   showIf?: string;
+  /**
+   * Optional `@info` annotation: surface this parameter's live value in the
+   * viewer's dimension info panel. `label` overrides the displayed name (null →
+   * fall back to `description`); `unit` is appended to the value (null → none).
+   */
+  info?: { label: string | null; unit: string | null };
 }
 
 export type Param = ParamBase &
@@ -218,6 +224,22 @@ export interface UiConfig {
    * text; set false to hide it entirely.
    */
   showVarName?: boolean;
+  /**
+   * Whether the viewer's measure (dimensions) toggle is offered (default true).
+   * Set false to hide the ruler button — and with it the W×D×H overlay and the
+   * measurements/@info panel, which are only reachable through that toggle.
+   */
+  measure?: boolean;
+  /** Whether the viewer's view picker (camera-angle menu) is offered (default true). */
+  viewPicker?: boolean;
+  /** Whether the viewer's "reset view" button is offered (default true). */
+  reset?: boolean;
+  /** Whether the viewer's zoom in/out buttons are offered (default false). */
+  zoom?: boolean;
+  /** Label for the "Presets" tab/section (default "Presets"). */
+  presetsLabel?: string;
+  /** Label for the "Parameters" tab/section (default "Parameters"). */
+  parametersLabel?: string;
 }
 
 export interface Schema {
@@ -238,7 +260,7 @@ export interface Schema {
    *  project-agnostic default is used. `sections` renders as a single pane;
    *  supplying `tabs` renders a tab strip (top-level `sections`, if any, become
    *  a leading tab so adding tabs never drops existing content). */
-  help: { intro?: string; sections?: HelpSection[]; tabs?: HelpTab[] } | null;
+  help: { title?: string; intro?: string; sections?: HelpSection[]; tabs?: HelpTab[] } | null;
   /**
    * Optional per-theme colour-scheme overrides supplied by the consumer config.
    * Keys are the CSS custom-property tokens from src/index.css (without the
