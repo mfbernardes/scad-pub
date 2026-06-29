@@ -21,6 +21,7 @@
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
+  "restOnGrid": false,            // rest the model's base on the z=0 grid instead of centring in Z; default false
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts to mount; a basename already in public/fonts/, or a path into `source` to bundle
   "fileImport": true,             // optional "Import file" button for user-supplied files
   "popup": { "header": "…", "body": "…", "mode": "once" },  // optional notice dialog on load
@@ -62,6 +63,7 @@
 - **`assets`** — files/directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph.
 - **`features`** — applied to all designs as `--enable=<feature>`.
 - **`format`** — the model format OpenSCAD exports and the viewer parses, fixed at build time. `"3mf"` (the default) carries per-object colour from each design's `color(...)` calls — shown in the preview and written into the exported file. `"stl"` is geometry-only (no colour). Changing it invalidates the render cache automatically.
+- **`restOnGrid`** — how the viewer frames a loaded model, fixed at build time. `false` (the default) centres the model on the origin in all three axes, as it always has. `true` centres it in X/Y but rests its base on the `z=0` grid plane — useful when designs are modelled with their base on `z=0` (as OpenSCAD designs typically are) and centring in Z would sink them half-way through the grid. Display-only: it doesn't change the exported file or the render cache.
 - **`id`** — namespaces localStorage, IndexedDB, and preset cache. Defaults to `"scadpub"`.
 - **`description`** / **`shortName`** / **`icon`** / **`themeColor`** / **`backgroundColor`** — `<meta>` and PWA manifest fields. `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg`.
 - **`colors`** — optional per-theme CSS colour overrides; see [Theme & colour scheme](#theme--colour-scheme).
