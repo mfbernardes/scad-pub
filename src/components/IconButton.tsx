@@ -13,6 +13,8 @@ interface Props {
   onClick: () => void;
   disabled?: boolean;
   className?: string;
+  /** For toggle buttons: announces on/off state to assistive tech. */
+  pressed?: boolean;
   children: ReactNode;
 }
 
@@ -22,6 +24,7 @@ export function IconButton({
   onClick,
   disabled,
   className,
+  pressed,
   children,
 }: Props) {
   return (
@@ -31,6 +34,7 @@ export function IconButton({
       size="icon"
       className={cn("icon-btn size-8", className)}
       aria-label={label}
+      aria-pressed={pressed}
       title={title ?? label}
       onClick={onClick}
       disabled={disabled}

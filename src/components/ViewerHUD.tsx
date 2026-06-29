@@ -45,6 +45,7 @@ export function ViewerHUD({ viewerRef, visible, showDimensions, onToggleDimensio
       <IconButton
         label={showDimensions ? "Hide dimensions" : "Show dimensions"}
         onClick={onToggleDimensions}
+        pressed={showDimensions}
         className={showDimensions ? "icon-btn--active" : undefined}
       >
         <RulerIcon size={18} />

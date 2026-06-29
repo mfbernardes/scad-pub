@@ -304,9 +304,11 @@ export const Viewer = forwardRef<
       for (const v of themedVertexRef.current)
         retintAutoVertices(v.attr, v.original, model);
       // Re-tint the dimension overlay too (rebuilt with the new --viewer-dim).
-      if (dimGroupRef.current) syncDimensions(true);
+      syncDimensions(showDimensions);
     });
     return () => cancelAnimationFrame(raf);
+    // showDimensions is read fresh on a theme change; its own effect handles toggles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
   // Show/hide the dimension overlay on toggle (geometry stays put).
