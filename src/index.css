@@ -740,24 +740,6 @@ button:disabled { cursor: default; }
   color: var(--text);
 }
 
-/* Small heading row that opens the "Calculated" subsection (runtime
-   echo("@info", ...) values) — a divider above it, no dd content, so it reads
-   as a subsection label rather than a data row. Mirrors the divider already
-   used under the bounding-box headline. */
-.dimension-info__row--section {
-  border-top: 1px solid var(--glass-border);
-  padding-top: 0.3rem;
-  margin-top: 0.15rem;
-}
-
-.dimension-info__row--section dt {
-  font-weight: 600;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-}
-
 /* Preview out of date: dim + italic so a stale figure never reads as current. */
 .dimension-info--stale {
   opacity: 0.55;

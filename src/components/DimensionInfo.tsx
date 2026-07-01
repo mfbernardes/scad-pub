@@ -2,7 +2,7 @@
 // overlay is on. Its first line is always the model's bounding box (W × D × H,
 // in mm); beneath it sit any per-design facts the design marked with a `// @info`
 // annotation in its .scad source (e.g. the engraved text, a font height), then
-// any "Calculated" rows the design surfaced at render time via
+// any rows the design surfaced at render time via
 // `echo("@info", label, unit, value)` (see lib/computedInfo.ts) — the mechanism
 // for values OpenSCAD itself computes internally, which gen-schema's static
 // parser could never know. All of it is measured/read downstream of the
@@ -24,10 +24,8 @@ interface Props {
    *  don't yet reflect the latest edits. */
   stale?: boolean;
   /** Runtime "calculated value" rows from `echo("@info", label, unit, value)`
-   *  in the design's .scad source — see lib/computedInfo.ts. Rendered as a
-   *  distinct "Calculated" subsection below the bounding box and param-@info
-   *  rows, since there's no shared ordering key between build-time schema
-   *  params and these runtime-only entries. */
+   *  in the design's .scad source — see lib/computedInfo.ts. Rendered as plain
+   *  rows after the bounding box and param-@info rows, in echo order. */
   computed?: ComputedInfo[];
 }
 
@@ -84,19 +82,12 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
           <dd>{l.value}</dd>
         </div>
       ))}
-      {computed.length > 0 && (
-        <>
-          <div className="dimension-info__row dimension-info__row--section">
-            <dt>Calculated</dt>
-          </div>
-          {computed.map((c, i) => (
-            <div className="dimension-info__row" key={`computed-${i}-${c.label}`}>
-              <dt>{c.label}</dt>
-              <dd>{c.value}</dd>
-            </div>
-          ))}
-        </>
-      )}
+      {computed.map((c, i) => (
+        <div className="dimension-info__row" key={`computed-${i}-${c.label}`}>
+          <dt>{c.label}</dt>
+          <dd>{c.value}</dd>
+        </div>
+      ))}
     </dl>
   );
 }

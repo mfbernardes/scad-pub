@@ -95,7 +95,7 @@ r = diameter / 2;
 echo("@info", "Radius", "mm", r);
 ```
 
-This is a **separate, purely-runtime mechanism** from the comment-based `// @info` annotation above — don't confuse the two. It has no build-time component at all: nothing in `gen-schema.mjs` changes, and the Customizer parameter surface is untouched. The app scans the design's OpenSCAD output for `echo("@info", label, unit, value)` calls and adds one row per matching echo to the measurements panel's "Calculated" subsection, in the order the design echoes them.
+This is a **separate, purely-runtime mechanism** from the comment-based `// @info` annotation above — don't confuse the two. It has no build-time component at all: nothing in `gen-schema.mjs` changes, and the Customizer parameter surface is untouched. The app scans the design's OpenSCAD output for `echo("@info", label, unit, value)` calls and adds one row per matching echo to the measurements panel, after the bounding box and any parameter `@info` rows, in the order the design echoes them.
 
 The call can appear anywhere after the value is known, including inside a conditional — the echo simply won't fire when not applicable, which is often simpler than a `// @showIf` expression:
 
