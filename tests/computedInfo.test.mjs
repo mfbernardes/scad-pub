@@ -16,35 +16,24 @@ test("an empty unit produces no trailing space", () => {
   assert.deepEqual(out, [{ label: "Count", unit: "", value: "3" }]);
 });
 
-test("boolean values map to Yes/No, parity with the param @info formatter", () => {
-  const out = parseComputedInfo([
-    '[out] ECHO: "@info", "Engraved", "", true',
-    '[out] ECHO: "@info", "Raised", "", false',
-  ]);
-  assert.deepEqual(out, [
-    { label: "Engraved", unit: "", value: "Yes" },
-    { label: "Raised", unit: "", value: "No" },
-  ]);
-});
-
 test("a quoted string value has its quotes stripped", () => {
   const out = parseComputedInfo(['[out] ECHO: "@info", "Mode", "", "raised"']);
   assert.deepEqual(out, [{ label: "Mode", unit: "", value: "raised" }]);
 });
 
-test("an escaped quote inside a string value is unescaped", () => {
-  const out = parseComputedInfo(['[out] ECHO: "@info", "Label", "", "say \\"hi\\""']);
-  assert.deepEqual(out, [{ label: "Label", unit: "", value: 'say "hi"' }]);
-});
-
-test("a vector value passes through as printed, with commas inside brackets", () => {
-  const out = parseComputedInfo(['[out] ECHO: "@info", "Position", "mm", [1, 2, 3]']);
-  assert.deepEqual(out, [{ label: "Position", unit: "mm", value: "[1, 2, 3] mm" }]);
-});
-
-test("an undef value passes through as printed", () => {
-  const out = parseComputedInfo(['[out] ECHO: "@info", "Maybe", "", undef']);
-  assert.deepEqual(out, [{ label: "Maybe", unit: "", value: "undef" }]);
+test("non-string values pass through exactly as OpenSCAD printed them", () => {
+  const out = parseComputedInfo([
+    '[out] ECHO: "@info", "Engraved", "", true',
+    '[out] ECHO: "@info", "Raised", "", false',
+    '[out] ECHO: "@info", "Maybe", "", undef',
+    '[out] ECHO: "@info", "Position", "mm", [1, 2, 3]',
+  ]);
+  assert.deepEqual(out, [
+    { label: "Engraved", unit: "", value: "true" },
+    { label: "Raised", unit: "", value: "false" },
+    { label: "Maybe", unit: "", value: "undef" },
+    { label: "Position", unit: "mm", value: "[1, 2, 3] mm" },
+  ]);
 });
 
 test("matches ECHO on stderr too (OpenSCAD-WASM routes ECHO to [err])", () => {

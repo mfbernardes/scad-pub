@@ -11,8 +11,7 @@
 export interface ComputedInfo {
   label: string;
   unit: string;
-  /** Already formatted for display (quotes stripped, booleans as Yes/No, unit
-   *  suffix appended) — same shape DimensionInfo expects from formatValue(). */
+  /** Already formatted for display (quotes stripped, unit suffix appended). */
   value: string;
 }
 
@@ -22,25 +21,19 @@ export interface ComputedInfo {
 // Label/unit are always double-quoted (string literals); the value can be a
 // bare number/bool/undef, a quoted string, or a bracketed vector — captured as
 // the remainder of the line (group 3) and formatted by formatComputedValue.
-// Matching on quote-pairs (not comma-splitting) means a label/unit containing
+// Matching on quote pairs (not comma-splitting) means a label/unit containing
 // a comma, or a vector value containing commas, is still handled correctly.
 const COMPUTED_RE =
-  /^\[(?:out|err)\]\s*ECHO:\s*"@info",\s*"((?:[^"\\]|\\.)*)",\s*"((?:[^"\\]|\\.)*)",\s*([\s\S]*)$/;
+  /^\[(?:out|err)\]\s*ECHO:\s*"@info",\s*"([^"]*)",\s*"([^"]*)",\s*([\s\S]*)$/;
 
 // Format the raw OpenSCAD repr of the 4th echo arg for display: strip quotes
-// from a quoted string, map true/false to Yes/No (parity with DimensionInfo's
-// formatValue for boolean params), and pass everything else (numbers, undef,
-// vectors) through as OpenSCAD printed it. Appends the unit suffix the same
-// way DimensionInfo does: `value + " " + unit`, only when unit is non-empty.
+// from a quoted string, and pass everything else (numbers, booleans, undef,
+// vectors) through exactly as OpenSCAD printed it. Appends the unit suffix
+// the same way DimensionInfo does: `value + " " + unit`, only when non-empty.
 function formatComputedValue(raw: string, unit: string): string {
   const trimmed = raw.trim();
-  let base: string;
-  if (trimmed === "true") base = "Yes";
-  else if (trimmed === "false") base = "No";
-  else if (/^"(?:[^"\\]|\\.)*"$/.test(trimmed)) {
-    // Quoted string: strip the wrapping quotes and un-escape \" and \\.
-    base = trimmed.slice(1, -1).replace(/\\(["\\])/g, "$1");
-  } else base = trimmed; // number, undef, vector — printed as-is
+  const str = /^"([^"]*)"$/.exec(trimmed);
+  const base = str ? str[1] : trimmed;
   return unit ? `${base} ${unit}` : base;
 }
 

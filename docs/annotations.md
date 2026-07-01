@@ -113,6 +113,6 @@ Arguments:
 | Unit (string) | Appended after the value, e.g. `"mm"`. Use `""` for a unitless value. |
 | Value | Any OpenSCAD value — number, string, boolean, vector, or `undef`. |
 
-Values are formatted for parity with the comment-based `// @info` annotation: booleans show as Yes/No, quoted strings have their quotes stripped, and the unit is appended as `value unit`. Numbers, vectors, and `undef` are shown as OpenSCAD prints them.
+A quoted string has its quotes stripped; everything else (numbers, booleans, vectors, `undef`) is shown exactly as OpenSCAD printed it. The unit is appended as `value unit`.
 
 Two things to watch for: rows are **not** de-duplicated, so if two branches both echo the same label unconditionally you'll see two rows — make sure only one branch echoes a given label per render. And a malformed call (wrong number of arguments, or a missing/misspelled `"@info"` tag) is silently ignored — if a row doesn't appear, double-check your `echo()` matches the four-argument form exactly.
