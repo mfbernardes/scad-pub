@@ -34,6 +34,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { Spinner } from "./ui/spinner";
 import { CircleHelp as HelpIcon, Info as InfoIcon } from "lucide-react";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
+import { parseComputedInfo } from "../lib/computedInfo";
 import { fontFamilyNames, normalizeFamily } from "../lib/fonts";
 import { isFontFile } from "../openscad/renderArgs";
 import { assetUrl } from "../lib/assetUrl";
@@ -168,6 +169,9 @@ export const AppShell = memo(function AppShell({
   // this derived data instead of re-parsing it.
   const diagnostics = useMemo(() => parseDiagnostics(log, notices), [log, notices]);
   const badges = useMemo(() => countBadges(log, notices), [log, notices]);
+  // Rows from `echo("@info", label, unit, value)` — internally-calculated
+  // values the design surfaced at render time (see lib/computedInfo.ts).
+  const computedInfo = useMemo(() => parseComputedInfo(log), [log]);
 
   const handleSavePng = useCallback(() => {
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
@@ -330,7 +334,7 @@ export const AppShell = memo(function AppShell({
                   any per-design @info values. Measured from the mesh, never part of
                   the export. */}
               {showDimensions && measured && (
-                <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} />
+                <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} computed={computedInfo} />
               )}
             </div>
 
@@ -389,7 +393,7 @@ export const AppShell = memo(function AppShell({
             {/* Measurements panel — top-left, below the floating top bar; shown
                 only while dimensions are on (bounding box + per-design @info). */}
             {showDimensions && measured && (
-              <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} />
+              <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} computed={computedInfo} />
             )}
           </div>
 

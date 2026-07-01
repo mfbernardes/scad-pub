@@ -1,12 +1,16 @@
 // DimensionInfo.tsx — the viewer's measurements panel, shown while the dimension
 // overlay is on. Its first line is always the model's bounding box (W × D × H,
 // in mm); beneath it sit any per-design facts the design marked with a `// @info`
-// annotation in its .scad source (e.g. the engraved text, a font height). Both
-// the box and the values are measured/read downstream of the export — purely
-// informative, never part of a print.
+// annotation in its .scad source (e.g. the engraved text, a font height), then
+// any rows the design surfaced at render time via
+// `echo("@info", label, unit, value)` (see lib/computedInfo.ts) — the mechanism
+// for values OpenSCAD itself computes internally, which gen-schema's static
+// parser could never know. All of it is measured/read downstream of the
+// export — purely informative, never part of a print.
 import type { Design, Param } from "../openscad/types";
 import type { Dimensions } from "./Viewer";
 import type { Values } from "../lib/presets";
+import type { ComputedInfo } from "../lib/computedInfo";
 import { isVisible } from "../lib/visibility";
 
 interface Props {
@@ -19,6 +23,10 @@ interface Props {
   /** Render is behind the controls (manual mode) — the figures, like the model,
    *  don't yet reflect the latest edits. */
   stale?: boolean;
+  /** Runtime "calculated value" rows from `echo("@info", label, unit, value)`
+   *  in the design's .scad source — see lib/computedInfo.ts. Rendered as plain
+   *  rows after the bounding box and param-@info rows, in echo order. */
+  computed?: ComputedInfo[];
 }
 
 // One millimetre figure, always with at least one decimal (90 → "90.0").
@@ -47,7 +55,7 @@ function formatValue(param: Param, values: Values): string | null {
   }
 }
 
-export function DimensionInfo({ design, size, values, stale = false }: Props) {
+export function DimensionInfo({ design, size, values, stale = false, computed = [] }: Props) {
   // The headline bounding box, then any params flagged `// @info` that are still
   // visible under their @showIf (if any) and have a non-empty formatted value.
   const infoLines = design.params
@@ -72,6 +80,12 @@ export function DimensionInfo({ design, size, values, stale = false }: Props) {
         <div className="dimension-info__row" key={l.name}>
           <dt>{l.label}</dt>
           <dd>{l.value}</dd>
+        </div>
+      ))}
+      {computed.map((c, i) => (
+        <div className="dimension-info__row" key={`computed-${i}-${c.label}`}>
+          <dt>{c.label}</dt>
+          <dd>{c.value}</dd>
         </div>
       ))}
     </dl>

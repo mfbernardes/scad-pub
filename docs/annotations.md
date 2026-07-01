@@ -85,3 +85,34 @@ The text after `@info` is optional:
 | `// @info Label \| mm` | a custom `Label` + value with the unit `mm` appended |
 
 Values reflect the **rendered** model, not the live controls — a line updates only once a render finishes, in step with the bounding box — and are formatted by type (booleans as Yes/No, enums by their choice label, empty strings are omitted). A line inherits its parameter's `// @showIf`, so it disappears when that control is hidden. The panel is purely informative and never part of the exported model.
+
+## Calculated values (`echo("@info", ...)`)
+
+The `// @info` annotation above only works on real Customizer parameters — `gen-schema.mjs` parses `.scad` source statically, so it can never know the actual numeric result of an internal formula (e.g. a dot height derived from a base value and a norm-specified factor) for whatever values a user currently has set; only OpenSCAD itself, at render time, can evaluate that. For a computed/derived value — including one your design only assigns inside a `/* [Hidden] */` section — echo it with a fixed 4-argument convention instead:
+
+```scad
+r = diameter / 2;
+echo("@info", "Radius", "mm", r);
+```
+
+This is a **separate, purely-runtime mechanism** from the comment-based `// @info` annotation above — don't confuse the two. It has no build-time component at all: nothing in `gen-schema.mjs` changes, and the Customizer parameter surface is untouched. The app scans the design's OpenSCAD output for `echo("@info", label, unit, value)` calls and adds one row per matching echo to the measurements panel, after the bounding box and any parameter `@info` rows, in the order the design echoes them.
+
+The call can appear anywhere after the value is known, including inside a conditional — the echo simply won't fire when not applicable, which is often simpler than a `// @showIf` expression:
+
+```scad
+if (relevant)
+  echo("@info", "X", "mm", x);
+```
+
+Arguments:
+
+| Position | Meaning |
+|---|---|
+| `"@info"` | Fixed literal tag — required, must match exactly. |
+| Label (string) | Row label, e.g. `"Dot height"`. |
+| Unit (string) | Appended after the value, e.g. `"mm"`. Use `""` for a unitless value. |
+| Value | Any OpenSCAD value — number, string, boolean, vector, or `undef`. |
+
+A quoted string has its quotes stripped; everything else (numbers, booleans, vectors, `undef`) is shown exactly as OpenSCAD printed it. The unit is appended as `value unit`.
+
+Two things to watch for: rows are **not** de-duplicated, so if two branches both echo the same label unconditionally you'll see two rows — make sure only one branch echoes a given label per render. And a malformed call (wrong number of arguments, or a missing/misspelled `"@info"` tag) is silently ignored — if a row doesn't appear, double-check your `echo()` matches the four-argument form exactly.
