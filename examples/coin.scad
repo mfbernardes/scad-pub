@@ -49,6 +49,7 @@ $fa = facet_angle;
 $fs = facet_size;
 
 r = diameter / 2;
+echo("@info", "Radius", "mm", r);
 
 // Validate: engraved text must not be deeper than the body.
 assert(!(engrave_text && label != "" && text_depth >= thickness),

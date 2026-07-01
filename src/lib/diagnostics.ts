@@ -8,6 +8,9 @@
 // count badge. OpenSCAD's own `WARNING:` lines and `assert()` failures
 // (`ERROR: Assertion …`) are handled in a fixed, hardcoded way: warnings surface
 // as notices; assert failures get both a notice and a count badge.
+//
+// See also computedInfo.ts, a separate echo convention (`echo("@info", ...)`)
+// for surfacing internally-calculated values in the measurements panel.
 import type { NoticeCategory } from "../openscad/types";
 
 export type DiagnosticLevel = "notice" | "warning" | "assert";
