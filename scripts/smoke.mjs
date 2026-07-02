@@ -279,6 +279,29 @@ async function main() {
     }
     if (!presetTested) console.log("  (no bundled presets in this config — skipped)");
 
+    // Preset import: an OpenSCAD parameterSets file becomes a saved preset.
+    console.log("=== preset import (parameterSets round-trip) ===");
+    await selectDesign(page, ids[0]);
+    await gotoPresets();
+    // An empty set still lists by name (values default in); enough to prove the
+    // parse→save→list wiring. Round-trip coercion is covered by the unit tests.
+    const setsFile = JSON.stringify({
+      fileFormatVersion: "1",
+      parameterSets: { "Imported Set": {} },
+    });
+    await page
+      .locator('.preset-picker input[type="file"]')
+      .first()
+      .setInputFiles({ name: "presets.json", mimeType: "application/json", buffer: Buffer.from(setsFile) });
+    await page.waitForTimeout(200);
+    check(
+      (await page
+        .locator('[aria-label="Your saved presets"] .preset-picker__item', { hasText: "Imported Set" })
+        .count()) >= 1,
+      "imported parameterSets file added a saved preset"
+    );
+    await gotoParams();
+
     // Export 3MF + PNG on the first design.
     await selectDesign(page, ids[0]);
     console.log("=== export 3MF ===");

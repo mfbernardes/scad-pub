@@ -4,12 +4,20 @@
 import { useCallback, useRef, useState } from "react";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
-import { deletePreset, loadPreset, savePreset } from "../lib/presets";
+import {
+  deletePreset,
+  loadPreset,
+  savePreset,
+  toParameterSetsFile,
+  parseParameterSetsFile,
+} from "../lib/presets";
+import { downloadBlob } from "../lib/download";
 import { Button } from "./ui/button";
 import { IconButton } from "./IconButton";
+import { FileInput } from "./FileInput";
 import { Input } from "./ui/input";
 import { cn } from "../lib/utils";
-import { X as XIcon } from "lucide-react";
+import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon } from "lucide-react";
 
 /* One preset row. `preset-picker__item` is a JS hook too (the roving-focus
    querySelector below), not just styling. Hover only tints unselected rows —
@@ -103,6 +111,34 @@ export function PresetPicker({
     setSaveName("");
   };
 
+  // Export your saved presets as an OpenSCAD parameterSets file (round-trips
+  // with the desktop Customizer: openscad -p <file>.json -P "Set name").
+  const handleExport = () => {
+    const sets: Record<string, Values> = {};
+    for (const name of userPresets) {
+      const v = loadPreset(design.id, name);
+      if (v) sets[name] = v;
+    }
+    if (!Object.keys(sets).length) return;
+    const file = toParameterSetsFile(design, sets);
+    downloadBlob(
+      new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }),
+      `${design.id}-presets.json`
+    );
+  };
+
+  // Import a parameterSets file (from this app or the desktop Customizer): each
+  // named set becomes one of your saved presets.
+  const handleImport = async (file: File) => {
+    try {
+      const parsed = parseParameterSetsFile(design, await file.text());
+      for (const set of parsed) savePreset(design.id, set.name, set.values);
+      onPresetsChange();
+    } catch {
+      /* not a valid parameterSets file — ignore rather than crash the panel */
+    }
+  };
+
   const content = (
     <div className={cn("preset-picker flex flex-col", inline && "min-h-0 flex-1")}>
       {/* Inline (mobile sheet): fill the tab height so the list grows and the
@@ -189,6 +225,38 @@ export function PresetPicker({
           </Button>
         </div>
       )}
+
+      {/* Import / export saved presets as an OpenSCAD parameterSets file — the
+          same format the desktop Customizer reads and writes, so presets carry
+          between the two. */}
+      <div className="flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-[0.4rem]">
+        <FileInput accept=".json,application/json" onFile={handleImport}>
+          {(open) => (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={open}
+              title="Import presets from an OpenSCAD parameterSets file"
+            >
+              <UploadIcon size={14} /> Import…
+            </Button>
+          )}
+        </FileInput>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto"
+          onClick={handleExport}
+          disabled={userPresets.length === 0}
+          title={
+            userPresets.length
+              ? "Export your saved presets as an OpenSCAD parameterSets file"
+              : "Save a preset first"
+          }
+        >
+          <DownloadIcon size={14} /> Export
+        </Button>
+      </div>
     </div>
   );
 

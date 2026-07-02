@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   defaultsFor,
+  toParameterSetsFile,
   parseParameterSetsFile,
   presetLabel,
 } from "../src/lib/presets.ts";
@@ -44,6 +45,26 @@ test("defaultsFor returns each parameter's default", () => {
     flag: false,
     lang: "de",
   });
+});
+
+test("toParameterSetsFile writes many named sets as OpenSCAD-format strings", () => {
+  const file = toParameterSetsFile(design, {
+    Small: { text: "s", thk: 1, flag: false, lang: "de" },
+    Big: { text: "b", thk: 9, flag: true, lang: "en" },
+  });
+  assert.equal(file.fileFormatVersion, "1");
+  // Every value is a plain string on disk (OpenSCAD's format).
+  assert.deepEqual(file.parameterSets.Small, { text: "s", thk: "1", flag: "false", lang: "de" });
+  assert.deepEqual(file.parameterSets.Big, { text: "b", thk: "9", flag: "true", lang: "en" });
+});
+
+test("toParameterSetsFile → parseParameterSetsFile round-trips typed values", () => {
+  const sets = { Mine: { text: "hello", thk: 4, flag: true, lang: "en" } };
+  const text = JSON.stringify(toParameterSetsFile(design, sets));
+  const parsed = parseParameterSetsFile(design, text);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].name, "Mine");
+  assert.deepEqual(parsed[0].values, sets.Mine);
 });
 
 test("parameterSets strings parse back to typed values", () => {
