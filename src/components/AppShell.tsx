@@ -266,10 +266,7 @@ export const AppShell = memo(function AppShell({
   const actionButtonsProps = {
     hasResult: !!result?.ok,
     modelFormat: schema.format,
-    outputOpen,
-    noticeCount: diagnostics.length,
     onSavePng: handleSavePng,
-    onToggleOutput: toggleOutput,
   };
   return (
     <div className="app-shell">
@@ -293,6 +290,9 @@ export const AppShell = memo(function AppShell({
           ready={ready}
           result={result}
           stalePreview={stalePreview}
+          outputOpen={outputOpen}
+          noticeCount={diagnostics.length}
+          onToggleOutput={toggleOutput}
         />
 
         <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
@@ -433,7 +433,7 @@ export const AppShell = memo(function AppShell({
         {/* The Output toggle lives in the top bar on mobile, so the footer is
             just the produce-a-file actions. */}
         <div className="mobile-footer">
-          <ActionButtons {...actionButtonsProps} compact showOutput={false} />
+          <ActionButtons {...actionButtonsProps} compact />
         </div>
 
         <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />

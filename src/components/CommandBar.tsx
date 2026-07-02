@@ -9,6 +9,9 @@ import { useAppActions } from "../lib/appActions";
 import { DesignPicker } from "./DesignPicker";
 import { BarBrand } from "./BarBrand";
 import { BarActions } from "./BarActions";
+import { OutputToggle } from "./OutputToggle";
+import { ICON_BUTTON_CLASS } from "./IconButton";
+import { cn } from "../lib/utils";
 
 interface Props {
   schema: Schema;
@@ -20,6 +23,9 @@ interface Props {
   ready: boolean;
   result: RenderResult | null;
   stalePreview: boolean;
+  outputOpen: boolean;
+  noticeCount: number;
+  onToggleOutput: () => void;
 }
 
 export const CommandBar = memo(function CommandBar({
@@ -32,6 +38,9 @@ export const CommandBar = memo(function CommandBar({
   ready,
   result,
   stalePreview,
+  outputOpen,
+  noticeCount,
+  onToggleOutput,
 }: Props) {
   const { designChange } = useAppActions();
   const currentDesign = designs.find((d) => d.id === designId);
@@ -58,15 +67,18 @@ export const CommandBar = memo(function CommandBar({
       </div>
 
       <div className="command-bar__right flex items-center gap-[0.4rem] justify-self-end">
-        <BarActions
-          rendering={rendering}
-          ready={ready}
-          result={result}
-          stalePreview={stalePreview}
-          themeMode={themeMode}
-          licensesLabel="Open-source licenses"
-          pillClassName="py-[0.25rem] cursor-pointer hover:bg-muted"
+        {/* The Output bell doubles as the render-status indicator (a status dot
+            rides its corner while working / on failure / when stale), so no
+            separate StatusPill is needed. */}
+        <OutputToggle
+          compact
+          outputOpen={outputOpen}
+          noticeCount={noticeCount}
+          onToggleOutput={onToggleOutput}
+          status={{ rendering, ready, result, stale: stalePreview }}
+          className={cn(ICON_BUTTON_CLASS, "command-bar__output")}
         />
+        <BarActions themeMode={themeMode} licensesLabel="Open-source licenses" />
       </div>
     </header>
   );

@@ -32,7 +32,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitRendered(page) {
   await page
     .waitForFunction(
-      () => /\d+ ms/.test(document.querySelector(".status-pill")?.getAttribute("aria-label") || ""),
+      () => /\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
       { timeout: 60000 }
     )
     .catch(() => {});
@@ -97,9 +97,9 @@ async function captureViewport(context, base, kind, theme) {
   await page.goto(base, { waitUntil: "load" });
   await page.evaluate((t) => localStorage.setItem("scadpub.theme", t), theme);
   await page.reload({ waitUntil: "load" });
-  // The status pill always renders but is visually hidden in the mobile layout,
+  // The Output bell's status live region always renders but is visually hidden,
   // so wait for it to be attached (not visible) before polling its render state.
-  await page.waitForSelector(".status-pill", { state: "attached", timeout: 30000 });
+  await page.waitForSelector(".render-status", { state: "attached", timeout: 30000 });
   await waitRendered(page);
 
   // 1. Welcome popup (config-driven schema.popup, shown on first visit).
@@ -148,12 +148,12 @@ async function captureViewport(context, base, kind, theme) {
     await sleep(200);
   }
 
-  // 9 / 5. Output console. On mobile the toggle is the top bar's Output bell;
-  // on desktop it's in the floating action cluster.
+  // 9 / 5. Output console. The Output bell lives in the top bar in both layouts —
+  // the mobile top bar and the desktop CommandBar.
   const outputSel =
     kind === "mobile"
       ? '.mobile-top-bar__output[aria-label^="Open output console"]'
-      : '.action-cluster__output[aria-label^="Open output console"]';
+      : '.command-bar__output[aria-label^="Open output console"]';
   const consoleName = kind === "mobile" ? "09-output-console" : "05-output-console";
   await page.locator(outputSel).click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 5000 }).catch(() => {});

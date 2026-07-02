@@ -4,7 +4,7 @@
 // top bar. Extracted so the same bell/badge logic serves both without drift.
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
-import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "./StatusPill";
+import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";
 import { Bell as BellIcon, BellRing as BellRingIcon } from "lucide-react";
 
 interface Props {
@@ -38,11 +38,15 @@ export function OutputToggle({
   const BellGlyph = hasNotices ? BellRingIcon : BellIcon;
 
   // Render-status dot (only when asked to double as the status indicator).
-  // Idle/loading show nothing — the viewer overlay covers "warming up".
+  // Only the states worth a maker's attention wear a dot: working, failed, or a
+  // stale preview. A happy "ok" stays neutral (no green) — the viewer already
+  // shows the fresh geometry — and idle/loading are covered by the viewer overlay.
   const derived = status ? deriveRenderStatus(status) : null;
-  const dot = derived && derived.state !== "idle" && derived.state !== "loading"
-    ? STATE_STYLES[derived.state]
-    : null;
+  const dot =
+    derived &&
+    (derived.state === "rendering" || derived.state === "error" || derived.state === "stale")
+      ? STATE_STYLES[derived.state]
+      : null;
 
   return (
     <Button
@@ -85,9 +89,10 @@ export function OutputToggle({
           />
         )
       )}
-      {/* Keep the render status available to assistive tech (mirrors StatusPill). */}
+      {/* Keep the render status available to assistive tech — and as the stable
+          `render-status` hook the smoke/capture scripts read for completion. */}
       {derived && (
-        <span className="sr-only" role="status" aria-live="polite">
+        <span className="render-status sr-only" role="status" aria-live="polite">
           {`Render status: ${derived.text}`}
         </span>
       )}
