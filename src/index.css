@@ -1,8 +1,11 @@
-/* Cascade-layer order. `legacy` (the app's pre-port CSS) sits just below
-   `utilities` and above `base`: shadcn/ui utility classes always win where
-   applied, while legacy class rules still beat Tailwind's preflight element
-   resets, so un-ported components keep their original styling. */
-@layer theme, base, legacy, utilities;
+/* Cascade-layer order. `components` (the app's structural CSS below — tokens,
+   shell layout, safe-area math, floating-overlay geometry, the bottom sheet)
+   sits just below `utilities` and above `base`: Tailwind utility classes on a
+   component always win, while these rules still beat preflight element resets.
+   All *decoration* lives on the components as utilities; only layout that
+   can't sensibly be expressed per-element (shared breakpoint, cross-layer
+   geometry, contextual mobile offsets) lives here. */
+@layer theme, base, components, utilities;
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -57,7 +60,7 @@
 
 /* Dark is the default; <html data-theme="light"> swaps the palette. The active
    theme is resolved in JS (lib/theme.ts) and set before paint (index.html). */
-@layer legacy {
+@layer components {
 :root {
   --bg: #15171c;
   --panel: #1f2229;
@@ -255,10 +258,6 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   COMMAND BAR — floating top bar (desktop)
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ═══════════════════════════════════════════════════════════════
    PARAM PANEL — docked collapsible/resizable panel (desktop)
    ═══════════════════════════════════════════════════════════════ */
 
@@ -384,10 +383,6 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   DIMENSION INFO — measurements panel (top-left, with the dimensions overlay)
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ═══════════════════════════════════════════════════════════════
    FLOATING OVERLAY GEOMETRY — measurements panel, action cluster,
    stale banner. Decoration lives on the components; only the
    position/inset/z (and the per-layout mobile offsets, which must
@@ -447,14 +442,6 @@ button:disabled { cursor: default; }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
 }
-
-/* ═══════════════════════════════════════════════════════════════
-   OUTPUT CONSOLE — Notices + Log tabs drawer
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ═══════════════════════════════════════════════════════════════
-   MOBILE TOP BAR — full-width bar with brand, design picker, badges
-   ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════════════
    MOBILE FOOTER — fixed actions bar below the bottom sheet
@@ -593,4 +580,4 @@ button:disabled { cursor: default; }
   .app-shell__mobile-viewer { transition: none !important; }
   .param-group > summary::before { transition: none; }
 }
-} /* end @layer legacy */
+} /* end @layer components */
