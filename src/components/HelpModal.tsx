@@ -3,12 +3,21 @@
 // config's `help`, so no design-specific copy is baked into the app. A config
 // may group its guide into many tabs (`help.tabs`); without tabs it renders as
 // a single pane exactly as before.
-import { Modal } from "./Modal";
+import { Modal, MODAL_BODY, MODAL_INTRO } from "./Modal";
 import { Markdown } from "./Markdown";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { DEFAULT_HELP } from "../lib/defaultHelp";
 import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
+
+/* The help sections' typography, applied to the scrolling body wrapper (the
+   Markdown renderer emits bare p/ul/li). */
+const HELP_BODY = cn(
+  MODAL_BODY,
+  "help-body [&_section]:my-[0.9rem] [&_h3]:mb-1 [&_h3]:text-[0.95rem] [&_h3]:text-brand",
+  "[&_p]:m-0 [&_p]:text-[0.88rem] [&_p]:leading-[1.5] [&_p]:text-foreground",
+  "[&_ul]:mt-[0.35rem] [&_ul]:pl-[1.1rem] [&_ul]:text-[0.88rem] [&_ul]:leading-[1.5] [&_ul]:text-foreground [&_li]:my-[0.2rem]"
+);
 
 /** The sections of one pane: an optional intro followed by titled sections. */
 function HelpSections({
@@ -21,7 +30,7 @@ function HelpSections({
   return (
     <>
       {intro && (
-        <div className="help-tab-intro">
+        <div className="mb-[0.6rem] text-[0.85rem] text-muted-foreground [&_p]:m-0">
           <Markdown body={intro} />
         </div>
       )}
@@ -57,9 +66,9 @@ function HelpTabs({ tabs }: { tabs: HelpTab[] }) {
         <TabsContent
           key={i}
           value={String(i)}
-          // `min-h-0` + the `.modal-body` `overflow-y:auto` make each tab scroll
+          // `min-h-0` + the body's `overflow-y-auto` make each tab scroll
           // its own content within the constrained `Tabs` height above.
-          className="modal-body help-body mt-0 min-h-0"
+          className={cn(HELP_BODY, "mt-0")}
           tabIndex={0}
         >
           <HelpSections intro={t.intro} sections={t.sections} />
@@ -92,14 +101,14 @@ export function HelpModal({
   return (
     <Modal title={content.title ?? "How to use this configurator"} label="Help" onClose={onClose}>
       {content.intro && (
-        <div className="modal-intro">
+        <div className={MODAL_INTRO}>
           <Markdown body={content.intro} />
         </div>
       )}
       {tabs ? (
         <HelpTabs tabs={tabs} />
       ) : (
-        <div className="modal-body help-body">
+        <div className={HELP_BODY}>
           <HelpSections sections={content.sections ?? []} />
         </div>
       )}

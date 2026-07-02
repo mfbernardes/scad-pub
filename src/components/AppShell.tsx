@@ -319,7 +319,7 @@ export const AppShell = memo(function AppShell({
             </ViewerStage>
 
             {/* Output console — inline below viewer */}
-            <OutputConsole {...outputProps} />
+            <OutputConsole {...outputProps} className="max-h-56" />
           </div>
         </div>
       </div>
@@ -359,10 +359,20 @@ export const AppShell = memo(function AppShell({
         {/* Output console (mobile — slides up over the sheet as a dismissible
             overlay, with a scrim so it reads as a distinct layer, not another
             band stacked above the sheet). */}
+        {/* Output console (mobile): a dismissible overlay that slides up just
+            above the COLLAPSED (peek) sheet — the sheet's tab row stays visible
+            and tappable beneath it — with a scrim dimming only the viewer. */}
         {outputOpen && (
-          <div className="output-console__scrim" onClick={closeOutput} aria-hidden="true" />
+          <div
+            className="output-console__scrim absolute inset-x-0 top-0 bottom-[calc(var(--mobile-footer-total)+var(--mobile-peek-height))] z-[31] bg-black/40"
+            onClick={closeOutput}
+            aria-hidden="true"
+          />
         )}
-        <OutputConsole {...outputProps} />
+        <OutputConsole
+          {...outputProps}
+          className="absolute inset-x-0 bottom-[calc(var(--mobile-footer-total)+var(--mobile-peek-height))] z-[32] max-h-[55vh] rounded-t-(--radius) border-b-0 shadow-(--elevation)"
+        />
 
         {/* Persistent bottom sheet */}
         <BottomSheet

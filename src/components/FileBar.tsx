@@ -40,8 +40,8 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
   };
 
   return (
-    <div className="file-manager">
-      <div className="file-manager__intro">
+    <div className="file-manager flex flex-col gap-2 px-3 pt-2 pb-3">
+      <div className="text-[0.85rem] leading-[1.4] text-muted-foreground [&_:is(p,ul)]:m-0 [&_:is(p,ul)+:is(p,ul)]:mt-2 [&_ul]:pl-[1.1rem]">
         <Markdown
           body={
             fileImport.note ??
@@ -51,14 +51,21 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
       </div>
 
       {loadedFiles.length > 0 && (
-        <ul className="file-manager__list">
+        <ul className="flex flex-col gap-[0.4rem]">
           {loadedFiles.map((f) => (
-            <li className="file-manager__item" key={f.name}>
-              <FileIcon size={16} />
-              <span className="file-manager__name" title={f.name}>{f.name}</span>
-              <span className="file-manager__size">{formatSize(f.size)}</span>
+            <li
+              className="flex items-center gap-2 rounded-(--radius-sm) border bg-muted px-[0.6rem] py-2"
+              key={f.name}
+            >
+              <FileIcon size={16} className="shrink-0 text-brand" />
+              <span className="file-manager__name min-w-0 flex-1 truncate text-[0.9rem]" title={f.name}>
+                {f.name}
+              </span>
+              <span className="shrink-0 text-[0.82rem] text-muted-foreground tabular-nums">
+                {formatSize(f.size)}
+              </span>
               <IconButton
-                className="file-manager__remove"
+                className="shrink-0 border-transparent bg-transparent text-brand hover:border-border hover:bg-card"
                 onClick={() => onRemoveFile(f.name)}
                 label={`Remove ${f.name}`}
                 title={`Remove ${f.name}`}
@@ -75,7 +82,7 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
           <Button
             type="button"
             variant="outline"
-            className="file-manager__action w-full"
+            className="w-full"
             title="Import a file your design references (a font, an SVG, a data file…)"
             onClick={open}
           >
@@ -86,7 +93,7 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
       <Button
         type="button"
         variant="outline"
-        className="file-manager__action w-full"
+        className="w-full"
         title="Remove all imported files and clear the render cache"
         onClick={onClearFiles}
         disabled={loadedFiles.length === 0}
