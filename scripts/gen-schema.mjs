@@ -28,6 +28,7 @@ import {
 import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve, relative, sep } from "node:path";
+import { WASM_VERSION } from "./wasm-version.mjs";
 
 // Optional build-time SVG→PNG rasterizer (@resvg/resvg-js). Present in dev
 // builds; gracefully absent in minimal CI environments that didn't npm install.
@@ -1247,6 +1248,9 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   const schema = {
     generatedFrom: relPosix(SOURCE) || ".",
     renderHash,
+    // Names the render worker's binary Cache Storage entry (and the service
+    // worker's warm-up target). Single-sourced from scripts/wasm-version.mjs.
+    wasmVersion: WASM_VERSION,
     title: TITLE,
     shortName: SHORT_NAME,
     id: ID,

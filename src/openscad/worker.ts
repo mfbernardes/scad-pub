@@ -14,13 +14,17 @@ import { buildOpenscadArgs, exportFor, userFileMountPath } from "./renderArgs";
 
 // Persistent cache for the big, version-pinned binaries (the ~10 MB WASM and
 // the fonts), so reloads are instant and the app works offline. The cache name
-// carries the pinned OpenSCAD version (see scripts/fetch-wasm.mjs) — bump it when
-// the WASM is bumped so stale binaries are evicted. The small, build-volatile
-// .scad sources are NOT cached here (they change every build).
+// carries the pinned OpenSCAD version (single-sourced via schema.wasmVersion
+// from scripts/wasm-version.mjs) — a WASM bump renames the cache so stale
+// binaries are evicted. The small, build-volatile .scad sources are NOT cached
+// here (they change every build).
 // Neutral, NOT namespaced per config: the WASM binary is identical across
 // deployments, so sharing this cache across configs on one origin avoids
-// re-downloading ~10 MB. The date suffix is the cache-bust key.
-const BIN_CACHE = "openscad-wasm-bin-2026.06.12";
+// re-downloading ~10 MB. The service worker warms this same cache at install
+// (see public/sw.js), so offline works even before the first render.
+const BIN_CACHE = `openscad-wasm-bin-${
+  (schema as { wasmVersion?: string }).wasmVersion ?? "2026.06.12"
+}`;
 
 async function cleanupOldCaches() {
   if (typeof caches === "undefined") return;

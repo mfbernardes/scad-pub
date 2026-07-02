@@ -264,6 +264,13 @@ export interface Schema {
    * changing in a deploy invalidates persisted geometry without a manual bump.
    */
   renderHash?: string;
+  /**
+   * The pinned OpenSCAD WebAssembly snapshot version (set by gen-schema from
+   * scripts/wasm-version.mjs). Names the render worker's binary cache — and
+   * the service worker warms the same cache — so a WASM bump evicts stale
+   * binaries everywhere in one edit.
+   */
+  wasmVersion?: string;
   /** Page/header title (used as the document title and the header text). */
   title: string;
   /** Optional stable id; namespaces this configurator's browser storage so two
