@@ -18,6 +18,8 @@ const EMPTY_LOG: string[] = [];
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
+import { OutputToggle } from "./OutputToggle";
+import { BarOverflow } from "./BarOverflow";
 import { ViewerStage } from "./ViewerStage";
 import { ViewerHUD } from "./ViewerHUD";
 import { DEFAULT_VIEW, type ViewName } from "./views";
@@ -26,7 +28,6 @@ import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
 import { BarBrand } from "./BarBrand";
-import { BarActions } from "./BarActions";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { parseComputedInfo } from "../lib/computedInfo";
 import { fontFamilyNames, normalizeFamily } from "../lib/fonts";
@@ -268,8 +269,6 @@ export const AppShell = memo(function AppShell({
     onSavePng: handleSavePng,
     onToggleOutput: toggleOutput,
   };
-  const barActionsProps = { rendering, ready, result, stalePreview, themeMode };
-
   return (
     <div className="app-shell">
       {/* Skip link: off-screen until focused. */}
@@ -360,8 +359,18 @@ export const AppShell = memo(function AppShell({
                 </span>
               )}
             </div>
+            {/* The Output bell rides up here (with its pending-notice count);
+                the theme/help/licenses actions collapse into a ⋮ overflow so
+                the narrow bar isn't crowded. */}
             <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
-              <BarActions {...barActionsProps} showStatus={false} licensesLabel="About & licenses" />
+              <OutputToggle
+                compact
+                outputOpen={outputOpen}
+                noticeCount={diagnostics.length}
+                onToggleOutput={toggleOutput}
+                className="mobile-top-bar__output size-8 rounded-(--radius-sm) border bg-muted p-[0.35rem] hover:border-brand"
+              />
+              <BarOverflow themeMode={themeMode} licensesLabel="About & licenses" />
             </div>
           </div>
         </div>
@@ -418,8 +427,10 @@ export const AppShell = memo(function AppShell({
         </BottomSheet>
 
         {/* Fixed footer: primary actions always accessible outside the sheet */}
+        {/* The Output toggle lives in the top bar on mobile, so the footer is
+            just the produce-a-file actions. */}
         <div className="mobile-footer">
-          <ActionButtons {...actionButtonsProps} compact />
+          <ActionButtons {...actionButtonsProps} compact showOutput={false} />
         </div>
 
         <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />

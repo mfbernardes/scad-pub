@@ -148,10 +148,11 @@ async function captureViewport(context, base, kind, theme) {
     await sleep(200);
   }
 
-  // 9 / 5. Output console.
+  // 9 / 5. Output console. On mobile the toggle is the top bar's Output bell;
+  // on desktop it's in the floating action cluster.
   const outputSel =
     kind === "mobile"
-      ? '.mobile-footer__output[aria-label^="Open output console"]'
+      ? '.mobile-top-bar__output[aria-label^="Open output console"]'
       : '.action-cluster__output[aria-label^="Open output console"]';
   const consoleName = kind === "mobile" ? "09-output-console" : "05-output-console";
   await page.locator(outputSel).click().catch(() => {});
@@ -160,9 +161,18 @@ async function captureViewport(context, base, kind, theme) {
   await shot(page, dir, consoleName);
   await closeConsole(page);
 
+  // On mobile, Help + licenses live behind the top bar's "⋮" overflow menu;
+  // open it before each. On desktop they're inline in the CommandBar.
+  const openOverflow = async () => {
+    if (kind !== "mobile") return;
+    await page.getByRole("button", { name: "More actions" }).first().click().catch(() => {});
+    await sleep(150);
+  };
+
   // Help + About dialogs.
   const helpName = kind === "mobile" ? "10-help" : "06-help";
   const aboutName = kind === "mobile" ? "11-about-licenses" : "07-about-licenses";
+  await openOverflow();
   await page.getByRole("button", { name: kind === "mobile" ? "Help" : "Help & keyboard shortcuts" })
     .first().click().catch(() => {});
   await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
@@ -170,6 +180,7 @@ async function captureViewport(context, base, kind, theme) {
   await shot(page, dir, helpName);
   await closeDialog(page);
 
+  await openOverflow();
   await page.getByRole("button", { name: kind === "mobile" ? "About & licenses" : "Open-source licenses" })
     .first().click().catch(() => {});
   await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});

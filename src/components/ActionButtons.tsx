@@ -11,14 +11,9 @@
 // single, stable shape that never lurches between auto and manual modes.
 import { useAppActions } from "../lib/appActions";
 import { Button } from "./ui/button";
+import { OutputToggle } from "./OutputToggle";
 import { cn } from "../lib/utils";
-import {
-  Download as DownloadIcon,
-  Image as ImageIcon,
-  Link2 as LinkIcon,
-  Bell as BellIcon,
-  BellRing as BellRingIcon,
-} from "lucide-react";
+import { Download as DownloadIcon, Image as ImageIcon, Link2 as LinkIcon } from "lucide-react";
 
 interface Props {
   hasResult: boolean;
@@ -30,6 +25,9 @@ interface Props {
   noticeCount?: number;
   /** Compact = the mobile footer: shorter labels, outline secondaries, full size. */
   compact?: boolean;
+  /** Include the Output console toggle (default true). The mobile top bar hosts
+   *  it separately, so the mobile footer passes false. */
+  showOutput?: boolean;
 }
 
 export function ActionButtons({
@@ -40,20 +38,15 @@ export function ActionButtons({
   onToggleOutput,
   noticeCount = 0,
   compact = false,
+  showOutput = true,
 }: Props) {
   const { exportModel, copyLink } = useAppActions();
-  const prefix = compact ? "mobile-footer" : "action-cluster";
   const secondary = compact ? "outline" : "ghost";
   const size = compact ? undefined : "sm";
   const fmt = modelFormat.toUpperCase();
-  const hasNotices = noticeCount > 0;
-  // A bell (ringing when notices are pending) reads far more clearly to a maker
-  // than the old `>_` terminal glyph — and a real count badge beats a bare dot.
-  const BellGlyph = hasNotices ? BellRingIcon : BellIcon;
 
-  // Mobile footer buttons grow to share the row (the console toggle stays
-  // icon-sized). The outline secondaries carry a real border there; the
-  // desktop cluster's ghosts have none.
+  // Mobile footer buttons grow to share the row. The outline secondaries carry
+  // a real border there; the desktop cluster's ghosts have none.
   const grow = compact ? "min-w-0 flex-1" : undefined;
 
   return (
@@ -74,42 +67,19 @@ export function ActionButtons({
       <Button size={size} variant={secondary} className={grow} onClick={copyLink} aria-label="Copy share link">
         <LinkIcon size={16} /> Share
       </Button>
-      {/* Divider fences the console toggle off from the produce-a-file actions. */}
-      <span
-        className={cn("w-px self-stretch bg-border", compact ? "mx-[0.15rem] my-2 flex-none" : "m-[0.2rem]")}
-        aria-hidden="true"
-      />
-      <Button
-        size={compact ? "icon" : size}
-        variant={secondary}
-        className={cn(
-          `${prefix}__output relative`,
-          compact && "flex-none",
-          outputOpen &&
-            (compact ? "border-brand text-brand" : "bg-card text-brand hover:bg-card"),
-          hasNotices && "text-warn"
-        )}
-        onClick={onToggleOutput}
-        aria-label={`${outputOpen ? "Close" : "Open"} output console${
-          hasNotices ? ` (${noticeCount} notice${noticeCount === 1 ? "" : "s"})` : ""
-        }`}
-        aria-pressed={outputOpen}
-        title="Output console — notices & log"
-      >
-        <BellGlyph size={16} />
-        {!compact && "Output"}
-        {hasNotices && (
-          <span
-            className={cn(
-              "inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-warn px-[0.3rem] text-[0.7rem] font-bold leading-none text-[#1c1f24] tabular-nums [[data-theme=light]_&]:text-white",
-              compact && "pointer-events-none absolute top-[2px] right-[2px] shadow-[0_0_0_2px_var(--panel)]"
-            )}
-            aria-hidden="true"
-          >
-            {noticeCount}
-          </span>
-        )}
-      </Button>
+      {showOutput && (
+        <>
+          {/* Divider fences the console toggle off from the produce-a-file actions. */}
+          <span className="m-[0.2rem] w-px self-stretch bg-border" aria-hidden="true" />
+          <OutputToggle
+            outputOpen={outputOpen}
+            noticeCount={noticeCount}
+            onToggleOutput={onToggleOutput}
+            compact={compact}
+            className="action-cluster__output"
+          />
+        </>
+      )}
     </>
   );
 }
