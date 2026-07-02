@@ -7,12 +7,8 @@ import { Modal } from "./Modal";
 import { Markdown } from "./Markdown";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
-import {
-  DEFAULT_HELP,
-  type HelpContent,
-  type HelpSection,
-  type HelpTab,
-} from "../lib/defaultHelp";
+import { DEFAULT_HELP } from "../lib/defaultHelp";
+import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
 
 /** The sections of one pane: an optional intro followed by titled sections. */
 function HelpSections({

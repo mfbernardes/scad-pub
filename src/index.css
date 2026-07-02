@@ -2,7 +2,7 @@
    `utilities` and above `base`: shadcn/ui utility classes always win where
    applied, while legacy class rules still beat Tailwind's preflight element
    resets, so un-ported components keep their original styling. */
-@layer theme, base, components, legacy, utilities;
+@layer theme, base, legacy, utilities;
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -36,6 +36,9 @@
   --color-warn: var(--warn);
   --color-brand: var(--accent);
 
+  /* These resolve against the app's --radius/--radius-sm tokens defined on
+     :root below (the config-override API), not the other way round: rounded-lg
+     follows --radius, while rounded-(--radius-sm) uses the token directly. */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -138,8 +141,7 @@
 /* Windows High Contrast / forced-colors: keep colour-only cues visible. */
 @media (forced-colors: active) {
   :focus-visible { outline-color: Highlight; }
-  .spinner { border-color: CanvasText; border-top-color: Highlight; }
-  .badge { border: 1px solid CanvasText; }
+  [data-slot="badge"] { border: 1px solid CanvasText; }
 }
 
 * { box-sizing: border-box; }
@@ -203,16 +205,6 @@ body {
    into shadcn components. A cursor default is kept for un-classed buttons. */
 button { cursor: pointer; touch-action: manipulation; }
 button:disabled { cursor: default; }
-
-.primary {
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  border: 1px solid var(--accent-solid);
-  border-radius: var(--radius-sm);
-  padding: 0.35rem 0.7rem;
-  font-weight: 600;
-}
-.primary:hover:not(:disabled) { filter: brightness(1.08); }
 
 /* Brand logo (theme-switched by App via src change). */
 .brand-logo { height: 1.6rem; width: auto; display: block; }
@@ -338,14 +330,6 @@ button:disabled { cursor: default; }
 }
 .command-bar__title { font-size: 0.95rem; font-weight: 700; }
 
-.command-bar__design-picker select {
-  max-width: 12rem;
-  background: transparent;
-  border: none;
-  padding: 0;
-  font-weight: 600;
-  color: var(--text);
-}
 .command-bar__design-name {
   font-size: 0.88rem;
   font-weight: 600;
@@ -551,16 +535,6 @@ button:disabled { cursor: default; }
   font-size: 0.9rem;
   pointer-events: none;
 }
-
-.spinner {
-  width: 34px;
-  height: 34px;
-  border: 3px solid var(--line);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
 
 .viewer-error {
   flex: 1;
@@ -1595,11 +1569,9 @@ button:disabled { cursor: default; }
   flex-shrink: 0;
 }
 
+/* Control sizing comes from the shadcn controls themselves (Slider flex,
+   number Input w-20, text Input w-full). */
 .control-row { display: flex; gap: 0.5rem; align-items: center; }
-.control-row input[type="range"] { flex: 1; min-width: 0; }
-/* Number-input width comes from the `w-20` utility on the control itself. */
-.param select, .param input[type="text"] { width: 100%; }
-.param input[type="checkbox"] { align-self: flex-start; }
 
 /* ═══════════════════════════════════════════════════════════════
    FILE MANAGER — imported-files list (Files tab + panel footer)
@@ -1693,16 +1665,6 @@ button:disabled { cursor: default; }
 /* ═══════════════════════════════════════════════════════════════
    UTILITY — badges, icon buttons, labelled buttons
    ═══════════════════════════════════════════════════════════════ */
-
-.badge {
-  margin-left: 0.35rem;
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  border-radius: var(--radius-sm);
-  padding: 0 0.4rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
 
 .badge-assert { background: var(--warn); color: #1c1f24; }
 :root[data-theme="light"] .badge-assert { color: #ffffff; }
@@ -1892,7 +1854,6 @@ button:disabled { cursor: default; }
    ═══════════════════════════════════════════════════════════════ */
 
 @media (prefers-reduced-motion: reduce) {
-  .spinner { animation-duration: 2.4s; }
   .bottom-sheet { transition: none !important; }
   .app-shell__mobile-viewer { transition: none !important; }
   .param-group > summary::before { transition: none; }

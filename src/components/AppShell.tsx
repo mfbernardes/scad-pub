@@ -314,7 +314,6 @@ export const AppShell = memo(function AppShell({
                 noticeCount={diagnostics.length}
                 onSavePng={handleSavePng}
                 onToggleOutput={toggleOutput}
-                className="action-cluster--desktop"
               />
               <ViewerHUD
                 viewerRef={desktopViewerRef}

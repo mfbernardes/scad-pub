@@ -111,7 +111,7 @@ export const CommandBar = memo(function CommandBar({
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="command-bar__presets-popover w-[22rem] max-w-[90vw] overflow-hidden p-0"
+          className="w-[22rem] max-w-[90vw] overflow-hidden p-0"
         >
           <PresetPicker
             design={design}

@@ -130,6 +130,19 @@ export interface HelpTab {
   sections: HelpSection[];
 }
 
+/** The Help modal's content. `sections` renders as a single pane; supplying
+ *  `tabs` renders a tab strip (top-level `sections`, if any, become a leading
+ *  tab so adding tabs never drops existing content). */
+export interface HelpContent {
+  /** Heading shown at the top of the Help modal (default "How to use this configurator"). */
+  title?: string;
+  intro?: string;
+  /** Single-pane sections (the default form). */
+  sections?: HelpSection[];
+  /** When present, the modal renders a tab strip; many tabs are supported. */
+  tabs?: HelpTab[];
+}
+
 /** One third-party software component and its license attribution, shown in the
  *  open-source licenses modal. Mirrors the built-in entries in
  *  src/lib/licenses.ts; a consumer config can APPEND more via the `licenses`
@@ -257,10 +270,8 @@ export interface Schema {
    *  configs on one origin don't collide. Defaults to "scadpub". */
   id?: string;
   /** Optional help content shown in the Help modal. When null, a generic,
-   *  project-agnostic default is used. `sections` renders as a single pane;
-   *  supplying `tabs` renders a tab strip (top-level `sections`, if any, become
-   *  a leading tab so adding tabs never drops existing content). */
-  help: { title?: string; intro?: string; sections?: HelpSection[]; tabs?: HelpTab[] } | null;
+   *  project-agnostic default is used. */
+  help: HelpContent | null;
   /**
    * Optional per-theme colour-scheme overrides supplied by the consumer config.
    * Keys are the CSS custom-property tokens from src/index.css (without the

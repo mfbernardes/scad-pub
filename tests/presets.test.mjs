@@ -1,10 +1,9 @@
-// Tests for the parameterSets round-trip (the desktop-Customizer compatibility
-// contract) and default extraction.
+// Tests for parsing OpenSCAD parameterSets files (the desktop-Customizer
+// compatibility contract) and default extraction.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   defaultsFor,
-  toParameterSetsFile,
   parseParameterSetsFile,
   presetLabel,
 } from "../src/lib/presets.ts";
@@ -47,21 +46,23 @@ test("defaultsFor returns each parameter's default", () => {
   });
 });
 
-test("parameterSets round-trips typed values through strings", () => {
-  const values = { text: "hello", thk: 4, flag: true, lang: "en" };
-  const file = toParameterSetsFile(design, "My set", values);
-  // on disk everything is a string (OpenSCAD's format)
-  assert.deepEqual(file.parameterSets["My set"], {
-    text: "hello",
-    thk: "4",
-    flag: "true",
-    lang: "en",
-  });
-  // and parses back to the original typed values
+test("parameterSets strings parse back to typed values", () => {
+  // On disk everything is a string — OpenSCAD's own format.
+  const file = {
+    fileFormatVersion: "1",
+    parameterSets: {
+      "My set": { text: "hello", thk: "4", flag: "true", lang: "en" },
+    },
+  };
   const parsed = parseParameterSetsFile(design, JSON.stringify(file));
   assert.equal(parsed.length, 1);
   assert.equal(parsed[0].name, "My set");
-  assert.deepEqual(parsed[0].values, values);
+  assert.deepEqual(parsed[0].values, {
+    text: "hello",
+    thk: 4,
+    flag: true,
+    lang: "en",
+  });
 });
 
 test("parse overlays defaults and ignores unknown keys", () => {
