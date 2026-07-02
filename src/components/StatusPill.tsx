@@ -6,9 +6,20 @@ import { useState } from "react";
 import type { RenderResult } from "../openscad/types";
 import { cn } from "../lib/utils";
 
+export type RenderState = "idle" | "loading" | "rendering" | "ok" | "error" | "stale";
+
+export interface RenderStatusInput {
+  rendering: boolean;
+  ready: boolean;
+  result: RenderResult | null;
+  /** Auto-render off AND params changed since the last render — preview is out of date. */
+  stale?: boolean;
+}
+
 /* The dot's literal green/red match the pre-port palette in BOTH themes (the
-   light-theme --danger is darker); kept literal for pixel fidelity. */
-const STATE_STYLES: Record<string, { pill?: string; dot: string; pulse?: boolean }> = {
+   light-theme --danger is darker); kept literal for pixel fidelity. Exported so
+   the mobile Output bell can wear the same status dot (see OutputToggle). */
+export const STATE_STYLES: Record<RenderState, { pill?: string; dot: string; pulse?: boolean }> = {
   idle: { pill: "text-muted-foreground", dot: "bg-muted-foreground" },
   loading: { dot: "bg-muted-foreground", pulse: true },
   rendering: { dot: "bg-brand", pulse: true },
@@ -17,41 +28,30 @@ const STATE_STYLES: Record<string, { pill?: string; dot: string; pulse?: boolean
   error: { pill: "text-[#f87171]", dot: "bg-[#f87171]" },
 };
 
-interface Props {
-  rendering: boolean;
-  ready: boolean;
-  result: RenderResult | null;
-  /** Auto-render off AND params changed since the last render — preview is out of date. */
-  stale?: boolean;
+/** Derive the render state + its human text from the raw flags. Shared by the
+ *  StatusPill and the mobile Output bell so both read the same. */
+export function deriveRenderStatus({ rendering, ready, result, stale = false }: RenderStatusInput): {
+  state: RenderState;
+  text: string;
+} {
+  if (!ready) return { state: "loading", text: "Loading renderer…" };
+  if (rendering) return { state: "rendering", text: "Rendering…" };
+  // The preview no longer matches the controls — surfaced before "ok" so a
+  // happy green "214 ms" never masks unrendered changes.
+  if (stale) return { state: "stale", text: "Preview out of date" };
+  if (!result) return { state: "idle", text: "Idle" };
+  if (result.ok)
+    return { state: "ok", text: result.cached ? `${result.ms} ms (cached)` : `${result.ms} ms` };
+  return { state: "error", text: `Failed (exit ${result.exitCode})` };
+}
+
+interface Props extends RenderStatusInput {
   className?: string;
 }
 
 export function StatusPill({ rendering, ready, result, stale = false, className = "" }: Props) {
   const [open, setOpen] = useState(false);
-  let text: string;
-  let state: "idle" | "loading" | "rendering" | "ok" | "error" | "stale";
-
-  if (!ready) {
-    text = "Loading renderer…";
-    state = "loading";
-  } else if (rendering) {
-    text = "Rendering…";
-    state = "rendering";
-  } else if (stale) {
-    // The preview no longer matches the controls — surfaced before "ok" so a
-    // happy green "214 ms" never masks unrendered changes.
-    text = "Preview out of date";
-    state = "stale";
-  } else if (!result) {
-    text = "Idle";
-    state = "idle";
-  } else if (result.ok) {
-    text = result.cached ? `${result.ms} ms (cached)` : `${result.ms} ms`;
-    state = "ok";
-  } else {
-    text = `Failed (exit ${result.exitCode})`;
-    state = "error";
-  }
+  const { state, text } = deriveRenderStatus({ rendering, ready, result, stale });
 
   const s = STATE_STYLES[state];
   return (

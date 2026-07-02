@@ -361,15 +361,16 @@ export const AppShell = memo(function AppShell({
                 </span>
               )}
             </div>
-            {/* The Output bell rides up here (with its pending-notice count);
-                the theme/help/licenses actions collapse into a ⋮ overflow so
-                the narrow bar isn't crowded. */}
+            {/* The Output bell doubles as the render-status indicator (a
+                status dot rides its corner), so the narrow bar needs no
+                separate pill; theme/help/licenses collapse into a ⋮ overflow. */}
             <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
               <OutputToggle
                 compact
                 outputOpen={outputOpen}
                 noticeCount={diagnostics.length}
                 onToggleOutput={toggleOutput}
+                status={{ rendering, ready, result, stale: stalePreview }}
                 className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
               />
               <BarOverflow themeMode={themeMode} licensesLabel="About & licenses" />
