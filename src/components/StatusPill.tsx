@@ -4,6 +4,18 @@
 // and a polite live region so it's never lost to assistive tech.
 import { useState } from "react";
 import type { RenderResult } from "../openscad/types";
+import { cn } from "../lib/utils";
+
+/* The dot's literal green/red match the pre-port palette in BOTH themes (the
+   light-theme --danger is darker); kept literal for pixel fidelity. */
+const STATE_STYLES: Record<string, { pill?: string; dot: string; pulse?: boolean }> = {
+  idle: { pill: "text-muted-foreground", dot: "bg-muted-foreground" },
+  loading: { dot: "bg-muted-foreground", pulse: true },
+  rendering: { dot: "bg-brand", pulse: true },
+  ok: { dot: "bg-[#4ade80]" },
+  stale: { pill: "text-warn", dot: "bg-warn", pulse: true },
+  error: { pill: "text-[#f87171]", dot: "bg-[#f87171]" },
+};
 
 interface Props {
   rendering: boolean;
@@ -41,18 +53,30 @@ export function StatusPill({ rendering, ready, result, stale = false, className 
     state = "error";
   }
 
+  const s = STATE_STYLES[state];
   return (
     <>
       <button
         type="button"
-        className={`status-pill status-pill--${state}${open ? " status-pill--open" : ""} ${className}`.trim()}
+        className={cn(
+          "status-pill inline-flex items-center gap-[0.4rem] whitespace-nowrap rounded-(--radius-sm) border border-transparent bg-transparent px-[0.4rem] py-[0.2rem] text-[0.78rem] font-medium leading-[1.3]",
+          s.pill,
+          className
+        )}
         aria-label={`Render status: ${text}`}
         aria-pressed={open}
         title={text}
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="status-pill__dot" aria-hidden />
-        {open && <span className="status-pill__text">{text}</span>}
+        <span
+          className={cn(
+            "size-[6px] shrink-0 rounded-full",
+            s.dot,
+            s.pulse && "animate-[pill-pulse_1s_ease-in-out_infinite] motion-reduce:animate-none"
+          )}
+          aria-hidden
+        />
+        {open && <span>{text}</span>}
       </button>
       <span className="sr-only" role="status" aria-live="polite">
         {`Render status: ${text}`}

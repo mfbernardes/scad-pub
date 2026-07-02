@@ -19,6 +19,9 @@ interface Props {
   themeMode: "light" | "dark" | "auto";
   /** Licenses-button wording (label doubles as the tooltip). */
   licensesLabel: string;
+  /** Extra classes for the StatusPill (the desktop bar pads it a touch more
+   *  and gives it a hover tint). */
+  pillClassName?: string;
   children?: ReactNode;
 }
 
@@ -29,12 +32,19 @@ export function BarActions({
   stalePreview,
   themeMode,
   licensesLabel,
+  pillClassName,
   children,
 }: Props) {
   const { cycleTheme, showHelp, showLicenses } = useAppActions();
   return (
     <>
-      <StatusPill rendering={rendering} ready={ready} result={result} stale={stalePreview} />
+      <StatusPill
+        rendering={rendering}
+        ready={ready}
+        result={result}
+        stale={stalePreview}
+        className={pillClassName}
+      />
       <ThemeToggle mode={themeMode} onCycle={cycleTheme} />
       <IconButton label="Help" title="Help & keyboard shortcuts" onClick={showHelp}>
         <HelpIcon size={16} />

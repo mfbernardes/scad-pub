@@ -126,6 +126,7 @@ export const CommandBar = memo(function CommandBar({
           stalePreview={stalePreview}
           themeMode={themeMode}
           licensesLabel="Open-source licenses"
+          pillClassName="py-[0.25rem] cursor-pointer hover:bg-muted"
         >
           {/* PWA install (when the browser offers it and the config allows it) */}
           {canInstall && schema.ui?.install !== "off" && (

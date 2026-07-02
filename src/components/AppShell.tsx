@@ -261,8 +261,13 @@ export const AppShell = memo(function AppShell({
 
   return (
     <div className="app-shell">
-      {/* Skip link */}
-      <a className="skip-link" href="#params">Skip to parameters</a>
+      {/* Skip link: off-screen until focused. */}
+      <a
+        className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
+        href="#params"
+      >
+        Skip to parameters
+      </a>
 
       {/* ── Desktop layout (hidden on mobile via CSS) ── */}
       <div className="app-shell__desktop">
@@ -336,7 +341,7 @@ export const AppShell = memo(function AppShell({
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
           <div className="mobile-top-bar">
             <span className="mobile-top-bar__brand">
-              <BarBrand schema={schema} theme={theme} />
+              <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
             </span>
             <div className="mobile-top-bar__center">
               {designs.length > 1 ? (

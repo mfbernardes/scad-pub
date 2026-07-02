@@ -163,39 +163,6 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   ACCESSIBILITY UTILITIES
-   ═══════════════════════════════════════════════════════════════ */
-
-/* Visually hidden but available to assistive tech (live regions, etc.). */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* Skip link: off-screen until focused. */
-.skip-link {
-  position: absolute;
-  left: 0.5rem;
-  top: -3rem;
-  z-index: 200;
-  padding: 0.4rem 0.7rem;
-  background: var(--panel);
-  color: var(--text);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  touch-action: manipulation;
-  transition: top 0.15s ease;
-}
-.skip-link:focus { top: 0.5rem; }
-
-/* ═══════════════════════════════════════════════════════════════
    BASE ELEMENT STYLES
    ═══════════════════════════════════════════════════════════════ */
 
@@ -205,9 +172,6 @@ body {
    into shadcn components. A cursor default is kept for un-classed buttons. */
 button { cursor: pointer; touch-action: manipulation; }
 button:disabled { cursor: default; }
-
-/* Brand logo (theme-switched by App via src change). */
-.brand-logo { height: 1.6rem; width: auto; display: block; }
 
 /* ═══════════════════════════════════════════════════════════════
    APP SHELL — responsive layout
@@ -371,17 +335,6 @@ button:disabled { cursor: default; }
   gap: 0.4rem;
 }
 
-/* Status: flat, no pill box */
-.command-bar__right .status-pill {
-  background: transparent;
-  border: none;
-  padding: 0.25rem 0.4rem;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-.command-bar__right .status-pill:hover { background: var(--panel-2); }
-.command-bar__right .icon-btn { border-radius: var(--radius-sm); }
-
 /* ═══════════════════════════════════════════════════════════════
    PARAM PANEL — docked collapsible/resizable panel (desktop)
    ═══════════════════════════════════════════════════════════════ */
@@ -522,34 +475,6 @@ button:disabled { cursor: default; }
    control. Scoped here (not on html/body) so user-zoom stays intact (WCAG 1.4.4). */
 .viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
-.viewer-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.8rem;
-  background: var(--overlay);
-  color: var(--muted);
-  font-size: 0.9rem;
-  pointer-events: none;
-}
-
-.viewer-error {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  padding: 1rem;
-  text-align: center;
-  background: var(--panel);
-  color: var(--text);
-}
-.viewer-error-detail { color: var(--muted); font-size: 0.82rem; }
-
 /* ═══════════════════════════════════════════════════════════════
    VIEWER HUD — zoom / reset / fullscreen (bottom-right, both layouts)
    ═══════════════════════════════════════════════════════════════ */
@@ -574,73 +499,6 @@ button:disabled { cursor: default; }
     top: calc(env(safe-area-inset-top, 0px) + 4rem);
     transform: none;
   }
-}
-
-.viewer-hud .icon-btn {
-  padding: 0.45rem;
-  background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  border-radius: var(--radius-sm);
-}
-
-.viewer-hud .icon-btn:hover:not(:disabled) { border-color: var(--accent); }
-
-/* Active toggle (e.g. dimensions shown): accent border + tint so the on-state
-   reads at a glance against the otherwise-uniform HUD buttons. */
-.viewer-hud .icon-btn--active {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* View-picker trigger while its menu is open: same accent cue as an active toggle. */
-.viewer-hud .icon-btn[data-state="open"] {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* View picker — the popover menu opened from the HUD's view button. The compact
-   width/padding come from Tailwind on the content; rows are icon-aligned. */
-.view-picker__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.view-picker__item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.35rem 0.5rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.85rem;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.view-picker__item:hover,
-.view-picker__item:focus-visible {
-  background: var(--panel-2);
-}
-
-.view-picker__item--active {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-/* Fixed-width slot so labels align whether or not the row is checkmarked. */
-.view-picker__check {
-  display: inline-flex;
-  width: 1rem;
-  flex-shrink: 0;
-  color: var(--accent);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -864,44 +722,6 @@ button:disabled { cursor: default; }
 /* ═══════════════════════════════════════════════════════════════
    STATUS PILL — render state chip
    ═══════════════════════════════════════════════════════════════ */
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.4rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.78rem;
-  font-weight: 500;
-  background: transparent;
-  border: 1px solid transparent;
-  white-space: nowrap;
-  line-height: 1.3;
-}
-
-.status-pill__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--muted);
-  flex-shrink: 0;
-}
-
-.status-pill--idle { color: var(--muted); }
-
-.status-pill--loading .status-pill__dot,
-.status-pill--rendering .status-pill__dot,
-.status-pill--stale .status-pill__dot {
-  animation: pill-pulse 1s ease-in-out infinite;
-}
-
-.status-pill--loading .status-pill__dot { background: var(--muted); }
-.status-pill--rendering .status-pill__dot { background: var(--accent); }
-.status-pill--ok .status-pill__dot { background: #4ade80; }
-.status-pill--stale .status-pill__dot { background: var(--warn); }
-.status-pill--stale { color: var(--warn); }
-.status-pill--error .status-pill__dot { background: #f87171; }
-.status-pill--error { color: #f87171; }
 
 @keyframes pill-pulse {
   0%, 100% { opacity: 1; }
@@ -1389,19 +1209,6 @@ button:disabled { cursor: default; }
   padding: 0.5rem 0.75rem;
 }
 
-/* Auto-render label (used in sheet footer and previously in preview-actions) */
-.auto-render {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-}
-
-.auto-render:hover { color: var(--text); }
-
 /* ═══════════════════════════════════════════════════════════════
    PARAM FORM — accordion groups, param rows, controls
    ═══════════════════════════════════════════════════════════════ */
@@ -1666,9 +1473,6 @@ button:disabled { cursor: default; }
    UTILITY — badges, icon buttons, labelled buttons
    ═══════════════════════════════════════════════════════════════ */
 
-.badge-assert { background: var(--warn); color: #1c1f24; }
-:root[data-theme="light"] .badge-assert { color: #ffffff; }
-
 .log {
   margin: 0;
   max-height: 11rem;
@@ -1693,36 +1497,6 @@ button:disabled { cursor: default; }
 .diag-warning .diag-icon { color: var(--warn); }
 .diag-assert .diag-icon { color: var(--warn); }
 .diag-text { color: var(--text); }
-
-/* Icon buttons (close, zoom, collapse, etc.) */
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.35rem;
-  line-height: 0;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-}
-
-.icon-btn:hover:not(:disabled) { border-color: var(--accent); }
-
-/* Quiet "Reset to defaults" link */
-.reset-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  padding: 0.25rem 0.3rem;
-  font-size: 0.85rem;
-}
-
-.reset-link svg { flex: 0 0 auto; }
-.reset-link:hover:not(:disabled) { color: var(--text); border: none; }
-/* Inert when parameters already match the defaults — nothing to reset. */
-.reset-link:disabled { opacity: 0.4; cursor: default; }
 
 /* ═══════════════════════════════════════════════════════════════
    MODALS — licenses, help, popup notice
@@ -1857,6 +1631,5 @@ button:disabled { cursor: default; }
   .bottom-sheet { transition: none !important; }
   .app-shell__mobile-viewer { transition: none !important; }
   .param-group > summary::before { transition: none; }
-  .status-pill__dot { animation: none !important; }
 }
 } /* end @layer legacy */

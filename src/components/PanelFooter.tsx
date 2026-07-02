@@ -26,12 +26,20 @@ export function PanelFooter({
     <div className={className}>
       {/* Auto-render lives here, with the params it governs, rather than in the
           output toolbar: it's a render-mode setting that's rarely toggled. */}
-      <Label className="auto-render cursor-pointer font-normal" title="Re-render automatically as parameters change">
+      <Label
+        className="auto-render inline-flex cursor-pointer select-none items-center gap-[0.3rem] text-[0.85rem] font-normal text-muted-foreground hover:text-foreground"
+        title="Re-render automatically as parameters change"
+      >
         <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Auto-render" />
         Auto-render
       </Label>
-      <ResetButton design={design} values={values} onReset={reset} className="reset-link ml-auto">
-        <ResetIcon size={14} /> Reset to defaults
+      <ResetButton
+        design={design}
+        values={values}
+        onReset={reset}
+        className="reset-link ml-auto inline-flex items-center gap-[0.35rem] border-none bg-transparent px-[0.3rem] py-[0.25rem] text-[0.85rem] text-muted-foreground enabled:hover:text-foreground disabled:cursor-default disabled:opacity-40"
+      >
+        <ResetIcon size={14} className="shrink-0" /> Reset to defaults
       </ResetButton>
     </div>
   );

@@ -34,9 +34,12 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.error) {
       return (
         this.props.fallback ?? (
-          <div className="viewer-error" role="alert">
+          <div
+            className="viewer-error flex flex-1 flex-col items-center justify-center gap-[0.4rem] bg-card p-4 text-center text-foreground"
+            role="alert"
+          >
             <p>The 3D preview couldn't be shown.</p>
-            <p className="viewer-error-detail">{this.state.error.message}</p>
+            <p className="text-[0.82rem] text-muted-foreground">{this.state.error.message}</p>
           </div>
         )
       );
