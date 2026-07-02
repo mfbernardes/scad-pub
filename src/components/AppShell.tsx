@@ -363,7 +363,7 @@ export const AppShell = memo(function AppShell({
               )}
             </div>
             <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
-              <BarActions {...barActionsProps} licensesLabel="About & licenses" />
+              <BarActions {...barActionsProps} showStatus={false} licensesLabel="About & licenses" />
             </div>
           </div>
         </div>
