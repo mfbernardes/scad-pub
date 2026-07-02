@@ -139,11 +139,12 @@ async function captureViewport(context, base, kind, theme) {
     }
     await sheetTo(page, "peek");
   } else {
-    // 4. Desktop parameters are always docked (visible in 02); capture the presets popover.
-    await page.locator(".command-bar__presets-btn").click().catch(() => {});
+    // 4. Desktop parameters are always docked (visible in 02); switch the panel
+    // to its Presets tab for the shot, then back to Parameters.
+    await page.getByRole("tab", { name: "Presets" }).first().click().catch(() => {});
     await sleep(300);
     await shot(page, dir, "04-presets");
-    await page.keyboard.press("Escape").catch(() => {});
+    await page.getByRole("tab", { name: "Parameters" }).first().click().catch(() => {});
     await sleep(200);
   }
 

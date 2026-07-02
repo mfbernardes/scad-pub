@@ -286,25 +286,22 @@ export const AppShell = memo(function AppShell({
           schema={schema}
           designs={designs}
           designId={design.id}
-          design={design}
-          bundled={bundled}
-          userPresets={userPresets}
-          selectedPreset={selectedPreset}
-          values={values}
           theme={theme}
           themeMode={themeMode}
           rendering={rendering}
           ready={ready}
           result={result}
           stalePreview={stalePreview}
-          presetsLabel={presetsLabel}
         />
 
         <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
-          {/* Docked panel (presets live in the CommandBar on desktop) */}
+          {/* Docked panel: Presets / Parameters / Files tabs (mirrors mobile). */}
           <ParamPanel
             design={design}
             values={values}
+            bundled={bundled}
+            userPresets={userPresets}
+            selectedPreset={selectedPreset}
             fileImport={fileImport}
             loadedFiles={loadedFiles}
             availableFontFamilies={availableFontFamilies}
@@ -313,6 +310,7 @@ export const AppShell = memo(function AppShell({
             panelDefaultOpen={panelDefaultOpen}
             showVarName={showVarName}
             autoRender={autoRender}
+            presetsLabel={presetsLabel}
             parametersLabel={parametersLabel}
           />
 

@@ -1,16 +1,17 @@
 // ParamPanel.tsx — docked desktop parameter panel: a slim header (collapse), a
-// Parameters/Files tab split (Files tab only when the design imports files),
-// parameter search + ParamForm, and a Reset footer. Collapsible and resizable;
-// state persisted to localStorage. Presets are reached from the top CommandBar
-// on desktop, so the panel itself carries no preset control.
+// Presets / Parameters / Files tab split (Files only when the design imports
+// files), parameter search + ParamForm, and a Reset footer. Collapsible and
+// resizable; state persisted to localStorage. Presets live here (a tab,
+// mirroring the mobile sheet) rather than in the top bar.
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Design, FileImport } from "../openscad/types";
-import type { Values } from "../lib/presets";
+import type { ParsedSet, Values } from "../lib/presets";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
+import { PresetPicker } from "./PresetPicker";
 import { IconButton } from "./IconButton";
 import { PanelFooter } from "./PanelFooter";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
@@ -22,6 +23,8 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
 } from "lucide-react";
+
+type PanelTab = "presets" | "params" | "files";
 
 const panelTabClass = cn(underlineTabTrigger, "flex-1");
 
@@ -35,6 +38,9 @@ const DEFAULT_WIDTH = 360;
 interface Props {
   design: Design;
   values: Values;
+  bundled: ParsedSet[];
+  userPresets: string[];
+  selectedPreset: string;
   fileImport: FileImport | null;
   loadedFiles: LoadedFile[];
   /** Font families the renderer can use (normalised), for the missing-font hint. */
@@ -46,13 +52,17 @@ interface Props {
   /** Show the underlying OpenSCAD variable name beside each label. */
   showVarName: boolean;
   autoRender: boolean;
-  /** Configurable label for the Parameters tab/panel (default "Parameters"). */
+  /** Configurable tab labels (default "Presets" / "Parameters"). */
+  presetsLabel?: string;
   parametersLabel?: string;
 }
 
 export function ParamPanel({
   design,
   values,
+  bundled,
+  userPresets,
+  selectedPreset,
   fileImport,
   loadedFiles,
   availableFontFamilies,
@@ -61,9 +71,18 @@ export function ParamPanel({
   panelDefaultOpen,
   showVarName,
   autoRender,
+  presetsLabel = "Presets",
   parametersLabel = "Parameters",
 }: Props) {
-  const { change, addFile, removeFile, clearFiles } = useAppActions();
+  const {
+    change,
+    applyPreset,
+    selectedPresetChange,
+    presetsChange,
+    addFile,
+    removeFile,
+    clearFiles,
+  } = useAppActions();
   const [open, setOpen] = useState(() => {
     try {
       const v = localStorage.getItem(PANEL_OPEN_KEY);
@@ -82,7 +101,9 @@ export function ParamPanel({
   });
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 150);
-  const [panelTab, setPanelTab] = useState<"params" | "files">("params");
+  // Parameters is the default (a returning user is usually here to tweak, not
+  // re-pick a preset — the reverse of mobile, where the sheet opens on Presets).
+  const [panelTab, setPanelTab] = useState<PanelTab>("params");
 
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -168,21 +189,18 @@ export function ParamPanel({
       />
 
       <Tabs
-        value={fileImport ? panelTab : "params"}
-        onValueChange={(v) => setPanelTab(v as "params" | "files")}
+        value={panelTab}
+        onValueChange={(v) => setPanelTab(v as PanelTab)}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        {/* Tab row (Parameters / Files) with the collapse control on the end.
-            Without file imports there are no tabs — just the collapse control. */}
+        {/* Tab row (Presets / Parameters / Files) with the collapse control on
+            the end. Files appears only when the design imports files. */}
         <div className="flex shrink-0 items-stretch border-b">
-          {fileImport ? (
-            <TabsList className="flex-1 rounded-none border-0 bg-transparent p-0">
-              <TabsTrigger value="params" className={panelTabClass}>{parametersLabel}</TabsTrigger>
-              <TabsTrigger value="files" className={panelTabClass}>Files</TabsTrigger>
-            </TabsList>
-          ) : (
-            <div className="flex-1" />
-          )}
+          <TabsList className="flex-1 rounded-none border-0 bg-transparent p-0">
+            <TabsTrigger value="presets" className={panelTabClass}>{presetsLabel}</TabsTrigger>
+            <TabsTrigger value="params" className={panelTabClass}>{parametersLabel}</TabsTrigger>
+            {fileImport && <TabsTrigger value="files" className={panelTabClass}>Files</TabsTrigger>}
+          </TabsList>
           <IconButton
             className="mr-1 self-center"
             label="Collapse panel"
@@ -192,6 +210,20 @@ export function ParamPanel({
             <CollapseChevron size={16} />
           </IconButton>
         </div>
+
+        <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <PresetPicker
+            design={design}
+            bundled={bundled}
+            userPresets={userPresets}
+            selected={selectedPreset}
+            values={values}
+            onApply={applyPreset}
+            onSelectedChange={selectedPresetChange}
+            onPresetsChange={presetsChange}
+            inline
+          />
+        </TabsContent>
 
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-[0.4rem] border-b px-[0.6rem] py-[0.35rem] text-muted-foreground">

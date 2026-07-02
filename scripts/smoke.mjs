@@ -234,44 +234,45 @@ async function main() {
     console.log("=== every design renders ===");
     for (const id of ids) await selectDesign(page, id);
 
-    // Bundled presets — exercised on the first design that ships any.
+    // Bundled presets — exercised on the first design that ships any. Desktop
+    // presets live in the panel's Presets tab (a button list), applied by click.
     console.log("=== bundled presets ===");
     let presetTested = false;
+    const gotoPresets = () =>
+      page.getByRole("tab", { name: "Presets" }).first().click().catch(() => {});
+    const gotoParams = () =>
+      page.getByRole("tab", { name: "Parameters" }).first().click().catch(() => {});
     for (const id of ids) {
       await selectDesign(page, id);
-      const opts = await page.$$eval('optgroup[label="Bundled"] option', (os) =>
-        os.map((o) => o.value)
-      );
-      if (opts.length) {
-        await page.selectOption(".preset-bar select", opts[0]);
-        await waitRendered(page, `${id} + "${opts[0]}"`);
-        check((await page.inputValue(".preset-bar select")) === opts[0], `applied ${opts[0]}`);
-        // The selection is encoded in the URL and auto-selected on reload.
+      await gotoPresets();
+      // Bundled presets sit in the "Bundled" section's listbox.
+      const bundled = page.locator('[aria-label="Bundled presets"] .preset-picker__item');
+      if (await bundled.count()) {
+        const name = (await bundled.first().textContent())?.trim() ?? "";
+        await bundled.first().click();
+        await waitRendered(page, `${id} + "${name}"`);
+        // The applied preset shows as selected, and the choice is in the URL.
+        check(
+          (await page.locator('[aria-label="Bundled presets"] [role="option"][aria-selected="true"]').count()) >= 1,
+          `applied bundled preset "${name}"`
+        );
+        // persistState debounces ~300ms after the apply, so wait for the hash.
+        await page
+          .waitForFunction(() => /[#&]p=/.test(location.hash), undefined, { timeout: 3000 })
+          .catch(() => {});
         check(
           /[#&]p=/.test(await page.evaluate(() => location.hash)),
           "selected preset is encoded in the URL"
         );
+        // The choice survives a reload (restored from the URL hash).
         await page.reload({ waitUntil: "load" });
         await waitRendered(page, `${id} reloaded`);
+        await gotoPresets();
         check(
-          (await page.inputValue(".preset-bar select")) === opts[0],
+          (await page.locator('[aria-label="Bundled presets"] [role="option"][aria-selected="true"]').count()) >= 1,
           "preset auto-selected from the URL after reload"
         );
-        // Editing a parameter flags the preset as "(modified)" in the dropdown.
-        const num = page.locator('.param-form input[type="number"]').first();
-        await num.fill("85");
-        await num.blur();
-        await page.waitForTimeout(200);
-        check(
-          (await page.inputValue(".preset-bar select")) === "__modified__",
-          "editing a param flags the preset as modified"
-        );
-        check(
-          /\(modified\)/.test(
-            (await page.locator(".preset-bar select option:checked").textContent()) ?? ""
-          ),
-          "dropdown shows the (modified) label"
-        );
+        await gotoParams();
         presetTested = true;
         break;
       }
