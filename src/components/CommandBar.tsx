@@ -7,20 +7,16 @@ import type { Design, Schema, RenderResult } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import { presetLabel } from "../lib/presets";
 import { useAppActions } from "../lib/appActions";
-import { StatusPill } from "./StatusPill";
-import { IconButton } from "./IconButton";
 import { PresetPicker } from "./PresetPicker";
 import { DesignPicker } from "./DesignPicker";
-import { ThemeToggle } from "./ThemeToggle";
+import { BarBrand } from "./BarBrand";
+import { BarActions } from "./BarActions";
 import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import {
-  CircleHelp as HelpIcon,
-  Info as InfoIcon,
   HardDriveDownload as InstallIcon,
   ChevronDown as ChevronDownIcon,
 } from "lucide-react";
-import { assetUrl } from "../lib/assetUrl";
 
 interface Props {
   schema: Schema;
@@ -66,9 +62,6 @@ export const CommandBar = memo(function CommandBar({
     applyPreset,
     selectedPresetChange,
     presetsChange,
-    cycleTheme,
-    showHelp,
-    showLicenses,
   } = useAppActions();
   const [showPresets, setShowPresets] = useState(false);
   const currentDesign = designs.find((d) => d.id === designId);
@@ -79,11 +72,7 @@ export const CommandBar = memo(function CommandBar({
     <header className="command-bar" role="banner">
       {/* Brand */}
       <div className="command-bar__brand">
-        {schema.logo ? (
-          <img className="brand-logo" src={assetUrl(schema.logo[theme])} alt={schema.title} />
-        ) : (
-          <span className="command-bar__title">{schema.title}</span>
-        )}
+        <BarBrand schema={schema} theme={theme} titleClassName="command-bar__title" />
       </div>
 
       {/* Design picker + presets, centered in the bar */}
@@ -130,29 +119,27 @@ export const CommandBar = memo(function CommandBar({
       </div>
 
       <div className="command-bar__right">
-        <StatusPill rendering={rendering} ready={ready} result={result} stale={stalePreview} />
-
-        {/* Action icons */}
-        <ThemeToggle mode={themeMode} onCycle={cycleTheme} />
-        <IconButton label="Help" title="Help & keyboard shortcuts" onClick={showHelp}>
-          <HelpIcon size={16} />
-        </IconButton>
-        <IconButton label="Open-source licenses" title="Open-source licenses" onClick={showLicenses}>
-          <InfoIcon size={16} />
-        </IconButton>
-
-        {/* PWA install (when the browser offers it and the config allows it) */}
-        {canInstall && schema.ui?.install !== "off" && (
-          <Button
-            size="sm"
-            className="command-bar__install-btn"
-            onClick={install}
-            title="Install as app"
-          >
-            <InstallIcon size={14} />
-            Install
-          </Button>
-        )}
+        <BarActions
+          rendering={rendering}
+          ready={ready}
+          result={result}
+          stalePreview={stalePreview}
+          themeMode={themeMode}
+          licensesLabel="Open-source licenses"
+        >
+          {/* PWA install (when the browser offers it and the config allows it) */}
+          {canInstall && schema.ui?.install !== "off" && (
+            <Button
+              size="sm"
+              className="command-bar__install-btn"
+              onClick={install}
+              title="Install as app"
+            >
+              <InstallIcon size={14} />
+              Install
+            </Button>
+          )}
+        </BarActions>
       </div>
     </header>
   );

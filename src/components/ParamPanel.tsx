@@ -12,13 +12,10 @@ import { useDebounce } from "../lib/useDebounce";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { IconButton } from "./IconButton";
-import { ResetButton } from "./ResetButton";
-import { Switch } from "./ui/switch";
-import { Label } from "./ui/label";
+import { PanelFooter } from "./PanelFooter";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
-  RotateCcw as ResetIcon,
   Search as SearchIcon,
   X as XIcon,
   Menu as MenuIcon,
@@ -66,7 +63,7 @@ export function ParamPanel({
   autoRender,
   parametersLabel = "Parameters",
 }: Props) {
-  const { change, reset, addFile, removeFile, clearFiles, autoRenderChange } = useAppActions();
+  const { change, addFile, removeFile, clearFiles } = useAppActions();
   const [open, setOpen] = useState(() => {
     try {
       const v = localStorage.getItem(PANEL_OPEN_KEY);
@@ -230,17 +227,7 @@ export function ParamPanel({
         )}
       </Tabs>
 
-      <div className="param-panel__footer">
-        {/* Auto-render lives here, with the params it governs, rather than in the
-            output toolbar: it's a render-mode setting that's rarely toggled. */}
-        <Label className="auto-render cursor-pointer font-normal" title="Re-render automatically as parameters change">
-          <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Auto-render" />
-          Auto-render
-        </Label>
-        <ResetButton design={design} values={values} onReset={reset} className="reset-link ml-auto">
-          <ResetIcon size={14} /> Reset to defaults
-        </ResetButton>
-      </div>
+      <PanelFooter design={design} values={values} autoRender={autoRender} className="param-panel__footer" />
     </aside>
   );
 }

@@ -2,7 +2,7 @@
 //   Desktop (≥ 860px): CommandBar + docked ParamPanel + ActionCluster + ViewerHUD
 //   Mobile (< 860px):  full-bleed viewer + top bar + BottomSheet + fixed footer
 // All state/logic stays in App.tsx; this is a pure view extraction.
-import { lazy, memo, Suspense, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
@@ -15,36 +15,25 @@ const MOBILE_FOOTER_HEIGHT = 56;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
 const EMPTY_LOG: string[] = [];
 
-import { ErrorBoundary } from "./ErrorBoundary";
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
-import { ActionCluster } from "./ActionCluster";
 import { ActionButtons } from "./ActionButtons";
-import { StaleBanner } from "./StaleBanner";
+import { ViewerStage } from "./ViewerStage";
 import { ViewerHUD } from "./ViewerHUD";
 import { DEFAULT_VIEW, type ViewName } from "./views";
-import { DimensionInfo } from "./DimensionInfo";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
-import { IconButton } from "./IconButton";
-import { StatusPill } from "./StatusPill";
-import { ThemeToggle } from "./ThemeToggle";
-import { Spinner } from "./ui/spinner";
-import { CircleHelp as HelpIcon, Info as InfoIcon } from "lucide-react";
+import { BarBrand } from "./BarBrand";
+import { BarActions } from "./BarActions";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { parseComputedInfo } from "../lib/computedInfo";
 import { fontFamilyNames, normalizeFamily } from "../lib/fonts";
 import { isFontFile } from "../openscad/renderArgs";
-import { assetUrl } from "../lib/assetUrl";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
 import { useSafeAreaBottom } from "../lib/useSafeAreaBottom";
-
-const Viewer = lazy(() =>
-  import("./Viewer").then((m) => ({ default: m.Viewer }))
-);
 
 interface Props {
   schema: Schema;
@@ -272,51 +261,37 @@ export const AppShell = memo(function AppShell({
 
           {/* Canvas */}
           <div className="app-shell__viewer">
-            <div className="viewer-wrap">
-              <ErrorBoundary resetKey={result}>
-                <Suspense fallback={null}>
-                  {!isMobile && (
-                    <Viewer
-                      ref={desktopViewerRef}
-                      stl={result?.ok ? result.stl : null}
-                      theme={theme}
-                      designId={design.id}
-                      presetId={selectedPreset}
-                      showDimensions={showDimensions}
-                      view={view}
-                      onMeasure={setMeasured}
-                    />
-                  )}
-                </Suspense>
-              </ErrorBoundary>
-              {(!ready || (rendering && !result)) && (
-                <div className="viewer-overlay">
-                  <Spinner className="size-9 text-muted-foreground" />
-                  <p>{ready ? "Rendering…" : "Loading renderer…"}</p>
-                </div>
-              )}
-
-              {/* "Preview out of date" alert — the manual-mode signal that the
-                  canvas no longer matches the controls. Top-centre, where the eye
-                  already is, instead of relying on a toolbar button. */}
-              <StaleBanner
-                autoRender={autoRender}
-                rendering={rendering}
-                stalePreview={stalePreview}
-                onRender={actions.render}
-              />
-
+            <ViewerStage
+              viewerRef={desktopViewerRef}
+              active={!isMobile}
+              design={design}
+              result={result}
+              ready={ready}
+              rendering={rendering}
+              autoRender={autoRender}
+              stalePreview={stalePreview}
+              theme={theme}
+              selectedPreset={selectedPreset}
+              showDimensions={showDimensions}
+              view={view}
+              onMeasure={setMeasured}
+              measured={measured}
+              renderedValues={renderedValues}
+              computedInfo={computedInfo}
+            >
               {/* Floating controls live inside viewer-wrap so they hover over the
                   canvas — which shrinks when the output console docks below it —
                   rather than overlapping the console's notices. */}
-              <ActionCluster
-                hasResult={!!result?.ok}
-                modelFormat={schema.format}
-                outputOpen={outputOpen}
-                noticeCount={diagnostics.length}
-                onSavePng={handleSavePng}
-                onToggleOutput={toggleOutput}
-              />
+              <div className="action-cluster">
+                <ActionButtons
+                  hasResult={!!result?.ok}
+                  modelFormat={schema.format}
+                  outputOpen={outputOpen}
+                  noticeCount={diagnostics.length}
+                  onSavePng={handleSavePng}
+                  onToggleOutput={toggleOutput}
+                />
+              </div>
               <ViewerHUD
                 viewerRef={desktopViewerRef}
                 visible={!!result?.ok}
@@ -329,15 +304,7 @@ export const AppShell = memo(function AppShell({
                 view={view}
                 onSelectView={handleSelectView}
               />
-
-              {/* Measurements panel — top-left, mirroring the HUD on the right.
-                  Shown only while dimensions are on: the bounding box headline plus
-                  any per-design @info values. Measured from the mesh, never part of
-                  the export. */}
-              {showDimensions && measured && (
-                <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} computed={computedInfo} />
-              )}
-            </div>
+            </ViewerStage>
 
             {/* Output console — inline below viewer */}
             <OutputConsole
@@ -358,54 +325,30 @@ export const AppShell = memo(function AppShell({
       <div className="app-shell__mobile" ref={mobileRootRef}>
         {/* Full-bleed viewer */}
         <div className="app-shell__mobile-viewer">
-          <div className="viewer-wrap">
-            <ErrorBoundary resetKey={result}>
-              <Suspense fallback={null}>
-                {isMobile && (
-                  <Viewer
-                    ref={mobileViewerRef}
-                    stl={result?.ok ? result.stl : null}
-                    theme={theme}
-                    designId={design.id}
-                    presetId={selectedPreset}
-                    reframeOnPreset={false}
-                    showDimensions={showDimensions}
-                    view={view}
-                    onMeasure={setMeasured}
-                  />
-                )}
-              </Suspense>
-            </ErrorBoundary>
-            {(!ready || (rendering && !result)) && (
-              <div className="viewer-overlay">
-                <Spinner className="size-9 text-muted-foreground" />
-                <p>{ready ? "Rendering…" : "Loading renderer…"}</p>
-              </div>
-            )}
-
-            {/* "Preview out of date" alert (manual mode) — same signal as desktop. */}
-            <StaleBanner
-              autoRender={autoRender}
-              rendering={rendering}
-              stalePreview={stalePreview}
-              onRender={actions.render}
-            />
-
-            {/* Measurements panel — top-left, below the floating top bar; shown
-                only while dimensions are on (bounding box + per-design @info). */}
-            {showDimensions && measured && (
-              <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} computed={computedInfo} />
-            )}
-          </div>
+          <ViewerStage
+            viewerRef={mobileViewerRef}
+            active={isMobile}
+            design={design}
+            result={result}
+            ready={ready}
+            rendering={rendering}
+            autoRender={autoRender}
+            stalePreview={stalePreview}
+            theme={theme}
+            selectedPreset={selectedPreset}
+            reframeOnPreset={false}
+            showDimensions={showDimensions}
+            view={view}
+            onMeasure={setMeasured}
+            measured={measured}
+            renderedValues={renderedValues}
+            computedInfo={computedInfo}
+          />
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
           <div className="mobile-top-bar">
             <span className="mobile-top-bar__brand">
-              {schema.logo ? (
-                <img className="brand-logo" src={assetUrl(schema.logo[theme])} alt={schema.title} />
-              ) : (
-                schema.title
-              )}
+              <BarBrand schema={schema} theme={theme} />
             </span>
             <div className="mobile-top-bar__center">
               {designs.length > 1 ? (
@@ -415,14 +358,14 @@ export const AppShell = memo(function AppShell({
               )}
             </div>
             <div className="mobile-top-bar__right">
-              <StatusPill rendering={rendering} ready={ready} result={result} stale={stalePreview} />
-              <ThemeToggle mode={themeMode} onCycle={actions.cycleTheme} />
-              <IconButton label="Help" title="Help & keyboard shortcuts" onClick={actions.showHelp}>
-                <HelpIcon size={16} />
-              </IconButton>
-              <IconButton label="About & licenses" title="About & licenses" onClick={actions.showLicenses}>
-                <InfoIcon size={16} />
-              </IconButton>
+              <BarActions
+                rendering={rendering}
+                ready={ready}
+                result={result}
+                stalePreview={stalePreview}
+                themeMode={themeMode}
+                licensesLabel="About & licenses"
+              />
             </div>
           </div>
         </div>
