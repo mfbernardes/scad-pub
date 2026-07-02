@@ -71,14 +71,13 @@ export const CommandBar = memo(function CommandBar({
             rides its corner while working / on failure / when stale), so no
             separate StatusPill is needed. */}
         <OutputToggle
-          compact
           outputOpen={outputOpen}
           noticeCount={noticeCount}
           onToggleOutput={onToggleOutput}
           status={{ rendering, ready, result, stale: stalePreview }}
           className={cn(ICON_BUTTON_CLASS, "command-bar__output")}
         />
-        <BarActions themeMode={themeMode} licensesLabel="Open-source licenses" />
+        <BarActions themeMode={themeMode} />
       </div>
     </header>
   );

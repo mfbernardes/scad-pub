@@ -1,7 +1,7 @@
-// OutputToggle.tsx — the "Output console" bell: a ringing bell + pending-notice
-// count badge that toggles the notices/log console. Rendered inline in the
-// desktop action cluster (with an "Output" label) and icon-only in the mobile
-// top bar. Extracted so the same bell/badge logic serves both without drift.
+// OutputToggle.tsx — the "Output console" bell: an icon-only, ringing bell that
+// toggles the notices/log console. Rides in the top bar of both layouts (desktop
+// CommandBar + mobile top bar). A pending-notice count shows as a corner badge;
+// absent that, it doubles as the render-status indicator (a corner status dot).
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";
@@ -9,16 +9,14 @@ import { Bell as BellIcon, BellRing as BellRingIcon } from "lucide-react";
 
 interface Props {
   outputOpen: boolean;
-  /** How many notices/warnings are pending — shown as a count badge when > 0. */
+  /** How many notices/warnings are pending — shown as a corner count badge when > 0. */
   noticeCount?: number;
   onToggleOutput: () => void;
-  /** Icon-only (no "Output" label); the count becomes a corner badge. */
-  compact?: boolean;
   /**
    * When provided, the bell doubles as the render-status indicator: a small
-   * status-coloured dot rides its corner (green ok / red failed / pulsing while
-   * working, …), so a separate StatusPill isn't needed. The pending-notice
-   * count, when there is one, takes the corner instead.
+   * status-coloured dot rides its corner (red failed / pulsing while working or
+   * stale), so a separate StatusPill isn't needed. The pending-notice count,
+   * when there is one, takes the corner instead.
    */
   status?: RenderStatusInput;
   className?: string;
@@ -28,7 +26,6 @@ export function OutputToggle({
   outputOpen,
   noticeCount = 0,
   onToggleOutput,
-  compact = false,
   status,
   className,
 }: Props) {
@@ -50,11 +47,11 @@ export function OutputToggle({
 
   return (
     <Button
-      size={compact ? "icon" : "sm"}
-      variant={compact ? "outline" : "ghost"}
+      size="icon"
+      variant="outline"
       className={cn(
         "relative",
-        outputOpen && (compact ? "border-brand text-brand" : "bg-card text-brand hover:bg-card"),
+        outputOpen && "border-brand text-brand",
         hasNotices && "text-warn",
         className
       )}
@@ -66,13 +63,9 @@ export function OutputToggle({
       title="Output console — notices & log"
     >
       <BellGlyph size={16} />
-      {!compact && "Output"}
       {hasNotices ? (
         <span
-          className={cn(
-            "inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-warn px-[0.3rem] text-[0.7rem] font-bold leading-none text-[#1c1f24] tabular-nums [[data-theme=light]_&]:text-white",
-            compact && "pointer-events-none absolute top-[2px] right-[2px] shadow-[0_0_0_2px_var(--panel)]"
-          )}
+          className="pointer-events-none absolute top-[2px] right-[2px] inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-warn px-[0.3rem] text-[0.7rem] font-bold leading-none text-[#1c1f24] tabular-nums shadow-[0_0_0_2px_var(--panel)] [[data-theme=light]_&]:text-white"
           aria-hidden="true"
         >
           {noticeCount}

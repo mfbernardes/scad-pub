@@ -181,7 +181,7 @@ async function captureViewport(context, base, kind, theme) {
   await closeDialog(page);
 
   await openOverflow();
-  await page.getByRole("button", { name: kind === "mobile" ? "About & licenses" : "Open-source licenses" })
+  await page.getByRole("button", { name: "Open-source licenses" })
     .first().click().catch(() => {});
   await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
   await sleep(300);

@@ -36,6 +36,16 @@ async function shoot(page, base, theme) {
   await page.goto(base, { waitUntil: "load" });
   await page.evaluate((t) => localStorage.setItem("scadpub.theme", t), theme);
   await page.reload({ waitUntil: "load" });
+  // Dismiss the first-visit welcome popup if present so it doesn't cover the
+  // panel (and would block the tab click below).
+  const dialog = page.getByRole("dialog");
+  if (await dialog.count()) {
+    await dialog.getByRole("button", { name: /^OK$/ }).click().catch(() => {});
+    await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  }
+  // The panel opens on the Presets tab; switch to Parameters so the baseline
+  // keeps exercising the param form (a richer regression surface).
+  await page.getByRole("tab", { name: "Parameters" }).first().click().catch(() => {});
   await page.waitForSelector(".param-form", { timeout: 30000 });
   await page.addStyleTag({ content: MASK_CSS });
   await page.waitForTimeout(150); // let fonts/layout settle

@@ -19,7 +19,7 @@ import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
 import { OutputToggle } from "./OutputToggle";
-import { BarOverflow } from "./BarOverflow";
+import { BarActions } from "./BarActions";
 import { ICON_BUTTON_CLASS } from "./IconButton";
 import { cn } from "../lib/utils";
 import { ViewerStage } from "./ViewerStage";
@@ -366,14 +366,13 @@ export const AppShell = memo(function AppShell({
                 separate pill; theme/help/licenses collapse into a ⋮ overflow. */}
             <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
               <OutputToggle
-                compact
                 outputOpen={outputOpen}
                 noticeCount={diagnostics.length}
                 onToggleOutput={toggleOutput}
                 status={{ rendering, ready, result, stale: stalePreview }}
                 className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
               />
-              <BarOverflow themeMode={themeMode} licensesLabel="About & licenses" />
+              <BarActions themeMode={themeMode} collapse />
             </div>
           </div>
         </div>
