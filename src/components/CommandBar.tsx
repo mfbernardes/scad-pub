@@ -1,7 +1,7 @@
 // CommandBar.tsx — top bar: brand, design picker (shadcn Select), presets
-// dropdown (shadcn Popover), status, action icons (theme / help / licenses),
-// optional PWA install. Notices surface via the auto-opening output console,
-// so the bar carries no notice badge.
+// dropdown (shadcn Popover), status, action icons (theme / help / licenses).
+// Notices surface via the auto-opening output console, so the bar carries no
+// notice badge; PWA install is demoted to the Help modal + a post-export hint.
 import { memo, useState } from "react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
@@ -11,12 +11,8 @@ import { PresetPicker } from "./PresetPicker";
 import { DesignPicker } from "./DesignPicker";
 import { BarBrand } from "./BarBrand";
 import { BarActions } from "./BarActions";
-import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import {
-  HardDriveDownload as InstallIcon,
-  ChevronDown as ChevronDownIcon,
-} from "lucide-react";
+import { ChevronDown as ChevronDownIcon } from "lucide-react";
 
 interface Props {
   schema: Schema;
@@ -33,7 +29,6 @@ interface Props {
   ready: boolean;
   result: RenderResult | null;
   stalePreview: boolean;
-  canInstall: boolean;
   /** Configurable label for the presets control (default "Presets"). */
   presetsLabel?: string;
 }
@@ -53,11 +48,9 @@ export const CommandBar = memo(function CommandBar({
   ready,
   result,
   stalePreview,
-  canInstall,
   presetsLabel = "Presets",
 }: Props) {
   const {
-    install,
     designChange,
     applyPreset,
     selectedPresetChange,
@@ -133,15 +126,7 @@ export const CommandBar = memo(function CommandBar({
           themeMode={themeMode}
           licensesLabel="Open-source licenses"
           pillClassName="py-[0.25rem] cursor-pointer hover:bg-muted"
-        >
-          {/* PWA install (when the browser offers it and the config allows it) */}
-          {canInstall && schema.ui?.install !== "off" && (
-            <Button size="sm" onClick={install} title="Install as app">
-              <InstallIcon size={14} />
-              Install
-            </Button>
-          )}
-        </BarActions>
+        />
       </div>
     </header>
   );

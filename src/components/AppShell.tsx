@@ -53,7 +53,6 @@ interface Props {
   stalePreview: boolean;
   theme: "dark" | "light";
   themeMode: "light" | "dark" | "auto";
-  canInstall: boolean;
 }
 
 export const AppShell = memo(function AppShell({
@@ -73,7 +72,6 @@ export const AppShell = memo(function AppShell({
   stalePreview,
   theme,
   themeMode,
-  canInstall,
 }: Props) {
   const actions = useAppActions();
   const desktopViewerRef = useRef<ViewerHandle>(null);
@@ -299,7 +297,6 @@ export const AppShell = memo(function AppShell({
           ready={ready}
           result={result}
           stalePreview={stalePreview}
-          canInstall={canInstall}
           presetsLabel={presetsLabel}
         />
 
