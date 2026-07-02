@@ -5,8 +5,10 @@
 // a single pane exactly as before.
 import { Modal, MODAL_BODY, MODAL_INTRO } from "./Modal";
 import { Markdown } from "./Markdown";
+import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
+import { HardDriveDownload as InstallIcon } from "lucide-react";
 import { DEFAULT_HELP } from "../lib/defaultHelp";
 import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
 
@@ -81,9 +83,15 @@ function HelpTabs({ tabs }: { tabs: HelpTab[] }) {
 export function HelpModal({
   help,
   onClose,
+  canInstall = false,
+  onInstall,
 }: {
   help?: HelpContent | null;
   onClose: () => void;
+  /** Show a permanent "Install app" action (only when the browser offers it and
+   *  the config allows it). Demoted here from a standing top-bar button. */
+  canInstall?: boolean;
+  onInstall?: () => void;
 }) {
   const content = help ?? DEFAULT_HELP;
   // Normalise to tabs when the config supplies any. Top-level `sections` (the
@@ -110,6 +118,16 @@ export function HelpModal({
       ) : (
         <div className={HELP_BODY}>
           <HelpSections sections={content.sections ?? []} />
+        </div>
+      )}
+      {canInstall && onInstall && (
+        <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
+          <span className="text-[0.85rem] text-muted-foreground">
+            Install this configurator for quick, offline access.
+          </span>
+          <Button size="sm" className="ml-auto" onClick={onInstall} title="Install as app">
+            <InstallIcon size={14} /> Install app
+          </Button>
         </div>
       )}
     </Modal>

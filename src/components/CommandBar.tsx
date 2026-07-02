@@ -1,72 +1,40 @@
-// CommandBar.tsx — top bar: brand, design picker (shadcn Select), presets
-// dropdown (shadcn Popover), status, action icons (theme / help / licenses),
-// optional PWA install. Notices surface via the auto-opening output console,
-// so the bar carries no notice badge.
-import { memo, useState } from "react";
+// CommandBar.tsx — top bar: brand, design picker (shadcn Select), status +
+// action icons (theme / help / licenses). Presets are a tab in the parameter
+// panel (mirroring the mobile sheet), not a top-bar popover; notices surface
+// via the auto-opening output console; PWA install is demoted to the Help
+// modal — so the bar stays lean.
+import { memo } from "react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
-import type { ParsedSet, Values } from "../lib/presets";
-import { presetLabel } from "../lib/presets";
 import { useAppActions } from "../lib/appActions";
-import { PresetPicker } from "./PresetPicker";
 import { DesignPicker } from "./DesignPicker";
 import { BarBrand } from "./BarBrand";
 import { BarActions } from "./BarActions";
-import { Button } from "./ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import {
-  HardDriveDownload as InstallIcon,
-  ChevronDown as ChevronDownIcon,
-} from "lucide-react";
 
 interface Props {
   schema: Schema;
   designs: Design[];
   designId: string;
-  design: Design;
-  bundled: ParsedSet[];
-  userPresets: string[];
-  selectedPreset: string;
-  values: Values;
   theme: "dark" | "light";
   themeMode: "light" | "dark" | "auto";
   rendering: boolean;
   ready: boolean;
   result: RenderResult | null;
   stalePreview: boolean;
-  canInstall: boolean;
-  /** Configurable label for the presets control (default "Presets"). */
-  presetsLabel?: string;
 }
 
 export const CommandBar = memo(function CommandBar({
   schema,
   designs,
   designId,
-  design,
-  bundled,
-  userPresets,
-  selectedPreset,
-  values,
   theme,
   themeMode,
   rendering,
   ready,
   result,
   stalePreview,
-  canInstall,
-  presetsLabel = "Presets",
 }: Props) {
-  const {
-    install,
-    designChange,
-    applyPreset,
-    selectedPresetChange,
-    presetsChange,
-  } = useAppActions();
-  const [showPresets, setShowPresets] = useState(false);
+  const { designChange } = useAppActions();
   const currentDesign = designs.find((d) => d.id === designId);
-
-  const presetName = selectedPreset ? presetLabel(selectedPreset) : "";
 
   return (
     <header
@@ -78,9 +46,8 @@ export const CommandBar = memo(function CommandBar({
         <BarBrand schema={schema} theme={theme} titleClassName="text-[0.95rem] font-bold" />
       </div>
 
-      {/* Design picker + presets, centered in the bar */}
-      <div className="inline-flex items-center gap-2 justify-self-center">
-        <div className="command-bar__design-picker inline-flex items-center gap-[0.4rem] whitespace-nowrap">
+      {/* Design picker, centered in the bar */}
+      <div className="command-bar__design-picker inline-flex items-center gap-[0.4rem] justify-self-center whitespace-nowrap">
         {designs.length > 1 ? (
           <DesignPicker designs={designs} value={designId} onChange={designChange} />
         ) : (
@@ -88,40 +55,6 @@ export const CommandBar = memo(function CommandBar({
             {currentDesign?.label ?? designId}
           </span>
         )}
-      </div>
-
-      {/* Presets dropdown trigger (the popover surface itself is a Radix portal
-          styled by the shadcn PopoverContent defaults). */}
-      <Popover open={showPresets} onOpenChange={setShowPresets}>
-        <PopoverTrigger asChild>
-          <button
-            className="command-bar__presets-btn inline-flex cursor-pointer items-center gap-[0.4rem] whitespace-nowrap rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.3rem] text-foreground [font:inherit] enabled:hover:bg-muted"
-            aria-label={`${presetsLabel}${presetName ? ` — ${presetName}` : ""}`}
-          >
-            <span className="text-[0.85rem] text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground">
-              {presetsLabel}{presetName ? <> · <strong>{presetName}</strong></> : ""}
-            </span>
-            <ChevronDownIcon size={14} />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="w-[22rem] max-w-[90vw] overflow-hidden p-0"
-        >
-          <PresetPicker
-            design={design}
-            bundled={bundled}
-            userPresets={userPresets}
-            selected={selectedPreset}
-            values={values}
-            onApply={applyPreset}
-            onSelectedChange={selectedPresetChange}
-            onPresetsChange={presetsChange}
-            onClose={() => setShowPresets(false)}
-            presetsLabel={presetsLabel}
-          />
-        </PopoverContent>
-      </Popover>
       </div>
 
       <div className="command-bar__right flex items-center gap-[0.4rem] justify-self-end">
@@ -133,15 +66,7 @@ export const CommandBar = memo(function CommandBar({
           themeMode={themeMode}
           licensesLabel="Open-source licenses"
           pillClassName="py-[0.25rem] cursor-pointer hover:bg-muted"
-        >
-          {/* PWA install (when the browser offers it and the config allows it) */}
-          {canInstall && schema.ui?.install !== "off" && (
-            <Button size="sm" onClick={install} title="Install as app">
-              <InstallIcon size={14} />
-              Install
-            </Button>
-          )}
-        </BarActions>
+        />
       </div>
     </header>
   );

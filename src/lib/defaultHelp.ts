@@ -34,8 +34,9 @@ export const DEFAULT_HELP: HelpContent = {
     {
       title: "5. Save & reuse settings (presets)",
       body:
-        "The **presets** dropdown groups **Bundled** examples (read-only) and **Saved** presets (your own, stored in this browser).\n\n" +
-        "- **Save** stores the current parameters as a browser preset for this design.",
+        "The **Presets** tab groups **Bundled** examples (read-only) and **Yours** (saved in this browser).\n\n" +
+        "- **Save** stores the current parameters as a browser preset for this design.\n" +
+        "- **Export** writes your saved presets to an OpenSCAD `parameterSets` JSON file, and **Import** reads one back in — so presets round-trip with the desktop OpenSCAD Customizer.",
     },
     {
       title: "6. Add files (fonts, SVGs…)",

@@ -1,9 +1,7 @@
-// BarActions.tsx — the top-bar action cluster: render status, theme toggle,
-// Help and licenses buttons. Shared by the desktop CommandBar and the mobile
-// top bar; the licenses wording differs per layout (and the capture scripts
-// select on it), so it stays a prop. Extra layout-specific actions (the
-// desktop Install button) append via children.
-import type { ReactNode } from "react";
+// BarActions.tsx — the desktop CommandBar's right cluster: render status, theme
+// toggle, Help and licenses buttons. (On mobile these collapse differently —
+// the Output bell rides in the top bar and theme/help/licenses go into a ⋮
+// overflow — so the mobile top bar builds its own cluster.)
 import type { RenderResult } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
 import { StatusPill } from "./StatusPill";
@@ -19,10 +17,8 @@ interface Props {
   themeMode: "light" | "dark" | "auto";
   /** Licenses-button wording (label doubles as the tooltip). */
   licensesLabel: string;
-  /** Extra classes for the StatusPill (the desktop bar pads it a touch more
-   *  and gives it a hover tint). */
+  /** Extra classes for the StatusPill (the bar pads it a touch and adds a hover tint). */
   pillClassName?: string;
-  children?: ReactNode;
 }
 
 export function BarActions({
@@ -33,7 +29,6 @@ export function BarActions({
   themeMode,
   licensesLabel,
   pillClassName,
-  children,
 }: Props) {
   const { cycleTheme, showHelp, showLicenses } = useAppActions();
   return (
@@ -52,7 +47,6 @@ export function BarActions({
       <IconButton label={licensesLabel} title={licensesLabel} onClick={showLicenses}>
         <InfoIcon size={16} />
       </IconButton>
-      {children}
     </>
   );
 }

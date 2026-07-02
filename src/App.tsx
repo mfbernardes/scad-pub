@@ -365,7 +365,14 @@ export default function App() {
   return (
     <>
       {showPopup && popup && <PopupModal popup={popup} onClose={closePopup} />}
-      {showHelp && <HelpModal help={schema.help} onClose={() => setShowHelp(false)} />}
+      {showHelp && (
+        <HelpModal
+          help={schema.help}
+          onClose={() => setShowHelp(false)}
+          canInstall={canInstall && installMode !== "off"}
+          onInstall={promptInstall}
+        />
+      )}
       {showLicenses && (
         <LicensesModal extra={schema.licenses} onClose={() => setShowLicenses(false)} />
       )}
@@ -390,7 +397,6 @@ export default function App() {
           stalePreview={stalePreview}
           theme={theme}
           themeMode={themeMode}
-          canInstall={canInstall}
         />
       </AppActionsProvider>
     </>

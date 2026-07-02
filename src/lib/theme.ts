@@ -4,6 +4,7 @@
 // off. Persisted in localStorage; a tiny inline script in index.html applies it
 // before first paint to avoid a flash.
 import { useEffect, useState } from "react";
+import { ns } from "./appId";
 
 export type ThemeMode = "auto" | "light" | "dark";
 export type Theme = "light" | "dark";
@@ -14,10 +15,11 @@ declare const __APP_THEME_COLOR__: string | undefined;
 const DARK_THEME_COLOR =
   typeof __APP_THEME_COLOR__ !== "undefined" ? __APP_THEME_COLOR__ : "#1f2229";
 
-// A neutral, fixed key (not namespaced by appId): the theme is a harmless
-// cross-configurator UI preference, and the pre-paint inline script in
-// index.html — which can't import the appId — must read the same key.
-const KEY = "scadpub.theme";
+// Namespaced by appId so two configs on one origin keep independent light/dark
+// choices (like every other storage key). The pre-paint inline script in
+// index.html can't import appId, so the configHtml Vite plugin injects the same
+// key (%APP_THEME_KEY%). For the default id this is "scadpub.theme".
+const KEY = ns("theme");
 const ORDER: ThemeMode[] = ["auto", "light", "dark"];
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 

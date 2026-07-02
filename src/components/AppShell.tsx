@@ -18,6 +18,10 @@ const EMPTY_LOG: string[] = [];
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
+import { OutputToggle } from "./OutputToggle";
+import { BarOverflow } from "./BarOverflow";
+import { ICON_BUTTON_CLASS } from "./IconButton";
+import { cn } from "../lib/utils";
 import { ViewerStage } from "./ViewerStage";
 import { ViewerHUD } from "./ViewerHUD";
 import { DEFAULT_VIEW, type ViewName } from "./views";
@@ -26,7 +30,6 @@ import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
 import { BarBrand } from "./BarBrand";
-import { BarActions } from "./BarActions";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { parseComputedInfo } from "../lib/computedInfo";
 import { fontFamilyNames, normalizeFamily } from "../lib/fonts";
@@ -53,7 +56,6 @@ interface Props {
   stalePreview: boolean;
   theme: "dark" | "light";
   themeMode: "light" | "dark" | "auto";
-  canInstall: boolean;
 }
 
 export const AppShell = memo(function AppShell({
@@ -73,7 +75,6 @@ export const AppShell = memo(function AppShell({
   stalePreview,
   theme,
   themeMode,
-  canInstall,
 }: Props) {
   const actions = useAppActions();
   const desktopViewerRef = useRef<ViewerHandle>(null);
@@ -206,15 +207,28 @@ export const AppShell = memo(function AppShell({
     el.dataset.sheetDragging = dragging ? "true" : "false";
   }, []);
 
-  // Notices are surfaced by the dot on the Output toggle, not by auto-popping the
-  // console. We only auto-hide a console that's open once its notices clear —
-  // detected by comparing against the previous render's value (the react.dev
-  // "adjust state during render" pattern), no effect pass needed.
+  // Info-level notices (config-driven `notices`) are surfaced passively by the
+  // dot/count on the Output toggle. A warning or assert is different — the model
+  // came out wrong in a way worth seeing — so the console auto-opens the first
+  // time a render surfaces one, rather than hiding it behind a badge the user
+  // may never click. Both transitions use the react.dev "adjust state during
+  // render" pattern (compare against the previous render's value), no effect.
   const hasNotices = diagnostics.length > 0;
   const [prevHasNotices, setPrevHasNotices] = useState(hasNotices);
   if (hasNotices !== prevHasNotices) {
     setPrevHasNotices(hasNotices);
-    if (!hasNotices) setOutputOpen(false);
+    if (!hasNotices) setOutputOpen(false); // notices cleared → hide the console
+  }
+  // Auto-open on the false→true edge only, so a persistent warning across edits
+  // doesn't re-pop a console the user has dismissed.
+  const hasProblem = diagnostics.some((d) => d.level === "warning" || d.level === "assert");
+  const [prevHasProblem, setPrevHasProblem] = useState(hasProblem);
+  if (hasProblem !== prevHasProblem) {
+    setPrevHasProblem(hasProblem);
+    if (hasProblem) {
+      setOutputOpen(true);
+      setSheetDetent("peek"); // mobile: anchor the overlay above the peek sheet
+    }
   }
 
   const closeOutput = useCallback(() => setOutputOpen(false), []);
@@ -257,8 +271,6 @@ export const AppShell = memo(function AppShell({
     onSavePng: handleSavePng,
     onToggleOutput: toggleOutput,
   };
-  const barActionsProps = { rendering, ready, result, stalePreview, themeMode };
-
   return (
     <div className="app-shell">
       {/* Skip link: off-screen until focused. */}
@@ -275,26 +287,22 @@ export const AppShell = memo(function AppShell({
           schema={schema}
           designs={designs}
           designId={design.id}
-          design={design}
-          bundled={bundled}
-          userPresets={userPresets}
-          selectedPreset={selectedPreset}
-          values={values}
           theme={theme}
           themeMode={themeMode}
           rendering={rendering}
           ready={ready}
           result={result}
           stalePreview={stalePreview}
-          canInstall={canInstall}
-          presetsLabel={presetsLabel}
         />
 
         <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
-          {/* Docked panel (presets live in the CommandBar on desktop) */}
+          {/* Docked panel: Presets / Parameters / Files tabs (mirrors mobile). */}
           <ParamPanel
             design={design}
             values={values}
+            bundled={bundled}
+            userPresets={userPresets}
+            selectedPreset={selectedPreset}
             fileImport={fileImport}
             loadedFiles={loadedFiles}
             availableFontFamilies={availableFontFamilies}
@@ -303,6 +311,7 @@ export const AppShell = memo(function AppShell({
             panelDefaultOpen={panelDefaultOpen}
             showVarName={showVarName}
             autoRender={autoRender}
+            presetsLabel={presetsLabel}
             parametersLabel={parametersLabel}
           />
 
@@ -352,8 +361,18 @@ export const AppShell = memo(function AppShell({
                 </span>
               )}
             </div>
+            {/* The Output bell rides up here (with its pending-notice count);
+                the theme/help/licenses actions collapse into a ⋮ overflow so
+                the narrow bar isn't crowded. */}
             <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
-              <BarActions {...barActionsProps} licensesLabel="About & licenses" />
+              <OutputToggle
+                compact
+                outputOpen={outputOpen}
+                noticeCount={diagnostics.length}
+                onToggleOutput={toggleOutput}
+                className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
+              />
+              <BarOverflow themeMode={themeMode} licensesLabel="About & licenses" />
             </div>
           </div>
         </div>
@@ -410,8 +429,10 @@ export const AppShell = memo(function AppShell({
         </BottomSheet>
 
         {/* Fixed footer: primary actions always accessible outside the sheet */}
+        {/* The Output toggle lives in the top bar on mobile, so the footer is
+            just the produce-a-file actions. */}
         <div className="mobile-footer">
-          <ActionButtons {...actionButtonsProps} compact />
+          <ActionButtons {...actionButtonsProps} compact showOutput={false} />
         </div>
 
         <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />

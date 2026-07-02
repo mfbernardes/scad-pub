@@ -72,6 +72,9 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
           )
           .replace(/%APP_THEME_COLOR_DARK%/g, darkColor)
           .replace(/%APP_THEME_COLOR_LIGHT%/g, lightColor)
+          // Per-config theme storage key for the pre-paint script — matches
+          // ns("theme") in src/lib/theme.ts (default id → "scadpub.theme").
+          .replace(/%APP_THEME_KEY%/g, `${s.id ?? "scadpub"}.theme`)
           .replace(/%APP_APPLE_TITLE%/g, appleTitle)
           .replace(/%APP_APPLE_SPLASH%/g, () => appleSplashLinks)
           // Insert before </head> via a replacer so $-sequences in colour values
