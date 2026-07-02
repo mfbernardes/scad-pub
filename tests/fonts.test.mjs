@@ -29,9 +29,11 @@ test("fontFamilyNames returns [] for non-font bytes rather than throwing", () =>
   assert.deepEqual(fontFamilyNames(new Uint8Array(0)), []);
 });
 
-// The browser parser (src/lib/fonts.ts) and the build-time parser
-// (scripts/gen-schema.mjs) are duplicated because the build can't import TS.
-// They MUST agree, or the app's availability check desyncs from schema data.
+// The browser (src/lib/fonts.ts) and the build (scripts/gen-schema.mjs) now
+// share ONE parser (src/lib/fontNameTable.mjs). This exercises that shared core
+// through both public entry points — a tripwire that the export chain and the
+// build↔app parity (the app's availability check reads schema data built here)
+// stay intact even if the wiring is refactored.
 test("the app and gen-schema font parsers produce identical families", () => {
   for (const file of ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf"]) {
     const bytes = readFileSync(join(FONTS, file));
