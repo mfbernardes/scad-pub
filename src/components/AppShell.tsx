@@ -312,7 +312,7 @@ export const AppShell = memo(function AppShell({
               {/* Floating controls live inside viewer-wrap so they hover over the
                   canvas — which shrinks when the output console docks below it —
                   rather than overlapping the console's notices. */}
-              <div className="action-cluster">
+              <div className="action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation) backdrop-blur-[12px]">
                 <ActionButtons {...actionButtonsProps} />
               </div>
               <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
@@ -339,18 +339,20 @@ export const AppShell = memo(function AppShell({
           />
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
-          <div className="mobile-top-bar">
-            <span className="mobile-top-bar__brand">
+          <div className="mobile-top-bar absolute inset-x-0 top-0 z-10 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))] backdrop-blur-[12px]">
+            <span className="inline-flex min-w-0 items-center gap-[0.4rem] justify-self-start overflow-hidden whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.92rem] font-bold">
               <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
             </span>
-            <div className="mobile-top-bar__center">
+            <div className="mobile-top-bar__center inline-flex min-w-0 items-center justify-self-center">
               {designs.length > 1 ? (
                 <DesignPicker designs={designs} value={design.id} onChange={actions.designChange} />
               ) : (
-                <span className="mobile-top-bar__design-name">{design.label}</span>
+                <span className="whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.85rem] font-semibold">
+                  {design.label}
+                </span>
               )}
             </div>
-            <div className="mobile-top-bar__right">
+            <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
               <BarActions {...barActionsProps} licensesLabel="About & licenses" />
             </div>
           </div>

@@ -69,30 +69,36 @@ export const CommandBar = memo(function CommandBar({
   const presetName = selectedPreset ? presetLabel(selectedPreset) : "";
 
   return (
-    <header className="command-bar" role="banner">
+    <header
+      className="command-bar z-10 grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b bg-background pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2 pl-[calc(1rem+env(safe-area-inset-left,0px))] pr-[calc(1rem+env(safe-area-inset-right,0px))]"
+      role="banner"
+    >
       {/* Brand */}
-      <div className="command-bar__brand">
-        <BarBrand schema={schema} theme={theme} titleClassName="command-bar__title" />
+      <div className="inline-flex items-center gap-[0.45rem] justify-self-start p-[0.2rem]">
+        <BarBrand schema={schema} theme={theme} titleClassName="text-[0.95rem] font-bold" />
       </div>
 
       {/* Design picker + presets, centered in the bar */}
-      <div className="command-bar__center">
-        <div className="command-bar__design-picker">
+      <div className="inline-flex items-center gap-2 justify-self-center">
+        <div className="command-bar__design-picker inline-flex items-center gap-[0.4rem] whitespace-nowrap">
         {designs.length > 1 ? (
           <DesignPicker designs={designs} value={designId} onChange={designChange} />
         ) : (
-          <span className="command-bar__design-name">{currentDesign?.label ?? designId}</span>
+          <span className="text-[0.88rem] font-semibold text-foreground">
+            {currentDesign?.label ?? designId}
+          </span>
         )}
       </div>
 
-      {/* Presets dropdown */}
+      {/* Presets dropdown trigger (the popover surface itself is a Radix portal
+          styled by the shadcn PopoverContent defaults). */}
       <Popover open={showPresets} onOpenChange={setShowPresets}>
         <PopoverTrigger asChild>
           <button
-            className="command-bar__presets-btn"
+            className="command-bar__presets-btn inline-flex cursor-pointer items-center gap-[0.4rem] whitespace-nowrap rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.3rem] text-foreground [font:inherit] enabled:hover:bg-muted"
             aria-label={`${presetsLabel}${presetName ? ` — ${presetName}` : ""}`}
           >
-            <span className="command-bar__presets-label">
+            <span className="text-[0.85rem] text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground">
               {presetsLabel}{presetName ? <> · <strong>{presetName}</strong></> : ""}
             </span>
             <ChevronDownIcon size={14} />
@@ -118,7 +124,7 @@ export const CommandBar = memo(function CommandBar({
       </Popover>
       </div>
 
-      <div className="command-bar__right">
+      <div className="command-bar__right flex items-center gap-[0.4rem] justify-self-end">
         <BarActions
           rendering={rendering}
           ready={ready}
@@ -130,12 +136,7 @@ export const CommandBar = memo(function CommandBar({
         >
           {/* PWA install (when the browser offers it and the config allows it) */}
           {canInstall && schema.ui?.install !== "off" && (
-            <Button
-              size="sm"
-              className="command-bar__install-btn"
-              onClick={install}
-              title="Install as app"
-            >
+            <Button size="sm" onClick={install} title="Install as app">
               <InstallIcon size={14} />
               Install
             </Button>
