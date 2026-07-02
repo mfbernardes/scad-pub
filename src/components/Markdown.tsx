@@ -16,14 +16,18 @@ function inline(text: string, key: string): ReactNode[] {
     if (part.startsWith("**") && part.endsWith("**"))
       return <strong key={k}>{part.slice(2, -2)}</strong>;
     if (part.startsWith("`") && part.endsWith("`"))
-      return <code key={k}>{part.slice(1, -1)}</code>;
+      return (
+        <code key={k} className="rounded-(--radius-sm) bg-code px-[0.2rem] font-mono text-xs">
+          {part.slice(1, -1)}
+        </code>
+      );
     const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (link) {
       const href = safeUrl(link[2]);
       // Unsafe protocol (e.g. javascript:) -> render the label as plain text.
       if (!href) return <span key={k}>{link[1]}</span>;
       return (
-        <a key={k} href={href} target="_blank" rel="noopener noreferrer">
+        <a key={k} className="text-link" href={href} target="_blank" rel="noopener noreferrer">
           {link[1]}
         </a>
       );

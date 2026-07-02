@@ -7,20 +7,16 @@ import type { Design, Schema, RenderResult } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import { presetLabel } from "../lib/presets";
 import { useAppActions } from "../lib/appActions";
-import { StatusPill } from "./StatusPill";
-import { IconButton } from "./IconButton";
 import { PresetPicker } from "./PresetPicker";
 import { DesignPicker } from "./DesignPicker";
-import { ThemeToggle } from "./ThemeToggle";
+import { BarBrand } from "./BarBrand";
+import { BarActions } from "./BarActions";
 import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import {
-  CircleHelp as HelpIcon,
-  Info as InfoIcon,
   HardDriveDownload as InstallIcon,
   ChevronDown as ChevronDownIcon,
 } from "lucide-react";
-import { assetUrl } from "../lib/assetUrl";
 
 interface Props {
   schema: Schema;
@@ -66,9 +62,6 @@ export const CommandBar = memo(function CommandBar({
     applyPreset,
     selectedPresetChange,
     presetsChange,
-    cycleTheme,
-    showHelp,
-    showLicenses,
   } = useAppActions();
   const [showPresets, setShowPresets] = useState(false);
   const currentDesign = designs.find((d) => d.id === designId);
@@ -76,34 +69,36 @@ export const CommandBar = memo(function CommandBar({
   const presetName = selectedPreset ? presetLabel(selectedPreset) : "";
 
   return (
-    <header className="command-bar" role="banner">
+    <header
+      className="command-bar z-10 grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b bg-background pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2 pl-[calc(1rem+env(safe-area-inset-left,0px))] pr-[calc(1rem+env(safe-area-inset-right,0px))]"
+      role="banner"
+    >
       {/* Brand */}
-      <div className="command-bar__brand">
-        {schema.logo ? (
-          <img className="brand-logo" src={assetUrl(schema.logo[theme])} alt={schema.title} />
-        ) : (
-          <span className="command-bar__title">{schema.title}</span>
-        )}
+      <div className="inline-flex items-center gap-[0.45rem] justify-self-start p-[0.2rem]">
+        <BarBrand schema={schema} theme={theme} titleClassName="text-[0.95rem] font-bold" />
       </div>
 
       {/* Design picker + presets, centered in the bar */}
-      <div className="command-bar__center">
-        <div className="command-bar__design-picker">
+      <div className="inline-flex items-center gap-2 justify-self-center">
+        <div className="command-bar__design-picker inline-flex items-center gap-[0.4rem] whitespace-nowrap">
         {designs.length > 1 ? (
           <DesignPicker designs={designs} value={designId} onChange={designChange} />
         ) : (
-          <span className="command-bar__design-name">{currentDesign?.label ?? designId}</span>
+          <span className="text-[0.88rem] font-semibold text-foreground">
+            {currentDesign?.label ?? designId}
+          </span>
         )}
       </div>
 
-      {/* Presets dropdown */}
+      {/* Presets dropdown trigger (the popover surface itself is a Radix portal
+          styled by the shadcn PopoverContent defaults). */}
       <Popover open={showPresets} onOpenChange={setShowPresets}>
         <PopoverTrigger asChild>
           <button
-            className="command-bar__presets-btn"
+            className="command-bar__presets-btn inline-flex cursor-pointer items-center gap-[0.4rem] whitespace-nowrap rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.3rem] text-foreground [font:inherit] enabled:hover:bg-muted"
             aria-label={`${presetsLabel}${presetName ? ` — ${presetName}` : ""}`}
           >
-            <span className="command-bar__presets-label">
+            <span className="text-[0.85rem] text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground">
               {presetsLabel}{presetName ? <> · <strong>{presetName}</strong></> : ""}
             </span>
             <ChevronDownIcon size={14} />
@@ -111,7 +106,7 @@ export const CommandBar = memo(function CommandBar({
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="command-bar__presets-popover w-[22rem] max-w-[90vw] overflow-hidden p-0"
+          className="w-[22rem] max-w-[90vw] overflow-hidden p-0"
         >
           <PresetPicker
             design={design}
@@ -129,30 +124,24 @@ export const CommandBar = memo(function CommandBar({
       </Popover>
       </div>
 
-      <div className="command-bar__right">
-        <StatusPill rendering={rendering} ready={ready} result={result} stale={stalePreview} />
-
-        {/* Action icons */}
-        <ThemeToggle mode={themeMode} onCycle={cycleTheme} />
-        <IconButton label="Help" title="Help & keyboard shortcuts" onClick={showHelp}>
-          <HelpIcon size={16} />
-        </IconButton>
-        <IconButton label="Open-source licenses" title="Open-source licenses" onClick={showLicenses}>
-          <InfoIcon size={16} />
-        </IconButton>
-
-        {/* PWA install (when the browser offers it and the config allows it) */}
-        {canInstall && schema.ui?.install !== "off" && (
-          <Button
-            size="sm"
-            className="command-bar__install-btn"
-            onClick={install}
-            title="Install as app"
-          >
-            <InstallIcon size={14} />
-            Install
-          </Button>
-        )}
+      <div className="command-bar__right flex items-center gap-[0.4rem] justify-self-end">
+        <BarActions
+          rendering={rendering}
+          ready={ready}
+          result={result}
+          stalePreview={stalePreview}
+          themeMode={themeMode}
+          licensesLabel="Open-source licenses"
+          pillClassName="py-[0.25rem] cursor-pointer hover:bg-muted"
+        >
+          {/* PWA install (when the browser offers it and the config allows it) */}
+          {canInstall && schema.ui?.install !== "off" && (
+            <Button size="sm" onClick={install} title="Install as app">
+              <InstallIcon size={14} />
+              Install
+            </Button>
+          )}
+        </BarActions>
       </div>
     </header>
   );

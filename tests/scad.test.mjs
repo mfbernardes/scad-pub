@@ -1,12 +1,11 @@
 // Tests for the OpenSCAD value <-> UI conversions (the -D expressions and the
-// parameterSets string round-trip). Escaping bugs here would silently corrupt
+// parameterSets string parsing). Escaping bugs here would silently corrupt
 // renders, so they're worth pinning.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   escapeScadString,
   toScadExpr,
-  toPresetString,
   fromPresetString,
   orphanedDefines,
 } from "../src/lib/scad.ts";
@@ -36,13 +35,6 @@ test("toScadExpr quotes/escapes strings and enums, leaves numbers/bools bare", (
 test("toScadExpr falls back for non-finite numbers", () => {
   assert.equal(toScadExpr(P("number", { default: 7 }), NaN), "7");
   assert.equal(toScadExpr(P("number", { default: 7 }), Infinity), "7");
-});
-
-test("toPresetString stores every value as a plain string", () => {
-  assert.equal(toPresetString(P("boolean"), true), "true");
-  assert.equal(toPresetString(P("boolean"), false), "false");
-  assert.equal(toPresetString(P("number"), 4), "4");
-  assert.equal(toPresetString(P("string"), "hi"), "hi");
 });
 
 test("fromPresetString coerces back to the param's type", () => {

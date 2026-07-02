@@ -2,7 +2,7 @@
 //   Desktop (≥ 860px): CommandBar + docked ParamPanel + ActionCluster + ViewerHUD
 //   Mobile (< 860px):  full-bleed viewer + top bar + BottomSheet + fixed footer
 // All state/logic stays in App.tsx; this is a pure view extraction.
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
@@ -15,36 +15,25 @@ const MOBILE_FOOTER_HEIGHT = 56;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
 const EMPTY_LOG: string[] = [];
 
-import { ErrorBoundary } from "./ErrorBoundary";
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
-import { ActionCluster } from "./ActionCluster";
 import { ActionButtons } from "./ActionButtons";
-import { StaleBanner } from "./StaleBanner";
+import { ViewerStage } from "./ViewerStage";
 import { ViewerHUD } from "./ViewerHUD";
 import { DEFAULT_VIEW, type ViewName } from "./views";
-import { DimensionInfo } from "./DimensionInfo";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
-import { IconButton } from "./IconButton";
-import { StatusPill } from "./StatusPill";
-import { ThemeToggle } from "./ThemeToggle";
-import { Spinner } from "./ui/spinner";
-import { CircleHelp as HelpIcon, Info as InfoIcon } from "lucide-react";
+import { BarBrand } from "./BarBrand";
+import { BarActions } from "./BarActions";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { parseComputedInfo } from "../lib/computedInfo";
 import { fontFamilyNames, normalizeFamily } from "../lib/fonts";
 import { isFontFile } from "../openscad/renderArgs";
-import { assetUrl } from "../lib/assetUrl";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
 import { useSafeAreaBottom } from "../lib/useSafeAreaBottom";
-
-const Viewer = lazy(() =>
-  import("./Viewer").then((m) => ({ default: m.Viewer }))
-);
 
 interface Props {
   schema: Schema;
@@ -218,18 +207,67 @@ export const AppShell = memo(function AppShell({
   }, []);
 
   // Notices are surfaced by the dot on the Output toggle, not by auto-popping the
-  // console. We only auto-hide a console that's open once its notices clear.
+  // console. We only auto-hide a console that's open once its notices clear —
+  // detected by comparing against the previous render's value (the react.dev
+  // "adjust state during render" pattern), no effect pass needed.
   const hasNotices = diagnostics.length > 0;
-  const hadNotices = useRef(false);
-  useEffect(() => {
-    if (!hasNotices && hadNotices.current) setOutputOpen(false);
-    hadNotices.current = hasNotices;
-  }, [hasNotices]);
+  const [prevHasNotices, setPrevHasNotices] = useState(hasNotices);
+  if (hasNotices !== prevHasNotices) {
+    setPrevHasNotices(hasNotices);
+    if (!hasNotices) setOutputOpen(false);
+  }
+
+  const closeOutput = useCallback(() => setOutputOpen(false), []);
+
+  // Prop bundles shared verbatim by the two layout trees — each invocation
+  // below adds only its layout-specific bits (viewer ref, active flag, …).
+  const stageProps = {
+    design,
+    result,
+    ready,
+    rendering,
+    autoRender,
+    stalePreview,
+    theme,
+    selectedPreset,
+    showDimensions,
+    view,
+    onMeasure: setMeasured,
+    measured,
+    renderedValues,
+    computedInfo,
+  };
+  const hudProps = {
+    visible: !!result?.ok,
+    measure: showMeasure,
+    showDimensions,
+    onToggleDimensions: toggleDimensions,
+    viewPicker: showViewPicker,
+    reset: showReset,
+    zoom: showZoom,
+    view,
+    onSelectView: handleSelectView,
+  };
+  const outputProps = { log, diagnostics, badges, open: outputOpen, onClose: closeOutput };
+  const actionButtonsProps = {
+    hasResult: !!result?.ok,
+    modelFormat: schema.format,
+    outputOpen,
+    noticeCount: diagnostics.length,
+    onSavePng: handleSavePng,
+    onToggleOutput: toggleOutput,
+  };
+  const barActionsProps = { rendering, ready, result, stalePreview, themeMode };
 
   return (
     <div className="app-shell">
-      {/* Skip link */}
-      <a className="skip-link" href="#params">Skip to parameters</a>
+      {/* Skip link: off-screen until focused. */}
+      <a
+        className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
+        href="#params"
+      >
+        Skip to parameters
+      </a>
 
       {/* ── Desktop layout (hidden on mobile via CSS) ── */}
       <div className="app-shell__desktop">
@@ -270,82 +308,18 @@ export const AppShell = memo(function AppShell({
 
           {/* Canvas */}
           <div className="app-shell__viewer">
-            <div className="viewer-wrap">
-              <ErrorBoundary resetKey={result}>
-                <Suspense fallback={null}>
-                  {!isMobile && (
-                    <Viewer
-                      ref={desktopViewerRef}
-                      stl={result?.ok ? result.stl : null}
-                      theme={theme}
-                      designId={design.id}
-                      presetId={selectedPreset}
-                      showDimensions={showDimensions}
-                      view={view}
-                      onMeasure={setMeasured}
-                    />
-                  )}
-                </Suspense>
-              </ErrorBoundary>
-              {(!ready || (rendering && !result)) && (
-                <div className="viewer-overlay">
-                  <Spinner className="size-9 text-muted-foreground" />
-                  <p>{ready ? "Rendering…" : "Loading renderer…"}</p>
-                </div>
-              )}
-
-              {/* "Preview out of date" alert — the manual-mode signal that the
-                  canvas no longer matches the controls. Top-centre, where the eye
-                  already is, instead of relying on a toolbar button. */}
-              <StaleBanner
-                autoRender={autoRender}
-                rendering={rendering}
-                stalePreview={stalePreview}
-                onRender={actions.render}
-              />
-
+            <ViewerStage {...stageProps} viewerRef={desktopViewerRef} active={!isMobile}>
               {/* Floating controls live inside viewer-wrap so they hover over the
                   canvas — which shrinks when the output console docks below it —
                   rather than overlapping the console's notices. */}
-              <ActionCluster
-                hasResult={!!result?.ok}
-                modelFormat={schema.format}
-                outputOpen={outputOpen}
-                noticeCount={diagnostics.length}
-                onSavePng={handleSavePng}
-                onToggleOutput={toggleOutput}
-                className="action-cluster--desktop"
-              />
-              <ViewerHUD
-                viewerRef={desktopViewerRef}
-                visible={!!result?.ok}
-                measure={showMeasure}
-                showDimensions={showDimensions}
-                onToggleDimensions={toggleDimensions}
-                viewPicker={showViewPicker}
-                reset={showReset}
-                zoom={showZoom}
-                view={view}
-                onSelectView={handleSelectView}
-              />
-
-              {/* Measurements panel — top-left, mirroring the HUD on the right.
-                  Shown only while dimensions are on: the bounding box headline plus
-                  any per-design @info values. Measured from the mesh, never part of
-                  the export. */}
-              {showDimensions && measured && (
-                <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} computed={computedInfo} />
-              )}
-            </div>
+              <div className="action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation) backdrop-blur-[12px]">
+                <ActionButtons {...actionButtonsProps} />
+              </div>
+              <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
+            </ViewerStage>
 
             {/* Output console — inline below viewer */}
-            <OutputConsole
-              log={log}
-              diagnostics={diagnostics}
-              badges={badges}
-              open={outputOpen}
-              onClose={() => setOutputOpen(false)}
-            />
+            <OutputConsole {...outputProps} className="max-h-56" />
           </div>
         </div>
       </div>
@@ -357,71 +331,29 @@ export const AppShell = memo(function AppShell({
       <div className="app-shell__mobile" ref={mobileRootRef}>
         {/* Full-bleed viewer */}
         <div className="app-shell__mobile-viewer">
-          <div className="viewer-wrap">
-            <ErrorBoundary resetKey={result}>
-              <Suspense fallback={null}>
-                {isMobile && (
-                  <Viewer
-                    ref={mobileViewerRef}
-                    stl={result?.ok ? result.stl : null}
-                    theme={theme}
-                    designId={design.id}
-                    presetId={selectedPreset}
-                    reframeOnPreset={false}
-                    showDimensions={showDimensions}
-                    view={view}
-                    onMeasure={setMeasured}
-                  />
-                )}
-              </Suspense>
-            </ErrorBoundary>
-            {(!ready || (rendering && !result)) && (
-              <div className="viewer-overlay">
-                <Spinner className="size-9 text-muted-foreground" />
-                <p>{ready ? "Rendering…" : "Loading renderer…"}</p>
-              </div>
-            )}
-
-            {/* "Preview out of date" alert (manual mode) — same signal as desktop. */}
-            <StaleBanner
-              autoRender={autoRender}
-              rendering={rendering}
-              stalePreview={stalePreview}
-              onRender={actions.render}
-            />
-
-            {/* Measurements panel — top-left, below the floating top bar; shown
-                only while dimensions are on (bounding box + per-design @info). */}
-            {showDimensions && measured && (
-              <DimensionInfo design={design} size={measured} values={renderedValues} stale={stalePreview} computed={computedInfo} />
-            )}
-          </div>
+          <ViewerStage
+            {...stageProps}
+            viewerRef={mobileViewerRef}
+            active={isMobile}
+            reframeOnPreset={false}
+          />
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
-          <div className="mobile-top-bar">
-            <span className="mobile-top-bar__brand">
-              {schema.logo ? (
-                <img className="brand-logo" src={assetUrl(schema.logo[theme])} alt={schema.title} />
-              ) : (
-                schema.title
-              )}
+          <div className="mobile-top-bar absolute inset-x-0 top-0 z-10 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))] backdrop-blur-[12px]">
+            <span className="inline-flex min-w-0 items-center gap-[0.4rem] justify-self-start overflow-hidden whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.92rem] font-bold">
+              <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
             </span>
-            <div className="mobile-top-bar__center">
+            <div className="mobile-top-bar__center inline-flex min-w-0 items-center justify-self-center">
               {designs.length > 1 ? (
                 <DesignPicker designs={designs} value={design.id} onChange={actions.designChange} />
               ) : (
-                <span className="mobile-top-bar__design-name">{design.label}</span>
+                <span className="whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.85rem] font-semibold">
+                  {design.label}
+                </span>
               )}
             </div>
-            <div className="mobile-top-bar__right">
-              <StatusPill rendering={rendering} ready={ready} result={result} stale={stalePreview} />
-              <ThemeToggle mode={themeMode} onCycle={actions.cycleTheme} />
-              <IconButton label="Help" title="Help & keyboard shortcuts" onClick={actions.showHelp}>
-                <HelpIcon size={16} />
-              </IconButton>
-              <IconButton label="About & licenses" title="About & licenses" onClick={actions.showLicenses}>
-                <InfoIcon size={16} />
-              </IconButton>
+            <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
+              <BarActions {...barActionsProps} licensesLabel="About & licenses" />
             </div>
           </div>
         </div>
@@ -429,19 +361,19 @@ export const AppShell = memo(function AppShell({
         {/* Output console (mobile — slides up over the sheet as a dismissible
             overlay, with a scrim so it reads as a distinct layer, not another
             band stacked above the sheet). */}
+        {/* Output console (mobile): a dismissible overlay that slides up just
+            above the COLLAPSED (peek) sheet — the sheet's tab row stays visible
+            and tappable beneath it — with a scrim dimming only the viewer. */}
         {outputOpen && (
           <div
-            className="output-console__scrim"
-            onClick={() => setOutputOpen(false)}
+            className="output-console__scrim absolute inset-x-0 top-0 bottom-[calc(var(--mobile-footer-total)+var(--mobile-peek-height))] z-[31] bg-black/40"
+            onClick={closeOutput}
             aria-hidden="true"
           />
         )}
         <OutputConsole
-          log={log}
-          diagnostics={diagnostics}
-          badges={badges}
-          open={outputOpen}
-          onClose={() => setOutputOpen(false)}
+          {...outputProps}
+          className="absolute inset-x-0 bottom-[calc(var(--mobile-footer-total)+var(--mobile-peek-height))] z-[32] max-h-[55vh] rounded-t-(--radius) border-b-0 shadow-(--elevation)"
         />
 
         {/* Persistent bottom sheet */}
@@ -479,29 +411,10 @@ export const AppShell = memo(function AppShell({
 
         {/* Fixed footer: primary actions always accessible outside the sheet */}
         <div className="mobile-footer">
-          <ActionButtons
-            compact
-            hasResult={!!result?.ok}
-            modelFormat={schema.format}
-            outputOpen={outputOpen}
-            noticeCount={diagnostics.length}
-            onSavePng={handleSavePng}
-            onToggleOutput={toggleOutput}
-          />
+          <ActionButtons {...actionButtonsProps} compact />
         </div>
 
-        <ViewerHUD
-          viewerRef={mobileViewerRef}
-          visible={!!result?.ok}
-          measure={showMeasure}
-          showDimensions={showDimensions}
-          onToggleDimensions={toggleDimensions}
-          viewPicker={showViewPicker}
-          reset={showReset}
-          zoom={showZoom}
-          view={view}
-          onSelectView={handleSelectView}
-        />
+        <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
       </div>
     </div>
   );

@@ -4,8 +4,9 @@
 // a "Don't show this again" checkbox; "once" remembers on any close; "always"
 // never remembers (it's shown every visit).
 import { useState } from "react";
-import { Modal } from "./Modal";
+import { Modal, MODAL_BODY } from "./Modal";
 import { Markdown } from "./Markdown";
+import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
@@ -28,12 +29,18 @@ export function PopupModal({
 
   return (
     <Modal title={popup.header} onClose={close}>
-      <div className="modal-body notice-body">
+      <div
+        className={cn(
+          MODAL_BODY,
+          "notice-body [&_p]:my-2 [&_p]:text-[0.9rem] [&_p]:leading-[1.5] [&_p]:text-foreground [&_p:first-child]:mt-0",
+          "[&_ul]:my-[0.4rem] [&_ul]:pl-[1.1rem] [&_ul]:text-[0.9rem] [&_ul]:leading-[1.5] [&_ul]:text-foreground"
+        )}
+      >
         <Markdown body={popup.body} />
       </div>
-      <div className="modal-actions">
+      <div className="modal-actions flex flex-wrap items-center gap-2 px-4 pb-4">
         {popup.mode === "dismissible" && (
-          <Label className="notice-dismiss cursor-pointer font-normal">
+          <Label className="notice-dismiss flex cursor-pointer items-center gap-[0.4rem] text-[0.85rem] font-normal text-muted-foreground">
             <Checkbox
               checked={dontShow}
               onCheckedChange={(v) => setDontShow(v === true)}
@@ -41,7 +48,7 @@ export function PopupModal({
             Don’t show this again
           </Label>
         )}
-        <Button className="notice-ok" onClick={close}>
+        <Button className="notice-ok ml-auto" onClick={close}>
           OK
         </Button>
       </div>

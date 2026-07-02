@@ -6,7 +6,14 @@
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Box as ViewIcon, Check as CheckIcon } from "lucide-react";
+import { cn } from "../lib/utils";
 import { VIEW_OPTIONS, type ViewName } from "./views";
+
+/** The HUD's glass icon-button decoration, shared by every button in the
+ *  viewer HUD (IconButtons get it via className; the picker trigger below
+ *  carries it directly). */
+export const HUD_GLASS_BTN =
+  "p-[0.45rem] bg-(--glass-bg) backdrop-blur-[8px] border-(color:--glass-border) shadow-[0_2px_8px_rgba(0,0,0,0.3)]";
 
 interface Props {
   /** The currently-applied view (checkmarked in the menu). */
@@ -21,11 +28,16 @@ export function ViewPicker({ view, onSelect }: Props) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {/* Native button so PopoverTrigger's ref reaches the DOM (Radix anchors to
-          it); styled to match the HUD's glass icon buttons (.viewer-hud .icon-btn). */}
+          it); styled to match the HUD's glass icon buttons. Its radius is the
+          smaller --radius-sm (the pre-port value), unlike the shadcn Buttons. */}
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="icon-btn size-8 inline-flex items-center justify-center cursor-pointer outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className={cn(
+            "icon-btn size-8 inline-flex items-center justify-center cursor-pointer outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            "border rounded-(--radius-sm) hover:border-brand data-[state=open]:border-brand data-[state=open]:text-brand",
+            HUD_GLASS_BTN
+          )}
           aria-label={`View: ${current}`}
           title={`View: ${current}`}
         >
@@ -33,21 +45,25 @@ export function ViewPicker({ view, onSelect }: Props) {
         </button>
       </PopoverTrigger>
       <PopoverContent side="left" align="start" className="w-auto min-w-[9rem] p-1">
-        <ul className="view-picker__list">
+        <ul className="flex flex-col gap-[0.1rem]">
           {VIEW_OPTIONS.map((o) => {
             const active = o.id === view;
             return (
               <li key={o.id}>
                 <button
                   type="button"
-                  className={`view-picker__item${active ? " view-picker__item--active" : ""}`}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-(--radius-sm) px-2 py-[0.35rem] text-left text-[0.85rem] text-foreground cursor-pointer hover:bg-muted focus-visible:bg-muted",
+                    active && "text-brand font-semibold"
+                  )}
                   aria-current={active ? "true" : undefined}
                   onClick={() => {
                     onSelect(o.id);
                     setOpen(false);
                   }}
                 >
-                  <span className="view-picker__check" aria-hidden="true">
+                  {/* Fixed-width slot so labels align whether or not checkmarked. */}
+                  <span className="inline-flex w-4 shrink-0 text-brand" aria-hidden="true">
                     {active && <CheckIcon size={15} />}
                   </span>
                   {o.label}

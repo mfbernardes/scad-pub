@@ -7,12 +7,9 @@ import { useAppActions } from "../lib/appActions";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
-import { ResetButton } from "./ResetButton";
-import { Switch } from "./ui/switch";
-import { Label } from "./ui/label";
+import { PanelFooter } from "./PanelFooter";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
-import { RotateCcw as ResetIcon } from "lucide-react";
 
 type Tab = "params" | "presets" | "files";
 
@@ -62,8 +59,6 @@ export function SheetTabs({
     addFile,
     removeFile,
     clearFiles,
-    reset,
-    autoRenderChange,
   } = useAppActions();
   const hasFiles = fileImport != null;
   // Presets first (and the default tab) on mobile, then Parameters, then Files.
@@ -76,7 +71,7 @@ export function SheetTabs({
     <Tabs
       value={tab}
       onValueChange={(v) => setTab(v as Tab)}
-      className="sheet-tabs gap-0"
+      className="sheet-tabs min-h-0 flex-1 gap-0"
     >
       <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
         {tabs.map((t) => (
@@ -85,22 +80,14 @@ export function SheetTabs({
           </TabsTrigger>
         ))}
       </TabsList>
-      <div className="sheet-tabs__body">
+      <div className="flex min-h-0 flex-1 flex-col">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <div className="sheet-tabs__params">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
             <ParamForm design={design} values={values} onChange={change} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} />
           </div>
           {/* Auto-render + Reset are parameter-scoped, so they pin to the bottom
               of this tab only — not on Presets/Files (mirrors the desktop panel). */}
-          <div className="sheet-footer">
-            <Label className="auto-render cursor-pointer font-normal" title="Re-render automatically as parameters change">
-              <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Auto-render" />
-              Auto-render
-            </Label>
-            <ResetButton design={design} values={values} onReset={reset} className="reset-link ml-auto">
-              <ResetIcon size={14} /> Reset to defaults
-            </ResetButton>
-          </div>
+          <PanelFooter design={design} values={values} autoRender={autoRender} className="sheet-footer" />
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetPicker

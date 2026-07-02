@@ -14,13 +14,17 @@ import { buildOpenscadArgs, exportFor, userFileMountPath } from "./renderArgs";
 
 // Persistent cache for the big, version-pinned binaries (the ~10 MB WASM and
 // the fonts), so reloads are instant and the app works offline. The cache name
-// carries the pinned OpenSCAD version (see scripts/fetch-wasm.mjs) — bump it when
-// the WASM is bumped so stale binaries are evicted. The small, build-volatile
-// .scad sources are NOT cached here (they change every build).
+// carries the pinned OpenSCAD version (single-sourced via schema.wasmVersion
+// from scripts/wasm-version.mjs) — a WASM bump renames the cache so stale
+// binaries are evicted. The small, build-volatile .scad sources are NOT cached
+// here (they change every build).
 // Neutral, NOT namespaced per config: the WASM binary is identical across
 // deployments, so sharing this cache across configs on one origin avoids
-// re-downloading ~10 MB. The date suffix is the cache-bust key.
-const BIN_CACHE = "openscad-wasm-bin-2026.06.12";
+// re-downloading ~10 MB. The service worker warms this same cache at install
+// (see public/sw.js), so offline works even before the first render.
+const BIN_CACHE = `openscad-wasm-bin-${
+  (schema as { wasmVersion?: string }).wasmVersion ?? "2026.06.12"
+}`;
 
 async function cleanupOldCaches() {
   if (typeof caches === "undefined") return;
@@ -68,36 +72,46 @@ async function loadFactory(): Promise<OpenSCADFactory> {
   return mod.default as OpenSCADFactory;
 }
 
-async function ensureAssets() {
-  if (!factoryPromise) {
+// One-shot, memoized asset load. The four independent downloads (WASM
+// fetch+compile, shared .scad sources, fonts.conf, font binaries) run in
+// parallel — serialized they made the cold first render pay each round-trip
+// back to back. Memoizing the whole promise also makes concurrent callers
+// share one load instead of racing the per-variable checks.
+let assetsReady: Promise<void> | null = null;
+
+function ensureAssets(): Promise<void> {
+  return (assetsReady ??= (async () => {
     void cleanupOldCaches();
     factoryPromise = loadFactory();
-  }
-  if (!wasmBinary) wasmBinary = await cachedBuffer(asset("wasm/openscad.wasm"));
-  if (!wasmModulePromise) {
-    wasmModulePromise = WebAssembly.compile(wasmBinary).catch(() => null);
-  }
-  await wasmModulePromise;
-  if (!assetSources) {
-    const entries = await Promise.all(
-      schema.assets.map(async (p) => [
-        p,
-        await (await fetch(asset(`scad/${p}`))).text(),
-      ])
-    );
-    assetSources = Object.fromEntries(entries) as Record<string, string>;
-  }
-  if (!fontsConf)
-    fontsConf = await (await fetch(asset("fonts/fonts.conf"))).text();
-  if (!fontFiles) {
-    const entries = await Promise.all(
-      schema.fonts.map(async (n) => [
-        n,
-        new Uint8Array(await cachedBuffer(asset(`fonts/${n}`))),
-      ])
-    );
-    fontFiles = Object.fromEntries(entries) as Record<string, Uint8Array>;
-  }
+    await Promise.all([
+      (async () => {
+        wasmBinary = await cachedBuffer(asset("wasm/openscad.wasm"));
+        wasmModulePromise = WebAssembly.compile(wasmBinary).catch(() => null);
+        await wasmModulePromise;
+      })(),
+      (async () => {
+        const entries = await Promise.all(
+          schema.assets.map(async (p) => [
+            p,
+            await (await fetch(asset(`scad/${p}`))).text(),
+          ])
+        );
+        assetSources = Object.fromEntries(entries) as Record<string, string>;
+      })(),
+      (async () => {
+        fontsConf = await (await fetch(asset("fonts/fonts.conf"))).text();
+      })(),
+      (async () => {
+        const entries = await Promise.all(
+          schema.fonts.map(async (n) => [
+            n,
+            new Uint8Array(await cachedBuffer(asset(`fonts/${n}`))),
+          ])
+        );
+        fontFiles = Object.fromEntries(entries) as Record<string, Uint8Array>;
+      })(),
+    ]);
+  })());
 }
 
 async function loadDesignSource(path: string): Promise<string> {

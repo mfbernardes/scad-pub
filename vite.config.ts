@@ -117,13 +117,64 @@ function swVersion(): Plugin {
   };
 }
 
+// Inject resource hints for the render-critical chunks into the built
+// index.html. Two birds:
+//  1. Startup speed — the browser fetches the render worker and the lazy
+//     three.js Viewer chunk in parallel with the entry instead of discovering
+//     them after it executes.
+//  2. Deterministic offline — sw.js precaches by parsing index.html's
+//     src/href attributes (plus Vite's asset-manifest, which does NOT list
+//     worker chunks), so without these links the worker chunk was only ever
+//     cached opportunistically at runtime. The links make install-time
+//     precache cover everything a render needs.
+// Runs at closeBundle (like swVersion) because the chunk names are only known
+// once the bundle is emitted; base-aware for subpath deploys.
+function preloadLinks(): Plugin {
+  let outDir = "dist";
+  let base = "/";
+  let workerFile: string | null = null;
+  let viewerFile: string | null = null;
+  return {
+    name: "preload-links",
+    apply: "build",
+    configResolved(c) {
+      outDir = c.build.outDir;
+      base = c.base;
+    },
+    generateBundle(_options, bundle) {
+      // Worker chunks are emitted by a nested rollup build and reach this hook
+      // as plain assets (no chunk.name), so match them by file name.
+      for (const [fileName, chunk] of Object.entries(bundle)) {
+        if (!fileName.endsWith(".js")) continue;
+        if (/(?:^|\/)worker-[^/]+\.js$/.test(fileName)) workerFile = fileName;
+        if (chunk.type === "chunk" && chunk.name === "Viewer") viewerFile = fileName;
+      }
+    },
+    closeBundle() {
+      const htmlPath = resolve(outDir, "index.html");
+      const links = [
+        // as="worker" warms the actual worker-script fetch.
+        workerFile && `<link rel="preload" as="worker" href="${base}${workerFile}" />`,
+        viewerFile && `<link rel="modulepreload" href="${base}${viewerFile}" />`,
+      ].filter(Boolean);
+      if (!links.length) return;
+      try {
+        const html = readFileSync(htmlPath, "utf-8");
+        writeFileSync(htmlPath, html.replace("</head>", () => `  ${links.join("\n    ")}\n  </head>`));
+      } catch {
+        /* no index.html in this build target — skip */
+      }
+    },
+  };
+}
+
 // Defaults to serving at the domain root. Set BASE_PATH to the subpath your
 // host serves the app under (e.g. "/app/" for example.com/app/). Dev uses "/".
 export default defineConfig(({ command }) => {
   const schema = readSchema();
   return {
     base: command === "build" ? process.env.BASE_PATH || "/" : "/",
-    plugins: [react(), tailwindcss(), configHtml(schema), swVersion(), cloudflare()],
+    plugins: [react(), tailwindcss(), configHtml(schema), swVersion(), preloadLinks(), cloudflare()],
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),

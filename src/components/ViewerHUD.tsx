@@ -4,7 +4,8 @@
 // API is unsupported (e.g. iOS Safari, which only fullscreens <video>).
 import type { ViewerHandle } from "./Viewer";
 import { IconButton } from "./IconButton";
-import { ViewPicker } from "./ViewPicker";
+import { ViewPicker, HUD_GLASS_BTN } from "./ViewPicker";
+import { cn } from "../lib/utils";
 import type { ViewName } from "./views";
 import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, Maximize as MaximizeIcon, Ruler as RulerIcon } from "lucide-react";
 import { useStandalone } from "../lib/useStandalone";
@@ -50,16 +51,16 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
       {viewPicker && <ViewPicker view={view} onSelect={onSelectView} />}
       {zoom && (
         <>
-          <IconButton label="Zoom in" onClick={() => viewerRef.current?.zoomIn()}>
+          <IconButton label="Zoom in" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomIn()}>
             <ZoomInIcon size={18} />
           </IconButton>
-          <IconButton label="Zoom out" onClick={() => viewerRef.current?.zoomOut()}>
+          <IconButton label="Zoom out" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomOut()}>
             <ZoomOutIcon size={18} />
           </IconButton>
         </>
       )}
       {reset && (
-        <IconButton label="Reset view" onClick={() => viewerRef.current?.resetView()}>
+        <IconButton label="Reset view" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.resetView()}>
           <ResetIcon size={18} />
         </IconButton>
       )}
@@ -68,7 +69,7 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
           label={showDimensions ? "Hide dimensions" : "Show dimensions"}
           onClick={onToggleDimensions}
           pressed={showDimensions}
-          className={showDimensions ? "icon-btn--active" : undefined}
+          className={cn(HUD_GLASS_BTN, showDimensions && "border-brand text-brand")}
         >
           <RulerIcon size={18} />
         </IconButton>
@@ -76,7 +77,7 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
       {/* Fullscreen only where it works: a browser tab (not an installed PWA)
           on a browser that supports the Fullscreen API. */}
       {canFullscreen && (
-        <IconButton label="Toggle fullscreen" onClick={toggleFullscreen}>
+        <IconButton label="Toggle fullscreen" className={HUD_GLASS_BTN} onClick={toggleFullscreen}>
           <MaximizeIcon size={18} />
         </IconButton>
       )}

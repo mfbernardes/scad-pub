@@ -84,10 +84,10 @@ export default function App() {
     setShowPopup(false);
   };
   const [autoRender, setAutoRender] = useState(!design.heavy);
+  // Mirrored on every render so async work (doRender) reads the latest value
+  // without retriggering the effects that depend on it.
   const autoRenderRef = useRef(autoRender);
-  useEffect(() => {
-    autoRenderRef.current = autoRender;
-  }, [autoRender]);
+  autoRenderRef.current = autoRender;
 
   const runnerRef = useRef<OpenSCADRunner | null>(null);
   const lastKeyRef = useRef("");
@@ -97,20 +97,24 @@ export default function App() {
       cacheVersion: schema.renderHash,
     });
 
-  const firstDesignRun = useRef(true);
-  useEffect(() => {
-    if (firstDesignRun.current) {
-      firstDesignRun.current = false;
-      return;
-    }
-    setValues(defaultsFor(design));
-    setResult(null);
-    setRenderedKey("");
-    lastKeyRef.current = "";
-    setAutoRender(!design.heavy);
-    setPresetSel("");
-    setUserPresets(listPresets(design.id));
-  }, [design]);
+  // Switching designs resets everything design-scoped in the same event —
+  // values, result, preset selection, auto-render mode.
+  const handleDesignChange = useCallback(
+    (id: string) => {
+      if (id === designId) return;
+      const next = schema.designs.find((d) => d.id === id);
+      if (!next) return;
+      setDesignId(id);
+      setValues(defaultsFor(next));
+      setResult(null);
+      setRenderedKey("");
+      lastKeyRef.current = "";
+      setAutoRender(!next.heavy);
+      setPresetSel("");
+      setUserPresets(listPresets(id));
+    },
+    [designId]
+  );
 
   useEffect(() => {
     const t = setTimeout(() => persistState(design, values, presetSel), 300);
@@ -143,8 +147,8 @@ export default function App() {
 
   const stalePreview = !autoRender && renderKey !== renderedKey;
 
-  const doRender = useMemo(
-    () => async () => {
+  const doRender = useCallback(
+    async () => {
       if (renderKey === lastKeyRef.current) return;
       setRendering(true);
       try {
@@ -307,7 +311,7 @@ export default function App() {
   // each render; the provider keeps a stable identity so consumers don't churn.
   const actions: AppActions = {
     install: promptInstall,
-    designChange: setDesignId,
+    designChange: handleDesignChange,
     change: setValue,
     applyPreset: setValues,
     selectedPresetChange: setPresetSel,

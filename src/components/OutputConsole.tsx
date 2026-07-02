@@ -11,6 +11,13 @@ import { IconButton } from "./IconButton";
 import { X as XIcon } from "lucide-react";
 
 const ICON: Record<DiagnosticLevel, string> = { notice: "ⓘ", warning: "⚠", assert: "✗" };
+/* The ⓘ/⚠/✗ glyph colour per diagnostic level (config categories may override
+   per-notice via inline style). */
+const ICON_COLOR: Record<DiagnosticLevel, string> = {
+  notice: "text-brand",
+  warning: "text-warn",
+  assert: "text-warn",
+};
 
 interface Props {
   log: string[];
@@ -18,17 +25,23 @@ interface Props {
   badges: BadgeCount[];
   open: boolean;
   onClose: () => void;
+  /** Layout-specific sizing/positioning (desktop band vs mobile overlay). */
+  className?: string;
 }
 
-export function OutputConsole({ log, diagnostics, badges, open, onClose }: Props) {
+export function OutputConsole({ log, diagnostics, badges, open, onClose, className }: Props) {
   const [tab, setTab] = useState("notices");
 
   if (!open) return null;
 
   return (
-    <div className="output-console" role="region" aria-label="OpenSCAD output">
+    <div
+      className={cn("output-console flex shrink-0 flex-col border-t bg-card", className)}
+      role="region"
+      aria-label="OpenSCAD output"
+    >
       <Tabs value={tab} onValueChange={setTab} className="gap-0">
-        <div className="output-console__header">
+        <div className="flex shrink-0 items-stretch border-b">
           <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
             <TabsTrigger value="notices" className={cn(underlineTabTrigger, "px-3")}>
               Notices
@@ -38,29 +51,39 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose }: Props
               Log
             </TabsTrigger>
           </TabsList>
-          <IconButton label="Close output console" className="output-console__close" onClick={onClose}>
+          <IconButton
+            label="Close output console"
+            className="output-console__close my-1 ml-auto mr-[0.4rem] shrink-0 self-center"
+            onClick={onClose}
+          >
             <XIcon size={16} />
           </IconButton>
         </div>
-        <div className="output-console__body">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <TabsContent value="notices" className="mt-0">
             {diagnostics.length ? (
-              <ul className="output-console__diag-list" aria-live="polite">
+              <ul className="px-3 py-[0.4rem]" aria-live="polite">
                 {diagnostics.map((d, i) => (
-                  <li key={i} className={`diag diag-${d.level}`}>
-                    <span className="diag-icon" aria-hidden style={d.color ? { color: d.color } : undefined}>
+                  <li key={i} className="flex items-baseline gap-2 py-[0.2rem] text-[0.82rem]">
+                    <span
+                      className={cn("shrink-0", ICON_COLOR[d.level])}
+                      aria-hidden
+                      style={d.color ? { color: d.color } : undefined}
+                    >
                       {ICON[d.level]}
                     </span>
-                    <span className="diag-text">{d.text}</span>
+                    <span className="text-foreground">{d.text}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="output-console__empty">No notices or warnings.</p>
+              <p className="px-3 py-2 text-[0.85rem] text-muted-foreground">No notices or warnings.</p>
             )}
           </TabsContent>
           <TabsContent value="log" className="mt-0">
-            <pre className="log">{log.length ? log.join("\n") : "(no output yet)"}</pre>
+            <pre className="log m-0 max-h-44 overflow-auto whitespace-pre-wrap bg-code px-4 py-[0.6rem] font-mono text-xs leading-[1.4] text-muted-foreground">
+              {log.length ? log.join("\n") : "(no output yet)"}
+            </pre>
           </TabsContent>
         </div>
       </Tabs>

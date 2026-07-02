@@ -1,10 +1,15 @@
 // Modal.tsx — shared dialog shell built on the shadcn/ui Dialog (Radix): portal,
 // overlay, focus trap, Escape + outside-click close, and a built-in close
-// button. Keeps the legacy `.modal-head`/`.modal-body`/`.modal-actions` content
-// classes so each modal's body markup styles unchanged. Mounted only while open
-// (callers conditionally render it), so the dialog is always `open`.
+// button. Mounted only while open (callers conditionally render it), so the
+// dialog is always `open`.
 import type { ReactNode } from "react";
-import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+
+/** Scrollable dialog body (below the header / between header and actions). */
+export const MODAL_BODY = "modal-body min-h-0 overflow-y-auto px-4 pt-2 pb-4";
+/** Muted lead-in paragraph between the header and the body. */
+export const MODAL_INTRO =
+  "modal-intro mx-4 mt-[0.8rem] text-[0.85rem] text-muted-foreground [&_p]:m-0";
 
 interface Props {
   title: string;
@@ -22,9 +27,9 @@ export function Modal({ title, label, onClose, children }: Props) {
         aria-label={label ?? title}
         aria-describedby={undefined}
       >
-        <div className="modal-head">
+        <DialogHeader className="modal-head flex-row items-center justify-between border-b px-4 py-[0.8rem]">
           <DialogTitle>{title}</DialogTitle>
-        </div>
+        </DialogHeader>
         {children}
       </DialogContent>
     </Dialog>

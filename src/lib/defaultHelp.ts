@@ -2,28 +2,7 @@
 // not supply its own `help`. It documents only universal configurator features
 // (no design-specific wording), in the Markdown subset the Markdown component
 // renders. A deployment can override any of this via `help` in its config.
-export interface HelpSection {
-  title: string;
-  body: string;
-}
-
-/** One tab of the Help modal: a labelled group of sections with its own intro.
- *  A config may supply many tabs. */
-export interface HelpTab {
-  label: string;
-  intro?: string;
-  sections: HelpSection[];
-}
-
-export interface HelpContent {
-  /** Heading shown at the top of the Help modal (default "How to use this configurator"). */
-  title?: string;
-  intro?: string;
-  /** Single-pane sections (the default form). */
-  sections?: HelpSection[];
-  /** When present, the modal renders a tab strip; many tabs are supported. */
-  tabs?: HelpTab[];
-}
+import type { HelpContent } from "../openscad/types";
 
 export const DEFAULT_HELP: HelpContent = {
   intro:
@@ -56,7 +35,7 @@ export const DEFAULT_HELP: HelpContent = {
       title: "5. Save & reuse settings (presets)",
       body:
         "The **presets** dropdown groups **Bundled** examples (read-only) and **Saved** presets (your own, stored in this browser).\n\n" +
-        "- **Save** stores the current parameters as a browser preset; **Export** saves them as an OpenSCAD `parameterSets` JSON, which also opens in the desktop OpenSCAD Customizer.",
+        "- **Save** stores the current parameters as a browser preset for this design.",
     },
     {
       title: "6. Add files (fonts, SVGs…)",

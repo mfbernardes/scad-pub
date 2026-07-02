@@ -1,8 +1,11 @@
-/* Cascade-layer order. `legacy` (the app's pre-port CSS) sits just below
-   `utilities` and above `base`: shadcn/ui utility classes always win where
-   applied, while legacy class rules still beat Tailwind's preflight element
-   resets, so un-ported components keep their original styling. */
-@layer theme, base, components, legacy, utilities;
+/* Cascade-layer order. `components` (the app's structural CSS below — tokens,
+   shell layout, safe-area math, floating-overlay geometry, the bottom sheet)
+   sits just below `utilities` and above `base`: Tailwind utility classes on a
+   component always win, while these rules still beat preflight element resets.
+   All *decoration* lives on the components as utilities; only layout that
+   can't sensibly be expressed per-element (shared breakpoint, cross-layer
+   geometry, contextual mobile offsets) lives here. */
+@layer theme, base, components, utilities;
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -35,7 +38,12 @@
   --color-ring: var(--focus);
   --color-warn: var(--warn);
   --color-brand: var(--accent);
+  --color-link: var(--link);
+  --color-code: var(--code-bg);
 
+  /* These resolve against the app's --radius/--radius-sm tokens defined on
+     :root below (the config-override API), not the other way round: rounded-lg
+     follows --radius, while rounded-(--radius-sm) uses the token directly. */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -52,7 +60,7 @@
 
 /* Dark is the default; <html data-theme="light"> swaps the palette. The active
    theme is resolved in JS (lib/theme.ts) and set before paint (index.html). */
-@layer legacy {
+@layer components {
 :root {
   --bg: #15171c;
   --panel: #1f2229;
@@ -138,8 +146,7 @@
 /* Windows High Contrast / forced-colors: keep colour-only cues visible. */
 @media (forced-colors: active) {
   :focus-visible { outline-color: Highlight; }
-  .spinner { border-color: CanvasText; border-top-color: Highlight; }
-  .badge { border: 1px solid CanvasText; }
+  [data-slot="badge"] { border: 1px solid CanvasText; }
 }
 
 * { box-sizing: border-box; }
@@ -161,39 +168,6 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   ACCESSIBILITY UTILITIES
-   ═══════════════════════════════════════════════════════════════ */
-
-/* Visually hidden but available to assistive tech (live regions, etc.). */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* Skip link: off-screen until focused. */
-.skip-link {
-  position: absolute;
-  left: 0.5rem;
-  top: -3rem;
-  z-index: 200;
-  padding: 0.4rem 0.7rem;
-  background: var(--panel);
-  color: var(--text);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  touch-action: manipulation;
-  transition: top 0.15s ease;
-}
-.skip-link:focus { top: 0.5rem; }
-
-/* ═══════════════════════════════════════════════════════════════
    BASE ELEMENT STYLES
    ═══════════════════════════════════════════════════════════════ */
 
@@ -203,19 +177,6 @@ body {
    into shadcn components. A cursor default is kept for un-classed buttons. */
 button { cursor: pointer; touch-action: manipulation; }
 button:disabled { cursor: default; }
-
-.primary {
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  border: 1px solid var(--accent-solid);
-  border-radius: var(--radius-sm);
-  padding: 0.35rem 0.7rem;
-  font-weight: 600;
-}
-.primary:hover:not(:disabled) { filter: brightness(1.08); }
-
-/* Brand logo (theme-switched by App via src change). */
-.brand-logo { height: 1.6rem; width: auto; display: block; }
 
 /* ═══════════════════════════════════════════════════════════════
    APP SHELL — responsive layout
@@ -295,108 +256,6 @@ button:disabled { cursor: default; }
 .app-shell__mobile[data-sheet-dragging="true"] .app-shell__mobile-viewer {
   transition: none;
 }
-
-/* ═══════════════════════════════════════════════════════════════
-   COMMAND BAR — floating top bar (desktop)
-   ═══════════════════════════════════════════════════════════════ */
-
-.command-bar {
-  display: grid;
-  /* brand (left) | design+presets (centered) | actions (right) */
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 0.5rem;
-  padding: calc(0.5rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) 0.5rem calc(1rem + env(safe-area-inset-left, 0px));
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-  z-index: 10;
-  flex-shrink: 0;
-}
-
-/* Centered design + presets group */
-.command-bar__center {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  justify-self: center;
-}
-
-/* Flat, unboxed design + presets controls (no pill chrome). */
-.command-bar__design-picker {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  white-space: nowrap;
-}
-
-.command-bar__brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.2rem;
-  justify-self: start;
-}
-.command-bar__title { font-size: 0.95rem; font-weight: 700; }
-
-.command-bar__design-picker select {
-  max-width: 12rem;
-  background: transparent;
-  border: none;
-  padding: 0;
-  font-weight: 600;
-  color: var(--text);
-}
-.command-bar__design-name {
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-/* Presets dropdown trigger (the popover surface itself is a Radix portal styled
-   by the shadcn PopoverContent defaults — bg/border/radius/shadow/position). */
-.command-bar__presets-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.45rem;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-  cursor: pointer;
-  color: var(--text);
-  font: inherit;
-}
-.command-bar__presets-btn:hover:not(:disabled) { background: var(--panel-2); }
-.command-bar__presets-btn .command-bar__presets-label { font-size: 0.85rem; color: var(--muted); }
-.command-bar__presets-btn .command-bar__presets-label strong { color: var(--text); font-weight: 600; }
-
-/* PWA install button */
-.command-bar__install-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.82rem;
-  padding: 0.34rem 0.7rem;
-}
-
-.command-bar__right {
-  justify-self: end;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-/* Status: flat, no pill box */
-.command-bar__right .status-pill {
-  background: transparent;
-  border: none;
-  padding: 0.25rem 0.4rem;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-.command-bar__right .status-pill:hover { background: var(--panel-2); }
-.command-bar__right .icon-btn { border-radius: var(--radius-sm); }
 
 /* ═══════════════════════════════════════════════════════════════
    PARAM PANEL — docked collapsible/resizable panel (desktop)
@@ -486,47 +345,6 @@ button:disabled { cursor: default; }
 /* handle--left sits at the left edge of a right panel */
 .handle--left { left: -4px; }
 
-/* Search row inside the panel */
-.param-panel__search {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.6rem;
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-  color: var(--muted);
-}
-
-.param-panel__search input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: var(--text);
-}
-
-.param-panel__search input::placeholder { color: var(--muted); }
-.param-panel__search input:focus { outline: none; }
-
-/* Scrollable parameter body */
-.param-panel__body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0.75rem;
-  min-height: 0;
-}
-
-/* Footer with reset button */
-.param-panel__footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.75rem;
-  border-top: 1px solid var(--line);
-  flex-shrink: 0;
-}
-
 /* ═══════════════════════════════════════════════════════════════
    VIEWER — the Three.js canvas container
    ═══════════════════════════════════════════════════════════════ */
@@ -537,44 +355,6 @@ button:disabled { cursor: default; }
 /* touch-action:none on the canvas: orbit/pan gestures need exclusive touch
    control. Scoped here (not on html/body) so user-zoom stays intact (WCAG 1.4.4). */
 .viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-
-.viewer-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.8rem;
-  background: var(--overlay);
-  color: var(--muted);
-  font-size: 0.9rem;
-  pointer-events: none;
-}
-
-.spinner {
-  width: 34px;
-  height: 34px;
-  border: 3px solid var(--line);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.viewer-error {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  padding: 1rem;
-  text-align: center;
-  background: var(--panel);
-  color: var(--text);
-}
-.viewer-error-detail { color: var(--muted); font-size: 0.82rem; }
 
 /* ═══════════════════════════════════════════════════════════════
    VIEWER HUD — zoom / reset / fullscreen (bottom-right, both layouts)
@@ -602,148 +382,22 @@ button:disabled { cursor: default; }
   }
 }
 
-.viewer-hud .icon-btn {
-  padding: 0.45rem;
-  background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  border-radius: var(--radius-sm);
-}
-
-.viewer-hud .icon-btn:hover:not(:disabled) { border-color: var(--accent); }
-
-/* Active toggle (e.g. dimensions shown): accent border + tint so the on-state
-   reads at a glance against the otherwise-uniform HUD buttons. */
-.viewer-hud .icon-btn--active {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* View-picker trigger while its menu is open: same accent cue as an active toggle. */
-.viewer-hud .icon-btn[data-state="open"] {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* View picker — the popover menu opened from the HUD's view button. The compact
-   width/padding come from Tailwind on the content; rows are icon-aligned. */
-.view-picker__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.view-picker__item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.35rem 0.5rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.85rem;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.view-picker__item:hover,
-.view-picker__item:focus-visible {
-  background: var(--panel-2);
-}
-
-.view-picker__item--active {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-/* Fixed-width slot so labels align whether or not the row is checkmarked. */
-.view-picker__check {
-  display: inline-flex;
-  width: 1rem;
-  flex-shrink: 0;
-  color: var(--accent);
-}
-
 /* ═══════════════════════════════════════════════════════════════
-   DIMENSION INFO — measurements panel (top-left, with the dimensions overlay)
+   FLOATING OVERLAY GEOMETRY — measurements panel, action cluster,
+   stale banner. Decoration lives on the components; only the
+   position/inset/z (and the per-layout mobile offsets, which must
+   override the base from a lower layer) stay here.
    ═══════════════════════════════════════════════════════════════ */
 
-/* Top-left, mirroring the HUD on the right. The top edge only ever holds the
-   (centred, transient) stale banner, so this never collides — unlike a bottom
-   corner, which the centre action cluster overruns as it widens on small
-   desktops. The headline "Dimensions" row sits on top; per-design @info rows
-   follow. When the list is long it scrolls inside a capped height rather than
-   running off the canvas. */
+/* Top-left, mirroring the HUD on the right; caps to the canvas height and
+   scrolls when a design surfaces many @info rows. */
 .dimension-info {
   position: absolute;
   left: calc(0.75rem + env(safe-area-inset-left, 0px));
   top: calc(0.75rem + env(safe-area-inset-top, 0px));
   z-index: 5;
-  margin: 0;
-  padding: 0.35rem 0.55rem;
   max-width: min(20rem, calc(100% - 1.5rem));
-  /* Cap to the canvas height (minus the top/bottom margins); the rest scrolls. */
   max-height: calc(100% - 1.5rem);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  font-size: 0.8rem;
-  color: var(--muted);
-  background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  border-radius: var(--radius-sm);
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  /* Interactive only so the list can scroll; the rest of the canvas stays
-     orbit-able because the panel is a small corner element. */
-  pointer-events: auto;
-}
-
-.dimension-info__row {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.dimension-info__row dt {
-  color: var(--muted);
-  flex: 0 1 auto;
-}
-
-.dimension-info__row dd {
-  margin: 0;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  word-break: break-word;
-}
-
-/* Divider under the bounding-box headline when @info rows follow it. */
-.dimension-info__row--primary:not(:last-child) {
-  border-bottom: 1px solid var(--glass-border);
-  padding-bottom: 0.3rem;
-  margin-bottom: 0.15rem;
-}
-
-.dimension-info__row--primary dt {
-  font-weight: 600;
-  color: var(--text);
-}
-
-/* Preview out of date: dim + italic so a stale figure never reads as current. */
-.dimension-info--stale {
-  opacity: 0.55;
-  font-style: italic;
 }
 
 /* Mobile: drop below the floating top bar (and any notch), level with the HUD,
@@ -755,129 +409,22 @@ button:disabled { cursor: default; }
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   ACTION CLUSTER — floating bottom-center controls
-   ═══════════════════════════════════════════════════════════════ */
-
+/* Floating bottom-center output cluster. */
 .action-cluster {
   position: absolute;
   bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.35rem 0.45rem;
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  box-shadow: var(--elevation);
   z-index: 10;
-  white-space: nowrap;
 }
 
-.action-cluster button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.82rem;
-  padding: 0.3rem 0.55rem;
-  background: transparent;
-  border-color: transparent;
-}
-
-.action-cluster button:hover:not(:disabled) {
-  background: var(--panel-2);
-  border-color: var(--line);
-}
-
-/* The single filled primary (Render when pending, else Export). The accent
-   fill is what makes "the action that matters" pop out of the ghost row. */
-.action-cluster__primary {
-  background: var(--accent-solid) !important;
-  color: var(--on-accent) !important;
-  border-color: var(--accent-solid) !important;
-  font-weight: 600;
-}
-
-.action-cluster__primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-  border-color: var(--accent-solid) !important;
-}
-
-.action-cluster__output.active {
-  background: var(--panel) !important;
-  border-color: var(--accent) !important;
-  color: var(--accent);
-}
-
-/* Thin vertical rule fencing the Output toggle off from the file actions:
-   [ Export · PNG · Share ] · [ Output ] */
-.action-cluster__divider {
-  align-self: stretch;
-  width: 1px;
-  margin: 0.2rem 0.2rem;
-  background: var(--line);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   STALE BANNER — "preview out of date" alert over the viewer
-   ═══════════════════════════════════════════════════════════════ */
-
+/* "Preview out of date" — top-centre over the viewer. */
 .stale-banner {
   position: absolute;
   top: calc(0.75rem + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.4rem 0.35rem 0.7rem;
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--text);
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  box-shadow: var(--elevation);
   z-index: 11;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.stale-banner:hover:not(:disabled) { border-color: var(--accent); }
-.stale-banner:hover:not(:disabled) .stale-banner__cta { filter: brightness(1.08); }
-
-.stale-banner--busy {
-  cursor: default;
-  color: var(--muted);
-  padding-right: 0.7rem;
-}
-
-/* Amber pulsing dot — "attention, but not an error". */
-.stale-banner__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--warn);
-  flex-shrink: 0;
-  animation: pill-pulse 1.4s ease-in-out infinite;
-}
-
-/* The render call-to-action, rendered as a solid accent chip inside the pill. */
-.stale-banner__cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: var(--radius-sm);
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  font-weight: 600;
 }
 
 /* Mobile: drop below the floating top bar (and any notch). */
@@ -891,310 +438,10 @@ button:disabled { cursor: default; }
    STATUS PILL — render state chip
    ═══════════════════════════════════════════════════════════════ */
 
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.4rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.78rem;
-  font-weight: 500;
-  background: transparent;
-  border: 1px solid transparent;
-  white-space: nowrap;
-  line-height: 1.3;
-}
-
-.status-pill__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--muted);
-  flex-shrink: 0;
-}
-
-.status-pill--idle { color: var(--muted); }
-
-.status-pill--loading .status-pill__dot,
-.status-pill--rendering .status-pill__dot,
-.status-pill--stale .status-pill__dot {
-  animation: pill-pulse 1s ease-in-out infinite;
-}
-
-.status-pill--loading .status-pill__dot { background: var(--muted); }
-.status-pill--rendering .status-pill__dot { background: var(--accent); }
-.status-pill--ok .status-pill__dot { background: #4ade80; }
-.status-pill--stale .status-pill__dot { background: var(--warn); }
-.status-pill--stale { color: var(--warn); }
-.status-pill--error .status-pill__dot { background: #f87171; }
-.status-pill--error { color: #f87171; }
-
 @keyframes pill-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
 }
-
-/* ═══════════════════════════════════════════════════════════════
-   OUTPUT CONSOLE — Notices + Log tabs drawer
-   ═══════════════════════════════════════════════════════════════ */
-
-.output-console {
-  background: var(--panel);
-  border-top: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  max-height: 14rem;
-  flex-shrink: 0;
-}
-
-.output-console__header {
-  display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-}
-
-.output-console__close {
-  margin: 0.25rem 0.4rem 0.25rem auto;
-  align-self: center;
-  flex-shrink: 0;
-}
-
-.output-console__body {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.output-console__diag-list {
-  margin: 0;
-  padding: 0.4rem 0.75rem;
-  list-style: none;
-}
-
-.output-console__empty {
-  padding: 0.5rem 0.75rem;
-  color: var(--muted);
-  font-size: 0.85rem;
-  margin: 0;
-}
-
-/* On mobile the output console is a dismissible overlay that slides up just
-   above the COLLAPSED (peek) sheet — so the sheet's Presets/Parameters/Files tab
-   row stays visible and tappable beneath it — with a scrim dimming only the
-   viewer above. Opening it collapses the sheet to peek; tapping a sheet tab
-   raises the sheet and closes the overlay, so the two never overlap. */
-.app-shell__mobile > .output-console {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--mobile-footer-total) + var(--mobile-peek-height));
-  top: auto;
-  z-index: 32;
-  max-height: 55vh;
-  box-shadow: var(--elevation);
-  border-top: 1px solid var(--line);
-  border-bottom: none;
-  border-radius: var(--radius) var(--radius) 0 0;
-}
-
-/* Dim the viewer behind the overlay; tap to dismiss. Stops above the peek sheet
-   + footer so the sheet tabs and primary actions stay live and undimmed. */
-.output-console__scrim {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--mobile-footer-total) + var(--mobile-peek-height));
-  z-index: 31;
-  background: rgba(0, 0, 0, 0.4);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   PRESET PICKER — searchable presets (panel popover + sheet tab)
-   ═══════════════════════════════════════════════════════════════ */
-
-.preset-picker {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Inline (mobile sheet): fill the tab height so the list grows and the
-   "Save current as…" row pins to the bottom — no dead space below it. */
-.preset-picker--inline {
-  flex: 1;
-  min-height: 0;
-}
-.preset-picker--inline .preset-picker__sections {
-  flex: 1;
-  max-height: none;
-}
-
-/* Sections list */
-.preset-picker__sections {
-  overflow-y: auto;
-  max-height: 18rem;
-  padding: 0.25rem 0.25rem 0.5rem;
-}
-
-.preset-picker__section-title {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  margin: 0.5rem 0 0.2rem;
-  padding: 0 0.4rem;
-  font-weight: 600;
-}
-
-.preset-picker__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.preset-picker__item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  text-align: left;
-  padding: 0.4rem 0.5rem;
-  background: none;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  font-size: 0.88rem;
-}
-
-.preset-picker__item:hover:not(:disabled) {
-  background: var(--panel-2);
-  border-color: transparent;
-}
-
-.preset-picker__item.selected {
-  background: var(--accent-solid);
-  border-color: var(--accent-solid);
-  color: var(--on-accent);
-}
-
-.preset-picker__user-item {
-  display: flex;
-  align-items: center;
-  gap: 0.15rem;
-}
-
-.preset-picker__user-item .preset-picker__item { flex: 1; min-width: 0; }
-
-.preset-picker__delete {
-  flex-shrink: 0;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 0.2rem 0.45rem;
-  font-size: 0.8rem;
-}
-
-.preset-picker__delete:hover:not(:disabled) {
-  background: var(--panel-2);
-  color: var(--warn);
-}
-
-.preset-picker__empty {
-  padding: 0.5rem 0.6rem;
-  color: var(--muted);
-  font-size: 0.85rem;
-  margin: 0;
-}
-
-/* "Save current as preset" row at the bottom of the picker */
-.preset-picker__save {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-  padding: 0.5rem 0.6rem;
-  border-top: 1px solid var(--line);
-  flex-shrink: 0;
-}
-.preset-picker__save input { flex: 1; min-width: 0; }
-
-/* Popover wrapper (desktop docked panel) */
-.preset-picker-popover {
-  background: var(--panel);
-  overflow: hidden;
-}
-
-.preset-picker-popover__header {
-  display: flex;
-  align-items: center;
-  padding: 0.4rem 0.5rem 0.4rem 0.75rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.preset-picker-popover__title {
-  font-size: 0.88rem;
-  font-weight: 600;
-  flex: 1;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   MOBILE TOP BAR — full-width bar with brand, design picker, badges
-   ═══════════════════════════════════════════════════════════════ */
-
-.mobile-top-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: grid;
-  /* brand (left) | design (centred) | actions (right) — mirrors the desktop bar */
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 0.5rem;
-  padding: calc(env(safe-area-inset-top, 0px) + 0.4rem) calc(0.75rem + env(safe-area-inset-right, 0px)) 0.4rem calc(0.75rem + env(safe-area-inset-left, 0px));
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--glass-border);
-  z-index: 10;
-  min-height: 48px;
-}
-
-.mobile-top-bar__brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.2rem;
-  font-size: 0.92rem;
-  font-weight: 700;
-  white-space: nowrap;
-  justify-self: start;
-  min-width: 0;
-  overflow: hidden;
-}
-.mobile-top-bar__brand .brand-logo { height: 1.3rem; }
-
-/* Centered design picker (mirrors the desktop command bar) */
-.mobile-top-bar__center {
-  display: inline-flex;
-  align-items: center;
-  justify-self: center;
-  min-width: 0;
-}
-.mobile-top-bar__design-name {
-  padding: 0.3rem 0.2rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.mobile-top-bar__right {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  justify-self: end;
-}
-.mobile-top-bar .icon-btn { border-radius: var(--radius-sm); }
 
 /* ═══════════════════════════════════════════════════════════════
    MOBILE FOOTER — fixed actions bar below the bottom sheet
@@ -1216,92 +463,6 @@ button:disabled { cursor: default; }
   background: var(--panel);
   border-top: 1px solid var(--line);
   z-index: 28;
-}
-
-/* The filled primary (Render when pending, else Export) leads the footer and
-   takes extra width so the action that matters reads first. */
-.mobile-footer__primary {
-  flex: 1.6 !important;
-  font-weight: 600;
-  font-size: 0.88rem;
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  border-color: var(--accent-solid);
-}
-
-.mobile-footer__primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-/* Text actions grow to share the remaining width. */
-.mobile-footer button {
-  flex: 1;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.3rem;
-  font-size: 0.8rem;
-  padding: 0.3rem 0.45rem;
-  white-space: nowrap;
-}
-
-/* The console toggle is a utility, not a file action: icon-only, no grow. */
-.mobile-footer__output {
-  flex: 0 0 auto !important;
-  width: var(--mobile-footer-height);
-}
-
-.mobile-footer__output.active {
-  background: var(--panel-2);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* Anchor for the corner-pinned notice count on the icon-only mobile toggle. */
-.action-cluster__output,
-.mobile-footer__output { position: relative; }
-
-/* Pending-notices count on the output toggle — a real number in a warn pill,
-   clearer than a bare dot. Inline on desktop (beside the "Output" label),
-   pinned to the corner on the mobile icon-only button. */
-.output-notice-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.05rem;
-  height: 1.05rem;
-  padding: 0 0.3rem;
-  border-radius: 999px;
-  background: var(--warn);
-  color: #1c1f24;
-  font-size: 0.7rem;
-  font-weight: 700;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-:root[data-theme="light"] .output-notice-count { color: #ffffff; }
-
-.output-notice-count--corner {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  box-shadow: 0 0 0 2px var(--panel);
-  pointer-events: none;
-}
-
-/* When notices are pending the whole toggle reads as "attention" (warn-tinted),
-   not just decorated with a badge. */
-.action-cluster__output.has-notices,
-.mobile-footer__output.has-notices { color: var(--warn); }
-
-/* Vertical rule fencing the console toggle off from the file actions. */
-.mobile-footer__divider {
-  align-self: stretch;
-  width: 1px;
-  margin: 0.5rem 0.15rem;
-  background: var(--line);
-  flex: 0 0 auto;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1390,73 +551,12 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SHEET TABS — Parameters / Presets / Files inside the sheet
+   PARAM FORM — the collapsible-group disclosure marker
+   (The rest of the form is utility-styled in ParamForm.tsx; the ▸ marker's
+   ::before/rotate pair stays here — the utility-variant spelling is
+   unreadable, and reduced-motion also targets it below.)
    ═══════════════════════════════════════════════════════════════ */
 
-.sheet-tabs {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.sheet-tabs__body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Params scroll inside their tab so the tab fills the sheet height. */
-.sheet-tabs__params {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0.5rem 0.75rem;
-}
-
-/* Auto-render label (used in sheet footer and previously in preview-actions) */
-.auto-render {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-}
-
-.auto-render:hover { color: var(--text); }
-
-/* ═══════════════════════════════════════════════════════════════
-   PARAM FORM — accordion groups, param rows, controls
-   ═══════════════════════════════════════════════════════════════ */
-
-.param-form__empty {
-  color: var(--muted);
-  font-size: 0.9rem;
-  padding: 1.25rem 0.25rem;
-  text-align: center;
-}
-
-.param-group {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  margin: 0 0 0.8rem;
-  padding: 0 0.7rem;
-}
-
-.param-group > summary {
-  display: flex;
-  align-items: center;
-  color: var(--accent);
-  font-size: 0.9rem;
-  font-weight: 600;
-  padding: 0.55rem 0.2rem;
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
 .param-group > summary::-webkit-details-marker { display: none; }
 .param-group > summary::before {
   content: "▸";
@@ -1470,432 +570,14 @@ button:disabled { cursor: default; }
   transition: transform 0.12s ease;
 }
 .param-group[open] > summary::before { transform: rotate(90deg); }
-.param-group > summary:focus-visible { outline: 2px solid var(--focus); border-radius: 4px; }
-.param-group[open] { padding-bottom: 0.5rem; }
-
-.param {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  margin: 0.7rem 0;
-}
-
-.param-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-
-/* Inline "font isn't loaded" hint under a font control (see ParamForm). Subtle,
-   not alarming: a panel-toned card with the theme's warn-coloured edge (the same
-   amber as stale-state pills and warning diagnostics) and two action links. */
-.font-missing {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin-top: 0.1rem;
-  padding: 0.5rem 0.6rem;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--warn);
-  border-radius: var(--radius-sm);
-}
-
-.font-missing__text {
-  color: var(--text);
-  font-size: 0.82rem;
-  line-height: 1.4;
-}
-
-.font-missing__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1rem;
-}
-
-.font-missing__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 2px 0;
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.font-missing__btn:hover {
-  text-decoration: underline;
-}
-
-.font-missing__btn:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* Label text + its optional info button, kept together on the left so the
-   var-name code stays pinned to the right edge. */
-.param-label__main {
-  display: flex;
-  align-items: baseline;
-  gap: 0.3rem;
-  min-width: 0;
-}
-
-.param-desc { color: var(--text); }
-
-.param-help-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  /* Keep the 15px glyph but give it a >=24px tap target (WCAG 2.2 target size);
-     the negative margin absorbs the padding so the row layout is unchanged. */
-  padding: 5px;
-  margin: -5px;
-  background: none;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  /* Align the icon's optical centre with the baseline text. */
-  align-self: center;
-  border-radius: 4px;
-  line-height: 0;
-}
-
-.param-help-btn svg {
-  width: 15px;
-  height: 15px;
-}
-
-.param-help-btn:hover,
-.param-help-btn:focus-visible {
-  color: var(--accent);
-}
-
-.param-help-btn:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
-}
-
-.param-help-popover {
-  color: var(--text);
-  line-height: 1.45;
-  /* Help is plain text joined from the source comment; wrap long words. */
-  overflow-wrap: anywhere;
-}
-
-.param-var {
-  color: var(--muted);
-  font: 11px ui-monospace, monospace;
-  flex-shrink: 0;
-}
-
-.control-row { display: flex; gap: 0.5rem; align-items: center; }
-.control-row input[type="range"] { flex: 1; min-width: 0; }
-/* Number-input width comes from the `w-20` utility on the control itself. */
-.param select, .param input[type="text"] { width: 100%; }
-.param input[type="checkbox"] { align-self: flex-start; }
-
-/* ═══════════════════════════════════════════════════════════════
-   FILE MANAGER — imported-files list (Files tab + panel footer)
-   ═══════════════════════════════════════════════════════════════ */
-
-.file-manager {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem 0.75rem;
-}
-
-.file-manager__intro {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-.file-manager__intro :is(p, ul) {
-  margin: 0;
-}
-
-.file-manager__intro :is(p, ul) + :is(p, ul) {
-  margin-top: 0.5rem;
-}
-
-.file-manager__intro ul {
-  padding-left: 1.1rem;
-}
-
-.file-manager__intro a {
-  color: var(--link);
-}
-
-.file-manager__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.file-manager__item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.6rem;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-}
-
-.file-manager__item > svg { color: var(--accent); flex-shrink: 0; }
-
-.file-manager__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.9rem;
-}
-
-.file-manager__size {
-  flex-shrink: 0;
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.file-manager__remove {
-  flex-shrink: 0;
-  color: var(--accent);
-  background: transparent;
-  border-color: transparent;
-}
-.file-manager__remove:hover:not(:disabled) { background: var(--panel); border-color: var(--line); }
-
-.file-manager__action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  width: 100%;
-  padding: 0.55rem;
-  font-size: 0.88rem;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   UTILITY — badges, icon buttons, labelled buttons
-   ═══════════════════════════════════════════════════════════════ */
-
-.badge {
-  margin-left: 0.35rem;
-  background: var(--accent-solid);
-  color: var(--on-accent);
-  border-radius: var(--radius-sm);
-  padding: 0 0.4rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge-assert { background: var(--warn); color: #1c1f24; }
-:root[data-theme="light"] .badge-assert { color: #ffffff; }
-
-.log {
-  margin: 0;
-  max-height: 11rem;
-  overflow: auto;
-  padding: 0.6rem 1rem;
-  background: var(--code-bg);
-  font: 12px/1.4 ui-monospace, monospace;
-  color: var(--muted);
-  white-space: pre-wrap;
-}
-
-.diag {
-  display: flex;
-  gap: 0.5rem;
-  align-items: baseline;
-  padding: 0.2rem 0;
-  font-size: 0.82rem;
-}
-
-.diag-icon { flex-shrink: 0; }
-.diag-notice .diag-icon { color: var(--accent); }
-.diag-warning .diag-icon { color: var(--warn); }
-.diag-assert .diag-icon { color: var(--warn); }
-.diag-text { color: var(--text); }
-
-/* Icon buttons (close, zoom, collapse, etc.) */
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.35rem;
-  line-height: 0;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-}
-
-.icon-btn:hover:not(:disabled) { border-color: var(--accent); }
-
-/* Quiet "Reset to defaults" link */
-.reset-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  padding: 0.25rem 0.3rem;
-  font-size: 0.85rem;
-}
-
-.reset-link svg { flex: 0 0 auto; }
-.reset-link:hover:not(:disabled) { color: var(--text); border: none; }
-/* Inert when parameters already match the defaults — nothing to reset. */
-.reset-link:disabled { opacity: 0.4; cursor: default; }
-
-/* ═══════════════════════════════════════════════════════════════
-   MODALS — licenses, help, popup notice
-   ═══════════════════════════════════════════════════════════════ */
-
-.modal {
-  display: flex;
-  flex-direction: column;
-  width: min(680px, 100%);
-  max-height: min(80vh, 760px);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--elevation);
-}
-
-.modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.8rem 1rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.modal-head h2 { margin: 0; font-size: 1.05rem; }
-
-.modal-intro { margin: 0.8rem 1rem 0; color: var(--muted); font-size: 0.85rem; }
-.modal-intro p { margin: 0; }
-.modal-intro a, .license-entry a { color: var(--link); }
-.modal-body { overflow-y: auto; padding: 0.5rem 1rem 1rem; }
-
-.modal-intro code,
-.help-body code,
-.notice-body code,
-.lic-text code {
-  background: var(--panel-2);
-  border-radius: var(--radius-sm);
-  padding: 0 0.2rem;
-  font: 12px ui-monospace, monospace;
-}
-
-.modal-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0 1rem 1rem;
-}
-
-/* Help modal */
-.help-tab-intro { margin: 0 0 0.6rem; color: var(--muted); font-size: 0.85rem; }
-.help-tab-intro p { margin: 0; }
-.help-tab-intro a, .help-body a { color: var(--link); }
-.help-body section { margin: 0.9rem 0; }
-.help-body h3 { margin: 0 0 0.25rem; font-size: 0.95rem; color: var(--accent); }
-.help-body p { margin: 0; color: var(--text); font-size: 0.88rem; line-height: 1.5; }
-.help-body ul {
-  margin: 0.35rem 0 0;
-  padding-left: 1.1rem;
-  color: var(--text);
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-.help-body li { margin: 0.2rem 0; }
-
-/* Notice popup */
-.notice-body p { margin: 0.5rem 0; color: var(--text); font-size: 0.9rem; line-height: 1.5; }
-.notice-body p:first-child { margin-top: 0; }
-.notice-body ul {
-  margin: 0.4rem 0;
-  padding-left: 1.1rem;
-  color: var(--text);
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-.notice-body a { color: var(--link); }
-
-.notice-dismiss {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--muted);
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.notice-ok { margin-left: auto; }
-
-/* Licenses */
-.license-entry { padding: 0.8rem 0; border-top: 1px solid var(--line); }
-.license-entry:first-child { border-top: none; }
-.license-entry h3 {
-  margin: 0 0 0.3rem;
-  font-size: 0.95rem;
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-.lic-version { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
-.lic-spdx {
-  margin-left: auto;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 0 0.5rem;
-  font: 11px ui-monospace, monospace;
-  color: var(--accent);
-}
-.lic-copyright { margin: 0.2rem 0; font-size: 0.85rem; }
-.lic-note { margin: 0.2rem 0; color: var(--muted); font-size: 0.82rem; }
-.lic-links { margin: 0.3rem 0; font-size: 0.82rem; }
-.license-entry details { margin-top: 0.4rem; }
-.license-entry summary { cursor: pointer; color: var(--muted); font-size: 0.82rem; }
-.lic-text {
-  margin: 0.5rem 0 0;
-  max-height: 16rem;
-  overflow: auto;
-  padding: 0.6rem 0.8rem;
-  background: var(--code-bg);
-  border-radius: var(--radius-sm);
-  font: 11px/1.45 ui-monospace, monospace;
-  color: var(--muted);
-  white-space: pre-wrap;
-}
 
 /* ═══════════════════════════════════════════════════════════════
    ANIMATIONS + MOTION PREFERENCES
    ═══════════════════════════════════════════════════════════════ */
 
 @media (prefers-reduced-motion: reduce) {
-  .spinner { animation-duration: 2.4s; }
   .bottom-sheet { transition: none !important; }
   .app-shell__mobile-viewer { transition: none !important; }
   .param-group > summary::before { transition: none; }
-  .status-pill__dot { animation: none !important; }
 }
-} /* end @layer legacy */
+} /* end @layer components */

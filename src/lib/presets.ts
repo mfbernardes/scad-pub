@@ -3,7 +3,7 @@
 // `<file>.json` so presets round-trip with the desktop Customizer
 // (openscad -p file.json -P "Set name").
 import type { Design, ParamValue } from "../openscad/types";
-import { fromPresetString, toPresetString } from "./scad";
+import { fromPresetString } from "./scad";
 import { assetUrl } from "./assetUrl";
 import { ns } from "./appId";
 
@@ -18,18 +18,6 @@ export function defaultsFor(design: Design): Values {
   const v: Values = {};
   for (const p of design.params) v[p.name] = p.default;
   return v;
-}
-
-/** Build a desktop-compatible parameterSets file for one named set. */
-export function toParameterSetsFile(
-  design: Design,
-  setName: string,
-  values: Values
-): ParameterSetsFile {
-  const set: Record<string, string> = {};
-  for (const p of design.params)
-    set[p.name] = toPresetString(p, values[p.name] ?? p.default);
-  return { parameterSets: { [setName]: set }, fileFormatVersion: "1" };
 }
 
 export interface ParsedSet {

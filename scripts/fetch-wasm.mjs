@@ -15,10 +15,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { unzipSync } from "fflate";
+import { PINNED_WASM_VERSION, WASM_VERSION as VERSION, WASM_SHA256 as SHA256 } from "./wasm-version.mjs";
 
-const VERSION = process.env.OPENSCAD_VERSION || "2026.06.12";
 const URL = `https://files.openscad.org/snapshots/OpenSCAD-${VERSION}-WebAssembly-web.zip`;
-const SHA256 = "509879dd6813f2c4e5cf2ce1da6420928ce9bb212cd08491ca5ec9d5bffc700b";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM_DIR = join(HERE, "..", "public", "wasm");
@@ -58,7 +57,7 @@ if (!res.ok) die(`download failed for ${URL} (HTTP ${res.status})`);
 const zip = new Uint8Array(await res.arrayBuffer());
 
 // Verify integrity when the version matches the pin.
-if (VERSION === "2026.06.12") {
+if (VERSION === PINNED_WASM_VERSION) {
   const actual = createHash("sha256").update(zip).digest("hex");
   if (actual !== SHA256) {
     log(`  expected ${SHA256}`);

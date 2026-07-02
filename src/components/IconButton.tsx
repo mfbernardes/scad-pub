@@ -1,8 +1,9 @@
 // IconButton.tsx — a compact icon button with consistent accessibility: an
 // aria-label (required) and a tooltip (native title) that defaults to the same
 // text. Built on the shadcn/ui Button (Radix Slot-based) for focus-ring and
-// disabled handling; keeps the `icon-btn` class so context-specific styling
-// (viewer HUD glass, command-bar pills, …) continues to apply.
+// disabled handling. Context-specific styling (viewer HUD glass, …) comes in
+// via className and wins through tailwind-merge; `icon-btn` stays as an inert
+// semantic hook for tests/extraCss.
 import type { ReactNode } from "react";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
@@ -32,7 +33,7 @@ export function IconButton({
       type="button"
       variant="ghost"
       size="icon"
-      className={cn("icon-btn size-8", className)}
+      className={cn("icon-btn size-8 p-[0.35rem] bg-muted border hover:border-brand", className)}
       aria-label={label}
       aria-pressed={pressed}
       title={title ?? label}

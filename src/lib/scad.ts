@@ -25,12 +25,6 @@ export function toScadExpr(param: Param, value: ParamValue): string {
   }
 }
 
-/** OpenSCAD's parameterSets stores every value as a plain (unquoted) string. */
-export function toPresetString(param: Param, value: ParamValue): string {
-  if (param.type === "boolean") return value ? "true" : "false";
-  return String(value);
-}
-
 /**
  * Parse a parameterSets string back into a typed value for the given param,
  * validating it against the schema. Values come from sharable URL hashes,

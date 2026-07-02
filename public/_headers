@@ -1,0 +1,8 @@
+# Cloudflare Workers static-assets headers (ignored by other hosts).
+# Hashed build output is immutable; the WASM is version-pinned but served
+# under a stable filename, so it gets a day of browser cache (the app's own
+# versioned Cache Storage makes browser-cache lifetime mostly moot anyway).
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/wasm/*
+  Cache-Control: public, max-age=86400

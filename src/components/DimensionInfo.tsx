@@ -12,6 +12,7 @@ import type { Dimensions } from "./Viewer";
 import type { Values } from "../lib/presets";
 import type { ComputedInfo } from "../lib/computedInfo";
 import { isVisible } from "../lib/visibility";
+import { cn } from "../lib/utils";
 
 interface Props {
   design: Design;
@@ -67,25 +68,43 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
     }))
     .filter((l): l is { name: string; label: string; value: string } => l.value !== null);
 
+  const hasRows = infoLines.length > 0 || computed.length > 0;
+  const row = "flex items-baseline justify-between gap-3";
+  const dd = "m-0 text-right text-foreground tabular-nums break-words";
+
   return (
     <dl
-      className={`dimension-info${stale ? " dimension-info--stale" : ""}`}
+      // Positioning/size caps come from the .dimension-info CSS block
+      // (per-layout offsets); pointer-events-auto so the list can scroll while
+      // the rest of the canvas stays orbit-able.
+      className={cn(
+        "dimension-info pointer-events-auto m-0 flex flex-col gap-[0.15rem] overflow-y-auto overscroll-contain rounded-(--radius-sm) border border-(color:--glass-border) bg-(--glass-bg) px-[0.55rem] py-[0.35rem] text-[0.8rem] text-muted-foreground shadow-[0_2px_8px_rgba(0,0,0,0.3)] backdrop-blur-[8px] [scrollbar-width:thin]",
+        // Preview out of date: dim + italic so a stale figure never reads as current.
+        stale && "italic opacity-55"
+      )}
       aria-label="Model measurements"
     >
-      <div className="dimension-info__row dimension-info__row--primary">
+      <div
+        className={cn(
+          row,
+          "[&>dt]:font-semibold [&>dt]:text-foreground",
+          // Divider under the headline when @info rows follow it.
+          hasRows && "mb-[0.15rem] border-b border-(color:--glass-border) pb-[0.3rem]"
+        )}
+      >
         <dt>Dimensions</dt>
-        <dd>{`${mm(size.x)} × ${mm(size.y)} × ${mm(size.z)} mm`}</dd>
+        <dd className={dd}>{`${mm(size.x)} × ${mm(size.y)} × ${mm(size.z)} mm`}</dd>
       </div>
       {infoLines.map((l) => (
-        <div className="dimension-info__row" key={l.name}>
+        <div className={row} key={l.name}>
           <dt>{l.label}</dt>
-          <dd>{l.value}</dd>
+          <dd className={dd}>{l.value}</dd>
         </div>
       ))}
       {computed.map((c, i) => (
-        <div className="dimension-info__row" key={`computed-${i}-${c.label}`}>
+        <div className={row} key={`computed-${i}-${c.label}`}>
           <dt>{c.label}</dt>
-          <dd>{c.value}</dd>
+          <dd className={dd}>{c.value}</dd>
         </div>
       ))}
     </dl>
