@@ -2,7 +2,7 @@
 //   Desktop (≥ 860px): CommandBar + docked ParamPanel + ActionCluster + ViewerHUD
 //   Mobile (< 860px):  full-bleed viewer + top bar + BottomSheet + fixed footer
 // All state/logic stays in App.tsx; this is a pure view extraction.
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
@@ -218,13 +218,15 @@ export const AppShell = memo(function AppShell({
   }, []);
 
   // Notices are surfaced by the dot on the Output toggle, not by auto-popping the
-  // console. We only auto-hide a console that's open once its notices clear.
+  // console. We only auto-hide a console that's open once its notices clear —
+  // detected by comparing against the previous render's value (the react.dev
+  // "adjust state during render" pattern), no effect pass needed.
   const hasNotices = diagnostics.length > 0;
-  const hadNotices = useRef(false);
-  useEffect(() => {
-    if (!hasNotices && hadNotices.current) setOutputOpen(false);
-    hadNotices.current = hasNotices;
-  }, [hasNotices]);
+  const [prevHasNotices, setPrevHasNotices] = useState(hasNotices);
+  if (hasNotices !== prevHasNotices) {
+    setPrevHasNotices(hasNotices);
+    if (!hasNotices) setOutputOpen(false);
+  }
 
   return (
     <div className="app-shell">

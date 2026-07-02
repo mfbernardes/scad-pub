@@ -38,8 +38,6 @@ export interface AppActions {
 
 const AppActionsContext = createContext<AppActions | null>(null);
 
-type AnyFn = (...args: never[]) => unknown;
-
 export function AppActionsProvider({
   actions,
   children,
@@ -51,14 +49,30 @@ export function AppActionsProvider({
   const latest = useRef(actions);
   latest.current = actions;
   // …through wrappers whose identities never change, so consumers stay stable.
+  // Spelled out per action (rather than looped) so adding an AppActions member
+  // without wiring it here is a compile error, not a runtime hole.
   const stable = useRef<AppActions | null>(null);
-  if (!stable.current) {
-    const out: Record<string, AnyFn> = {};
-    for (const key of Object.keys(actions))
-      out[key] = (...args: never[]) =>
-        (latest.current as unknown as Record<string, AnyFn>)[key](...args);
-    stable.current = out as unknown as AppActions;
-  }
+  if (!stable.current)
+    stable.current = {
+      install: () => latest.current.install(),
+      designChange: (id) => latest.current.designChange(id),
+      change: (name, value) => latest.current.change(name, value),
+      applyPreset: (v) => latest.current.applyPreset(v),
+      selectedPresetChange: (id) => latest.current.selectedPresetChange(id),
+      presetsChange: () => latest.current.presetsChange(),
+      render: () => latest.current.render(),
+      exportModel: () => latest.current.exportModel(),
+      savePng: (url) => latest.current.savePng(url),
+      copyLink: () => latest.current.copyLink(),
+      reset: () => latest.current.reset(),
+      addFile: (name, bytes) => latest.current.addFile(name, bytes),
+      removeFile: (name) => latest.current.removeFile(name),
+      clearFiles: () => latest.current.clearFiles(),
+      autoRenderChange: (v) => latest.current.autoRenderChange(v),
+      cycleTheme: () => latest.current.cycleTheme(),
+      showHelp: () => latest.current.showHelp(),
+      showLicenses: () => latest.current.showLicenses(),
+    };
   return createElement(AppActionsContext.Provider, { value: stable.current }, children);
 }
 
