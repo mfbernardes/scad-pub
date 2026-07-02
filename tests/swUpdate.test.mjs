@@ -29,10 +29,15 @@ test("service worker precaches the app shell without auto-activating updates", (
   assert.doesNotMatch(text, /install[\s\S]{0,200}skipWaiting/);
 });
 
-test("service worker only excludes wasm binaries from shell caching", () => {
+test("service worker keeps the big binaries out of the shell cache and warms BIN_CACHE", () => {
   const text = swText();
-  assert.match(text, /pathname\.endsWith\(["']\.wasm["']\)/);
+  // The wasm + font binaries live in the render worker's own versioned cache…
+  assert.match(text, /BIN_RE\s*=\s*\/\\\.\(wasm\|ttf\|otf\|ttc\)\$\/i/);
   assert.doesNotMatch(text, /pathname\.includes\(["']\/wasm\/["']\)/);
+  // …which the install step warms from the precache manifest's `bin` section,
+  // so offline rendering works even before the first render.
+  assert.match(text, /precacheBin/);
+  assert.match(text, /bin\.cache/);
 });
 
 test("service worker carries a build-stamped version so updates are detectable", () => {

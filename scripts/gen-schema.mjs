@@ -1275,7 +1275,13 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     designs: designs.map(({ abs, ...d }) => d),
   };
   if (outPublicDir) {
-    const precache = new Set([
+    // v2 precache manifest, read by public/sw.js at install:
+    //   shell — small runtime assets cached into the per-build shell cache;
+    //   bin   — the big version-pinned binaries (the ~10 MB WASM + fonts),
+    //           warmed into the render worker's own BIN_CACHE (same cache,
+    //           same keys — no double store) so offline rendering works even
+    //           before the first render.
+    const shell = new Set([
       "icon.svg",
       "icon-192.png",
       "icon-512.png",
@@ -1285,21 +1291,28 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       "wasm/openscad.js",
       "fonts/fonts.conf",
     ]);
-    for (const splash of appleSplash) precache.add(splash.href);
-    for (const font of FONTS) precache.add(`fonts/${font}`);
-    for (const asset of assets) precache.add(`scad/${asset}`);
+    for (const splash of appleSplash) shell.add(splash.href);
+    for (const asset of assets) shell.add(`scad/${asset}`);
     for (const d of schema.designs) {
-      precache.add(`scad/${d.file}`);
-      for (const preset of d.presets) precache.add(`scad/${preset}`);
+      shell.add(`scad/${d.file}`);
+      for (const preset of d.presets) shell.add(`scad/${preset}`);
     }
     if (logo) {
-      precache.add(logo.light);
-      precache.add(logo.dark);
+      shell.add(logo.light);
+      shell.add(logo.dark);
     }
-    if (extraCss) precache.add(extraCss);
+    if (extraCss) shell.add(extraCss);
+    const precache = {
+      version: 2,
+      shell: [...shell].sort(),
+      bin: {
+        cache: `openscad-wasm-bin-${WASM_VERSION}`,
+        urls: ["wasm/openscad.wasm", ...FONTS.map((f) => `fonts/${f}`)].sort(),
+      },
+    };
     writeFileSync(
       join(outPublicDir, "precache-manifest.json"),
-      JSON.stringify([...precache].sort(), null, 2) + "\n"
+      JSON.stringify(precache, null, 2) + "\n"
     );
   }
   writeFileSync(

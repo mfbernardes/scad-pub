@@ -257,21 +257,27 @@ test("public precache manifest lists generated runtime assets", () => {
   const precache = JSON.parse(
     readFileSync(join(out, "public", "precache-manifest.json"), "utf-8")
   );
+  assert.equal(precache.version, 2);
   for (const path of [
     "icon.svg",
     "manifest.webmanifest",
     "wasm/openscad.js",
     "fonts/fonts.conf",
-    "fonts/Foo.ttf",
     "scad/widget.scad",
     "scad/widget.json",
     "scad/lib/core.scad",
     "scad/lib/util.scad",
     "scad/logo.svg",
   ]) {
-    assert.ok(precache.includes(path), `${path} should be precached`);
+    assert.ok(precache.shell.includes(path), `${path} should be shell-precached`);
   }
-  assert.ok(!precache.includes("wasm/openscad.wasm"));
+  // The big binaries (WASM + font files) go to the render worker's own
+  // versioned cache, not the shell cache.
+  assert.ok(!precache.shell.includes("wasm/openscad.wasm"));
+  assert.ok(!precache.shell.includes("fonts/Foo.ttf"));
+  assert.match(precache.bin.cache, /^openscad-wasm-bin-/);
+  assert.ok(precache.bin.urls.includes("wasm/openscad.wasm"));
+  assert.ok(precache.bin.urls.includes("fonts/Foo.ttf"));
 });
 
 test("manifest carries the PWA install fields (id, launch_handler, maskable icon)", () => {
@@ -340,7 +346,7 @@ test("iOS splash images are generated and described in the schema", () => {
   const precache = JSON.parse(
     readFileSync(join(out, "public", "precache-manifest.json"), "utf-8")
   );
-  for (const sp of schema.appleSplash) assert.ok(precache.includes(sp.href));
+  for (const sp of schema.appleSplash) assert.ok(precache.shell.includes(sp.href));
 });
 
 test("regenerating cleans the scad output dir so removed files don't linger", () => {
@@ -596,7 +602,7 @@ test("extraCss is listed in the public precache manifest", () => {
   const precache = JSON.parse(
     readFileSync(join(out, "public", "precache-manifest.json"), "utf-8")
   );
-  assert.ok(precache.includes("scad/extra.css"));
+  assert.ok(precache.shell.includes("scad/extra.css"));
 });
 
 test("parseColors validates tokens and values", () => {

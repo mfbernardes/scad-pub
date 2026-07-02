@@ -72,36 +72,46 @@ async function loadFactory(): Promise<OpenSCADFactory> {
   return mod.default as OpenSCADFactory;
 }
 
-async function ensureAssets() {
-  if (!factoryPromise) {
+// One-shot, memoized asset load. The four independent downloads (WASM
+// fetch+compile, shared .scad sources, fonts.conf, font binaries) run in
+// parallel — serialized they made the cold first render pay each round-trip
+// back to back. Memoizing the whole promise also makes concurrent callers
+// share one load instead of racing the per-variable checks.
+let assetsReady: Promise<void> | null = null;
+
+function ensureAssets(): Promise<void> {
+  return (assetsReady ??= (async () => {
     void cleanupOldCaches();
     factoryPromise = loadFactory();
-  }
-  if (!wasmBinary) wasmBinary = await cachedBuffer(asset("wasm/openscad.wasm"));
-  if (!wasmModulePromise) {
-    wasmModulePromise = WebAssembly.compile(wasmBinary).catch(() => null);
-  }
-  await wasmModulePromise;
-  if (!assetSources) {
-    const entries = await Promise.all(
-      schema.assets.map(async (p) => [
-        p,
-        await (await fetch(asset(`scad/${p}`))).text(),
-      ])
-    );
-    assetSources = Object.fromEntries(entries) as Record<string, string>;
-  }
-  if (!fontsConf)
-    fontsConf = await (await fetch(asset("fonts/fonts.conf"))).text();
-  if (!fontFiles) {
-    const entries = await Promise.all(
-      schema.fonts.map(async (n) => [
-        n,
-        new Uint8Array(await cachedBuffer(asset(`fonts/${n}`))),
-      ])
-    );
-    fontFiles = Object.fromEntries(entries) as Record<string, Uint8Array>;
-  }
+    await Promise.all([
+      (async () => {
+        wasmBinary = await cachedBuffer(asset("wasm/openscad.wasm"));
+        wasmModulePromise = WebAssembly.compile(wasmBinary).catch(() => null);
+        await wasmModulePromise;
+      })(),
+      (async () => {
+        const entries = await Promise.all(
+          schema.assets.map(async (p) => [
+            p,
+            await (await fetch(asset(`scad/${p}`))).text(),
+          ])
+        );
+        assetSources = Object.fromEntries(entries) as Record<string, string>;
+      })(),
+      (async () => {
+        fontsConf = await (await fetch(asset("fonts/fonts.conf"))).text();
+      })(),
+      (async () => {
+        const entries = await Promise.all(
+          schema.fonts.map(async (n) => [
+            n,
+            new Uint8Array(await cachedBuffer(asset(`fonts/${n}`))),
+          ])
+        );
+        fontFiles = Object.fromEntries(entries) as Record<string, Uint8Array>;
+      })(),
+    ]);
+  })());
 }
 
 async function loadDesignSource(path: string): Promise<string> {
