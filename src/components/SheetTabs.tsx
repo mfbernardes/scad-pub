@@ -71,7 +71,7 @@ export function SheetTabs({
     <Tabs
       value={tab}
       onValueChange={(v) => setTab(v as Tab)}
-      className="sheet-tabs gap-0"
+      className="sheet-tabs min-h-0 flex-1 gap-0"
     >
       <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
         {tabs.map((t) => (
@@ -80,9 +80,9 @@ export function SheetTabs({
           </TabsTrigger>
         ))}
       </TabsList>
-      <div className="sheet-tabs__body">
+      <div className="flex min-h-0 flex-1 flex-col">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <div className="sheet-tabs__params">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
             <ParamForm design={design} values={values} onChange={change} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} />
           </div>
           {/* Auto-render + Reset are parameter-scoped, so they pin to the bottom

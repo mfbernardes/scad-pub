@@ -425,47 +425,6 @@ button:disabled { cursor: default; }
 /* handle--left sits at the left edge of a right panel */
 .handle--left { left: -4px; }
 
-/* Search row inside the panel */
-.param-panel__search {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.6rem;
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-  color: var(--muted);
-}
-
-.param-panel__search input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: var(--text);
-}
-
-.param-panel__search input::placeholder { color: var(--muted); }
-.param-panel__search input:focus { outline: none; }
-
-/* Scrollable parameter body */
-.param-panel__body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0.75rem;
-  min-height: 0;
-}
-
-/* Footer with reset button */
-.param-panel__footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.75rem;
-  border-top: 1px solid var(--line);
-  flex-shrink: 0;
-}
-
 /* ═══════════════════════════════════════════════════════════════
    VIEWER — the Three.js canvas container
    ═══════════════════════════════════════════════════════════════ */
@@ -987,60 +946,12 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SHEET TABS — Parameters / Presets / Files inside the sheet
+   PARAM FORM — the collapsible-group disclosure marker
+   (The rest of the form is utility-styled in ParamForm.tsx; the ▸ marker's
+   ::before/rotate pair stays here — the utility-variant spelling is
+   unreadable, and reduced-motion also targets it below.)
    ═══════════════════════════════════════════════════════════════ */
 
-.sheet-tabs {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.sheet-tabs__body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Params scroll inside their tab so the tab fills the sheet height. */
-.sheet-tabs__params {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0.5rem 0.75rem;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   PARAM FORM — accordion groups, param rows, controls
-   ═══════════════════════════════════════════════════════════════ */
-
-.param-form__empty {
-  color: var(--muted);
-  font-size: 0.9rem;
-  padding: 1.25rem 0.25rem;
-  text-align: center;
-}
-
-.param-group {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  margin: 0 0 0.8rem;
-  padding: 0 0.7rem;
-}
-
-.param-group > summary {
-  display: flex;
-  align-items: center;
-  color: var(--accent);
-  font-size: 0.9rem;
-  font-weight: 600;
-  padding: 0.55rem 0.2rem;
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
 .param-group > summary::-webkit-details-marker { display: none; }
 .param-group > summary::before {
   content: "▸";
@@ -1054,134 +965,6 @@ button:disabled { cursor: default; }
   transition: transform 0.12s ease;
 }
 .param-group[open] > summary::before { transform: rotate(90deg); }
-.param-group > summary:focus-visible { outline: 2px solid var(--focus); border-radius: 4px; }
-.param-group[open] { padding-bottom: 0.5rem; }
-
-.param {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  margin: 0.7rem 0;
-}
-
-.param-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-
-/* Inline "font isn't loaded" hint under a font control (see ParamForm). Subtle,
-   not alarming: a panel-toned card with the theme's warn-coloured edge (the same
-   amber as stale-state pills and warning diagnostics) and two action links. */
-.font-missing {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin-top: 0.1rem;
-  padding: 0.5rem 0.6rem;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--warn);
-  border-radius: var(--radius-sm);
-}
-
-.font-missing__text {
-  color: var(--text);
-  font-size: 0.82rem;
-  line-height: 1.4;
-}
-
-.font-missing__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1rem;
-}
-
-.font-missing__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 2px 0;
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.font-missing__btn:hover {
-  text-decoration: underline;
-}
-
-.font-missing__btn:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* Label text + its optional info button, kept together on the left so the
-   var-name code stays pinned to the right edge. */
-.param-label__main {
-  display: flex;
-  align-items: baseline;
-  gap: 0.3rem;
-  min-width: 0;
-}
-
-.param-desc { color: var(--text); }
-
-.param-help-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  /* Keep the 15px glyph but give it a >=24px tap target (WCAG 2.2 target size);
-     the negative margin absorbs the padding so the row layout is unchanged. */
-  padding: 5px;
-  margin: -5px;
-  background: none;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  /* Align the icon's optical centre with the baseline text. */
-  align-self: center;
-  border-radius: 4px;
-  line-height: 0;
-}
-
-.param-help-btn svg {
-  width: 15px;
-  height: 15px;
-}
-
-.param-help-btn:hover,
-.param-help-btn:focus-visible {
-  color: var(--accent);
-}
-
-.param-help-btn:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
-}
-
-.param-help-popover {
-  color: var(--text);
-  line-height: 1.45;
-  /* Help is plain text joined from the source comment; wrap long words. */
-  overflow-wrap: anywhere;
-}
-
-.param-var {
-  color: var(--muted);
-  font: 11px ui-monospace, monospace;
-  flex-shrink: 0;
-}
-
-/* Control sizing comes from the shadcn controls themselves (Slider flex,
-   number Input w-20, text Input w-full). */
-.control-row { display: flex; gap: 0.5rem; align-items: center; }
 
 /* ═══════════════════════════════════════════════════════════════
    ANIMATIONS + MOTION PREFERENCES

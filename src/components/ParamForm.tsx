@@ -55,28 +55,31 @@ function FontMissingHint({
   onUse: (next: string) => void;
 }) {
   const { addFile } = useAppActions();
+  // The action links that actually fix a missing font (import it, or switch
+  // to a loaded family).
+  const actionBtn =
+    "inline-flex cursor-pointer items-center gap-[0.3rem] border-none bg-transparent px-0 py-[2px] text-[0.82rem] font-semibold text-brand hover:underline focus-visible:rounded-[4px] focus-visible:outline-offset-2";
   return (
-    <div className="font-missing" role="status">
-      <span className="font-missing__text">
+    <div
+      className="font-missing mt-[0.1rem] flex flex-col gap-[0.4rem] rounded-(--radius-sm) border border-l-[3px] border-l-warn bg-muted px-[0.6rem] py-2"
+      role="status"
+    >
+      <span className="text-[0.82rem] leading-[1.4] text-foreground">
         “{family}” isn’t loaded — text may render in another font.
       </span>
-      <div className="font-missing__actions">
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
         <FileInput
           accept=".ttf,.otf,.ttc"
           onFile={async (file) => addFile(file.name, new Uint8Array(await file.arrayBuffer()))}
         >
           {(open) => (
-            <button type="button" className="font-missing__btn" onClick={open}>
+            <button type="button" className={actionBtn} onClick={open}>
               <UploadIcon size={13} aria-hidden="true" /> Import font…
             </button>
           )}
         </FileInput>
         {fallback && (
-          <button
-            type="button"
-            className="font-missing__btn"
-            onClick={() => onUse(fallback.value)}
-          >
+          <button type="button" className={actionBtn} onClick={() => onUse(fallback.value)}>
             Use {fallback.label}
           </button>
         )}
@@ -164,7 +167,7 @@ function NumberControl({
   };
 
   return (
-    <div className="control-row">
+    <div className="flex items-center gap-2">
       {hasRange && (
         <Slider
           className="flex-1"
@@ -257,15 +260,20 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
+        {/* 15px glyph with a >=24px tap target (WCAG 2.2): the negative margin
+            absorbs the padding so the row layout is unchanged. */}
         <button
           type="button"
-          className="param-help-btn"
+          className="-m-[5px] inline-flex shrink-0 cursor-pointer items-center justify-center self-center rounded-[4px] border-none bg-transparent p-[5px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
           aria-label={`Help for ${label}`}
         >
           <InfoIcon aria-hidden="true" focusable="false" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="param-help-popover w-64 max-w-[80vw] p-3 text-sm">
+      <PopoverContent
+        align="start"
+        className="w-64 max-w-[80vw] p-3 text-sm leading-[1.45] text-foreground [overflow-wrap:anywhere]"
+      >
         {help}
       </PopoverContent>
     </Popover>
@@ -306,14 +314,20 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
   return (
     <div className="param-form">
       {groups.length === 0 && (
-        <p className="param-form__empty">
+        <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
           {q ? `No parameters match “${search}”.` : "This design has no parameters."}
         </p>
       )}
       {groups.map(({ section, params, startOpen }) => {
         return (
-          <details className="param-group" key={section} open={startOpen}>
-            <summary>{section}</summary>
+          <details
+            className="param-group mb-[0.8rem] rounded-lg border px-[0.7rem] open:pb-2"
+            key={section}
+            open={startOpen}
+          >
+            <summary className="flex cursor-pointer select-none list-none items-center px-[0.2rem] py-[0.55rem] text-[0.9rem] font-semibold text-brand focus-visible:rounded-[4px]">
+              {section}
+            </summary>
             {params.map((p) => {
               const label = p.description || p.name;
               // `help` is the full comment block; its first sentence is the
@@ -322,13 +336,19 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               const value = values[p.name];
               const missingFontValue = missingFont(p, value, availableFontFamilies);
               return (
-                <div className="param" key={p.name}>
-                  <span className="param-label">
-                    <span className="param-label__main">
-                      <span className="param-desc">{label}</span>
+                <div className="param my-[0.7rem] flex flex-col gap-[0.3rem]" key={p.name}>
+                  <span className="flex items-baseline justify-between gap-2">
+                    {/* Label + optional info button together on the left so the
+                        var-name code pins to the right edge. */}
+                    <span className="flex min-w-0 items-baseline gap-[0.3rem]">
+                      <span className="text-foreground">{label}</span>
                       {hasHelp && <ParamHelp help={p.help} label={label} />}
                     </span>
-                    {showVarName && p.description && <code className="param-var">{p.name}</code>}
+                    {showVarName && p.description && (
+                      <code className="param-var shrink-0 font-mono text-[11px] leading-[normal] text-muted-foreground">
+                        {p.name}
+                      </code>
+                    )}
                   </span>
                   <Control
                     param={p}
