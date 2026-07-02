@@ -20,6 +20,8 @@ import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
 import { OutputToggle } from "./OutputToggle";
 import { BarOverflow } from "./BarOverflow";
+import { ICON_BUTTON_CLASS } from "./IconButton";
+import { cn } from "../lib/utils";
 import { ViewerStage } from "./ViewerStage";
 import { ViewerHUD } from "./ViewerHUD";
 import { DEFAULT_VIEW, type ViewName } from "./views";
@@ -368,7 +370,7 @@ export const AppShell = memo(function AppShell({
                 outputOpen={outputOpen}
                 noticeCount={diagnostics.length}
                 onToggleOutput={toggleOutput}
-                className="mobile-top-bar__output size-8 rounded-(--radius-sm) border bg-muted p-[0.35rem] hover:border-brand"
+                className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
               />
               <BarOverflow themeMode={themeMode} licensesLabel="About & licenses" />
             </div>
