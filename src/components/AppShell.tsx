@@ -206,15 +206,28 @@ export const AppShell = memo(function AppShell({
     el.dataset.sheetDragging = dragging ? "true" : "false";
   }, []);
 
-  // Notices are surfaced by the dot on the Output toggle, not by auto-popping the
-  // console. We only auto-hide a console that's open once its notices clear —
-  // detected by comparing against the previous render's value (the react.dev
-  // "adjust state during render" pattern), no effect pass needed.
+  // Info-level notices (config-driven `notices`) are surfaced passively by the
+  // dot/count on the Output toggle. A warning or assert is different — the model
+  // came out wrong in a way worth seeing — so the console auto-opens the first
+  // time a render surfaces one, rather than hiding it behind a badge the user
+  // may never click. Both transitions use the react.dev "adjust state during
+  // render" pattern (compare against the previous render's value), no effect.
   const hasNotices = diagnostics.length > 0;
   const [prevHasNotices, setPrevHasNotices] = useState(hasNotices);
   if (hasNotices !== prevHasNotices) {
     setPrevHasNotices(hasNotices);
-    if (!hasNotices) setOutputOpen(false);
+    if (!hasNotices) setOutputOpen(false); // notices cleared → hide the console
+  }
+  // Auto-open on the false→true edge only, so a persistent warning across edits
+  // doesn't re-pop a console the user has dismissed.
+  const hasProblem = diagnostics.some((d) => d.level === "warning" || d.level === "assert");
+  const [prevHasProblem, setPrevHasProblem] = useState(hasProblem);
+  if (hasProblem !== prevHasProblem) {
+    setPrevHasProblem(hasProblem);
+    if (hasProblem) {
+      setOutputOpen(true);
+      setSheetDetent("peek"); // mobile: anchor the overlay above the peek sheet
+    }
   }
 
   const closeOutput = useCallback(() => setOutputOpen(false), []);
