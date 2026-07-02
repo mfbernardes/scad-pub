@@ -217,6 +217,48 @@ export const AppShell = memo(function AppShell({
     if (!hasNotices) setOutputOpen(false);
   }
 
+  const closeOutput = useCallback(() => setOutputOpen(false), []);
+
+  // Prop bundles shared verbatim by the two layout trees — each invocation
+  // below adds only its layout-specific bits (viewer ref, active flag, …).
+  const stageProps = {
+    design,
+    result,
+    ready,
+    rendering,
+    autoRender,
+    stalePreview,
+    theme,
+    selectedPreset,
+    showDimensions,
+    view,
+    onMeasure: setMeasured,
+    measured,
+    renderedValues,
+    computedInfo,
+  };
+  const hudProps = {
+    visible: !!result?.ok,
+    measure: showMeasure,
+    showDimensions,
+    onToggleDimensions: toggleDimensions,
+    viewPicker: showViewPicker,
+    reset: showReset,
+    zoom: showZoom,
+    view,
+    onSelectView: handleSelectView,
+  };
+  const outputProps = { log, diagnostics, badges, open: outputOpen, onClose: closeOutput };
+  const actionButtonsProps = {
+    hasResult: !!result?.ok,
+    modelFormat: schema.format,
+    outputOpen,
+    noticeCount: diagnostics.length,
+    onSavePng: handleSavePng,
+    onToggleOutput: toggleOutput,
+  };
+  const barActionsProps = { rendering, ready, result, stalePreview, themeMode };
+
   return (
     <div className="app-shell">
       {/* Skip link */}
@@ -261,59 +303,18 @@ export const AppShell = memo(function AppShell({
 
           {/* Canvas */}
           <div className="app-shell__viewer">
-            <ViewerStage
-              viewerRef={desktopViewerRef}
-              active={!isMobile}
-              design={design}
-              result={result}
-              ready={ready}
-              rendering={rendering}
-              autoRender={autoRender}
-              stalePreview={stalePreview}
-              theme={theme}
-              selectedPreset={selectedPreset}
-              showDimensions={showDimensions}
-              view={view}
-              onMeasure={setMeasured}
-              measured={measured}
-              renderedValues={renderedValues}
-              computedInfo={computedInfo}
-            >
+            <ViewerStage {...stageProps} viewerRef={desktopViewerRef} active={!isMobile}>
               {/* Floating controls live inside viewer-wrap so they hover over the
                   canvas — which shrinks when the output console docks below it —
                   rather than overlapping the console's notices. */}
               <div className="action-cluster">
-                <ActionButtons
-                  hasResult={!!result?.ok}
-                  modelFormat={schema.format}
-                  outputOpen={outputOpen}
-                  noticeCount={diagnostics.length}
-                  onSavePng={handleSavePng}
-                  onToggleOutput={toggleOutput}
-                />
+                <ActionButtons {...actionButtonsProps} />
               </div>
-              <ViewerHUD
-                viewerRef={desktopViewerRef}
-                visible={!!result?.ok}
-                measure={showMeasure}
-                showDimensions={showDimensions}
-                onToggleDimensions={toggleDimensions}
-                viewPicker={showViewPicker}
-                reset={showReset}
-                zoom={showZoom}
-                view={view}
-                onSelectView={handleSelectView}
-              />
+              <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
             </ViewerStage>
 
             {/* Output console — inline below viewer */}
-            <OutputConsole
-              log={log}
-              diagnostics={diagnostics}
-              badges={badges}
-              open={outputOpen}
-              onClose={() => setOutputOpen(false)}
-            />
+            <OutputConsole {...outputProps} />
           </div>
         </div>
       </div>
@@ -326,23 +327,10 @@ export const AppShell = memo(function AppShell({
         {/* Full-bleed viewer */}
         <div className="app-shell__mobile-viewer">
           <ViewerStage
+            {...stageProps}
             viewerRef={mobileViewerRef}
             active={isMobile}
-            design={design}
-            result={result}
-            ready={ready}
-            rendering={rendering}
-            autoRender={autoRender}
-            stalePreview={stalePreview}
-            theme={theme}
-            selectedPreset={selectedPreset}
             reframeOnPreset={false}
-            showDimensions={showDimensions}
-            view={view}
-            onMeasure={setMeasured}
-            measured={measured}
-            renderedValues={renderedValues}
-            computedInfo={computedInfo}
           />
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
@@ -358,14 +346,7 @@ export const AppShell = memo(function AppShell({
               )}
             </div>
             <div className="mobile-top-bar__right">
-              <BarActions
-                rendering={rendering}
-                ready={ready}
-                result={result}
-                stalePreview={stalePreview}
-                themeMode={themeMode}
-                licensesLabel="About & licenses"
-              />
+              <BarActions {...barActionsProps} licensesLabel="About & licenses" />
             </div>
           </div>
         </div>
@@ -374,19 +355,9 @@ export const AppShell = memo(function AppShell({
             overlay, with a scrim so it reads as a distinct layer, not another
             band stacked above the sheet). */}
         {outputOpen && (
-          <div
-            className="output-console__scrim"
-            onClick={() => setOutputOpen(false)}
-            aria-hidden="true"
-          />
+          <div className="output-console__scrim" onClick={closeOutput} aria-hidden="true" />
         )}
-        <OutputConsole
-          log={log}
-          diagnostics={diagnostics}
-          badges={badges}
-          open={outputOpen}
-          onClose={() => setOutputOpen(false)}
-        />
+        <OutputConsole {...outputProps} />
 
         {/* Persistent bottom sheet */}
         <BottomSheet
@@ -423,29 +394,10 @@ export const AppShell = memo(function AppShell({
 
         {/* Fixed footer: primary actions always accessible outside the sheet */}
         <div className="mobile-footer">
-          <ActionButtons
-            compact
-            hasResult={!!result?.ok}
-            modelFormat={schema.format}
-            outputOpen={outputOpen}
-            noticeCount={diagnostics.length}
-            onSavePng={handleSavePng}
-            onToggleOutput={toggleOutput}
-          />
+          <ActionButtons {...actionButtonsProps} compact />
         </div>
 
-        <ViewerHUD
-          viewerRef={mobileViewerRef}
-          visible={!!result?.ok}
-          measure={showMeasure}
-          showDimensions={showDimensions}
-          onToggleDimensions={toggleDimensions}
-          viewPicker={showViewPicker}
-          reset={showReset}
-          zoom={showZoom}
-          view={view}
-          onSelectView={handleSelectView}
-        />
+        <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
       </div>
     </div>
   );
