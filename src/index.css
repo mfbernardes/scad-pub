@@ -88,17 +88,14 @@
   --glass-bg: rgba(31, 34, 41, 0.88);
   --glass-border: rgba(255, 255, 255, 0.08);
   --elevation: 0 4px 20px rgba(0, 0, 0, 0.45);
-  /* Mobile layout constants — keep in sync with AppShell.tsx MOBILE_FOOTER_HEIGHT / PEEK_HEIGHT */
-  --mobile-footer-height: 56px;
+  /* Mobile layout constants — keep in sync with AppShell.tsx PEEK_HEIGHT */
   --mobile-peek-height: 60px;
-  /* iOS home-indicator inset. The footer's *total* height is its button band
-     plus this inset, so the buttons keep their full height and nothing is laid
-     under the gesture bar. Everything stacked above the footer (sheet, viewer,
-     output console) anchors to --mobile-footer-total, and AppShell mirrors the
-     same sum (MOBILE_FOOTER_HEIGHT + useSafeAreaBottom) for the sheet geometry.
-     Off-iOS the inset is 0, so the total collapses back to the button band. */
+  /* iOS home-indicator inset. The bottom sheet sits directly on the viewport
+     bottom (no docked footer band) and reserves this inset below itself so its
+     peek row clears the gesture bar; everything stacked above the sheet (viewer,
+     output console) anchors to it, and AppShell mirrors the same value
+     (useSafeAreaBottom) for the sheet geometry. Off-iOS the inset is 0. */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --mobile-footer-total: calc(var(--mobile-footer-height) + var(--safe-area-bottom));
   color-scheme: dark;
 }
 
@@ -240,10 +237,10 @@ button:disabled { cursor: default; }
   left: 0;
   right: 0;
   bottom: calc(
-    var(--mobile-footer-total) +
+    var(--safe-area-bottom) +
     min(
       var(--sheet-follow-h, var(--mobile-peek-height)),
-      (100dvh - var(--mobile-footer-total)) * 0.52
+      (100dvh - var(--safe-area-bottom)) * 0.52
     )
   );
   display: flex;
@@ -409,13 +406,24 @@ button:disabled { cursor: default; }
   }
 }
 
-/* Floating bottom-center output cluster. */
+/* Floating bottom-center action cluster (Export / PNG / Share). Desktop hovers
+   it over the viewer bottom; mobile hovers the same pill just above the sheet's
+   peek (tab row) — see the mobile override below. */
 .action-cluster {
   position: absolute;
   bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
+}
+
+/* Mobile: lift the cluster clear of the collapsed sheet's tab row so it reads
+   as floating over the viewer, mirroring the desktop position. Sits below the
+   sheet (z-30) so raising the sheet slides over it. */
+@media (max-width: 860px) {
+  .app-shell__mobile .action-cluster {
+    bottom: calc(var(--mobile-peek-height) + var(--safe-area-bottom) + 0.6rem);
+  }
 }
 
 /* "Preview out of date" — top-centre over the viewer. */
@@ -441,28 +449,6 @@ button:disabled { cursor: default; }
 @keyframes pill-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   MOBILE FOOTER — fixed actions bar below the bottom sheet
-   ═══════════════════════════════════════════════════════════════ */
-
-.mobile-footer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  /* Total height = the 56px button band + the home-indicator inset, with the
-     inset reserved as bottom padding so the buttons keep their full height and
-     sit clear of the gesture bar (rather than being crushed inside a fixed box). */
-  height: var(--mobile-footer-total);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0 calc(0.6rem + env(safe-area-inset-right, 0px)) calc(var(--safe-area-bottom) + 0.35rem) calc(0.6rem + env(safe-area-inset-left, 0px));
-  background: var(--panel);
-  border-top: 1px solid var(--line);
-  z-index: 28;
 }
 
 /* ═══════════════════════════════════════════════════════════════
