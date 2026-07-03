@@ -1,7 +1,9 @@
 // AppShell.tsx — responsive layout shell. Owns the full-bleed viewer canvas with:
 //   Desktop (≥ 860px): CommandBar + docked ParamPanel + ActionCluster + ViewerHUD
-//   Mobile (< 860px):  full-bleed viewer + top bar + BottomSheet + fixed footer
-// All state/logic stays in App.tsx; this is a pure view extraction.
+//   Mobile (< 860px):  full-bleed viewer + top bar + BottomSheet + floating ActionCluster
+// Both layouts float the same compact action cluster over the viewer bottom —
+// mobile no longer reserves a solid footer band. All state/logic stays in
+// App.tsx; this is a pure view extraction.
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
@@ -11,9 +13,12 @@ import type { ViewerHandle, Dimensions } from "./Viewer";
 // Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
 // ending at the tab underline — no sliver of the tab's content.
 const PEEK_HEIGHT = 60;
-const MOBILE_FOOTER_HEIGHT = 56;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
 const EMPTY_LOG: string[] = [];
+// The floating glass pill that wraps the ActionButtons row — shared verbatim by
+// the desktop and mobile clusters so a tweak to padding/border/blur lands once.
+const ACTION_CLUSTER_CLASS =
+  "action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation) backdrop-blur-[12px]";
 
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
@@ -98,12 +103,11 @@ export const AppShell = memo(function AppShell({
   // picker's highlight and a freshly-mounted Viewer in step; the imperative snap
   // below re-applies it on every pick, including the current one.
   const [view, setView] = useState<ViewName>(DEFAULT_VIEW);
-  // The fixed footer reserves the iOS home-indicator inset below its buttons (see
-  // .mobile-footer / --mobile-footer-total in index.css), so the sheet must sit
-  // above the footer's *full* height — its 56px button band plus that inset —
-  // for its JS geometry to match the CSS layout. Off-iOS the inset is 0.
+  // The sheet sits directly on the viewport bottom now (no docked footer band),
+  // reserving only the iOS home-indicator inset below itself so its peek row
+  // clears the gesture bar. Its JS geometry must match that CSS bottom offset.
+  // Off-iOS the inset is 0.
   const safeAreaBottom = useSafeAreaBottom();
-  const footerInset = MOBILE_FOOTER_HEIGHT + safeAreaBottom;
   const [outputOpen, setOutputOpen] = useState(
     schema.ui?.outputDefault === "open"
   );
@@ -321,7 +325,7 @@ export const AppShell = memo(function AppShell({
               {/* Floating controls live inside viewer-wrap so they hover over the
                   canvas — which shrinks when the output console docks below it —
                   rather than overlapping the console's notices. */}
-              <div className="action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation) backdrop-blur-[12px]">
+              <div className={ACTION_CLUSTER_CLASS}>
                 <ActionButtons {...actionButtonsProps} />
               </div>
               <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
@@ -385,14 +389,14 @@ export const AppShell = memo(function AppShell({
             and tappable beneath it — with a scrim dimming only the viewer. */}
         {outputOpen && (
           <div
-            className="output-console__scrim absolute inset-x-0 top-0 bottom-[calc(var(--mobile-footer-total)+var(--mobile-peek-height))] z-[31] bg-black/40"
+            className="output-console__scrim absolute inset-x-0 top-0 bottom-[calc(var(--safe-area-bottom)+var(--mobile-peek-height))] z-[31] bg-black/40"
             onClick={closeOutput}
             aria-hidden="true"
           />
         )}
         <OutputConsole
           {...outputProps}
-          className="absolute inset-x-0 bottom-[calc(var(--mobile-footer-total)+var(--mobile-peek-height))] z-[32] max-h-[55vh] rounded-t-(--radius) border-b-0 shadow-(--elevation)"
+          className="absolute inset-x-0 bottom-[calc(var(--safe-area-bottom)+var(--mobile-peek-height))] z-[32] max-h-[55vh] rounded-t-(--radius) border-b-0 shadow-(--elevation)"
         />
 
         {/* Persistent bottom sheet */}
@@ -401,7 +405,7 @@ export const AppShell = memo(function AppShell({
           onDetentChange={handleDetentChange}
           onFollow={handleSheetFollow}
           peekHeight={PEEK_HEIGHT}
-          bottomInset={footerInset}
+          bottomInset={safeAreaBottom}
         >
           {(_detent, expand) => (
             // The tab bar shows at every detent (including peek); tapping a tab
@@ -428,11 +432,13 @@ export const AppShell = memo(function AppShell({
           )}
         </BottomSheet>
 
-        {/* Fixed footer: primary actions always accessible outside the sheet */}
-        {/* The Output toggle lives in the top bar on mobile, so the footer is
-            just the produce-a-file actions. */}
-        <div className="mobile-footer">
-          <ActionButtons {...actionButtonsProps} compact />
+        {/* Floating action cluster — the same compact glass pill the desktop
+            floats over its viewer, riding just above the sheet's top edge (it
+            follows the sheet up to the half detent via --sheet-follow-h) instead
+            of a solid docked footer band that would reserve a strip of the
+            viewport. Identical markup + buttons to the desktop cluster. */}
+        <div className={ACTION_CLUSTER_CLASS}>
+          <ActionButtons {...actionButtonsProps} />
         </div>
 
         <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />

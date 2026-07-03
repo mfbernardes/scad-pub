@@ -88,17 +88,14 @@
   --glass-bg: rgba(31, 34, 41, 0.88);
   --glass-border: rgba(255, 255, 255, 0.08);
   --elevation: 0 4px 20px rgba(0, 0, 0, 0.45);
-  /* Mobile layout constants — keep in sync with AppShell.tsx MOBILE_FOOTER_HEIGHT / PEEK_HEIGHT */
-  --mobile-footer-height: 56px;
+  /* Mobile layout constants — keep in sync with AppShell.tsx PEEK_HEIGHT */
   --mobile-peek-height: 60px;
-  /* iOS home-indicator inset. The footer's *total* height is its button band
-     plus this inset, so the buttons keep their full height and nothing is laid
-     under the gesture bar. Everything stacked above the footer (sheet, viewer,
-     output console) anchors to --mobile-footer-total, and AppShell mirrors the
-     same sum (MOBILE_FOOTER_HEIGHT + useSafeAreaBottom) for the sheet geometry.
-     Off-iOS the inset is 0, so the total collapses back to the button band. */
+  /* iOS home-indicator inset. The bottom sheet sits directly on the viewport
+     bottom (no docked footer band) and reserves this inset below itself so its
+     peek row clears the gesture bar; everything stacked above the sheet (viewer,
+     output console) anchors to it, and AppShell mirrors the same value
+     (useSafeAreaBottom) for the sheet geometry. Off-iOS the inset is 0. */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --mobile-footer-total: calc(var(--mobile-footer-height) + var(--safe-area-bottom));
   color-scheme: dark;
 }
 
@@ -203,6 +200,19 @@ button:disabled { cursor: default; }
     height: 100%;
     position: relative;
     overflow: hidden;
+    /* The bottom sheet's live top edge, in px from the viewport bottom: the
+       sheet's current height (--sheet-follow-h, set each drag frame by AppShell)
+       above its safe-area inset, capped at the half detent so dragging on to
+       full doesn't drag dependents off-screen. The viewer's bottom sits here;
+       the floating action cluster rides just above it. The 0.52 cap mirrors
+       BottomSheet's HALF_VH_RATIO — keep them in sync. */
+    --sheet-top: calc(
+      var(--safe-area-bottom) +
+      min(
+        var(--sheet-follow-h, var(--mobile-peek-height)),
+        (100dvh - var(--safe-area-bottom)) * 0.52
+      )
+    );
   }
 }
 
@@ -228,24 +238,18 @@ button:disabled { cursor: default; }
 /* Mobile: the viewer fills the visible area above the sheet + fixed footer, so
    the model is framed in the remaining viewport rather than the full page (its
    lower part would otherwise sit hidden behind the sheet). The canvas follows
-   the sheet live: --sheet-follow-h (the sheet's current height, set by AppShell
-   from BottomSheet's drag) drives the bottom edge, and the Viewer's RAF loop
-   reframes the model into the new box. It falls back to the peek height before
-   the first drag, and is capped at the half height (the 0.52 ratio mirrors
-   BottomSheet's halfH) so dragging on to full doesn't shrink the canvas to
-   nothing — the sheet covers it and the Viewer pauses rendering off-screen. */
+   the sheet live: its bottom sits at --sheet-top (the sheet's live top edge,
+   defined on .app-shell__mobile), and the Viewer's RAF loop reframes the model
+   into the new box. --sheet-top falls back to the peek height before the first
+   drag and is capped at the half height, so dragging on to full doesn't shrink
+   the canvas to nothing — the sheet covers it and the Viewer pauses rendering
+   off-screen. */
 .app-shell__mobile-viewer {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  bottom: calc(
-    var(--mobile-footer-total) +
-    min(
-      var(--sheet-follow-h, var(--mobile-peek-height)),
-      (100dvh - var(--mobile-footer-total)) * 0.52
-    )
-  );
+  bottom: var(--sheet-top);
   display: flex;
   flex-direction: column;
   /* Eases the snap when the sheet settles (mirrors .bottom-sheet's transition).
@@ -409,13 +413,31 @@ button:disabled { cursor: default; }
   }
 }
 
-/* Floating bottom-center output cluster. */
+/* Floating bottom-center action cluster (Export / PNG / Share). Desktop hovers
+   it over the viewer bottom; mobile rides it on the sheet's top edge — see the
+   mobile override below. */
 .action-cluster {
   position: absolute;
-  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(0.75rem + var(--safe-area-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
+}
+
+/* Mobile: ride the cluster 0.6rem above the sheet's live top edge (--sheet-top,
+   shared with the viewer bottom), so it tracks the sheet up from peek to the
+   half detent and stays visible there. Past half it stays pinned at the half
+   line while the sheet (z-30) rises over it, so the cluster is covered only once
+   the sheet is (near) full. Easing mirrors the viewer's; data-sheet-dragging
+   disables it so the pill tracks the finger 1:1. */
+@media (max-width: 860px) {
+  .app-shell__mobile .action-cluster {
+    bottom: calc(var(--sheet-top) + 0.6rem);
+    transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .app-shell__mobile[data-sheet-dragging="true"] .action-cluster {
+    transition: none;
+  }
 }
 
 /* "Preview out of date" — top-centre over the viewer. */
@@ -441,28 +463,6 @@ button:disabled { cursor: default; }
 @keyframes pill-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   MOBILE FOOTER — fixed actions bar below the bottom sheet
-   ═══════════════════════════════════════════════════════════════ */
-
-.mobile-footer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  /* Total height = the 56px button band + the home-indicator inset, with the
-     inset reserved as bottom padding so the buttons keep their full height and
-     sit clear of the gesture bar (rather than being crushed inside a fixed box). */
-  height: var(--mobile-footer-total);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0 calc(0.6rem + env(safe-area-inset-right, 0px)) calc(var(--safe-area-bottom) + 0.35rem) calc(0.6rem + env(safe-area-inset-left, 0px));
-  background: var(--panel);
-  border-top: 1px solid var(--line);
-  z-index: 28;
 }
 
 /* ═══════════════════════════════════════════════════════════════
