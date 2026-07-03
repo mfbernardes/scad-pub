@@ -28,7 +28,7 @@ export function PopupModal({
     onClose(popup.mode === "once" || (popup.mode === "dismissible" && dontShow));
 
   return (
-    <Modal title={popup.header} onClose={close}>
+    <Modal title={popup.header} size="compact" onClose={close}>
       <div
         className={cn(
           MODAL_BODY,
