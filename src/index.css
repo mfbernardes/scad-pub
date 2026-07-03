@@ -579,5 +579,9 @@ button:disabled { cursor: default; }
   .bottom-sheet { transition: none !important; }
   .app-shell__mobile-viewer { transition: none !important; }
   .param-group > summary::before { transition: none; }
+  [data-slot="dialog-overlay"],
+  [data-slot="dialog-content"] {
+    animation-duration: 0.01ms !important;
+  }
 }
 } /* end @layer components */

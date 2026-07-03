@@ -2,7 +2,7 @@
 // overlay, focus trap, Escape + outside-click close, and a built-in close
 // button. Mounted only while open (callers conditionally render it), so the
 // dialog is always `open`.
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 
 /** Scrollable dialog body (below the header / between header and actions). */
@@ -25,17 +25,31 @@ interface Props {
   label?: string;
   /** Shell width: `default` for long-form content, `compact` for a short notice. */
   size?: keyof typeof SIZE_CLASS;
+  /**
+   * Element to focus when the dialog opens, overriding Radix's default (the
+   * first focusable descendant in DOM order, which can land on an
+   * unrelated secondary control). Optional — omit to keep Radix's default.
+   */
+  initialFocus?: RefObject<HTMLElement | null>;
   onClose: () => void;
   children: ReactNode;
 }
 
-export function Modal({ title, label, size = "default", onClose, children }: Props) {
+export function Modal({ title, label, size = "default", initialFocus, onClose, children }: Props) {
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
-        className={`flex ${SIZE_CLASS[size]} flex-col gap-0 overflow-hidden p-0`}
+        className={`flex ${SIZE_CLASS[size]} flex-col gap-0 overflow-hidden p-0 shadow-none`}
         aria-label={label ?? title}
         aria-describedby={undefined}
+        onOpenAutoFocus={
+          initialFocus
+            ? (e) => {
+                e.preventDefault();
+                initialFocus.current?.focus();
+              }
+            : undefined
+        }
       >
         <DialogHeader className="modal-head flex-row items-center justify-between border-b px-4 py-[0.8rem]">
           <DialogTitle>{title}</DialogTitle>

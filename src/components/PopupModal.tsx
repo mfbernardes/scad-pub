@@ -3,7 +3,7 @@
 // so the body supports links and basic formatting. The "dismissible" mode adds
 // a "Don't show this again" checkbox; "once" remembers on any close; "always"
 // never remembers (it's shown every visit).
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Modal, MODAL_BODY } from "./Modal";
 import { Markdown } from "./Markdown";
 import { cn } from "../lib/utils";
@@ -21,6 +21,10 @@ export function PopupModal({
   onClose: (remember: boolean) => void;
 }) {
   const [dontShow, setDontShow] = useState(false);
+  // Radix's default initial focus lands on the first focusable descendant in
+  // DOM order, which can land on the secondary "don't show again" checkbox
+  // rather than the primary action — steer it to OK instead.
+  const okRef = useRef<HTMLButtonElement>(null);
 
   // "once" persists on every close; "dismissible" only when the box is ticked;
   // "always" never persists. Backdrop click, Escape and the X all route here.
@@ -28,7 +32,7 @@ export function PopupModal({
     onClose(popup.mode === "once" || (popup.mode === "dismissible" && dontShow));
 
   return (
-    <Modal title={popup.header} size="compact" onClose={close}>
+    <Modal title={popup.header} size="compact" initialFocus={okRef} onClose={close}>
       <div
         className={cn(
           MODAL_BODY,
@@ -48,7 +52,7 @@ export function PopupModal({
             Don’t show this again
           </Label>
         )}
-        <Button className="notice-ok ml-auto" onClick={close}>
+        <Button ref={okRef} className="notice-ok ml-auto" onClick={close}>
           OK
         </Button>
       </div>
