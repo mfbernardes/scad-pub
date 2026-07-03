@@ -14,22 +14,22 @@ import { chromium } from "playwright";
 import { tmpdir } from "node:os";
 import { startServer } from "./serve-dist.mjs";
 
-// Status pill shows "123 ms" or "123 ms (cached)" on success, "Failed (exit N)" on error.
-// The status pill shows only a colour dot; its detail ("123 ms" / "Failed …")
-// lives in aria-label and is revealed on click.
-// Both layouts render a status pill (the inactive one is CSS-hidden but still in
-// the DOM), and both carry the same aria-label — so read the first match.
+// Render status ("Render status: 123 ms" / "… (cached)" / "… Failed (exit N)")
+// rides on the Output bell, which doubles as the status indicator: the detail
+// lives in a polite live region carrying the `.render-status` hook. Both layouts
+// render the bell (the inactive one is CSS-hidden but still in the DOM), and both
+// carry the same text — so read the first match.
 const statusText = (page) =>
-  page.locator(".status-pill").first().getAttribute("aria-label");
+  page.locator(".render-status").first().textContent();
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
-// means it may be shut — so click the Output toggle when it's not already open.
-// The toggle's label is "Open output console" while closed.
+// means it may be shut — so click the Output bell when it's not already open.
+// The bell's label is "Open output console" while closed.
 async function openConsole(page) {
   if (await page.locator(".output-console").count()) return;
-  // Desktop toggle (the mobile footer's twin is CSS-hidden at this viewport).
-  await page.locator('.action-cluster__output[aria-label^="Open output console"]').click().catch(() => {});
+  // Desktop bell (the mobile top bar's twin is CSS-hidden at this viewport).
+  await page.locator('.command-bar__output[aria-label^="Open output console"]').click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
 }
 
@@ -44,7 +44,7 @@ async function resetDefaults(page) {
 
 async function waitRendered(page, label) {
   await page.waitForFunction(
-    () => /\d+ ms/.test(document.querySelector(".status-pill")?.getAttribute("aria-label") || ""),
+    () => /\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
     { timeout: 60000 }
   );
   console.log(`  ${label ?? "default"}: ${((await statusText(page)) ?? "").replace(/^Render status: /, "").trim()} ✅`);
@@ -65,7 +65,7 @@ async function selectDesign(page, id) {
       // Clear the cached "ok" state so waitRendered can't pass on prior render
       await page
         .waitForFunction(
-          () => !/\d+ ms/.test(document.querySelector(".status-pill")?.getAttribute("aria-label") || ""),
+          () => !/\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
           { timeout: 5000 }
         )
         .catch(() => {});
@@ -178,9 +178,10 @@ async function main() {
     console.log("=== theme toggle ===");
     const bg0 = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     let themeChanged = false;
-    // Theme is now a direct icon button in the CommandBar (first .icon-btn in the right section)
+    // Theme is a direct icon button in the CommandBar; select it by its label
+    // (the first .icon-btn there is now the status-bearing Output bell).
     for (let i = 0; i < 3 && !themeChanged; i++) {
-      await page.locator('.command-bar__right .icon-btn').first().click();
+      await page.locator('.command-bar__right button[aria-label^="Switch to"]').first().click();
       await page.waitForTimeout(60);
       themeChanged =
         (await page.evaluate(() => getComputedStyle(document.body).backgroundColor)) !== bg0;
@@ -427,7 +428,7 @@ async function main() {
       await setNum("text_depth", 2);
       check(
         await waitFor(() =>
-          /Failed/.test(document.querySelector(".status-pill")?.getAttribute("aria-label") || "")
+          /Failed/.test(document.querySelector(".render-status")?.textContent || "")
         ),
         "the failed assert render reports a render failure"
       );

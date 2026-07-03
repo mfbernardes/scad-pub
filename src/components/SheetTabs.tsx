@@ -4,9 +4,11 @@ import { useState } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import { useAppActions } from "../lib/appActions";
+import { useDebounce } from "../lib/useDebounce";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
+import { ParamSearch } from "./ParamSearch";
 import { PanelFooter } from "./PanelFooter";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
@@ -64,6 +66,8 @@ export function SheetTabs({
   // Presets first (and the default tab) on mobile, then Parameters, then Files.
   const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
   const [tab, setTab] = useState<Tab>("presets");
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 150);
 
   const triggerClass = cn(underlineTabTrigger, "flex-1");
 
@@ -82,8 +86,9 @@ export function SheetTabs({
       </TabsList>
       <div className="flex min-h-0 flex-1 flex-col">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <ParamSearch value={search} onChange={setSearch} onClear={() => setSearch("")} />
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <ParamForm design={design} values={values} onChange={change} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} />
           </div>
           {/* Auto-render + Reset are parameter-scoped, so they pin to the bottom
               of this tab only — not on Presets/Files (mirrors the desktop panel). */}

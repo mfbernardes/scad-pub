@@ -12,13 +12,12 @@ import { useDebounce } from "../lib/useDebounce";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
+import { ParamSearch } from "./ParamSearch";
 import { IconButton } from "./IconButton";
 import { PanelFooter } from "./PanelFooter";
 import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
-  Search as SearchIcon,
-  X as XIcon,
   Menu as MenuIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
@@ -101,9 +100,9 @@ export function ParamPanel({
   });
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 150);
-  // Parameters is the default (a returning user is usually here to tweak, not
-  // re-pick a preset — the reverse of mobile, where the sheet opens on Presets).
-  const [panelTab, setPanelTab] = useState<PanelTab>("params");
+  // Presets is the default tab — the same landing tab as the mobile sheet, so
+  // the two layouts open on the same thing.
+  const [panelTab, setPanelTab] = useState<PanelTab>("presets");
 
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -226,22 +225,7 @@ export function ParamPanel({
         </TabsContent>
 
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-center gap-[0.4rem] border-b px-[0.6rem] py-[0.35rem] text-muted-foreground">
-            <SearchIcon size={14} />
-            <input
-              type="text"
-              className="min-w-0 flex-1 border-none bg-transparent p-0 text-foreground placeholder:text-muted-foreground focus:outline-none"
-              placeholder="Search parameters…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search parameters"
-            />
-            {search && (
-              <IconButton label="Clear search" onClick={() => setSearch("")}>
-                <XIcon size={14} />
-              </IconButton>
-            )}
-          </div>
+          <ParamSearch value={search} onChange={setSearch} onClear={() => setSearch("")} />
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} />
           </div>

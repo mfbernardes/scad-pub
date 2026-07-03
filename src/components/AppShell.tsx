@@ -19,7 +19,7 @@ import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
 import { OutputToggle } from "./OutputToggle";
-import { BarOverflow } from "./BarOverflow";
+import { BarActions } from "./BarActions";
 import { ICON_BUTTON_CLASS } from "./IconButton";
 import { cn } from "../lib/utils";
 import { ViewerStage } from "./ViewerStage";
@@ -266,10 +266,7 @@ export const AppShell = memo(function AppShell({
   const actionButtonsProps = {
     hasResult: !!result?.ok,
     modelFormat: schema.format,
-    outputOpen,
-    noticeCount: diagnostics.length,
     onSavePng: handleSavePng,
-    onToggleOutput: toggleOutput,
   };
   return (
     <div className="app-shell">
@@ -293,6 +290,9 @@ export const AppShell = memo(function AppShell({
           ready={ready}
           result={result}
           stalePreview={stalePreview}
+          outputOpen={outputOpen}
+          noticeCount={diagnostics.length}
+          onToggleOutput={toggleOutput}
         />
 
         <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
@@ -361,18 +361,18 @@ export const AppShell = memo(function AppShell({
                 </span>
               )}
             </div>
-            {/* The Output bell rides up here (with its pending-notice count);
-                the theme/help/licenses actions collapse into a ⋮ overflow so
-                the narrow bar isn't crowded. */}
+            {/* The Output bell doubles as the render-status indicator (a
+                status dot rides its corner), so the narrow bar needs no
+                separate pill; theme/help/licenses collapse into a ⋮ overflow. */}
             <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
               <OutputToggle
-                compact
                 outputOpen={outputOpen}
                 noticeCount={diagnostics.length}
                 onToggleOutput={toggleOutput}
+                status={{ rendering, ready, result, stale: stalePreview }}
                 className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
               />
-              <BarOverflow themeMode={themeMode} licensesLabel="About & licenses" />
+              <BarActions themeMode={themeMode} collapse />
             </div>
           </div>
         </div>
@@ -432,7 +432,7 @@ export const AppShell = memo(function AppShell({
         {/* The Output toggle lives in the top bar on mobile, so the footer is
             just the produce-a-file actions. */}
         <div className="mobile-footer">
-          <ActionButtons {...actionButtonsProps} compact showOutput={false} />
+          <ActionButtons {...actionButtonsProps} compact />
         </div>
 
         <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
