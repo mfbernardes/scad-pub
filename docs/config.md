@@ -4,26 +4,44 @@
 
 ```jsonc
 {
+  // ── App identity & PWA ─────────────────────────────────────────────
   "title": "ScadPub",             // page/header title
   "id": "scadpub",                // namespaces browser storage (default "scadpub")
   "shortName": "ScadPub",         // PWA short_name (default: title)
   "description": "Configure …",   // page <meta> + PWA description
   "icon": "branding/icon.svg",    // PWA/favicon icon
+  "iconMaskable": "branding/icon-maskable.svg", // optional maskable icon (defaults to `icon`)
   "themeColor": "#1f2229",        // browser-chrome / PWA colour
+  "themeColorLight": "#ffffff",   // light-scheme browser-chrome colour (default "#ffffff")
   "backgroundColor": "#15171c",   // PWA splash background
+  "categories": ["productivity", "graphics"],  // optional PWA manifest categories
+  "screenshots": [                // optional, for the Android rich install UI
+    { "src": "shot-narrow.png", "sizes": "390x844", "form_factor": "narrow" }
+  ],
+  "shortcuts": [                  // optional app shortcuts (auto-derived per design if omitted)
+    { "name": "Open Tag", "short_name": "Tag", "url": "./#d=tag" }
+  ],
+
+  // ── Design sources ─────────────────────────────────────────────────
+  "source": "examples",           // directory of .scad designs (relative to this file)
+  "designs": [
+    { "id": "tag", "label": "Tag", "heavy": false }
+  ],                              // omit to auto-discover *.scad in source; presets auto-detected as <id>.json
+  "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
+
+  // ── Rendering ──────────────────────────────────────────────────────
+  "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
+  "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
+  "fonts": ["LiberationSans-Regular.ttf"],  // fonts to mount; a basename already in public/fonts/, or a path into `source` to bundle
+  "fontFallback": "Liberation Mono",  // optional deterministic last-resort family (must be bundled)
+
+  // ── Appearance & UI behaviour ──────────────────────────────────────
+  "logo": "logo.svg",             // header logo (omit for text title)
   "colors": {                     // optional per-theme colour-scheme overrides
     "dark":  { "accent": "#ff7849", "viewer-model": "#ff7849" },
     "light": { "accent": "#b8430f" }
   },
   "extraCss": "theme.css",        // optional raw-CSS escape hatch (advanced)
-  "logo": "logo.svg",             // header logo (omit for text title)
-  "source": "examples",           // directory of .scad designs (relative to this file)
-  "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
-  "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
-  "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
-  "fonts": ["LiberationSans-Regular.ttf"],  // fonts to mount; a basename already in public/fonts/, or a path into `source` to bundle
-  "fileImport": true,             // optional "Import file" button for user-supplied files
-  "popup": { "header": "…", "body": "…", "mode": "once" },  // optional notice dialog on load
   "ui": {                         // optional UI behaviour (see "UI behaviour" below)
     "panelSide": "left",          // desktop dock edge: "left" | "right"
     "panelDefault": "open",       // first-load desktop panel: "open" | "collapsed"
@@ -37,44 +55,54 @@
     "presetsLabel": "Presets",    // label for the Presets tab/section
     "parametersLabel": "Parameters" // label for the Parameters tab/section
   },
-  "themeColorLight": "#ffffff",   // light-scheme browser-chrome colour (default "#ffffff")
-  "categories": ["productivity", "graphics"],  // optional PWA manifest categories
-  "iconMaskable": "branding/icon-maskable.svg", // optional maskable icon (defaults to `icon`)
-  "screenshots": [                // optional, for the Android rich install UI
-    { "src": "shot-narrow.png", "sizes": "390x844", "form_factor": "narrow" }
-  ],
-  "shortcuts": [                  // optional app shortcuts (auto-derived per design if omitted)
-    { "name": "Open Tag", "short_name": "Tag", "url": "./#d=tag" }
-  ],
+  "fileImport": true,             // optional "Import file" button for user-supplied files
+
+  // ── In-app content ─────────────────────────────────────────────────
+  "popup": { "header": "…", "body": "…", "mode": "once" },  // optional notice dialog on load
+  "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
   "notices": [                    // design-defined log markers -> count badges (off by default)
     { "marker": "alert", "label": "alerts", "color": "#e0a458" },
     { "marker": "note",  "label": "notes",  "color": "#86a9ff" }
   ],
-  "help": { "sections": [ { "title": "…", "body": "…" } ] },  // optional Help content (single pane or tabs)
-  "licenses": [ { "name": "…", "license": "…", … } ],  // optional extra open-source notices (appended)
-  "designs": [
-    { "id": "tag", "label": "Tag", "heavy": false }
-  ]   // omit to auto-discover *.scad in source; presets auto-detected as <id>.json
+  "licenses": [ { "name": "…", "license": "…", … } ]  // optional extra open-source notices (appended)
 }
 ```
 
-- **`source`** — directory of Customizer-style `.scad` designs, relative to this config file. Defaults to `"."`.
-- **`assets`** — files/directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph.
-- **`features`** — applied to all designs as `--enable=<feature>`.
-- **`format`** — the model format OpenSCAD exports and the viewer parses, fixed at build time. `"3mf"` (the default) carries per-object colour from each design's `color(...)` calls — shown in the preview and written into the exported file. `"stl"` is geometry-only (no colour). Changing it invalidates the render cache automatically.
+**App identity & PWA**
+
+- **`title`** / **`logo`** — see [Title & logo](#title--logo).
 - **`id`** — namespaces localStorage, IndexedDB, and preset cache. Defaults to `"scadpub"`.
 - **`description`** / **`shortName`** / **`icon`** / **`themeColor`** / **`backgroundColor`** — `<meta>` and PWA manifest fields. `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg`.
+- **`themeColorLight`** / **`categories`** / **`iconMaskable`** / **`screenshots`** / **`shortcuts`** — see [UI behaviour & PWA](#ui-behaviour--pwa).
+
+**Design sources**
+
+- **`source`** — directory of Customizer-style `.scad` designs, relative to this config file. Defaults to `"."`.
+- **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
+- **`assets`** — files/directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph.
+- **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.
+
+**Rendering**
+
+- **`features`** — applied to all designs as `--enable=<feature>`.
+- **`format`** — the model format OpenSCAD exports and the viewer parses, fixed at build time. `"3mf"` (the default) carries per-object colour from each design's `color(...)` calls — shown in the preview and written into the exported file. `"stl"` is geometry-only (no colour). Changing it invalidates the render cache automatically.
+- **`fonts`** / **`fontFallback`** — see [Fonts](#fonts-fonts-fontfallback).
+
+**Appearance & UI behaviour**
+
 - **`colors`** — optional per-theme CSS colour overrides; see [Theme & colour scheme](#theme--colour-scheme).
 - **`extraCss`** — optional raw-CSS escape hatch for advanced restyling; see [Custom CSS](#custom-css-extracss).
+- **`ui`** — see [UI behaviour & PWA](#ui-behaviour--pwa).
 - **`fileImport`** — see [Import file button](#import-file-fileimport).
+
+**In-app content**
+
 - **`popup`** — optional notice dialog shown over the app on load. See [Popup notice](#popup-notice-popup).
-- **`ui`** / PWA manifest keys — see [UI behaviour & PWA](#ui-behaviour--pwa).
-- **`notices`** — see [Notice badges](#notice-badges-notices).
 - **`help`** — `{ title?, intro?, sections?: [{ title, body }], tabs?: [{ label, intro?, sections }] }` where `body` is a Markdown subset (`**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, `- ` bullets). Use `sections` for a single pane, or `tabs` for a tabbed guide (many tabs supported). Omit for a generic default. See [Help content](#help-content-help).
+- **`notices`** — see [Notice badges](#notice-badges-notices).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
-- **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
-- Missing `source`, `assets`, design, or `logo` paths fail the build with a clear error.
-- **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.
+
+Missing `source`, `assets`, design, or `logo` paths fail the build with a clear error.
 
 ## Title & logo
 

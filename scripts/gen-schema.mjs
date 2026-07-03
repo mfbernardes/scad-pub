@@ -83,11 +83,40 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   mustExist(configPath, "config file");
   const config = JSON.parse(readFileSync(configPath, "utf-8"));
   // Everything in the config is resolved relative to the config file's directory.
+  const CONFIG_DIR = dirname(configPath);
+
+  // ── App identity & PWA chrome ─────────────────────────────────────────────
+  // (icon/iconMaskable/screenshots/shortcuts are consumed by generatePwaAssets.)
+  const TITLE = config.title ?? "ScadPub";
+  const SHORT_NAME = config.shortName ?? TITLE;
+  const ID = config.id ?? "scadpub";
+  const DESCRIPTION =
+    config.description ?? "Configure and export designs in your browser.";
+  // PWA / browser chrome colours (default to the dark palette's chrome).
+  // Validated like every other colour input (COLOR_VALUE_RE) so they stay safe
+  // when interpolated into generated SVG/HTML attributes below.
+  const THEME_COLOR = config.themeColor ?? "#1f2229";
+  const THEME_COLOR_LIGHT = config.themeColorLight ?? "#ffffff";
+  const BG_COLOR = config.backgroundColor ?? "#15171c";
+  for (const [key, val] of [
+    ["themeColor", THEME_COLOR],
+    ["themeColorLight", THEME_COLOR_LIGHT],
+    ["backgroundColor", BG_COLOR],
+  ]) {
+    if (typeof val !== "string" || !COLOR_VALUE_RE.test(val.trim()))
+      throw new Error(`gen-schema: '${key}' must be a CSS colour string (got ${JSON.stringify(val)})`);
+  }
+  const CATEGORIES = Array.isArray(config.categories) ? config.categories : [];
+
+  // ── Design sources ────────────────────────────────────────────────────────
   // `source` defaults to "." (designs live beside the config); set it to point
   // elsewhere (e.g. "examples", a sibling checkout, or an absolute path).
-  const CONFIG_DIR = dirname(configPath);
+  // (`designs`, `assets`, `logo` and `extraCss` are consumed further down, in
+  // the copy/generation steps that need the wiped output tree.)
   const SOURCE = resolve(CONFIG_DIR, config.source ?? ".");
   mustExist(SOURCE, `source directory '${config.source ?? "."}'`);
+
+  // ── Rendering ─────────────────────────────────────────────────────────────
   const FEATURES = config.features ?? [];
   const FORMAT = parseFormat(config.format);
   // Fonts are referenced by basename under /fonts. An entry is either a font
@@ -136,47 +165,31 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     }
     FONT_FAMILIES.sort((a, b) => a.localeCompare(b));
   }
-  const TITLE = config.title ?? "ScadPub";
-  const SHORT_NAME = config.shortName ?? TITLE;
-  const ID = config.id ?? "scadpub";
-  const DESCRIPTION =
-    config.description ?? "Configure and export designs in your browser.";
-  // PWA / browser chrome colours (default to the dark palette's chrome).
-  // Validated like every other colour input (COLOR_VALUE_RE) so they stay safe
-  // when interpolated into generated SVG/HTML attributes below.
-  const THEME_COLOR = config.themeColor ?? "#1f2229";
-  const THEME_COLOR_LIGHT = config.themeColorLight ?? "#ffffff";
-  const BG_COLOR = config.backgroundColor ?? "#15171c";
-  for (const [key, val] of [
-    ["themeColor", THEME_COLOR],
-    ["themeColorLight", THEME_COLOR_LIGHT],
-    ["backgroundColor", BG_COLOR],
-  ]) {
-    if (typeof val !== "string" || !COLOR_VALUE_RE.test(val.trim()))
-      throw new Error(`gen-schema: '${key}' must be a CSS colour string (got ${JSON.stringify(val)})`);
-  }
-  const CATEGORIES = Array.isArray(config.categories) ? config.categories : [];
-  // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
-  // Absent -> null -> no import button.
-  const FILE_IMPORT = parseFileImport(config.fileImport);
-  // Optional one-off notice dialog shown over the app on load. Validated; absent
-  // -> null -> no popup.
-  const POPUP = parsePopup(config.popup);
-  // Config-driven notice categories surfaced on the OpenSCAD output panel.
-  // Validated; off by default (omitted -> none).
-  const NOTICES = parseNotices(config.notices);
-  // Optional help content; passed through verbatim. Absent -> null -> the app
-  // falls back to its generic, project-agnostic default help.
-  const HELP = config.help ?? null;
-  // Optional extra third-party software / license notices. Validated and
-  // appended (never replacing the built-ins) by the in-app licenses modal.
-  const LICENSES_EXTRA = parseLicenses(config.licenses);
+
+  // ── Appearance & UI behaviour ─────────────────────────────────────────────
   // Optional per-theme colour-scheme overrides. Validated against the known CSS
   // tokens; emitted by vite.config.ts as a <style> block so a consumer project
   // can restyle the app entirely from its config. Absent -> null.
   const COLORS = parseColors(config.colors);
   // Build-time UI behaviour config (panel side, default state, etc.).
   const UI = parseUi(config.ui);
+  // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
+  // Absent -> null -> no import button.
+  const FILE_IMPORT = parseFileImport(config.fileImport);
+
+  // ── In-app content ────────────────────────────────────────────────────────
+  // Optional one-off notice dialog shown over the app on load. Validated; absent
+  // -> null -> no popup.
+  const POPUP = parsePopup(config.popup);
+  // Optional help content; passed through verbatim. Absent -> null -> the app
+  // falls back to its generic, project-agnostic default help.
+  const HELP = config.help ?? null;
+  // Config-driven notice categories surfaced on the OpenSCAD output panel.
+  // Validated; off by default (omitted -> none).
+  const NOTICES = parseNotices(config.notices);
+  // Optional extra third-party software / license notices. Validated and
+  // appended (never replacing the built-ins) by the in-app licenses modal.
+  const LICENSES_EXTRA = parseLicenses(config.licenses);
 
   // outScadDir is entirely generated: wipe it before repopulating so files from
   // a previous config/build (a removed, renamed or briefly-private design or
