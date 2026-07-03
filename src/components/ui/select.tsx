@@ -78,8 +78,15 @@ function SelectContent({
 function SelectItem({
   className,
   children,
+  icon,
+  description,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Item>) {
+}: React.ComponentProps<typeof SelectPrimitive.Item> & {
+  /** Optional leading visual, shown in the dropdown row (not mirrored to the trigger). */
+  icon?: React.ReactNode;
+  /** Optional secondary line under the label, shown in the dropdown row only. */
+  description?: React.ReactNode;
+}) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
@@ -94,7 +101,17 @@ function SelectItem({
           <CheckIcon className="size-4" />
         </SelectPrimitive.ItemIndicator>
       </span>
-      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      {/* icon + description render outside ItemText so the trigger's SelectValue
+          mirrors only the label. */}
+      {icon}
+      {description ? (
+        <span className="flex min-w-0 flex-col">
+          <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+          <span className="text-xs text-muted-foreground">{description}</span>
+        </span>
+      ) : (
+        <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      )}
     </SelectPrimitive.Item>
   );
 }

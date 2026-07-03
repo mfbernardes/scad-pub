@@ -5,8 +5,8 @@
 
   "source": "examples",
   "designs": [
-    { "id": "tag", "label": "Tag" },
-    { "id": "coin", "label": "Coin" }
+    { "id": "tag", "label": "Tag", "description": "Personalised name tag with text." },
+    { "id": "coin", "label": "Coin", "description": "Round coin with an embossed emblem." }
   ],
   "assets": ["emblem.svg"],
 

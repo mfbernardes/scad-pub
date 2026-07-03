@@ -26,15 +26,17 @@ interface Props {
   reset: boolean;
   /** Whether the zoom in/out buttons are offered (config ui.zoom). */
   zoom: boolean;
+  /** Whether the fullscreen toggle is offered (config ui.fullscreen). */
+  fullscreen: boolean;
   /** The active camera view (checkmarked in the view picker). */
   view: ViewName;
   /** Snap to a standard camera view. */
   onSelectView: (view: ViewName) => void;
 }
 
-export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, reset, zoom, view, onSelectView }: Props) {
+export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, reset, zoom, fullscreen, view, onSelectView }: Props) {
   const standalone = useStandalone();
-  const canFullscreen = !standalone && fullscreenSupported();
+  const canFullscreen = fullscreen && !standalone && fullscreenSupported();
   if (!visible) return null;
 
   const toggleFullscreen = () => {

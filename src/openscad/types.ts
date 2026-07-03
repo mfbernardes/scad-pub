@@ -107,6 +107,11 @@ export interface Design {
   /** Optional dropdown grouping label; designs sharing a group cluster under a
    *  header in the design picker. Null/absent designs render ungrouped. */
   group?: string | null;
+  /** Optional short description, shown under the label in the design picker. */
+  description?: string | null;
+  /** Optional served URL of the design's icon (shown in the picker and used as
+   *  the design's manifest-shortcut icon). Null/absent for none. */
+  icon?: string | null;
   sections: string[];
   /** Section names that start collapsed (from a `// @collapsed` annotation). */
   collapsedSections?: string[];
@@ -182,6 +187,35 @@ export interface FileImport {
    * subset (paragraphs, bullet lists, **bold**, `code`, links).
    */
   note?: string;
+  /**
+   * Optional max upload size in bytes. A larger file is rejected with a friendly
+   * message instead of being stored. Omit for no cap.
+   */
+  maxBytes?: number;
+}
+
+/**
+ * Build-time render tuning (config's `render` key). Every field is optional; the
+ * app keeps its built-in default for any omitted value. None affect geometry, so
+ * `render` is absent from renderHash.
+ */
+export interface RenderConfig {
+  /**
+   * Auto-pause threshold in ms: a live (auto-render) pass slower than this pauses
+   * auto-render for the design. Default ≈ 6000.
+   */
+  heavyMs?: number;
+  /** Render-cache sizing (runner's in-memory L1 + persistent L2). */
+  cache?: {
+    /** L1 slot count (default 16). */
+    maxEntries?: number;
+    /** L1 total byte budget (default derived from device memory). */
+    maxBytes?: number;
+    /** Largest single render that may be cached (default derived from maxBytes). */
+    maxEntryBytes?: number;
+    /** Persist renders to IndexedDB (L2). Default on where IndexedDB exists. */
+    persistent?: boolean;
+  };
 }
 
 /**
@@ -249,6 +283,12 @@ export interface UiConfig {
   reset?: boolean;
   /** Whether the viewer's zoom in/out buttons are offered (default false). */
   zoom?: boolean;
+  /**
+   * Whether the viewer's fullscreen toggle is offered (default true). Only ever
+   * shown in a browser tab that supports the Fullscreen API anyway; set false to
+   * suppress it there too.
+   */
+  fullscreen?: boolean;
   /** Label for the "Presets" tab/section (default "Presets"). */
   presetsLabel?: string;
   /** Label for the "Parameters" tab/section (default "Parameters"). */
@@ -276,6 +316,10 @@ export interface Schema {
   /** Optional stable id; namespaces this configurator's browser storage so two
    *  configs on one origin don't collide. Defaults to "scadpub". */
   id?: string;
+  /** Document / manifest language (BCP-47 tag). Default "en". */
+  lang?: string;
+  /** Document / manifest text direction. Default "ltr". */
+  dir?: "ltr" | "rtl" | "auto";
   /** Optional help content shown in the Help modal. When null, a generic,
    *  project-agnostic default is used. */
   help: HelpContent | null;
@@ -302,6 +346,9 @@ export interface Schema {
   format: ModelFormat;
   /** OpenSCAD experimental features to --enable for every render. */
   features: string[];
+  /** Optional build-time render tuning (heavy-render threshold + cache sizing).
+   *  Null/absent keeps the app's built-in defaults. */
+  render?: RenderConfig | null;
   /** Bundled font filenames the renderer mounts from public/fonts/. */
   fonts: string[];
   /**
@@ -345,6 +392,9 @@ export interface Schema {
   designs: Design[];
   /** Build-time UI behaviour overrides (panel side, default state, etc.). */
   ui?: UiConfig;
+  /** Optional id of the design shown when a visit carries no `#d=` deep link.
+   *  Validated at build time to name a real design; null/absent → the first. */
+  defaultDesign?: string | null;
   /** Light-mode theme color for `<meta name="theme-color">` (default "#ffffff"). */
   themeColorLight?: string;
   /** iOS standalone launch images (apple-touch-startup-image), generated when a

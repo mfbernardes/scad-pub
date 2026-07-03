@@ -30,6 +30,8 @@ export function generatePwaAssets({
   SHORT_NAME,
   DESCRIPTION,
   ID,
+  LANG,
+  DIR,
   THEME_COLOR,
   BG_COLOR,
   CATEGORIES,
@@ -134,6 +136,7 @@ export function generatePwaAssets({
   }
 
   // Manifest screenshot entries (optional — enables rich Android install UI).
+  // `label` (accessibility) and `platform` are passed through when present.
   const screenshots = [];
   if (Array.isArray(config.screenshots)) {
     for (const shot of config.screenshots) {
@@ -141,7 +144,14 @@ export function generatePwaAssets({
         const abs = mustExist(resolve(CONFIG_DIR, shot.src), `screenshot '${shot.src}'`);
         const name = abs.split(/[\\/]/).pop();
         copyFileSync(abs, join(outPublicDir, name));
-        screenshots.push({ src: name, sizes: shot.sizes, type: "image/png", form_factor: shot.form_factor });
+        screenshots.push({
+          src: name,
+          sizes: shot.sizes,
+          type: "image/png",
+          form_factor: shot.form_factor,
+          ...(typeof shot.label === "string" ? { label: shot.label } : {}),
+          ...(typeof shot.platform === "string" ? { platform: shot.platform } : {}),
+        });
       }
     }
   }
@@ -153,9 +163,20 @@ export function generatePwaAssets({
     { src: "icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
   ];
 
+  // A manifest icon descriptor for a served image URL, typed by extension.
+  // SVGs advertise sizes "any"; other raster types are left sizeless (the OS
+  // still uses them). Unknown extensions get no type (also valid per the spec).
+  const iconDescriptor = (src) => {
+    const ext = src.slice(src.lastIndexOf(".") + 1).toLowerCase();
+    const type = { svg: "image/svg+xml", png: "image/png", webp: "image/webp" }[ext];
+    return { src, sizes: ext === "svg" ? "any" : "any", ...(type ? { type } : {}) };
+  };
+
   // App shortcuts (Android long-press / desktop jump list). Author-provided
   // `shortcuts` win; otherwise, with multiple designs, derive one per design
-  // that deep-links to it (#d=<id>, the same hash readInitialState parses).
+  // that deep-links to it (#d=<id>, the same hash readInitialState parses). A
+  // derived shortcut carries the design's own icon (if any); author entries may
+  // supply their own `icons` array ([{ src, sizes?, type? }]).
   let shortcuts = [];
   if (Array.isArray(config.shortcuts)) {
     shortcuts = config.shortcuts
@@ -164,12 +185,17 @@ export function generatePwaAssets({
         name: sc.name,
         ...(sc.short_name ? { short_name: sc.short_name } : {}),
         url: sc.url,
+        ...(Array.isArray(sc.icons) &&
+        sc.icons.every((ic) => ic && typeof ic.src === "string")
+          ? { icons: sc.icons }
+          : {}),
       }));
   } else if (designs.length > 1) {
     shortcuts = designs.map((d) => ({
       name: d.label,
       short_name: d.label,
       url: `./#d=${d.id}`,
+      ...(d.icon ? { icons: [iconDescriptor(d.icon)] } : {}),
     }));
   }
 
@@ -178,8 +204,8 @@ export function generatePwaAssets({
     name: TITLE,
     short_name: SHORT_NAME,
     description: DESCRIPTION,
-    lang: "en",
-    dir: "ltr",
+    lang: LANG ?? "en",
+    dir: DIR ?? "ltr",
     start_url: ".",
     scope: ".",
     display: "standalone",

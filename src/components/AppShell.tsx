@@ -134,6 +134,8 @@ export const AppShell = memo(function AppShell({
   const showReset = ui.reset !== false;
   // Whether the viewer offers the zoom in/out buttons (off by default).
   const showZoom = ui.zoom === true;
+  // Whether the viewer offers the fullscreen toggle (where it works at all).
+  const showFullscreen = ui.fullscreen !== false;
 
   const log = result?.log ?? EMPTY_LOG;
   const notices = schema.notices ?? [];
@@ -263,6 +265,7 @@ export const AppShell = memo(function AppShell({
     viewPicker: showViewPicker,
     reset: showReset,
     zoom: showZoom,
+    fullscreen: showFullscreen,
     view,
     onSelectView: handleSelectView,
   };

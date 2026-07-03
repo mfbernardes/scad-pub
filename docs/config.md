@@ -9,6 +9,8 @@
   "id": "scadpub",                // namespaces browser storage (default "scadpub")
   "shortName": "ScadPub",         // PWA short_name (default: title)
   "description": "Configure …",   // page <meta> + PWA description
+  "lang": "en",                   // document / manifest language (BCP-47; default "en")
+  "dir": "ltr",                   // text direction: "ltr" | "rtl" | "auto"; default "ltr"
   "icon": "branding/icon.svg",    // PWA/favicon icon
   "iconMaskable": "branding/icon-maskable.svg", // optional maskable icon (defaults to `icon`)
   "themeColor": "#1f2229",        // browser-chrome / PWA colour
@@ -16,7 +18,7 @@
   "backgroundColor": "#15171c",   // PWA splash background
   "categories": ["productivity", "graphics"],  // optional PWA manifest categories
   "screenshots": [                // optional, for the Android rich install UI
-    { "src": "shot-narrow.png", "sizes": "390x844", "form_factor": "narrow" }
+    { "src": "shot-narrow.png", "sizes": "390x844", "form_factor": "narrow", "label": "Home" }
   ],
   "shortcuts": [                  // optional app shortcuts (auto-derived per design if omitted)
     { "name": "Open Tag", "short_name": "Tag", "url": "./#d=tag" }
@@ -24,8 +26,9 @@
 
   // ── Design sources ─────────────────────────────────────────────────
   "source": "examples",           // directory of .scad designs (relative to this file)
+  "defaultDesign": "tag",         // optional: design shown when no #d= deep link (default: first)
   "designs": [
-    { "id": "tag", "label": "Tag", "heavy": false }
+    { "id": "tag", "label": "Tag", "heavy": false, "description": "A name tag.", "icon": "branding/tag.svg" }
   ],                              // omit to auto-discover *.scad in source; presets auto-detected as <id>.json
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
 
@@ -34,6 +37,10 @@
   "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
   "fonts": ["LiberationSans-Regular.ttf"],  // fonts to mount; a basename already in public/fonts/, or a path into `source` to bundle
   "fontFallback": "Liberation Mono",  // optional deterministic last-resort family (must be bundled)
+  "render": {                     // optional render tuning (see "Render tuning" below)
+    "heavyMs": 6000,              // auto-pause live re-render above this many ms
+    "cache": { "maxEntries": 16, "persistent": true }
+  },
 
   // ── Appearance & UI behaviour ──────────────────────────────────────
   "logo": "logo.svg",             // header logo (omit for text title)
@@ -52,6 +59,7 @@
     "viewPicker": true,           // viewer view picker (camera angles): true | false
     "reset": true,                // viewer "reset view" button: true | false
     "zoom": false,                // viewer zoom in/out buttons: true | false (default false)
+    "fullscreen": true,           // viewer fullscreen toggle: true | false (default true)
     "presetsLabel": "Presets",    // label for the Presets tab/section
     "parametersLabel": "Parameters" // label for the Parameters tab/section
   },
@@ -73,12 +81,14 @@
 - **`title`** / **`logo`** — see [Title & logo](#title--logo).
 - **`id`** — namespaces localStorage, IndexedDB, and preset cache. Defaults to `"scadpub"`.
 - **`description`** / **`shortName`** / **`icon`** / **`themeColor`** / **`backgroundColor`** — `<meta>` and PWA manifest fields. `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg`.
+- **`lang`** / **`dir`** — document + manifest language (a BCP-47 tag, default `"en"`) and text direction (`"ltr"` (default), `"rtl"`, or `"auto"`). Emitted onto `<html lang dir>` and into the manifest.
 - **`themeColorLight`** / **`categories`** / **`iconMaskable`** / **`screenshots`** / **`shortcuts`** — see [UI behaviour & PWA](#ui-behaviour--pwa).
 
 **Design sources**
 
 - **`source`** — directory of Customizer-style `.scad` designs, relative to this config file. Defaults to `"."`.
-- **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode.
+- **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode. Each entry also takes an optional **`description`** (a short line shown under the label in the design picker) and **`icon`** (a path, relative to the config file like `logo`, shown in the picker and used as the design's manifest shortcut icon).
+- **`defaultDesign`** — optional design `id` shown on a visit that carries no `#d=` deep link (a saved session or hash still wins). Must name a configured design; defaults to the first.
 - **`assets`** — files/directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph.
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.
 
@@ -87,6 +97,7 @@
 - **`features`** — applied to all designs as `--enable=<feature>`.
 - **`format`** — the model format OpenSCAD exports and the viewer parses, fixed at build time. `"3mf"` (the default) carries per-object colour from each design's `color(...)` calls — shown in the preview and written into the exported file. `"stl"` is geometry-only (no colour). Changing it invalidates the render cache automatically.
 - **`fonts`** / **`fontFallback`** — see [Fonts](#fonts-fonts-fontfallback).
+- **`render`** — optional render tuning (heavy-render threshold + cache sizing); see [Render tuning](#render-tuning-render).
 
 **Appearance & UI behaviour**
 
@@ -102,7 +113,7 @@
 - **`notices`** — see [Notice badges](#notice-badges-notices).
 - **`licenses`** — optional list of extra third-party software/license notices, **appended** to the app's built-in open-source attributions in the ⓘ panel (the built-ins are never removed). See [Open-source notices](#open-source-notices-licenses).
 
-Missing `source`, `assets`, design, or `logo` paths fail the build with a clear error.
+Missing `source`, `assets`, design, `logo`, or design-`icon` paths fail the build with a clear error. So does an **unknown top-level key** — a whole-key typo like `"popups"` or `"fontfallback"` fails the build rather than being silently ignored (add a `"$schema"` key for editor tooling if you want; it's allowed).
 
 ## Title & logo
 
@@ -241,10 +252,13 @@ Designs sometimes need a file the app can't bundle — a license-restricted font
   "fileImport": {
     "accept": ".svg,.ttf,.otf",  // optional: file-picker filter (omit to accept any file)
     "label": "Import file",      // optional: button label (default "Import file")
-    "note": "…"                  // optional: help text shown above the file list (Markdown)
+    "note": "…",                 // optional: help text shown above the file list (Markdown)
+    "maxBytes": 5242880          // optional: reject uploads larger than this (bytes)
   }
 }
 ```
+
+When **`maxBytes`** is set, an upload larger than the cap is rejected with a friendly toast (showing the file's size and the limit) and is never stored; omit it for no cap.
 
 `note` is rendered as a small Markdown subset (paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`) — the same renderer used for help and popup content.
 
@@ -270,6 +284,27 @@ A string or enum (dropdown) parameter annotated `// @font` (see [annotations](an
 ```
 
 **`fontFallback`** (optional) pins a deterministic last-resort family in the generated `fonts.conf`. Without it, once a user imports a font, Fontconfig can pick that font as the global default for any *unmatched* family — making OpenSCAD's own substitution unpredictable. Set `fontFallback` to a **bundled** family that you **don't** offer as a selectable lettering choice (e.g. a monospace face), and any absent family deterministically falls back to it instead. Omit it for the default (no fallback rule).
+
+## Render tuning (`render`)
+
+An optional build-time object that tunes rendering behaviour. Every field is optional; the app keeps its built-in default for any you omit. None affect geometry, so `render` is absent from `renderHash` (changing it doesn't invalidate cached renders).
+
+```jsonc
+{
+  "render": {
+    "heavyMs": 6000,       // auto-pause threshold (ms); default ≈ 6000
+    "cache": {
+      "maxEntries": 16,    // in-memory (L1) slot count; default 16
+      "maxBytes": 67108864,    // in-memory (L1) total budget; default derived from device memory
+      "maxEntryBytes": 33554432,  // largest single render that may be cached
+      "persistent": true   // persist renders to IndexedDB (L2); default on where available
+    }
+  }
+}
+```
+
+- **`heavyMs`** — when a *live* (auto-render) pass takes longer than this, auto-render pauses for that design and the user renders on demand with **Render now** (designs flagged `"heavy": true` start paused regardless). Raise it for a fast machine, lower it to pause sooner.
+- **`cache`** — sizes the runner's two-tier render cache: `maxEntries` / `maxBytes` bound the in-memory L1 (slot count / total bytes), `maxEntryBytes` caps the largest single render that's worth caching, and `persistent` toggles the IndexedDB L2 store (set `false` to render fresh each session / for privacy-sensitive deployments).
 
 ## Popup notice (`popup`)
 
@@ -308,6 +343,7 @@ An optional object (validated as a unit; defaults applied when absent). None of 
 - **`viewPicker`** — `true` (default) or `false`: whether the viewer offers the view picker — the cube button whose menu snaps the camera to standard angles (Isometric, Top, Front, …). Set `false` to hide it.
 - **`reset`** — `true` (default) or `false`: whether the viewer offers the "reset view" button (re-frames the model in the current view). Mouse/touch orbit and zoom still work regardless.
 - **`zoom`** — `false` (default) or `true`: whether the viewer offers the zoom in/out buttons. Off by default since mouse-wheel / pinch zoom already works; set `true` to show the two buttons.
+- **`fullscreen`** — `true` (default) or `false`: whether the viewer offers the fullscreen toggle. It only ever appears in a browser tab whose browser supports the Fullscreen API (never in an installed PWA, which is already its own window); set `false` to suppress it even there.
 - **`presetsLabel`** — string (default `"Presets"`): the label shown for the Presets tab/section (the mobile sheet tab, the desktop presets dropdown, and the presets popover title).
 - **`parametersLabel`** — string (default `"Parameters"`): the label shown for the Parameters tab/section (the mobile sheet tab and the desktop parameter panel).
 
@@ -318,8 +354,8 @@ An optional object (validated as a unit; defaults applied when absent). None of 
 - **`themeColorLight`** — light-scheme `<meta name="theme-color">` (default `"#ffffff"`); the dark value comes from `themeColor`.
 - **`categories`** — optional array of [manifest categories](https://developer.mozilla.org/docs/Web/Manifest/categories).
 - **`iconMaskable`** — optional separate SVG (safe-zone padded) for the maskable icon; defaults to `icon`.
-- **`screenshots`** — optional `[{ src, sizes, form_factor }]` for the richer Android install UI (`form_factor`: `"wide"` or `"narrow"`).
-- **`shortcuts`** — optional `[{ name, short_name?, url }]` app shortcuts (Android long-press / desktop jump list). If omitted and the config has **more than one design**, a shortcut per design is derived automatically, deep-linking to it (`./#d=<id>`).
+- **`screenshots`** — optional `[{ src, sizes, form_factor, label?, platform? }]` for the richer Android install UI (`form_factor`: `"wide"` or `"narrow"`; `label` is the accessible caption; `platform` targets a store listing). `label`/`platform` are passed through to the manifest when present.
+- **`shortcuts`** — optional `[{ name, short_name?, url, icons? }]` app shortcuts (Android long-press / desktop jump list); `icons` (an array of `{ src, sizes?, type? }`) is passed through when supplied. If omitted and the config has **more than one design**, a shortcut per design is derived automatically, deep-linking to it (`./#d=<id>`) and carrying that design's `icon` (if it has one).
 
 ## Notice badges (`notices`)
 

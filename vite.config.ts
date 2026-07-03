@@ -15,6 +15,8 @@ function readSchema(): {
   title?: string;
   shortName?: string;
   id?: string;
+  lang?: string;
+  dir?: "ltr" | "rtl" | "auto";
   format?: "3mf" | "stl";
   description?: string;
   themeColor?: string;
@@ -66,6 +68,8 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
       handler(html) {
         return html
           .replace(/%APP_TITLE%/g, s.title ?? "ScadPub")
+          .replace(/%APP_LANG%/g, s.lang ?? "en")
+          .replace(/%APP_DIR%/g, s.dir ?? "ltr")
           .replace(
             /%APP_DESCRIPTION%/g,
             s.description ?? "Configure and export designs in your browser."
