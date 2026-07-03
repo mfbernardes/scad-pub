@@ -391,27 +391,10 @@ the runtime only ever merges small objects:
 
 2. **OpenSCAD parameter-label sidecars.** Parameter/section/enum labels come from
    `.scad` comments and cannot be config fields without drift. Add per-design sidecar
-   translation files next to the design, keyed by **stable identifiers** only:
-
-   ```jsonc
-   // examples/tag.i18n.de.json
-   {
-     "sections":   { "Plate": "Platte", "Mounting": "Befestigung" },
-     "params": {
-       "label":     { "description": "Text, der auf dem Anhänger steht.", "help": "…" },
-       "text_size": { "description": "Schrifthöhe (mm)." }
-     },
-     "choices":  { "arrow": { "left": "links", "right": "rechts" } },   // value → label
-     "info":     { "text_size": { "label": "Texthöhe" } }
-   }
-   ```
-
-   `gen-schema` discovers `<design>.i18n.<locale>.json`, validates every key against
-   the parsed schema (an unknown param/section/choice fails the build — this is the
-   drift guard the Customizer-parsing design demands), and emits the overlay. Enum
-   *values*, param *names*, and `@showIf` expressions are untouched — only display
-   labels overlay, so visibility logic and define-passing are locale-independent by
-   construction.
+   translation files (`<design>.i18n.<locale>.json`) next to the design, keyed by
+   **stable identifiers** only, validated against the parsed schema at build time, and
+   merged as display-only overlays. This is the structurally deepest part of the plan
+   and is specified in full in **Appendix A**.
 
 3. **Schema shape and runtime merge.** `designs.json` gains
    `"i18n": { "<locale>": { config-overlay…, designs: { "<id>": sidecar-overlay… } } }`.
@@ -527,3 +510,173 @@ Open questions to settle before Phase 2/3 (owner: maintainer):
 Phases 0→1→2 are strictly ordered; 3 and 4 can proceed in parallel after 2; 5 is
 demand-driven. After Phase 2 the project can honestly claim i18n support; after Phase 3
 a deployment can ship a fully localized configurator.
+
+---
+
+## Appendix A — `.scad` localization in detail
+
+This appendix specifies the sidecar mechanism from Phase 3 step 2. It is grounded in
+the actual parser (`scripts/lib/params.mjs`) and the example design
+(`examples/tag.scad`).
+
+### A.1 What text a `.scad` file contributes, and what is localizable
+
+`gen-schema` parses **only the design's own file** for parameters (the `use`/`include`
+graph is followed for *mounting*, not for Customizer parsing — same as OpenSCAD's own
+Customizer). So sidecars exist per design; shared `.scad` libraries never need one.
+
+| Source construct | Parser | Schema field | Shown where | Localizable? |
+|---|---|---|---|---|
+| `/* [Text] */` section header | `SECTION_RE` (`params.mjs:8`) | `sections[]`, `param.section` | group headers (`ParamForm`) | **Yes** — display only; the source string stays the identity key |
+| Doc comment, first sentence | `firstSentence()` (`params.mjs:33`) | `param.description` | control label; `@info` fallback label; search | **Yes** |
+| Doc comment, full block | (`params.mjs:160-162`) | `param.help` | help popover; search | **Yes** |
+| Enum hint labels — `// [a:Label]`, quoted or bare lists | `parseEnumHint()` (`params.mjs:53`) | `choices[].label` | dropdown options; `DimensionInfo` enum display | **Yes** |
+| Enum hint **values** | same | `choices[].value` | `-D` defines sent to OpenSCAD; `@showIf` comparisons; preset values | **Never** |
+| Parameter identifier | `PARAM_RE` (`params.mjs:14`) | `param.name` | monospace var-name (`ui.showVarName`); defines; URL state | **Never** |
+| `// @info Label \| unit` | `INFO_RE` (`params.mjs:26`) | `param.info.label` / `.unit` | measurements panel (`DimensionInfo`) | **Yes** (label); unit overridable but usually universal (`mm`) |
+| `// @showIf expr` | `SHOWIF_RE` | `param.showIf` | visibility logic | **Never** (references names/values) |
+| String-parameter **defaults** (e.g. `label = "ScadPub"`) | `inferParam()` | `param.default` | rendered **geometry** | **Deferred** — see A.6 |
+| `echo("tag: alert: …")`, `assert()` messages, `echo("@info", …)` labels | runtime output | notices / log / measurements | output console, `DimensionInfo` | **No** — runtime author text, see A.7 |
+
+### A.2 Why sidecar files (alternatives considered and rejected)
+
+- **Per-locale `.scad` copies** — forks geometry; every bug fix must be applied N
+  times; drift is guaranteed. Rejected outright.
+- **Inline annotations** (`// @label[de] Breite des Anhängers.`) — invisible to
+  OpenSCAD, and they keep text next to source, but: every new locale touches every
+  design file, doc blocks balloon (a 6-locale design triples in comment volume),
+  translators must edit code files they don't otherwise understand, and the desktop
+  Customizer shows the annotation soup in no case anyway. Rejected.
+- **English-text keys** (gettext-style: key = the base string) — rewording a doc
+  comment silently orphans every translation of it. Identifier keys plus strict build
+  validation make the same event a **loud build error** instead. Rejected.
+
+The `.scad` file stays the single source of truth for the base language and for all
+geometry; a translation can never fork behaviour. Desktop OpenSCAD users always see
+the source language — annotations and sidecars are both invisible to it.
+
+### A.3 Sidecar format and discovery
+
+`<design-stem>.i18n.<locale>.json`, discovered next to `<design>.scad` exactly like
+bundled presets (`<stem>.json`) are today — the `.i18n.` infix keeps the two
+namespaces distinct (preset auto-detection matches `<stem>.json` only; add a test
+pinning that `tag.i18n.de.json` is never picked up as a preset).
+
+All fields optional and sparse; keys are canonical identifiers from the parse:
+
+```jsonc
+// examples/tag.i18n.pt-BR.json
+{
+  "sections": {
+    "Tag": "Etiqueta",
+    "Text": "Texto",
+    "Emblem (SVG)": "Emblema (SVG)",
+    "Hanging hole": "Furo de pendurar",
+    "Quality": "Qualidade"
+  },
+  "params": {
+    "width":      { "description": "Largura da etiqueta (mm)." },
+    "label":      { "description": "Texto a gravar na etiqueta.",
+                    "help": "Texto a gravar na etiqueta. Deixe vazio para nenhum." },
+    "text_size":  { "description": "Altura da fonte (mm)." },
+    "engrave_text": { "description": "Entalhar o texto na placa em vez de elevá-lo." }
+  },
+  "choices": {
+    // param name → { enum VALUE → translated label }; values never change
+    "font": { "Liberation Sans:style=Bold": "Liberation Sans (negrito)" }
+  },
+  "info": {
+    "text_size":     { "label": "Altura do texto" },   // unit inherits "mm"
+    "hole_diameter": { "label": "Diâmetro do furo" }
+  }
+}
+```
+
+Two format details that matter:
+
+- **`description` and `help` are separate fields.** The base language derives the
+  label by splitting the doc block with a Latin-punctuation sentence heuristic
+  (`firstSentence()`, `params.mjs:33-36` — `.!?` followed by whitespace and a capital).
+  That regex is never applied to translations; the translator supplies both fields
+  explicitly, so languages without Latin sentence punctuation (or capitalization) are
+  unaffected.
+- **Section keys are the verbatim source header text** (e.g. `"Emblem (SVG)"`), since
+  the header *is* the section's identity in the schema (`param.section`,
+  `collapsedSections`). Renaming a section in the `.scad` is a schema change and
+  correctly breaks the sidecar at build time.
+
+### A.4 Build-time processing (`gen-schema`)
+
+For each design × each supported non-default locale:
+
+1. Parse the `.scad` as today → canonical schema (unchanged code path).
+2. If `<stem>.i18n.<locale>.json` exists, validate it **strictly** against that parse:
+   an unknown section header, param name, enum value, or `info` key **fails the build**
+   with the offending key and file — the same "typos fail the build" philosophy as
+   unknown `colors` tokens. Values must be non-empty strings. A sidecar for a locale
+   not in `locales.supported` is also an error (dead file detection).
+3. Emit the validated overlay, sparse, into `designs.json` under
+   `i18n.<locale>.designs.<id>` — the schema grows only what was translated.
+4. **Sidecars are never copied into `public/scad/` and never mounted into the WASM
+   filesystem.** `renderHash` hashes mounted `.scad`, fonts, features, the WASM build,
+   and `worker.ts` — sidecars are outside all of those by construction, so a
+   translation edit can never invalidate or fork the render cache. Add a regression
+   test asserting `renderHash` is byte-identical across a sidecar-only change.
+
+**Authoring workflow** — translators never hand-derive keys:
+
+- `npm run gen -- --i18n-template <locale>` emits (or updates in place) a sidecar
+  skeleton per design, prefilled with the base-language strings for every localizable
+  key. The translator edits values only.
+- Re-running the template after a design change **adds** new keys (prefilled with base
+  strings, so they're greppable as untranslated) and, via step 2 validation, **errors**
+  on orphaned ones — so a renamed parameter shows up as a loud diff + build failure in
+  the same PR that renamed it, not as silent English leakage later.
+- A non-fatal `--i18n-coverage` report lists untranslated keys per locale for release
+  checklists.
+
+### A.5 Runtime behaviour
+
+- `localizeSchema(schema, locale)` (Phase 3 step 3) merges overlays per field. All
+  grouping, collapse state, `@showIf` evaluation, define-passing, URL state, and preset
+  application key on canonical names/values — only render-time display strings swap.
+  Components are untouched; the merge happens in one place, memoized per locale.
+- **Fallback is per-field**: sidecar `info.label` → sidecar `description` → base
+  `info.label` → base `description` (mirroring the existing `@info` label fallback);
+  an untranslated param simply shows base language.
+- **Parameter search** (`ParamForm`) matches the localized `description`/`help` *and*
+  the canonical `name` — so in a German UI both "Breite" and "width" find the width
+  slider. Casing via `toLocaleLowerCase(locale)` per §3.5.
+- The monospace variable name (`ui.showVarName`) always shows the canonical
+  identifier — it is the bridge to the `.scad` source and to desktop OpenSCAD, and
+  translating it would sever that.
+- `DimensionInfo` shows enum values through their localized choice label; booleans use
+  the catalog's Yes/No; numbers use `fmtMm`/locale formatting.
+
+### A.6 String-parameter defaults — deliberately deferred
+
+`label = "ScadPub"` in `tag.scad` is engraved into the exported geometry; a German
+deployment might want the *default* text localized too. This is technically easy
+(override `param.default` per locale; defines are part of the render-cache key, so
+caching stays correct and `renderHash` is untouched) but it breaks a subtle
+invariant: **share links encode only non-default values** (`urlState.ts` diffs against
+defaults). With per-locale defaults, the same link opened under a different locale
+reproduces **different geometry** — silently violating the "Copy link reproduces this
+exact design" promise. If this feature is ever added it must stamp locale-defaulted
+values into the URL explicitly. Until then, the documented pattern for deployments is:
+pick a language-neutral default in the `.scad`, or ship a bundled preset per language.
+(Non-Latin default text also requires bundling a covering font — risk #7.)
+
+### A.7 Runtime author text sidecars cannot reach
+
+Notice echoes (`echo("tag: alert: …")`), `assert()` messages, and `echo("@info", label,
+unit, value)` labels are produced by OpenSCAD *at render time* — `gen-schema` never
+sees their evaluated form, so no build-time overlay can translate them. Passing the
+locale into the render as a `-D` define was considered and **rejected**: it would make
+geometry-identical renders cache-miss per locale and lets a design fork geometry by
+language. The output console is a diagnostic surface; its author text stays in the
+design's language (OpenSCAD's own `WARNING:`/`ERROR:` lines are upstream English
+regardless). Deployments that care should keep echo text terse and neutral. The
+category **badge labels** (config `notices[].label`) are localizable via the config
+overlay, and the console chrome ("Notices", "Log", empty states) via the app catalog —
+so the frame around the author text is fully localized.
