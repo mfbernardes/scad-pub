@@ -407,8 +407,8 @@ button:disabled { cursor: default; }
 }
 
 /* Floating bottom-center action cluster (Export / PNG / Share). Desktop hovers
-   it over the viewer bottom; mobile hovers the same pill just above the sheet's
-   peek (tab row) — see the mobile override below. */
+   it over the viewer bottom; mobile rides it on the sheet's top edge — see the
+   mobile override below. */
 .action-cluster {
   position: absolute;
   bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
@@ -417,12 +417,26 @@ button:disabled { cursor: default; }
   z-index: 10;
 }
 
-/* Mobile: lift the cluster clear of the collapsed sheet's tab row so it reads
-   as floating over the viewer, mirroring the desktop position. Sits below the
-   sheet (z-30) so raising the sheet slides over it. */
+/* Mobile: sit the cluster just above the sheet's top edge and follow it live —
+   the same min(follow, half) cap the viewer uses, so it tracks the sheet up
+   from peek to the half detent and stays visible there. Past half it stays
+   pinned at the half line while the sheet (z-30) rises over it, so the cluster
+   is covered only once the sheet is (near) full. Easing mirrors the viewer's;
+   data-sheet-dragging disables it so the pill tracks the finger 1:1. */
 @media (max-width: 860px) {
   .app-shell__mobile .action-cluster {
-    bottom: calc(var(--mobile-peek-height) + var(--safe-area-bottom) + 0.6rem);
+    bottom: calc(
+      var(--safe-area-bottom) +
+      min(
+        var(--sheet-follow-h, var(--mobile-peek-height)),
+        (100dvh - var(--safe-area-bottom)) * 0.52
+      ) +
+      0.6rem
+    );
+    transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .app-shell__mobile[data-sheet-dragging="true"] .action-cluster {
+    transition: none;
   }
 }
 

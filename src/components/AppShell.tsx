@@ -429,9 +429,10 @@ export const AppShell = memo(function AppShell({
         </BottomSheet>
 
         {/* Floating action cluster — the same compact glass pill the desktop
-            floats over its viewer, hovering just above the sheet's peek (tab
-            row) instead of a solid docked footer band that would reserve a strip
-            of the viewport. Identical markup + buttons to the desktop cluster. */}
+            floats over its viewer, riding just above the sheet's top edge (it
+            follows the sheet up to the half detent via --sheet-follow-h) instead
+            of a solid docked footer band that would reserve a strip of the
+            viewport. Identical markup + buttons to the desktop cluster. */}
         <div className="action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation) backdrop-blur-[12px]">
           <ActionButtons {...actionButtonsProps} />
         </div>
