@@ -83,6 +83,13 @@ export default function App() {
     if (remember && popup) rememberPopup(popup);
     setShowPopup(false);
   };
+  // The welcome popup shouldn't sit as an opaque scrim over the model's very
+  // first render — that live render is the product's strongest first
+  // impression. Hold it until the first render lands, or a short timeout
+  // elapses (so a slow/heavy design, or one the user never renders, doesn't
+  // suppress the welcome message indefinitely).
+  const [popupGateOpen, setPopupGateOpen] = useState(false);
+  const popupGateResolvedRef = useRef(false);
   const [autoRender, setAutoRender] = useState(!design.heavy);
   // Mirrored on every render so async work (doRender) reads the latest value
   // without retriggering the effects that depend on it.
@@ -203,6 +210,20 @@ export default function App() {
   }, [ready, result, rendering, doRender]);
 
   useEffect(() => () => runnerRef.current?.dispose(), []);
+
+  useEffect(() => {
+    if (popupGateResolvedRef.current) return;
+    if (result) {
+      popupGateResolvedRef.current = true;
+      setPopupGateOpen(true);
+      return;
+    }
+    const t = setTimeout(() => {
+      popupGateResolvedRef.current = true;
+      setPopupGateOpen(true);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [result]);
 
   useEffect(() => {
     loadFiles().then((f) => {
@@ -364,7 +385,7 @@ export default function App() {
 
   return (
     <>
-      {showPopup && popup && <PopupModal popup={popup} onClose={closePopup} />}
+      {showPopup && popup && popupGateOpen && <PopupModal popup={popup} onClose={closePopup} />}
       {showHelp && (
         <HelpModal
           help={schema.help}
