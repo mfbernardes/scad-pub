@@ -200,6 +200,19 @@ button:disabled { cursor: default; }
     height: 100%;
     position: relative;
     overflow: hidden;
+    /* The bottom sheet's live top edge, in px from the viewport bottom: the
+       sheet's current height (--sheet-follow-h, set each drag frame by AppShell)
+       above its safe-area inset, capped at the half detent so dragging on to
+       full doesn't drag dependents off-screen. The viewer's bottom sits here;
+       the floating action cluster rides just above it. The 0.52 cap mirrors
+       BottomSheet's HALF_VH_RATIO — keep them in sync. */
+    --sheet-top: calc(
+      var(--safe-area-bottom) +
+      min(
+        var(--sheet-follow-h, var(--mobile-peek-height)),
+        (100dvh - var(--safe-area-bottom)) * 0.52
+      )
+    );
   }
 }
 
@@ -225,24 +238,18 @@ button:disabled { cursor: default; }
 /* Mobile: the viewer fills the visible area above the sheet + fixed footer, so
    the model is framed in the remaining viewport rather than the full page (its
    lower part would otherwise sit hidden behind the sheet). The canvas follows
-   the sheet live: --sheet-follow-h (the sheet's current height, set by AppShell
-   from BottomSheet's drag) drives the bottom edge, and the Viewer's RAF loop
-   reframes the model into the new box. It falls back to the peek height before
-   the first drag, and is capped at the half height (the 0.52 ratio mirrors
-   BottomSheet's halfH) so dragging on to full doesn't shrink the canvas to
-   nothing — the sheet covers it and the Viewer pauses rendering off-screen. */
+   the sheet live: its bottom sits at --sheet-top (the sheet's live top edge,
+   defined on .app-shell__mobile), and the Viewer's RAF loop reframes the model
+   into the new box. --sheet-top falls back to the peek height before the first
+   drag and is capped at the half height, so dragging on to full doesn't shrink
+   the canvas to nothing — the sheet covers it and the Viewer pauses rendering
+   off-screen. */
 .app-shell__mobile-viewer {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  bottom: calc(
-    var(--safe-area-bottom) +
-    min(
-      var(--sheet-follow-h, var(--mobile-peek-height)),
-      (100dvh - var(--safe-area-bottom)) * 0.52
-    )
-  );
+  bottom: var(--sheet-top);
   display: flex;
   flex-direction: column;
   /* Eases the snap when the sheet settles (mirrors .bottom-sheet's transition).
@@ -411,28 +418,21 @@ button:disabled { cursor: default; }
    mobile override below. */
 .action-cluster {
   position: absolute;
-  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(0.75rem + var(--safe-area-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
 }
 
-/* Mobile: sit the cluster just above the sheet's top edge and follow it live —
-   the same min(follow, half) cap the viewer uses, so it tracks the sheet up
-   from peek to the half detent and stays visible there. Past half it stays
-   pinned at the half line while the sheet (z-30) rises over it, so the cluster
-   is covered only once the sheet is (near) full. Easing mirrors the viewer's;
-   data-sheet-dragging disables it so the pill tracks the finger 1:1. */
+/* Mobile: ride the cluster 0.6rem above the sheet's live top edge (--sheet-top,
+   shared with the viewer bottom), so it tracks the sheet up from peek to the
+   half detent and stays visible there. Past half it stays pinned at the half
+   line while the sheet (z-30) rises over it, so the cluster is covered only once
+   the sheet is (near) full. Easing mirrors the viewer's; data-sheet-dragging
+   disables it so the pill tracks the finger 1:1. */
 @media (max-width: 860px) {
   .app-shell__mobile .action-cluster {
-    bottom: calc(
-      var(--safe-area-bottom) +
-      min(
-        var(--sheet-follow-h, var(--mobile-peek-height)),
-        (100dvh - var(--safe-area-bottom)) * 0.52
-      ) +
-      0.6rem
-    );
+    bottom: calc(var(--sheet-top) + 0.6rem);
     transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
   .app-shell__mobile[data-sheet-dragging="true"] .action-cluster {

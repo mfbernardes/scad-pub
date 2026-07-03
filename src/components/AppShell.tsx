@@ -15,6 +15,10 @@ import type { ViewerHandle, Dimensions } from "./Viewer";
 const PEEK_HEIGHT = 60;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
 const EMPTY_LOG: string[] = [];
+// The floating glass pill that wraps the ActionButtons row — shared verbatim by
+// the desktop and mobile clusters so a tweak to padding/border/blur lands once.
+const ACTION_CLUSTER_CLASS =
+  "action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation) backdrop-blur-[12px]";
 
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
@@ -321,7 +325,7 @@ export const AppShell = memo(function AppShell({
               {/* Floating controls live inside viewer-wrap so they hover over the
                   canvas — which shrinks when the output console docks below it —
                   rather than overlapping the console's notices. */}
-              <div className="action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation) backdrop-blur-[12px]">
+              <div className={ACTION_CLUSTER_CLASS}>
                 <ActionButtons {...actionButtonsProps} />
               </div>
               <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
@@ -433,7 +437,7 @@ export const AppShell = memo(function AppShell({
             follows the sheet up to the half detent via --sheet-follow-h) instead
             of a solid docked footer band that would reserve a strip of the
             viewport. Identical markup + buttons to the desktop cluster. */}
-        <div className="action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation) backdrop-blur-[12px]">
+        <div className={ACTION_CLUSTER_CLASS}>
           <ActionButtons {...actionButtonsProps} />
         </div>
 
