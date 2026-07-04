@@ -26,6 +26,13 @@ const FONT_ANNOT_RE = /^@font\s*$/i;
 const INFO_RE = /^@info\b\s*(.*)$/i;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
+// File-level design metadata, read anywhere in the file (typically a header
+// comment, so it works even before the first section). `@description` is the
+// design's picker sub-label; `@icon` is a path to its thumbnail, resolved
+// relative to the design's own .scad file. Both are ScadPub-only fallbacks —
+// a config `designs[]` entry still overrides them — and invisible to OpenSCAD.
+const DESCRIPTION_RE = /^\s*\/\/\s*@description\b\s*(.*)$/i;
+const ICON_RE = /^\s*\/\/\s*@icon\b\s*(.*)$/i;
 
 // The concise label is the first sentence of the doc block; the rest is help.
 // Split on sentence-ending .!? + whitespace + a capital/opening paren, so we
@@ -124,6 +131,10 @@ export function parseParams(absPath) {
   const params = [];
   const sections = [];
   const collapsedSections = [];
+  // File-level design metadata (`// @description` / `// @icon`); first non-empty
+  // wins. Populated regardless of section, so a header comment above the first
+  // `/* [Section] */` is honoured.
+  const meta = { description: null, icon: null };
   const reset = () => {
     pendingDoc = [];
     pendingShowIf = null;
@@ -136,6 +147,18 @@ export function parseParams(absPath) {
     // section, so handle it before the null-section guard below.
     if (COLLAPSE_RE.test(line)) {
       pendingSectionCollapsed = true;
+      continue;
+    }
+    // File-level metadata is section-independent, so capture it before the
+    // null-section guard too (a header comment sits above the first section).
+    const dmeta = line.match(DESCRIPTION_RE);
+    if (dmeta) {
+      if (meta.description === null && dmeta[1].trim()) meta.description = dmeta[1].trim();
+      continue;
+    }
+    const imeta = line.match(ICON_RE);
+    if (imeta) {
+      if (meta.icon === null && imeta[1].trim()) meta.icon = imeta[1].trim();
       continue;
     }
     const sm = line.match(SECTION_RE);
@@ -195,5 +218,5 @@ export function parseParams(absPath) {
       reset();
     }
   }
-  return { params, sections, collapsedSections };
+  return { params, sections, collapsedSections, meta };
 }

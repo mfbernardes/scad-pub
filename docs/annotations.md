@@ -1,6 +1,23 @@
 # OpenSCAD annotations
 
-ScadPub adds four comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
+ScadPub adds a handful of comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
+
+## Design metadata (`// @description`, `// @icon`)
+
+A design can describe itself from its own `.scad` file instead of the config. Put these anywhere in the file — a header comment above the first section is the natural home:
+
+```openscad
+// @description Auto-sized flat Braille plate for a door, shelf, or desk.
+// @icon icons/nameplate.svg
+
+/* [Text] */
+label = "Zimmer 1";
+```
+
+- **`@description`** — the design's picker sub-label (the same line a config `designs[]` entry's `description` sets).
+- **`@icon`** — a path to the design's thumbnail, resolved **relative to the design's own `.scad` file** (unlike a config `icon`, which is relative to the config). It may be an SVG, PNG, or WebP; it's served as-is and reused as the design's manifest shortcut icon.
+
+Both are **fallbacks**: a value on the design's config `designs[]` entry wins. First occurrence in the file wins; blank values are ignored. This keeps a design self-describing (and works even with auto-discovery, when the config lists no `designs[]` at all), while still letting a deployment override either from the config.
 
 ## Conditional parameters (`// @showIf`)
 
