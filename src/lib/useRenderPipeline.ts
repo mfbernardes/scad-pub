@@ -61,14 +61,8 @@ export function useRenderPipeline({
   const runnerRef = useRef<OpenSCADRunner | null>(null);
   const lastKeyRef = useRef("");
   if (!runnerRef.current)
-    runnerRef.current = new OpenSCADRunner({
-      onReady: () => setReady(true),
-      cacheVersion: runner.cacheVersion,
-      cacheSize: runner.cacheSize,
-      cacheBytes: runner.cacheBytes,
-      maxCacheEntryBytes: runner.maxCacheEntryBytes,
-      persistentCache: runner.persistentCache,
-    });
+    // `runner`'s fields are exactly OpenSCADRunner's cache options, so spread them.
+    runnerRef.current = new OpenSCADRunner({ onReady: () => setReady(true), ...runner });
 
   const defines = useMemo(() => {
     const d: Record<string, string> = {};
