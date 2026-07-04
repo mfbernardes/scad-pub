@@ -87,7 +87,7 @@
 **Design sources**
 
 - **`source`** — directory of Customizer-style `.scad` designs, relative to this config file. Defaults to `"."`.
-- **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode. Each entry also takes an optional **`description`** (a short line shown under the label in the design picker) and **`icon`** (a path, relative to the config file like `logo`, shown in the picker and used as the design's manifest shortcut icon).
+- **`designs`** — explicit list with id, label, optional `file`. Omit to auto-discover. Set `"heavy": true` to start a design in manual-render mode. Each entry also takes an optional **`description`** (a short line shown under the label in the design picker) and **`icon`** (a path, relative to the config file like `logo`, shown in the picker and used as the design's manifest shortcut icon). The `icon` may be an **SVG, PNG, or WebP** — it's served as-is (not rasterized); for a PNG the build reads its pixel dimensions so the manifest shortcut advertises the real `sizes`.
 - **`defaultDesign`** — optional design `id` shown on a visit that carries no `#d=` deep link (a saved session or hash still wins). Must name a configured design; defaults to the first.
 - **`assets`** — files/directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph.
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.

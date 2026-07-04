@@ -255,6 +255,27 @@ test("lang/dir + per-design shortcut icons + screenshot fields reach the manifes
   assert.equal(manifest.screenshots[0].platform, "android");
 });
 
+test("a PNG design icon is served as-is and its real pixel size reaches the manifest", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const schema = generate({
+    configPath: join(FIXTURES, "widget-pngicon.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  // PNG copied verbatim (no rasterization) preserving its extension.
+  assert.equal(schema.designs.find((d) => d.id === "widget").icon, "scad/widget-icon.png");
+  assert.ok(existsSync(join(out, "public", "scad", "widget-icon.png")));
+  // The derived shortcut icon advertises the PNG's real 48x24 size (not "any").
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  const shortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
+  assert.deepEqual(shortcut.icons, [
+    { src: "scad/widget-icon.png", sizes: "48x24", type: "image/png" },
+  ]);
+});
+
 test("heavy defaults to false when unset", () => {
   const { schema } = run("widget-autodeps.config.json");
   assert.equal(schema.designs[0].heavy, false);
