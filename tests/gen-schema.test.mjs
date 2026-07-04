@@ -222,12 +222,24 @@ test("per-design description + icon are parsed, copied and served", () => {
   const { schema, out } = run("widget-designmeta.config.json");
   const widget = schema.designs.find((d) => d.id === "widget");
   const collapsible = schema.designs.find((d) => d.id === "collapsible");
+  // Config `designs[]` values win over the design's own annotations.
   assert.equal(widget.description, "A little widget.");
   assert.equal(widget.icon, "scad/widget-icon.svg");
   assert.ok(existsSync(join(out, "scad", "widget-icon.svg")));
-  // A design without description/icon reports them as null.
-  assert.equal(collapsible.description, null);
-  assert.equal(collapsible.icon, null);
+  // collapsible sets no config description/icon, so it falls back to the
+  // `// @description` / `// @icon` annotations in its .scad (the icon path is
+  // resolved relative to the design file and copied under <id>-icon.<ext>).
+  assert.equal(collapsible.description, "A collapsible gadget.");
+  assert.equal(collapsible.icon, "scad/collapsible-icon.svg");
+  assert.ok(existsSync(join(out, "scad", "collapsible-icon.svg")));
+});
+
+test("parseParams captures file-level @description / @icon metadata", () => {
+  const { meta } = parseParams(join(FIXTURES, "src", "collapsible.scad"));
+  assert.deepEqual(meta, { description: "A collapsible gadget.", icon: "assets/emblem.svg" });
+  // A design file with no such annotations reports nulls.
+  const plain = parseParams(join(FIXTURES, "mini.scad"));
+  assert.deepEqual(plain.meta, { description: null, icon: null });
 });
 
 test("lang/dir + per-design shortcut icons + screenshot fields reach the manifest", () => {
@@ -243,13 +255,16 @@ test("lang/dir + per-design shortcut icons + screenshot fields reach the manifes
   );
   assert.equal(manifest.lang, "pt-BR");
   assert.equal(manifest.dir, "rtl");
-  // Two designs -> auto-derived shortcuts; the one with an icon carries it.
+  // Two designs -> auto-derived shortcuts, each carrying its design's icon —
+  // widget's from the config, collapsible's from its `// @icon` annotation.
   const widgetShortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
   assert.deepEqual(widgetShortcut.icons, [
     { src: "scad/widget-icon.svg", sizes: "any", type: "image/svg+xml" },
   ]);
   const collapsibleShortcut = manifest.shortcuts.find((s) => s.url === "./#d=collapsible");
-  assert.equal(collapsibleShortcut.icons, undefined); // no icon configured
+  assert.deepEqual(collapsibleShortcut.icons, [
+    { src: "scad/collapsible-icon.svg", sizes: "any", type: "image/svg+xml" },
+  ]);
   // Screenshot label/platform are passed through.
   assert.equal(manifest.screenshots[0].label, "Home screen");
   assert.equal(manifest.screenshots[0].platform, "android");

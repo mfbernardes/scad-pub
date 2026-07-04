@@ -346,26 +346,32 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
 
   const designs = resolveDesigns().map(({ iconSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
-    const { params, sections, collapsedSections } = parseParams(abs);
+    const { params, sections, collapsedSections, meta } = parseParams(abs);
     copyAsset(d.file);
     // Auto-detect a sibling OpenSCAD parameterSets file: <name>.scad -> <name>.json
     // next to it. One file can hold many named sets; absent -> no bundled presets.
     const presetRel = d.file.replace(/\.scad$/, ".json");
     const presets = existsSync(join(SOURCE, presetRel)) ? [presetRel] : [];
     if (presets.length) copyAsset(presetRel);
-    // Copy a per-design icon (config-relative, like logo) into the served tree.
-    // A deterministic `<id>-icon.<ext>` name keeps distinct designs from
-    // clobbering each other; the id charset is already URL-safe.
+    // Description + icon each fall back to the design's own `// @description` /
+    // `// @icon` annotation when the config `designs[]` entry omits them (config
+    // wins). A config icon is config-relative (like logo); a `// @icon` path is
+    // relative to the design's own .scad file. Copy into the served tree under a
+    // deterministic `<id>-icon.<ext>` name so distinct designs never clobber each
+    // other; the id charset is already URL-safe.
+    const description = d.description ?? meta.description;
     let icon = null;
-    if (iconSrc) {
-      const src = mustExist(resolve(CONFIG_DIR, iconSrc), `design '${d.id}' icon '${iconSrc}'`);
-      const dot = iconSrc.lastIndexOf(".");
-      const ext = dot > 0 ? iconSrc.slice(dot) : "";
+    const iconRel = iconSrc ?? meta.icon;
+    if (iconRel) {
+      const base = iconSrc ? CONFIG_DIR : dirname(abs);
+      const src = mustExist(resolve(base, iconRel), `design '${d.id}' icon '${iconRel}'`);
+      const dot = iconRel.lastIndexOf(".");
+      const ext = dot > 0 ? iconRel.slice(dot) : "";
       const name = `${d.id}-icon${ext}`;
       copyFileSync(src, join(outScadDir, name));
       icon = `scad/${name}`;
     }
-    return { ...d, icon, presets, abs, sections, collapsedSections, params };
+    return { ...d, description, icon, presets, abs, sections, collapsedSections, params };
   });
 
   // Optional default design shown when a visit carries no `#d=` deep link.

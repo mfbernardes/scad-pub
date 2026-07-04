@@ -1,5 +1,10 @@
 use <lib/core.scad>
 
+// File-level metadata the config DOES override (config wins), so its presence
+// here must not change widget's resolved description/icon.
+// @description Annotation description that should lose to the config.
+// @icon assets/emblem.svg
+
 /* [Main] */
 // The label to engrave. Letters and digits are supported.
 label = "hi";
