@@ -188,9 +188,20 @@ export default function App() {
           );
         }
       } catch (e) {
+        // Superseded: a newer render is already in flight and now owns the
+        // spinner state — deliberately do NOT setRendering(false) here, or the
+        // indicator would flicker off under the render that replaced this one.
         if (e instanceof SupersededError) return;
+        // A hard failure (worker crash, message error) rejects instead of
+        // resolving with ok:false — surface it like a failed render rather
+        // than silently stopping the spinner over a stale model.
         lastKeyRef.current = "";
         setRendering(false);
+        toast.error("Render failed", {
+          id: "render-failed",
+          description:
+            e instanceof Error ? e.message : "Unexpected renderer error.",
+        });
       }
     },
     [design.id, defines, userFiles, renderKey, values]
