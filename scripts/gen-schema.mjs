@@ -88,30 +88,35 @@ export const KNOWN_TOP_LEVEL_KEYS = new Set([
   "popup", "help", "notices", "licenses",
 ]);
 
-/**
- * Build the configurator schema and copy the needed .scad/preset files.
- * @param {object} opts
- * @param {string} opts.configPath  Path to the configurator config JSON.
- * @param {string} opts.outSchemaDir  Where designs.json is written.
- * @param {string} opts.outScadDir  Where the copied .scad/presets are written.
- * @returns {object} the schema (also written to outSchemaDir/designs.json).
- */
-export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, rendererFiles }) {
-  // Fail early and clearly when a configured path doesn't exist — these are the
-  // most common ways a config drifts from the designs it points at.
-  const mustExist = (abs, what) => {
-    if (!existsSync(abs))
-      throw new Error(
-        `gen-schema: ${what} not found:\n  ${abs}\n` +
-          `  (referenced from ${configPath} — check its source/assets/designs/logo/icon)`
-      );
-    return abs;
-  };
+// Fail early and clearly when a configured path doesn't exist — these are the
+// most common ways a config drifts from the designs it points at.
+const makeMustExist = (configPath) => (abs, what) => {
+  if (!existsSync(abs))
+    throw new Error(
+      `gen-schema: ${what} not found:\n  ${abs}\n` +
+        `  (referenced from ${configPath} — check its source/assets/designs/logo/icon)`
+    );
+  return abs;
+};
 
-  mustExist(configPath, "config file");
+// An id namespaces storage and is interpolated into a default filename
+// (`${id}.scad`), the URL deep link (`#d=${id}`), manifest shortcuts, and —
+// for the app-level id — the theme key inside index.html's inline pre-paint
+// <script> string literal, so restrict it to a safe, path/URL/script-friendly
+// character set. Used for both the app id and every design id.
+const checkId = (id, what = "design id") => {
+  if (typeof id !== "string" || !/^[A-Za-z0-9._-]+$/.test(id))
+    throw new Error(
+      `gen-schema: ${what} ${JSON.stringify(id)} must match [A-Za-z0-9._-]+`
+    );
+  return id;
+};
+
+// Load + sanity-check the config. Catches typo'd / stale top-level keys before
+// doing any work — a whole-key typo would otherwise be silently ignored (see
+// KNOWN_TOP_LEVEL_KEYS).
+function loadConfig(configPath) {
   const config = JSON.parse(readFileSync(configPath, "utf-8"));
-  // Catch typo'd / stale top-level keys before doing any work — a whole-key typo
-  // would otherwise be silently ignored (see KNOWN_TOP_LEVEL_KEYS).
   for (const key of Object.keys(config)) {
     if (!KNOWN_TOP_LEVEL_KEYS.has(key))
       throw new Error(
@@ -119,24 +124,12 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
           `  Valid keys: ${[...KNOWN_TOP_LEVEL_KEYS].filter((k) => k !== "$schema").join(", ")}`
       );
   }
-  // Everything in the config is resolved relative to the config file's directory.
-  const CONFIG_DIR = dirname(configPath);
+  return config;
+}
 
-  // An id namespaces storage and is interpolated into a default filename
-  // (`${id}.scad`), the URL deep link (`#d=${id}`), manifest shortcuts, and —
-  // for the app-level id — the theme key inside index.html's inline pre-paint
-  // <script> string literal, so restrict it to a safe, path/URL/script-friendly
-  // character set. Used for both the app id and every design id.
-  const checkId = (id, what = "design id") => {
-    if (typeof id !== "string" || !/^[A-Za-z0-9._-]+$/.test(id))
-      throw new Error(
-        `gen-schema: ${what} ${JSON.stringify(id)} must match [A-Za-z0-9._-]+`
-      );
-    return id;
-  };
-
-  // ── App identity & PWA chrome ─────────────────────────────────────────────
-  // (icon/iconMaskable/screenshots/shortcuts are consumed by generatePwaAssets.)
+// ── App identity & PWA chrome ───────────────────────────────────────────────
+// (icon/iconMaskable/screenshots/shortcuts are consumed by generatePwaAssets.)
+function parseIdentity(config) {
   const TITLE = config.title ?? "ScadPub";
   const SHORT_NAME = config.shortName ?? TITLE;
   const ID = checkId(config.id ?? "scadpub", "config 'id'");
@@ -149,7 +142,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   const DIR = parseDir(config.dir);
   // PWA / browser chrome colours (default to the dark palette's chrome).
   // Validated like every other colour input (COLOR_VALUE_RE) so they stay safe
-  // when interpolated into generated SVG/HTML attributes below.
+  // when interpolated into generated SVG/HTML attributes.
   const THEME_COLOR = config.themeColor ?? "#1f2229";
   const THEME_COLOR_LIGHT = config.themeColorLight ?? "#ffffff";
   const BG_COLOR = config.backgroundColor ?? "#15171c";
@@ -162,25 +155,19 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       throw new Error(`gen-schema: '${key}' must be a CSS colour string (got ${JSON.stringify(val)})`);
   }
   const CATEGORIES = Array.isArray(config.categories) ? config.categories : [];
+  return { TITLE, SHORT_NAME, ID, DESCRIPTION, LANG, DIR, THEME_COLOR, THEME_COLOR_LIGHT, BG_COLOR, CATEGORIES };
+}
 
-  // ── Design sources ────────────────────────────────────────────────────────
-  // `source` defaults to "." (designs live beside the config); set it to point
-  // elsewhere (e.g. "examples", a sibling checkout, or an absolute path).
-  // (`designs`, `assets`, `logo` and `extraCss` are consumed further down, in
-  // the copy/generation steps that need the wiped output tree.)
-  const SOURCE = resolve(CONFIG_DIR, config.source ?? ".");
-  mustExist(SOURCE, `source directory '${config.source ?? "."}'`);
-
-  // ── Rendering ─────────────────────────────────────────────────────────────
-  const FEATURES = config.features ?? [];
-  const FORMAT = parseFormat(config.format);
-  // Optional build-time render tuning (heavy-render threshold + cache sizing).
-  // Validated; absent -> null -> the app keeps its built-in defaults.
-  const RENDER = parseRender(config.render);
-  // Fonts are referenced by basename under /fonts. An entry is either a font
-  // already present in public/fonts (the Liberation fallbacks that ship with the
-  // app) or a path into the source tree (a design repo bundling its own font),
-  // which we copy into public/fonts so it is served like the rest.
+// ── Rendering: bundled fonts ────────────────────────────────────────────────
+// Fonts are referenced by basename under /fonts. An entry is either a font
+// already present in public/fonts (the Liberation fallbacks that ship with the
+// app) or a path into the source tree (a design repo bundling its own font),
+// which we copy into public/fonts so it is served like the rest. Also writes
+// the fontconfig config the renderer mounts — optionally pinning a weak
+// last-resort fallback family (config.fontFallback) so an imported font can't
+// hijack Fontconfig's global default; generated into the served tree (and
+// hashed into renderHash) so the matching rules stay config-driven.
+function bundleFonts(config, SOURCE, outPublicDir) {
   const FONTS = (config.fonts ?? []).map((entry) => {
     const name = String(entry).split(/[\\/]/).pop();
     const srcAbs = resolve(SOURCE, entry);
@@ -191,10 +178,6 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     }
     return name;
   });
-  // The fontconfig config the renderer mounts. Optionally pins a weak last-resort
-  // fallback family (config.fontFallback) so an imported font can't hijack
-  // Fontconfig's global default. Generated into the served tree (and hashed into
-  // renderHash) so the matching rules stay config-driven, not hand-maintained.
   const FONT_FALLBACK = parseFontFallback(config.fontFallback);
   if (outPublicDir) {
     mkdirSync(join(outPublicDir, "fonts"), { recursive: true });
@@ -237,130 +220,85 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       (a, b) => a.family.localeCompare(b.family) || a.style.localeCompare(b.style)
     );
   }
+  return { FONTS, FONT_FAMILIES, FONT_FACES };
+}
 
-  // ── Appearance & UI behaviour ─────────────────────────────────────────────
-  // Optional per-theme colour-scheme overrides. Validated against the known CSS
-  // tokens; emitted by vite.config.ts as a <style> block so a consumer project
-  // can restyle the app entirely from its config. Absent -> null.
-  const COLORS = parseColors(config.colors);
-  // Build-time UI behaviour config (panel side, default state, etc.).
-  const UI = parseUi(config.ui);
-  // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
-  // Absent -> null -> no import button.
-  const FILE_IMPORT = parseFileImport(config.fileImport);
+// Optional header logo, per theme. `logo` may be a string (used for both
+// themes) or { light, dark } (either may be omitted -> the other is used).
+// Each referenced file is copied into the served tree; returns the resolved
+// { light, dark } URLs, or null when no logo is configured.
+function copyLogoAssets(config, CONFIG_DIR, outScadDir, mustExist) {
+  if (!config.logo) return null;
+  // Map each resolved source to the URL it was copied to, so a single source
+  // used for both themes is copied once and two distinct sources never clobber
+  // each other — even when they share a basename (light/logo.svg vs
+  // dark/logo.svg), which a flat basename would silently overwrite.
+  const copiedByAbs = new Map();
+  const usedNames = new Set();
+  const copyLogo = (src) => {
+    const abs = mustExist(resolve(CONFIG_DIR, src), `logo '${src}'`);
+    const existing = copiedByAbs.get(abs);
+    if (existing) return existing;
+    let name = abs.split(/[\\/]/).pop();
+    if (usedNames.has(name)) {
+      // Same basename, different source: disambiguate with a short hash of the
+      // source path so the second logo doesn't overwrite the first.
+      const tag = createHash("sha256").update(abs).digest("hex").slice(0, 8);
+      const dot = name.lastIndexOf(".");
+      name = dot > 0 ? `${name.slice(0, dot)}-${tag}${name.slice(dot)}` : `${name}-${tag}`;
+    }
+    usedNames.add(name);
+    copyFileSync(abs, join(outScadDir, name));
+    const url = `scad/${name}`;
+    copiedByAbs.set(abs, url);
+    return url;
+  };
+  const entry = config.logo;
+  const lightSrc = typeof entry === "string" ? entry : entry.light ?? entry.dark;
+  const darkSrc = typeof entry === "string" ? entry : entry.dark ?? entry.light;
+  return { light: copyLogo(lightSrc), dark: copyLogo(darkSrc) };
+}
 
-  // ── In-app content ────────────────────────────────────────────────────────
-  // Optional one-off notice dialog shown over the app on load. Validated; absent
-  // -> null -> no popup.
-  const POPUP = parsePopup(config.popup);
-  // Optional help content; passed through verbatim. Absent -> null -> the app
-  // falls back to its generic, project-agnostic default help.
-  const HELP = config.help ?? null;
-  // Config-driven notice categories surfaced on the OpenSCAD output panel.
-  // Validated; off by default (omitted -> none).
-  const NOTICES = parseNotices(config.notices);
-  // Optional extra third-party software / license notices. Validated and
-  // appended (never replacing the built-ins) by the in-app licenses modal.
-  const LICENSES_EXTRA = parseLicenses(config.licenses);
-
-  // outScadDir is entirely generated: wipe it before repopulating so files from
-  // a previous config/build (a removed, renamed or briefly-private design or
-  // dependency) can't survive into the published tree. Recreated empty below.
-  rmSync(outScadDir, { recursive: true, force: true });
-
-  // Optional header logo, per theme. `logo` may be a string (used for both
-  // themes) or { light, dark } (either may be omitted -> the other is used).
-  // Each referenced file is copied into the served tree; the schema records the
-  // resolved { light, dark } URLs.
-  mkdirSync(outScadDir, { recursive: true });
-  let logo = null;
-  if (config.logo) {
-    // Map each resolved source to the URL it was copied to, so a single source
-    // used for both themes is copied once and two distinct sources never clobber
-    // each other — even when they share a basename (light/logo.svg vs
-    // dark/logo.svg), which a flat basename would silently overwrite.
-    const copiedByAbs = new Map();
-    const usedNames = new Set();
-    const copyLogo = (src) => {
-      const abs = mustExist(resolve(CONFIG_DIR, src), `logo '${src}'`);
-      const existing = copiedByAbs.get(abs);
-      if (existing) return existing;
-      let name = abs.split(/[\\/]/).pop();
-      if (usedNames.has(name)) {
-        // Same basename, different source: disambiguate with a short hash of the
-        // source path so the second logo doesn't overwrite the first.
-        const tag = createHash("sha256").update(abs).digest("hex").slice(0, 8);
-        const dot = name.lastIndexOf(".");
-        name = dot > 0 ? `${name.slice(0, dot)}-${tag}${name.slice(dot)}` : `${name}-${tag}`;
-      }
-      usedNames.add(name);
-      copyFileSync(abs, join(outScadDir, name));
-      const url = `scad/${name}`;
-      copiedByAbs.set(abs, url);
-      return url;
-    };
-    const entry = config.logo;
-    const lightSrc = typeof entry === "string" ? entry : entry.light ?? entry.dark;
-    const darkSrc = typeof entry === "string" ? entry : entry.dark ?? entry.light;
-    logo = { light: copyLogo(lightSrc), dark: copyLogo(darkSrc) };
-  }
-
-  // SOURCE-bound asset resolution: source-relative paths (relPosix), config
-  // `assets` expansion (files/dirs/globs), and the use/include dep-graph walk.
-  // See scripts/lib/assets.mjs.
-  const { relPosix, expandConfiguredAssets, collectDeps } = createAssetTools({
-    SOURCE,
-    configPath,
-    mustExist,
-  });
-
+// The design list from the config, or auto-discovered root .scad files.
+function resolveDesignList(config, SOURCE) {
   // An optional per-design non-empty string field: the picker `description`, or
   // the `icon` path (config-relative, like `logo`, copied into the served tree
-  // below and used for the manifest shortcut + picker thumbnail). Absent -> null.
+  // by buildDesigns and used for the manifest shortcut + picker thumbnail).
+  // Absent -> null.
   const checkDesignString = (raw, id, field) => {
     if (raw === undefined || raw === null) return null;
     if (typeof raw !== "string" || !raw.trim())
       throw new Error(`gen-schema: design '${id}' '${field}' must be a non-empty string`);
     return raw.trim();
   };
+  if (Array.isArray(config.designs) && config.designs.length) {
+    return config.designs.map((d) => ({
+      id: checkId(d.id),
+      label: d.label ?? humanize(d.id),
+      file: d.file ?? `${d.id}.scad`,
+      // Heavy designs skip the debounced auto-render (the user renders on demand).
+      heavy: d.heavy ?? false,
+      // Optional dropdown grouping header (designs sharing a group cluster).
+      group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
+      // Optional picker description + icon (icon is a config-relative path,
+      // resolved to a served URL once outScadDir exists).
+      description: checkDesignString(d.description, d.id, "description"),
+      iconSrc: checkDesignString(d.icon, d.id, "icon"),
+    }));
+  }
+  return readdirSync(SOURCE)
+    .filter((f) => f.endsWith(".scad"))
+    .sort()
+    .map((f) => {
+      const id = f.replace(/\.scad$/, "");
+      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null };
+    });
+}
 
-  // The design list from the config, or auto-discovered root .scad files.
-  const resolveDesigns = () => {
-    if (Array.isArray(config.designs) && config.designs.length) {
-      return config.designs.map((d) => ({
-        id: checkId(d.id),
-        label: d.label ?? humanize(d.id),
-        file: d.file ?? `${d.id}.scad`,
-        // Heavy designs skip the debounced auto-render (the user renders on demand).
-        heavy: d.heavy ?? false,
-        // Optional dropdown grouping header (designs sharing a group cluster).
-        group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
-        // Optional picker description + icon (icon is a config-relative path,
-        // resolved to a served URL once outScadDir exists).
-        description: checkDesignString(d.description, d.id, "description"),
-        iconSrc: checkDesignString(d.icon, d.id, "icon"),
-      }));
-    }
-    return readdirSync(SOURCE)
-      .filter((f) => f.endsWith(".scad"))
-      .sort()
-      .map((f) => {
-        const id = f.replace(/\.scad$/, "");
-        return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null };
-      });
-  };
-
-  // Copy a source file into outScadDir, preserving its relative path.
-  const copyAsset = (relPath) => {
-    const dest = join(outScadDir, relPath);
-    mkdirSync(dirname(dest), { recursive: true });
-    copyFileSync(join(SOURCE, relPath), dest);
-  };
-
-  mkdirSync(outSchemaDir, { recursive: true });
-  mkdirSync(outScadDir, { recursive: true });
-
-  const designs = resolveDesigns().map(({ iconSrc, ...d }) => {
+// Parse each design's Customizer parameters and copy its .scad, sibling
+// parameterSets .json, and picker icon into the served tree.
+function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyAsset }) {
+  return resolveDesignList(config, SOURCE).map(({ iconSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
     copyAsset(d.file);
@@ -389,18 +327,168 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     }
     return { ...d, description, icon, presets, abs, sections, collapsedSections, params };
   });
+}
 
-  // Optional default design shown when a visit carries no `#d=` deep link.
-  // Must name one of the configured designs.
-  let defaultDesign = null;
-  if (config.defaultDesign !== undefined && config.defaultDesign !== null) {
-    if (!designs.some((d) => d.id === config.defaultDesign))
-      throw new Error(
-        `gen-schema: 'defaultDesign' ${JSON.stringify(config.defaultDesign)} ` +
-          `is not one of the configured design ids (${designs.map((d) => d.id).join(", ")})`
-      );
-    defaultDesign = config.defaultDesign;
+// Optional default design shown when a visit carries no `#d=` deep link.
+// Must name one of the configured designs.
+function resolveDefaultDesign(config, designs) {
+  if (config.defaultDesign === undefined || config.defaultDesign === null) return null;
+  if (!designs.some((d) => d.id === config.defaultDesign))
+    throw new Error(
+      `gen-schema: 'defaultDesign' ${JSON.stringify(config.defaultDesign)} ` +
+        `is not one of the configured design ids (${designs.map((d) => d.id).join(", ")})`
+    );
+  return config.defaultDesign;
+}
+
+// Optional raw-CSS escape hatch. Unlike `colors` — a safe, validated token map
+// — this is a stylesheet the consumer fully controls, copied verbatim into the
+// served tree and (see vite.config.ts) loaded *after* the app's own styles so
+// it can override anything. It targets internal class names at the consumer's
+// own risk: not a stable API, and not covered by the accessibility guarantees.
+// Lives under the (gitignored, auto-wiped) scad output dir, so it never goes
+// stale or gets committed. Returns its served URL, or null.
+function copyExtraCss(config, CONFIG_DIR, outScadDir, mustExist) {
+  if (!config.extraCss) return null;
+  const abs = mustExist(
+    resolve(CONFIG_DIR, config.extraCss),
+    `extraCss '${config.extraCss}'`
+  );
+  const name = abs.split(/[\\/]/).pop();
+  copyFileSync(abs, join(outScadDir, name));
+  return `scad/${name}`;
+}
+
+// v2 precache manifest, read by public/sw.js at install:
+//   shell — small runtime assets cached into the per-build shell cache;
+//   bin   — the big version-pinned binaries (the ~10 MB WASM + fonts),
+//           warmed into the render worker's own BIN_CACHE (same cache,
+//           same keys — no double store) so offline rendering works even
+//           before the first render.
+function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo, extraCss }) {
+  const shell = new Set([
+    "icon.svg",
+    "icon-192.png",
+    "icon-512.png",
+    "icon-512-maskable.png",
+    "icon-180.png",
+    "manifest.webmanifest",
+    "wasm/openscad.js",
+    "fonts/fonts.conf",
+  ]);
+  for (const splash of appleSplash) shell.add(splash.href);
+  for (const asset of assets) shell.add(`scad/${asset}`);
+  for (const d of schema.designs) {
+    shell.add(`scad/${d.file}`);
+    for (const preset of d.presets) shell.add(`scad/${preset}`);
+    if (d.icon) shell.add(d.icon);
   }
+  if (logo) {
+    shell.add(logo.light);
+    shell.add(logo.dark);
+  }
+  if (extraCss) shell.add(extraCss);
+  const precache = {
+    version: 2,
+    shell: [...shell].sort(),
+    bin: {
+      cache: `openscad-wasm-bin-${WASM_VERSION}`,
+      urls: ["wasm/openscad.wasm", ...schema.fonts.map((f) => `fonts/${f}`)].sort(),
+    },
+  };
+  writeFileSync(
+    join(outPublicDir, "precache-manifest.json"),
+    JSON.stringify(precache, null, 2) + "\n"
+  );
+}
+
+/**
+ * Build the configurator schema and copy the needed .scad/preset files.
+ * The heavy lifting lives in the section helpers above (and scripts/lib/);
+ * this orchestrates them in dependency order and assembles the schema.
+ * @param {object} opts
+ * @param {string} opts.configPath  Path to the configurator config JSON.
+ * @param {string} opts.outSchemaDir  Where designs.json is written.
+ * @param {string} opts.outScadDir  Where the copied .scad/presets are written.
+ * @returns {object} the schema (also written to outSchemaDir/designs.json).
+ */
+export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, rendererFiles }) {
+  const mustExist = makeMustExist(configPath);
+  mustExist(configPath, "config file");
+  const config = loadConfig(configPath);
+  // Everything in the config is resolved relative to the config file's directory.
+  const CONFIG_DIR = dirname(configPath);
+
+  const identity = parseIdentity(config);
+  const { TITLE, SHORT_NAME, ID, DESCRIPTION, LANG, DIR, THEME_COLOR, THEME_COLOR_LIGHT, BG_COLOR, CATEGORIES } = identity;
+
+  // ── Design sources ────────────────────────────────────────────────────────
+  // `source` defaults to "." (designs live beside the config); set it to point
+  // elsewhere (e.g. "examples", a sibling checkout, or an absolute path).
+  const SOURCE = resolve(CONFIG_DIR, config.source ?? ".");
+  mustExist(SOURCE, `source directory '${config.source ?? "."}'`);
+
+  // ── Rendering ─────────────────────────────────────────────────────────────
+  const FEATURES = config.features ?? [];
+  const FORMAT = parseFormat(config.format);
+  // Optional build-time render tuning (heavy-render threshold + cache sizing).
+  // Validated; absent -> null -> the app keeps its built-in defaults.
+  const RENDER = parseRender(config.render);
+  const { FONTS, FONT_FAMILIES, FONT_FACES } = bundleFonts(config, SOURCE, outPublicDir);
+
+  // ── Appearance & UI behaviour ─────────────────────────────────────────────
+  // Optional per-theme colour-scheme overrides. Validated against the known CSS
+  // tokens; emitted by vite.config.ts as a <style> block so a consumer project
+  // can restyle the app entirely from its config. Absent -> null.
+  const COLORS = parseColors(config.colors);
+  // Build-time UI behaviour config (panel side, default state, etc.).
+  const UI = parseUi(config.ui);
+  // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
+  // Absent -> null -> no import button.
+  const FILE_IMPORT = parseFileImport(config.fileImport);
+
+  // ── In-app content ────────────────────────────────────────────────────────
+  // Optional one-off notice dialog shown over the app on load. Validated; absent
+  // -> null -> no popup.
+  const POPUP = parsePopup(config.popup);
+  // Optional help content; passed through verbatim. Absent -> null -> the app
+  // falls back to its generic, project-agnostic default help.
+  const HELP = config.help ?? null;
+  // Config-driven notice categories surfaced on the OpenSCAD output panel.
+  // Validated; off by default (omitted -> none).
+  const NOTICES = parseNotices(config.notices);
+  // Optional extra third-party software / license notices. Validated and
+  // appended (never replacing the built-ins) by the in-app licenses modal.
+  const LICENSES_EXTRA = parseLicenses(config.licenses);
+
+  // outScadDir is entirely generated: wipe it before repopulating so files from
+  // a previous config/build (a removed, renamed or briefly-private design or
+  // dependency) can't survive into the published tree.
+  rmSync(outScadDir, { recursive: true, force: true });
+  mkdirSync(outScadDir, { recursive: true });
+
+  const logo = copyLogoAssets(config, CONFIG_DIR, outScadDir, mustExist);
+
+  // SOURCE-bound asset resolution: source-relative paths (relPosix), config
+  // `assets` expansion (files/dirs/globs), and the use/include dep-graph walk.
+  // See scripts/lib/assets.mjs.
+  const { relPosix, expandConfiguredAssets, collectDeps } = createAssetTools({
+    SOURCE,
+    configPath,
+    mustExist,
+  });
+
+  // Copy a source file into outScadDir, preserving its relative path.
+  const copyAsset = (relPath) => {
+    const dest = join(outScadDir, relPath);
+    mkdirSync(dirname(dest), { recursive: true });
+    copyFileSync(join(SOURCE, relPath), dest);
+  };
+
+  mkdirSync(outSchemaDir, { recursive: true });
+
+  const designs = buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyAsset });
+  const defaultDesign = resolveDefaultDesign(config, designs);
 
   // Shared dependency files: from the config's `assets` (files/directories) when
   // given, otherwise discovered by following each design's use/include graph.
@@ -412,23 +500,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   }
   for (const a of assets) copyAsset(a);
 
-  // Optional raw-CSS escape hatch. Unlike `colors` — a safe, validated token map
-  // — this is a stylesheet the consumer fully controls, copied verbatim into the
-  // served tree and (see vite.config.ts) loaded *after* the app's own styles so
-  // it can override anything. It targets internal class names at the consumer's
-  // own risk: not a stable API, and not covered by the accessibility guarantees.
-  // Lives under the (gitignored, auto-wiped) scad output dir, so it never goes
-  // stale or gets committed. The schema records its served URL, or null.
-  let extraCss = null;
-  if (config.extraCss) {
-    const abs = mustExist(
-      resolve(CONFIG_DIR, config.extraCss),
-      `extraCss '${config.extraCss}'`
-    );
-    const name = abs.split(/[\\/]/).pop();
-    copyFileSync(abs, join(outScadDir, name));
-    extraCss = `scad/${name}`;
-  }
+  const extraCss = copyExtraCss(config, CONFIG_DIR, outScadDir, mustExist);
 
   // Generate the PWA icon set, iOS splash images and manifest.webmanifest
   // (skipped for the fixture-driven unit tests, which pass no outPublicDir).
@@ -497,48 +569,8 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     assets: [...assets].sort(),
     designs: designs.map(({ abs, ...d }) => d),
   };
-  if (outPublicDir) {
-    // v2 precache manifest, read by public/sw.js at install:
-    //   shell — small runtime assets cached into the per-build shell cache;
-    //   bin   — the big version-pinned binaries (the ~10 MB WASM + fonts),
-    //           warmed into the render worker's own BIN_CACHE (same cache,
-    //           same keys — no double store) so offline rendering works even
-    //           before the first render.
-    const shell = new Set([
-      "icon.svg",
-      "icon-192.png",
-      "icon-512.png",
-      "icon-512-maskable.png",
-      "icon-180.png",
-      "manifest.webmanifest",
-      "wasm/openscad.js",
-      "fonts/fonts.conf",
-    ]);
-    for (const splash of appleSplash) shell.add(splash.href);
-    for (const asset of assets) shell.add(`scad/${asset}`);
-    for (const d of schema.designs) {
-      shell.add(`scad/${d.file}`);
-      for (const preset of d.presets) shell.add(`scad/${preset}`);
-      if (d.icon) shell.add(d.icon);
-    }
-    if (logo) {
-      shell.add(logo.light);
-      shell.add(logo.dark);
-    }
-    if (extraCss) shell.add(extraCss);
-    const precache = {
-      version: 2,
-      shell: [...shell].sort(),
-      bin: {
-        cache: `openscad-wasm-bin-${WASM_VERSION}`,
-        urls: ["wasm/openscad.wasm", ...FONTS.map((f) => `fonts/${f}`)].sort(),
-      },
-    };
-    writeFileSync(
-      join(outPublicDir, "precache-manifest.json"),
-      JSON.stringify(precache, null, 2) + "\n"
-    );
-  }
+  if (outPublicDir)
+    writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo, extraCss });
   writeFileSync(
     join(outSchemaDir, "designs.json"),
     JSON.stringify(schema, null, 2) + "\n"
