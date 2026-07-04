@@ -122,11 +122,24 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Everything in the config is resolved relative to the config file's directory.
   const CONFIG_DIR = dirname(configPath);
 
+  // An id namespaces storage and is interpolated into a default filename
+  // (`${id}.scad`), the URL deep link (`#d=${id}`), manifest shortcuts, and —
+  // for the app-level id — the theme key inside index.html's inline pre-paint
+  // <script> string literal, so restrict it to a safe, path/URL/script-friendly
+  // character set. Used for both the app id and every design id.
+  const checkId = (id, what = "design id") => {
+    if (typeof id !== "string" || !/^[A-Za-z0-9._-]+$/.test(id))
+      throw new Error(
+        `gen-schema: ${what} ${JSON.stringify(id)} must match [A-Za-z0-9._-]+`
+      );
+    return id;
+  };
+
   // ── App identity & PWA chrome ─────────────────────────────────────────────
   // (icon/iconMaskable/screenshots/shortcuts are consumed by generatePwaAssets.)
   const TITLE = config.title ?? "ScadPub";
   const SHORT_NAME = config.shortName ?? TITLE;
-  const ID = config.id ?? "scadpub";
+  const ID = checkId(config.id ?? "scadpub", "config 'id'");
   const DESCRIPTION =
     config.description ?? "Configure and export designs in your browser.";
   // Document / manifest language and text direction. Default "en" / "ltr"
@@ -300,17 +313,6 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     configPath,
     mustExist,
   });
-
-  // A design id namespaces storage and is interpolated into a default filename
-  // (`${id}.scad`), the URL deep link (`#d=${id}`) and manifest shortcuts, so
-  // restrict it to a safe, path/URL-friendly character set.
-  const checkId = (id) => {
-    if (typeof id !== "string" || !/^[A-Za-z0-9._-]+$/.test(id))
-      throw new Error(
-        `gen-schema: design id ${JSON.stringify(id)} must match [A-Za-z0-9._-]+`
-      );
-    return id;
-  };
 
   // An optional per-design non-empty string field: the picker `description`, or
   // the `icon` path (config-relative, like `logo`, copied into the served tree

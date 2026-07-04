@@ -1,0 +1,7 @@
+{
+  "title": "Widget Studio",
+  "id": "bad id\"with-quotes",
+  "source": "src",
+  "assets": ["lib"],
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

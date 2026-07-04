@@ -445,6 +445,12 @@ test("rejects a design id with unsafe characters", () => {
   assert.throws(() => run("widget-bad-id.config.json"), /design id .* must match/);
 });
 
+test("rejects an app-level id with unsafe characters", () => {
+  // The app id reaches index.html's inline pre-paint script as a string
+  // literal (%APP_THEME_KEY%), so it gets the same charset check as design ids.
+  assert.throws(() => run("widget-bad-app-id.config.json"), /config 'id' .* must match/);
+});
+
 test("iOS splash images are generated and described in the schema", () => {
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   const schema = generate({
