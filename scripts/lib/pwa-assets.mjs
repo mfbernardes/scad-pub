@@ -8,6 +8,19 @@ import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { xmlEscape } from "./config-parsers.mjs";
 
+// Read a PNG's pixel dimensions from its IHDR chunk (the first chunk, right
+// after the 8-byte signature: 4-byte length + "IHDR" + 4-byte width + height,
+// big-endian). Returns "<w>x<h>" for a valid PNG, else null. Used to advertise
+// a manifest icon's real `sizes` instead of a bare "any".
+function pngSize(buf) {
+  if (buf.length < 24) return null;
+  if (buf.readUInt32BE(0) !== 0x89504e47) return null; // \x89 P N G
+  if (buf.toString("latin1", 12, 16) !== "IHDR") return null;
+  const w = buf.readUInt32BE(16);
+  const h = buf.readUInt32BE(20);
+  return w > 0 && h > 0 ? `${w}x${h}` : null;
+}
+
 // Optional build-time SVG→PNG rasterizer (@resvg/resvg-js). Present in dev
 // builds; gracefully absent in minimal CI environments that didn't npm install.
 let Resvg = null;
@@ -30,6 +43,8 @@ export function generatePwaAssets({
   SHORT_NAME,
   DESCRIPTION,
   ID,
+  LANG,
+  DIR,
   THEME_COLOR,
   BG_COLOR,
   CATEGORIES,
@@ -134,6 +149,7 @@ export function generatePwaAssets({
   }
 
   // Manifest screenshot entries (optional — enables rich Android install UI).
+  // `label` (accessibility) and `platform` are passed through when present.
   const screenshots = [];
   if (Array.isArray(config.screenshots)) {
     for (const shot of config.screenshots) {
@@ -141,7 +157,14 @@ export function generatePwaAssets({
         const abs = mustExist(resolve(CONFIG_DIR, shot.src), `screenshot '${shot.src}'`);
         const name = abs.split(/[\\/]/).pop();
         copyFileSync(abs, join(outPublicDir, name));
-        screenshots.push({ src: name, sizes: shot.sizes, type: "image/png", form_factor: shot.form_factor });
+        screenshots.push({
+          src: name,
+          sizes: shot.sizes,
+          type: "image/png",
+          form_factor: shot.form_factor,
+          ...(typeof shot.label === "string" ? { label: shot.label } : {}),
+          ...(typeof shot.platform === "string" ? { platform: shot.platform } : {}),
+        });
       }
     }
   }
@@ -153,9 +176,29 @@ export function generatePwaAssets({
     { src: "icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
   ];
 
+  // A manifest icon descriptor for a served image URL, typed by extension. SVGs
+  // advertise sizes "any"; a PNG's real pixel size is read from its header so
+  // launchers can pick it accurately (falling back to "any" if unreadable); other
+  // types default to "any". An unknown extension gets no type (valid per the spec).
+  const iconDescriptor = (src) => {
+    const ext = src.slice(src.lastIndexOf(".") + 1).toLowerCase();
+    const type = { svg: "image/svg+xml", png: "image/png", webp: "image/webp" }[ext];
+    let sizes = "any";
+    if (ext === "png") {
+      try {
+        sizes = pngSize(readFileSync(join(outPublicDir, src))) ?? "any";
+      } catch {
+        /* icon unreadable here — keep "any" */
+      }
+    }
+    return { src, sizes, ...(type ? { type } : {}) };
+  };
+
   // App shortcuts (Android long-press / desktop jump list). Author-provided
   // `shortcuts` win; otherwise, with multiple designs, derive one per design
-  // that deep-links to it (#d=<id>, the same hash readInitialState parses).
+  // that deep-links to it (#d=<id>, the same hash readInitialState parses). A
+  // derived shortcut carries the design's own icon (if any); author entries may
+  // supply their own `icons` array ([{ src, sizes?, type? }]).
   let shortcuts = [];
   if (Array.isArray(config.shortcuts)) {
     shortcuts = config.shortcuts
@@ -164,12 +207,17 @@ export function generatePwaAssets({
         name: sc.name,
         ...(sc.short_name ? { short_name: sc.short_name } : {}),
         url: sc.url,
+        ...(Array.isArray(sc.icons) &&
+        sc.icons.every((ic) => ic && typeof ic.src === "string")
+          ? { icons: sc.icons }
+          : {}),
       }));
   } else if (designs.length > 1) {
     shortcuts = designs.map((d) => ({
       name: d.label,
       short_name: d.label,
       url: `./#d=${d.id}`,
+      ...(d.icon ? { icons: [iconDescriptor(d.icon)] } : {}),
     }));
   }
 
@@ -178,8 +226,8 @@ export function generatePwaAssets({
     name: TITLE,
     short_name: SHORT_NAME,
     description: DESCRIPTION,
-    lang: "en",
-    dir: "ltr",
+    lang: LANG ?? "en",
+    dir: DIR ?? "ltr",
     start_url: ".",
     scope: ".",
     display: "standalone",

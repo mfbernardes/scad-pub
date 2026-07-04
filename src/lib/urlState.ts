@@ -75,9 +75,13 @@ function fromStore(schema: Schema): SessionState | null {
   }
 }
 
-/** Initial state on load: URL hash wins, then last session, then defaults. */
+/** Initial state on load: URL hash wins, then last session, then defaults. The
+ *  no-link default is the configured `defaultDesign`, else the first design. */
 export function readInitialState(schema: Schema): SessionState {
-  const design0 = schema.designs[0];
+  // find() returns undefined when defaultDesign is unset (no id === undefined),
+  // so the ?? fallback to the first design covers the no-default case too.
+  const design0 =
+    schema.designs.find((d) => d.id === schema.defaultDesign) ?? schema.designs[0];
   return (
     fromHash(schema) ??
     fromStore(schema) ?? {

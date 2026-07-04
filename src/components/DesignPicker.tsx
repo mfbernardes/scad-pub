@@ -1,6 +1,7 @@
 // DesignPicker.tsx — the shadcn Select used to switch designs. Shared by the
 // desktop CommandBar and the mobile top bar (each wraps it differently and
 // handles the single-design fallback in its own markup).
+import type { ReactNode } from "react";
 import type { Design } from "../openscad/types";
 import {
   Select,
@@ -33,9 +34,21 @@ function groupDesigns(designs: Design[]): { group: string | null; items: Design[
   return runs;
 }
 
+// A design's optional icon, shown as a small leading thumbnail in the dropdown.
+function designIcon(d: Design): ReactNode {
+  return d.icon ? (
+    <img src={d.icon} alt="" aria-hidden="true" className="size-4 shrink-0 object-contain" />
+  ) : undefined;
+}
+
 export function DesignPicker({ designs, value, onChange }: Props) {
   const runs = groupDesigns(designs);
   const grouped = runs.some((r) => r.group !== null);
+  const item = (d: Design) => (
+    <SelectItem key={d.id} value={d.id} icon={designIcon(d)} description={d.description ?? undefined}>
+      {d.label}
+    </SelectItem>
+  );
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger
@@ -50,14 +63,10 @@ export function DesignPicker({ designs, value, onChange }: Props) {
           ? runs.map((run, i) => (
               <SelectGroup key={run.group ?? `ungrouped-${i}`}>
                 {run.group && <SelectLabel>{run.group}</SelectLabel>}
-                {run.items.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
-                ))}
+                {run.items.map(item)}
               </SelectGroup>
             ))
-          : designs.map((d) => (
-              <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
-            ))}
+          : designs.map(item)}
       </SelectContent>
     </Select>
   );

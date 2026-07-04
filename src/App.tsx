@@ -29,12 +29,16 @@ import { HelpModal } from "./components/HelpModal";
 import { PopupModal } from "./components/PopupModal";
 import { shouldShowPopup, rememberPopup } from "./lib/popup";
 
-// A render slower than this auto-pauses live re-rendering for the design.
-const HEAVY_RENDER_MS = 6000;
-
 const schema = validateSchema(schemaJson);
 const initialState = readInitialState(schema);
 document.title = schema.title;
+
+// A render slower than this auto-pauses live re-rendering for the design.
+// Configurable via `render.heavyMs`; defaults to 6 s.
+const HEAVY_RENDER_MS = schema.render?.heavyMs ?? 6000;
+// Optional build-time render-cache sizing (config `render.cache`). Each field
+// falls through to the runner's own default when unset.
+const cacheConfig = schema.render?.cache;
 
 const popup = schema.popup ?? null;
 const installMode = schema.ui?.install ?? "auto";
@@ -95,6 +99,10 @@ export default function App() {
     runnerRef.current = new OpenSCADRunner({
       onReady: () => setReady(true),
       cacheVersion: schema.renderHash,
+      cacheSize: cacheConfig?.maxEntries,
+      cacheBytes: cacheConfig?.maxBytes,
+      maxCacheEntryBytes: cacheConfig?.maxEntryBytes,
+      persistentCache: cacheConfig?.persistent,
     });
 
   // Switching designs resets everything design-scoped in the same event —

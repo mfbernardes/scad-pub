@@ -16,6 +16,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   generate,
+  KNOWN_TOP_LEVEL_KEYS,
   firstSentence,
   parseEnumHint,
   parseColors,
@@ -27,6 +28,9 @@ import {
   parseUi,
   parseParams,
   parseFontFallback,
+  parseLang,
+  parseDir,
+  parseRender,
   renderFontsConf,
 } from "../scripts/gen-schema.mjs";
 
@@ -172,6 +176,104 @@ test("config-driven features, fonts; presets auto-detected by sibling name", () 
   // preset + design files copied into the output scad tree
   assert.ok(existsSync(join(out, "scad", "widget.scad")));
   assert.ok(existsSync(join(out, "scad", "widget.json")));
+});
+
+test("unknown top-level config key fails the build", () => {
+  // A whole-key typo ("popups") is rejected rather than silently ignored.
+  assert.throws(() => run("widget-unknown-key.config.json"), /unknown config key 'popups'/);
+});
+
+test("the shipped example config uses only known top-level keys", () => {
+  // Guards the KNOWN_TOP_LEVEL_KEYS <-> readers drift hazard: if a future key is
+  // read (e.g. in pwa-assets.mjs) and used in scadpub.config.json but never added
+  // to the set, this trips here instead of failing a downstream user's build.
+  const config = JSON.parse(
+    readFileSync(join(HERE, "..", "scadpub.config.json"), "utf-8")
+  );
+  for (const key of Object.keys(config))
+    assert.ok(
+      KNOWN_TOP_LEVEL_KEYS.has(key),
+      `scadpub.config.json key '${key}' is missing from KNOWN_TOP_LEVEL_KEYS`
+    );
+});
+
+test("lang/dir default to en/ltr and pass through to the schema", () => {
+  const { schema: def } = run("widget-autodeps.config.json");
+  assert.equal(def.lang, "en");
+  assert.equal(def.dir, "ltr");
+  const { schema } = run("widget-designmeta.config.json");
+  assert.equal(schema.lang, "pt-BR");
+  assert.equal(schema.dir, "rtl");
+});
+
+test("render tuning and defaultDesign pass through to the schema", () => {
+  const { schema } = run("widget-designmeta.config.json");
+  assert.deepEqual(schema.render, { heavyMs: 9000, cache: { maxEntries: 4, persistent: false } });
+  assert.equal(schema.defaultDesign, "collapsible");
+  assert.deepEqual(schema.fileImport, { maxBytes: 1048576 });
+  assert.equal(schema.ui.fullscreen, false);
+});
+
+test("defaultDesign must name a configured design", () => {
+  assert.throws(() => run("widget-bad-default.config.json"), /'defaultDesign' .* is not one of the configured design ids/);
+});
+
+test("per-design description + icon are parsed, copied and served", () => {
+  const { schema, out } = run("widget-designmeta.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  const collapsible = schema.designs.find((d) => d.id === "collapsible");
+  assert.equal(widget.description, "A little widget.");
+  assert.equal(widget.icon, "scad/widget-icon.svg");
+  assert.ok(existsSync(join(out, "scad", "widget-icon.svg")));
+  // A design without description/icon reports them as null.
+  assert.equal(collapsible.description, null);
+  assert.equal(collapsible.icon, null);
+});
+
+test("lang/dir + per-design shortcut icons + screenshot fields reach the manifest", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  generate({
+    configPath: join(FIXTURES, "widget-designmeta.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  assert.equal(manifest.lang, "pt-BR");
+  assert.equal(manifest.dir, "rtl");
+  // Two designs -> auto-derived shortcuts; the one with an icon carries it.
+  const widgetShortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
+  assert.deepEqual(widgetShortcut.icons, [
+    { src: "scad/widget-icon.svg", sizes: "any", type: "image/svg+xml" },
+  ]);
+  const collapsibleShortcut = manifest.shortcuts.find((s) => s.url === "./#d=collapsible");
+  assert.equal(collapsibleShortcut.icons, undefined); // no icon configured
+  // Screenshot label/platform are passed through.
+  assert.equal(manifest.screenshots[0].label, "Home screen");
+  assert.equal(manifest.screenshots[0].platform, "android");
+});
+
+test("a PNG design icon is served as-is and its real pixel size reaches the manifest", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const schema = generate({
+    configPath: join(FIXTURES, "widget-pngicon.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  // PNG copied verbatim (no rasterization) preserving its extension.
+  assert.equal(schema.designs.find((d) => d.id === "widget").icon, "scad/widget-icon.png");
+  assert.ok(existsSync(join(out, "public", "scad", "widget-icon.png")));
+  // The derived shortcut icon advertises the PNG's real 48x24 size (not "any").
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  const shortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
+  assert.deepEqual(shortcut.icons, [
+    { src: "scad/widget-icon.png", sizes: "48x24", type: "image/png" },
+  ]);
 });
 
 test("heavy defaults to false when unset", () => {
@@ -726,12 +828,57 @@ test("parseFileImport: true/object, defaults and errors", () => {
     parseFileImport({ accept: ".svg", label: "Add SVG", note: undefined }),
     { accept: ".svg", label: "Add SVG" }
   );
+  // maxBytes: a positive number passes through; bad values fail.
+  assert.deepEqual(parseFileImport({ maxBytes: 1024 }), { maxBytes: 1024 });
+  assert.deepEqual(parseFileImport({ accept: ".ttf", maxBytes: null }), { accept: ".ttf" });
+  assert.throws(() => parseFileImport({ maxBytes: 0 }), /'fileImport\.maxBytes' must be a positive number/);
+  assert.throws(() => parseFileImport({ maxBytes: -5 }), /'fileImport\.maxBytes' must be a positive number/);
+  assert.throws(() => parseFileImport({ maxBytes: "big" }), /'fileImport\.maxBytes' must be a positive number/);
   // Wrong shapes -> clear errors.
   assert.throws(() => parseFileImport([]), /'fileImport' must be true/);
   assert.throws(
     () => parseFileImport({ accept: 5 }),
     /'fileImport\.accept' must be a string/
   );
+});
+
+test("parseLang / parseDir: defaults, validation and errors", () => {
+  assert.equal(parseLang(undefined), "en");
+  assert.equal(parseLang("pt-BR"), "pt-BR");
+  assert.equal(parseLang("  zh-Hant  "), "zh-Hant");
+  assert.throws(() => parseLang("en_US"), /'lang' must be a BCP-47/); // underscore isn't a tag char
+  assert.throws(() => parseLang('en"><script'), /'lang' must be a BCP-47/);
+  assert.throws(() => parseLang(5), /'lang' must be a BCP-47/);
+
+  assert.equal(parseDir(undefined), "ltr");
+  for (const d of ["ltr", "rtl", "auto"]) assert.equal(parseDir(d), d);
+  assert.throws(() => parseDir("sideways"), /'dir' must be one of/);
+});
+
+test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
+  assert.equal(parseRender(undefined), null);
+  assert.equal(parseRender(null), null);
+  assert.equal(parseRender({}), null); // no recognised keys -> null (all defaults)
+  assert.deepEqual(parseRender({ heavyMs: 8000 }), { heavyMs: 8000 });
+  assert.deepEqual(
+    parseRender({ heavyMs: 3000, cache: { maxEntries: 4, maxBytes: 1024, maxEntryBytes: 512, persistent: false } }),
+    { heavyMs: 3000, cache: { maxEntries: 4, maxBytes: 1024, maxEntryBytes: 512, persistent: false } }
+  );
+  // Nulls inside cache are dropped; an all-null cache disappears.
+  assert.deepEqual(parseRender({ cache: { maxEntries: null } }), null);
+  // Bad shapes / values -> clear errors.
+  assert.throws(() => parseRender([]), /'render' must be an object/);
+  assert.throws(() => parseRender({ heavyMs: -1 }), /'render\.heavyMs' must be a non-negative number/);
+  assert.throws(() => parseRender({ cache: 5 }), /'render\.cache' must be an object/);
+  assert.throws(() => parseRender({ cache: { maxBytes: "lots" } }), /'render\.cache\.maxBytes' must be a non-negative number/);
+  assert.throws(() => parseRender({ cache: { persistent: "yes" } }), /'render\.cache\.persistent' must be a boolean/);
+});
+
+test("parseUi: fullscreen defaults true and validates", () => {
+  assert.equal(parseUi(undefined).fullscreen, true);
+  assert.equal(parseUi({}).fullscreen, true);
+  assert.equal(parseUi({ fullscreen: false }).fullscreen, false);
+  assert.throws(() => parseUi({ fullscreen: "no" }), /'ui\.fullscreen' must be a boolean/);
 });
 
 test("parsePopup: defaults, modes, links and errors", () => {

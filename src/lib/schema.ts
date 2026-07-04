@@ -38,6 +38,10 @@ function checkDesign(d: unknown): void {
   }
   if (design.heavy !== undefined && typeof design.heavy !== "boolean")
     fail(`design '${id}' 'heavy' must be a boolean`);
+  if (design.description != null && typeof design.description !== "string")
+    fail(`design '${id}' 'description' must be a string`);
+  if (design.icon != null && typeof design.icon !== "string")
+    fail(`design '${id}' 'icon' must be a string URL`);
   if (
     design.collapsedSections !== undefined &&
     (!Array.isArray(design.collapsedSections) ||
@@ -76,6 +80,8 @@ export function validateSchema(raw: unknown): Schema {
       if (fi[key] !== undefined && typeof fi[key] !== "string")
         fail(`'fileImport.${key}' must be a string`);
     }
+    if (fi.maxBytes !== undefined && typeof fi.maxBytes !== "number")
+      fail("'fileImport.maxBytes' must be a number");
   }
   if (s.popup != null) {
     if (typeof s.popup !== "object" || Array.isArray(s.popup))
@@ -102,6 +108,31 @@ export function validateSchema(raw: unknown): Schema {
     }
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
+  if (s.lang !== undefined && typeof s.lang !== "string") fail("'lang' must be a string");
+  if (s.dir !== undefined && !["ltr", "rtl", "auto"].includes(s.dir as string))
+    fail("'dir' must be \"ltr\", \"rtl\" or \"auto\"");
+  if (s.defaultDesign != null) {
+    if (typeof s.defaultDesign !== "string") fail("'defaultDesign' must be a string");
+    if (!(s.designs as { id: string }[]).some((d) => d.id === s.defaultDesign))
+      fail(`'defaultDesign' '${s.defaultDesign}' is not a configured design id`);
+  }
+  if (s.render != null) {
+    if (typeof s.render !== "object" || Array.isArray(s.render))
+      fail("'render' must be an object or null");
+    const r = s.render as Record<string, unknown>;
+    if (r.heavyMs !== undefined && typeof r.heavyMs !== "number")
+      fail("'render.heavyMs' must be a number");
+    if (r.cache !== undefined) {
+      if (typeof r.cache !== "object" || Array.isArray(r.cache))
+        fail("'render.cache' must be an object");
+      const c = r.cache as Record<string, unknown>;
+      for (const key of ["maxEntries", "maxBytes", "maxEntryBytes"] as const)
+        if (c[key] !== undefined && typeof c[key] !== "number")
+          fail(`'render.cache.${key}' must be a number`);
+      if (c.persistent !== undefined && typeof c.persistent !== "boolean")
+        fail("'render.cache.persistent' must be a boolean");
+    }
+  }
   if (s.format !== "3mf" && s.format !== "stl")
     fail("'format' must be \"3mf\" or \"stl\"");
   if (s.colors != null) {
@@ -141,6 +172,8 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.reset' must be a boolean");
     if (ui.zoom !== undefined && typeof ui.zoom !== "boolean")
       fail("'ui.zoom' must be a boolean");
+    if (ui.fullscreen !== undefined && typeof ui.fullscreen !== "boolean")
+      fail("'ui.fullscreen' must be a boolean");
     for (const key of ["presetsLabel", "parametersLabel"] as const)
       if (ui[key] !== undefined && typeof ui[key] !== "string")
         fail(`'ui.${key}' must be a string`);

@@ -3,6 +3,7 @@
 // actions. Shown as the Files tab on mobile and at the bottom of the desktop
 // parameter panel. All copy is config-driven (see `fileImport`); uploads are
 // stored client-side and mounted by the renderer.
+import { toast } from "sonner";
 import type { FileImport } from "../openscad/types";
 import { FileInput } from "./FileInput";
 import { Markdown } from "./Markdown";
@@ -35,6 +36,14 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
   if (!fileImport) return null;
 
   const onUploadFile = async (file: File) => {
+    // Reject an over-cap upload before reading it — a friendly toast, no store.
+    if (fileImport.maxBytes !== undefined && file.size > fileImport.maxBytes) {
+      toast.error(
+        `"${file.name}" is ${formatSize(file.size)} — over the ${formatSize(fileImport.maxBytes)} limit.`,
+        { id: "file-too-large" }
+      );
+      return;
+    }
     const bytes = new Uint8Array(await file.arrayBuffer());
     onAddFile(file.name, bytes);
   };

@@ -1,0 +1,17 @@
+{
+  "title": "Widget Studio",
+  "lang": "pt-BR",
+  "dir": "rtl",
+  "source": "src",
+  "defaultDesign": "collapsible",
+  "render": { "heavyMs": 9000, "cache": { "maxEntries": 4, "persistent": false } },
+  "fileImport": { "maxBytes": 1048576 },
+  "ui": { "fullscreen": false },
+  "screenshots": [
+    { "src": "logo.svg", "sizes": "390x844", "form_factor": "narrow", "label": "Home screen", "platform": "android" }
+  ],
+  "designs": [
+    { "id": "widget", "label": "Widget", "description": "A little widget.", "icon": "logo.svg" },
+    { "id": "collapsible", "label": "Collapsible" }
+  ]
+}

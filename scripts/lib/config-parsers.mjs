@@ -49,6 +49,37 @@ export const xmlEscape = (s) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+// A conservative BCP-47-ish language tag (letters, digits, hyphens only, e.g.
+// "en", "pt-BR", "zh-Hant"). Strict enough that the value is safe to interpolate
+// verbatim into the generated `<html lang="…">` attribute and the manifest.
+export const LANG_RE = /^[A-Za-z0-9-]{1,35}$/;
+
+// Validate the optional `lang` config key — the document/manifest language.
+// Defaults to "en". Fails the build on anything that isn't a plain BCP-47 tag.
+export function parseLang(raw) {
+  if (raw == null) return "en";
+  if (typeof raw !== "string" || !LANG_RE.test(raw.trim()))
+    throw new Error(
+      `gen-schema: 'lang' must be a BCP-47 language tag (got ${JSON.stringify(raw)})`
+    );
+  return raw.trim();
+}
+
+// The writing directions HTML and the web-app manifest both accept.
+export const TEXT_DIRECTIONS = ["ltr", "rtl", "auto"];
+
+// Validate the optional `dir` config key — the document/manifest text direction.
+// Defaults to "ltr" (matching the previously hard-coded manifest value).
+export function parseDir(raw) {
+  if (raw == null) return "ltr";
+  if (!TEXT_DIRECTIONS.includes(raw))
+    throw new Error(
+      `gen-schema: 'dir' must be one of ${TEXT_DIRECTIONS.map((d) => `"${d}"`).join(", ")} ` +
+        `(got ${JSON.stringify(raw)})`
+    );
+  return raw;
+}
+
 // The model formats OpenSCAD can export and the viewer can parse.
 const FORMATS = ["3mf", "stl"];
 
@@ -155,7 +186,52 @@ export function parseFileImport(fileImport) {
       throw new Error(`gen-schema: 'fileImport.${key}' must be a string`);
     out[key] = raw[key];
   }
+  // Optional upload size cap (bytes). The app rejects a larger file with a
+  // friendly message instead of persisting it to IndexedDB. Must be positive.
+  if (raw.maxBytes !== undefined && raw.maxBytes !== null) {
+    if (typeof raw.maxBytes !== "number" || !Number.isFinite(raw.maxBytes) || raw.maxBytes <= 0)
+      throw new Error("gen-schema: 'fileImport.maxBytes' must be a positive number");
+    out.maxBytes = raw.maxBytes;
+  }
   return out;
+}
+
+// Validate and normalise the optional `render` config block: build-time render
+// tuning. `heavyMs` sets the auto-pause threshold (a live render slower than
+// this pauses auto-render for the design); `cache` tunes the runner's two-tier
+// render cache (`maxEntries` L1 slot count, `maxBytes` total L1 budget,
+// `maxEntryBytes` largest cacheable render, `persistent` the L2 IndexedDB
+// store). Every key is optional — the app keeps its built-in default for any
+// omitted value. None affect geometry, so `render` is absent from renderHash.
+// Returns null when unset; fails the build with a clear message on a bad shape.
+export function parseRender(raw) {
+  if (raw == null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'render' must be an object");
+  const posNum = (v, key) => {
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0)
+      throw new Error(`gen-schema: 'render.${key}' must be a non-negative number`);
+    return v;
+  };
+  const out = {};
+  if (raw.heavyMs !== undefined && raw.heavyMs !== null)
+    out.heavyMs = posNum(raw.heavyMs, "heavyMs");
+  if (raw.cache !== undefined && raw.cache !== null) {
+    if (typeof raw.cache !== "object" || Array.isArray(raw.cache))
+      throw new Error("gen-schema: 'render.cache' must be an object");
+    const cache = {};
+    for (const key of ["maxEntries", "maxBytes", "maxEntryBytes"]) {
+      if (raw.cache[key] !== undefined && raw.cache[key] !== null)
+        cache[key] = posNum(raw.cache[key], `cache.${key}`);
+    }
+    if (raw.cache.persistent !== undefined && raw.cache.persistent !== null) {
+      if (typeof raw.cache.persistent !== "boolean")
+        throw new Error("gen-schema: 'render.cache.persistent' must be a boolean");
+      cache.persistent = raw.cache.persistent;
+    }
+    if (Object.keys(cache).length) out.cache = cache;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 // The display policies a `popup` may choose: shown on every visit ("always"),
@@ -244,7 +320,7 @@ export function parseNotices(raw) {
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: true, measure: true, viewPicker: true, reset: true, zoom: false, presetsLabel: "Presets", parametersLabel: "Parameters" };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: true, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, presetsLabel: "Presets", parametersLabel: "Parameters" };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -297,6 +373,11 @@ export function parseUi(raw) {
     if (typeof raw.zoom !== "boolean")
       throw new Error("gen-schema: 'ui.zoom' must be a boolean");
     out.zoom = raw.zoom;
+  }
+  if (raw.fullscreen !== undefined) {
+    if (typeof raw.fullscreen !== "boolean")
+      throw new Error("gen-schema: 'ui.fullscreen' must be a boolean");
+    out.fullscreen = raw.fullscreen;
   }
   for (const key of ["presetsLabel", "parametersLabel"]) {
     if (raw[key] !== undefined) {
