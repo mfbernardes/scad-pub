@@ -18,10 +18,10 @@ export function ParamSearch({ value, onChange, onClear }: Props) {
       <input
         type="text"
         className="min-w-0 flex-1 border-none bg-transparent p-0 text-foreground placeholder:text-muted-foreground focus:outline-none"
-        placeholder="Search parameters…"
+        placeholder="Find a setting…"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        aria-label="Search parameters"
+        aria-label="Find a setting"
       />
       {value && (
         <IconButton label="Clear search" onClick={onClear}>

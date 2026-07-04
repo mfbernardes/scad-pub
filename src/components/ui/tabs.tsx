@@ -61,10 +61,11 @@ function TabsContent({
   );
 }
 
-// Shared "underline" tab-trigger styling used by the app's flat tab bars
-// (param panel, mobile sheet, output console, help). Override the default
-// pill look from TabsList/TabsTrigger; callers append `flex-1` or `px-3`.
-const underlineTabTrigger =
-  "h-auto rounded-none border-0 border-b-2 border-transparent bg-transparent py-2 font-normal text-muted-foreground data-[state=active]:border-b-brand data-[state=active]:bg-transparent data-[state=active]:text-brand data-[state=active]:shadow-none";
+// Shared "chip" tab-trigger styling used by the app's flat tab bars (param
+// panel, mobile sheet, output console, help): each tab is a rounded-rectangle
+// chip (not a pill) that fills when active. Overrides the default boxed look
+// from TabsList/TabsTrigger; callers append `flex-1`/`px-3`.
+const chipTabTrigger =
+  "font-display h-auto my-1.5 mx-1 rounded-(--radius-sm) border border-transparent bg-transparent px-3 py-[0.35rem] font-medium text-muted-foreground hover:text-foreground data-[state=active]:border-(color:--line) data-[state=active]:bg-secondary data-[state=active]:text-brand data-[state=active]:shadow-none";
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, underlineTabTrigger };
+export { Tabs, TabsList, TabsTrigger, TabsContent, chipTabTrigger };

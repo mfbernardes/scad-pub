@@ -25,18 +25,20 @@ export function ActionButtons({ hasResult, modelFormat, onSavePng }: Props) {
 
   return (
     <>
+      {/* "Download", not "Export": the universal word for "get the file". The
+          format rides along because the slicer needs it. */}
       <Button
         size="sm"
         variant="default"
         className="hover:bg-primary hover:brightness-[1.08]"
         onClick={exportModel}
         disabled={!hasResult}
-        aria-label={`Export ${fmt}`}
+        aria-label={`Download ${fmt}`}
       >
-        <DownloadIcon size={16} /> Export {fmt}
+        <DownloadIcon size={16} /> Download {fmt}
       </Button>
-      <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!hasResult} aria-label="Save PNG">
-        <ImageIcon size={16} /> PNG
+      <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!hasResult} aria-label="Save image">
+        <ImageIcon size={16} /> Image
       </Button>
       <Button size="sm" variant="ghost" onClick={copyLink} aria-label="Copy share link">
         <LinkIcon size={16} /> Share

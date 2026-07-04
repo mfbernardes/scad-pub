@@ -24,14 +24,14 @@ export function PanelFooter({
   const { reset, autoRenderChange } = useAppActions();
   return (
     <div className={className}>
-      {/* Auto-render lives here, with the params it governs, rather than in the
-          output toolbar: it's a render-mode setting that's rarely toggled. */}
+      {/* Live preview (auto-render) lives here, with the settings it governs,
+          rather than in the output toolbar: it's a mode that's rarely toggled. */}
       <Label
-        className="auto-render inline-flex cursor-pointer select-none items-center gap-[0.3rem] text-[0.85rem] font-normal text-muted-foreground hover:text-foreground"
-        title="Re-render automatically as parameters change"
+        className="auto-render inline-flex cursor-pointer select-none items-center gap-[0.35rem] text-[0.85rem] font-normal text-muted-foreground hover:text-foreground"
+        title="Update the preview automatically as you change settings"
       >
-        <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Auto-render" />
-        Auto-render
+        <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Live preview" />
+        Live preview
       </Label>
       <ResetButton
         design={design}

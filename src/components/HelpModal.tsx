@@ -6,7 +6,7 @@
 import { Modal, MODAL_BODY, MODAL_INTRO } from "./Modal";
 import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { HardDriveDownload as InstallIcon } from "lucide-react";
 import { DEFAULT_HELP } from "../lib/defaultHelp";
@@ -59,7 +59,7 @@ function HelpTabs({ tabs }: { tabs: HelpTab[] }) {
         aria-label="Help topics"
       >
         {tabs.map((t, i) => (
-          <TabsTrigger key={i} value={String(i)} className={cn(underlineTabTrigger, "px-3")}>
+          <TabsTrigger key={i} value={String(i)} className={cn(chipTabTrigger, "px-3")}>
             {t.label}
           </TabsTrigger>
         ))}

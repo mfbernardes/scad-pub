@@ -192,6 +192,7 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--glass-bg` / `--glass-border` | translucent "glass" surfaces: command bar, sheets, viewer HUD |
 | `--elevation` | drop shadow on raised surfaces (a `box-shadow`, not a colour) |
 | `--radius` / `--radius-sm` | corner radius, base and small (a length, not a colour) |
+| `--font-sans` / `--font-display` | UI font stacks: body text / the display voice (brand, headings, tabs, buttons). Unquoted family names only (e.g. `Georgia, serif`); set them under `dark` (the `:root` block) to apply to both themes |
 | `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid |
 | `--viewer-model` | rendered model material colour |
 
@@ -338,14 +339,14 @@ An optional object (validated as a unit; defaults applied when absent). None of 
 - **`panelDefault`** — `"open"` (default) or `"collapsed"`: the first-load desktop panel state (the user's later choice persists per browser).
 - **`outputDefault`** — `"closed"` (default) or `"open"`: whether the OpenSCAD output console starts open.
 - **`install`** — `"auto"` (default) or `"off"`: when `"off"`, no PWA install affordance is offered even on browsers that support it.
-- **`showVarName`** — `true` (default) or `false`: whether each parameter control shows the underlying OpenSCAD variable name beside its label. Shown as visually-secondary monospace text; set `false` to hide it.
+- **`showVarName`** — `false` (default) or `true`: whether each parameter control shows the underlying OpenSCAD variable name beside its label (visually-secondary monospace text). Hidden by default — it's developer detail; set `true` for a technical audience. Every parameter row always carries a `data-param="<var>"` attribute regardless, which is what the smoke test (and `extraCss`) target.
 - **`measure`** — `true` (default) or `false`: whether the viewer offers the measure (dimensions) toggle — the ruler button that draws the W×D×H overlay and shows the measurements/`@info` panel. Set `false` to hide the button entirely (the overlay and panel are only reachable through it).
 - **`viewPicker`** — `true` (default) or `false`: whether the viewer offers the view picker — the cube button whose menu snaps the camera to standard angles (Isometric, Top, Front, …). Set `false` to hide it.
 - **`reset`** — `true` (default) or `false`: whether the viewer offers the "reset view" button (re-frames the model in the current view). Mouse/touch orbit and zoom still work regardless.
 - **`zoom`** — `false` (default) or `true`: whether the viewer offers the zoom in/out buttons. Off by default since mouse-wheel / pinch zoom already works; set `true` to show the two buttons.
 - **`fullscreen`** — `true` (default) or `false`: whether the viewer offers the fullscreen toggle. It only ever appears in a browser tab whose browser supports the Fullscreen API (never in an installed PWA, which is already its own window); set `false` to suppress it even there.
-- **`presetsLabel`** — string (default `"Presets"`): the label shown for the Presets tab/section (the mobile sheet tab, the desktop presets dropdown, and the presets popover title).
-- **`parametersLabel`** — string (default `"Parameters"`): the label shown for the Parameters tab/section (the mobile sheet tab and the desktop parameter panel).
+- **`presetsLabel`** — string (default `"Presets"`): the label shown for the Presets tab/section (the mobile sheet tab, the desktop panel tab, and the presets popover title).
+- **`parametersLabel`** — string (default `"Customize"`): the label shown for the parameters tab/section (the mobile sheet tab, the desktop parameter panel, and the collapsed panel's reopen button).
 
 ### PWA manifest
 

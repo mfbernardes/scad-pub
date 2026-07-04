@@ -54,7 +54,7 @@ async function shoot(page, base, theme) {
   await dismissWelcomePopup(page);
   // The panel opens on the Presets tab; switch to Parameters so the baseline
   // keeps exercising the param form (a richer regression surface).
-  await page.getByRole("tab", { name: "Parameters" }).first().click().catch(() => {});
+  await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});
   await page.waitForSelector(".param-form", { timeout: 30000 });
   await page.addStyleTag({ content: MASK_CSS });
   await page.waitForTimeout(150); // let fonts/layout settle

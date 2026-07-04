@@ -61,7 +61,7 @@ export async function selectDesign(page, label, { mobile = false } = {}) {
   }
   // Every design renders once on first view; if a "Render now" button is present
   // (auto-render off + pending changes), click it to be safe.
-  const renderBtn = page.getByRole("button", { name: "Render now" }).first();
+  const renderBtn = page.getByRole("button", { name: /update now/i }).first();
   if (await renderBtn.count()) await renderBtn.click().catch(() => {});
 }
 

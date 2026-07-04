@@ -30,8 +30,10 @@ export function deriveRenderStatus({ rendering, ready, result, stale = false }: 
   state: RenderState;
   text: string;
 } {
-  if (!ready) return { state: "loading", text: "Loading renderer…" };
-  if (rendering) return { state: "rendering", text: "Rendering…" };
+  // Keep the "N ms" / "Failed (exit N)" shapes below stable — the smoke and
+  // capture scripts wait on them via the `.render-status` hook.
+  if (!ready) return { state: "loading", text: "Getting ready…" };
+  if (rendering) return { state: "rendering", text: "Updating preview…" };
   // The preview no longer matches the controls — surfaced before "ok" so a
   // happy green "214 ms" never masks unrendered changes.
   if (stale) return { state: "stale", text: "Preview out of date" };

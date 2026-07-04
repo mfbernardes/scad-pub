@@ -4,7 +4,7 @@
 // and passed in.
 import { useState } from "react";
 import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
-import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { CountBadges } from "./CountBadges";
 import { IconButton } from "./IconButton";
@@ -38,21 +38,21 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose, classNa
     <div
       className={cn("output-console flex shrink-0 flex-col border-t bg-card", className)}
       role="region"
-      aria-label="OpenSCAD output"
+      aria-label="Messages from the design"
     >
       <Tabs value={tab} onValueChange={setTab} className="gap-0">
         <div className="flex shrink-0 items-stretch border-b">
           <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
-            <TabsTrigger value="notices" className={cn(underlineTabTrigger, "px-3")}>
+            <TabsTrigger value="notices" className={cn(chipTabTrigger, "px-3")}>
               Notices
               <CountBadges badges={badges} />
             </TabsTrigger>
-            <TabsTrigger value="log" className={cn(underlineTabTrigger, "px-3")}>
+            <TabsTrigger value="log" className={cn(chipTabTrigger, "px-3")}>
               Log
             </TabsTrigger>
           </TabsList>
           <IconButton
-            label="Close output console"
+            label="Close messages"
             className="output-console__close my-1 ml-auto mr-[0.4rem] shrink-0 self-center"
             onClick={onClose}
           >

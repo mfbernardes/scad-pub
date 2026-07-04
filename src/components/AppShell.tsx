@@ -15,10 +15,11 @@ import type { ViewerHandle, Dimensions } from "./Viewer";
 const PEEK_HEIGHT = 60;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
 const EMPTY_LOG: string[] = [];
-// The floating glass pill that wraps the ActionButtons row — shared verbatim by
-// the desktop and mobile clusters so a tweak to padding/border/blur lands once.
+// The floating action cluster that wraps the ActionButtons row — a solid raised
+// card shared verbatim by the desktop and mobile clusters so a tweak to
+// padding/border lands once.
 const ACTION_CLUSTER_CLASS =
-  "action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation) backdrop-blur-[12px]";
+  "action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation)";
 
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
@@ -126,10 +127,11 @@ export const AppShell = memo(function AppShell({
   const ui = schema.ui ?? {};
   const panelSide = ui.panelSide ?? "left";
   const panelDefaultOpen = (ui.panelDefault ?? "open") === "open";
-  const showVarName = ui.showVarName !== false;
+  // Variable names are developer detail — hidden unless a config opts in.
+  const showVarName = ui.showVarName === true;
   // Configurable tab/section labels (default to the built-in names).
   const presetsLabel = ui.presetsLabel ?? "Presets";
-  const parametersLabel = ui.parametersLabel ?? "Parameters";
+  const parametersLabel = ui.parametersLabel ?? "Customize";
   // Whether the viewer offers the measure (dimensions) toggle. Off hides the HUD
   // ruler button; the overlay + panel are only reachable through it, so they
   // stay hidden too.
@@ -373,7 +375,7 @@ export const AppShell = memo(function AppShell({
           />
 
           {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
-          <div className="mobile-top-bar absolute inset-x-0 top-0 z-10 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))] backdrop-blur-[12px]">
+          <div className="mobile-top-bar absolute inset-x-0 top-0 z-10 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]">
             <span className="inline-flex min-w-0 items-center gap-[0.4rem] justify-self-start overflow-hidden whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.92rem] font-bold">
               <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
             </span>
@@ -454,7 +456,7 @@ export const AppShell = memo(function AppShell({
           )}
         </BottomSheet>
 
-        {/* Floating action cluster — the same compact glass pill the desktop
+        {/* Floating action cluster — the same compact card the desktop
             floats over its viewer, riding just above the sheet's top edge (it
             follows the sheet up to the half detent via --sheet-follow-h) instead
             of a solid docked footer band that would reserve a strip of the

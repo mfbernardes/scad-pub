@@ -8,6 +8,10 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss";
 @import "tw-animate-css";
+/* The app's display face (brand, headings, tabs, buttons). A single variable
+   woff2 per script subset, bundled by Vite and precached by the service worker
+   via asset-manifest.json — no external font host at runtime. */
+@import "@fontsource-variable/space-grotesk";
 
 /* ── shadcn/ui token bridge ───────────────────────────────────────────────
    The app's AA-tuned palette (the --bg/--panel/--text/… custom properties
@@ -58,36 +62,53 @@
   }
 }
 
+/* `font-display` — the app's display voice (brand, headings, tabs, primary
+   buttons). A real utility so it composes with tailwind-merge like any other. */
+@utility font-display {
+  font-family: var(--font-display);
+}
+
 /* Dark is the default; <html data-theme="light"> swaps the palette. The active
    theme is resolved in JS (lib/theme.ts) and set before paint (index.html). */
 @layer components {
 :root {
-  --bg: #15171c;
-  --panel: #1f2229;
-  --panel-2: #262a32;
-  --line: #333843;
-  --text: #e6e8ec;
-  --muted: #aeb6c2; /* AA on every panel (>= 7:1); BITV 2.0 / WCAG 2.1 */
-  --accent: #86a9ff; /* bright azure: accent TEXT/icons on dark (~6.9:1 on panels) */
+  /* Blue palette — cool slate neutrals with the signature electric-blue accent
+     and a brand-blue model, offset by a warm amber dimension callout. Every
+     pair below is WCAG 2.1 AA-verified (most exceed AAA); re-verify with
+     npm run smoke after any change. */
+  --bg: #14161c;
+  --panel: #1c1f27;
+  --panel-2: #252935;
+  --line: #343a48;
+  --text: #e6e9ef;
+  --muted: #a7b0c0; /* AA on every panel (>= 6.5:1); BITV 2.0 / WCAG 2.1 */
+  --accent: #86a9ff; /* azure: accent TEXT/icons on dark (~7:1 on panels) */
   --accent-solid: #2f55ff; /* electric blue: FILLED accent surfaces (buttons, badges) */
-  --on-accent: #ffffff; /* text on an --accent-solid surface (white on #2f55ff, ~5.4:1) */
-  --focus: #6db0ff; /* focus-ring colour, ~7:1 vs panels (WCAG 1.4.11) */
+  --on-accent: #ffffff; /* text on an --accent-solid surface (white, ~5.4:1) */
+  --focus: #6db0ff; /* focus-ring colour, >7:1 vs panels (WCAG 1.4.11) */
   --link: #8ab4f8;
   --warn: #e0a458;
   --danger: #f87171;
-  --code-bg: #111317;
-  --overlay: rgba(21, 23, 28, 0.72);
-  --viewer-bg: #0f1115; /* deep charcoal, darker than the chrome to frame the model */
-  --viewer-grid: #565f6e; /* centre axes: ~2.9:1 vs --viewer-bg for orientation */
-  --viewer-grid-2: #20252e; /* grid lines: deliberately subtle */
-  --viewer-model: #6f93ff; /* the rendered model's material — brand blue */
-  --viewer-dim: #cfe0ff; /* dimension callouts — bright, contrasts the blue model */
-  /* Phase 1 shape + glass tokens — configurable via colors.dark in the config */
+  --code-bg: #101218;
+  --overlay: rgba(20, 22, 28, 0.72);
+  --viewer-bg: #0e1016; /* deep slate, darker than the chrome to frame the model */
+  --viewer-grid: #565f6e; /* centre axes: ~3:1 vs --viewer-bg for orientation */
+  --viewer-grid-2: #20242e; /* grid lines: deliberately subtle */
+  --viewer-model: #6f93ff; /* the rendered model's material — brand blue, the hero */
+  --viewer-dim: #ffd7a1; /* dimension callouts — warm amber, contrasts the blue model */
+  /* Typography — --font-sans is the workhorse; --font-display carries the
+     brand voice (wordmark, headings, tabs, buttons). Both are configurable
+     via the config's `colors` map (unquoted family names). */
+  --font-sans: system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Space Grotesk Variable", var(--font-sans);
+  /* Shape + surface tokens — configurable via colors.dark in the config.
+     Moderate (not pill) radii; the floating surfaces (--surface-*) are solid,
+     not translucent glass — they read as raised panels, not frosted overlays. */
   --radius: 10px;
   --radius-sm: 6px;
-  --glass-bg: rgba(31, 34, 41, 0.88);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --elevation: 0 4px 20px rgba(0, 0, 0, 0.45);
+  --glass-bg: #252935;
+  --glass-border: #343a48;
+  --elevation: 0 6px 18px rgba(0, 0, 0, 0.5);
   /* Mobile layout constants — keep in sync with AppShell.tsx PEEK_HEIGHT */
   --mobile-peek-height: 60px;
   /* iOS home-indicator inset. The bottom sheet sits directly on the viewport
@@ -100,32 +121,32 @@
 }
 
 :root[data-theme="light"] {
-  --bg: #f4f5f7;
+  --bg: #eef1f6; /* cool light grey, not clinical white */
   --panel: #ffffff;
-  --panel-2: #eef0f3;
-  --line: #d4d8de;
-  --text: #1c1f24;
-  --muted: #5b6472; /* AA on every panel (>= 5:1) */
-  --accent: #1d4ed8; /* deep electric blue: AA as text on white (~6.7:1) */
+  --panel-2: #e5e9f0;
+  --line: #cfd6e1;
+  --text: #1a1d24;
+  --muted: #545d6c; /* AA on every panel (>= 5.4:1) */
+  --accent: #1d4ed8; /* deep blue: AA as text on white (~6.7:1 on panel) */
   --accent-solid: #1f3df5; /* electric blue: FILLED accent surfaces (white text ~6.9:1) */
   --on-accent: #ffffff;
   --focus: #2563eb;
   --link: #1558c0;
   --warn: #9a5512;
   --danger: #c0341d;
-  --code-bg: #eef1f5;
-  --overlay: rgba(255, 255, 255, 0.72);
-  --viewer-bg: #dde1e6; /* soft neutral grey, not a glaring white */
+  --code-bg: #e8ecf3;
+  --overlay: rgba(245, 247, 250, 0.72);
+  --viewer-bg: #dde2ea; /* soft cool grey, not a glaring white */
   --viewer-grid: #8b94a0; /* centre axes */
   --viewer-grid-2: #c4cad1; /* grid lines: subtle */
   --viewer-model: #3a5fd0; /* the rendered model's material — brand blue */
-  --viewer-dim: #b8281a; /* dimension callouts — warm contrast against the blue model */
-  /* Phase 1 shape + glass tokens — lighter values for light mode */
+  --viewer-dim: #9c380b; /* dimension callouts — deep amber against the blue model */
+  /* Shape + surface tokens — lighter values for light mode; solid, not glass. */
   --radius: 10px;
   --radius-sm: 6px;
-  --glass-bg: rgba(255, 255, 255, 0.88);
-  --glass-border: rgba(0, 0, 0, 0.08);
-  --elevation: 0 4px 20px rgba(0, 0, 0, 0.12);
+  --glass-bg: #ffffff;
+  --glass-border: #cfd6e1;
+  --elevation: 0 6px 18px rgba(20, 30, 60, 0.12);
   color-scheme: light;
 }
 
@@ -159,7 +180,7 @@ html, body { overscroll-behavior: none; }
 }
 
 body {
-  font: 0.875rem/1.45 system-ui, sans-serif;
+  font: 0.875rem/1.5 var(--font-sans);
   background: var(--bg);
   color: var(--text);
 }
@@ -307,8 +328,6 @@ button:disabled { cursor: default; }
   font-size: 0.82rem;
   padding: 0.35rem 0.65rem;
   background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   box-shadow: var(--elevation);

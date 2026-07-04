@@ -10,6 +10,7 @@ import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
+import { useInitialTab } from "../lib/useInitialTab";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
@@ -17,7 +18,7 @@ import { PresetPicker } from "./PresetPicker";
 import { ParamSearch } from "./ParamSearch";
 import { IconButton } from "./IconButton";
 import { PanelFooter } from "./PanelFooter";
-import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
   Menu as MenuIcon,
@@ -27,7 +28,7 @@ import {
 
 type PanelTab = "presets" | "params" | "files";
 
-const panelTabClass = cn(underlineTabTrigger, "flex-1");
+const panelTabClass = cn(chipTabTrigger, "flex-1");
 
 const PANEL_WIDTH_KEY = ns("panel.width");
 const PANEL_OPEN_KEY = ns("panel.open");
@@ -76,7 +77,7 @@ export function ParamPanel({
   showVarName,
   autoRender,
   presetsLabel = "Presets",
-  parametersLabel = "Parameters",
+  parametersLabel = "Customize",
 }: Props) {
   const {
     change,
@@ -97,9 +98,9 @@ export function ParamPanel({
   });
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 150);
-  // Presets is the default tab — the same landing tab as the mobile sheet, so
-  // the two layouts open on the same thing.
-  const [panelTab, setPanelTab] = useState<PanelTab>("presets");
+  // Landing tab (Presets when the design ships ready-made presets, else the
+  // controls) — shared with the mobile sheet via useInitialTab.
+  const [panelTab, setPanelTab] = useInitialTab<PanelTab>(bundled.length > 0);
 
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -146,12 +147,12 @@ export function ParamPanel({
     return (
       <div className={`param-panel-rail ${side}`}>
         <button
-          className="param-panel-open-btn"
+          className="param-panel-open-btn font-display"
           onClick={() => setOpen(true)}
-          aria-label="Open parameter panel"
-          title="Open parameter panel"
+          aria-label={`Open the ${parametersLabel} panel`}
+          title={`Open the ${parametersLabel} panel`}
         >
-          <MenuIcon size={14} /> Edit parameters
+          <MenuIcon size={14} /> {parametersLabel}
         </button>
       </div>
     );

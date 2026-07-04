@@ -28,17 +28,17 @@ export function StaleBanner({ autoRender, rendering, stalePreview, onRender, cla
       type="button"
       className={cn(
         // Positioning comes from the .stale-banner CSS block (per-layout offsets).
-        "stale-banner group inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg border border-(color:--glass-border) bg-(--glass-bg) py-[0.35rem] pl-[0.7rem] pr-[0.4rem] text-[0.82rem] font-medium text-foreground shadow-(--elevation) backdrop-blur-[12px] enabled:hover:border-brand",
+        "stale-banner group inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg border border-(color:--glass-border) bg-(--glass-bg) py-[0.35rem] pl-[0.7rem] pr-[0.4rem] text-[0.82rem] font-medium text-foreground shadow-(--elevation) enabled:hover:border-brand",
         rendering && "cursor-default pr-[0.7rem] text-muted-foreground",
         className
       )}
       onClick={rendering ? undefined : onRender}
       disabled={rendering}
-      aria-label={rendering ? "Rendering" : "Preview out of date — render now"}
+      aria-label={rendering ? "Updating the preview" : "Preview out of date — update now"}
     >
       {rendering ? (
         <>
-          <Spinner className="size-4" /> Rendering…
+          <Spinner className="size-4" /> Updating…
         </>
       ) : (
         <>
@@ -49,7 +49,7 @@ export function StaleBanner({ autoRender, rendering, stalePreview, onRender, cla
           />
           Preview out of date
           <span className="inline-flex items-center gap-[0.3rem] rounded-(--radius-sm) bg-primary px-2 py-[0.2rem] font-semibold text-primary-foreground group-hover:brightness-[1.08]">
-            <RefreshIcon size={14} /> Render
+            <RefreshIcon size={14} /> Update
           </span>
         </>
       )}

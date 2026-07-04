@@ -26,11 +26,11 @@ import {
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
 // means it may be shut — so click the Output bell when it's not already open.
-// The bell's label is "Open output console" while closed.
+// The bell's label is "Open messages" while closed.
 async function openConsole(page) {
   if (await page.locator(".output-console").count()) return;
   // Desktop bell (the mobile top bar's twin is CSS-hidden at this viewport).
-  await page.locator('.command-bar__output[aria-label^="Open output console"]').click().catch(() => {});
+  await page.locator('.command-bar__output[aria-label^="Open messages"]').click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
 }
 
@@ -222,15 +222,15 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
   for (const id of ids) {
     await selectDesign(page, id);
     await gotoPresets();
-    // Bundled presets sit in the "Bundled" section's listbox.
-    const bundled = page.locator('[aria-label="Bundled presets"] .preset-picker__item');
+    // Ready-made presets sit in the "Ready-made" section's listbox.
+    const bundled = page.locator('[aria-label="Ready-made presets"] .preset-picker__item');
     if (await bundled.count()) {
       const name = (await bundled.first().textContent())?.trim() ?? "";
       await bundled.first().click();
       await waitRendered(page, `${id} + "${name}"`);
       // The applied preset shows as selected, and the choice is in the URL.
       check(
-        (await page.locator('[aria-label="Bundled presets"] [role="option"][aria-selected="true"]').count()) >= 1,
+        (await page.locator('[aria-label="Ready-made presets"] [role="option"][aria-selected="true"]').count()) >= 1,
         `applied bundled preset "${name}"`
       );
       // persistState debounces ~300ms after the apply, so wait for the hash.
@@ -246,7 +246,7 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
       await waitRendered(page, `${id} reloaded`);
       await gotoPresets();
       check(
-        (await page.locator('[aria-label="Bundled presets"] [role="option"][aria-selected="true"]').count()) >= 1,
+        (await page.locator('[aria-label="Ready-made presets"] [role="option"][aria-selected="true"]').count()) >= 1,
         "preset auto-selected from the URL after reload"
       );
       await gotoParams();
@@ -289,7 +289,7 @@ async function checkExports({ page, check, ids, dir }) {
   const [model] = await Promise.all([
     page.waitForEvent("download"),
     // ActionCluster uses aria-label="Export STL/3MF"; button text is just the format
-    page.click('[aria-label^="Export "]'),
+    page.click('[aria-label^="Download "]'),
   ]);
   const modelOut = join(dir, await model.suggestedFilename());
   await model.saveAs(modelOut);
@@ -298,7 +298,7 @@ async function checkExports({ page, check, ids, dir }) {
   console.log("=== save PNG ===");
   const [png] = await Promise.all([
     page.waitForEvent("download"),
-    page.click('[aria-label="Save PNG"]'),
+    page.click('[aria-label="Save image"]'),
   ]);
   const pngOut = join(dir, await png.suggestedFilename());
   await png.saveAs(pngOut);
@@ -308,17 +308,17 @@ async function checkExports({ page, check, ids, dir }) {
 }
 
 async function checkPreviewControls({ page, check }) {
-  console.log("=== preview controls (share link + auto-render) ===");
+  console.log("=== preview controls (share link + live preview) ===");
   check(
     (await page.locator('[aria-label="Copy share link"]').count()) >= 1,
     "copy-link button present"
   );
-  // Auto-render: a shadcn/ui Switch (role=switch) in the ActionCluster.
-  const auto = page.getByRole("switch", { name: /Auto-render/i }).first();
+  // Live preview (auto-render): a shadcn/ui Switch (role=switch) in the params footer.
+  const auto = page.getByRole("switch", { name: /Live preview/i }).first();
   const autoOn = async () => (await auto.getAttribute("aria-checked")) === "true";
-  check(await autoOn(), "auto-render on by default (non-heavy design)");
+  check(await autoOn(), "live preview on by default (non-heavy design)");
   await auto.click();
-  check(!(await autoOn()), "auto-render can be turned off");
+  check(!(await autoOn()), "live preview can be turned off");
   await auto.click();
 }
 
@@ -340,13 +340,20 @@ async function checkServiceWorker({ page, check, base }) {
   );
 }
 
+// Locate a parameter row by its stable data-param hook (present regardless
+// of ui.showVarName), shared by the tag + signage checks.
+const paramRow = (page, name) => page.locator(`.param[data-param="${name}"]`);
+
 // @showIf + @collapsed — exercised on the example "tag" design when present.
-async function checkTagDesign({ page, check, schema, ids, paramsTabName }) {
-  if (!(ids.includes("tag") && (schema.ui?.showVarName ?? true))) return;
+// Param rows are located by their stable data-param hook, which exists
+// regardless of ui.showVarName, so this block runs in every config.
+async function checkTagDesign({ page, check, ids, paramsTabName }) {
+  if (!ids.includes("tag")) return;
   console.log("=== conditional visibility (@showIf, tag) ===");
   await selectDesign(page, "tag");
-  // Back to the Parameters tab (the file-import test left the panel on Files).
+  // Back to the Customize tab (the file-import test left the panel on Files).
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+
 
   // @collapsed: the "Quality" group starts folded; its params are hidden
   // until the group header is opened.
@@ -354,17 +361,19 @@ async function checkTagDesign({ page, check, schema, ids, paramsTabName }) {
     has: page.locator("summary", { hasText: "Quality" }),
   });
   check((await quality.count()) === 1, "Quality group is collapsible");
-  const facet = page.locator("code.param-var", { hasText: /^facet_angle$/ });
+  const facet = paramRow(page, "facet_angle");
   check(!(await facet.isVisible()), "collapsed @collapsed group hides its params");
   await quality.locator("summary").click();
   check(await facet.isVisible(), "opening the group reveals its params");
 
-  const hd = page.locator("code.param-var", { hasText: /^hole_diameter$/ });
+  // Boolean params are switches now — toggle by click, read aria-checked.
+  const holeSwitch = paramRow(page, "hole").getByRole("switch");
+  if ((await holeSwitch.getAttribute("aria-checked")) !== "true")
+    await holeSwitch.click(); // ensure on (an applied preset may have turned it off)
+  const hd = paramRow(page, "hole_diameter");
+  await hd.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   check((await hd.count()) > 0, "hole_diameter shown when hole on");
-  const holeRow = page.locator(".param", {
-    has: page.locator("code.param-var", { hasText: /^hole$/ }),
-  });
-  await holeRow.getByRole("checkbox").uncheck();
+  await holeSwitch.click();
   await hd.first().waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
   check((await hd.count()) === 0, "hole_diameter hidden when hole off");
 
@@ -373,10 +382,6 @@ async function checkTagDesign({ page, check, schema, ids, paramsTabName }) {
   await resetDefaults(page);
   await waitRendered(page, "tag");
 
-  const paramRow = (name) =>
-    page.locator(".param", {
-      has: page.locator("code.param-var", { hasText: new RegExp(`^${name}$`) }),
-    });
   // Wait for a DOM predicate (returns false on timeout instead of throwing)
   // — a param edit only re-renders after a debounce, and the status text can
   // still read "N ms" from the previous render, so we wait on the result.
@@ -392,7 +397,7 @@ async function checkTagDesign({ page, check, schema, ids, paramsTabName }) {
   // Engraving the label trips the design's `note` category (a config-driven
   // notice). The console auto-opens on the first notice; open it explicitly
   // in case it was already showing earlier notices (no badge in the top bar).
-  await paramRow("engrave_text").getByRole("checkbox").check();
+  await paramRow(page, "engrave_text").getByRole("switch").click();
   await openConsole(page);
   check(
     await waitFor(() =>
@@ -406,7 +411,7 @@ async function checkTagDesign({ page, check, schema, ids, paramsTabName }) {
   // Making the engraving deeper than the plate trips a hard assert(): the
   // render fails and the hardcoded "asserts" badge appears.
   const setNum = async (name, value) => {
-    const input = paramRow(name).locator('input[type="number"]');
+    const input = paramRow(page, name).locator('input[type="number"]');
     await input.fill(String(value));
     await input.blur();
   };
@@ -433,20 +438,19 @@ async function checkTagDesign({ page, check, schema, ids, paramsTabName }) {
 // @showIf arrow_style — exercised on a "signage" design when present. (No
 // notice expectation here: a well-tuned config renders its defaults
 // advisory-free; the notice/assert badge machinery is covered by "tag".)
-// Params are located by their `code.param-var` name tag, which only renders
-// when ui.showVarName is on — skip the interaction otherwise.
-async function checkSignageDesign({ page, check, schema, ids }) {
-  if (!(ids.includes("signage") && (schema.ui?.showVarName ?? true))) return;
+// Params are located by their stable `data-param` hook, which exists
+// regardless of ui.showVarName.
+async function checkSignageDesign({ page, check, ids }) {
+  if (!ids.includes("signage")) return;
   console.log("=== signage: @showIf arrow_style ===");
   await selectDesign(page, "signage");
   // arrow_style is relevant only once an arrow is chosen (`@showIf arrow != none`);
   // the signage default is arrow = "none", so it starts hidden.
-  const arrowStyle = page.locator("code.param-var", { hasText: /^arrow_style$/ });
+  const arrowStyle = paramRow(page, "arrow_style");
   check((await arrowStyle.count()) === 0, "arrow_style hidden when arrow = none");
-  const arrowRow = page.locator("label.param", {
-    has: page.locator("code.param-var", { hasText: /^arrow$/ }),
-  });
-  await arrowRow.locator("select").selectOption("right");
+  // Enums are Radix Selects: open the row's trigger, then click the option.
+  await paramRow(page, "arrow").locator('[data-slot="select-trigger"]').click();
+  await page.getByRole("option", { name: "right" }).click();
   await arrowStyle.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   check((await arrowStyle.count()) > 0, "arrow_style shown when arrow = right");
   await waitRendered(page, "arrow");
@@ -476,7 +480,7 @@ async function main() {
     for (const d of designs) designLabels[d.id] = d.label;
     // Panel tab names are config-overridable (ui.presetsLabel/parametersLabel).
     const presetsTabName = schema.ui?.presetsLabel || "Presets";
-    const paramsTabName = schema.ui?.parametersLabel || "Parameters";
+    const paramsTabName = schema.ui?.parametersLabel || "Customize";
     const ids = designs.map((d) => d.id);
     console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);
     await waitRendered(page, ids[0]);

@@ -38,9 +38,11 @@ function Slider({
       )}
       {...props}
     >
+      {/* Chunky track + solid thumb: the sliders are the app's main hands-on
+          control, so they read as tactile hardware, not a hairline widget. */}
       <SliderPrimitive.Track
         data-slot="slider-track"
-        className="bg-muted relative grow overflow-hidden rounded-full h-1.5 w-full"
+        className="bg-muted relative grow overflow-hidden rounded-full h-2 w-full"
       >
         <SliderPrimitive.Range
           data-slot="slider-range"
@@ -53,7 +55,7 @@ function Slider({
           key={index}
           aria-label={thumbLabel}
           aria-labelledby={thumbLabelledBy}
-          className="border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+          className="bg-primary border-card ring-ring/50 block size-5 shrink-0 rounded-full border-2 shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
     </SliderPrimitive.Root>
