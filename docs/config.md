@@ -192,6 +192,7 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--glass-bg` / `--glass-border` | translucent "glass" surfaces: command bar, sheets, viewer HUD |
 | `--elevation` | drop shadow on raised surfaces (a `box-shadow`, not a colour) |
 | `--radius` / `--radius-sm` | corner radius, base and small (a length, not a colour) |
+| `--font-sans` / `--font-display` | UI font stacks: body text / the display voice (brand, headings, tabs, buttons). Unquoted family names only (e.g. `Georgia, serif`); set them under `dark` (the `:root` block) to apply to both themes |
 | `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid |
 | `--viewer-model` | rendered model material colour |
 

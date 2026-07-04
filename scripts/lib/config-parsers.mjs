@@ -28,12 +28,17 @@ export const COLOR_TOKENS = [
   "viewer-grid-2",
   "viewer-model",
   "viewer-dim",
-  // Phase 1 theme-revamp tokens
+  // Shape / glass design tokens (non-colour values allowed)
   "radius",
   "radius-sm",
   "glass-bg",
   "glass-border",
   "elevation",
+  // Font stacks — unquoted family names only (the value filter forbids quotes),
+  // e.g. "Georgia, serif". Set them under `dark` (the `:root` block) to apply
+  // to both themes; the light theme doesn't redeclare them.
+  "font-sans",
+  "font-display",
 ];
 
 // A deliberately strict CSS-colour value: hex, rgb()/rgba()/hsl()/hsla(), or a
