@@ -106,6 +106,8 @@ CI (`.github/workflows/ci.yml`) runs unit tests, build, and smoke test on every 
 
 The build output (`dist/`) is a plain static bundle. No special headers are required.
 
+Two deploy targets are supported: CI (`.github/workflows/ci.yml`) deploys to **GitHub Pages** automatically on every push to `main` — that is the authoritative path for the public site — while `npm run deploy` publishes the same bundle to **Cloudflare** via `wrangler` (see `wrangler.jsonc`) for manually pushed deployments.
+
 ```bash
 npm run build                 # serves at "/"
 BASE_PATH=/app/ npm run build # if served under a subpath
