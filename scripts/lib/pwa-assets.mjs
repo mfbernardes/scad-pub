@@ -164,12 +164,12 @@ export function generatePwaAssets({
   ];
 
   // A manifest icon descriptor for a served image URL, typed by extension.
-  // SVGs advertise sizes "any"; other raster types are left sizeless (the OS
-  // still uses them). Unknown extensions get no type (also valid per the spec).
+  // sizes "any" suits an SVG and is an acceptable "scalable" hint for the raster
+  // types too. An unknown extension gets no type (also valid per the spec).
   const iconDescriptor = (src) => {
     const ext = src.slice(src.lastIndexOf(".") + 1).toLowerCase();
     const type = { svg: "image/svg+xml", png: "image/png", webp: "image/webp" }[ext];
-    return { src, sizes: ext === "svg" ? "any" : "any", ...(type ? { type } : {}) };
+    return { src, sizes: "any", ...(type ? { type } : {}) };
   };
 
   // App shortcuts (Android long-press / desktop jump list). Author-provided

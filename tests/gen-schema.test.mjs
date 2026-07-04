@@ -16,6 +16,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   generate,
+  KNOWN_TOP_LEVEL_KEYS,
   firstSentence,
   parseEnumHint,
   parseColors,
@@ -180,6 +181,20 @@ test("config-driven features, fonts; presets auto-detected by sibling name", () 
 test("unknown top-level config key fails the build", () => {
   // A whole-key typo ("popups") is rejected rather than silently ignored.
   assert.throws(() => run("widget-unknown-key.config.json"), /unknown config key 'popups'/);
+});
+
+test("the shipped example config uses only known top-level keys", () => {
+  // Guards the KNOWN_TOP_LEVEL_KEYS <-> readers drift hazard: if a future key is
+  // read (e.g. in pwa-assets.mjs) and used in scadpub.config.json but never added
+  // to the set, this trips here instead of failing a downstream user's build.
+  const config = JSON.parse(
+    readFileSync(join(HERE, "..", "scadpub.config.json"), "utf-8")
+  );
+  for (const key of Object.keys(config))
+    assert.ok(
+      KNOWN_TOP_LEVEL_KEYS.has(key),
+      `scadpub.config.json key '${key}' is missing from KNOWN_TOP_LEVEL_KEYS`
+    );
 });
 
 test("lang/dir default to en/ltr and pass through to the schema", () => {

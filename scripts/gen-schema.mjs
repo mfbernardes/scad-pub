@@ -298,21 +298,13 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     return id;
   };
 
-  // Optional per-design short description, shown under the label in the design
-  // picker. Validated as a non-empty string; absent -> null.
-  const checkDesignDescription = (raw, id) => {
+  // An optional per-design non-empty string field: the picker `description`, or
+  // the `icon` path (config-relative, like `logo`, copied into the served tree
+  // below and used for the manifest shortcut + picker thumbnail). Absent -> null.
+  const checkDesignString = (raw, id, field) => {
     if (raw === undefined || raw === null) return null;
     if (typeof raw !== "string" || !raw.trim())
-      throw new Error(`gen-schema: design '${id}' 'description' must be a non-empty string`);
-    return raw.trim();
-  };
-  // Optional per-design icon (path relative to the config file, like `logo`).
-  // Copied into the served tree below and used for the design's manifest
-  // shortcut icon and in the design picker. Absent -> null.
-  const checkDesignIcon = (raw, id) => {
-    if (raw === undefined || raw === null) return null;
-    if (typeof raw !== "string" || !raw.trim())
-      throw new Error(`gen-schema: design '${id}' 'icon' must be a non-empty string path`);
+      throw new Error(`gen-schema: design '${id}' '${field}' must be a non-empty string`);
     return raw.trim();
   };
 
@@ -329,8 +321,8 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
         group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
         // Optional picker description + icon (icon is a config-relative path,
         // resolved to a served URL once outScadDir exists).
-        description: checkDesignDescription(d.description, d.id),
-        iconSrc: checkDesignIcon(d.icon, d.id),
+        description: checkDesignString(d.description, d.id, "description"),
+        iconSrc: checkDesignString(d.icon, d.id, "icon"),
       }));
     }
     return readdirSync(SOURCE)
