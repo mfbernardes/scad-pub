@@ -59,7 +59,7 @@ Collapsed parameters remain in the DOM and are still sent to OpenSCAD.
 
 ## Font selectors (`// @font`)
 
-Mark a string parameter as a font-family selector so the UI can check its value against the available font set (bundled fonts ∪ imported ones, matched by family name) and offer an inline import / fallback affordance when the family isn't loaded:
+Mark a string parameter as a font selector. In the app it renders as a **font dropdown** listing every face the renderer can actually use — the bundled fonts plus any the user imported — under friendly names read from the font files themselves ("Liberation Sans Bold", never the raw Fontconfig `Family:style=Style` string), with an **Import font…** action at the bottom. The list updates the moment a font is imported.
 
 ```scad
 // Lettering face.
@@ -77,7 +77,7 @@ It applies to both **free-text** string params and `// [..]` enum **dropdowns** 
 font = "DIN 32986:style=Regular"; // ["DIN 32986:style=Regular", "Liberation Sans:style=Bold"]
 ```
 
-Annotating the dropdown lets a design keep the native OpenSCAD `// [..]` choice list — which the **desktop** Customizer renders as a dropdown — while still getting the in-app availability check and import affordance when a chosen face (e.g. a not-bundled, license-restricted font) isn't loaded. For a flagged dropdown the one-click fallback switches to the first listed choice whose family *is* loaded (an off-list value can't be shown in a dropdown). See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.
+The `// [..]` choice list is what the **desktop** Customizer renders as a dropdown; in the app, listed faces that aren't loaded (e.g. a not-bundled, license-restricted font) stay visible and selectable in a clearly-marked "Needs a font file" group, so a design can keep suggesting its preferred face. When the *selected* face's family isn't loaded, an inline hint appears beneath the control with the two fixes: **Import font…**, or a one-click switch to a loaded family (for a flagged dropdown, the first listed choice whose family *is* loaded). See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.
 
 ## Viewer info (`// @info`)
 

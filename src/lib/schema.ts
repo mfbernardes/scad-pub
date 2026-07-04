@@ -63,6 +63,17 @@ export function validateSchema(raw: unknown): Schema {
     (!Array.isArray(s.fontFamilies) || !s.fontFamilies.every((f) => typeof f === "string"))
   )
     fail("'fontFamilies' must be an array of strings");
+  if (
+    s.fontFaces !== undefined &&
+    (!Array.isArray(s.fontFaces) ||
+      !s.fontFaces.every(
+        (f) =>
+          !!f &&
+          typeof (f as Record<string, unknown>).family === "string" &&
+          typeof (f as Record<string, unknown>).style === "string"
+      ))
+  )
+    fail("'fontFaces' must be an array of { family, style } strings");
   if (!Array.isArray(s.designs) || s.designs.length === 0)
     fail("'designs' must be a non-empty array");
   for (const d of s.designs) checkDesign(d);

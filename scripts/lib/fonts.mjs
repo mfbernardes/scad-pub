@@ -3,10 +3,10 @@
 // in the shared src/lib/fontNameTable.mjs so this build code and the browser's
 // src/lib/fonts.ts run byte-identical parsing (the app matches a design's font
 // against this build-time data — the two must never disagree).
-import { fontFamilyNames } from "../../src/lib/fontNameTable.mjs";
+import { fontFaces, fontFamilyNames } from "../../src/lib/fontNameTable.mjs";
 import { xmlEscape } from "./config-parsers.mjs";
 
-export { fontFamilyNames };
+export { fontFaces, fontFamilyNames };
 
 // Validate the optional `fontFallback` config key: a family name pinned as the
 // deterministic last-resort match in fonts.conf so an imported font can never

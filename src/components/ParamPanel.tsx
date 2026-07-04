@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
+import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
@@ -46,6 +47,8 @@ interface Props {
   availableFontFamilies?: Set<string>;
   /** A bundled family to offer as a one-click fallback for a missing font. */
   fontSuggestion?: string | null;
+  /** Faces the renderer can use (bundled ∪ imported), for the font selector. */
+  installedFonts?: InstalledFont[];
   panelSide: "left" | "right";
   panelDefaultOpen: boolean;
   /** Show the underlying OpenSCAD variable name beside each label. */
@@ -66,6 +69,7 @@ export function ParamPanel({
   loadedFiles,
   availableFontFamilies,
   fontSuggestion,
+  installedFonts,
   panelSide,
   panelDefaultOpen,
   showVarName,
@@ -227,7 +231,7 @@ export function ParamPanel({
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <ParamSearch value={search} onChange={setSearch} onClear={() => setSearch("")} />
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} />
           </div>
         </TabsContent>
 

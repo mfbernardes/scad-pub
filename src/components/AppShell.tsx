@@ -37,7 +37,13 @@ import { DesignPicker } from "./DesignPicker";
 import { BarBrand } from "./BarBrand";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { parseComputedInfo } from "../lib/computedInfo";
-import { fontFamilyNames, normalizeFamily } from "../lib/fonts";
+import {
+  fontFaces,
+  fontFamilyNames,
+  mergeInstalledFonts,
+  normalizeFamily,
+  type FontFaceInfo,
+} from "../lib/fonts";
 import { isFontFile } from "../openscad/renderArgs";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
@@ -160,6 +166,17 @@ export const AppShell = memo(function AppShell({
   // A bundled family to offer as a one-click fallback when the selected font
   // isn't loaded. Always available, so it can never itself be missing.
   const fontSuggestion = (schema.fontFamilies ?? [])[0] ?? null;
+  // Every face the renderer can actually use, display-ordered: the bundled
+  // faces (parsed at build time into schema.fontFaces) merged with the faces of
+  // any imported font — so the font selector's list updates the moment a font
+  // is imported. Feeds ParamForm's FontSelect.
+  const installedFonts = useMemo(() => {
+    const imported: FontFaceInfo[] = [];
+    for (const [name, bytes] of Object.entries(userFiles)) {
+      if (isFontFile(name)) imported.push(...fontFaces(bytes));
+    }
+    return mergeInstalledFonts(schema.fontFaces ?? [], imported);
+  }, [schema.fontFaces, userFiles]);
 
   // Parse the log once here; the OutputConsole (Notices tab count chips) reads
   // this derived data instead of re-parsing it.
@@ -314,6 +331,7 @@ export const AppShell = memo(function AppShell({
             loadedFiles={loadedFiles}
             availableFontFamilies={availableFontFamilies}
             fontSuggestion={fontSuggestion}
+            installedFonts={installedFonts}
             panelSide={panelSide}
             panelDefaultOpen={panelDefaultOpen}
             showVarName={showVarName}
@@ -425,6 +443,7 @@ export const AppShell = memo(function AppShell({
                 loadedFiles={loadedFiles}
                 availableFontFamilies={availableFontFamilies}
                 fontSuggestion={fontSuggestion}
+                installedFonts={installedFonts}
                 onActivate={expand}
                 showVarName={showVarName}
                 autoRender={autoRender}

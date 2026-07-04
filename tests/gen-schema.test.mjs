@@ -1055,6 +1055,9 @@ test("a real build records the bundled fonts' embedded families + writes fonts.c
     outPublicDir: join(out, "public"),
   });
   assert.deepEqual(schema.fontFamilies, ["Liberation Sans"]);
+  // The face description ({ family, style }) rides along for the app's font
+  // selector — REAL_TTF is the Liberation Sans regular face.
+  assert.deepEqual(schema.fontFaces, [{ family: "Liberation Sans", style: "Regular" }]);
   // fonts.conf is generated into the served tree, with the configured fallback.
   const conf = readFileSync(join(out, "public", "fonts", "fonts.conf"), "utf-8");
   assert.ok(conf.includes("<string>Liberation Sans</string>"));

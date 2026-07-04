@@ -30,7 +30,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { WASM_VERSION } from "./wasm-version.mjs";
 import { computeRenderHash } from "./lib/hash.mjs";
-import { fontFamilyNames, parseFontFallback, renderFontsConf } from "./lib/fonts.mjs";
+import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "./lib/fonts.mjs";
 import { humanize, parseParams } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
 import { generatePwaAssets } from "./lib/pwa-assets.mjs";
@@ -188,11 +188,15 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     writeFileSync(join(outPublicDir, "fonts", "fonts.conf"), renderFontsConf(FONT_FALLBACK));
   }
   // The bundled fonts' real embedded family names, so the app can decide font
-  // availability by family rather than filename. Read from the copied files in
-  // the served tree; only meaningful in a real build (outPublicDir present).
+  // availability by family rather than filename — plus their face descriptions
+  // ({ family, style }), which the app's font selector lists under friendly
+  // names. Read from the copied files in the served tree; only meaningful in a
+  // real build (outPublicDir present).
   const FONT_FAMILIES = [];
+  const FONT_FACES = [];
   if (outPublicDir) {
     const seen = new Set();
+    const seenFaces = new Set();
     for (const name of FONTS) {
       let buf;
       try {
@@ -207,8 +211,18 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
           FONT_FAMILIES.push(fam);
         }
       }
+      for (const face of fontFaces(buf)) {
+        const key = `${face.family.toLowerCase()} ${face.style.toLowerCase()}`;
+        if (!seenFaces.has(key)) {
+          seenFaces.add(key);
+          FONT_FACES.push(face);
+        }
+      }
     }
     FONT_FAMILIES.sort((a, b) => a.localeCompare(b));
+    FONT_FACES.sort(
+      (a, b) => a.family.localeCompare(b.family) || a.style.localeCompare(b.style)
+    );
   }
 
   // ── Appearance & UI behaviour ─────────────────────────────────────────────
@@ -470,6 +484,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     render: RENDER,
     fonts: FONTS,
     fontFamilies: FONT_FAMILIES,
+    fontFaces: FONT_FACES,
     fileImport: FILE_IMPORT,
     popup: POPUP,
     notices: NOTICES,
