@@ -2,9 +2,10 @@
 // dist/ in-process, drives headless Chromium at a fixed viewport, and compares
 // a full-page screenshot of each theme against a committed baseline.
 //
-// The WebGL viewer and the volatile status/log text are masked, so the check
-// covers the deterministic chrome (top bar, parameter form, action row) only —
-// the 3D canvas is non-deterministic across GPUs and is exercised by smoke.mjs.
+// The WebGL viewer and everything whose presence/content depends on render
+// timing (see MASK_CSS) are masked, so the check covers the deterministic
+// chrome (top bar, parameter form, action row) only — the 3D canvas is
+// non-deterministic across GPUs and is exercised by smoke.mjs.
 //
 // Baselines are environment-pinned (font rendering differs across OSes), like
 // the OpenSCAD reference images in tests/. Regenerate with `--update` (or the
@@ -23,11 +24,27 @@ const THEMES = ["light", "dark"];
 // Allow a small fraction of pixels to differ (sub-pixel AA jitter) before failing.
 const MAX_DIFF_RATIO = 0.01;
 
-// Hide everything that isn't deterministic so the baseline is stable run-to-run:
-// the WebGL canvas + its overlay, and the render-time/log text.
+// Hide everything that isn't deterministic so the baseline is stable run-to-run.
+// Each selector is a literal class hook the app keeps for these scripts (see
+// CLAUDE.md); the volatile render-timing text itself (`.render-status`) is
+// sr-only, so it never needs masking.
 const MASK_CSS = `
+  /* WebGL canvas + its loading/rendering overlay: pixel output differs across
+     GPUs/drivers, and whether the spinner is still up depends on render timing
+     relative to the screenshot. Exercised by smoke.mjs instead. */
   .viewer, .viewer-overlay { visibility: hidden !important; }
-  .status, .log, .diagnostics { visibility: hidden !important; }
+  /* Measurements panel (bounding box + @info values): appears only once a
+     render lands, so its presence depends on render timing. */
+  .dimension-info { visibility: hidden !important; }
+  /* Output console: auto-opens when the default design's render surfaces its
+     notices — open/closed depends on render timing — and its Log tab carries
+     run-dependent OpenSCAD output. display:none (not visibility) so an opened
+     console also doesn't shift the layout relative to a closed one. */
+  .output-console { display: none !important; }
+  /* Output bell: its corner wears a render-status dot (pulsing while a render
+     runs) or a pending-notice count badge once the render surfaces notices —
+     both change with render progress. */
+  .command-bar__output { visibility: hidden !important; }
 `;
 
 async function shoot(page, base, theme) {
