@@ -4,7 +4,7 @@
 // and passed in.
 import { useState } from "react";
 import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
-import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { CountBadges } from "./CountBadges";
 import { IconButton } from "./IconButton";
@@ -43,11 +43,11 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose, classNa
       <Tabs value={tab} onValueChange={setTab} className="gap-0">
         <div className="flex shrink-0 items-stretch border-b">
           <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
-            <TabsTrigger value="notices" className={cn(underlineTabTrigger, "px-3")}>
+            <TabsTrigger value="notices" className={cn(chipTabTrigger, "px-3")}>
               Notices
               <CountBadges badges={badges} />
             </TabsTrigger>
-            <TabsTrigger value="log" className={cn(underlineTabTrigger, "px-3")}>
+            <TabsTrigger value="log" className={cn(chipTabTrigger, "px-3")}>
               Log
             </TabsTrigger>
           </TabsList>

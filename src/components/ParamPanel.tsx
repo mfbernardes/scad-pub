@@ -17,7 +17,7 @@ import { PresetPicker } from "./PresetPicker";
 import { ParamSearch } from "./ParamSearch";
 import { IconButton } from "./IconButton";
 import { PanelFooter } from "./PanelFooter";
-import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
   Menu as MenuIcon,
@@ -27,7 +27,7 @@ import {
 
 type PanelTab = "presets" | "params" | "files";
 
-const panelTabClass = cn(underlineTabTrigger, "flex-1");
+const panelTabClass = cn(chipTabTrigger, "flex-1");
 
 const PANEL_WIDTH_KEY = ns("panel.width");
 const PANEL_OPEN_KEY = ns("panel.open");

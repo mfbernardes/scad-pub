@@ -11,7 +11,7 @@ import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
 import { ParamSearch } from "./ParamSearch";
 import { PanelFooter } from "./PanelFooter";
-import { Tabs, TabsContent, TabsList, TabsTrigger, underlineTabTrigger } from "./ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 
 type Tab = "params" | "presets" | "files";
@@ -73,7 +73,7 @@ export function SheetTabs({
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 150);
 
-  const triggerClass = cn(underlineTabTrigger, "flex-1");
+  const triggerClass = cn(chipTabTrigger, "flex-1");
 
   return (
     <Tabs
