@@ -10,17 +10,14 @@
 import { readFile, mkdtemp, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
 import { tmpdir } from "node:os";
 import { startServer } from "./serve-dist.mjs";
-
-// Render status ("Render status: 123 ms" / "… (cached)" / "… Failed (exit N)")
-// rides on the Output bell, which doubles as the status indicator: the detail
-// lives in a polite live region carrying the `.render-status` hook. Both layouts
-// render the bell (the inactive one is CSS-hidden but still in the DOM), and both
-// carry the same text — so read the first match.
-const statusText = (page) =>
-  page.locator(".render-status").first().textContent();
+import {
+  launchChromium,
+  renderStatusText,
+  waitRendered as waitRenderDone,
+  selectDesign as pickDesign,
+} from "./lib/browser.mjs";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
@@ -43,11 +40,8 @@ async function resetDefaults(page) {
 }
 
 async function waitRendered(page, label) {
-  await page.waitForFunction(
-    () => /\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
-    { timeout: 60000 }
-  );
-  console.log(`  ${label ?? "default"}: ${((await statusText(page)) ?? "").replace(/^Render status: /, "").trim()} ✅`);
+  await waitRenderDone(page);
+  console.log(`  ${label ?? "default"}: ${((await renderStatusText(page)) ?? "").replace(/^Render status: /, "").trim()} ✅`);
 }
 
 // Switch design and wait for the fresh render.
@@ -57,33 +51,14 @@ async function waitRendered(page, label) {
 const designLabels = {};
 
 async function selectDesign(page, id) {
-  if (id !== undefined) {
-    const trigger = page.locator('.command-bar__design-picker [data-slot="select-trigger"]');
-    if (await trigger.count()) {
-      await trigger.click();
-      await page.getByRole("option", { name: designLabels[id] ?? id, exact: true }).click();
-      // Clear the cached "ok" state so waitRendered can't pass on prior render
-      await page
-        .waitForFunction(
-          () => !/\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
-          { timeout: 5000 }
-        )
-        .catch(() => {});
-    }
-  }
-  // Every design renders once on first view; if a "Render now" button is present
-  // (auto-render off + pending changes), click it to be safe.
-  const renderBtn = page.getByRole("button", { name: "Render now" }).first();
-  if (await renderBtn.count()) await renderBtn.click().catch(() => {});
+  await pickDesign(page, id === undefined ? undefined : designLabels[id] ?? id);
   await waitRendered(page, id);
 }
 
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
-  const browser = await chromium.launch({
-    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-  });
+  const browser = await launchChromium();
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));

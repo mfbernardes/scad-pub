@@ -12,10 +12,10 @@
 // first run, when no baseline exists yet). Run after `npm run build`.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import { startServer } from "./serve-dist.mjs";
+import { launchChromium, gotoWithTheme, dismissWelcomePopup } from "./lib/browser.mjs";
 
 const UPDATE = process.argv.includes("--update");
 const BASELINE_DIR = fileURLToPath(new URL("../tests/screenshots", import.meta.url));
@@ -48,18 +48,10 @@ const MASK_CSS = `
 `;
 
 async function shoot(page, base, theme) {
-  // Load once to establish the origin (localStorage isn't available on
-  // about:blank), force the theme, then reload so it applies before paint.
-  await page.goto(base, { waitUntil: "load" });
-  await page.evaluate((t) => localStorage.setItem("scadpub.theme", t), theme);
-  await page.reload({ waitUntil: "load" });
+  await gotoWithTheme(page, base, theme);
   // Dismiss the first-visit welcome popup if present so it doesn't cover the
   // panel (and would block the tab click below).
-  const dialog = page.getByRole("dialog");
-  if (await dialog.count()) {
-    await dialog.getByRole("button", { name: /^OK$/ }).click().catch(() => {});
-    await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
-  }
+  await dismissWelcomePopup(page);
   // The panel opens on the Presets tab; switch to Parameters so the baseline
   // keeps exercising the param form (a richer regression surface).
   await page.getByRole("tab", { name: "Parameters" }).first().click().catch(() => {});
@@ -106,9 +98,7 @@ function compare(theme, actual) {
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
-  const browser = await chromium.launch({
-    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-  });
+  const browser = await launchChromium();
   const page = await browser.newPage({
     viewport: { width: 1280, height: 900 },
     deviceScaleFactor: 1,
