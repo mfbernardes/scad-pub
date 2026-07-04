@@ -120,7 +120,7 @@ async function captureViewport(context, base, kind, theme) {
     await sheetTo(page, "full");
     for (const [n, tab] of [
       ["06", "Presets"],
-      ["07", "Parameters"],
+      ["07", "Customize"],
       ["08", "Files"],
     ]) {
       await page.getByRole("tab", { name: tab }).click().catch(() => {});
@@ -134,7 +134,7 @@ async function captureViewport(context, base, kind, theme) {
     await page.getByRole("tab", { name: "Presets" }).first().click().catch(() => {});
     await sleep(300);
     await shot(page, dir, "04-presets");
-    await page.getByRole("tab", { name: "Parameters" }).first().click().catch(() => {});
+    await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});
     await sleep(200);
   }
 
@@ -142,8 +142,8 @@ async function captureViewport(context, base, kind, theme) {
   // the mobile top bar and the desktop CommandBar.
   const outputSel =
     kind === "mobile"
-      ? '.mobile-top-bar__output[aria-label^="Open output console"]'
-      : '.command-bar__output[aria-label^="Open output console"]';
+      ? '.mobile-top-bar__output[aria-label^="Open messages"]'
+      : '.command-bar__output[aria-label^="Open messages"]';
   const consoleName = kind === "mobile" ? "09-output-console" : "05-output-console";
   await page.locator(outputSel).click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 5000 }).catch(() => {});
