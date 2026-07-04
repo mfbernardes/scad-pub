@@ -4,8 +4,8 @@
 // + PNG export work via the UI. Design-specific checks run only when that design
 // is present in the built config: the example "tag" design exercises conditional
 // visibility (@showIf/@collapsed) and the OpenSCAD-output notice/assert badges;
-// a "signage" design, when configured, exercises the textmetrics notice and
-// @showIf arrow_style. Finally runs axe-core to guard against serious/critical
+// a "signage" design, when configured, exercises @showIf arrow_style. Finally
+// runs axe-core to guard against serious/critical
 // accessibility regressions. Run after `npm run build`.
 import { readFile, mkdtemp, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -102,24 +102,28 @@ async function main() {
     );
     const designs = schema.designs ?? [];
     for (const d of designs) designLabels[d.id] = d.label;
+    // Panel tab names are config-overridable (ui.presetsLabel/parametersLabel).
+    const presetsTabName = schema.ui?.presetsLabel || "Presets";
+    const paramsTabName = schema.ui?.parametersLabel || "Parameters";
     const ids = designs.map((d) => d.id);
     console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);
     await waitRendered(page, ids[0]);
 
-    // Configurable popup (schema.popup): the example config shows a dismissible
-    // welcome notice on load. It overlays the app behind a modal backdrop that
-    // intercepts pointer events, so dismiss it before driving the UI — ticking
-    // "Don't show this again" persists the dismissal so it stays gone across the
-    // reloads the later checks perform.
+    // Configurable popup (schema.popup): a welcome notice on load. It overlays
+    // the app behind a modal backdrop that intercepts pointer events, so dismiss
+    // it before driving the UI — ticking "Don't show this again" (when the mode
+    // offers it) persists the dismissal so it stays gone across the reloads the
+    // later checks perform. The dialog's accessible name is the configured
+    // header, so look it up from the schema rather than hardcoding one config's.
     console.log("=== welcome popup ===");
-    const popup = page.getByRole("dialog", { name: /Welcome to ScadPub/i });
-    if (await popup.count()) {
-      check(true, "welcome popup shown on load");
-      check(
-        (await popup.getByRole("link", { name: /GitHub/i }).count()) > 0,
-        "popup body renders its link"
-      );
-      await popup.getByRole("checkbox").check();
+    if (schema.popup) {
+      const popup = page.getByRole("dialog", { name: schema.popup.header });
+      check((await popup.count()) > 0, "welcome popup shown on load");
+      if (/\]\(/.test(schema.popup.body ?? "")) {
+        check((await popup.getByRole("link").count()) > 0, "popup body renders its link");
+      }
+      const dontShow = popup.getByRole("checkbox");
+      if (await dontShow.count()) await dontShow.check();
       await popup.getByRole("button", { name: /^OK$/ }).click();
       await popup.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
       check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
@@ -240,9 +244,9 @@ async function main() {
     console.log("=== bundled presets ===");
     let presetTested = false;
     const gotoPresets = () =>
-      page.getByRole("tab", { name: "Presets" }).first().click().catch(() => {});
+      page.getByRole("tab", { name: presetsTabName }).first().click().catch(() => {});
     const gotoParams = () =>
-      page.getByRole("tab", { name: "Parameters" }).first().click().catch(() => {});
+      page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
     for (const id of ids) {
       await selectDesign(page, id);
       await gotoPresets();
@@ -294,13 +298,13 @@ async function main() {
       .locator('.preset-picker input[type="file"]')
       .first()
       .setInputFiles({ name: "presets.json", mimeType: "application/json", buffer: Buffer.from(setsFile) });
-    await page.waitForTimeout(200);
-    check(
-      (await page
-        .locator('[aria-label="Your saved presets"] .preset-picker__item', { hasText: "Imported Set" })
-        .count()) >= 1,
-      "imported parameterSets file added a saved preset"
+    // The import parses and saves asynchronously; wait for the item to list.
+    const importedItem = page.locator(
+      '[aria-label="Your saved presets"] .preset-picker__item',
+      { hasText: "Imported Set" }
     );
+    await importedItem.first().waitFor({ state: "attached", timeout: 3000 }).catch(() => {});
+    check((await importedItem.count()) >= 1, "imported parameterSets file added a saved preset");
     await gotoParams();
 
     // Export 3MF + PNG on the first design.
@@ -356,11 +360,11 @@ async function main() {
     );
 
     // @showIf + @collapsed — exercised on the example "tag" design when present.
-    if (ids.includes("tag")) {
+    if (ids.includes("tag") && (schema.ui?.showVarName ?? true)) {
       console.log("=== conditional visibility (@showIf, tag) ===");
       await selectDesign(page, "tag");
       // Back to the Parameters tab (the file-import test left the panel on Files).
-      await page.getByRole("tab", { name: "Parameters" }).click().catch(() => {});
+      await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
 
       // @collapsed: the "Quality" group starts folded; its params are hidden
       // until the group header is opened.
@@ -444,14 +448,14 @@ async function main() {
       await waitRendered(page, "tag");
     }
 
-    // textmetrics + @showIf arrow_style — exercised on "signage" when present.
-    if (ids.includes("signage")) {
-      console.log("=== signage: textmetrics + @showIf arrow_style ===");
+    // @showIf arrow_style — exercised on a "signage" design when present. (No
+    // notice expectation here: a well-tuned config renders its defaults
+    // advisory-free; the notice/assert badge machinery is covered by "tag".)
+    // Params are located by their `code.param-var` name tag, which only renders
+    // when ui.showVarName is on — skip the interaction otherwise.
+    if (ids.includes("signage") && (schema.ui?.showVarName ?? true)) {
+      console.log("=== signage: @showIf arrow_style ===");
       await selectDesign(page, "signage");
-      // Open the output console and switch to the Log tab.
-      await openConsole(page);
-      await page.click('.output-console__tab:has-text("Log")').catch(() => {});
-      check(/between characters/.test((await page.textContent(".output-console").catch(() => "")) || ""), "textmetrics notice present");
       // arrow_style is relevant only once an arrow is chosen (`@showIf arrow != none`);
       // the signage default is arrow = "none", so it starts hidden.
       const arrowStyle = page.locator("code.param-var", { hasText: /^arrow_style$/ });
