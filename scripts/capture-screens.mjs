@@ -9,9 +9,10 @@
 // through all three detents (peek/half/full) and each of its tabs (Presets,
 // Parameters, Files). Output lives under the gitignored screenshots/ dir. Needs
 // Chromium (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or a `playwright install chromium`).
-import { mkdirSync, rmSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { zipSync } from "fflate";
 import { chromium } from "playwright";
 import { startServer } from "./serve-dist.mjs";
 
@@ -219,10 +220,18 @@ async function main() {
     await browser.close();
     server.close();
   }
-  // Bundle into a single zip (paths relative to screenshots/ → captures/...).
-  execFileSync("zip", ["-r", "-q", ZIP_PATH, "captures"], {
-    cwd: fileURLToPath(new URL("../screenshots", import.meta.url)),
-  });
+  // Bundle into a single zip (entries relative to screenshots/ → captures/...).
+  // Pure Node via fflate — no system `zip` binary needed (same principle as
+  // fetch-wasm.mjs, which unzips with fflate).
+  const files = {};
+  for (const entry of readdirSync(OUT_DIR, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const abs = join(entry.parentPath, entry.name);
+    // Zip entry names always use forward slashes, whatever the host separator.
+    const rel = abs.slice(OUT_DIR.length + 1).split("\\").join("/");
+    files[`captures/${rel}`] = readFileSync(abs);
+  }
+  writeFileSync(ZIP_PATH, zipSync(files));
   console.log(`\nWrote ${ZIP_PATH}`);
 }
 
