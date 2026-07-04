@@ -3,7 +3,7 @@
 // per-case (it's a configurable global in Node).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shareUrl, shareFile } from "../src/lib/share.ts";
+import { shareUrl, shareFile, shareFileOrFallback } from "../src/lib/share.ts";
 
 const orig = Object.getOwnPropertyDescriptor(globalThis, "navigator");
 function withNavigator(nav, fn) {
@@ -64,4 +64,38 @@ test("shareFile: shared when canShare accepts the file", async () => {
   );
   assert.equal(out, "shared");
   assert.deepEqual(got, { files: [fakeFile], title: "m.3mf" });
+});
+
+test("shareFileOrFallback: shared → no fallback", async () => {
+  let fell = false;
+  const out = await withNavigator(
+    { share: async () => {}, canShare: () => true },
+    () => shareFileOrFallback(fakeFile, () => { fell = true; })
+  );
+  assert.equal(out, "shared");
+  assert.equal(fell, false);
+});
+
+test("shareFileOrFallback: cancelled → no fallback (user declined)", async () => {
+  let fell = false;
+  const out = await withNavigator(
+    { share: async () => { throw abort(); }, canShare: () => true },
+    () => shareFileOrFallback(fakeFile, () => { fell = true; })
+  );
+  assert.equal(out, "cancelled");
+  assert.equal(fell, false);
+});
+
+test("shareFileOrFallback: unsupported and failed both run the fallback", async () => {
+  let fell = 0;
+  const unsupported = await withNavigator({}, () =>
+    shareFileOrFallback(fakeFile, () => { fell++; })
+  );
+  assert.equal(unsupported, "fell-back");
+  const failed = await withNavigator(
+    { share: async () => { throw new Error("nope"); }, canShare: () => true },
+    () => shareFileOrFallback(fakeFile, () => { fell++; })
+  );
+  assert.equal(failed, "fell-back");
+  assert.equal(fell, 2);
 });

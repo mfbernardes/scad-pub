@@ -11,7 +11,7 @@ import {
 } from "./lib/presets";
 import { readInitialState, persistState } from "./lib/urlState";
 import { download, downloadBlob } from "./lib/download";
-import { shareUrl, shareFile } from "./lib/share";
+import { shareUrl, shareFileOrFallback } from "./lib/share";
 import { useTheme } from "./lib/theme";
 import { useServiceWorkerUpdate } from "./lib/swUpdate";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
@@ -174,14 +174,12 @@ export default function App() {
     const blob = new Blob([result.stl as BlobPart], { type: `model/${schema.format}` });
     // Prefer the native share sheet on capable devices (send straight to a
     // slicer / Files / AirDrop); fall back to a plain download otherwise.
-    const outcome = await shareFile(new File([blob], name, { type: blob.type }), name);
+    const outcome = await shareFileOrFallback(
+      new File([blob], name, { type: blob.type }),
+      () => downloadBlob(blob, name)
+    );
     if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
-    if (outcome === "shared") {
-      setAnnouncement(`Shared ${name}`);
-    } else {
-      downloadBlob(blob, name);
-      setAnnouncement(`Exported ${name}`);
-    }
+    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
     offerInstallHint();
   }, [result, design.id, offerInstallHint]);
 
@@ -190,14 +188,12 @@ export default function App() {
     // The snapshot is a data: URL — turn it into a File so it can go to the
     // native share sheet (like the model export); fall back to a download.
     const blob = await (await fetch(url)).blob();
-    const outcome = await shareFile(new File([blob], name, { type: blob.type || "image/png" }), name);
+    const outcome = await shareFileOrFallback(
+      new File([blob], name, { type: blob.type || "image/png" }),
+      () => download(url, name)
+    );
     if (outcome === "cancelled") return;
-    if (outcome === "shared") {
-      setAnnouncement(`Shared ${name}`);
-    } else {
-      download(url, name);
-      setAnnouncement(`Saved ${name}`);
-    }
+    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Saved ${name}`);
   }, [design.id]);
 
   const copyLink = useCallback(async () => {
