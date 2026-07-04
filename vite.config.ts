@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { headStyleInjection } from "./src/lib/configCss";
+import { headStyleInjection, escapeHtml } from "./src/lib/configCss";
 
 import { cloudflare } from "@cloudflare/vite-plugin";
 
@@ -53,7 +53,15 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
   const darkColor = s.themeColor ?? "#1f2229";
   // Light theme-color (panel surface in light mode).
   const lightColor = s.themeColorLight ?? "#ffffff";
-  const appleTitle = s.shortName ?? s.title ?? "ScadPub";
+  // Free-form config strings are HTML-escaped here (they can't be
+  // charset-validated like the colours below), and interpolated through
+  // function replacers so `$`-sequences in the text are never treated as
+  // substitution patterns.
+  const title = escapeHtml(s.title ?? "ScadPub");
+  const description = escapeHtml(
+    s.description ?? "Configure and export designs in your browser."
+  );
+  const appleTitle = escapeHtml(s.shortName ?? s.title ?? "ScadPub");
   // iOS launch images — one <link> per generated splash (empty string when none).
   // `media`/`href` are fully derived by gen-schema from a fixed device table
   // (integers) and the `apple-splash-<w>x<h>.png` filename — no config/user input
@@ -67,19 +75,18 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
       order: "post",
       handler(html) {
         return html
-          .replace(/%APP_TITLE%/g, s.title ?? "ScadPub")
+          .replace(/%APP_TITLE%/g, () => title)
           .replace(/%APP_LANG%/g, s.lang ?? "en")
           .replace(/%APP_DIR%/g, s.dir ?? "ltr")
-          .replace(
-            /%APP_DESCRIPTION%/g,
-            s.description ?? "Configure and export designs in your browser."
-          )
+          .replace(/%APP_DESCRIPTION%/g, () => description)
           .replace(/%APP_THEME_COLOR_DARK%/g, darkColor)
           .replace(/%APP_THEME_COLOR_LIGHT%/g, lightColor)
           // Per-config theme storage key for the pre-paint script — matches
           // ns("theme") in src/lib/theme.ts (default id → "scadpub.theme").
+          // The id lands inside the inline script's string literal; gen-schema
+          // charset-validates it (checkId) so it can't break out.
           .replace(/%APP_THEME_KEY%/g, `${s.id ?? "scadpub"}.theme`)
-          .replace(/%APP_APPLE_TITLE%/g, appleTitle)
+          .replace(/%APP_APPLE_TITLE%/g, () => appleTitle)
           .replace(/%APP_APPLE_SPLASH%/g, () => appleSplashLinks)
           // Insert before </head> via a replacer so $-sequences in colour values
           // (there shouldn't be any) are never treated as substitution patterns.

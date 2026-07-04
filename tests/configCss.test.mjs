@@ -4,7 +4,7 @@
 // Vite. The module is pure (no imports), so Node's type-stripping loads it as-is.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { colorStyle, headStyleInjection } from "../src/lib/configCss.ts";
+import { colorStyle, escapeHtml, headStyleInjection } from "../src/lib/configCss.ts";
 
 test("colorStyle returns '' when no colours are configured", () => {
   assert.equal(colorStyle(null), "");
@@ -90,4 +90,19 @@ test("headStyleInjection: double-quotes in extraCss are escaped to prevent HTML 
   // The href attribute must not contain a raw " that could break out of the attribute.
   assert.ok(!out.includes('"onload='), "raw quote must not appear in output");
   assert.match(out, /href="evil&quot;onload=&quot;alert\(1\)"/);
+});
+
+test("escapeHtml neutralises element-text and attribute breakouts", () => {
+  // Element-text context (<title>): a closing tag must not survive.
+  assert.equal(
+    escapeHtml("</title><script>alert(1)</script>"),
+    "&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
+  );
+  // Attribute context (<meta content="…">): quotes must not survive.
+  assert.equal(escapeHtml('a" onload="x'), "a&quot; onload=&quot;x");
+  assert.equal(escapeHtml("it's"), "it&#39;s");
+  // & is escaped first so entities aren't double-mangled.
+  assert.equal(escapeHtml("a & b &amp; c"), "a &amp; b &amp;amp; c");
+  // Plain text passes through untouched.
+  assert.equal(escapeHtml("Tactile Braille configurator"), "Tactile Braille configurator");
 });
