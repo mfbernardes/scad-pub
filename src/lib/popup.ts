@@ -3,6 +3,7 @@
 // app id so two configs on one origin don't share a flag, and is keyed by a
 // content hash of the popup so changing its text re-shows it to returning users.
 import { ns } from "./appId";
+import { readLocal, writeLocal } from "./safeStorage";
 import type { PopupNotice } from "../openscad/types";
 
 const KEY = "popup.seen.v1";
@@ -24,19 +25,13 @@ function contentHash(popup: PopupNotice): string {
 export function shouldShowPopup(popup: PopupNotice | null): boolean {
   if (!popup) return false;
   if (popup.mode === "always") return true;
-  try {
-    return localStorage.getItem(ns(KEY)) !== contentHash(popup);
-  } catch {
-    // Storage blocked (private mode, etc.) — fail open and show the notice.
-    return true;
-  }
+  // Storage blocked (private mode, etc.) reads as null ≠ hash — fail open and
+  // show the notice.
+  return readLocal(ns(KEY)) !== contentHash(popup);
 }
 
-/** Persist that the user has dismissed this popup, so it won't show again. */
+/** Persist that the user has dismissed this popup, so it won't show again.
+ *  Storage unavailable — the popup simply shows again next visit. */
 export function rememberPopup(popup: PopupNotice): void {
-  try {
-    localStorage.setItem(ns(KEY), contentHash(popup));
-  } catch {
-    // Storage unavailable — the popup simply shows again next visit.
-  }
+  writeLocal(ns(KEY), contentHash(popup));
 }

@@ -6,6 +6,7 @@ import type { Design, Schema } from "../openscad/types";
 import { fromPresetString } from "./scad";
 import { defaultsFor, type Values } from "./presets";
 import { ns } from "./appId";
+import { readLocal, writeLocal } from "./safeStorage";
 
 const STORE_KEY = ns("session.v1");
 
@@ -60,7 +61,7 @@ function fromHash(schema: Schema): SessionState | null {
 
 function fromStore(schema: Schema): SessionState | null {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    const raw = readLocal(STORE_KEY);
     if (!raw) return null;
     const { designId, diff, preset } = JSON.parse(raw);
     const design = findDesign(schema, designId);
@@ -99,12 +100,5 @@ export function persistState(design: Design, values: Values, preset = "") {
   if (Object.keys(diff).length) params.set("v", JSON.stringify(diff));
   if (preset) params.set("p", preset);
   history.replaceState(null, "", "#" + params.toString());
-  try {
-    localStorage.setItem(
-      STORE_KEY,
-      JSON.stringify({ designId: design.id, diff, preset })
-    );
-  } catch {
-    /* ignore storage quota / privacy mode */
-  }
+  writeLocal(STORE_KEY, JSON.stringify({ designId: design.id, diff, preset }));
 }

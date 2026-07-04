@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import schemaJson from "./generated/designs.json";
-import type { Design, ParamValue, RenderResult } from "./openscad/types";
+import type { Design, ParamValue } from "./openscad/types";
 import { validateSchema } from "./lib/schema";
-import { fileSignature, OpenSCADRunner, SupersededError } from "./openscad/runner";
-import { toScadExpr } from "./lib/scad";
 import {
   defaultsFor,
   fetchBundledPresets,
@@ -12,14 +10,17 @@ import {
   type Values,
 } from "./lib/presets";
 import { readInitialState, persistState } from "./lib/urlState";
-import { loadFiles, saveFile, deleteFile, clearFiles } from "./lib/fileStore";
 import { download, downloadBlob } from "./lib/download";
-import { shareUrl, shareFile } from "./lib/share";
+import { shareUrl, shareFileOrFallback } from "./lib/share";
 import { useTheme } from "./lib/theme";
 import { useServiceWorkerUpdate } from "./lib/swUpdate";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
 import { useOnline } from "./lib/useOnline";
+import { useRenderPipeline } from "./lib/useRenderPipeline";
+import { useFileImports } from "./lib/useFileImports";
+import { useAppNotices } from "./lib/useAppNotices";
 import { ns } from "./lib/appId";
+import { readLocal, writeLocal } from "./lib/safeStorage";
 import { toast } from "sonner";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
@@ -64,16 +65,6 @@ export default function App() {
   const [bundledPresets, setBundledPresets] = useState<ParsedSet[]>([]);
   const [userPresets, setUserPresets] = useState<string[]>(() => listPresets(design.id));
   const refreshUserPresets = useCallback(() => setUserPresets(listPresets(design.id)), [design.id]);
-  const [userFiles, setUserFiles] = useState<Record<string, Uint8Array>>({});
-  const [result, setResult] = useState<RenderResult | null>(null);
-  const [rendering, setRendering] = useState(false);
-  const [bundleStale, setBundleStale] = useState(false);
-  const [renderedKey, setRenderedKey] = useState("");
-  // The parameter values behind the *current* render, captured when it finishes.
-  // The viewer's measurements panel reads these (not the live controls) so its
-  // figures only change once a render lands, in step with the measured geometry.
-  const [renderedValues, setRenderedValues] = useState<Values>(initialState.values);
-  const [ready, setReady] = useState(false);
   // Transient user-facing confirmations (export done, link copied, …) go through
   // Sonner toasts, which provide their own polite live region for a11y. A shared
   // id means a new confirmation replaces the previous one instead of stacking.
@@ -87,26 +78,48 @@ export default function App() {
     if (remember && popup) rememberPopup(popup);
     setShowPopup(false);
   };
-  const [autoRender, setAutoRender] = useState(!design.heavy);
-  // Mirrored on every render so async work (doRender) reads the latest value
-  // without retriggering the effects that depend on it.
-  const autoRenderRef = useRef(autoRender);
-  autoRenderRef.current = autoRender;
 
-  const runnerRef = useRef<OpenSCADRunner | null>(null);
-  const lastKeyRef = useRef("");
-  if (!runnerRef.current)
-    runnerRef.current = new OpenSCADRunner({
-      onReady: () => setReady(true),
+  // File imports and the render pipeline are mutually coupled — imports feed
+  // the render key, and an import must invalidate the render cache. The ref
+  // breaks the ordering cycle: imports call the pipeline's latest invalidate
+  // through it (same latest-wins idiom as the AppActions provider).
+  const invalidateRef = useRef<() => void>(() => {});
+  const { userFiles, addFile, removeFile, clearImportedFiles } = useFileImports({
+    invalidate: useCallback(() => invalidateRef.current(), []),
+    setAnnouncement,
+  });
+
+  const {
+    result,
+    rendering,
+    ready,
+    renderedValues,
+    autoRender,
+    setAutoRender,
+    stalePreview,
+    bundleStale,
+    doRender,
+    invalidate,
+    resetForDesign,
+  } = useRenderPipeline({
+    design,
+    values,
+    userFiles,
+    initialValues: initialState.values,
+    heavyMs: HEAVY_RENDER_MS,
+    runner: {
       cacheVersion: schema.renderHash,
       cacheSize: cacheConfig?.maxEntries,
       cacheBytes: cacheConfig?.maxBytes,
       maxCacheEntryBytes: cacheConfig?.maxEntryBytes,
       persistentCache: cacheConfig?.persistent,
-    });
+    },
+    setAnnouncement,
+  });
+  invalidateRef.current = invalidate;
 
   // Switching designs resets everything design-scoped in the same event —
-  // values, result, preset selection, auto-render mode.
+  // values, preset selection, and the pipeline's render-scoped state.
   const handleDesignChange = useCallback(
     (id: string) => {
       if (id === designId) return;
@@ -114,14 +127,11 @@ export default function App() {
       if (!next) return;
       setDesignId(id);
       setValues(defaultsFor(next));
-      setResult(null);
-      setRenderedKey("");
-      lastKeyRef.current = "";
-      setAutoRender(!next.heavy);
+      resetForDesign(next);
       setPresetSel("");
       setUserPresets(listPresets(id));
     },
-    [designId]
+    [designId, resetForDesign]
   );
 
   useEffect(() => {
@@ -139,97 +149,14 @@ export default function App() {
   const setValue = useCallback((name: string, value: ParamValue) =>
     setValues((v) => ({ ...v, [name]: value })), []);
 
-  const defines = useMemo(() => {
-    const d: Record<string, string> = {};
-    for (const p of design.params)
-      d[p.name] = toScadExpr(p, values[p.name] ?? p.default);
-    return d;
-  }, [design, values]);
-  // Hash user files only when they change, not on every param edit (it scans
-  // every uploaded byte), then fold the cheap signature into the render key.
-  const fileSig = useMemo(() => fileSignature(userFiles), [userFiles]);
-  const renderKey = useMemo(
-    () => JSON.stringify({ d: design.id, defines, f: fileSig }),
-    [design.id, defines, fileSig]
-  );
-
-  const stalePreview = !autoRender && renderKey !== renderedKey;
-
-  const doRender = useCallback(
-    async () => {
-      if (renderKey === lastKeyRef.current) return;
-      setRendering(true);
-      try {
-        const r = await runnerRef.current!.render({
-          design: design.id,
-          defines,
-          userFiles,
-        });
-        lastKeyRef.current = r.ok ? renderKey : "";
-        if (r.ok) {
-          setReady(true);
-          setRenderedKey(renderKey);
-          // Snapshot the values this render was built from (defines derives from
-          // them, so doRender is recreated whenever they change) for the panel.
-          setRenderedValues(values);
-        }
-        setResult(r);
-        if (!r.ok)
-          toast.error("Render failed", {
-            id: "render-failed",
-            description: `Exit ${r.exitCode}. Open Output for details.`,
-          });
-        if (r.staleDefines?.length) setBundleStale(true);
-        setRendering(false);
-        if (r.ok && !r.cached && r.ms > HEAVY_RENDER_MS && autoRenderRef.current) {
-          setAutoRender(false);
-          setAnnouncement(
-            `Large model (${r.ms} ms) — auto-render paused. Click "Render now" after edits.`
-          );
-        }
-      } catch (e) {
-        if (e instanceof SupersededError) return;
-        lastKeyRef.current = "";
-        setRendering(false);
-      }
-    },
-    [design.id, defines, userFiles, renderKey, values]
-  );
-
-  useEffect(() => {
-    if (!autoRender) return;
-    const t = setTimeout(doRender, 400);
-    return () => clearTimeout(t);
-  }, [doRender, autoRender]);
-
-  // First view of a design always renders once, even when auto-render is off
-  // (e.g. heavy designs), so the user never faces an empty canvas. Fires when the
-  // renderer is ready and there's no result yet (initial load or design switch);
-  // skipped when auto-render is on, since the effect above already covers it.
-  useEffect(() => {
-    if (ready && !result && !rendering && !autoRenderRef.current) doRender();
-  }, [ready, result, rendering, doRender]);
-
-  useEffect(() => () => runnerRef.current?.dispose(), []);
-
-  useEffect(() => {
-    loadFiles().then((f) => {
-      if (Object.keys(f).length > 0) setUserFiles((prev) => ({ ...f, ...prev }));
-    });
-  }, []);
-
   // One-time, post-export install nudge: only when the browser actually offers
   // install, the config allows it, and we haven't shown it before. Demoted per
   // the UX plan — never a standing prompt.
   const offerInstallHint = useCallback(() => {
     if (!canInstall || installMode === "off") return;
-    try {
-      if (localStorage.getItem(INSTALL_HINT_KEY)) return;
-      localStorage.setItem(INSTALL_HINT_KEY, "1");
-    } catch {
-      /* storage unavailable — skip the hint rather than risk repeating it */
-      return;
-    }
+    if (readLocal(INSTALL_HINT_KEY)) return;
+    // Storage unavailable — skip the hint rather than risk repeating it.
+    if (!writeLocal(INSTALL_HINT_KEY, "1")) return;
     toast("Install this configurator for quick, offline access?", {
       id: "install-hint",
       duration: 12000,
@@ -244,14 +171,12 @@ export default function App() {
     const blob = new Blob([result.stl as BlobPart], { type: `model/${schema.format}` });
     // Prefer the native share sheet on capable devices (send straight to a
     // slicer / Files / AirDrop); fall back to a plain download otherwise.
-    const outcome = await shareFile(new File([blob], name, { type: blob.type }), name);
+    const outcome = await shareFileOrFallback(
+      new File([blob], name, { type: blob.type }),
+      () => downloadBlob(blob, name)
+    );
     if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
-    if (outcome === "shared") {
-      setAnnouncement(`Shared ${name}`);
-    } else {
-      downloadBlob(blob, name);
-      setAnnouncement(`Exported ${name}`);
-    }
+    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
     offerInstallHint();
   }, [result, design.id, offerInstallHint]);
 
@@ -260,43 +185,13 @@ export default function App() {
     // The snapshot is a data: URL — turn it into a File so it can go to the
     // native share sheet (like the model export); fall back to a download.
     const blob = await (await fetch(url)).blob();
-    const outcome = await shareFile(new File([blob], name, { type: blob.type || "image/png" }), name);
+    const outcome = await shareFileOrFallback(
+      new File([blob], name, { type: blob.type || "image/png" }),
+      () => download(url, name)
+    );
     if (outcome === "cancelled") return;
-    if (outcome === "shared") {
-      setAnnouncement(`Shared ${name}`);
-    } else {
-      download(url, name);
-      setAnnouncement(`Saved ${name}`);
-    }
+    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Saved ${name}`);
   }, [design.id]);
-
-  const addFile = useCallback((name: string, bytes: Uint8Array) => {
-    setUserFiles((f) => ({ ...f, [name]: bytes }));
-    void saveFile(name, bytes);
-    runnerRef.current?.clearCache();
-    lastKeyRef.current = "";
-    setAnnouncement(`File added: ${name}`);
-  }, []);
-
-  const removeFile = useCallback((name: string) => {
-    setUserFiles((f) => {
-      const next = { ...f };
-      delete next[name];
-      return next;
-    });
-    void deleteFile(name);
-    runnerRef.current?.clearCache();
-    lastKeyRef.current = "";
-    setAnnouncement(`File removed: ${name}`);
-  }, []);
-
-  const clearImportedFiles = useCallback(() => {
-    setUserFiles({});
-    void clearFiles();
-    runnerRef.current?.clearCache();
-    lastKeyRef.current = "";
-    setAnnouncement("Imported files cleared");
-  }, []);
 
   const copyLink = useCallback(async () => {
     const url = location.href;
@@ -338,37 +233,14 @@ export default function App() {
     showLicenses: showLicensesModal,
   };
 
-  // Stale-bundle (hard) and service-worker-update (soft) notices as Sonner
-  // toasts. Stable ids keep them from stacking; they persist until acted on.
-  useEffect(() => {
-    if (bundleStale)
-      toast.error("This page is running an outdated version. Reload to update.", {
-        id: "bundle-stale",
-        duration: Infinity,
-        action: { label: "Reload", onClick: forceUpdate },
-      });
-  }, [bundleStale, forceUpdate]);
-
-  useEffect(() => {
-    if (updateReady && !bundleStale)
-      toast("A new version is available.", {
-        id: "sw-update",
-        duration: Infinity,
-        action: { label: "Reload", onClick: applyUpdate },
-        cancel: { label: "Later", onClick: dismissUpdate },
-      });
-  }, [updateReady, bundleStale, applyUpdate, dismissUpdate]);
-
-  // Offline indicator: a persistent (but reassuring) toast while offline, since
-  // the cached WASM means rendering and export keep working. Clears on reconnect.
-  useEffect(() => {
-    if (!online)
-      toast("You're offline — rendering and export still work.", {
-        id: "offline",
-        duration: Infinity,
-      });
-    else toast.dismiss("offline");
-  }, [online]);
+  useAppNotices({
+    bundleStale,
+    forceUpdate,
+    updateReady,
+    applyUpdate,
+    dismissUpdate,
+    online,
+  });
 
   return (
     <>

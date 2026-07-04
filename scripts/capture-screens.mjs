@@ -9,11 +9,18 @@
 // through all three detents (peek/half/full) and each of its tabs (Presets,
 // Parameters, Files). Output lives under the gitignored screenshots/ dir. Needs
 // Chromium (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or a `playwright install chromium`).
-import { mkdirSync, rmSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
+import { zipSync } from "fflate";
 import { startServer } from "./serve-dist.mjs";
+import {
+  launchChromium,
+  gotoWithTheme,
+  dismissWelcomePopup,
+  waitRendered as waitRenderDone,
+  selectDesign as pickDesign,
+} from "./lib/browser.mjs";
 
 const OUT_DIR = fileURLToPath(new URL("../screenshots/captures", import.meta.url));
 const ZIP_PATH = fileURLToPath(new URL("../screenshots/scadpub-screenshots.zip", import.meta.url));
@@ -30,12 +37,8 @@ const VIEWPORTS = {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function waitRendered(page) {
-  await page
-    .waitForFunction(
-      () => /\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
-      { timeout: 60000 }
-    )
-    .catch(() => {});
+  // Tolerate a missing render (a shot of a loading state still has value here).
+  await waitRenderDone(page).catch(() => {});
   await sleep(600); // let the WebGL canvas paint the model
 }
 
@@ -45,17 +48,7 @@ async function shot(page, dir, name) {
 }
 
 async function selectDesign(page, kind, label) {
-  const sel =
-    kind === "mobile"
-      ? '.mobile-top-bar__center [data-slot="select-trigger"]'
-      : '.command-bar__design-picker [data-slot="select-trigger"]';
-  const trigger = page.locator(sel);
-  if (await trigger.count()) {
-    await trigger.click();
-    await page.getByRole("option", { name: label, exact: true }).click();
-  }
-  const renderBtn = page.getByRole("button", { name: "Render now" }).first();
-  if (await renderBtn.count()) await renderBtn.click().catch(() => {});
+  await pickDesign(page, label, { mobile: kind === "mobile" });
   await waitRendered(page);
 }
 
@@ -92,11 +85,8 @@ async function captureViewport(context, base, kind, theme) {
   mkdirSync(dir, { recursive: true });
   const page = await context.newPage();
 
-  // Establish the origin (localStorage isn't available on about:blank), force
-  // the theme, then reload so it applies before paint.
-  await page.goto(base, { waitUntil: "load" });
-  await page.evaluate((t) => localStorage.setItem("scadpub.theme", t), theme);
-  await page.reload({ waitUntil: "load" });
+  // Establish the origin, force the theme, then reload so it applies before paint.
+  await gotoWithTheme(page, base, theme);
   // The Output bell's status live region always renders but is visually hidden,
   // so wait for it to be attached (not visible) before polling its render state.
   await page.waitForSelector(".render-status", { state: "attached", timeout: 30000 });
@@ -105,7 +95,7 @@ async function captureViewport(context, base, kind, theme) {
   // 1. Welcome popup (config-driven schema.popup, shown on first visit).
   if (await page.locator('[role="dialog"]').count()) {
     await shot(page, dir, "01-welcome-popup");
-    await page.locator(".notice-ok").click().catch(() => {});
+    await dismissWelcomePopup(page);
     await sleep(250);
   }
 
@@ -196,9 +186,7 @@ async function main() {
   rmSync(ZIP_PATH, { force: true });
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
-  const browser = await chromium.launch({
-    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-  });
+  const browser = await launchChromium();
   try {
     for (const kind of Object.keys(VIEWPORTS)) {
       const vp = VIEWPORTS[kind];
@@ -219,10 +207,18 @@ async function main() {
     await browser.close();
     server.close();
   }
-  // Bundle into a single zip (paths relative to screenshots/ → captures/...).
-  execFileSync("zip", ["-r", "-q", ZIP_PATH, "captures"], {
-    cwd: fileURLToPath(new URL("../screenshots", import.meta.url)),
-  });
+  // Bundle into a single zip (entries relative to screenshots/ → captures/...).
+  // Pure Node via fflate — no system `zip` binary needed (same principle as
+  // fetch-wasm.mjs, which unzips with fflate).
+  const files = {};
+  for (const entry of readdirSync(OUT_DIR, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const abs = join(entry.parentPath, entry.name);
+    // Zip entry names always use forward slashes, whatever the host separator.
+    const rel = abs.slice(OUT_DIR.length + 1).split("\\").join("/");
+    files[`captures/${rel}`] = readFileSync(abs);
+  }
+  writeFileSync(ZIP_PATH, zipSync(files));
   console.log(`\nWrote ${ZIP_PATH}`);
 }
 

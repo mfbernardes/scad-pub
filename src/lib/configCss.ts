@@ -24,6 +24,20 @@ export interface ConfigChrome {
 const SAFE_NAME = /^[A-Za-z0-9_-]+$/;
 const SAFE_VALUE = /^[#a-zA-Z0-9 ,.()%/-]+$/;
 
+// HTML-escape a config string before vite.config.ts interpolates it into
+// index.html (<title> text, <meta content="…"> attributes). Covers both
+// contexts: `& < >` for element text, quotes for attribute values. Free-form
+// fields (title, description, shortName) can't be charset-validated like
+// colours or ids — escaping is the correct treatment.
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // A <style> block of the per-theme colour overrides, applied to :root (dark) and
 // :root[data-theme="light"]. The doubled `:root:root` bumps specificity above
 // index.css's own `:root` / `:root[data-theme="light"]` rules so the overrides

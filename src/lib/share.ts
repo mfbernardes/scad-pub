@@ -24,6 +24,20 @@ export async function shareUrl(url: string, title?: string): Promise<ShareOutcom
   }
 }
 
+/** Share a file via the sheet, or run the caller's save/download fallback when
+ *  sharing is unavailable or fails. A user-cancelled sheet does NOT fall back
+ *  (the user already declined) — callers stop announcing on "cancelled". */
+export async function shareFileOrFallback(
+  file: File,
+  fallback: () => void
+): Promise<"shared" | "cancelled" | "fell-back"> {
+  const outcome = await shareFile(file, file.name);
+  if (outcome === "cancelled") return "cancelled";
+  if (outcome === "shared") return "shared";
+  fallback();
+  return "fell-back";
+}
+
 /** Share a file (e.g. an exported model). "unsupported" → fall back to download. */
 export async function shareFile(file: File, title?: string): Promise<ShareOutcome> {
   if (

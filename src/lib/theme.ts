@@ -5,6 +5,7 @@
 // before first paint to avoid a flash.
 import { useEffect, useState } from "react";
 import { ns } from "./appId";
+import { readLocal, writeLocal } from "./safeStorage";
 
 export type ThemeMode = "auto" | "light" | "dark";
 export type Theme = "light" | "dark";
@@ -32,12 +33,7 @@ export function resolveTheme(mode: ThemeMode): Theme {
 }
 
 function readMode(): ThemeMode {
-  let v: string | null = null;
-  try {
-    v = localStorage.getItem(KEY);
-  } catch {
-    /* storage unavailable */
-  }
+  const v = readLocal(KEY);
   return v === "light" || v === "dark" || v === "auto" ? v : "auto";
 }
 
@@ -54,11 +50,7 @@ export function useTheme() {
 
   useEffect(() => {
     apply(resolveTheme(mode));
-    try {
-      localStorage.setItem(KEY, mode);
-    } catch {
-      /* ignore */
-    }
+    writeLocal(KEY, mode);
     if (mode !== "auto") return;
     // In auto mode, track OS changes live.
     const mq = window.matchMedia(DARK_QUERY);
