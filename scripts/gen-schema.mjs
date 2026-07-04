@@ -419,8 +419,8 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Everything in the config is resolved relative to the config file's directory.
   const CONFIG_DIR = dirname(configPath);
 
-  const identity = parseIdentity(config);
-  const { TITLE, SHORT_NAME, ID, DESCRIPTION, LANG, DIR, THEME_COLOR, THEME_COLOR_LIGHT, BG_COLOR, CATEGORIES } = identity;
+  const { TITLE, SHORT_NAME, ID, DESCRIPTION, LANG, DIR, THEME_COLOR, THEME_COLOR_LIGHT, BG_COLOR, CATEGORIES } =
+    parseIdentity(config);
 
   // ── Design sources ────────────────────────────────────────────────────────
   // `source` defaults to "." (designs live beside the config); set it to point
