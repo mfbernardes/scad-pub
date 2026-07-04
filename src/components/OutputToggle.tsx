@@ -56,11 +56,11 @@ export function OutputToggle({
         className
       )}
       onClick={onToggleOutput}
-      aria-label={`${outputOpen ? "Close" : "Open"} output console${
+      aria-label={`${outputOpen ? "Close" : "Open"} messages${
         hasNotices ? ` (${noticeCount} notice${noticeCount === 1 ? "" : "s"})` : ""
       }`}
       aria-pressed={outputOpen}
-      title="Output console — notices & log"
+      title="Messages from the design — notices & log"
     >
       <BellGlyph size={16} />
       {hasNotices ? (

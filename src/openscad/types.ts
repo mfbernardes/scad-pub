@@ -267,8 +267,8 @@ export interface UiConfig {
   install?: "auto" | "off";
   /**
    * Whether each parameter control shows the underlying OpenSCAD variable name
-   * alongside its label (default true). Shown as visually-secondary monospace
-   * text; set false to hide it entirely.
+   * alongside its label (default false — it's developer detail). Shown as
+   * visually-secondary monospace text when enabled.
    */
   showVarName?: boolean;
   /**
@@ -291,7 +291,7 @@ export interface UiConfig {
   fullscreen?: boolean;
   /** Label for the "Presets" tab/section (default "Presets"). */
   presetsLabel?: string;
-  /** Label for the "Parameters" tab/section (default "Parameters"). */
+  /** Label for the "Customize" (parameters) tab/section (default "Customize"). */
   parametersLabel?: string;
 }
 

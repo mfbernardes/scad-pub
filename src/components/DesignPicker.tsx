@@ -53,8 +53,8 @@ export function DesignPicker({ designs, value, onChange }: Props) {
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger
         size="sm"
-        aria-label="Select design"
-        className="h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-0"
+        aria-label="Choose a design"
+        className="font-display h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-0"
       >
         <SelectValue />
       </SelectTrigger>

@@ -6,6 +6,7 @@ import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
+import { useInitialTab } from "../lib/useInitialTab";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
@@ -52,10 +53,10 @@ export function SheetTabs({
   fontSuggestion,
   installedFonts,
   onActivate,
-  showVarName = true,
+  showVarName = false,
   autoRender,
   presetsLabel = "Presets",
-  parametersLabel = "Parameters",
+  parametersLabel = "Customize",
 }: Props) {
   const {
     change,
@@ -67,9 +68,11 @@ export function SheetTabs({
     clearFiles,
   } = useAppActions();
   const hasFiles = fileImport != null;
-  // Presets first (and the default tab) on mobile, then Parameters, then Files.
+  // Presets first on mobile, then Customize, then Files. Landing tab (Presets
+  // when the design ships ready-made presets, else the controls) — shared with
+  // the desktop panel via useInitialTab.
   const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
-  const [tab, setTab] = useState<Tab>("presets");
+  const [tab, setTab] = useInitialTab<Tab>(bundled.length > 0);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 150);
 

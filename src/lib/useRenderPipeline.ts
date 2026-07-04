@@ -100,16 +100,16 @@ export function useRenderPipeline({
         }
         setResult(r);
         if (!r.ok)
-          toast.error("Render failed", {
+          toast.error("That combination of settings didn't work", {
             id: "render-failed",
-            description: `Exit ${r.exitCode}. Open Output for details.`,
+            description: "Open Messages (the bell in the top bar) for details.",
           });
         if (r.staleDefines?.length) setBundleStale(true);
         setRendering(false);
         if (r.ok && !r.cached && r.ms > heavyMs && autoRenderRef.current) {
           setAutoRender(false);
           setAnnouncement(
-            `Large model (${r.ms} ms) — auto-render paused. Click "Render now" after edits.`
+            `This design takes a while to build (${(r.ms / 1000).toFixed(1)} s), so live preview is paused — press "Update" after making changes.`
           );
         }
       } catch (e) {
@@ -122,7 +122,7 @@ export function useRenderPipeline({
         // than silently stopping the spinner over a stale model.
         lastKeyRef.current = "";
         setRendering(false);
-        toast.error("Render failed", {
+        toast.error("The preview couldn't be built", {
           id: "render-failed",
           description:
             e instanceof Error ? e.message : "Unexpected renderer error.",

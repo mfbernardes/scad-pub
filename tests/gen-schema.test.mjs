@@ -562,9 +562,9 @@ test("renderHash folds in the bundled font set (glyph outlines drive text geomet
   assert.notEqual(hashWithFonts("widget.config.json"), hashWithFonts("widget-fonts.config.json"));
 });
 
-test("ui.showVarName defaults to true, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseUi(undefined).showVarName, true);
-  assert.equal(parseUi({}).showVarName, true);
+test("ui.showVarName defaults to false, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).showVarName, false);
+  assert.equal(parseUi({}).showVarName, false);
   assert.equal(parseUi({ showVarName: true }).showVarName, true);
   assert.equal(parseUi({ showVarName: false }).showVarName, false);
   assert.throws(() => parseUi({ showVarName: "yes" }), /'ui\.showVarName' must be a boolean/);
@@ -606,7 +606,7 @@ test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () =>
 
 test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
   assert.equal(parseUi(undefined).presetsLabel, "Presets");
-  assert.equal(parseUi(undefined).parametersLabel, "Parameters");
+  assert.equal(parseUi(undefined).parametersLabel, "Customize");
   assert.equal(parseUi({ presetsLabel: "  Styles  " }).presetsLabel, "Styles");
   assert.equal(parseUi({ parametersLabel: "Options" }).parametersLabel, "Options");
   assert.throws(() => parseUi({ presetsLabel: "  " }), /'ui\.presetsLabel' must be a non-empty string/);

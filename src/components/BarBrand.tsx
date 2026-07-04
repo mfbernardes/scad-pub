@@ -25,6 +25,14 @@ export function BarBrand({
       alt={schema.title}
     />
   ) : (
-    <span className={titleClassName}>{schema.title}</span>
+    // Wordmark treatment for the plain-title fallback: display face + an
+    // accent full stop — a tiny, title-agnostic brand mark that reads as
+    // deliberate design rather than a default header.
+    <span className={cn("font-display tracking-tight", titleClassName)}>
+      {schema.title}
+      <span className="text-brand" aria-hidden="true">
+        .
+      </span>
+    </span>
   );
 }

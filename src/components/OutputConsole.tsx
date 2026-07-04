@@ -38,7 +38,7 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose, classNa
     <div
       className={cn("output-console flex shrink-0 flex-col border-t bg-card", className)}
       role="region"
-      aria-label="OpenSCAD output"
+      aria-label="Messages from the design"
     >
       <Tabs value={tab} onValueChange={setTab} className="gap-0">
         <div className="flex shrink-0 items-stretch border-b">
@@ -52,7 +52,7 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose, classNa
             </TabsTrigger>
           </TabsList>
           <IconButton
-            label="Close output console"
+            label="Close messages"
             className="output-console__close my-1 ml-auto mr-[0.4rem] shrink-0 self-center"
             onClick={onClose}
           >

@@ -20,15 +20,20 @@ import { cn } from "../lib/utils";
 import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon } from "lucide-react";
 
 /* One preset row. `preset-picker__item` is a JS hook too (the roving-focus
-   querySelector below), not just styling. Hover only tints unselected rows —
-   a selected row keeps its accent fill (matches the pre-port cascade). */
+   querySelector below), not just styling. Rows read as tappable cards — a
+   ready-made preset is a choice, not a line in a list; the selected one keeps
+   its accent fill. */
 const itemClass = (isSelected: boolean) =>
   cn(
-    "preset-picker__item flex w-full items-center gap-2 rounded-(--radius-sm) border border-transparent bg-transparent px-2 py-[0.4rem] text-left text-[0.88rem]",
+    "preset-picker__item my-1 flex w-full items-center gap-2 rounded-(--radius-sm) border bg-background/40 px-3 py-2 text-left text-[0.88rem]",
     isSelected
-      ? "border-primary bg-primary text-primary-foreground"
-      : "enabled:hover:bg-muted"
+      ? "border-primary bg-primary font-medium text-primary-foreground"
+      : "enabled:hover:border-brand"
   );
+
+// Shared look for the "Ready-made" / "Saved by you" section headers.
+const sectionHeadingClass =
+  "font-display mt-2 mb-[0.2rem] px-[0.4rem] text-[0.72rem] font-semibold uppercase tracking-[0.04em] text-muted-foreground";
 
 interface Props {
   design: Design;
@@ -150,10 +155,10 @@ export function PresetPicker({
       >
         {bundled.length > 0 && (
           <section>
-            <h3 className="mt-2 mb-[0.2rem] px-[0.4rem] text-[0.72rem] font-semibold uppercase tracking-[0.04em] text-muted-foreground">
-              Bundled
+            <h3 className={sectionHeadingClass}>
+              Ready-made
             </h3>
-            <ul role="listbox" aria-label="Bundled presets">
+            <ul role="listbox" aria-label="Ready-made presets">
               {bundled.map((p) => {
                 const id = `bundled:${design.id}:${p.name}`;
                 return (
@@ -169,8 +174,8 @@ export function PresetPicker({
         )}
         {userPresets.length > 0 && (
           <section>
-            <h3 className="mt-2 mb-[0.2rem] px-[0.4rem] text-[0.72rem] font-semibold uppercase tracking-[0.04em] text-muted-foreground">
-              Yours
+            <h3 className={sectionHeadingClass}>
+              Saved by you
             </h3>
             <ul role="listbox" aria-label="Your saved presets">
               {userPresets.map((name) => {
@@ -203,7 +208,9 @@ export function PresetPicker({
           </section>
         )}
         {bundled.length === 0 && userPresets.length === 0 && (
-          <p className="px-[0.6rem] py-2 text-[0.85rem] text-muted-foreground">No presets available.</p>
+          <p className="px-[0.6rem] py-2 text-[0.85rem] text-muted-foreground">
+            No presets yet — set things up the way you like, then save them below.
+          </p>
         )}
       </div>
 
@@ -212,7 +219,7 @@ export function PresetPicker({
           <Input
             type="text"
             className="h-8 flex-1"
-            placeholder="Save current as…"
+            placeholder="Save these settings as…"
             value={saveName}
             aria-label="New preset name"
             onChange={(e) => setSaveName(e.target.value)}

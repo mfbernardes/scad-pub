@@ -87,7 +87,7 @@ export function ViewerStage({
       {(!ready || (rendering && !result)) && (
         <div className="viewer-overlay pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-[0.8rem] bg-(--overlay) text-[0.9rem] text-muted-foreground">
           <Spinner className="size-9 text-muted-foreground" />
-          <p>{ready ? "Rendering…" : "Loading renderer…"}</p>
+          <p>{ready ? "Building your preview…" : "Getting things ready…"}</p>
         </div>
       )}
 

@@ -52,7 +52,7 @@ export const CommandBar = memo(function CommandBar({
     >
       {/* Brand */}
       <div className="inline-flex items-center gap-[0.45rem] justify-self-start p-[0.2rem]">
-        <BarBrand schema={schema} theme={theme} titleClassName="text-[0.95rem] font-bold" />
+        <BarBrand schema={schema} theme={theme} titleClassName="text-[1.05rem] font-bold" />
       </div>
 
       {/* Design picker, centered in the bar */}

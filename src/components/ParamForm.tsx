@@ -1,7 +1,9 @@
 // ParamForm.tsx — renders the design's Customizer parameters grouped by section,
 // driven entirely by the generated schema. Controls are shadcn/ui (Radix):
-// Slider + Input for numbers, Checkbox for booleans, Select for enums, Input for
+// Slider + Input for numbers, Switch for booleans, Select for enums, Input for
 // strings. Each control carries an aria-label (its description) for its name.
+// Every row also carries `data-param="<var>"` — the stable hook the smoke test
+// (and extraCss) target now that variable names are hidden from users by default.
 import { memo, useEffect, useMemo, useState } from "react";
 import { Info as InfoIcon, Upload as UploadIcon } from "lucide-react";
 import type { Design, Param, ParamValue } from "../openscad/types";
@@ -13,7 +15,7 @@ import { FileInput } from "./FileInput";
 import { FontSelect } from "./FontSelect";
 import { Slider } from "./ui/slider";
 import { Input } from "./ui/input";
-import { Checkbox } from "./ui/checkbox";
+import { Switch } from "./ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import {
   Select,
@@ -29,7 +31,7 @@ interface Props {
   onChange: (name: string, value: ParamValue) => void;
   /** Optional search query to filter visible parameters by name/description. */
   search?: string;
-  /** Show the underlying OpenSCAD variable name beside each label (default true). */
+  /** Show the underlying OpenSCAD variable name beside each label (default false). */
   showVarName?: boolean;
   /**
    * Normalised set of font families the renderer can use (bundled ∪ imported).
@@ -242,8 +244,11 @@ function Control({
     case "number":
       return <NumberControl param={param} value={value} label={label} onChange={onChange} />;
     case "boolean":
+      // A switch, not a checkbox: parameter changes apply immediately (live
+      // preview), and a switch reads as "turn this feature on/off" to a
+      // non-technical user.
       return (
-        <Checkbox
+        <Switch
           checked={Boolean(value)}
           onCheckedChange={(v) => onChange(v === true)}
           aria-label={label}
@@ -303,7 +308,7 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = true, availableFontFamilies, fontSuggestion, installedFonts }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
@@ -338,17 +343,17 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
     <div className="param-form">
       {groups.length === 0 && (
         <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
-          {q ? `No parameters match “${search}”.` : "This design has no parameters."}
+          {q ? `Nothing matches “${search}”.` : "This design has nothing to customize."}
         </p>
       )}
       {groups.map(({ section, params, startOpen }) => {
         return (
           <details
-            className="param-group mb-[0.8rem] rounded-lg border px-[0.7rem] open:pb-2"
+            className="param-group mb-3 rounded-lg border bg-background/50 px-[0.8rem] open:pb-2"
             key={section}
             open={startOpen}
           >
-            <summary className="flex cursor-pointer select-none list-none items-center px-[0.2rem] py-[0.55rem] text-[0.9rem] font-semibold text-brand focus-visible:rounded-[4px]">
+            <summary className="font-display flex cursor-pointer select-none list-none items-center px-[0.2rem] py-[0.6rem] text-[0.92rem] font-semibold text-brand focus-visible:rounded-[4px]">
               {section}
             </summary>
             {params.map((p) => {
@@ -358,28 +363,39 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               const hasHelp = Boolean(p.help) && p.help !== label;
               const value = values[p.name];
               const missingFontValue = missingFont(p, value, availableFontFamilies);
+              // Toggles ride the label row (label left, switch right) — a
+              // control row below would leave a stranded switch.
+              const isToggle = p.type === "boolean";
+              const control = (
+                <Control
+                  param={p}
+                  value={value}
+                  label={label}
+                  onChange={(v) => onChange(p.name, v)}
+                  installedFonts={installedFonts}
+                />
+              );
               return (
-                <div className="param my-[0.7rem] flex flex-col gap-[0.3rem]" key={p.name}>
-                  <span className="flex items-baseline justify-between gap-2">
+                <div
+                  className="param my-3 flex flex-col gap-[0.35rem]"
+                  key={p.name}
+                  data-param={p.name}
+                >
+                  <span className={`flex ${isToggle ? "items-center" : "items-baseline"} justify-between gap-2`}>
                     {/* Label + optional info button together on the left so the
-                        var-name code pins to the right edge. */}
+                        right edge is free for the toggle / var-name code. */}
                     <span className="flex min-w-0 items-baseline gap-[0.3rem]">
                       <span className="text-foreground">{label}</span>
                       {hasHelp && <ParamHelp help={p.help} label={label} />}
+                      {showVarName && p.description && (
+                        <code className="param-var shrink-0 font-mono text-[11px] leading-[normal] text-muted-foreground">
+                          {p.name}
+                        </code>
+                      )}
                     </span>
-                    {showVarName && p.description && (
-                      <code className="param-var shrink-0 font-mono text-[11px] leading-[normal] text-muted-foreground">
-                        {p.name}
-                      </code>
-                    )}
+                    {isToggle && control}
                   </span>
-                  <Control
-                    param={p}
-                    value={value}
-                    label={label}
-                    onChange={(v) => onChange(p.name, v)}
-                    installedFonts={installedFonts}
-                  />
+                  {!isToggle && control}
                   {missingFontValue !== null && (
                     <FontMissingHint
                       family={familyOf(missingFontValue)}
