@@ -572,6 +572,20 @@ button:disabled { cursor: default; }
 .param-group[open] > summary::before { transform: rotate(90deg); }
 
 /* ═══════════════════════════════════════════════════════════════
+   SELECT GROUP SEPARATOR
+   ═══════════════════════════════════════════════════════════════
+   A hairline above every grouped Select run except the first, so the
+   uppercase group header (SelectLabel) reads as a divider even when each
+   row carries a muted description line of its own weight/size. The rule
+   is sibling-aware (a header can't know it isn't the first group from a
+   utility on itself), so it lives here rather than on the component. */
+
+[data-slot="select-group"] + [data-slot="select-group"] > [data-slot="select-label"] {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--line);
+}
+
+/* ═══════════════════════════════════════════════════════════════
    ANIMATIONS + MOTION PREFERENCES
    ═══════════════════════════════════════════════════════════════ */
 
