@@ -23,19 +23,6 @@ const DRAG_THRESHOLD = 6;
 function halfH(inset: number) { return Math.round((window.innerHeight - inset) * HALF_VH_RATIO); }
 function fullH(inset: number) { return window.innerHeight - inset; }
 
-/** Pixel height of a detent — shared with AppShell so it can sit the output
- *  console just above the sheet. */
-export function detentHeight(
-  detent: SheetDetent,
-  bottomInset: number,
-  peekHeight: number,
-  innerHeight: number
-): number {
-  if (detent === "peek") return peekHeight;
-  if (detent === "half") return Math.round((innerHeight - bottomInset) * HALF_VH_RATIO);
-  return innerHeight - bottomInset;
-}
-
 interface Props {
   children: (detent: SheetDetent, expand: () => void) => ReactNode;
   /** Current detent (controlled by the parent). */
@@ -47,9 +34,6 @@ interface Props {
   peekHeight?: number;
   /** Height in px of any fixed content below the sheet (e.g. mobile footer). */
   bottomInset?: number;
-  /** Reports the effective (measured) peek height so the parent can sit content
-   *  just above the collapsed sheet. */
-  onPeekHeightChange?: (px: number) => void;
   /** Reports the sheet's live displayed height (px) and whether it's mid-drag,
    *  so the parent can size the viewer to follow the sheet in real time. Fires
    *  every drag frame and on each settle. */
@@ -62,7 +46,6 @@ export function BottomSheet({
   onDetentChange,
   peekHeight = 72,
   bottomInset = 0,
-  onPeekHeightChange,
   onFollow,
 }: Props) {
   // Detent is controlled by the parent; setDetent forwards to it.
@@ -120,12 +103,6 @@ export function BottomSheet({
     if (tabs) ro.observe(tabs);
     return () => ro.disconnect();
   }, []);
-
-  // Report the effective peek height up so the parent can position the output
-  // console just above the collapsed sheet.
-  useEffect(() => {
-    onPeekHeightChange?.(effectivePeek);
-  }, [effectivePeek, onPeekHeightChange]);
 
   // heightFor reads peekHeight from a ref so this can have empty deps and stay stable.
   const heightFor = useCallback((d: SheetDetent): number => {
