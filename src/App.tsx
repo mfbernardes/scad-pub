@@ -20,6 +20,7 @@ import { useRenderPipeline } from "./lib/useRenderPipeline";
 import { useFileImports } from "./lib/useFileImports";
 import { useAppNotices } from "./lib/useAppNotices";
 import { ns } from "./lib/appId";
+import { readLocal, writeLocal } from "./lib/safeStorage";
 import { toast } from "sonner";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
@@ -153,13 +154,9 @@ export default function App() {
   // the UX plan — never a standing prompt.
   const offerInstallHint = useCallback(() => {
     if (!canInstall || installMode === "off") return;
-    try {
-      if (localStorage.getItem(INSTALL_HINT_KEY)) return;
-      localStorage.setItem(INSTALL_HINT_KEY, "1");
-    } catch {
-      /* storage unavailable — skip the hint rather than risk repeating it */
-      return;
-    }
+    if (readLocal(INSTALL_HINT_KEY)) return;
+    // Storage unavailable — skip the hint rather than risk repeating it.
+    if (!writeLocal(INSTALL_HINT_KEY, "1")) return;
     toast("Install this configurator for quick, offline access?", {
       id: "install-hint",
       duration: 12000,

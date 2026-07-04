@@ -6,6 +6,7 @@ import type { Design, ParamValue } from "../openscad/types";
 import { fromPresetString, toPresetString } from "./scad";
 import { assetUrl } from "./assetUrl";
 import { ns } from "./appId";
+import { readLocal, writeLocal } from "./safeStorage";
 
 export interface ParameterSetsFile {
   parameterSets: Record<string, Record<string, string>>;
@@ -91,14 +92,14 @@ type Store = Record<string, Record<string, Values>>; // designId -> name -> valu
 
 function read(): Store {
   try {
-    return JSON.parse(localStorage.getItem(KEY) || "{}") as Store;
+    return JSON.parse(readLocal(KEY) || "{}") as Store;
   } catch {
     return {};
   }
 }
 
 function write(store: Store) {
-  localStorage.setItem(KEY, JSON.stringify(store));
+  writeLocal(KEY, JSON.stringify(store));
 }
 
 export function listPresets(designId: string): string[] {

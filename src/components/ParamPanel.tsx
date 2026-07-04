@@ -10,6 +10,7 @@ import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
+import { readLocal, writeLocal } from "../lib/safeStorage";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
@@ -87,20 +88,12 @@ export function ParamPanel({
     clearFiles,
   } = useAppActions();
   const [open, setOpen] = useState(() => {
-    try {
-      const v = localStorage.getItem(PANEL_OPEN_KEY);
-      return v !== null ? v === "true" : panelDefaultOpen;
-    } catch {
-      return panelDefaultOpen;
-    }
+    const v = readLocal(PANEL_OPEN_KEY);
+    return v !== null ? v === "true" : panelDefaultOpen;
   });
   const [width, setWidth] = useState(() => {
-    try {
-      const w = parseInt(localStorage.getItem(PANEL_WIDTH_KEY) || "0");
-      return w >= MIN_WIDTH && w <= MAX_WIDTH ? w : DEFAULT_WIDTH;
-    } catch {
-      return DEFAULT_WIDTH;
-    }
+    const w = parseInt(readLocal(PANEL_WIDTH_KEY) || "0");
+    return w >= MIN_WIDTH && w <= MAX_WIDTH ? w : DEFAULT_WIDTH;
   });
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 150);
@@ -117,11 +110,11 @@ export function ParamPanel({
   widthRef.current = width;
 
   useEffect(() => {
-    try { localStorage.setItem(PANEL_OPEN_KEY, String(open)); } catch { /* noop */ }
+    writeLocal(PANEL_OPEN_KEY, String(open));
   }, [open]);
 
   useEffect(() => {
-    try { localStorage.setItem(PANEL_WIDTH_KEY, String(width)); } catch { /* noop */ }
+    writeLocal(PANEL_WIDTH_KEY, String(width));
   }, [width]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
