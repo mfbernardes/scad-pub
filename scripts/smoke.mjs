@@ -222,19 +222,30 @@ async function main() {
     await page.addScriptTag({
       path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
     });
-    const axeRes = await page.evaluate(async () =>
-      // WCAG 2.1 AA tags; report only violations.
-      window.axe.run(document, {
-        resultTypes: ["violations"],
-        runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
-      })
-    );
-    const serious = axeRes.violations.filter((v) =>
-      ["serious", "critical"].includes(v.impact)
-    );
-    for (const v of serious)
-      console.log(`  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node(s)) -> ${v.nodes.map((n) => n.target.join(" ")).join("; ")}`);
-    check(serious.length === 0, `axe: ${serious.length} serious/critical violation(s)`);
+    // Palettes are per-theme (and config-overridable per theme), so a contrast
+    // regression can hide in whichever theme a single sweep doesn't visit: run
+    // the AA sweep in the current theme, then toggle and sweep the other. The
+    // second toggle also returns the app to the theme it started the section in.
+    for (let pass = 0; pass < 2; pass++) {
+      const theme = await page.getAttribute("html", "data-theme");
+      const axeRes = await page.evaluate(async () =>
+        // WCAG 2.1 AA tags; report only violations.
+        window.axe.run(document, {
+          resultTypes: ["violations"],
+          runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
+        })
+      );
+      const serious = axeRes.violations.filter((v) =>
+        ["serious", "critical"].includes(v.impact)
+      );
+      for (const v of serious)
+        console.log(`  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node(s)) -> ${v.nodes.map((n) => n.target.join(" ")).join("; ")}`);
+      check(serious.length === 0, `axe (${theme}): ${serious.length} serious/critical violation(s)`);
+      if (pass === 0) {
+        await page.locator('.command-bar__right button[aria-label^="Switch to"]').first().click();
+        await page.waitForTimeout(80); // let the palette swap land before the next sweep
+      }
+    }
 
     console.log("=== every design renders ===");
     for (const id of ids) await selectDesign(page, id);
