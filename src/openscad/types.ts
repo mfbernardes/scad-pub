@@ -360,6 +360,13 @@ export interface Schema {
    */
   fontFamilies: string[];
   /**
+   * Face descriptions of the bundled fonts ({ family, style }, from their
+   * `name` tables at build time), display-ordered. The app's font selector
+   * lists these — merged with the faces of any user-imported fonts — under
+   * friendly names ("Liberation Sans Bold") instead of raw Fontconfig strings.
+   */
+  fontFaces?: { family: string; style: string }[];
+  /**
    * Optional generic "Import file" control in the preset panel. Lets the user
    * supply any file their designs reference but the app can't bundle — a font, an
    * SVG to `import()`, a `surface()` data file, etc. Fonts (by extension) are

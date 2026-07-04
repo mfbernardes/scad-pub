@@ -271,9 +271,9 @@ Uploaded files persist in IndexedDB and are re-applied on the next visit; the pa
 
 ## Fonts (`fonts`, `fontFallback`)
 
-`fonts` lists the font files the renderer bundles and mounts (a basename already in `public/fonts/`, or a path into `source` to copy one in). Their embedded family names are read at build time, so the app knows the authoritative available set.
+`fonts` lists the font files the renderer bundles and mounts (a basename already in `public/fonts/`, or a path into `source` to copy one in). Their embedded family and style names are read at build time, so the app knows the authoritative available set — and can name each face the way a user knows it.
 
-A string or enum (dropdown) parameter annotated `// @font` (see [annotations](annotations.md#font-selectors--font)) is checked against that set (bundled **∪** any imported fonts, matched by family name). When the selected family isn't loaded, the control shows a non-alarming inline hint with **Import font…** and a one-click **Use \<available family\>** fallback — so availability is known immediately, without needing a render to find out. (A family that *is* loaded never warns.)
+A string or enum (dropdown) parameter annotated `// @font` (see [annotations](annotations.md#font-selectors--font)) renders as a **font dropdown** listing every face the renderer can actually use (bundled **∪** any imported fonts) under friendly names ("Liberation Sans Bold" — never the raw Fontconfig `Family:style=Style` string), with imported faces labelled as such and an **Import font…** action at the bottom; the list updates the moment a font is imported. Faces the design suggests (or the current value names) that are **not** loaded stay visible and selectable in a marked "Needs a font file" group, and while the selected family isn't loaded the control also shows a non-alarming inline hint with **Import font…** and a one-click **Use \<available family\>** fallback — so availability is known immediately, without needing a render to find out. (A family that *is* loaded never warns.)
 
 ```jsonc
 {

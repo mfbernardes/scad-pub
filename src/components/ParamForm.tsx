@@ -7,9 +7,10 @@ import { Info as InfoIcon, Upload as UploadIcon } from "lucide-react";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { isVisible } from "../lib/visibility";
-import { familyOf, normalizeFamily, withFamily } from "../lib/fonts";
+import { familyOf, normalizeFamily, withFamily, type InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { FileInput } from "./FileInput";
+import { FontSelect } from "./FontSelect";
 import { Slider } from "./ui/slider";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
@@ -39,6 +40,13 @@ interface Props {
   availableFontFamilies?: Set<string>;
   /** A bundled family offered as a one-click fallback for a missing font. */
   fontSuggestion?: string | null;
+  /**
+   * Every face the renderer can use right now (bundled ∪ imported), display-
+   * ordered. When non-empty, a `font` parameter renders as the FontSelect
+   * dropdown listing these under friendly names instead of a raw string/enum
+   * control. Omitted or empty → the plain control (we can't be authoritative).
+   */
+  installedFonts?: InstalledFont[];
 }
 
 // Inline, non-alarming hint shown under a `font` control when the selected
@@ -209,12 +217,27 @@ function Control({
   value,
   label,
   onChange,
+  installedFonts,
 }: {
   param: Param;
   value: ParamValue;
   label: string;
   onChange: (v: ParamValue) => void;
+  installedFonts?: InstalledFont[];
 }) {
+  // A font parameter (string or enum flagged `isFont`) becomes the friendly
+  // FontSelect dropdown whenever we authoritatively know what's installed —
+  // listing real faces by name instead of raw Fontconfig strings.
+  if ((param.type === "string" || param.type === "enum") && param.isFont && installedFonts?.length)
+    return (
+      <FontSelect
+        param={param}
+        value={String(value ?? "")}
+        label={label}
+        onChange={onChange}
+        fonts={installedFonts}
+      />
+    );
   switch (param.type) {
     case "number":
       return <NumberControl param={param} value={value} label={label} onChange={onChange} />;
@@ -280,7 +303,7 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = true, availableFontFamilies, fontSuggestion }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = true, availableFontFamilies, fontSuggestion, installedFonts }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
@@ -355,6 +378,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                     value={value}
                     label={label}
                     onChange={(v) => onChange(p.name, v)}
+                    installedFonts={installedFonts}
                   />
                   {missingFontValue !== null && (
                     <FontMissingHint

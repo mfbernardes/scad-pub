@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
+import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
 import { ParamForm } from "./ParamForm";
@@ -27,6 +28,8 @@ interface Props {
   availableFontFamilies?: Set<string>;
   /** A bundled family to offer as a one-click fallback for a missing font. */
   fontSuggestion?: string | null;
+  /** Faces the renderer can use (bundled ∪ imported), for the font selector. */
+  installedFonts?: InstalledFont[];
   /** Called when a tab is tapped — used to raise a collapsed (peek) sheet. */
   onActivate?: () => void;
   /** Show the underlying OpenSCAD variable name beside each label (default true). */
@@ -47,6 +50,7 @@ export function SheetTabs({
   loadedFiles,
   availableFontFamilies,
   fontSuggestion,
+  installedFonts,
   onActivate,
   showVarName = true,
   autoRender,
@@ -88,7 +92,7 @@ export function SheetTabs({
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <ParamSearch value={search} onChange={setSearch} onClear={() => setSearch("")} />
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} />
           </div>
           {/* Auto-render + Reset are parameter-scoped, so they pin to the bottom
               of this tab only — not on Presets/Files (mirrors the desktop panel). */}
