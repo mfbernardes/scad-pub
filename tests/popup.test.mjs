@@ -55,3 +55,11 @@ test("changing the content re-shows a remembered popup", () => {
   // A later deploy edits the body -> the remembered hash no longer matches.
   assert.equal(shouldShowPopup({ ...p, body: "Second." }), true);
 });
+
+test("changing the button label re-shows a remembered popup", () => {
+  const p = notice({ mode: "once", button: "OK" });
+  rememberPopup(p);
+  assert.equal(shouldShowPopup(p), false);
+  // The button label is part of the content hash, so editing it re-shows.
+  assert.equal(shouldShowPopup({ ...p, button: "Start designing" }), true);
+});

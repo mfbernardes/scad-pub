@@ -49,7 +49,7 @@ export function PopupModal({
           </Label>
         )}
         <Button className="notice-ok ml-auto" onClick={close}>
-          OK
+          {popup.button ?? "OK"}
         </Button>
       </div>
     </Modal>

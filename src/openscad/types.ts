@@ -253,6 +253,13 @@ export interface PopupNotice {
    * "dismissible" (every visit until the user ticks "Don't show this again").
    */
   mode: PopupMode;
+  /**
+   * Label for the primary (confirm) button. Defaults to "OK". A consumer can
+   * set an action-oriented call to action ("Start designing", "Let's go") —
+   * clicking it closes the popup and, when there's more than one design, opens
+   * the design picker so the user's obvious next step is to choose what to make.
+   */
+  button?: string;
 }
 
 /** Build-time UI behaviour overrides. None affect geometry (absent from renderHash). */
