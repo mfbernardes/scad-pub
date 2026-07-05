@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { buildFontChoices, fontValueLabel } from "../src/lib/fontChoices.ts";
 
 const FONTS = [
-  { family: "Atkinson Hyperlegible", style: "Regular", imported: false },
+  { family: "Atkinson Hyperlegible Next", style: "Regular", imported: false },
   { family: "Liberation Sans", style: "Regular", imported: false },
   { family: "Liberation Sans", style: "Bold", imported: false },
   { family: "DejaVu Sans", style: "Bold", imported: true },
@@ -34,7 +34,7 @@ test("every installed face is listed with a friendly label and canonical value",
   assert.deepEqual(
     installed.map((c) => [c.value, c.label, c.imported]),
     [
-      ["Atkinson Hyperlegible", "Atkinson Hyperlegible", false],
+      ["Atkinson Hyperlegible Next", "Atkinson Hyperlegible Next", false],
       ["Liberation Sans", "Liberation Sans", false],
       ["Liberation Sans:style=Bold", "Liberation Sans Bold", false],
       ["DejaVu Sans:style=Bold", "DejaVu Sans Bold", true],
@@ -45,24 +45,24 @@ test("every installed face is listed with a friendly label and canonical value",
 });
 
 test("an installed face's entry reuses the stored value that already names it", () => {
-  // A preset stored "Atkinson Hyperlegible:style=Regular"; the entry must carry
+  // A preset stored "Atkinson Hyperlegible Next:style=Regular"; the entry must carry
   // that exact string so the dropdown selects it without rewriting the value.
-  const value = "Atkinson Hyperlegible:style=Regular";
+  const value = "Atkinson Hyperlegible Next:style=Regular";
   const { installed } = buildFontChoices(stringParam, value, FONTS);
-  assert.equal(installed.find((c) => c.label === "Atkinson Hyperlegible").value, value);
+  assert.equal(installed.find((c) => c.label === "Atkinson Hyperlegible Next").value, value);
 });
 
 test("an installed face named by an enum choice reuses the choice's exact value", () => {
   const param = enumParam([
     "DIN 32986 Taktil Positiv:style=Regular",
-    "Atkinson Hyperlegible:style=Regular",
+    "Atkinson Hyperlegible Next:style=Regular",
     "Liberation Sans:style=Bold",
   ]);
   const { installed, missing } = buildFontChoices(param, param.default, FONTS);
   // Installed faces the enum names keep the enum's value form (preset parity)…
   assert.equal(
-    installed.find((c) => c.label === "Atkinson Hyperlegible").value,
-    "Atkinson Hyperlegible:style=Regular"
+    installed.find((c) => c.label === "Atkinson Hyperlegible Next").value,
+    "Atkinson Hyperlegible Next:style=Regular"
   );
   assert.equal(
     installed.find((c) => c.label === "Liberation Sans Bold").value,
