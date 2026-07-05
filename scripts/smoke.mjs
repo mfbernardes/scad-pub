@@ -73,11 +73,30 @@ async function checkWelcomePopup({ page, check, schema }) {
     if (/\]\(/.test(schema.popup.body ?? "")) {
       check((await popup.getByRole("link").count()) > 0, "popup body renders its link");
     }
+    // The primary button's label is config-driven (schema.popup.button), so read
+    // it from the schema instead of hardcoding "OK".
+    const buttonLabel = schema.popup.button ?? "OK";
+    const cta = popup.getByRole("button", { name: buttonLabel, exact: true });
+    check((await cta.count()) > 0, `popup shows its configured button "${buttonLabel}"`);
     const dontShow = popup.getByRole("checkbox");
     if (await dontShow.count()) await dontShow.check();
-    await popup.getByRole("button", { name: /^OK$/ }).click();
+    await cta.click();
     await popup.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
     check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
+    // The primary CTA also opens the design picker (when there's more than one
+    // design) so the user's next step — choosing what to make — is obvious.
+    if (schema.designs.length > 1) {
+      const listbox = page.getByRole("listbox");
+      const opened = await listbox
+        .first()
+        .waitFor({ state: "visible", timeout: 3000 })
+        .then(() => true)
+        .catch(() => false);
+      check(opened, "primary CTA opens the design picker");
+      // Close it so it doesn't intercept the later checks' interactions.
+      await page.keyboard.press("Escape");
+      await listbox.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+    }
   } else {
     console.log("  (no popup in this config — skipped)");
   }
@@ -449,8 +468,10 @@ async function checkSignageDesign({ page, check, ids }) {
   const arrowStyle = paramRow(page, "arrow_style");
   check((await arrowStyle.count()) === 0, "arrow_style hidden when arrow = none");
   // Enums are Radix Selects: open the row's trigger, then click the option.
+  // Match exactly — several arrow options contain "right" (Up-right, Turn
+  // right…), so a substring match would be ambiguous.
   await paramRow(page, "arrow").locator('[data-slot="select-trigger"]').click();
-  await page.getByRole("option", { name: "right" }).click();
+  await page.getByRole("option", { name: "Right", exact: true }).click();
   await arrowStyle.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   check((await arrowStyle.count()) > 0, "arrow_style shown when arrow = right");
   await waitRendered(page, "arrow");

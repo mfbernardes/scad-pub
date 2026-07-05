@@ -104,6 +104,8 @@ export function validateSchema(raw: unknown): Schema {
     }
     if (!["always", "once", "dismissible"].includes(p.mode as string))
       fail("'popup.mode' must be \"always\", \"once\" or \"dismissible\"");
+    if (p.button !== undefined && (typeof p.button !== "string" || !p.button))
+      fail("'popup.button', when set, must be a non-empty string");
   }
   if (s.notices !== undefined) {
     if (!Array.isArray(s.notices)) fail("'notices' must be an array");

@@ -67,12 +67,17 @@ export async function selectDesign(page, label, { mobile = false } = {}) {
 
 /** Dismiss the config-driven welcome popup (schema.popup) if it is showing.
  *  It overlays the app behind a modal backdrop that intercepts pointer events,
- *  so it must go before driving the UI. No-op when no dialog is open. */
+ *  so it must go before driving the UI. The primary button's label is
+ *  config-driven (schema.popup.button), so target the stable `.notice-ok` hook
+ *  instead of a fixed "OK" text. That button also opens the design picker, so
+ *  press Escape afterwards to close it and leave the UI clean. No-op when no
+ *  dialog is open. */
 export async function dismissWelcomePopup(page) {
   const dialog = page.getByRole("dialog");
   if (!(await dialog.count())) return;
-  await dialog.getByRole("button", { name: /^OK$/ }).click().catch(() => {});
+  await dialog.locator(".notice-ok").click().catch(() => {});
   await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  await page.keyboard.press("Escape").catch(() => {});
 }
 
 /** Navigate to `base` with the given theme forced. Load once to establish the

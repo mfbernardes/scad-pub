@@ -919,7 +919,14 @@ test("parsePopup: defaults, modes, links and errors", () => {
       { header: "H", body: "See [docs](https://x).", mode }
     );
   }
-  // Wrong shapes / missing required fields / bad mode -> clear errors.
+  // An optional custom button label passes through; absent -> omitted (the app
+  // defaults to "OK").
+  assert.deepEqual(
+    parsePopup({ header: "H", body: "B", mode: "once", button: "Start designing" }),
+    { header: "H", body: "B", mode: "once", button: "Start designing" }
+  );
+  assert.equal("button" in parsePopup({ header: "H", body: "B" }), false);
+  // Wrong shapes / missing required fields / bad mode / blank button -> clear errors.
   assert.throws(() => parsePopup([]), /'popup' must be an object/);
   assert.throws(() => parsePopup({ body: "x" }), /'popup\.header' is required/);
   assert.throws(() => parsePopup({ header: "x" }), /'popup\.body' is required/);
@@ -927,6 +934,10 @@ test("parsePopup: defaults, modes, links and errors", () => {
   assert.throws(
     () => parsePopup({ header: "x", body: "y", mode: "sometimes" }),
     /'popup\.mode' must be one of/
+  );
+  assert.throws(
+    () => parsePopup({ header: "x", body: "y", button: "  " }),
+    /'popup\.button', when set, must be a non-empty string/
   );
 });
 

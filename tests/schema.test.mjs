@@ -256,4 +256,19 @@ test("validates the optional popup shape", () => {
     () => validateSchema({ ...validBase(), popup: { header: "x", body: "y", mode: "nope" } }),
     /'popup\.mode' must be/
   );
+  // optional custom button label: a non-empty string is fine, blank/empty is not.
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      popup: { header: "Hi", body: "Body", mode: "once", button: "Start designing" },
+    })
+  );
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        popup: { header: "x", body: "y", mode: "once", button: "" },
+      }),
+    /'popup\.button', when set, must be a non-empty string/
+  );
 });

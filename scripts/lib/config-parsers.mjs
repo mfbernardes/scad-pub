@@ -269,7 +269,15 @@ export function parsePopup(raw) {
       `gen-schema: 'popup.mode' must be one of ${POPUP_MODES.map((m) => `"${m}"`).join(", ")} ` +
         `(got ${JSON.stringify(raw.mode)})`
     );
-  return { header: raw.header, body: raw.body, mode };
+  // Optional label for the primary button (the app defaults to "OK"). A blank
+  // string would render an empty button, so require non-empty when present.
+  if (raw.button !== undefined && (typeof raw.button !== "string" || !raw.button.trim()))
+    throw new Error(
+      "gen-schema: 'popup.button', when set, must be a non-empty string"
+    );
+  const out = { header: raw.header, body: raw.body, mode };
+  if (raw.button !== undefined) out.button = raw.button;
+  return out;
 }
 
 // Validate and normalise the optional `notices` config block: the design-defined

@@ -26,6 +26,10 @@ interface Props {
   outputOpen: boolean;
   noticeCount: number;
   onToggleOutput: () => void;
+  /** Bumped by the intro popup's CTA to open the design picker. */
+  openPickerSignal: number;
+  /** Whether the desktop bar is the visible layout (so only its picker opens). */
+  pickerActive: boolean;
 }
 
 export const CommandBar = memo(function CommandBar({
@@ -41,6 +45,8 @@ export const CommandBar = memo(function CommandBar({
   outputOpen,
   noticeCount,
   onToggleOutput,
+  openPickerSignal,
+  pickerActive,
 }: Props) {
   const { designChange } = useAppActions();
   const currentDesign = designs.find((d) => d.id === designId);
@@ -58,7 +64,13 @@ export const CommandBar = memo(function CommandBar({
       {/* Design picker, centered in the bar */}
       <div className="command-bar__design-picker inline-flex items-center gap-[0.4rem] justify-self-center whitespace-nowrap">
         {designs.length > 1 ? (
-          <DesignPicker designs={designs} value={designId} onChange={designChange} />
+          <DesignPicker
+            designs={designs}
+            value={designId}
+            onChange={designChange}
+            openSignal={openPickerSignal}
+            active={pickerActive}
+          />
         ) : (
           <span className="text-[0.88rem] font-semibold text-foreground">
             {currentDesign?.label ?? designId}
