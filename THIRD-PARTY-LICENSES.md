@@ -25,7 +25,7 @@ regardless of the licenses below.
 | tailwind-merge | MIT | https://github.com/dcastil/tailwind-merge |
 | class-variance-authority | Apache-2.0 | https://github.com/joe-bell/cva |
 | Liberation fonts (Sans / Mono) | OFL-1.1 | https://github.com/liberationfonts/liberation-fonts |
-| Atkinson Hyperlegible Next (UI display typeface, via `@fontsource-variable/atkinson-hyperlegible-next`) | OFL-1.1 | https://github.com/googlefonts/atkinson-hyperlegible-next |
+| Atkinson Hyperlegible (UI display typeface, via `@fontsource/atkinson-hyperlegible`) | OFL-1.1 | https://github.com/googlefonts/atkinson-hyperlegible |
 
 ### The OpenSCAD-WASM (GPL) obligation
 

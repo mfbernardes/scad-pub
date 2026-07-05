@@ -115,11 +115,11 @@ test("mergeInstalledFonts dedupes bundled∪imported and orders regular-first pe
       // A re-import of a bundled face stays "bundled" (deduped, bundled wins)…
       { family: "liberation sans", style: "BOLD" },
       // …while a genuinely new face is appended as imported.
-      { family: "Atkinson Hyperlegible Next", style: "Regular" },
+      { family: "Atkinson Hyperlegible", style: "Regular" },
     ]
   );
   assert.deepEqual(merged, [
-    { family: "Atkinson Hyperlegible Next", style: "Regular", imported: true },
+    { family: "Atkinson Hyperlegible", style: "Regular", imported: true },
     { family: "Liberation Sans", style: "Regular", imported: false },
     { family: "Liberation Sans", style: "Bold", imported: false },
   ]);
