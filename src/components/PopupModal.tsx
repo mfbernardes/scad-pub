@@ -15,17 +15,22 @@ import type { PopupNotice } from "../openscad/types";
 export function PopupModal({
   popup,
   onClose,
+  onPrimary,
 }: {
   popup: PopupNotice;
-  /** Called on any close; `remember` is true when this dismissal should persist. */
+  /** Incidental close (backdrop / Escape / X). `remember` persists the dismissal. */
   onClose: (remember: boolean) => void;
+  /** The primary button — closes and advances (e.g. opens the design picker). */
+  onPrimary: (remember: boolean) => void;
 }) {
   const [dontShow, setDontShow] = useState(false);
 
   // "once" persists on every close; "dismissible" only when the box is ticked;
-  // "always" never persists. Backdrop click, Escape and the X all route here.
-  const close = () =>
-    onClose(popup.mode === "once" || (popup.mode === "dismissible" && dontShow));
+  // "always" never persists. Shared by the incidental close and the primary CTA.
+  const remember = () =>
+    popup.mode === "once" || (popup.mode === "dismissible" && dontShow);
+  const close = () => onClose(remember());
+  const primary = () => onPrimary(remember());
 
   return (
     <Modal title={popup.header} onClose={close}>
@@ -48,7 +53,7 @@ export function PopupModal({
             Don’t show this again
           </Label>
         )}
-        <Button className="notice-ok ml-auto" onClick={close}>
+        <Button className="notice-ok ml-auto" onClick={primary}>
           {popup.button ?? "OK"}
         </Button>
       </div>

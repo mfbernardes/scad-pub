@@ -1,7 +1,7 @@
 // DesignPicker.tsx — the shadcn Select used to switch designs. Shared by the
 // desktop CommandBar and the mobile top bar (each wraps it differently and
 // handles the single-design fallback in its own markup).
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Design } from "../openscad/types";
 import {
   Select,
@@ -17,6 +17,14 @@ interface Props {
   designs: Design[];
   value: string;
   onChange: (id: string) => void;
+  /**
+   * Monotonically-increasing signal: each increment asks this picker to open
+   * (used by the intro popup's "start designing" CTA). Ignored unless `active`,
+   * so only the visible layout's picker opens — both bars mount at once.
+   */
+  openSignal?: number;
+  /** Whether this instance belongs to the currently-shown layout (desktop vs mobile). */
+  active?: boolean;
 }
 
 // Cluster designs under their `group` header while preserving config order: a
@@ -41,16 +49,28 @@ function designIcon(d: Design): ReactNode {
   ) : undefined;
 }
 
-export function DesignPicker({ designs, value, onChange }: Props) {
+export function DesignPicker({ designs, value, onChange, openSignal, active = true }: Props) {
   const runs = groupDesigns(designs);
   const grouped = runs.some((r) => r.group !== null);
+  const [open, setOpen] = useState(false);
+
+  // Open on a fresh signal (the CTA), but only for the visible layout's picker.
+  // A ref tracks the last-seen value so a later `active` flip alone can't re-open it.
+  const lastSignal = useRef(openSignal);
+  useEffect(() => {
+    if (openSignal !== undefined && openSignal !== lastSignal.current) {
+      lastSignal.current = openSignal;
+      if (active) setOpen(true);
+    }
+  }, [openSignal, active]);
+
   const item = (d: Design) => (
     <SelectItem key={d.id} value={d.id} icon={designIcon(d)} description={d.description ?? undefined}>
       {d.label}
     </SelectItem>
   );
   return (
-    <Select value={value} onValueChange={onChange}>
+    <Select value={value} onValueChange={onChange} open={open} onOpenChange={setOpen}>
       <SelectTrigger
         size="sm"
         aria-label="Choose a design"

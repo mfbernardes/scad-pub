@@ -68,6 +68,8 @@ interface Props {
   stalePreview: boolean;
   theme: "dark" | "light";
   themeMode: "light" | "dark" | "auto";
+  /** Incremented by the intro popup's primary CTA to open the design picker. */
+  openPickerSignal: number;
 }
 
 export const AppShell = memo(function AppShell({
@@ -87,6 +89,7 @@ export const AppShell = memo(function AppShell({
   stalePreview,
   theme,
   themeMode,
+  openPickerSignal,
 }: Props) {
   const actions = useAppActions();
   const desktopViewerRef = useRef<ViewerHandle>(null);
@@ -319,6 +322,8 @@ export const AppShell = memo(function AppShell({
           outputOpen={outputOpen}
           noticeCount={diagnostics.length}
           onToggleOutput={toggleOutput}
+          openPickerSignal={openPickerSignal}
+          pickerActive={!isMobile}
         />
 
         <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
@@ -381,7 +386,13 @@ export const AppShell = memo(function AppShell({
             </span>
             <div className="mobile-top-bar__center inline-flex min-w-0 items-center justify-self-center">
               {designs.length > 1 ? (
-                <DesignPicker designs={designs} value={design.id} onChange={actions.designChange} />
+                <DesignPicker
+                  designs={designs}
+                  value={design.id}
+                  onChange={actions.designChange}
+                  openSignal={openPickerSignal}
+                  active={isMobile}
+                />
               ) : (
                 <span className="whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.85rem] font-semibold">
                   {design.label}

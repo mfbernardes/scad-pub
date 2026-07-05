@@ -78,6 +78,13 @@ export default function App() {
     if (remember && popup) rememberPopup(popup);
     setShowPopup(false);
   };
+  // Bumped by the popup's primary CTA to open the design picker (the obvious
+  // first step). AppShell routes it to whichever layout's picker is visible.
+  const [openPickerSignal, setOpenPickerSignal] = useState(0);
+  const popupPrimary = (remember: boolean) => {
+    closePopup(remember);
+    if (schema.designs.length > 1) setOpenPickerSignal((n) => n + 1);
+  };
 
   // File imports and the render pipeline are mutually coupled — imports feed
   // the render key, and an import must invalidate the render cache. The ref
@@ -244,7 +251,9 @@ export default function App() {
 
   return (
     <>
-      {showPopup && popup && <PopupModal popup={popup} onClose={closePopup} />}
+      {showPopup && popup && (
+        <PopupModal popup={popup} onClose={closePopup} onPrimary={popupPrimary} />
+      )}
       {showHelp && (
         <HelpModal
           help={schema.help}
@@ -277,6 +286,7 @@ export default function App() {
           stalePreview={stalePreview}
           theme={theme}
           themeMode={themeMode}
+          openPickerSignal={openPickerSignal}
         />
       </AppActionsProvider>
     </>
