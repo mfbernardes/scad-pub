@@ -468,8 +468,10 @@ async function checkSignageDesign({ page, check, ids }) {
   const arrowStyle = paramRow(page, "arrow_style");
   check((await arrowStyle.count()) === 0, "arrow_style hidden when arrow = none");
   // Enums are Radix Selects: open the row's trigger, then click the option.
+  // Match exactly — several arrow options contain "right" (Up-right, Turn
+  // right…), so a substring match would be ambiguous.
   await paramRow(page, "arrow").locator('[data-slot="select-trigger"]').click();
-  await page.getByRole("option", { name: "right" }).click();
+  await page.getByRole("option", { name: "Right", exact: true }).click();
   await arrowStyle.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   check((await arrowStyle.count()) > 0, "arrow_style shown when arrow = right");
   await waitRendered(page, "arrow");
