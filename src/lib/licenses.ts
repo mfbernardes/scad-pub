@@ -92,14 +92,14 @@ export const LICENSES: SoftwareLicense[] = [
       "(e.g. a license-restricted profile font) is not bundled and is uploaded by you.",
   },
   {
-    name: "Space Grotesk",
+    name: "Atkinson Hyperlegible Next",
     license: "OFL-1.1",
     copyright:
-      "Copyright 2020 The Space Grotesk Project Authors (https://github.com/floriankarsten/space-grotesk)",
-    url: "https://github.com/floriankarsten/space-grotesk",
+      "Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next)",
+    url: "https://www.brailleinstitute.org/freefont/",
     licenseUrl:
-      "https://github.com/floriankarsten/space-grotesk/blob/master/OFL.txt",
-    text: `Copyright 2020 The Space Grotesk Project Authors (https://github.com/floriankarsten/space-grotesk)\n\n${oflText}`,
+      "https://github.com/googlefonts/atkinson-hyperlegible-next/blob/main/OFL.txt",
+    text: `Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next)\n\n${oflText}`,
     note:
       "The interface's display typeface (packaged via Fontsource). Used only " +
       "for the app chrome — it is not available to the rendered designs.",

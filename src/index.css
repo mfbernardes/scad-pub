@@ -11,7 +11,7 @@
 /* The app's display face (brand, headings, tabs, buttons). A single variable
    woff2 per script subset, bundled by Vite and precached by the service worker
    via asset-manifest.json — no external font host at runtime. */
-@import "@fontsource-variable/space-grotesk";
+@import "@fontsource-variable/atkinson-hyperlegible-next";
 
 /* ── shadcn/ui token bridge ───────────────────────────────────────────────
    The app's AA-tuned palette (the --bg/--panel/--text/… custom properties
@@ -100,7 +100,7 @@
      brand voice (wordmark, headings, tabs, buttons). Both are configurable
      via the config's `colors` map (unquoted family names). */
   --font-sans: system-ui, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Space Grotesk Variable", var(--font-sans);
+  --font-display: "Atkinson Hyperlegible Next Variable", var(--font-sans);
   /* Shape + surface tokens — configurable via colors.dark in the config.
      Moderate (not pill) radii; the floating surfaces (--surface-*) are solid,
      not translucent glass — they read as raised panels, not frosted overlays. */
