@@ -114,9 +114,12 @@ export function ParamPanel({
     writeLocal(PANEL_OPEN_KEY, String(open));
   }, [open]);
 
-  useEffect(() => {
-    writeLocal(PANEL_WIDTH_KEY, String(width));
-  }, [width]);
+  // Persisted on pointer up / keyboard resize rather than on every `width`
+  // change — a drag fires a state update (and, previously, a localStorage
+  // write) per pointer-move frame (see docs/react-performance-review.md #4).
+  const persistWidth = useCallback((w: number) => {
+    writeLocal(PANEL_WIDTH_KEY, String(w));
+  }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -136,8 +139,10 @@ export function ParamPanel({
   }, []);
 
   const onPointerUp = useCallback(() => {
+    if (!dragging.current) return;
     dragging.current = false;
-  }, []);
+    persistWidth(widthRef.current);
+  }, [persistWidth]);
 
   const side = panelSide === "right" ? "param-panel--right" : "param-panel--left";
   // Collapse chevron points toward the screen edge the panel docks against.
@@ -180,8 +185,12 @@ export function ParamPanel({
         aria-valuemax={MAX_WIDTH}
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === "ArrowLeft") setWidth((w) => Math.max(MIN_WIDTH, w - 20));
-          if (e.key === "ArrowRight") setWidth((w) => Math.min(MAX_WIDTH, w + 20));
+          let next: number;
+          if (e.key === "ArrowLeft") next = Math.max(MIN_WIDTH, widthRef.current - 20);
+          else if (e.key === "ArrowRight") next = Math.min(MAX_WIDTH, widthRef.current + 20);
+          else return;
+          setWidth(next);
+          persistWidth(next);
         }}
       />
 

@@ -4,7 +4,7 @@
 // build time (config -> __APP_FORMAT__): 3MF carries per-object colour from
 // `color(...)`; STL is geometry-only and shown in the theme's model colour.
 // Only the chosen format's loader is referenced, so the other tree-shakes out.
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, memo, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
@@ -86,7 +86,7 @@ function retintAutoVertices(
   return matched;
 }
 
-export const Viewer = forwardRef<
+export const Viewer = memo(forwardRef<
   ViewerHandle,
   {
     stl: Uint8Array | null;
@@ -440,7 +440,7 @@ export const Viewer = forwardRef<
   // status/log/notices carry the meaning instead.
   return <div className="viewer" ref={mountRef} aria-hidden="true" />;
   }
-);
+));
 
 // A mesh's material(s), always as an array.
 function materialList(material: THREE.Material | THREE.Material[]): THREE.Material[] {

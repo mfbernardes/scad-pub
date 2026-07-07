@@ -264,40 +264,80 @@ export const AppShell = memo(function AppShell({
 
   // Prop bundles shared verbatim by the two layout trees — each invocation
   // below adds only its layout-specific bits (viewer ref, active flag, …).
-  const stageProps = {
-    design,
-    result,
-    ready,
-    rendering,
-    autoRender,
-    stalePreview,
-    theme,
-    selectedPreset,
-    showDimensions,
-    view,
-    onMeasure: setMeasured,
-    measured,
-    renderedValues,
-    computedInfo,
-  };
-  const hudProps = {
-    visible: !!result?.ok,
-    measure: showMeasure,
-    showDimensions,
-    onToggleDimensions: toggleDimensions,
-    viewPicker: showViewPicker,
-    reset: showReset,
-    zoom: showZoom,
-    fullscreen: showFullscreen,
-    view,
-    onSelectView: handleSelectView,
-  };
-  const outputProps = { log, diagnostics, badges, open: outputOpen, onClose: closeOutput };
-  const actionButtonsProps = {
-    hasResult: !!result?.ok,
-    modelFormat: schema.format,
-    onSavePng: handleSavePng,
-  };
+  // Memoized so a parameter edit (which only changes `values`, not any of
+  // these) doesn't hand ViewerStage/ViewerHUD/etc. a new object identity and
+  // defeat their memoization (see docs/react-performance-review.md #2).
+  const stageProps = useMemo(
+    () => ({
+      design,
+      result,
+      ready,
+      rendering,
+      autoRender,
+      stalePreview,
+      theme,
+      selectedPreset,
+      showDimensions,
+      view,
+      onMeasure: setMeasured,
+      measured,
+      renderedValues,
+      computedInfo,
+    }),
+    [
+      design,
+      result,
+      ready,
+      rendering,
+      autoRender,
+      stalePreview,
+      theme,
+      selectedPreset,
+      showDimensions,
+      view,
+      measured,
+      renderedValues,
+      computedInfo,
+    ]
+  );
+  const hudProps = useMemo(
+    () => ({
+      visible: !!result?.ok,
+      measure: showMeasure,
+      showDimensions,
+      onToggleDimensions: toggleDimensions,
+      viewPicker: showViewPicker,
+      reset: showReset,
+      zoom: showZoom,
+      fullscreen: showFullscreen,
+      view,
+      onSelectView: handleSelectView,
+    }),
+    [
+      result?.ok,
+      showMeasure,
+      showDimensions,
+      toggleDimensions,
+      showViewPicker,
+      showReset,
+      showZoom,
+      showFullscreen,
+      view,
+      handleSelectView,
+    ]
+  );
+  const outputProps = useMemo(
+    () => ({ log, diagnostics, badges, open: outputOpen, onClose: closeOutput }),
+    [log, diagnostics, badges, outputOpen, closeOutput]
+  );
+  const actionButtonsProps = useMemo(
+    () => ({
+      hasResult: !!result?.ok,
+      modelFormat: schema.format,
+      onSavePng: handleSavePng,
+    }),
+    [result?.ok, schema.format, handleSavePng]
+  );
   return (
     <div className="app-shell">
       {/* Skip link: off-screen until focused. */}
@@ -328,25 +368,31 @@ export const AppShell = memo(function AppShell({
         />
 
         <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
-          {/* Docked panel: Presets / Parameters / Files tabs (mirrors mobile). */}
-          <ParamPanel
-            design={design}
-            values={values}
-            bundled={bundled}
-            userPresets={userPresets}
-            selectedPreset={selectedPreset}
-            fileImport={fileImport}
-            loadedFiles={loadedFiles}
-            availableFontFamilies={availableFontFamilies}
-            fontSuggestion={fontSuggestion}
-            installedFonts={installedFonts}
-            panelSide={panelSide}
-            panelDefaultOpen={panelDefaultOpen}
-            showVarName={showVarName}
-            autoRender={autoRender}
-            presetsLabel={presetsLabel}
-            parametersLabel={parametersLabel}
-          />
+          {/* Docked panel: Presets / Parameters / Files tabs (mirrors mobile).
+              Mounted only on desktop — CSS already hides this whole layout on
+              mobile, but without this guard the mobile layout switch still
+              leaves this ParamForm tree mounted and reconciling on every
+              parameter edit (see docs/react-performance-review.md #1). */}
+          {!isMobile && (
+            <ParamPanel
+              design={design}
+              values={values}
+              bundled={bundled}
+              userPresets={userPresets}
+              selectedPreset={selectedPreset}
+              fileImport={fileImport}
+              loadedFiles={loadedFiles}
+              availableFontFamilies={availableFontFamilies}
+              fontSuggestion={fontSuggestion}
+              installedFonts={installedFonts}
+              panelSide={panelSide}
+              panelDefaultOpen={panelDefaultOpen}
+              showVarName={showVarName}
+              autoRender={autoRender}
+              presetsLabel={presetsLabel}
+              parametersLabel={parametersLabel}
+            />
+          )}
 
           {/* Canvas */}
           <div className="app-shell__viewer">
@@ -457,23 +503,28 @@ export const AppShell = memo(function AppShell({
             // raises a collapsed sheet. Auto-render + Reset are param-scoped, so
             // they live inside the Parameters tab (SheetTabs), not here.
             <div className="sheet-content" id="params">
-              <SheetTabs
-                design={design}
-                values={values}
-                bundled={bundled}
-                userPresets={userPresets}
-                selected={selectedPreset}
-                fileImport={fileImport}
-                loadedFiles={loadedFiles}
-                availableFontFamilies={availableFontFamilies}
-                fontSuggestion={fontSuggestion}
-                installedFonts={installedFonts}
-                onActivate={expand}
-                showVarName={showVarName}
-                autoRender={autoRender}
-                presetsLabel={presetsLabel}
-                parametersLabel={parametersLabel}
-              />
+              {/* Mounted only on mobile, mirroring the desktop ParamPanel
+                  guard above — otherwise this ParamForm tree stays mounted
+                  and reconciling behind the desktop layout on every edit. */}
+              {isMobile && (
+                <SheetTabs
+                  design={design}
+                  values={values}
+                  bundled={bundled}
+                  userPresets={userPresets}
+                  selected={selectedPreset}
+                  fileImport={fileImport}
+                  loadedFiles={loadedFiles}
+                  availableFontFamilies={availableFontFamilies}
+                  fontSuggestion={fontSuggestion}
+                  installedFonts={installedFonts}
+                  onActivate={expand}
+                  showVarName={showVarName}
+                  autoRender={autoRender}
+                  presetsLabel={presetsLabel}
+                  parametersLabel={parametersLabel}
+                />
+              )}
             </div>
           )}
         </BottomSheet>

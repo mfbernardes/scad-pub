@@ -4,7 +4,7 @@
 // so we never run two renderers at once; the single lazy factory lives here so
 // both layouts share one chunk. Layout-specific floating controls (desktop's
 // ActionCluster/HUD anchor inside the wrap) come through `children`.
-import { lazy, Suspense, type ReactNode, type RefObject } from "react";
+import { lazy, memo, Suspense, type ReactNode, type RefObject } from "react";
 import type { Design, RenderResult } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import type { ViewerHandle, Dimensions } from "./Viewer";
@@ -44,7 +44,7 @@ interface Props {
   children?: ReactNode;
 }
 
-export function ViewerStage({
+export const ViewerStage = memo(function ViewerStage({
   viewerRef,
   active,
   design,
@@ -117,4 +117,4 @@ export function ViewerStage({
       {children}
     </div>
   );
-}
+});
