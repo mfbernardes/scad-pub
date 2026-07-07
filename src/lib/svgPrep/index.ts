@@ -20,6 +20,7 @@ export {
   displayColor,
   colorKey,
   slugForColor,
+  isRenderableColor,
 } from "./colors";
 export type { Rgb } from "./colors";
 export { check } from "./check";
@@ -42,6 +43,11 @@ import { applyFixes } from "./fixes";
 import { groupByColor } from "./groupByColor";
 import { deriveRegions, formatLayers, parseLayersArg } from "./regions";
 import type { Finding, Region } from "./types";
+
+/** Above this many colour regions a multi-colour export tends to import
+ *  unreliably into slicers (small regions merge or drop). Surfaced as a caution,
+ *  not a hard limit. */
+export const MAX_RELIABLE_REGIONS = 8;
 
 /** A region binding is only meaningful with 2+ distinct regions; a single
  *  colour degrades to a blank string (no per-region split). */

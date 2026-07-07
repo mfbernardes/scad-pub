@@ -4,7 +4,15 @@
 // layers string. The configurator's own 3D viewer is the preview — this dialog
 // only reports what it checked, fixed and derived.
 import { useMemo, useState } from "react";
-import { check, parseSvg, prepareSvg, type Finding, type Region } from "../lib/svgPrep";
+import {
+  check,
+  isRenderableColor,
+  MAX_RELIABLE_REGIONS,
+  parseSvg,
+  prepareSvg,
+  type Finding,
+  type Region,
+} from "../lib/svgPrep";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
@@ -42,12 +50,16 @@ const LEVEL_BADGE: Record<Finding["level"], "destructive" | "warn" | "secondary"
   INFO: "secondary",
 };
 
+// Blocking problems first, then warnings, then informational notes.
+const LEVEL_ORDER: Record<Finding["level"], number> = { ERROR: 0, WARN: 1, INFO: 2 };
+
 function FindingList({ findings, empty }: { findings: Finding[]; empty: string }) {
   if (findings.length === 0)
     return <p className="text-sm text-muted-foreground">{empty}</p>;
+  const sorted = [...findings].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
   return (
     <ul className="flex flex-col gap-2">
-      {findings.map((f, i) => (
+      {sorted.map((f, i) => (
         <li key={`${f.code}-${i}`} className="flex gap-2 text-sm leading-[1.4]">
           <Badge variant={LEVEL_BADGE[f.level]} className="mt-[1px] shrink-0">
             {f.level}
@@ -64,6 +76,8 @@ function FindingList({ findings, empty }: { findings: Finding[]; empty: string }
 
 // Steps: 1 = check, 2 = fix, 3 = colours (only when deriveColours).
 type Step = 1 | 2 | 3;
+
+const STEP_NAMES: Record<Step, string> = { 1: "Check", 2: "Fix", 3: "Colours" };
 
 export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComplete }: Props) {
   // Parse once. A parse failure is a terminal state with a retry via cancel.
@@ -122,7 +136,7 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
           <DialogDescription>
             {parsed.error
               ? "This file could not be read as an SVG."
-              : `Step ${step} of ${lastStep} · ${fileName}`}
+              : `Step ${step} of ${lastStep}: ${STEP_NAMES[step]} · ${fileName}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -182,21 +196,47 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                       colour on export:
                     </p>
                     <ul className="flex flex-col gap-1 text-sm">
-                      {fixed.regions.map((r) => (
-                        <li key={r.id} className="flex items-center gap-2">
-                          <span
-                            className="inline-block size-3 shrink-0 rounded-[3px] border"
-                            style={{ background: r.color }}
-                            aria-hidden="true"
-                          />
-                          <code className="font-mono text-[0.8rem]">{r.id}</code>
-                          <span className="text-muted-foreground">
-                            {r.color}
-                            {r.count > 0 && ` · ${r.count} shape(s)`}
-                          </span>
-                        </li>
-                      ))}
+                      {fixed.regions.map((r) => {
+                        const showable = isRenderableColor(r.color);
+                        return (
+                          <li key={r.id} className="flex items-center gap-2">
+                            {showable ? (
+                              <span
+                                className="inline-block size-3 shrink-0 rounded-[3px] border"
+                                style={{ background: r.color }}
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              <span
+                                className="inline-flex size-3 shrink-0 items-center justify-center rounded-[3px] border border-dashed text-[0.6rem] leading-none text-muted-foreground"
+                                aria-hidden="true"
+                              >
+                                ?
+                              </span>
+                            )}
+                            <code className="font-mono text-[0.8rem]">{r.id}</code>
+                            <span className="text-muted-foreground">
+                              {r.color}
+                              {r.count > 0 && ` · ${r.count} shape(s)`}
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
+                    {fixed.regions.some((r) => !isRenderableColor(r.color)) && (
+                      <p className="text-[0.78rem] text-muted-foreground">
+                        Colours marked <span aria-hidden="true">?</span> can't be
+                        previewed here, but pass through to OpenSCAD unchanged — check
+                        them in your slicer.
+                      </p>
+                    )}
+                    {fixed.regions.length > MAX_RELIABLE_REGIONS && (
+                      <p className="text-sm text-warn">
+                        {fixed.regions.length} regions is a lot: slicers import a few
+                        large regions reliably, but many small ones can merge or import
+                        unpredictably. Consider fewer, larger regions.
+                      </p>
+                    )}
                     <label className="flex flex-col gap-1 text-sm">
                       <span className="text-muted-foreground">
                         Region colours (editable):

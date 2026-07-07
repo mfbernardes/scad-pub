@@ -101,6 +101,8 @@ svg_file = "plan.svg";
 svg_layers = "";
 ```
 
+The wizard grades what it finds by severity — **errors first, then warnings, then notes**. A residual **error** (e.g. no importable geometry) blocks completion: the *Use this SVG* button stays disabled until it's resolved. Warnings (dropped `<text>`, stroke-only outlines…) are informational — the drawing still imports, minus what OpenSCAD can't read. Before the wizard even opens, a dropped file that isn't an SVG, or one over 2 MB, is rejected inline. On the colours step it also cautions when a drawing yields many regions (which import unreliably into slicers) and marks any region colour it can't preview (still passed to OpenSCAD verbatim).
+
 `@svg` composes with a co-located `// @showIf`, so a conditional SVG field still gets the affordance. Both annotations are invisible to OpenSCAD, which just imports the file and (for the per-region path) selects regions by their `<g id>`.
 
 ## Viewer info (`// @info`)
