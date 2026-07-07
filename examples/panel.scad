@@ -6,6 +6,7 @@
 //
 // @description An SVG extruded as a coloured relief panel (per-region colours).
 // @icon panel-icon.svg
+// @doc panel.md
 
 /* [Panel] */
 // Panel width (mm).

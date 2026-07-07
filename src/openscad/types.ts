@@ -135,6 +135,10 @@ export interface Design {
   /** Optional served URL of the design's icon (shown in the picker and used as
    *  the design's manifest-shortcut icon). Null/absent for none. */
   icon?: string | null;
+  /** Optional served URL of the design's own user-documentation Markdown
+   *  (scad/<id>-doc.md), fetched on demand and rendered in the doc modal.
+   *  Null/absent hides the "Design guide" affordance. */
+  doc?: string | null;
   sections: string[];
   /** Section names that start collapsed (from a `// @collapsed` annotation). */
   collapsedSections?: string[];

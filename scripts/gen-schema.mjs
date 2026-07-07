@@ -280,10 +280,11 @@ function resolveDesignList(config, SOURCE) {
       heavy: d.heavy ?? false,
       // Optional dropdown grouping header (designs sharing a group cluster).
       group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
-      // Optional picker description + icon (icon is a config-relative path,
-      // resolved to a served URL once outScadDir exists).
+      // Optional picker description + icon + user-doc (icon/doc are config-
+      // relative paths, resolved/copied to served URLs once outScadDir exists).
       description: checkDesignString(d.description, d.id, "description"),
       iconSrc: checkDesignString(d.icon, d.id, "icon"),
+      docSrc: checkDesignString(d.doc, d.id, "doc"),
     }));
   }
   return readdirSync(SOURCE)
@@ -291,14 +292,14 @@ function resolveDesignList(config, SOURCE) {
     .sort()
     .map((f) => {
       const id = f.replace(/\.scad$/, "");
-      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null };
+      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null, docSrc: null };
     });
 }
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
 function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyAsset }) {
-  return resolveDesignList(config, SOURCE).map(({ iconSrc, ...d }) => {
+  return resolveDesignList(config, SOURCE).map(({ iconSrc, docSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
     copyAsset(d.file);
@@ -325,7 +326,21 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyA
       copyFileSync(src, join(outScadDir, name));
       icon = `scad/${name}`;
     }
-    return { ...d, description, icon, presets, abs, sections, collapsedSections, params };
+    // User documentation, same fallback + base rules as icon: config `doc` wins
+    // (config-relative) over a `// @doc` annotation (relative to the .scad). The
+    // Markdown file is copied verbatim under a deterministic `<id>-doc.md` name;
+    // its served URL is fetched on demand and rendered by the doc modal. Pure
+    // prose, so it's excluded from renderHash (it can't affect geometry).
+    let doc = null;
+    const docRel = docSrc ?? meta.doc;
+    if (docRel) {
+      const base = docSrc ? CONFIG_DIR : dirname(abs);
+      const src = mustExist(resolve(base, docRel), `design '${d.id}' doc '${docRel}'`);
+      const name = `${d.id}-doc.md`;
+      copyFileSync(src, join(outScadDir, name));
+      doc = `scad/${name}`;
+    }
+    return { ...d, description, icon, doc, presets, abs, sections, collapsedSections, params };
   });
 }
 
@@ -382,6 +397,7 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
     shell.add(`scad/${d.file}`);
     for (const preset of d.presets) shell.add(`scad/${preset}`);
     if (d.icon) shell.add(d.icon);
+    if (d.doc) shell.add(d.doc);
   }
   if (logo) {
     shell.add(logo.light);

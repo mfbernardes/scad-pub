@@ -26,7 +26,8 @@ import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
 import { OutputToggle } from "./OutputToggle";
 import { BarActions } from "./BarActions";
-import { ICON_BUTTON_CLASS } from "./IconButton";
+import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
+import { BookOpen as GuideIcon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { ViewerStage } from "./ViewerStage";
 import { ViewerHUD } from "./ViewerHUD";
@@ -397,6 +398,16 @@ export const AppShell = memo(function AppShell({
                 <span className="whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.85rem] font-semibold">
                   {design.label}
                 </span>
+              )}
+              {design.doc && (
+                <IconButton
+                  label="Design guide"
+                  title="About this design"
+                  onClick={actions.showDesignDoc}
+                  className="mobile-top-bar__design-doc size-7 shrink-0 p-[0.3rem]"
+                >
+                  <GuideIcon size={15} />
+                </IconButton>
               )}
             </div>
             {/* The Output bell doubles as the render-status indicator (a

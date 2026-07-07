@@ -42,6 +42,8 @@ function checkDesign(d: unknown): void {
     fail(`design '${id}' 'description' must be a string`);
   if (design.icon != null && typeof design.icon !== "string")
     fail(`design '${id}' 'icon' must be a string URL`);
+  if (design.doc != null && typeof design.doc !== "string")
+    fail(`design '${id}' 'doc' must be a string URL`);
   if (
     design.collapsedSections !== undefined &&
     (!Array.isArray(design.collapsedSections) ||

@@ -33,6 +33,7 @@ export interface AppActions {
   autoRenderChange: (v: boolean) => void;
   cycleTheme: () => void;
   showHelp: () => void;
+  showDesignDoc: () => void;
   showLicenses: () => void;
 }
 
@@ -71,6 +72,7 @@ export function AppActionsProvider({
       autoRenderChange: (v) => latest.current.autoRenderChange(v),
       cycleTheme: () => latest.current.cycleTheme(),
       showHelp: () => latest.current.showHelp(),
+      showDesignDoc: () => latest.current.showDesignDoc(),
       showLicenses: () => latest.current.showLicenses(),
     };
   return createElement(AppActionsContext.Provider, { value: stable.current }, children);
