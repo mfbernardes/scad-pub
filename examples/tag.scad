@@ -42,9 +42,10 @@ engrave_text = false;
 /* [Emblem (SVG)] */
 // Extrude an SVG emblem onto the tag.
 show_emblem = true;
-// SVG file to import. The bundled default is "emblem.svg"; upload your own and
-// set this to its filename to use it instead.
+// SVG file to import. The bundled default is "emblem.svg"; drop in your own and
+// the wizard checks and fixes it for OpenSCAD import.
 // @showIf show_emblem
+// @svg
 svg_file = "emblem.svg";
 // Target width of the emblem; height follows the SVG's aspect ratio (mm).
 // @showIf show_emblem

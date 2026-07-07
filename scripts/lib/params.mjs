@@ -33,6 +33,15 @@ const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
 // a config `designs[]` entry still overrides them — and invisible to OpenSCAD.
 const DESCRIPTION_RE = /^\s*\/\/\s*@description\b\s*(.*)$/i;
 const ICON_RE = /^\s*\/\/\s*@icon\b\s*(.*)$/i;
+// `@svg [layers=<param>]` directive: marks a string parameter as an SVG file the
+// in-app wizard prepares (check / fix / import). The optional `layers=<param>`
+// binds the wizard's derived per-region colour string to a second parameter.
+// Invisible to OpenSCAD.
+const SVG_ANNOT_RE = /^@svg\b\s*(.*)$/i;
+const SVG_LAYERS_RE = /^layers=([A-Za-z_][A-Za-z0-9_]*)$/i;
+// `@filledBy <param>` directive: marks a parameter as populated by the wizard on
+// the named `@svg` field, so the UI can render it demoted. Invisible to OpenSCAD.
+const FILLEDBY_RE = /^@filledBy\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i;
 
 // The concise label is the first sentence of the doc block; the rest is help.
 // Split on sentence-ending .!? + whitespace + a capital/opening paren, so we
@@ -126,6 +135,10 @@ export function parseParams(absPath) {
   let pendingFont = false;
   // Set by an `// @info [Label | unit]` line; consumed by the next parameter.
   let pendingInfo = null;
+  // Set by an `// @svg [layers=<param>]` line; consumed by the next parameter.
+  let pendingSvg = null;
+  // Set by an `// @filledBy <param>` line; consumed by the next parameter.
+  let pendingFilledBy = null;
   // Set by a `// @collapsed` line; consumed by the next section header.
   let pendingSectionCollapsed = false;
   const params = [];
@@ -140,6 +153,8 @@ export function parseParams(absPath) {
     pendingShowIf = null;
     pendingFont = false;
     pendingInfo = null;
+    pendingSvg = null;
+    pendingFilledBy = null;
     pendingSectionCollapsed = false;
   };
   for (const line of lines) {
@@ -193,6 +208,10 @@ export function parseParams(absPath) {
         p.isFont = true;
       // Surface this param's value in the viewer info panel (see `// @info`).
       if (pendingInfo) p.info = pendingInfo;
+      // Mark a string SVG field for the in-app wizard (see `// @svg`), and a
+      // wizard-populated target for demoted rendering (see `// @filledBy`).
+      if (pendingSvg && p.type === "string") p.svg = pendingSvg;
+      if (pendingFilledBy) p.filledBy = pendingFilledBy;
       params.push(p);
       reset();
       continue;
@@ -203,6 +222,8 @@ export function parseParams(absPath) {
       // label/help; it drives conditional visibility in the UI instead.
       const showIf = dm[1].trim().match(SHOWIF_RE);
       const info = dm[1].trim().match(INFO_RE);
+      const svg = dm[1].trim().match(SVG_ANNOT_RE);
+      const filledBy = dm[1].trim().match(FILLEDBY_RE);
       if (showIf) pendingShowIf = showIf[1].trim();
       else if (FONT_ANNOT_RE.test(dm[1].trim())) pendingFont = true;
       else if (info) {
@@ -211,6 +232,11 @@ export function parseParams(absPath) {
         // description in the UI).
         const [label, unit] = info[1].split("|").map((s) => s.trim());
         pendingInfo = { label: label || null, unit: unit || null };
+      } else if (filledBy) pendingFilledBy = filledBy[1];
+      else if (svg) {
+        // `@svg` or `@svg layers=<param>` — capture the optional layers binding.
+        const layersMatch = svg[1].trim().match(SVG_LAYERS_RE);
+        pendingSvg = { layers: layersMatch ? layersMatch[1] : null };
       } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {
       // keep doc across blank lines

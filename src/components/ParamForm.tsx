@@ -13,6 +13,7 @@ import { familyOf, normalizeFamily, withFamily, type InstalledFont } from "../li
 import { useAppActions } from "../lib/appActions";
 import { FileInput } from "./FileInput";
 import { FontSelect } from "./FontSelect";
+import { SvgPrepareControl } from "./SvgPrepareControl";
 import { Slider } from "./ui/slider";
 import { Input } from "./ui/input";
 import { Switch } from "./ui/switch";
@@ -240,6 +241,18 @@ function Control({
         fonts={installedFonts}
       />
     );
+  // An `@svg` string field becomes a "Prepare SVG…" affordance that opens the
+  // in-app wizard (check / fix / colour derivation) instead of a raw path box.
+  if (param.type === "string" && param.svg)
+    return (
+      <SvgPrepareControl
+        name={param.name}
+        svg={param.svg}
+        value={String(value ?? "")}
+        label={label}
+        onChange={onChange}
+      />
+    );
   switch (param.type) {
     case "number":
       return <NumberControl param={param} value={value} label={label} onChange={onChange} />;
@@ -375,12 +388,8 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                   installedFonts={installedFonts}
                 />
               );
-              return (
-                <div
-                  className="param my-3 flex flex-col gap-[0.35rem]"
-                  key={p.name}
-                  data-param={p.name}
-                >
+              const body = (
+                <>
                   <span className={`flex ${isToggle ? "items-center" : "items-baseline"} justify-between gap-2`}>
                     {/* Label + optional info button together on the left so the
                         right edge is free for the toggle / var-name code. */}
@@ -402,6 +411,28 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                       fallback={fontFallback(p, missingFontValue, availableFontFamilies, fontSuggestion)}
                       onUse={(next) => onChange(p.name, next)}
                     />
+                  )}
+                </>
+              );
+              // The `.param`/`data-param` row hook stays on the outer element for
+              // every param (smoke harness + extraCss target it). A `@filledBy`
+              // param is normally written by the SVG wizard, so its content rides
+              // an inner "Advanced" disclosure — demoted, but still hand-editable.
+              return (
+                <div
+                  className="param my-3 flex flex-col gap-[0.35rem]"
+                  key={p.name}
+                  data-param={p.name}
+                >
+                  {p.filledBy ? (
+                    <details className="param-advanced">
+                      <summary className="flex cursor-pointer select-none list-none items-center gap-[0.3rem] text-[0.82rem] text-muted-foreground focus-visible:rounded-[4px]">
+                        Advanced: {label}
+                      </summary>
+                      <div className="mt-2 flex flex-col gap-[0.35rem]">{body}</div>
+                    </details>
+                  ) : (
+                    body
                   )}
                 </div>
               );

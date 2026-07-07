@@ -1024,6 +1024,37 @@ test("@info marks a param for the viewer panel, with optional label + unit", () 
   assert.equal(byName.width.info, undefined);
 });
 
+test("@svg marks a string field for the wizard and captures the layers binding", () => {
+  const params = paramsOf(
+    `/* [Source] */\n` +
+      `// The drawing to extrude.\n` +
+      `// @svg layers=parts_layers\n` +
+      `svg_file = "examples/plan.svg";\n` +
+      `// Colours per region, filled by the wizard.\n` +
+      `// @filledBy svg_file\n` +
+      `parts_layers = "";\n` +
+      `// A plain SVG field with no colour binding.\n` +
+      `// @svg\n` +
+      `icon_file = "examples/icon.svg";\n` +
+      `// A plain string, no annotation.\n` +
+      `note = "hello";\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  // `@svg layers=<param>` captures the binding on a string param.
+  assert.deepEqual(byName.svg_file.svg, { layers: "parts_layers" });
+  // The annotation line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.svg_file.help.includes("@svg"));
+  assert.equal(byName.svg_file.description, "The drawing to extrude.");
+  // Bare `@svg` (no binding) => layers is null.
+  assert.deepEqual(byName.icon_file.svg, { layers: null });
+  // `@filledBy` names the source @svg field and stays a normal (editable) param.
+  assert.equal(byName.parts_layers.filledBy, "svg_file");
+  assert.ok(!byName.parts_layers.help.includes("@filledBy"));
+  // No annotation -> no svg / filledBy fields.
+  assert.equal(byName.note.svg, undefined);
+  assert.equal(byName.note.filledBy, undefined);
+});
+
 test("parseFontFallback accepts a trimmed string or null; rejects empty", () => {
   assert.equal(parseFontFallback(undefined), null);
   assert.equal(parseFontFallback(null), null);
