@@ -27,6 +27,7 @@ import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/ui/sonner";
 import { LicensesModal } from "./components/LicensesModal";
 import { HelpModal } from "./components/HelpModal";
+import { DesignDocModal } from "./components/DesignDocModal";
 import { PopupModal } from "./components/PopupModal";
 import { shouldShowPopup, rememberPopup } from "./lib/popup";
 
@@ -73,6 +74,7 @@ export default function App() {
   }, []);
   const [showLicenses, setShowLicenses] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showDesignDoc, setShowDesignDoc] = useState(false);
   const [showPopup, setShowPopup] = useState(() => shouldShowPopup(popup));
   const closePopup = (remember: boolean) => {
     if (remember && popup) rememberPopup(popup);
@@ -215,6 +217,7 @@ export default function App() {
 
   const handleReset = useCallback(() => { setValues(defaultsFor(design)); setPresetSel(""); }, [design]);
   const showHelpModal = useCallback(() => setShowHelp(true), []);
+  const showDesignDocModal = useCallback(() => setShowDesignDoc(true), []);
   const showLicensesModal = useCallback(() => setShowLicenses(true), []);
 
   // The app-level action bundle, read via useAppActions() by the panels. Rebuilt
@@ -237,6 +240,7 @@ export default function App() {
     autoRenderChange: setAutoRender,
     cycleTheme,
     showHelp: showHelpModal,
+    showDesignDoc: showDesignDocModal,
     showLicenses: showLicensesModal,
   };
 
@@ -261,6 +265,9 @@ export default function App() {
           canInstall={canInstall && installMode !== "off"}
           onInstall={promptInstall}
         />
+      )}
+      {showDesignDoc && design.doc && (
+        <DesignDocModal design={design} onClose={() => setShowDesignDoc(false)} />
       )}
       {showLicenses && (
         <LicensesModal extra={schema.licenses} onClose={() => setShowLicenses(false)} />

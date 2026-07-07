@@ -234,12 +234,53 @@ test("per-design description + icon are parsed, copied and served", () => {
   assert.ok(existsSync(join(out, "scad", "collapsible-icon.svg")));
 });
 
-test("parseParams captures file-level @description / @icon metadata", () => {
+test("per-design @doc is resolved, copied and served (config + annotation paths)", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const schema = generate({
+    configPath: join(FIXTURES, "widget-designmeta.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const widget = schema.designs.find((d) => d.id === "widget");
+  const collapsible = schema.designs.find((d) => d.id === "collapsible");
+  // widget's doc comes from the config `designs[].doc` (config-relative path).
+  assert.equal(widget.doc, "scad/widget-doc.md");
+  assert.ok(existsSync(join(out, "public", "scad", "widget-doc.md")));
+  // collapsible sets no config doc, so it falls back to its `// @doc`
+  // annotation (resolved relative to the design file), copied under <id>-doc.md.
+  assert.equal(collapsible.doc, "scad/collapsible-doc.md");
+  assert.ok(existsSync(join(out, "public", "scad", "collapsible-doc.md")));
+  // Both docs are precached for offline use.
+  const precache = JSON.parse(
+    readFileSync(join(out, "public", "precache-manifest.json"), "utf-8")
+  );
+  assert.ok(precache.shell.includes("scad/widget-doc.md"));
+  assert.ok(precache.shell.includes("scad/collapsible-doc.md"));
+});
+
+test("a design with no @doc / config doc has doc null and no button target", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].doc ?? null, null);
+});
+
+test("a missing @doc target fails the build", () => {
+  assert.throws(
+    () => run("widget-baddoc.config.json"),
+    /design 'widget' doc/
+  );
+});
+
+test("parseParams captures file-level @description / @icon / @doc metadata", () => {
   const { meta } = parseParams(join(FIXTURES, "src", "collapsible.scad"));
-  assert.deepEqual(meta, { description: "A collapsible gadget.", icon: "assets/emblem.svg" });
+  assert.deepEqual(meta, {
+    description: "A collapsible gadget.",
+    icon: "assets/emblem.svg",
+    doc: "collapsible-doc.md",
+  });
   // A design file with no such annotations reports nulls.
   const plain = parseParams(join(FIXTURES, "mini.scad"));
-  assert.deepEqual(plain.meta, { description: null, icon: null });
+  assert.deepEqual(plain.meta, { description: null, icon: null, doc: null });
 });
 
 test("lang/dir + per-design shortcut icons + screenshot fields reach the manifest", () => {

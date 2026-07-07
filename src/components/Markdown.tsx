@@ -1,9 +1,14 @@
 // Markdown.tsx — a deliberately tiny, safe Markdown renderer for help content
 // (no library, no dangerouslySetInnerHTML). Supports the block + inline subset
-// the help text needs: blank-line-separated paragraphs, `- ` bullet lists, and
-// inline **bold**, `code`, and [text](url) links. Anything else renders as text.
-import type { ReactNode } from "react";
+// the help text needs: blank-line-separated paragraphs, `#`/`##`/`###` ATX
+// headings, `- ` bullet lists, and inline **bold**, `code`, and [text](url)
+// links. Anything else renders as text.
+import { createElement, type ReactNode } from "react";
 import { safeUrl } from "../lib/safeUrl";
+
+// `#`/`##`/`###` at the start of a single-line block. `#` maps to <h2> so a doc
+// heading nests under the modal's own <h1> (DialogTitle) rather than competing.
+const HEADING = /^(#{1,3})\s+(.+)$/;
 
 // Inline: **bold**, `code`, [text](url). Split on the first matching token,
 // recurse on the rest. Order matters only for disjoint tokens, so a single pass
@@ -41,6 +46,12 @@ export function Markdown({ body }: { body: string }): ReactNode {
   const blocks = body.trim().split(/\n\s*\n/);
   return blocks.map((block, b) => {
     const lines = block.split("\n");
+    const heading = lines.length === 1 ? block.match(HEADING) : null;
+    if (heading) {
+      // `#`->h2, `##`->h3, `###`->h4 (offset by one; see HEADING).
+      const tag = `h${heading[1].length + 1}`;
+      return createElement(tag, { key: b }, inline(heading[2], `h-${b}`));
+    }
     if (lines.every((l) => l.trim().startsWith("- "))) {
       return (
         <ul key={b}>

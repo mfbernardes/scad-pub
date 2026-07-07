@@ -11,7 +11,7 @@
     { "src": "logo.svg", "sizes": "390x844", "form_factor": "narrow", "label": "Home screen", "platform": "android" }
   ],
   "designs": [
-    { "id": "widget", "label": "Widget", "description": "A little widget.", "icon": "logo.svg" },
+    { "id": "widget", "label": "Widget", "description": "A little widget.", "icon": "logo.svg", "doc": "widget-doc.md" },
     { "id": "collapsible", "label": "Collapsible" }
   ]
 }

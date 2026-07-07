@@ -17,6 +17,7 @@ const TYPES = {
   ".wasm": "application/wasm",
   ".json": "application/json",
   ".scad": "text/plain; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
   ".ttf": "font/ttf",
   ".conf": "text/plain",
   ".svg": "image/svg+xml",

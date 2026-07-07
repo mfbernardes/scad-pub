@@ -4,13 +4,14 @@
 // via the auto-opening output console; PWA install is demoted to the Help
 // modal — so the bar stays lean.
 import { memo } from "react";
+import { BookOpen as GuideIcon } from "lucide-react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
 import { DesignPicker } from "./DesignPicker";
 import { BarBrand } from "./BarBrand";
 import { BarActions } from "./BarActions";
 import { OutputToggle } from "./OutputToggle";
-import { ICON_BUTTON_CLASS } from "./IconButton";
+import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
 import { cn } from "../lib/utils";
 
 interface Props {
@@ -48,7 +49,7 @@ export const CommandBar = memo(function CommandBar({
   openPickerSignal,
   pickerActive,
 }: Props) {
-  const { designChange } = useAppActions();
+  const { designChange, showDesignDoc } = useAppActions();
   const currentDesign = designs.find((d) => d.id === designId);
 
   return (
@@ -75,6 +76,16 @@ export const CommandBar = memo(function CommandBar({
           <span className="text-[0.88rem] font-semibold text-foreground">
             {currentDesign?.label ?? designId}
           </span>
+        )}
+        {currentDesign?.doc && (
+          <IconButton
+            label="Design guide"
+            title="About this design"
+            onClick={showDesignDoc}
+            className="command-bar__design-doc size-7 p-[0.3rem]"
+          >
+            <GuideIcon size={15} />
+          </IconButton>
         )}
       </div>
 

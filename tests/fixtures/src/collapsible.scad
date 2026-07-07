@@ -1,11 +1,12 @@
 // Fixture exercising `// @collapsed` section annotations. The annotation before
 // the first section also covers the "section === null" edge in the parser.
 //
-// Also carries file-level `// @description` / `// @icon` metadata (above the
-// first section) that the config does NOT override, so the fallback path is
-// exercised.
+// Also carries file-level `// @description` / `// @icon` / `// @doc` metadata
+// (above the first section) that the config does NOT override, so the fallback
+// path is exercised.
 // @description A collapsible gadget.
 // @icon assets/emblem.svg
+// @doc collapsible-doc.md
 
 // @collapsed
 /* [Basics] */
