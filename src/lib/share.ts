@@ -6,6 +6,20 @@
 
 export type ShareOutcome = "shared" | "cancelled" | "unsupported" | "failed";
 
+// The Web Share API also exists on desktop, but routing an export or a link to
+// the OS share sheet there is worse than a plain download / clipboard copy — the
+// user can't actually get the file into Downloads. Restrict outbound sharing to
+// touch devices: a coarse pointer with no hover is the signal for a phone/tablet
+// rather than a mouse-driven desktop (a merely-narrow desktop window still reads
+// as desktop here, unlike a viewport-width breakpoint).
+function isTouchDevice(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse) and (hover: none)").matches
+  );
+}
+
 function outcomeFromError(e: unknown): ShareOutcome {
   // A user dismissing the share sheet rejects with AbortError — not a failure,
   // and the caller must NOT then fall back (the user already declined).
@@ -14,6 +28,7 @@ function outcomeFromError(e: unknown): ShareOutcome {
 
 /** Share a URL via the native share sheet. "unsupported" → fall back to clipboard. */
 export async function shareUrl(url: string, title?: string): Promise<ShareOutcome> {
+  if (!isTouchDevice()) return "unsupported"; // desktop → copy to clipboard instead
   if (typeof navigator === "undefined" || typeof navigator.share !== "function")
     return "unsupported";
   try {
@@ -40,6 +55,7 @@ export async function shareFileOrFallback(
 
 /** Share a file (e.g. an exported model). "unsupported" → fall back to download. */
 export async function shareFile(file: File, title?: string): Promise<ShareOutcome> {
+  if (!isTouchDevice()) return "unsupported"; // desktop → download instead
   if (
     typeof navigator === "undefined" ||
     typeof navigator.share !== "function" ||

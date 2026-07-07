@@ -6,12 +6,23 @@ import assert from "node:assert/strict";
 import { shareUrl, shareFile, shareFileOrFallback } from "../src/lib/share.ts";
 
 const orig = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-function withNavigator(nav, fn) {
+const origWin = Object.getOwnPropertyDescriptor(globalThis, "window");
+
+// Swap in a fake navigator plus a `window.matchMedia` reporting the requested
+// device class (touch = coarse pointer / no hover). Outbound sharing is gated on
+// a touch device, so most cases run as mobile; the desktop cases assert the gate.
+function withNavigator(nav, fn, { touch = true } = {}) {
   Object.defineProperty(globalThis, "navigator", { value: nav, configurable: true });
+  Object.defineProperty(globalThis, "window", {
+    value: { matchMedia: (q) => ({ matches: touch && q.includes("coarse") }) },
+    configurable: true,
+  });
   try {
     return fn();
   } finally {
     if (orig) Object.defineProperty(globalThis, "navigator", orig);
+    if (origWin) Object.defineProperty(globalThis, "window", origWin);
+    else delete globalThis.window;
   }
 }
 
@@ -21,6 +32,17 @@ const fakeFile = { name: "m.3mf" };
 test("shareUrl: unsupported when navigator.share is absent", async () => {
   const out = await withNavigator({}, () => shareUrl("https://x/#d=a"));
   assert.equal(out, "unsupported");
+});
+
+test("shareUrl: unsupported on desktop even when navigator.share exists", async () => {
+  let called = false;
+  const out = await withNavigator(
+    { share: async () => { called = true; } },
+    () => shareUrl("https://x/#d=a", "Tag"),
+    { touch: false }
+  );
+  assert.equal(out, "unsupported");
+  assert.equal(called, false); // never reaches the share sheet on desktop
 });
 
 test("shareUrl: shared on success, passes url + title", async () => {
@@ -54,6 +76,30 @@ test("shareFile: unsupported when canShare rejects the file", async () => {
 test("shareFile: unsupported when canShare is absent (Level 1 only)", async () => {
   const out = await withNavigator({ share: async () => {} }, () => shareFile(fakeFile));
   assert.equal(out, "unsupported");
+});
+
+test("shareFile: unsupported on desktop even when canShare accepts the file", async () => {
+  let called = false;
+  const out = await withNavigator(
+    { share: async () => { called = true; }, canShare: () => true },
+    () => shareFile(fakeFile, "m.3mf"),
+    { touch: false }
+  );
+  assert.equal(out, "unsupported");
+  assert.equal(called, false);
+});
+
+test("shareFileOrFallback: desktop falls back to download (no share sheet)", async () => {
+  let fell = false;
+  let called = false;
+  const out = await withNavigator(
+    { share: async () => { called = true; }, canShare: () => true },
+    () => shareFileOrFallback(fakeFile, () => { fell = true; }),
+    { touch: false }
+  );
+  assert.equal(out, "fell-back");
+  assert.equal(fell, true);
+  assert.equal(called, false);
 });
 
 test("shareFile: shared when canShare accepts the file", async () => {
