@@ -1,7 +1,7 @@
 // Safe, appearance-preserving fixes applied in place. Each returns a list of
 // human-readable change strings.
 
-import { SVG_NS, inkAttr, iterElements, localName } from "./dom";
+import { SHAPE_TAGS, SVG_NS, inkAttr, iterElements, localName } from "./dom";
 import { gFormat, parseViewBox } from "./geometry";
 
 /** Rename each Inkscape layer's id to its label so it is selectable. Only touches
@@ -51,6 +51,87 @@ export function fixViewBoxOrigin(root: Element): string[] {
   ];
 }
 
+// Whether the element sets its own fill (a `fill=` attribute or a `fill:` in its
+// `style` attribute) — in which case a stylesheet rule must not override it.
+export function hasOwnFill(el: Element): boolean {
+  if (/(?:^|;)\s*fill\s*:/i.test(el.getAttribute("style") ?? "")) return true;
+  return el.getAttribute("fill") !== null;
+}
+
+interface FillRule {
+  /** Specificity rank: 0 = element/tag, 1 = class, 2 = id. */
+  rank: 0 | 1 | 2;
+  name: string;
+  fill: string;
+}
+
+// Parse `<style>` text for simple `selector { … fill: X … }` rules using a
+// class (`.c`), id (`#i`) or element (`tag`) selector. OpenSCAD's import ignores
+// `<style>` entirely, so these fills are invisible to it and to colour
+// derivation; resolving them onto the shapes is what keeps a CSS-styled export
+// (common from Illustrator/Inkscape) from deriving every region as black.
+// Compound/complex selectors are skipped (they're reported by `check`).
+function parseStyleFillRules(root: Element): FillRule[] {
+  const rules: FillRule[] = [];
+  for (const el of iterElements(root)) {
+    if (localName(el) !== "style") continue;
+    const css = (el.textContent ?? "").replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const block of css.split("}")) {
+      const brace = block.indexOf("{");
+      if (brace < 0) continue;
+      const fillMatch = /(?:^|;)\s*fill\s*:\s*([^;]+)/i.exec(block.slice(brace + 1));
+      if (!fillMatch) continue;
+      const fill = fillMatch[1].trim();
+      for (const sel of block.slice(0, brace).split(",")) {
+        const s = sel.trim();
+        if (/^\.[-\w]+$/.test(s)) rules.push({ rank: 1, name: s.slice(1), fill });
+        else if (/^#[-\w]+$/.test(s)) rules.push({ rank: 2, name: s.slice(1), fill });
+        else if (/^[a-zA-Z][\w-]*$/.test(s)) rules.push({ rank: 0, name: s.toLowerCase(), fill });
+        // anything else is a compound/complex selector — left for `check` to flag
+      }
+    }
+  }
+  return rules;
+}
+
+/** The fill an element inherits from a matching `<style>` rule (id beats class
+ *  beats tag; a later rule wins a tie), or null when none applies. */
+export function styleRuleFill(el: Element, rules: FillRule[]): string | null {
+  const classes = (el.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
+  const id = el.getAttribute("id");
+  const tag = localName(el);
+  let best: FillRule | null = null;
+  for (const r of rules) {
+    const matches =
+      (r.rank === 2 && r.name === id) ||
+      (r.rank === 1 && classes.includes(r.name)) ||
+      (r.rank === 0 && r.name === tag);
+    if (matches && (!best || r.rank >= best.rank)) best = r;
+  }
+  return best ? best.fill : null;
+}
+
+/** Resolve simple `<style>` class/id/tag fill rules onto the shapes and groups
+ *  that rely on them (setting an inline `fill`), so colour derivation reads the
+ *  drawing's real colours instead of defaulting to black. Appearance-preserving
+ *  and geometry-neutral (OpenSCAD ignores both the stylesheet and the fill). */
+export function resolveStyleFills(root: Element): string[] {
+  const rules = parseStyleFillRules(root);
+  if (rules.length === 0) return [];
+  let count = 0;
+  for (const el of iterElements(root)) {
+    const tag = localName(el);
+    if (tag !== "g" && !SHAPE_TAGS.has(tag)) continue;
+    if (hasOwnFill(el)) continue;
+    const fill = styleRuleFill(el, rules);
+    if (fill) {
+      el.setAttribute("fill", fill);
+      count += 1;
+    }
+  }
+  return count ? [`applied ${count} fill(s) from a <style> block onto their shapes`] : [];
+}
+
 export function applyFixes(root: Element): string[] {
-  return [...fixInkscapeIds(root), ...fixViewBoxOrigin(root)];
+  return [...fixInkscapeIds(root), ...fixViewBoxOrigin(root), ...resolveStyleFills(root)];
 }

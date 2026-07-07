@@ -13,7 +13,7 @@ import {
   paint,
 } from "./dom";
 import { contentBbox, parseViewBox } from "./geometry";
-import { groupIndex } from "./regions";
+import { effectiveFill, groupIndex } from "./regions";
 import type { Finding } from "./types";
 
 /**
@@ -118,6 +118,28 @@ export function check(root: Element, layers: string[] = []): Finding[] {
       message: `${ignored.get(name)} <${name}> element(s) — OpenSCAD ignores these on import`,
       hint: "flatten/expand them to plain shapes if they carry visible geometry",
     });
+  }
+
+  // CSS-styled fills: OpenSCAD ignores <style> entirely, so a region painted only
+  // through a stylesheet rule imports (and derives) as black. applyFixes resolves
+  // simple .class/#id/tag rules onto the shapes; flag any shape that still has no
+  // effective fill while a <style> block is present (an unresolved compound rule).
+  if (els.some((el) => localName(el) === "style")) {
+    const styled = shapes.filter(
+      (el) => el.getAttribute("class") && !effectiveFill(el)[1],
+    );
+    if (styled.length > 0) {
+      findings.push({
+        level: "WARN",
+        code: "styled-fill",
+        message:
+          `${styled.length} shape(s) take their fill from a <style> rule, which ` +
+          "OpenSCAD ignores — those regions import as black",
+        hint:
+          "give each region a fill attribute, or a simple .class / #id / tag " +
+          "{ fill: … } rule the wizard can resolve",
+      });
+    }
   }
 
   // Inkscape layer trap: a layer carries its name in inkscape:label, but OpenSCAD

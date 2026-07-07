@@ -232,3 +232,56 @@ test("prepareSvg: single-colour drawing yields a blank layers string", () => {
   );
   assert.equal(prepareSvg(root, { deriveColours: true }).layers, "");
 });
+
+test("resolves simple CSS class fills so colour derivation isn't black", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10">
+       <style>.a { fill: #ff0000 } .b { fill: #0000ff }</style>
+       <g id="left"><rect class="a" x="0" y="0" width="10" height="10"/></g>
+       <g id="right"><rect class="b" x="10" y="0" width="10" height="10"/></g>
+     </svg>`,
+  );
+  applyFixes(root);
+  assert.equal(formatLayers(deriveRegions(roundtrip(root))), "left:red, right:blue");
+});
+
+test("prepareSvg derives colours from a CSS-styled drawing", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10">
+       <style>#l{fill:#008000}#r{fill:#ffa500}</style>
+       <g id="l"><rect x="0" y="0" width="10" height="10"/></g>
+       <g id="r"><rect x="10" y="0" width="10" height="10"/></g>
+     </svg>`,
+  );
+  assert.equal(prepareSvg(root, { deriveColours: true }).layers, "l:green, r:orange");
+});
+
+test("a simple styled fill is resolved (no styled-fill warning after fixes)", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+       <style>.a{fill:red}</style>
+       <rect class="a" x="0" y="0" width="10" height="10"/>
+     </svg>`,
+  );
+  applyFixes(root);
+  assert.ok(!codes(root).includes("styled-fill"));
+});
+
+test("an unresolved (compound-selector) styled fill is flagged", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+       <style>.wrap .a{fill:red}</style>
+       <g class="wrap"><rect class="a" x="0" y="0" width="10" height="10"/></g>
+     </svg>`,
+  );
+  applyFixes(root);
+  assert.ok(codes(root).includes("styled-fill"));
+});
+
+test("prepareSvg surfaces a blocking ERROR when there is no importable geometry", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>x</text></svg>`,
+  );
+  const res = prepareSvg(root, { deriveColours: false });
+  assert.ok(res.findings.some((f) => f.level === "ERROR" && f.code === "no-geometry"));
+});

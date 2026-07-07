@@ -100,6 +100,23 @@ try {
     `svg_layers derived from the drawing's colours (${layersVal})`);
   await waitRendered(page, { timeout: 60000 });
   check(true, "panel re-rendered with per-region colours");
+
+  // --- error gate: a drawing with no importable geometry can't complete ---
+  const TEXT_ONLY = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text x="1" y="6">hi</text></svg>`;
+  await selectDesign(page, "Tag");
+  await page.getByRole("tab", { name: "Customize" }).click().catch(() => {});
+  await page.locator('[data-svg-field="svg_file"]').first().locator('input[type="file"]').setInputFiles({
+    name: "text-only.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from(TEXT_ONLY),
+  });
+  const d3 = page.getByRole("dialog");
+  await d3.waitFor({ state: "visible", timeout: 5000 });
+  await d3.getByRole("button", { name: /Fix & continue/i }).click();
+  check(/can't be imported/i.test(await d3.textContent()), "error step explains the drawing can't be imported");
+  check(await d3.getByRole("button", { name: /Use this SVG/i }).isDisabled(),
+    "‘Use this SVG’ is disabled while an ERROR remains");
+  await page.keyboard.press("Escape");
 } catch (e) {
   console.error("E2E ERROR:", e.message);
   failures++;

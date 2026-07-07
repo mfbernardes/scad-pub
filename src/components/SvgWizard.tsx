@@ -89,6 +89,9 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
   const [layers, setLayers] = useState("");
 
   const lastStep: Step = deriveColours ? 3 : 2;
+  // Residual ERROR findings (e.g. no importable geometry) mean the drawing can't
+  // be imported as-is, so block advancing past the check step and completing.
+  const blockedByError = (fixed?.findings ?? []).some((f) => f.level === "ERROR");
 
   const applyAndAdvance = () => {
     // The engine's one-call host contract: fix, (optionally) derive colours,
@@ -100,6 +103,7 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
   };
 
   const finish = () => {
+    if (blockedByError) return;
     onComplete({
       svg: fixed!.svg,
       layers: deriveColours ? layers.trim() : null,
@@ -212,6 +216,13 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                 )}
               </section>
             )}
+
+            {blockedByError && (
+              <p className="mt-3 text-sm font-medium text-destructive">
+                This drawing can't be imported as-is — resolve the errors above (e.g. add
+                importable geometry), then try again.
+              </p>
+            )}
           </div>
         )}
 
@@ -229,11 +240,16 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                 {step === 1 ? "Cancel" : "Back"}
               </Button>
               {step < lastStep ? (
-                <Button onClick={step === 1 ? applyAndAdvance : () => setStep((step + 1) as Step)}>
+                <Button
+                  onClick={step === 1 ? applyAndAdvance : () => setStep((step + 1) as Step)}
+                  disabled={step !== 1 && blockedByError}
+                >
                   {step === 1 ? "Fix & continue" : "Next"}
                 </Button>
               ) : (
-                <Button onClick={finish}>Use this SVG</Button>
+                <Button onClick={finish} disabled={blockedByError}>
+                  Use this SVG
+                </Button>
               )}
             </div>
           )}
