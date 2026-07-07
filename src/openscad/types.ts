@@ -63,6 +63,23 @@ export interface ParamBase {
    * fall back to `description`); `unit` is appended to the value (null → none).
    */
   info?: { label: string | null; unit: string | null };
+  /**
+   * Optional `@filledBy <param>` annotation: this parameter is populated by the
+   * SVG wizard on the named `@svg` field, so the UI renders it demoted (behind an
+   * "Advanced" disclosure) rather than as a prominent, hand-edited control. The
+   * value is the name of the `@svg` field that fills it. It stays editable.
+   */
+  filledBy?: string;
+}
+
+/**
+ * `@svg [layers=<param>]`: this string parameter is an SVG file prepared by the
+ * in-app wizard. `layers` names a second parameter that receives the derived
+ * per-region colour string (null when the field carries no `layers=` binding, so
+ * the colour step is skipped entirely).
+ */
+export interface SvgFieldMeta {
+  layers: string | null;
 }
 
 export type Param = ParamBase &
@@ -92,6 +109,12 @@ export type Param = ParamBase &
          * affordance when the family isn't loaded.
          */
         isFont?: boolean;
+        /**
+         * This string is an SVG file prepared by the in-app wizard. Set by
+         * gen-schema from an explicit `// @svg [layers=<param>]` annotation. The UI
+         * renders it as a "Prepare SVG…" affordance instead of a plain text box.
+         */
+        svg?: SvgFieldMeta;
       }
   );
 

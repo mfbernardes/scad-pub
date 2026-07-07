@@ -7,11 +7,11 @@ ScadPub adds a handful of comment annotations that `gen-schema.mjs` parses. All 
 A design can describe itself from its own `.scad` file instead of the config. Put these anywhere in the file — a header comment above the first section is the natural home:
 
 ```openscad
-// @description Auto-sized flat Braille plate for a door, shelf, or desk.
+// @description Auto-sized flat name plate for a door, shelf, or desk.
 // @icon icons/nameplate.svg
 
 /* [Text] */
-label = "Zimmer 1";
+label = "Room 1";
 ```
 
 - **`@description`** — the design's picker sub-label (the same line a config `designs[]` entry's `description` sets).
@@ -74,10 +74,34 @@ It applies to both **free-text** string params and `// [..]` enum **dropdowns** 
 ```scad
 // Lettering face.
 // @font
-font = "DIN 32986:style=Regular"; // ["DIN 32986:style=Regular", "Liberation Sans:style=Bold"]
+font = "Brand Display:style=Regular"; // ["Brand Display:style=Regular", "Liberation Sans:style=Bold"]
 ```
 
 The `// [..]` choice list is what the **desktop** Customizer renders as a dropdown; in the app, listed faces that aren't loaded (e.g. a not-bundled, license-restricted font) stay visible and selectable in a clearly-marked "Needs a font file" group, so a design can keep suggesting its preferred face. When the *selected* face's family isn't loaded, an inline hint appears beneath the control with the two fixes: **Import font…**, or a one-click switch to a loaded family (for a flagged dropdown, the first listed choice whose family *is* loaded). See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.
+
+## SVG fields (`// @svg`, `// @filledBy`)
+
+Mark a string parameter that names an SVG file with `// @svg`. In the app the plain path box is replaced by a **drop zone / "Prepare SVG…" button** that opens an in-app wizard. The wizard checks the drawing against OpenSCAD's geometry-only `import()` (it drops `<text>`, colour, `<image>`/`<use>`/filters…), applies safe fixes (normalises an off-origin `viewBox`, renames Inkscape layer ids to their labels), and — when the field binds colours (below) — reads the drawing's per-region colours. On finish it writes the fixed SVG into the render's virtual filesystem, points the parameter at it, and re-renders. The configurator's own 3D viewer is the preview.
+
+```scad
+// The drawing to extrude. Drop in an SVG; the wizard checks and fixes it.
+// @svg
+svg_file = "emblem.svg";
+```
+
+Add `layers=<param>` to also derive the drawing's colours and write the standard **layers string** into a second parameter — a comma-separated `id:colour` list (with a bare-token shorthand, e.g. `gray, c8b0000`), blank for a single-colour drawing. Mark that target parameter `// @filledBy <svg-param>` so the UI renders it demoted (behind an "Advanced" disclosure) — it stays editable for power users, but the wizard is its normal writer.
+
+```scad
+// The drawing to extrude. The wizard reads out its colours.
+// @svg layers=svg_layers
+svg_file = "plan.svg";
+
+// Region colours, filled in by the SVG wizard.
+// @filledBy svg_file
+svg_layers = "";
+```
+
+`@svg` composes with a co-located `// @showIf`, so a conditional SVG field still gets the affordance. Both annotations are invisible to OpenSCAD, which just imports the file and (for the per-region path) selects regions by their `<g id>`.
 
 ## Viewer info (`// @info`)
 

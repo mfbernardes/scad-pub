@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A small multi-region drawing: three named <g id> regions, each a solid
+     colour, tiling a flush "0 0 W H" viewBox with no overlap (so each region
+     owns its area and keeps its colour). The @svg wizard reads the region
+     colours out into panel.scad's svg_layers, and each region imports and
+     colours separately. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 90" width="120mm" height="90mm">
+  <g id="sky" fill="#87ceeb">
+    <rect x="0" y="0" width="120" height="45"/>
+  </g>
+  <g id="ground" fill="#9acd32">
+    <rect x="0" y="45" width="48" height="45"/>
+    <rect x="72" y="45" width="48" height="45"/>
+  </g>
+  <g id="house" fill="#cd5c5c">
+    <rect x="48" y="45" width="24" height="45"/>
+  </g>
+</svg>
