@@ -7,6 +7,8 @@
 // for values OpenSCAD itself computes internally, which gen-schema's static
 // parser could never know. All of it is measured/read downstream of the
 // export — purely informative, never part of a print.
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import type { Design, Param } from "../openscad/types";
 import type { Dimensions } from "./Viewer";
 import type { Values } from "../lib/presets";
@@ -57,6 +59,10 @@ function formatValue(param: Param, values: Values): string | null {
 }
 
 export function DimensionInfo({ design, size, values, stale = false, computed = [] }: Props) {
+  // Folds down to the bounding-box headline alone, so the panel can get out of
+  // the way of the model without hiding the overlay entirely.
+  const [collapsed, setCollapsed] = useState(false);
+
   // The headline bounding box, then any params flagged `// @info` that are still
   // visible under their @showIf (if any) and have a non-empty formatted value.
   const infoLines = design.params
@@ -69,6 +75,9 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
     .filter((l): l is { name: string; label: string; value: string } => l.value !== null);
 
   const hasRows = infoLines.length > 0 || computed.length > 0;
+  // Only the headline shows when collapsed; the toggle only appears when there's
+  // something to hide.
+  const showRows = hasRows && !collapsed;
   const row = "flex items-baseline justify-between gap-3";
   const dd = "m-0 text-right text-foreground tabular-nums break-words";
 
@@ -87,26 +96,46 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
       <div
         className={cn(
           row,
-          "[&>dt]:font-semibold [&>dt]:text-foreground",
           // Divider under the headline when @info rows follow it.
-          hasRows && "mb-[0.15rem] border-b border-(color:--glass-border) pb-[0.3rem]"
+          showRows && "mb-[0.15rem] border-b border-(color:--glass-border) pb-[0.3rem]"
         )}
       >
-        <dt>Dimensions</dt>
+        <dt className="font-semibold text-foreground">
+          {hasRows ? (
+            <button
+              type="button"
+              onClick={() => setCollapsed((c) => !c)}
+              aria-expanded={!collapsed}
+              title={collapsed ? "Show measurement details" : "Hide measurement details"}
+              className="-m-1 inline-flex cursor-pointer items-center gap-[0.3rem] rounded-(--radius-sm) bg-transparent p-1 font-semibold text-foreground hover:text-brand"
+            >
+              <ChevronDown
+                size={14}
+                aria-hidden
+                className={cn("shrink-0 transition-transform", collapsed && "-rotate-90")}
+              />
+              Dimensions
+            </button>
+          ) : (
+            "Dimensions"
+          )}
+        </dt>
         <dd className={dd}>{`${mm(size.x)} × ${mm(size.y)} × ${mm(size.z)} mm`}</dd>
       </div>
-      {infoLines.map((l) => (
-        <div className={row} key={l.name}>
-          <dt>{l.label}</dt>
-          <dd className={dd}>{l.value}</dd>
-        </div>
-      ))}
-      {computed.map((c, i) => (
-        <div className={row} key={`computed-${i}-${c.label}`}>
-          <dt>{c.label}</dt>
-          <dd className={dd}>{c.value}</dd>
-        </div>
-      ))}
+      {showRows &&
+        infoLines.map((l) => (
+          <div className={row} key={l.name}>
+            <dt>{l.label}</dt>
+            <dd className={dd}>{l.value}</dd>
+          </div>
+        ))}
+      {showRows &&
+        computed.map((c, i) => (
+          <div className={row} key={`computed-${i}-${c.label}`}>
+            <dt>{c.label}</dt>
+            <dd className={dd}>{c.value}</dd>
+          </div>
+        ))}
     </dl>
   );
 }
