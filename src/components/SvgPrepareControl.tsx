@@ -24,12 +24,33 @@ function baseName(name: string): string {
   return name.split(/[\\/]/).pop() || name;
 }
 
+/** Reject an unreasonably large upload before reading it into memory. */
+const MAX_SVG_BYTES = 2 * 1024 * 1024; // 2 MB
+
+/** A dropped/picked file must look like an SVG. The native picker's `accept`
+ *  filters its own dialog, but a drag-drop bypasses it — so re-check here. */
+function svgRejectionReason(file: File): string | null {
+  const isSvg =
+    file.type === "image/svg+xml" || /\.svg$/i.test(file.name);
+  if (!isSvg) return "That's not an SVG — choose a .svg file.";
+  if (file.size > MAX_SVG_BYTES)
+    return `That SVG is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). The limit is 2 MB — simplify the drawing and try again.`;
+  return null;
+}
+
 export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) {
   const { change, addFile } = useAppActions();
   const [pending, setPending] = useState<{ text: string; fileName: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadFile = async (file: File) => {
+    const reason = svgRejectionReason(file);
+    if (reason) {
+      setError(reason);
+      return;
+    }
+    setError(null);
     setPending({ text: await file.text(), fileName: baseName(file.name) });
   };
 
@@ -86,6 +107,12 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
           </div>
         )}
       </FileInput>
+
+      {error && (
+        <p role="alert" className="text-[0.78rem] text-destructive">
+          {error}
+        </p>
+      )}
 
       {pending && (
         <SvgWizard

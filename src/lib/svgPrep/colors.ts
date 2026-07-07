@@ -74,6 +74,25 @@ export function parseColor(token: string | null | undefined): Rgb | null {
   return null;
 }
 
+/** Whether a colour token can be painted into a CSS swatch. Uses the browser's
+ *  own CSS parser when available (so it accepts every CSS colour, not only the
+ *  ones we name), and falls back to a best-effort check in non-DOM (test)
+ *  contexts. A derived region colour that fails this is still handed to OpenSCAD
+ *  verbatim — it just can't be previewed as a swatch. */
+export function isRenderableColor(token: string | null | undefined): boolean {
+  if (!token) return false;
+  const t = token.trim();
+  if (!t) return false;
+  if (typeof CSS !== "undefined" && typeof CSS.supports === "function") {
+    return CSS.supports("color", t);
+  }
+  if (parseColor(t) !== null) return true;
+  return (
+    /^#([0-9a-f]{4}|[0-9a-f]{8})$/i.test(t) ||
+    /^(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/i.test(t)
+  );
+}
+
 function hex2(n: number): string {
   return n.toString(16).padStart(2, "0");
 }

@@ -17,6 +17,8 @@ import {
   deriveRegions,
   formatLayers,
   groupByColor,
+  isRenderableColor,
+  MAX_RELIABLE_REGIONS,
   parseLayersArg,
   prepareSvg,
   serializeSvg,
@@ -284,4 +286,31 @@ test("prepareSvg surfaces a blocking ERROR when there is no importable geometry"
   );
   const res = prepareSvg(root, { deriveColours: false });
   assert.ok(res.findings.some((f) => f.level === "ERROR" && f.code === "no-geometry"));
+});
+
+test("isRenderableColor accepts real colours and rejects nonsense", () => {
+  // Understood by our parser (names, #rgb/#rrggbb, rgb()).
+  for (const t of ["red", "gray", "#abc", "#a0b0c0", "rgb(1,2,3)"])
+    assert.ok(isRenderableColor(t), `${t} should be renderable`);
+  // CSS colour functions / extended hex the swatch can still paint.
+  for (const t of ["rgba(0,0,0,0.5)", "hsl(200,50%,50%)", "#11223344"])
+    assert.ok(isRenderableColor(t), `${t} should be renderable`);
+  // Not a colour at all, and empty input.
+  for (const t of ["notacolour", "", null, undefined])
+    assert.ok(!isRenderableColor(t), `${JSON.stringify(t)} should not be renderable`);
+});
+
+test("many painted colours derive more regions than the reliable threshold", () => {
+  const shapes = Array.from(
+    { length: MAX_RELIABLE_REGIONS + 2 },
+    (_, i) => `<rect x="${i}" y="0" width="1" height="1" fill="#${(i + 1).toString(16).padStart(6, "0")}"/>`,
+  ).join("");
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 10">${shapes}</svg>`,
+  );
+  const res = prepareSvg(root, { deriveColours: true });
+  assert.ok(
+    res.regions.length > MAX_RELIABLE_REGIONS,
+    `expected > ${MAX_RELIABLE_REGIONS} regions, got ${res.regions.length}`,
+  );
 });
