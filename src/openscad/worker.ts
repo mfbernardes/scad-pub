@@ -63,7 +63,7 @@ let wasmBinary: ArrayBuffer | null = null;
 let wasmModulePromise: Promise<WebAssembly.Module | null> | null = null;
 // Shared .scad dependency files, keyed by their source-relative path.
 let assetSources: Record<string, string> | null = null;
-let designSources: Record<string, string> = {};
+const designSources: Record<string, string> = {};
 let fontFiles: Record<string, Uint8Array> | null = null;
 let fontsConf: string | null = null;
 

@@ -10,6 +10,7 @@ export function safeUrl(url: string | undefined | null): string | undefined {
   if (!url) return undefined;
   // Browsers ignore leading/embedded control chars and whitespace when parsing
   // a scheme (so "java\tscript:" still runs); strip them before inspecting it.
+  // eslint-disable-next-line no-control-regex -- deliberately stripping control chars, see comment above
   const stripped = url.replace(/[\u0000-\u0020]/g, "");
   const scheme = stripped.match(/^([a-z][a-z0-9+.-]*):/i);
   if (!scheme) return url; // relative or protocol-relative reference — safe

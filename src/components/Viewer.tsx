@@ -339,7 +339,6 @@ export const Viewer = forwardRef<
   // Show/hide the dimension overlay on toggle (geometry stays put).
   useEffect(() => {
     syncDimensions(showDimensions);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showDimensions]);
 
   // Swap geometry when a new model arrives.
