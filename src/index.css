@@ -496,6 +496,8 @@ button:disabled { cursor: default; }
   inset: 0;
   z-index: 29;
   background: rgba(0, 0, 0, 0.4);
+  border: 0;
+  padding: 0;
 }
 
 .bottom-sheet {
@@ -507,6 +509,11 @@ button:disabled { cursor: default; }
   background: var(--panel);
   border-top: 1px solid var(--line);
   border-radius: var(--radius) var(--radius) 0 0;
+  overflow: hidden;
+}
+
+.sheet-frame {
+  height: var(--sheet-visible-h);
   display: flex;
   flex-direction: column;
   overflow: hidden;

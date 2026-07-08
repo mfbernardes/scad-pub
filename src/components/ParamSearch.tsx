@@ -16,8 +16,10 @@ export function ParamSearch({ value, onChange, onClear }: Props) {
     <div className="flex shrink-0 items-center gap-[0.4rem] border-b px-[0.6rem] py-[0.35rem] text-muted-foreground">
       <SearchIcon size={14} />
       <input
-        type="text"
-        className="min-w-0 flex-1 border-none bg-transparent p-0 text-foreground placeholder:text-muted-foreground focus:outline-none"
+        type="search"
+        name="param-search"
+        autoComplete="off"
+        className="min-w-0 flex-1 rounded-[4px] border-none bg-transparent p-0 text-foreground placeholder:text-muted-foreground focus-visible:outline-offset-2"
         placeholder="Find a setting…"
         value={value}
         onChange={(e) => onChange(e.target.value)}

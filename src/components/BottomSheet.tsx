@@ -152,7 +152,9 @@ export function BottomSheet({
     (height) => {
       const sheet = sheetRef.current;
       if (!sheet) return;
-      sheet.style.height = `${height}px`;
+      const full = fullH(bottomInsetRef.current);
+      sheet.style.setProperty("--sheet-visible-h", `${height}px`);
+      sheet.style.transform = `translateY(${Math.max(0, full - height)}px)`;
       sheet.style.transition = "none";
       onFollowRef.current?.(height, true);
     }
@@ -211,6 +213,7 @@ export function BottomSheet({
   // Committed height for the current detent. Drag frames update the DOM
   // directly via applyLiveHeight and don't flow through this render path.
   const displayH = heightFor(detent);
+  const fullHeight = fullH(bottomInset);
 
   // Report the committed height + drag state up so the viewer follows detent
   // changes; in-progress drag frames report via applyLiveHeight instead.
@@ -222,10 +225,11 @@ export function BottomSheet({
     <>
       {/* Scrim only at Full detent */}
       {detent === "full" && (
-        <div
+        <button
+          type="button"
           className="sheet-scrim"
           style={bottomInset ? { bottom: bottomInset } : undefined}
-          aria-hidden
+          aria-label="Collapse parameter panel"
           onClick={() => setDetent("half")}
         />
       )}
@@ -233,31 +237,35 @@ export function BottomSheet({
         ref={sheetRef}
         className={`bottom-sheet bottom-sheet--${detent}${dragging ? " is-dragging" : ""}`}
         style={{
-          height: displayH,
+          height: fullHeight,
           bottom: bottomInset || undefined,
-          transition: dragging ? "none" : "height 0.28s cubic-bezier(0.32,0.72,0,1)",
-        }}
+          "--sheet-visible-h": `${displayH}px`,
+          transform: `translateY(${Math.max(0, fullHeight - displayH)}px)`,
+          transition: dragging ? "none" : "transform 0.28s cubic-bezier(0.32,0.72,0,1)",
+        } as React.CSSProperties}
         aria-label="Parameter panel"
         role="complementary"
       >
-        {/* Drag handle — single visible control; tap cycles, arrow keys resize. */}
-        <div
-          className="sheet-handle"
-          role="button"
-          tabIndex={0}
-          aria-label={`Parameter panel — ${detent}. Tap to cycle, Arrow Up/Down to resize`}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          onClick={onHandleClick}
-          onKeyDown={onHandleKeyDown}
-        >
-          <div className="sheet-handle__bar" aria-hidden />
-        </div>
+        <div className="sheet-frame">
+          {/* Drag handle — single visible control; tap cycles, arrow keys resize. */}
+          <div
+            className="sheet-handle"
+            role="button"
+            tabIndex={0}
+            aria-label={`Parameter panel — ${detent}. Tap to cycle, Arrow Up/Down to resize`}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            onClick={onHandleClick}
+            onKeyDown={onHandleKeyDown}
+          >
+            <div className="sheet-handle__bar" aria-hidden />
+          </div>
 
-        <div className="sheet-body">
-          {children(detent, expand)}
+          <div className="sheet-body">
+            {children(detent, expand)}
+          </div>
         </div>
       </div>
     </>
