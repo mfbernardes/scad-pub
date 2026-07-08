@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case B24: a viewBox with a non-zero origin (viewBox="10 20 100
+     100" instead of "0 0 ..."). Content is authored correctly within that
+     shifted coordinate box; a checker/importer that assumes the viewBox
+     always starts at 0,0 will mis-place or mis-crop this geometry. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 20 100 100">
+  <rect x="25" y="40" width="35" height="35" fill="black"/>
+  <circle cx="85" cy="90" r="18" fill="black"/>
+</svg>

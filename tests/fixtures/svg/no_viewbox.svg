@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A14: no viewBox attribute at all - only width/height in
+     plain user units. The importer must fall back to treating width/height
+     as the coordinate space. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+  <rect x="10" y="10" width="35" height="35" fill="black"/>
+  <circle cx="70" cy="70" r="20" fill="black"/>
+</svg>

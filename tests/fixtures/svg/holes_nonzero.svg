@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A3: a square picture-frame. Single path, default nonzero
+     winding rule. Outer rectangle wound clockwise, inner rectangle wound
+     counter-clockwise (opposite direction), so the nonzero rule punches the
+     middle out as a hole. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path fill="black"
+        d="M10,10 L90,10 L90,90 L10,90 Z
+           M30,30 L30,70 L70,70 L70,30 Z"/>
+</svg>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case B22: Inkscape-style layers, where the human-readable name
+     lives in inkscape:label ("walls" / "rooms") while the actual id=
+     attribute is the generic Inkscape default ("layer1" / "layer2"). A
+     checker keying region detection off id= alone will get meaningless
+     names and must read inkscape:label instead. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 100 100">
+  <g id="layer1" inkscape:groupmode="layer" inkscape:label="walls" fill="gray">
+    <path d="M0,0 L100,0 L100,100 L0,100 Z
+             M6,6 L6,94 L94,94 L94,6 Z"/>
+  </g>
+  <g id="layer2" inkscape:groupmode="layer" inkscape:label="rooms" fill="white">
+    <rect x="10" y="10" width="80" height="80"/>
+  </g>
+</svg>

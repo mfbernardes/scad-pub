@@ -12,6 +12,7 @@ import {
   localName,
   paint,
 } from "./dom";
+import { canvasBackgrounds } from "./background";
 import { contentBbox, parseViewBox } from "./geometry";
 import { effectiveFill, groupIndex } from "./regions";
 import type { Finding } from "./types";
@@ -103,6 +104,25 @@ export function check(root: Element, layers: string[] = []): Finding[] {
       code: "open-paths",
       message: `${openPaths} open path subpath(s) (no Z) — may import as a sliver or nothing`,
       hint: "close every path",
+    });
+  }
+
+  // Canvas-background trap: OpenSCAD fills every shape, so a rectangle covering
+  // the whole viewBox imports as one solid block that buries all other detail —
+  // the drawing extrudes as a single featureless slab. The commonest cause of a
+  // map/pictogram that renders as one block.
+  const backgrounds = canvasBackgrounds(root);
+  if (backgrounds.length > 0) {
+    findings.push({
+      level: "WARN",
+      code: "covers-canvas",
+      message:
+        `${backgrounds.length} shape(s) cover the whole canvas as a solid rectangle — ` +
+        "OpenSCAD fills every shape, so the drawing imports as ONE solid block that " +
+        "buries the detail",
+      hint:
+        "remove the background/artboard rectangle (the Fix step drops it); tactile " +
+        "relief needs open space between the raised shapes",
     });
   }
 

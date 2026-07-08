@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A10: two levels of nested <g>, each carrying its own
+     transform, containing three distinct filled shapes. Correct placement
+     requires composing the outer group's transform with each inner group's
+     transform. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <g id="outer" transform="translate(5,5)">
+    <g id="inner-circle" transform="translate(10,10) scale(1.3)">
+      <circle cx="0" cy="0" r="10" fill="black"/>
+    </g>
+    <g id="inner-square" transform="translate(60,10) rotate(30)">
+      <rect x="-10" y="-10" width="20" height="20" fill="black"/>
+    </g>
+    <g id="inner-triangle" transform="translate(35,65)">
+      <polygon points="-15,20 15,20 0,-15" fill="black"/>
+    </g>
+  </g>
+</svg>

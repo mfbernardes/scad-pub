@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A2: a ring/donut. Single path, fill-rule="evenodd", outer
+     circle subpath (built from arc commands) plus an inner circle subpath;
+     the two same-direction subpaths become a hole under evenodd. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path fill="black" fill-rule="evenodd"
+        d="M50,10 A40,40 0 1 1 49.99,10 Z
+           M50,35 A15,15 0 1 1 49.99,35 Z"/>
+</svg>

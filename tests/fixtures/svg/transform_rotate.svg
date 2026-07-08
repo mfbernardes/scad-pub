@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A8: an axis-aligned filled square rotated 45 degrees about
+     the canvas center via a <g transform="rotate(...)"> wrapper, turning it
+     into a diamond. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <g transform="rotate(45 50 50)">
+    <rect x="30" y="30" width="40" height="40" fill="black"/>
+  </g>
+</svg>
