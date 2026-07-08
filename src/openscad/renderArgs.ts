@@ -1,6 +1,7 @@
 // renderArgs.ts — pure helpers for the render worker (worker.ts). Extracted so
-// the security-sensitive untrusted-filename handling and the format -> OpenSCAD
-// CLI-args mapping can be unit-tested without a browser/WASM module.
+// the security-sensitive untrusted-filename handling, the source-relative FS
+// mount-path computation, and the format -> OpenSCAD CLI-args mapping can be
+// unit-tested without a browser/WASM module.
 import type { ModelFormat } from "./types";
 
 // A user file is treated as a font (mounted where fontconfig can find it) when
@@ -23,6 +24,29 @@ export function stripFilename(rawName: string): string {
 export function userFileMountPath(rawName: string): string {
   const name = stripFilename(rawName);
   return isFontFile(name) ? `/fonts/${name}` : `/${name}`;
+}
+
+// The chain of ancestor directories to create for `dir`, outermost first, each
+// an absolute path — the pure half of `mkdir -p` (worker.ts's mkdirp wraps this
+// with FS.mkdir + swallow-if-exists). A leading slash, empty segments, and a
+// trailing slash are all tolerated; "", "/" and "//" yield [] (the FS root
+// already exists, so there's nothing to make).
+export function mkdirPaths(dir: string): string[] {
+  const paths: string[] = [];
+  let cur = "";
+  for (const part of dir.split("/").filter(Boolean)) {
+    cur += "/" + part;
+    paths.push(cur);
+  }
+  return paths;
+}
+
+// The parent directory a source-relative file mounts into, as an absolute path,
+// so its ancestors can be created before the file is written. "sub/lib.scad" ->
+// "/sub"; a top-level "tag.scad" -> "" (the FS root, which always exists — mkdirp
+// then makes nothing). Mirrors the `/${path}` mount target used in worker.ts.
+export function mountDir(path: string): string {
+  return `/${path}`.replace(/\/[^/]*$/, "");
 }
 
 export interface ExportSpec {

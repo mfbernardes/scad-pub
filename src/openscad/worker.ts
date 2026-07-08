@@ -10,7 +10,7 @@ import schema from "../generated/designs.json";
 import type { ModelFormat, RenderRequest, RenderResult } from "./types";
 import { assetUrl as asset } from "../lib/assetUrl";
 import { orphanedDefines } from "../lib/scad";
-import { buildOpenscadArgs, exportFor, userFileMountPath } from "./renderArgs";
+import { buildOpenscadArgs, exportFor, mkdirPaths, mountDir, userFileMountPath } from "./renderArgs";
 
 // Persistent cache for the big, version-pinned binaries (the ~10 MB WASM and
 // the fonts), so reloads are instant and the app works offline. The cache name
@@ -121,11 +121,9 @@ async function loadDesignSource(path: string): Promise<string> {
 }
 
 function mkdirp(FS: OpenSCADInstance["FS"], dir: string) {
-  let cur = "";
-  for (const part of dir.split("/").filter(Boolean)) {
-    cur += "/" + part;
+  for (const path of mkdirPaths(dir)) {
     try {
-      FS.mkdir(cur);
+      FS.mkdir(path);
     } catch {
       /* exists */
     }
@@ -182,7 +180,7 @@ async function render(req: RenderRequest): Promise<RenderResult> {
 
   // Write a source-relative file into the FS, creating its parent directory.
   const mount = (path: string, src: string | Uint8Array) => {
-    mkdirp(FS, `/${path}`.replace(/\/[^/]*$/, ""));
+    mkdirp(FS, mountDir(path));
     FS.writeFile(`/${path}`, src);
   };
 

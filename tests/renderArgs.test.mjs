@@ -9,6 +9,8 @@ import {
   isFontFile,
   stripFilename,
   userFileMountPath,
+  mkdirPaths,
+  mountDir,
   exportFor,
   buildOpenscadArgs,
 } from "../src/openscad/renderArgs.ts";
@@ -45,6 +47,30 @@ test("userFileMountPath routes fonts to /fonts and everything else to root", () 
   assert.equal(userFileMountPath("../../sneaky.ttf"), "/fonts/sneaky.ttf");
   assert.equal(userFileMountPath("../../sneaky.svg"), "/sneaky.svg");
   assert.equal(userFileMountPath("/"), "/file");
+});
+
+test("mkdirPaths returns each ancestor dir outermost-first, absolute", () => {
+  assert.deepEqual(mkdirPaths("a/b/c"), ["/a", "/a/b", "/a/b/c"]);
+  assert.deepEqual(mkdirPaths("/fonts"), ["/fonts"]);
+  assert.deepEqual(mkdirPaths("/fontconfig-cache"), ["/fontconfig-cache"]);
+});
+
+test("mkdirPaths tolerates leading/trailing/double slashes and blanks", () => {
+  // Nothing to create for the root (or an empty path): the FS root always exists.
+  assert.deepEqual(mkdirPaths(""), []);
+  assert.deepEqual(mkdirPaths("/"), []);
+  assert.deepEqual(mkdirPaths("//"), []);
+  // A leading slash and a trailing slash both collapse to the same segments.
+  assert.deepEqual(mkdirPaths("/a/b/"), ["/a", "/a/b"]);
+  assert.deepEqual(mkdirPaths("a//b"), ["/a", "/a/b"]);
+});
+
+test("mountDir yields the parent dir of a source-relative mount path", () => {
+  assert.equal(mountDir("sub/lib.scad"), "/sub");
+  assert.equal(mountDir("a/b/c.scad"), "/a/b");
+  // A top-level file mounts at the FS root, whose parent is "" (mkdirp makes
+  // nothing) — the invariant worker.ts relies on for its default design.
+  assert.equal(mountDir("tag.scad"), "");
 });
 
 test("exportFor: 3mf carries the colour-group options, stl is geometry-only", () => {
