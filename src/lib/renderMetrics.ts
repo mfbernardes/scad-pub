@@ -6,6 +6,7 @@
 // console's Metrics tab (see useRenderPipeline.ts for where it's recorded).
 import type { Param } from "../openscad/types";
 import type { Values } from "./presets";
+import { changedParams, paramLabel } from "./paramDiff";
 
 export interface RenderMetric {
   ms: number;
@@ -32,13 +33,7 @@ export function formatDuration(ms: number): string {
  * number/string/boolean shapes without needing a per-type comparator.
  */
 export function changedParamLabels(params: Param[], prev: Values, next: Values): string[] {
-  const labels: string[] = [];
-  for (const p of params) {
-    const before = JSON.stringify(prev[p.name] ?? p.default);
-    const after = JSON.stringify(next[p.name] ?? p.default);
-    if (before !== after) labels.push(p.description || p.name);
-  }
-  return labels;
+  return changedParams(params, prev, next).map(paramLabel);
 }
 
 /**

@@ -370,6 +370,18 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   if (!ids.includes("tag")) return;
   console.log("=== conditional visibility (@showIf, tag) ===");
   await selectDesign(page, "tag");
+  // A bundled preset may still be selected from the earlier presets check —
+  // while one is selected, the preset-diff strip's restore action reverts to
+  // the PRESET rather than the design's defaults (see PresetDiffBar), which
+  // would break the deterministic "Reset to defaults" flow below. Clear the
+  // selection via a fresh reload before driving the rest of this design.
+  await page.evaluate(() => {
+    const params = new URLSearchParams(location.hash.slice(1));
+    params.delete("p");
+    history.replaceState(null, "", "#" + params.toString());
+  });
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "tag reloaded");
   // Back to the Customize tab (the file-import test left the panel on Files).
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
 

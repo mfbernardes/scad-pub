@@ -5,9 +5,10 @@
 // Every row also carries `data-param="<var>"` — the stable hook the smoke test
 // (and extraCss) target now that variable names are hidden from users by default.
 import { memo, useEffect, useMemo, useState } from "react";
-import { Info as InfoIcon, Upload as UploadIcon } from "lucide-react";
+import { Info as InfoIcon, RotateCcw as RevertIcon, Upload as UploadIcon } from "lucide-react";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
+import { displayValue } from "../lib/paramDiff";
 import { isVisible } from "../lib/visibility";
 import { familyOf, normalizeFamily, withFamily, type InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
@@ -50,6 +51,18 @@ interface Props {
    * control. Omitted or empty → the plain control (we can't be authoritative).
    */
   installedFonts?: InstalledFont[];
+  /**
+   * Tier-2 preset-diff markers: the values a drifted param is compared against
+   * (the selected preset, or design defaults — see App.tsx/PresetDiffBar) and
+   * the set of param names currently drifted from it. Both optional so the
+   * form still works for a caller that doesn't wire up the diff (e.g. a future
+   * standalone use); omitting either suppresses the markers entirely.
+   */
+  baseline?: Values;
+  changedParams?: Set<string>;
+  /** The selected preset's display name, for the revert button's aria-label
+   *  ("to the preset" vs "to default" when no preset is selected). */
+  presetName?: string | null;
 }
 
 // Inline, non-alarming hint shown under a `font` control when the selected
@@ -325,7 +338,7 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, baseline, changedParams, presetName }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
@@ -383,6 +396,10 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               // Toggles ride the label row (label left, switch right) — a
               // control row below would leave a stranded switch.
               const isToggle = p.type === "boolean";
+              // Tier-2 preset-diff marker (see PresetDiffBar for Tier 1): this
+              // param's value differs from the baseline (selected preset, or
+              // design defaults). Neutral/slate — never the warn colour.
+              const isDrifted = Boolean(baseline && changedParams?.has(p.name));
               const control = (
                 <Control
                   param={p}
@@ -398,6 +415,12 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                     {/* Label + optional info button together on the left so the
                         right edge is free for the toggle / var-name code. */}
                     <span className="flex min-w-0 items-baseline gap-[0.3rem]">
+                      {isDrifted && (
+                        <span
+                          className="param-drift-dot size-[6px] shrink-0 self-center rounded-full bg-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      )}
                       <span className="text-foreground">{label}</span>
                       {hasHelp && <ParamHelp help={p.help} label={label} />}
                       {showVarName && p.description && (
@@ -409,6 +432,20 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                     {isToggle && control}
                   </span>
                   {!isToggle && control}
+                  {isDrifted && baseline && (
+                    <span className="param-drift flex items-center gap-[0.4rem] text-[0.78rem] text-muted-foreground">
+                      <span className="line-through">was {displayValue(p, baseline[p.name])}</span>
+                      <button
+                        type="button"
+                        className="param-drift-revert -m-[3px] inline-flex shrink-0 cursor-pointer items-center rounded-[4px] border-none bg-transparent p-[3px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1"
+                        aria-label={`Revert ${label} to ${presetName ? "the preset" : "default"}`}
+                        title={`Revert to ${presetName ? "the preset" : "default"}`}
+                        onClick={() => onChange(p.name, baseline[p.name])}
+                      >
+                        <RevertIcon size={12} aria-hidden="true" />
+                      </button>
+                    </span>
+                  )}
                   {missingFontValue !== null && (
                     <FontMissingHint
                       family={familyOf(missingFontValue)}

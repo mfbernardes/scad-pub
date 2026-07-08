@@ -64,6 +64,14 @@ interface Props {
   bundled: ParsedSet[];
   userPresets: string[];
   selectedPreset: string;
+  /** The selected preset's values, or null when no preset is selected (baseline is defaults). */
+  presetBaseline: Values | null;
+  /** The selected preset's display name, or null when no preset is selected. */
+  presetName: string | null;
+  /** Values the current params are diffed against — presetBaseline, or design defaults. */
+  baseline: Values;
+  /** Names of params whose value differs from `baseline`. */
+  changedParams: Set<string>;
   userFiles: Record<string, Uint8Array>;
   result: RenderResult | null;
   rendering: boolean;
@@ -86,6 +94,10 @@ export const AppShell = memo(function AppShell({
   bundled,
   userPresets,
   selectedPreset,
+  presetBaseline,
+  presetName,
+  baseline,
+  changedParams,
   userFiles,
   result,
   rendering,
@@ -339,6 +351,10 @@ export const AppShell = memo(function AppShell({
             bundled={bundled}
             userPresets={userPresets}
             selectedPreset={selectedPreset}
+            presetBaseline={presetBaseline}
+            presetName={presetName}
+            baseline={baseline}
+            changedParams={changedParams}
             fileImport={fileImport}
             loadedFiles={loadedFiles}
             availableFontFamilies={availableFontFamilies}
@@ -468,6 +484,10 @@ export const AppShell = memo(function AppShell({
                 bundled={bundled}
                 userPresets={userPresets}
                 selected={selectedPreset}
+                presetBaseline={presetBaseline}
+                presetName={presetName}
+                baseline={baseline}
+                changedParams={changedParams}
                 fileImport={fileImport}
                 loadedFiles={loadedFiles}
                 availableFontFamilies={availableFontFamilies}

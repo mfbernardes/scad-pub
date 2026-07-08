@@ -116,10 +116,31 @@ export function loadPreset(designId: string, name: string): Values | null {
   return read()[designId]?.[name] ?? null;
 }
 
-/** Extract the display name from a preset ID (`type:designId:name` → `name`). */
+/** Extract the display name from a preset ID (`type:designId:name` → `name`),
+ *  falling back to the whole id when it isn't a well-formed preset id. Shares
+ *  the single preset-id parser with parsePresetId (below). */
 export function presetLabel(id: string): string {
-  const third = id.indexOf(":", id.indexOf(":") + 1);
-  return third >= 0 ? id.slice(third + 1) : id;
+  return parsePresetId(id)?.name ?? id;
+}
+
+/**
+ * Parse a preset ID (`bundled:<designId>:<name>` or `user:<designId>:<name>`,
+ * as built by PresetPicker) into its parts. The name may itself contain
+ * colons, so it's everything after the second colon. Returns null for "" or
+ * any id that isn't a recognised, well-formed bundled/user id.
+ */
+export function parsePresetId(
+  id: string
+): { kind: "bundled" | "user"; designId: string; name: string } | null {
+  if (!id) return null;
+  const parts = id.split(":");
+  if (parts.length < 3) return null;
+  const [kind, designId] = parts;
+  if (kind !== "bundled" && kind !== "user") return null;
+  if (!designId) return null;
+  const name = parts.slice(2).join(":");
+  if (!name) return null;
+  return { kind, designId, name };
 }
 
 export function deletePreset(designId: string, name: string) {

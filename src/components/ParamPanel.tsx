@@ -16,6 +16,7 @@ import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
+import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
 import { IconButton } from "./IconButton";
 import { PanelFooter } from "./PanelFooter";
@@ -44,6 +45,14 @@ interface Props {
   bundled: ParsedSet[];
   userPresets: string[];
   selectedPreset: string;
+  /** The selected preset's values, or null when no preset is selected (baseline is defaults). */
+  presetBaseline: Values | null;
+  /** The selected preset's display name, or null when no preset is selected. */
+  presetName: string | null;
+  /** Values the current params are diffed against — presetBaseline, or design defaults. */
+  baseline: Values;
+  /** Names of params whose value differs from `baseline`. */
+  changedParams: Set<string>;
   fileImport: FileImport | null;
   loadedFiles: LoadedFile[];
   /** Font families the renderer can use (normalised), for the missing-font hint. */
@@ -68,6 +77,10 @@ export function ParamPanel({
   bundled,
   userPresets,
   selectedPreset,
+  presetBaseline,
+  presetName,
+  baseline,
+  changedParams,
   fileImport,
   loadedFiles,
   availableFontFamilies,
@@ -241,9 +254,16 @@ export function ParamPanel({
         </TabsContent>
 
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <PresetDiffBar
+            design={design}
+            values={values}
+            presetBaseline={presetBaseline}
+            presetName={presetName}
+            changedParams={changedParams}
+          />
           <ParamSearch value={search} onChange={setSearch} onClear={() => setSearch("")} />
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} />
           </div>
         </TabsContent>
 
@@ -261,8 +281,6 @@ export function ParamPanel({
       </Tabs>
 
       <PanelFooter
-        design={design}
-        values={values}
         autoRender={autoRender}
         className="flex shrink-0 items-center gap-2 border-t px-3 py-[0.4rem]"
       />
