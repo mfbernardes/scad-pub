@@ -84,27 +84,45 @@ module rounded_rect(w, h, r) {
   else square([w, h]);
 }
 
-// The drawing fit to the usable area (inside the margin) and centred. A blank
-// layers list extrudes the whole drawing in one colour; otherwise each region is
-// imported by id and coloured, under one shared fit transform so they stay
-// registered (import(id=…) keeps regions in the drawing's own coordinates).
+// The drawing fit inside the usable area (inside the margin), preserving its
+// aspect ratio — scaled to the box's smaller side so resizing the panel scales
+// the drawing proportionally instead of stretching it, then clipped so nothing
+// runs off the plate. resize() with two non-zero axes would stretch each to fill
+// the box (distorting the drawing), so only one axis is driven and the other
+// follows.
+//
+// A blank layers list extrudes the whole drawing in one colour, centred on its
+// own bounding box. Otherwise each region is imported by id and coloured under
+// one shared fit transform so they stay registered (import(id=…, center=false)
+// keeps regions in the drawing's own coordinates); the group is corner-anchored,
+// so a drawing that fills its viewBox and matches the panel's proportions lands
+// centred.
 module svg_relief(layers) {
   usable_w = panel_width - 2 * margin;
   usable_h = panel_height - 2 * margin;
   assert(usable_w > 0 && usable_h > 0, "margin leaves no room for the drawing");
-  translate([margin, margin, base_thickness])
-    resize([usable_w, usable_h, 0], auto=true)
-      union() {
-        if (len(layers) == 0)
-          color(relief_color)
-            linear_extrude(height=relief_height)
-              import(file=svg_file, center=false);
-        else
+  // Fit to the smaller side, preserving aspect (never stretched).
+  fit = usable_w >= usable_h ? [0, usable_h, 0] : [usable_w, 0, 0];
+  if (len(layers) == 0)
+    // Single relief: centre the whole drawing and clip it to the usable box.
+    translate([panel_width / 2, panel_height / 2, base_thickness])
+      color(relief_color)
+        linear_extrude(height=relief_height)
+          intersection() {
+            resize(fit, auto=true) import(file=svg_file, center=true);
+            square([usable_w, usable_h], center=true);
+          }
+  else
+    // Per-region colours: one shared resize keeps the regions registered,
+    // corner-anchored in the usable area.
+    translate([margin, margin, base_thickness])
+      resize(fit, auto=true)
+        union() {
           for (lyr = layers)
             color(lyr[1])
               linear_extrude(height=relief_height)
                 import(file=svg_file, id=lyr[0], center=false);
-      }
+        }
 }
 
 module panel() {
