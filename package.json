@@ -54,7 +54,7 @@
     "@xmldom/xmldom": "^0.9.10",
     "axe-core": "^4.12.1",
     "eslint": "^9.39.4",
-    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "fake-indexeddb": "^6.2.5",
     "fflate": "^0.8.3",
     "globals": "^17.7.0",
