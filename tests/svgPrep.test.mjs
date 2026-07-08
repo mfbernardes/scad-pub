@@ -19,7 +19,6 @@ import {
   groupByColor,
   isRenderableColor,
   MAX_RELIABLE_REGIONS,
-  parseLayersArg,
   prepareSvg,
   serializeSvg,
 } from "../src/lib/svgPrep/index.ts";

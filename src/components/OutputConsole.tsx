@@ -4,6 +4,7 @@
 // and passed in.
 import { useState } from "react";
 import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
+import { type RenderMetrics, formatDuration } from "../lib/renderMetrics";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { CountBadges } from "./CountBadges";
@@ -23,13 +24,15 @@ interface Props {
   log: string[];
   diagnostics: Diagnostic[];
   badges: BadgeCount[];
+  /** Local-only render performance telemetry (see lib/renderMetrics.ts). */
+  metrics: RenderMetrics;
   open: boolean;
   onClose: () => void;
   /** Layout-specific sizing/positioning (desktop band vs mobile overlay). */
   className?: string;
 }
 
-export function OutputConsole({ log, diagnostics, badges, open, onClose, className }: Props) {
+export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose, className }: Props) {
   const [tab, setTab] = useState("notices");
 
   if (!open) return null;
@@ -49,6 +52,9 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose, classNa
             </TabsTrigger>
             <TabsTrigger value="log" className={cn(chipTabTrigger, "px-3")}>
               Log
+            </TabsTrigger>
+            <TabsTrigger value="metrics" className={cn(chipTabTrigger, "px-3")}>
+              Metrics
             </TabsTrigger>
           </TabsList>
           <IconButton
@@ -84,6 +90,37 @@ export function OutputConsole({ log, diagnostics, badges, open, onClose, classNa
             <pre className="log m-0 max-h-44 overflow-auto whitespace-pre-wrap bg-code px-4 py-[0.6rem] font-mono text-xs leading-[1.4] text-muted-foreground">
               {log.length ? log.join("\n") : "(no output yet)"}
             </pre>
+          </TabsContent>
+          <TabsContent value="metrics" className="mt-0">
+            <div className="render-metrics px-3 py-[0.4rem] text-[0.82rem]">
+              {!metrics.last ? (
+                <p className="text-muted-foreground">No renders yet.</p>
+              ) : (
+                <dl className="m-0 flex flex-col gap-[0.3rem]">
+                  <div className="flex gap-1">
+                    <dt className="text-muted-foreground">Last render:</dt>
+                    <dd className="m-0 text-foreground">
+                      {formatDuration(metrics.last.ms)}
+                      {metrics.last.cached ? " (cached)" : ""}
+                    </dd>
+                  </div>
+                  {metrics.slowest && (
+                    <>
+                      <div className="flex gap-1">
+                        <dt className="text-muted-foreground">Slowest this session:</dt>
+                        <dd className="m-0 text-foreground">{formatDuration(metrics.slowest.ms)}</dd>
+                      </div>
+                      {metrics.slowest.changed.length > 0 && (
+                        <div className="flex gap-1">
+                          <dt className="text-muted-foreground">Changed:</dt>
+                          <dd className="m-0 text-foreground">{metrics.slowest.changed.join(", ")}</dd>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </dl>
+              )}
+            </div>
           </TabsContent>
         </div>
       </Tabs>

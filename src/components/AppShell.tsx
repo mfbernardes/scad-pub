@@ -8,6 +8,7 @@ import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
+import type { RenderMetrics } from "../lib/renderMetrics";
 import type { ViewerHandle, Dimensions } from "./Viewer";
 
 // Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
@@ -58,6 +59,8 @@ interface Props {
   values: Values;
   /** Values behind the current render — what the measurements panel reads. */
   renderedValues: Values;
+  /** Local-only render performance telemetry, shown in the Output console's Metrics tab. */
+  renderMetrics: RenderMetrics;
   bundled: ParsedSet[];
   userPresets: string[];
   selectedPreset: string;
@@ -79,6 +82,7 @@ export const AppShell = memo(function AppShell({
   designs,
   values,
   renderedValues,
+  renderMetrics,
   bundled,
   userPresets,
   selectedPreset,
@@ -292,7 +296,7 @@ export const AppShell = memo(function AppShell({
     view,
     onSelectView: handleSelectView,
   };
-  const outputProps = { log, diagnostics, badges, open: outputOpen, onClose: closeOutput };
+  const outputProps = { log, diagnostics, badges, metrics: renderMetrics, open: outputOpen, onClose: closeOutput };
   const actionButtonsProps = {
     hasResult: !!result?.ok,
     modelFormat: schema.format,
