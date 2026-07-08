@@ -56,6 +56,18 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // react-hooks v7 added `refs` to its recommended set. It flags the
+      // deliberate ref-mirror / lazy-ref-init architecture this codebase is
+      // built on — `latest.current = props` to forward the freshest callbacks
+      // through identity-stable wrappers (appActions.ts, useRafBatchedWrite,
+      // useRenderPipeline, …) and `if (!ref.current) ref.current = …` lazy
+      // init. Both are React-endorsed patterns, documented in CLAUDE.md as the
+      // stable-context-value design. Off, like no-explicit-any below, because
+      // it fires on intentional code rather than bugs.
+      'react-hooks/refs': 'off',
+      // Also new in v7. setState inside an effect is used here to sync derived
+      // UI state; keep it visible as advice without failing the lint.
+      'react-hooks/set-state-in-effect': 'warn',
       // Style-only rules that don't indicate real bugs — keep the signal
       // focused on correctness/react-hooks rather than drowning in noise
       // from a first-time lint pass over an existing codebase.
