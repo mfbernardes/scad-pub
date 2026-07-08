@@ -6,9 +6,12 @@ import {
   defaultsFor,
   fetchBundledPresets,
   listPresets,
+  loadPreset,
+  parsePresetId,
   type ParsedSet,
   type Values,
 } from "./lib/presets";
+import { changedParams } from "./lib/paramDiff";
 import { readInitialState, persistState } from "./lib/urlState";
 import { download, downloadBlob } from "./lib/download";
 import { shareUrl, shareFileOrFallback } from "./lib/share";
@@ -159,6 +162,27 @@ export default function App() {
   const setValue = useCallback((name: string, value: ParamValue) =>
     setValues((v) => ({ ...v, [name]: value })), []);
 
+  // The unified preset-diff baseline: the selected preset's values when one is
+  // selected, else null (meaning "compare against defaults" — see `baseline`
+  // below). Resolved from `presetSel` rather than stored separately so it can
+  // never drift out of sync with the picker's own selection.
+  const parsedPreset = useMemo(() => parsePresetId(presetSel), [presetSel]);
+  const presetBaseline = useMemo<Values | null>(() => {
+    if (!parsedPreset) return null;
+    if (parsedPreset.kind === "bundled")
+      return bundledPresets.find((p) => p.name === parsedPreset.name)?.values ?? null;
+    return loadPreset(design.id, parsedPreset.name);
+  }, [parsedPreset, bundledPresets, design]);
+  const presetName = parsedPreset?.name ?? null;
+  // The baseline "drifted" is measured against: the selected preset's values,
+  // or the design's defaults when no preset is selected.
+  const baseline = useMemo(() => presetBaseline ?? defaultsFor(design), [presetBaseline, design]);
+  const changed = useMemo(
+    () => changedParams(design.params, baseline, values),
+    [design, baseline, values]
+  );
+  const changedNames = useMemo(() => new Set(changed.map((p) => p.name)), [changed]);
+
   // One-time, post-export install nudge: only when the browser actually offers
   // install, the config allows it, and we haven't shown it before. Demoted per
   // the UX plan — never a standing prompt.
@@ -287,6 +311,10 @@ export default function App() {
           bundled={bundledPresets}
           userPresets={userPresets}
           selectedPreset={presetSel}
+          presetBaseline={presetBaseline}
+          presetName={presetName}
+          baseline={baseline}
+          changedParams={changedNames}
           userFiles={userFiles}
           result={result}
           rendering={rendering}

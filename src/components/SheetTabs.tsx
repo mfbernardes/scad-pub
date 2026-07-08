@@ -10,6 +10,7 @@ import { useInitialTab } from "../lib/useInitialTab";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
+import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
 import { PanelFooter } from "./PanelFooter";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
@@ -23,6 +24,14 @@ interface Props {
   bundled: ParsedSet[];
   userPresets: string[];
   selected: string;
+  /** The selected preset's values, or null when no preset is selected (baseline is defaults). */
+  presetBaseline: Values | null;
+  /** The selected preset's display name, or null when no preset is selected. */
+  presetName: string | null;
+  /** Values the current params are diffed against — presetBaseline, or design defaults. */
+  baseline: Values;
+  /** Names of params whose value differs from `baseline`. */
+  changedParams: Set<string>;
   fileImport: FileImport | null;
   loadedFiles: LoadedFile[];
   /** Font families the renderer can use (normalised), for the missing-font hint. */
@@ -47,6 +56,10 @@ export function SheetTabs({
   bundled,
   userPresets,
   selected,
+  presetBaseline,
+  presetName,
+  baseline,
+  changedParams,
   fileImport,
   loadedFiles,
   availableFontFamilies,
@@ -93,13 +106,21 @@ export function SheetTabs({
       </TabsList>
       <div className="flex min-h-0 flex-1 flex-col">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <PresetDiffBar
+            design={design}
+            values={values}
+            presetBaseline={presetBaseline}
+            presetName={presetName}
+            changedParams={changedParams}
+          />
           <ParamSearch value={search} onChange={setSearch} onClear={() => setSearch("")} />
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} />
           </div>
-          {/* Auto-render + Reset are parameter-scoped, so they pin to the bottom
-              of this tab only — not on Presets/Files (mirrors the desktop panel). */}
-          <PanelFooter design={design} values={values} autoRender={autoRender} className="sheet-footer" />
+          {/* Auto-render is parameter-scoped, so it pins to the bottom of this
+              tab only — not on Presets/Files (mirrors the desktop panel). Reset
+              lives in PresetDiffBar above now (the unified restore control). */}
+          <PanelFooter autoRender={autoRender} className="sheet-footer" />
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetPicker

@@ -7,6 +7,7 @@ import {
   toParameterSetsFile,
   parseParameterSetsFile,
   presetLabel,
+  parsePresetId,
 } from "../src/lib/presets.ts";
 
 const p = (name, type, def, extra = {}) => ({
@@ -111,4 +112,39 @@ test("presetLabel preserves colons within the name", () => {
 test("presetLabel falls back to the full id when there is no second colon", () => {
   assert.equal(presetLabel("nocolon"), "nocolon");
   assert.equal(presetLabel("type:d"), "type:d");
+});
+
+test("parsePresetId parses the bundled form", () => {
+  assert.deepEqual(parsePresetId("bundled:d:Compact"), {
+    kind: "bundled",
+    designId: "d",
+    name: "Compact",
+  });
+});
+
+test("parsePresetId parses the user form", () => {
+  assert.deepEqual(parsePresetId("user:d:Small"), {
+    kind: "user",
+    designId: "d",
+    name: "Small",
+  });
+});
+
+test("parsePresetId keeps colons within the name", () => {
+  assert.deepEqual(parsePresetId("user:d:a:b"), {
+    kind: "user",
+    designId: "d",
+    name: "a:b",
+  });
+});
+
+test("parsePresetId returns null for an empty string", () => {
+  assert.equal(parsePresetId(""), null);
+});
+
+test("parsePresetId returns null for a malformed id", () => {
+  assert.equal(parsePresetId("nocolon"), null);
+  assert.equal(parsePresetId("type:d"), null);
+  assert.equal(parsePresetId("bogus:d:Name"), null);
+  assert.equal(parsePresetId("bundled::Name"), null);
 });

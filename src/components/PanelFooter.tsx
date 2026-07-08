@@ -1,27 +1,21 @@
-// PanelFooter.tsx — the parameter-scoped footer row: the Auto-render switch and
-// Reset-to-defaults. Shared by the desktop ParamPanel (pinned under the whole
-// panel) and the mobile SheetTabs (pinned inside the Parameters tab); only the
-// container class differs.
-import type { Design } from "../openscad/types";
-import type { Values } from "../lib/presets";
+// PanelFooter.tsx — the parameter-scoped footer row: the Live-preview
+// (auto-render) switch. Shared by the desktop ParamPanel (pinned under the
+// whole panel) and the mobile SheetTabs (pinned inside the Parameters tab);
+// only the container class differs. Reset-to-defaults used to live here too,
+// but the unified preset-diff strip (PresetDiffBar, at the top of the
+// Parameters tab) is now the single restore control — see that file.
 import { useAppActions } from "../lib/appActions";
-import { ResetButton } from "./ResetButton";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
-import { RotateCcw as ResetIcon } from "lucide-react";
 
 export function PanelFooter({
-  design,
-  values,
   autoRender,
   className,
 }: {
-  design: Design;
-  values: Values;
   autoRender: boolean;
   className: string;
 }) {
-  const { reset, autoRenderChange } = useAppActions();
+  const { autoRenderChange } = useAppActions();
   return (
     <div className={className}>
       {/* Live preview (auto-render) lives here, with the settings it governs,
@@ -33,14 +27,6 @@ export function PanelFooter({
         <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Live preview" />
         Live preview
       </Label>
-      <ResetButton
-        design={design}
-        values={values}
-        onReset={reset}
-        className="reset-link ml-auto inline-flex items-center gap-[0.35rem] border-none bg-transparent px-[0.3rem] py-[0.25rem] text-[0.85rem] text-muted-foreground enabled:hover:text-foreground disabled:cursor-default disabled:opacity-40"
-      >
-        <ResetIcon size={14} className="shrink-0" /> Reset to defaults
-      </ResetButton>
     </div>
   );
 }
