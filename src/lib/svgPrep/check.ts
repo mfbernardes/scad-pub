@@ -31,8 +31,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "WARN",
       code: "no-viewbox",
-      message: "no usable viewBox; OpenSCAD will size the drawing by width/height/DPI",
-      hint: 'set a viewBox="0 0 W H" so the drawing scales predictably',
+      message: "the drawing has no canvas frame, so its size on the plate can't be judged reliably",
+      hint: "export with a viewBox (most editors do this automatically) so it always scales the same way",
     });
   } else {
     const [minx, miny] = vb;
@@ -41,9 +41,9 @@ export function check(root: Element, layers: string[] = []): Finding[] {
         level: "WARN",
         code: "viewbox-origin",
         message:
-          `viewBox origin is (${g(minx)}, ${g(miny)}), not 0 0 — ` +
-          "regions can land off the base (esp. with colour layers)",
-        hint: 'use viewBox="0 0 W H" (the Fix step normalises it)',
+          "the drawing's canvas doesn't start at the top-left corner, so parts of it " +
+          "can land off the plate (especially with colour regions)",
+        hint: "the Fix step re-centres the drawing for you",
       });
     }
   }
@@ -54,8 +54,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "ERROR",
       code: "no-geometry",
-      message: "no importable geometry (path/rect/circle/ellipse/line/poly*) found",
-      hint: "draw filled shapes; OpenSCAD imports only path and basic shapes",
+      message: "nothing to raise — the drawing has no shapes that can become relief",
+      hint: "draw filled shapes (rectangles, circles, paths); only shapes can be raised, not text or images",
     });
   }
 
@@ -64,10 +64,10 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "WARN",
       code: "text",
-      message: `${texts.length} text element(s) — OpenSCAD drops <text>, so it will vanish`,
+      message: `${texts.length} piece(s) of live text — text can't be raised into relief and will disappear`,
       hint:
-        "outline text (Inkscape Object to Path / Illustrator Create Outlines), " +
-        "or add the label through a separate parameter instead of drawing it",
+        "convert the text to outlines in your editor (Inkscape: Object to Path; " +
+        "Illustrator: Create Outlines), or add wording through the design's own label field instead",
     });
   }
 
@@ -91,19 +91,19 @@ export function check(root: Element, layers: string[] = []): Finding[] {
       level: "WARN",
       code: "stroke-only",
       message:
-        `${strokeOnly.length} stroke-only shape(s) (fill:none) — ` +
-        "OpenSCAD fills every closed shape, so these import as SOLID blocks",
+        `${strokeOnly.length} outline-only shape(s) (a stroke with no fill) — ` +
+        "every shape is raised as a filled shape, so these come out solid instead of as thin outlines",
       hint:
-        "convert the stroke to a filled shape (Inkscape Stroke to Path / " +
-        "Illustrator Outline Stroke) for a thin wall or outline",
+        "give the shape a fill, or convert its outline to a filled shape " +
+        "(Inkscape: Stroke to Path; Illustrator: Outline Stroke) to keep a thin wall or outline",
     });
   }
   if (openPaths > 0) {
     findings.push({
       level: "WARN",
       code: "open-paths",
-      message: `${openPaths} open path subpath(s) (no Z) — may import as a sliver or nothing`,
-      hint: "close every path",
+      message: `${openPaths} unclosed path(s) — an open path may come out as a thin sliver or not at all`,
+      hint: "close every path in your editor",
     });
   }
 
@@ -117,12 +117,11 @@ export function check(root: Element, layers: string[] = []): Finding[] {
       level: "WARN",
       code: "covers-canvas",
       message:
-        `${backgrounds.length} shape(s) cover the whole canvas as a solid rectangle — ` +
-        "OpenSCAD fills every shape, so the drawing imports as ONE solid block that " +
-        "buries the detail",
+        `${backgrounds.length} shape(s) cover the whole canvas — a full-canvas background ` +
+        "is raised as one solid block that buries everything on top of it",
       hint:
-        "remove the background/artboard rectangle (the Fix step drops it); tactile " +
-        "relief needs open space between the raised shapes",
+        "remove the background/artboard rectangle (the Fix step drops it); a tactile " +
+        "relief needs open space around the raised shapes",
     });
   }
 
@@ -135,8 +134,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "WARN",
       code: `ignored:${name}`,
-      message: `${ignored.get(name)} <${name}> element(s) — OpenSCAD ignores these on import`,
-      hint: "flatten/expand them to plain shapes if they carry visible geometry",
+      message: `${ignored.get(name)} <${name}> element(s) — these aren't supported and won't be raised`,
+      hint: "flatten or expand them into plain filled shapes if they carry artwork you need",
     });
   }
 
@@ -153,11 +152,11 @@ export function check(root: Element, layers: string[] = []): Finding[] {
         level: "WARN",
         code: "styled-fill",
         message:
-          `${styled.length} shape(s) take their fill from a <style> rule, which ` +
-          "OpenSCAD ignores — those regions import as black",
+          `${styled.length} shape(s) get their colour from a stylesheet, which isn't ` +
+          "read here — those regions are treated as black",
         hint:
-          "give each region a fill attribute, or a simple .class / #id / tag " +
-          "{ fill: … } rule the wizard can resolve",
+          "give each shape a direct fill colour, or a simple class / id / tag colour " +
+          "rule the Fix step can resolve",
       });
     }
   }
@@ -178,10 +177,10 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "WARN",
       code: "inkscape-trap",
-      message: `Inkscape layer name(s) are labels, not ids: ${names}`,
+      message: `Inkscape layer name(s) won't be matched as colour regions yet: ${names}`,
       hint:
-        "the region binding matches the SVG id — the Fix step renames each " +
-        "id to its label, or use groups with an explicit id",
+        "the Fix step renames each layer so its name is used as the region, " +
+        "or set an explicit name on the group",
     });
   }
 
@@ -190,7 +189,7 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "INFO",
       code: "regions-available",
-      message: `named regions available by id: ${regionIds.join(", ")}`,
+      message: `colourable regions found: ${regionIds.join(", ")}`,
     });
   }
 
@@ -202,19 +201,18 @@ export function check(root: Element, layers: string[] = []): Finding[] {
         level: "ERROR",
         code: "region-is-label",
         message:
-          `region "${name}" is an Inkscape layer label, not an id — ` +
-          "the region binding will not find it",
-        hint: "the Fix step renames the layer id to its label",
+          `the colour region "${name}" is an Inkscape layer name that won't be matched as-is`,
+        hint: "the Fix step makes the layer name usable as a region",
       });
     } else {
       const avail = regionIds.join(", ") || "(none)";
       findings.push({
         level: "ERROR",
         code: "region-missing",
-        message: `no region <g id="${name}"> in the SVG; available: ${avail}`,
+        message: `no region named "${name}" in the drawing; available: ${avail}`,
         hint:
-          "group the shapes for this colour and set the group id to " +
-          `"${name}" (Inkscape Object Properties / Illustrator layer name)`,
+          `group the shapes for this colour and name the group "${name}" ` +
+          "(Inkscape: Object Properties; Illustrator: the layer name)",
       });
     }
   }
@@ -233,8 +231,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
       findings.push({
         level: "WARN",
         code: "content-outside-viewbox",
-        message: "content extends outside the viewBox — it may be clipped",
-        hint: "fit the artwork inside the viewBox",
+        message: "some artwork sits outside the canvas — it may be cut off",
+        hint: "move everything inside the canvas frame",
       });
     } else if (w > 0 && h > 0) {
       const fillFrac = ((bx1 - bx0) * (by1 - by0)) / (w * h);
@@ -243,18 +241,13 @@ export function check(root: Element, layers: string[] = []): Finding[] {
           level: "INFO",
           code: "undersized",
           message:
-            "the drawing fills less than half its canvas — it will render " +
-            "small and, with colour layers, off-centre (approximate)",
-          hint: "draw the content out to the canvas edges",
+            "the drawing fills less than half its canvas — it may come out " +
+            "small and, with colour regions, off-centre",
+          hint: "draw the artwork out to the edges of the canvas",
         });
       }
     }
   }
 
   return findings;
-}
-
-// `%g`-style integer/short formatting for the viewBox-origin message.
-function g(n: number): string {
-  return Number.isInteger(n) ? String(n) : String(parseFloat(n.toPrecision(6)));
 }

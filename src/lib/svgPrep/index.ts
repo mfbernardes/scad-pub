@@ -103,7 +103,7 @@ export function autoGroupByColor(root: Element): string[] {
   if (deriveRegions(root).length > 0) return [];
   const { changes, error } = groupByColor(root);
   if (error) {
-    if (error.includes("already inside a named") || error.includes("only one fill colour")) {
+    if (error.includes("already in a named") || error.includes("only one colour")) {
       return [];
     }
     return [`Group by colour: ${error}`];

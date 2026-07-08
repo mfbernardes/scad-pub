@@ -147,12 +147,12 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
             {step === 1 && (
               <section className="flex flex-col gap-3">
                 <p className="text-sm text-muted-foreground">
-                  OpenSCAD imports only path/shape geometry — it drops text, colour and
-                  more. Here's what this drawing looks like to the importer:
+                  Only shapes are raised into relief — text, colours and a few other
+                  things aren't. Here's what to expect from this drawing:
                 </p>
                 <FindingList
                   findings={parsed.before}
-                  empty="No problems found — this SVG is ready to import."
+                  empty="No problems found — this drawing is ready to use."
                 />
               </section>
             )}
@@ -181,7 +181,7 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                   </h3>
                   <FindingList
                     findings={fixed.findings}
-                    empty="No problems remain — this SVG is ready to import."
+                    empty="No problems remain — this drawing is ready to use."
                   />
                 </div>
               </section>
@@ -226,14 +226,13 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                     {fixed.regions.some((r) => !isRenderableColor(r.color)) && (
                       <p className="text-[0.78rem] text-muted-foreground">
                         Colours marked <span aria-hidden="true">?</span> can't be
-                        previewed here, but pass through to OpenSCAD unchanged — check
-                        them in your slicer.
+                        previewed here, but are still applied — check them when you print.
                       </p>
                     )}
                     {fixed.regions.length > MAX_RELIABLE_REGIONS && (
                       <p className="text-sm text-warn">
-                        {fixed.regions.length} regions is a lot: slicers import a few
-                        large regions reliably, but many small ones can merge or import
+                        {fixed.regions.length} regions is a lot: a few large colour
+                        regions print reliably, but many small ones can merge or print
                         unpredictably. Consider fewer, larger regions.
                       </p>
                     )}
@@ -250,7 +249,7 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    This drawing has a single colour, so it imports as one solid — no
+                    This drawing has a single colour, so it comes out as one solid — no
                     per-region colours to set.
                   </p>
                 )}
@@ -259,8 +258,8 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
 
             {blockedByError && (
               <p className="mt-3 text-sm font-medium text-destructive">
-                This drawing can't be imported as-is — resolve the errors above (e.g. add
-                importable geometry), then try again.
+                This drawing can't be used as-is — resolve the errors above (e.g. add some
+                filled shapes), then try again.
               </p>
             )}
           </div>

@@ -21,13 +21,13 @@ export function fixInkscapeIds(root: Element): string[] {
     const gid = el.getAttribute("id");
     if (!label || gid === label) continue;
     if (existing.has(label) && label !== gid) {
-      changes.push(`skip layer "${label}": id "${label}" already in use`);
+      changes.push(`left layer "${label}" as-is (another region already uses that name)`);
       continue;
     }
     el.setAttribute("id", label);
     if (gid) existing.delete(gid);
     existing.add(label);
-    changes.push(`renamed layer id "${gid}" -> "${label}"`);
+    changes.push(`made layer "${label}" usable as a colour region`);
   }
   return changes;
 }
@@ -46,10 +46,7 @@ export function fixViewBoxOrigin(root: Element): string[] {
   while (root.firstChild) wrapper.appendChild(root.firstChild);
   root.appendChild(wrapper);
   root.setAttribute("viewBox", `0 0 ${gFormat(w)} ${gFormat(h)}`);
-  return [
-    `normalised viewBox origin (${gFormat(minx)}, ${gFormat(miny)}) -> 0 0 ` +
-      "(wrapped content in a translate)",
-  ];
+  return ["re-centred the drawing so it sits on the plate"];
 }
 
 // Whether the element sets its own fill (a `fill=` attribute or a `fill:` in its
@@ -130,7 +127,7 @@ export function resolveStyleFills(root: Element): string[] {
       count += 1;
     }
   }
-  return count ? [`applied ${count} fill(s) from a <style> block onto their shapes`] : [];
+  return count ? [`applied ${count} stylesheet colour(s) directly to the shapes`] : [];
 }
 
 /** Drop any full-canvas background rectangle. OpenSCAD fills every shape, so a
@@ -149,7 +146,7 @@ export function removeCanvasBackground(root: Element): string[] {
   }
   return count
     ? [
-        `removed ${count} full-canvas background rectangle(s) that would import as ` +
+        `removed ${count} full-canvas background(s) that would bury the artwork in ` +
           "one solid block",
       ]
     : [];

@@ -80,7 +80,7 @@ test("safe fix normalises an off-origin viewBox by wrapping in a translate", () 
        <rect x="10" y="20" width="100" height="50" fill="gray"/>
      </svg>`,
   );
-  assert.match(applyFixes(root).join(" "), /normalised viewBox origin/);
+  assert.match(applyFixes(root).join(" "), /re-centred the drawing/);
   const fixed = roundtrip(root);
   assert.equal(fixed.getAttribute("viewBox"), "0 0 100 50");
   assert.match(serializeSvg(fixed), /translate\(-10,-20\)/);
@@ -134,7 +134,7 @@ test("group-by-colour is idempotent on already-named regions", () => {
   );
   const res = groupByColor(root);
   assert.equal(res.changes.length, 0);
-  assert.match(res.error, /already inside a named/);
+  assert.match(res.error, /already in a named/);
   assert.equal(formatLayers(deriveRegions(root)), "walls:gray, rooms:white");
 });
 
@@ -177,7 +177,7 @@ test("group-by-colour refuses when a transform sits between container and shape"
        <rect x="10" y="0" width="10" height="10" fill="white"/>
      </svg>`,
   );
-  assert.match(groupByColor(root).error, /transform\/clip\/mask/);
+  assert.match(groupByColor(root).error, /transformed or clipped/);
 });
 
 test("a single colour derives a blank layers string (no per-region split)", () => {
