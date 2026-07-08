@@ -227,7 +227,7 @@ async function render(req: RenderRequest): Promise<RenderResult> {
   });
   log.push(`[cmd] openscad ${args.join(" ")}`);
 
-  let exitCode = 0;
+  let exitCode: number;
   try {
     exitCode = instance.callMain(args) ?? 0;
   } catch (e) {
