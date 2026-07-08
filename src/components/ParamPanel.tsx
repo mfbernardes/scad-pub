@@ -12,6 +12,7 @@ import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
 import { useInitialTab } from "../lib/useInitialTab";
 import { readLocal, writeLocal } from "../lib/safeStorage";
+import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
@@ -109,6 +110,8 @@ export function ParamPanel({
   panelSideRef.current = panelSide;
   const widthRef = useRef(width);
   widthRef.current = width;
+  const panelRef = useRef<HTMLElement | null>(null);
+  const liveWidthRef = useRef(width);
 
   useEffect(() => {
     writeLocal(PANEL_OPEN_KEY, String(open));
@@ -118,12 +121,19 @@ export function ParamPanel({
     writeLocal(PANEL_WIDTH_KEY, String(width));
   }, [width]);
 
+  const { schedule: scheduleWidth, cancel: cancelWidthFrame } = useRafBatchedWrite<number>(
+    (w) => {
+      if (panelRef.current) panelRef.current.style.width = `${w}px`;
+    }
+  );
+
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
     dragging.current = true;
     startX.current = e.clientX;
     startW.current = widthRef.current;
+    liveWidthRef.current = widthRef.current;
     (e.target as Element).setPointerCapture(e.pointerId);
   }, []);
 
@@ -132,12 +142,19 @@ export function ParamPanel({
     const delta = panelSideRef.current === "left"
       ? e.clientX - startX.current
       : startX.current - e.clientX;
-    setWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startW.current + delta)));
-  }, []);
+    const next = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startW.current + delta));
+    liveWidthRef.current = next;
+    scheduleWidth(next);
+  }, [scheduleWidth]);
 
   const onPointerUp = useCallback(() => {
+    if (!dragging.current) return;
     dragging.current = false;
-  }, []);
+    // Drop any pending rAF write so a frame queued just before pointer-up
+    // can't fire after React commits the settled width below.
+    cancelWidthFrame();
+    setWidth(liveWidthRef.current);
+  }, [cancelWidthFrame]);
 
   const side = panelSide === "right" ? "param-panel--right" : "param-panel--left";
   // Collapse chevron points toward the screen edge the panel docks against.
@@ -160,6 +177,7 @@ export function ParamPanel({
 
   return (
     <aside
+      ref={panelRef}
       className={`param-panel ${side}`}
       style={{ width }}
       id="params"
