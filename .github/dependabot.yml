@@ -1,0 +1,48 @@
+version: 2
+
+updates:
+  # --- npm (root package.json) ---
+  # This is a solo/AI-assisted project, so the goal is low-noise visibility
+  # into drift (esp. the WASM-adjacent 3D stack, e.g. three.js/@types/three)
+  # rather than a flood of individual PRs. Routine minor/patch bumps are
+  # batched into one weekly PR; the render-critical three.js and any major
+  # bumps get their own reviewable PRs.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # three.js (and its types) can ship breaking changes on a 0.x "minor"
+      # bump (0.169 -> 0.170) because it never leaves 0.x — Dependabot still
+      # classifies those as "minor", so without its own group three would be
+      # swept into the batch below. Keep it out, always its own reviewable PR.
+      three:
+        patterns:
+          - "three"
+          - "@types/three"
+      # All other routine, low-risk bumps across prod + dev deps in one PR.
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    # Non-three majors are intentionally left out of any group so each opens as
+    # its own PR for human review — the whole point of surfacing the drift.
+
+  # --- GitHub Actions (.github/workflows/ci.yml) ---
+  # Action version drift (checkout, setup-node, cache, upload-artifact,
+  # upload-pages-artifact, deploy-pages, ...) is low-risk to batch, so all
+  # updates go into a single weekly PR.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns:
+          - "*"

@@ -116,6 +116,8 @@ npm run vis -- --update  # rewrite baselines
 
 CI (`.github/workflows/ci.yml`) runs unit tests, build, smoke test, and visual regression on every push/PR and uploads `dist` as an artifact. Visual regression is gated in CI, so an intentional UI change needs `npm run vis -- --update` and the updated baselines committed alongside it.
 
+Dependabot (`.github/dependabot.yml`) checks npm and GitHub Actions dependencies weekly, batching routine minor/patch bumps into a single low-noise PR while giving the render-critical three.js (and any major bumps) their own individual PRs for review.
+
 ## Publish the static bundle
 
 The build output (`dist/`) is a plain static bundle. No special headers are required.
