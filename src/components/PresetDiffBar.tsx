@@ -35,15 +35,15 @@ export function PresetDiffBar({ design, values, presetBaseline, presetName, chan
 
   if (presetBaseline) {
     return (
-      <div className={barClass} role="region" aria-label="Changes since your preset">
+      <div className={barClass} role="region" aria-label={`Changes from ${presetName}`}>
         <span>
-          {count} from preset <b className="font-semibold text-foreground">{presetName}</b>
+          {count} from <b className="font-semibold text-foreground">{presetName}</b>
         </span>
         <button
           type="button"
           className={actionBtnClass}
           onClick={() => applyPreset(presetBaseline)}
-          aria-label={`Revert to preset ${presetName}`}
+          aria-label={`Revert to ${presetName}`}
         >
           <ResetIcon size={13} className="shrink-0" /> Revert to {presetName}
         </button>
@@ -52,7 +52,7 @@ export function PresetDiffBar({ design, values, presetBaseline, presetName, chan
   }
 
   return (
-    <div className={barClass} role="region" aria-label="Changes since your preset">
+    <div className={barClass} role="region" aria-label="Changes from defaults">
       <span>
         {count} from <b className="font-semibold text-foreground">defaults</b>
       </span>

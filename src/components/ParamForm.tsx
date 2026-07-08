@@ -60,8 +60,8 @@ interface Props {
    */
   baseline?: Values;
   changedParams?: Set<string>;
-  /** The selected preset's display name, for the revert button's aria-label
-   *  ("to the preset" vs "to default" when no preset is selected). */
+  /** The selected preset's display name, used to name the revert target in the
+   *  per-field revert button ("to <preset>" vs "to default" when none). */
   presetName?: string | null;
 }
 
@@ -438,8 +438,8 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                       <button
                         type="button"
                         className="param-drift-revert -m-[3px] inline-flex shrink-0 cursor-pointer items-center rounded-[4px] border-none bg-transparent p-[3px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1"
-                        aria-label={`Revert ${label} to ${presetName ? "the preset" : "default"}`}
-                        title={`Revert to ${presetName ? "the preset" : "default"}`}
+                        aria-label={`Revert ${label} to ${presetName ?? "default"}`}
+                        title={`Revert to ${presetName ?? "default"}`}
                         onClick={() => onChange(p.name, baseline[p.name])}
                       >
                         <RevertIcon size={12} aria-hidden="true" />
