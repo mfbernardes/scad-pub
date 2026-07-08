@@ -19,7 +19,7 @@ export function ParamSearch({ value, onChange, onClear }: Props) {
         type="search"
         name="param-search"
         autoComplete="off"
-        className="min-w-0 flex-1 rounded-[4px] border-none bg-transparent p-0 text-foreground placeholder:text-muted-foreground focus-visible:outline-offset-2"
+        className="min-w-0 flex-1 rounded-[4px] border-none bg-transparent p-0 text-foreground placeholder:text-muted-foreground focus-visible:outline-offset-2 [&::-webkit-search-cancel-button]:appearance-none"
         placeholder="Find a setting…"
         value={value}
         onChange={(e) => onChange(e.target.value)}
