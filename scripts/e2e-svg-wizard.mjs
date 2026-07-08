@@ -54,12 +54,12 @@ try {
   check(true, "wizard dialog opened");
 
   const bodyText = await dialog.textContent();
-  check(/OpenSCAD drops <text>/.test(bodyText), "check step flags dropped <text>");
-  check(/not 0 0/.test(bodyText), "check step flags the off-origin viewBox");
+  check(/text can't be raised/.test(bodyText), "check step flags dropped <text>");
+  check(/doesn't start at the top-left corner/.test(bodyText), "check step flags the off-origin viewBox");
 
   await dialog.getByRole("button", { name: /Fix & continue/i }).click();
   const fixText = await dialog.textContent();
-  check(/normalised viewBox origin/.test(fixText), "fix step reports the viewBox normalisation");
+  check(/re-centred the drawing/.test(fixText), "fix step reports the viewBox normalisation");
 
   await dialog.getByRole("button", { name: /Use this SVG/i }).click();
   await dialog.waitFor({ state: "detached", timeout: 5000 });

@@ -86,7 +86,7 @@ export function groupByColor(root: Element): GroupByColorResult {
   if (shapes.length === 0) {
     return {
       changes: [],
-      error: "every shape is already inside a named <g id> region — nothing to regroup",
+      error: "every shape is already in a named colour region — nothing to regroup",
     };
   }
 
@@ -109,8 +109,8 @@ export function groupByColor(root: Element): GroupByColorResult {
         return {
           changes: [],
           error:
-            "shapes sit under a transform/clip/mask, so regrouping could " +
-            "move them — group by colour in your editor instead",
+            "some shapes are transformed or clipped, so regrouping could move " +
+            "them — group them by colour in your editor instead",
         };
       }
       node = el.parentNode;
@@ -132,7 +132,7 @@ export function groupByColor(root: Element): GroupByColorResult {
   if (order.length < 2 && shapes.length === allShapes.length) {
     return {
       changes: [],
-      error: "only one fill colour found — nothing to separate",
+      error: "only one colour found — nothing to separate",
     };
   }
 
@@ -157,7 +157,7 @@ export function groupByColor(root: Element): GroupByColorResult {
     for (const sh of bucket.shapes) group.appendChild(sh);
     container.appendChild(group);
     changes.push(
-      `grouped ${bucket.shapes.length} shape(s) filled ${disp} into <g id="${gid}">`,
+      `grouped ${bucket.shapes.length} shape(s) into the "${disp}" colour region`,
     );
   }
   pruneEmptyGroups(root);
