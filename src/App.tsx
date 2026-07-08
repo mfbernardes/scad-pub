@@ -103,6 +103,7 @@ export default function App() {
     rendering,
     ready,
     renderedValues,
+    renderMetrics,
     autoRender,
     setAutoRender,
     stalePreview,
@@ -282,6 +283,7 @@ export default function App() {
           designs={schema.designs}
           values={values}
           renderedValues={renderedValues}
+          renderMetrics={renderMetrics}
           bundled={bundledPresets}
           userPresets={userPresets}
           selectedPreset={presetSel}

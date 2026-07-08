@@ -13,7 +13,8 @@ import {
   SupersededError,
 } from "../openscad/runner";
 import { toScadExpr } from "./scad";
-import type { Values } from "./presets";
+import { defaultsFor, type Values } from "./presets";
+import { changedParamLabels, emptyMetrics, recordRender, type RenderMetrics } from "./renderMetrics";
 
 export interface RenderPipelineArgs {
   design: Design;
@@ -51,6 +52,15 @@ export function useRenderPipeline({
   // The viewer's measurements panel reads these (not the live controls) so its
   // figures only change once a render lands, in step with the measured geometry.
   const [renderedValues, setRenderedValues] = useState<Values>(initialValues);
+  // Local-only render performance telemetry (see renderMetrics.ts) surfaced by
+  // the Output console's Metrics tab. Never persisted, never sent anywhere.
+  const [renderMetrics, setRenderMetrics] = useState<RenderMetrics>(emptyMetrics);
+  // The values snapshot behind the *previous* render, used only to compute
+  // which params changed for the metrics above. Deliberately NOT a doRender
+  // dependency (see the comment on doRender's useCallback below) — updated
+  // imperatively inside doRender instead, so adding it can't recreate the
+  // callback and disturb the debounce/auto-render invariants.
+  const prevRenderedValuesRef = useRef<Values>(initialValues);
   const [ready, setReady] = useState(false);
   const [autoRender, setAutoRender] = useState(!design.heavy);
   // Mirrored on every render so async work (doRender) reads the latest value
@@ -97,6 +107,16 @@ export function useRenderPipeline({
           // Snapshot the values this render was built from (defines derives from
           // them, so doRender is recreated whenever they change) for the panel.
           setRenderedValues(values);
+          // Diff against the previous render's snapshot (not the dep array —
+          // see prevRenderedValuesRef above) to attribute the metric to
+          // whichever params actually changed since last time. Only a fresh
+          // render can become `slowest` (the only place `changed` is shown), so
+          // skip the per-param diff on cache hits — the hottest render path.
+          const changed = r.cached
+            ? []
+            : changedParamLabels(design.params, prevRenderedValuesRef.current, values);
+          setRenderMetrics((m) => recordRender(m, { ms: r.ms, cached: !!r.cached, changed }));
+          prevRenderedValuesRef.current = values;
         }
         setResult(r);
         if (!r.ok)
@@ -129,7 +149,7 @@ export function useRenderPipeline({
         });
       }
     },
-    [design.id, defines, userFiles, renderKey, values, heavyMs, setAnnouncement]
+    [design.id, design.params, defines, userFiles, renderKey, values, heavyMs, setAnnouncement]
   );
 
   useEffect(() => {
@@ -163,6 +183,12 @@ export function useRenderPipeline({
     setRenderedKey("");
     lastKeyRef.current = "";
     setAutoRender(!next.heavy);
+    setRenderMetrics(emptyMetrics);
+    // Seed the diff baseline with the new design's defaults — what App resets
+    // `values` to on a switch — so the first render after a switch reports no
+    // "changed" params (mirrors how the initial mount seeds initialValues),
+    // rather than spuriously attributing the previous design's params.
+    prevRenderedValuesRef.current = defaultsFor(next);
   }, []);
 
   return {
@@ -170,6 +196,7 @@ export function useRenderPipeline({
     rendering,
     ready,
     renderedValues,
+    renderMetrics,
     autoRender,
     setAutoRender,
     stalePreview,
