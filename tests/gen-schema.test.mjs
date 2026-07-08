@@ -24,6 +24,7 @@ import {
   parseFileImport,
   parsePopup,
   parseFormat,
+  parseRestOnGrid,
   parseNotices,
   parseUi,
   parseParams,
@@ -556,6 +557,22 @@ test("format defaults to 3mf, accepts stl, and rejects anything else", () => {
   assert.equal(parseFormat("stl"), "stl");
   assert.throws(() => parseFormat("obj"), /config\.format must be/);
   assert.throws(() => parseFormat("STL"), /config\.format must be/);
+});
+
+test("restOnGrid defaults to false, accepts booleans, and rejects anything else", () => {
+  assert.equal(parseRestOnGrid(undefined), false);
+  assert.equal(parseRestOnGrid(null), false);
+  assert.equal(parseRestOnGrid(true), true);
+  assert.equal(parseRestOnGrid(false), false);
+  assert.throws(() => parseRestOnGrid("true"), /config\.restOnGrid must be a boolean/);
+  assert.throws(() => parseRestOnGrid(1), /config\.restOnGrid must be a boolean/);
+});
+
+test("restOnGrid is emitted to the schema and absent from renderHash (display-only)", () => {
+  // restOnGrid only changes how the viewer frames the model, not the exported
+  // bytes, so it must reach the schema without disturbing renderHash.
+  const a = run("widget.config.json").schema; // default -> false
+  assert.equal(a.restOnGrid, false);
 });
 
 test("format is emitted to the schema and folded into renderHash", () => {

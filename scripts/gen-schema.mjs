@@ -40,6 +40,7 @@ import {
   parseDir,
   parseFileImport,
   parseFormat,
+  parseRestOnGrid,
   parseLang,
   parseLicenses,
   parseNotices,
@@ -56,6 +57,7 @@ export {
   parseDir,
   parseFileImport,
   parseFormat,
+  parseRestOnGrid,
   parseLang,
   parseLicenses,
   parseNotices,
@@ -81,7 +83,7 @@ export const KNOWN_TOP_LEVEL_KEYS = new Set([
   // Design sources
   "source", "designs", "defaultDesign", "assets",
   // Rendering
-  "features", "format", "fonts", "fontFallback", "render",
+  "features", "format", "restOnGrid", "fonts", "fontFallback", "render",
   // Appearance & UI behaviour
   "logo", "colors", "extraCss", "ui", "fileImport",
   // In-app content
@@ -447,6 +449,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // ── Rendering ─────────────────────────────────────────────────────────────
   const FEATURES = config.features ?? [];
   const FORMAT = parseFormat(config.format);
+  const REST_ON_GRID = parseRestOnGrid(config.restOnGrid);
   // Optional build-time render tuning (heavy-render threshold + cache sizing).
   // Validated; absent -> null -> the app keeps its built-in defaults.
   const RENDER = parseRender(config.render);
@@ -570,6 +573,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     extraCss,
     logo,
     format: FORMAT,
+    restOnGrid: REST_ON_GRID,
     features: FEATURES,
     render: RENDER,
     fonts: FONTS,

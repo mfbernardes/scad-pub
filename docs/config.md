@@ -23,6 +23,7 @@ This representative config shows the major surfaces. The sections below define e
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
+  "restOnGrid": false,            // rest the model's base on the z=0 grid instead of centring in Z; default false
   "fileImport": true              // optional "Import file" button
 }
 ```
@@ -61,6 +62,7 @@ These keys affect render arguments, bundled fonts, and cache behavior:
 
 - **`features`**: applied to all designs as `--enable=<feature>`
 - **`format`**: the model format OpenSCAD exports and the viewer parses, fixed at build time. `"3mf"` is the default and carries per-object colour from each design's `color(...)` calls. `"stl"` is geometry-only. Changing it invalidates the render cache automatically
+- **`restOnGrid`**: how the viewer frames a loaded model, fixed at build time. `false` (the default) centres the model on the origin in all three axes, as it always has. `true` centres it in X/Y but rests its base on the `z=0` grid plane, which suits designs modelled with their base on `z=0` (as OpenSCAD designs typically are) where centring in Z would sink them half-way through the grid. Display-only: it does not change the exported file or the render cache
 - **`fonts`** / **`fontFallback`**: see [Fonts](#fonts-fonts-fontfallback)
 - **`render`**: optional render tuning for the heavy-render threshold and cache sizing. See [Render tuning](#render-tuning-render)
 
