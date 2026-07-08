@@ -218,6 +218,8 @@ export function PresetPicker({
         <div className="flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-2">
           <Input
             type="text"
+            name="preset-name"
+            autoComplete="off"
             className="h-8 flex-1"
             placeholder="Save these settings as…"
             value={saveName}

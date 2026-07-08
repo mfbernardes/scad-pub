@@ -192,6 +192,8 @@ function NumberControl({
       )}
       <Input
         type="number"
+        name={param.name}
+        autoComplete="off"
         className="w-20"
         min={param.min}
         max={param.max}
@@ -286,6 +288,8 @@ function Control({
       return (
         <Input
           type="text"
+          name={param.name}
+          autoComplete="off"
           value={String(value)}
           aria-label={label}
           onChange={(e) => onChange(e.target.value)}

@@ -45,7 +45,7 @@ function groupDesigns(designs: Design[]): { group: string | null; items: Design[
 // A design's optional icon, shown as a small leading thumbnail in the dropdown.
 function designIcon(d: Design): ReactNode {
   return d.icon ? (
-    <img src={d.icon} alt="" aria-hidden="true" className="size-4 shrink-0 object-contain" />
+    <img src={d.icon} alt="" aria-hidden="true" width={16} height={16} className="size-4 shrink-0 object-contain" />
   ) : undefined;
 }
 

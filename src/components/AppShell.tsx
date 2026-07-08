@@ -437,10 +437,11 @@ export const AppShell = memo(function AppShell({
             above the COLLAPSED (peek) sheet — the sheet's tab row stays visible
             and tappable beneath it — with a scrim dimming only the viewer. */}
         {outputOpen && (
-          <div
+          <button
+            type="button"
             className="output-console__scrim absolute inset-x-0 top-0 bottom-[calc(var(--safe-area-bottom)+var(--mobile-peek-height))] z-[31] bg-black/40"
             onClick={closeOutput}
-            aria-hidden="true"
+            aria-label="Close messages"
           />
         )}
         <OutputConsole

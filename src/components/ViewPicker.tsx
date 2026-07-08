@@ -34,7 +34,7 @@ export function ViewPicker({ view, onSelect }: Props) {
         <button
           type="button"
           className={cn(
-            "icon-btn size-8 inline-flex items-center justify-center cursor-pointer outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            "icon-btn size-8 inline-flex items-center justify-center cursor-pointer outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50",
             "border rounded-(--radius-sm) hover:border-brand data-[state=open]:border-brand data-[state=open]:text-brand",
             HUD_GLASS_BTN
           )}

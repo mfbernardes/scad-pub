@@ -23,6 +23,8 @@ export function BarBrand({
       className={cn("brand-logo block h-[1.6rem] w-auto", logoClassName)}
       src={assetUrl(schema.logo[theme])}
       alt={schema.title}
+      width={160}
+      height={32}
     />
   ) : (
     // Wordmark treatment for the plain-title fallback: display face + an
