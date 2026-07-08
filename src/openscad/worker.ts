@@ -10,30 +10,22 @@ import schema from "../generated/designs.json";
 import type { ModelFormat, RenderRequest, RenderResult } from "./types";
 import { assetUrl as asset } from "../lib/assetUrl";
 import { orphanedDefines } from "../lib/scad";
-import { buildOpenscadArgs, exportFor, userFileMountPath } from "./renderArgs";
+import { buildOpenscadArgs, exportFor, mkdirPaths, mountDir, userFileMountPath } from "./renderArgs";
+import { binCacheName, staleBinaryCaches } from "./binCache";
 
-// Persistent cache for the big, version-pinned binaries (the ~10 MB WASM and
-// the fonts), so reloads are instant and the app works offline. The cache name
-// carries the pinned OpenSCAD version (single-sourced via schema.wasmVersion
-// from scripts/wasm-version.mjs) — a WASM bump renames the cache so stale
-// binaries are evicted. The small, build-volatile .scad sources are NOT cached
-// here (they change every build).
-// Neutral, NOT namespaced per config: the WASM binary is identical across
-// deployments, so sharing this cache across configs on one origin avoids
-// re-downloading ~10 MB. The service worker warms this same cache at install
-// (see public/sw.js), so offline works even before the first render.
-const BIN_CACHE = `openscad-wasm-bin-${
-  (schema as { wasmVersion?: string }).wasmVersion ?? "2026.06.12"
-}`;
+// Persistent Cache Storage entry for the big, version-pinned binaries (the
+// ~10 MB WASM and the fonts), so reloads are instant and the app works offline.
+// binCacheName keys it by the pinned OpenSCAD version (see binCache.ts for the
+// naming + eviction rationale). The small, build-volatile .scad sources are NOT
+// cached here (they change every build). The service worker warms this same
+// cache at install (see public/sw.js), so offline works even before the first
+// render.
+const BIN_CACHE = binCacheName((schema as { wasmVersion?: string }).wasmVersion);
 
 async function cleanupOldCaches() {
   if (typeof caches === "undefined") return;
   const keys = await caches.keys();
-  await Promise.all(
-    keys
-      .filter((k) => k.startsWith("openscad-wasm-bin-") && k !== BIN_CACHE)
-      .map((k) => caches.delete(k))
-  );
+  await Promise.all(staleBinaryCaches(keys, BIN_CACHE).map((k) => caches.delete(k)));
 }
 
 // Cache-first fetch of an immutable binary into an ArrayBuffer.
@@ -121,11 +113,9 @@ async function loadDesignSource(path: string): Promise<string> {
 }
 
 function mkdirp(FS: OpenSCADInstance["FS"], dir: string) {
-  let cur = "";
-  for (const part of dir.split("/").filter(Boolean)) {
-    cur += "/" + part;
+  for (const path of mkdirPaths(dir)) {
     try {
-      FS.mkdir(cur);
+      FS.mkdir(path);
     } catch {
       /* exists */
     }
@@ -182,7 +172,7 @@ async function render(req: RenderRequest): Promise<RenderResult> {
 
   // Write a source-relative file into the FS, creating its parent directory.
   const mount = (path: string, src: string | Uint8Array) => {
-    mkdirp(FS, `/${path}`.replace(/\/[^/]*$/, ""));
+    mkdirp(FS, mountDir(path));
     FS.writeFile(`/${path}`, src);
   };
 
