@@ -4,12 +4,23 @@
 // the render's virtual filesystem, points this parameter at it, and (when the
 // field binds `layers=<param>`) writes the derived colour string into that
 // second parameter — then the normal auto-render picks it up.
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Upload as UploadIcon, FileCode as FileCodeIcon } from "lucide-react";
 import type { SvgFieldMeta } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
 import { FileInput } from "./FileInput";
-import { SvgWizard, type SvgWizardResult } from "./SvgWizard";
+import type { SvgWizardResult } from "./SvgWizard";
+
+const SvgWizard = lazy(() =>
+  import("./SvgWizard").then((m) => ({ default: m.SvgWizard }))
+);
+
+// Preload on user intent (hover/focus of the trigger button) so the chunk is
+// likely already fetched by the time `pending` mounts it. The dynamic import
+// is already deduped by the module loader, so repeat calls are free.
+function preloadSvgWizard() {
+  void import("./SvgWizard");
+}
 
 interface Props {
   name: string;
@@ -96,6 +107,8 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
             <button
               type="button"
               onClick={open}
+              onPointerEnter={preloadSvgWizard}
+              onFocus={preloadSvgWizard}
               className="inline-flex cursor-pointer items-center gap-[0.4rem] rounded-(--radius-sm) border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground focus-visible:outline-offset-2"
               aria-label={`Prepare SVG for ${label}`}
             >
@@ -115,13 +128,15 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
       )}
 
       {pending && (
-        <SvgWizard
-          svgText={pending.text}
-          fileName={pending.fileName}
-          deriveColours={Boolean(svg.layers)}
-          onCancel={() => setPending(null)}
-          onComplete={onComplete}
-        />
+        <Suspense fallback={null}>
+          <SvgWizard
+            svgText={pending.text}
+            fileName={pending.fileName}
+            deriveColours={Boolean(svg.layers)}
+            onCancel={() => setPending(null)}
+            onComplete={onComplete}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { tapFeedback } from "../lib/haptics";
+import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
 
 export type SheetDetent = "peek" | "half" | "full";
 
@@ -60,11 +61,12 @@ export function BottomSheet({
   // Whether the current interaction moved enough to be a drag (vs a tap).
   const draggedRef = useRef(false);
   const [dragging, setDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState(0);
 
   // Refs so stable callbacks can read current values without deps.
   const detentRef = useRef(detent);
   detentRef.current = detent;
+  const onFollowRef = useRef(onFollow);
+  onFollowRef.current = onFollow;
 
   // A short haptic tick whenever the sheet settles on a new detent (drag-snap,
   // tap-cycle or keyboard) — Android only; silent on iOS / reduced-motion.
@@ -143,13 +145,30 @@ export function BottomSheet({
     e.currentTarget.setPointerCapture(e.pointerId);
   }, [heightFor]);
 
+  // Apply the live drag height imperatively (rAF-batched direct DOM write),
+  // bypassing React render for pointer-move frequency updates. Only called
+  // while dragging, so the transition is always suppressed here.
+  const { schedule: scheduleHeight, cancel: cancelHeightFrame } = useRafBatchedWrite<number>(
+    (height) => {
+      const sheet = sheetRef.current;
+      if (!sheet) return;
+      sheet.style.height = `${height}px`;
+      sheet.style.transition = "none";
+      onFollowRef.current?.(height, true);
+    }
+  );
+
   // onPointerMove only reads refs — no state deps at all.
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragStart.current || e.pointerId !== dragPointerId.current) return;
     const offset = dragStart.current.y - e.clientY;
     if (Math.abs(offset) > DRAG_THRESHOLD) draggedRef.current = true;
-    setDragOffset(offset);
-  }, []);
+    const nextH = Math.max(
+      peekHeightRef.current,
+      Math.min(fullH(bottomInsetRef.current), dragStart.current.height + offset)
+    );
+    scheduleHeight(nextH);
+  }, [scheduleHeight]);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
     if (!dragStart.current || e.pointerId !== dragPointerId.current) return;
@@ -157,8 +176,10 @@ export function BottomSheet({
     const delta = dragStart.current.y - e.clientY;
     const currentH = dragStart.current.height;
     dragStart.current = null;
+    // Drop any pending rAF write so a frame queued just before pointer-up
+    // can't fire after React commits the settled detent below.
+    cancelHeightFrame();
     setDragging(false);
-    setDragOffset(0);
 
     const minH = peekHeightRef.current;
     const maxH = fullH(bottomInsetRef.current);
@@ -170,7 +191,7 @@ export function BottomSheet({
       if (dist < bestDist) { bestDist = dist; best = d; }
     }
     setDetent(best);
-  }, [heightFor]);
+  }, [heightFor, cancelHeightFrame]);
 
   const onHandleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "ArrowUp") {
@@ -187,15 +208,14 @@ export function BottomSheet({
     }
   }, [cycleDetent]);
 
-  const currentH = heightFor(detent);
-  const displayH = dragging
-    ? Math.max(peekHeightRef.current, Math.min(fullH(bottomInsetRef.current), currentH + dragOffset))
-    : currentH;
+  // Committed height for the current detent. Drag frames update the DOM
+  // directly via applyLiveHeight and don't flow through this render path.
+  const displayH = heightFor(detent);
 
-  // Report the live height + drag state up so the viewer can follow the sheet.
-  // Runs every drag frame (displayH changes with dragOffset) and on each settle.
+  // Report the committed height + drag state up so the viewer follows detent
+  // changes; in-progress drag frames report via applyLiveHeight instead.
   useEffect(() => {
-    onFollow?.(displayH, dragging);
+    if (!dragging) onFollow?.(displayH, dragging);
   }, [displayH, dragging, onFollow]);
 
   return (
