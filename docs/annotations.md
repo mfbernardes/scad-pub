@@ -1,10 +1,15 @@
+<!--
+meta.contentType: Reference
+content plan: define each supported OpenSCAD comment annotation, show its syntax, and explain how the app renders it.
+-->
+
 # OpenSCAD annotations
 
 ScadPub adds a handful of comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
 
 ## Design metadata (`// @description`, `// @icon`)
 
-A design can describe itself from its own `.scad` file instead of the config. Put these anywhere in the file — a header comment above the first section is the natural home:
+A design can describe itself from its own `.scad` file instead of the config. Put these anywhere in the file. A header comment above the first section is the natural home:
 
 ```openscad
 // @description Auto-sized flat name plate for a door, shelf, or desk.
@@ -14,8 +19,8 @@ A design can describe itself from its own `.scad` file instead of the config. Pu
 label = "Room 1";
 ```
 
-- **`@description`** — the design's picker sub-label (the same line a config `designs[]` entry's `description` sets).
-- **`@icon`** — a path to the design's thumbnail, resolved **relative to the design's own `.scad` file** (unlike a config `icon`, which is relative to the config). It may be an SVG, PNG, or WebP; it's served as-is and reused as the design's manifest shortcut icon.
+- **`@description`**: the design's picker sub-label. It sets the same value as `description` on a config `designs[]` entry.
+- **`@icon`**: a path to the design's thumbnail. The path resolves **relative to the design's own `.scad` file**, unlike a config `icon`, which is relative to the config. It may be a Scalable Vector Graphics (SVG), PNG, or WebP file. ScadPub serves it as-is and reuses it as the design's manifest shortcut icon.
 
 Both are **fallbacks**: a value on the design's config `designs[]` entry wins. First occurrence in the file wins; blank values are ignored. This keeps a design self-describing (and works even with auto-discovery, when the config lists no `designs[]` at all), while still letting a deployment override either from the config.
 
@@ -41,7 +46,7 @@ Expression syntax:
 | `name == value` | `name` equals `value` |
 | `name != value` | `name` differs from `value` |
 
-`value` is a bare word, quoted string, number, or `true`/`false`. Combine with `&&` and `||` (OR of ANDs). A malformed expression fails safe — the control stays visible.
+`value` is a bare word, quoted string, number, or `true`/`false`. Combine with `&&` and `||` (OR of ANDs). A malformed expression fails safe: the control stays visible.
 
 Visibility is UI-only: hidden parameters are still sent to OpenSCAD, their values are retained, and their DOM nodes are removed.
 
@@ -59,7 +64,7 @@ Collapsed parameters remain in the DOM and are still sent to OpenSCAD.
 
 ## Font selectors (`// @font`)
 
-Mark a string parameter as a font selector. In the app it renders as a **font dropdown** listing every face the renderer can actually use — the bundled fonts plus any the user imported — under friendly names read from the font files themselves ("Liberation Sans Bold", never the raw Fontconfig `Family:style=Style` string), with an **Import font…** action at the bottom. The list updates the moment a font is imported.
+Mark a string parameter as a font selector. In the app, it renders as a **font dropdown** listing every face the renderer can use: bundled fonts plus imported fonts. Friendly names come from the font files themselves, such as "Liberation Sans Bold", never the raw Fontconfig `Family:style=Style` string. The list updates the moment you import a font, and the menu includes an **Import font…** action.
 
 ```scad
 // Lettering face.
@@ -67,7 +72,7 @@ Mark a string parameter as a font selector. In the app it renders as a **font dr
 font = "Brand Display:style=Regular";
 ```
 
-The annotation is required — there's no name-based auto-detection, so a param is only treated as a font selector when you mark it `// @font`.
+The annotation is required. There is no name-based auto-detection, so ScadPub treats a param as a font selector only when you mark it `// @font`.
 
 It applies to both **free-text** string params and `// [..]` enum **dropdowns** of fixed font choices:
 
@@ -77,11 +82,17 @@ It applies to both **free-text** string params and `// [..]` enum **dropdowns** 
 font = "Brand Display:style=Regular"; // ["Brand Display:style=Regular", "Liberation Sans:style=Bold"]
 ```
 
-The `// [..]` choice list is what the **desktop** Customizer renders as a dropdown; in the app, listed faces that aren't loaded (e.g. a not-bundled, license-restricted font) stay visible and selectable in a clearly-marked "Needs a font file" group, so a design can keep suggesting its preferred face. When the *selected* face's family isn't loaded, an inline hint appears beneath the control with the two fixes: **Import font…**, or a one-click switch to a loaded family (for a flagged dropdown, the first listed choice whose family *is* loaded). See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.
+The `// [..]` choice list is what the **desktop** Customizer renders as a dropdown. In the app, listed faces that are not loaded stay visible and selectable in a "Needs a font file" group. That lets a design keep suggesting its preferred face, even when the font is not bundled.
+
+When the selected face's family is not loaded, an inline hint appears beneath the control with two fixes: **Import font…** or a one-click switch to a loaded family. For a flagged dropdown, the fallback is the first listed choice whose family is loaded. See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.
 
 ## SVG fields (`// @svg`, `// @filledBy`)
 
-Mark a string parameter that names an SVG file with `// @svg`. In the app the plain path box is replaced by a **drop zone / "Prepare SVG…" button** that opens an in-app wizard. The wizard checks the drawing against OpenSCAD's geometry-only `import()` (it drops `<text>`, colour, `<image>`/`<use>`/filters…), applies safe fixes (normalises an off-origin `viewBox`, renames Inkscape layer ids to their labels), and — when the field binds colours (below) — reads the drawing's per-region colours. On finish it writes the fixed SVG into the render's virtual filesystem, points the parameter at it, and re-renders. The configurator's own 3D viewer is the preview.
+Mark a string parameter that names an SVG file with `// @svg`. In the app, the plain path box becomes a **drop zone / "Prepare SVG…" button** that opens an in-app wizard.
+
+The wizard checks the drawing against OpenSCAD's geometry-only `import()`. OpenSCAD drops `<text>`, colour, `<image>`, `<use>`, and filters. The wizard can apply safe fixes, such as normalising an off-origin `viewBox` and renaming Inkscape layer IDs to their labels.
+
+When the field binds colours, the wizard also reads the drawing's per-region colours. On finish, it writes the fixed SVG into the render's virtual filesystem, points the parameter at it, and re-renders. The configurator's own 3D viewer is the preview.
 
 ```scad
 // The drawing to extrude. Drop in an SVG; the wizard checks and fixes it.
@@ -89,7 +100,9 @@ Mark a string parameter that names an SVG file with `// @svg`. In the app the pl
 svg_file = "emblem.svg";
 ```
 
-Add `layers=<param>` to also derive the drawing's colours and write the standard **layers string** into a second parameter — a comma-separated `id:colour` list (with a bare-token shorthand, e.g. `gray, c8b0000`), blank for a single-colour drawing. Mark that target parameter `// @filledBy <svg-param>` so the UI renders it demoted (behind an "Advanced" disclosure) — it stays editable for power users, but the wizard is its normal writer.
+Add `layers=<param>` to derive the drawing's colours and write the standard **layers string** into a second parameter. The value is a comma-separated `id:colour` list, with a bare-token shorthand such as `gray, c8b0000`. It is blank for a single-colour drawing.
+
+Mark that target parameter `// @filledBy <svg-param>` so the UI renders it demoted behind an "Advanced" disclosure. It stays editable for power users, but the wizard is its normal writer.
 
 ```scad
 // The drawing to extrude. The wizard reads out its colours.
@@ -101,9 +114,13 @@ svg_file = "plan.svg";
 svg_layers = "";
 ```
 
-The wizard grades what it finds by severity — **errors first, then warnings, then notes**. A residual **error** (e.g. no importable geometry) blocks completion: the *Use this SVG* button stays disabled until it's resolved. Warnings (dropped `<text>`, stroke-only outlines…) are informational — the drawing still imports, minus what OpenSCAD can't read. Before the wizard even opens, a dropped file that isn't an SVG, or one over 2 MB, is rejected inline. On the colours step it also cautions when a drawing yields many regions (which import unreliably into slicers) and marks any region colour it can't preview (still passed to OpenSCAD verbatim).
+The wizard grades what it finds by severity: **errors first, then warnings, then notes**. A residual **error**, such as no importable geometry, blocks completion. The *Use this SVG* button stays disabled until you resolve it.
 
-`@svg` composes with a co-located `// @showIf`, so a conditional SVG field still gets the affordance. Both annotations are invisible to OpenSCAD, which just imports the file and (for the per-region path) selects regions by their `<g id>`.
+Warnings, such as dropped `<text>` or stroke-only outlines, are informational. The drawing still imports, minus what OpenSCAD cannot read. Before the wizard opens, a dropped file that is not an SVG, or one over 2 MB, is rejected inline.
+
+On the colours step, the wizard cautions when a drawing yields several regions that may import unreliably into slicers. It also marks any region colour it cannot preview, while still passing that colour to OpenSCAD verbatim.
+
+`@svg` composes with a co-located `// @showIf`, so a conditional SVG field still gets the affordance. Both annotations are invisible to OpenSCAD, which imports the file and, for the per-region path, selects regions by their `<g id>`.
 
 ## Viewer info (`// @info`)
 
@@ -127,20 +144,22 @@ The text after `@info` is optional:
 | `// @info Label` | a custom `Label` + value |
 | `// @info Label \| mm` | a custom `Label` + value with the unit `mm` appended |
 
-Values reflect the **rendered** model, not the live controls — a line updates only once a render finishes, in step with the bounding box — and are formatted by type (booleans as Yes/No, enums by their choice label, empty strings are omitted). A line inherits its parameter's `// @showIf`, so it disappears when that control is hidden. The panel is purely informative and never part of the exported model.
+Values reflect the **rendered** model, not the live controls. A line updates only once a render finishes, in step with the bounding box. Values are formatted by type: booleans as Yes/No, enums by their choice label, and empty strings omitted. A line inherits its parameter's `// @showIf`, so it disappears when that control is hidden. The panel is purely informative and never part of the exported model.
 
-## Calculated values (`echo("@info", ...)`)
+## Calculated values (`echo("@info", …)`)
 
-The `// @info` annotation above only works on real Customizer parameters — `gen-schema.mjs` parses `.scad` source statically, so it can never know the actual numeric result of an internal formula (e.g. a dot height derived from a base value and a norm-specified factor) for whatever values a user currently has set; only OpenSCAD itself, at render time, can evaluate that. For a computed/derived value — including one your design only assigns inside a `/* [Hidden] */` section — echo it with a fixed 4-argument convention instead:
+The `// @info` annotation above only works on real Customizer parameters. `gen-schema.mjs` parses `.scad` source statically, so it cannot know the numeric result of an internal formula for your current values. Only OpenSCAD can evaluate that at render time.
+
+For a computed or derived value, echo it with a fixed 4-argument convention instead. This also works for values your design assigns only inside a `/* [Hidden] */` section:
 
 ```scad
 r = diameter / 2;
 echo("@info", "Radius", "mm", r);
 ```
 
-This is a **separate, purely-runtime mechanism** from the comment-based `// @info` annotation above — don't confuse the two. It has no build-time component at all: nothing in `gen-schema.mjs` changes, and the Customizer parameter surface is untouched. The app scans the design's OpenSCAD output for `echo("@info", label, unit, value)` calls and adds one row per matching echo to the measurements panel, after the bounding box and any parameter `@info` rows, in the order the design echoes them.
+This runtime mechanism is separate from the comment-based `// @info` annotation above. It has no build-time component: nothing in `gen-schema.mjs` changes, and the Customizer parameter surface is untouched. The app scans the design's OpenSCAD output for `echo("@info", label, unit, value)` calls and adds one row per matching echo to the measurements panel. Rows appear after the bounding box and any parameter `@info` rows, in the order the design echoes them.
 
-The call can appear anywhere after the value is known, including inside a conditional — the echo simply won't fire when not applicable, which is often simpler than a `// @showIf` expression:
+The call can appear anywhere after the value is known, including inside a conditional. When the branch does not run, the echo does not fire:
 
 ```scad
 if (relevant)
@@ -151,11 +170,14 @@ Arguments:
 
 | Position | Meaning |
 |---|---|
-| `"@info"` | Fixed literal tag — required, must match exactly. |
+| `"@info"` | Fixed literal tag. Required, must match exactly. |
 | Label (string) | Row label, e.g. `"Dot height"`. |
 | Unit (string) | Appended after the value, e.g. `"mm"`. Use `""` for a unitless value. |
-| Value | Any OpenSCAD value — number, string, boolean, vector, or `undef`. |
+| Value | Any OpenSCAD value: number, string, boolean, vector, or `undef`. |
 
 A quoted string has its quotes stripped; everything else (numbers, booleans, vectors, `undef`) is shown exactly as OpenSCAD printed it. The unit is appended as `value unit`.
 
-Two things to watch for: rows are **not** de-duplicated, so if two branches both echo the same label unconditionally you'll see two rows — make sure only one branch echoes a given label per render. And a malformed call (wrong number of arguments, or a missing/misspelled `"@info"` tag) is silently ignored — if a row doesn't appear, double-check your `echo()` matches the four-argument form exactly.
+Two checks help avoid confusing output:
+
+- Rows are **not** de-duplicated. If two branches both echo the same label unconditionally, you see two rows. Make sure only one branch echoes a given label per render.
+- A malformed call is silently ignored. If a row does not appear, double-check the argument count and the exact `"@info"` tag.
