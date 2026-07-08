@@ -19,7 +19,9 @@ export function ParamSearch({ value, onChange, onClear }: Props) {
         type="search"
         name="param-search"
         autoComplete="off"
-        className="min-w-0 flex-1 rounded-[4px] border-none bg-transparent p-0 text-foreground placeholder:text-muted-foreground focus-visible:outline-offset-2 [&::-webkit-search-cancel-button]:appearance-none"
+        // text-base (16px) keeps iOS Safari from auto-zooming on focus — it
+        // zooms any focused input under 16px and never zooms back.
+        className="min-w-0 flex-1 rounded-[4px] border-none bg-transparent p-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-offset-2 [&::-webkit-search-cancel-button]:appearance-none"
         placeholder="Find a setting…"
         value={value}
         onChange={(e) => onChange(e.target.value)}
