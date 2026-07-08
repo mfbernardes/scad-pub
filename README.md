@@ -114,7 +114,7 @@ npm run vis            # compare
 npm run vis -- --update  # rewrite baselines
 ```
 
-CI (`.github/workflows/ci.yml`) runs unit tests, build, and smoke test on every push/PR and uploads `dist` as an artifact.
+CI (`.github/workflows/ci.yml`) runs unit tests, build, smoke test, and visual regression on every push/PR and uploads `dist` as an artifact. Visual regression is gated in CI, so an intentional UI change needs `npm run vis -- --update` and the updated baselines committed alongside it.
 
 ## Publish the static bundle
 
