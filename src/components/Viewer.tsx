@@ -11,6 +11,7 @@ import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildDimensions, type DimensionsGroup } from "./dimensions";
 import { VIEW_DIRECTIONS, DEFAULT_VIEW, type ViewName } from "./views";
+import { toIndexedGeometry } from "@/lib/meshIndex";
 
 // The build-time model format (Vite define; see vite.config.ts). A literal, so
 // the unused branch below — and its loader import — drop out of the bundle.
@@ -388,6 +389,11 @@ export const Viewer = forwardRef<
       obj.traverse((node) => {
         const mesh = node as THREE.Mesh;
         if (!mesh.isMesh) return;
+        // Re-index the loader's non-indexed geometry before reading its colour
+        // buffer (see toIndexedGeometry): the recolour path below then mutates
+        // the deduplicated buffer, and the ~6× smaller buffer avoids Safari's
+        // large-non-indexed-buffer corruption (garbage spikes on big models).
+        mesh.geometry = toIndexedGeometry(mesh.geometry);
         const attr = mesh.geometry.getAttribute("color") as
           | THREE.BufferAttribute
           | undefined;
