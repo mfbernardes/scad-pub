@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A7: a small shape authored near the origin, only placed and
+     sized correctly by its enclosing <g transform="translate(...) scale(...)">.
+     The importer must apply the group transform, not just the raw local
+     coordinates. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <g transform="translate(50,50) scale(1.6)">
+    <path fill="black" d="M0,-12 L12,0 L0,12 L-12,0 Z"/>
+  </g>
+</svg>

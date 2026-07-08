@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case B17: the same full-canvas background bug as
+     background_rect.svg, but the background is a rectangular <path>
+     (M0,0 H100 V100 H0 Z) instead of a <rect> element, so a checker that
+     only pattern-matches on <rect> would miss it. Detail shapes sit on top. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path fill="white" d="M0,0 H100 V100 H0 Z"/>
+  <rect x="15" y="15" width="30" height="30" fill="black"/>
+  <circle cx="72" cy="65" r="18" fill="black"/>
+</svg>

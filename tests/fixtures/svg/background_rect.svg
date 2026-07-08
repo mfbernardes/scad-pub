@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case B16: classic "single solid block" bug. A full-canvas white
+     background <rect> is drawn FIRST, then black detail shapes on top.
+     OpenSCAD import() ignores fill colour, so the white background imports
+     as solid geometry too and buries the detail into one flat block. The
+     checker/wizard must flag and strip this background layer. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect x="0" y="0" width="100" height="100" fill="white"/>
+  <circle cx="35" cy="50" r="20" fill="black"/>
+  <polygon points="70,25 90,75 55,75" fill="black"/>
+</svg>

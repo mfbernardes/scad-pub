@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A15: a floor-plan-like drawing split into two named,
+     colour-tagged groups - <g id="walls"> (a hollow frame path with a hole
+     plus a partition wall rect) and <g id="rooms"> (a floor rect and a
+     circular fixture marker) - feeding a multi-colour/multi-material
+     export path. Content fills the whole viewBox, touching all four edges. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <g id="walls" fill="gray">
+    <path d="M0,0 L100,0 L100,100 L0,100 Z
+             M4,4 L4,96 L96,96 L96,4 Z"/>
+    <rect x="48" y="4" width="4" height="92"/>
+  </g>
+  <g id="rooms" fill="white">
+    <rect x="54" y="6" width="40" height="88"/>
+    <circle cx="25" cy="50" r="4"/>
+  </g>
+</svg>

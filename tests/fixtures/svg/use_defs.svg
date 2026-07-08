@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case B25: a shape defined once in <defs> (never rendered directly)
+     and instantiated twice via <use xlink:href="#..."> at different
+     positions. OpenSCAD's importer resolves <use>/<defs> fine, but a
+     naive checker that walks elements without special-casing <defs> as
+     non-rendering, or that doesn't resolve <use> references at all, will
+     mis-detect this file as empty or double-count the template shape. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 100 100">
+  <defs>
+    <polygon id="tri" points="0,-14 14,14 -14,14" fill="black"/>
+  </defs>
+  <use xlink:href="#tri" x="30" y="30"/>
+  <use xlink:href="#tri" x="70" y="70"/>
+</svg>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A4: bold letters "A" and "B" side by side, each a single
+     filled path (default nonzero winding) whose interior counters are cut
+     out as holes by winding the inner subpaths in the opposite direction
+     from the outer subpath. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Letter A: outer triangle silhouette with a triangular counter hole -->
+  <path fill="black"
+        d="M25,8 L45,90 L5,90 Z
+           M25,30 L16,65 L34,65 Z"/>
+  <!-- Letter B: outer block with two rectangular counter holes -->
+  <path fill="black"
+        d="M55,8 L92,8 L92,90 L55,90 Z
+           M60,14 L60,44 L87,44 L87,14 Z
+           M60,54 L60,84 L87,84 L87,54 Z"/>
+</svg>

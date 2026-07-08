@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A6: a bold right-pointing arrow drawn entirely with
+     lowercase relative path commands (m, h, v, l, z) - no absolute
+     coordinates anywhere in the data string. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path fill="black"
+        d="m10,40 h45 v-20 l35,30 l-35,30 v-20 h-45 z"/>
+</svg>

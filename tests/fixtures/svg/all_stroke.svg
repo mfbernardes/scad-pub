@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case B19: an entire line-art drawing (a house) built only from
+     stroked, unfilled paths and lines (fill="none" throughout). Nothing in
+     this file will import into OpenSCAD at all - the checker must flag the
+     whole document as empty/invisible geometry. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path fill="none" stroke="black" stroke-width="4"
+        d="M15,55 L50,20 L85,55 L85,90 L15,90 Z"/>
+  <line x1="15" y1="55" x2="85" y2="55" stroke="black" stroke-width="4"/>
+  <rect x="42" y="65" width="16" height="25" fill="none" stroke="black" stroke-width="4"/>
+</svg>

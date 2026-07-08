@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A1: five distinct basic shapes (rect, circle, ellipse, polygon,
+     polyline) spread with gaps, so OpenSCAD import() produces five separate
+     filled parts rather than one solid block. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect x="5" y="5" width="20" height="20" fill="black"/>
+  <circle cx="50" cy="15" r="11" fill="black"/>
+  <ellipse cx="85" cy="15" rx="12" ry="8" fill="black"/>
+  <polygon points="15,60 30,90 5,90" fill="black"/>
+  <polyline points="60,65 70,90 80,70 90,90" fill="black" stroke="none"/>
+</svg>

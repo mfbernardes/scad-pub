@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case B18: shapes drawn as outlines only (fill="none",
+     stroke="black"). OpenSCAD import() ignores stroke entirely and treats
+     an unfilled shape as having no fill, so these will NOT appear as the
+     thin outlines seen on screen - the checker must flag fill:none shapes
+     as invisible-to-OpenSCAD. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect x="10" y="10" width="35" height="35" fill="none" stroke="black" stroke-width="6"/>
+  <circle cx="70" cy="65" r="20" fill="none" stroke="black" stroke-width="6"/>
+</svg>

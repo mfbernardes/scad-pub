@@ -1,6 +1,7 @@
 // Safe, appearance-preserving fixes applied in place. Each returns a list of
 // human-readable change strings.
 
+import { canvasBackgrounds } from "./background";
 import { SHAPE_TAGS, SVG_NS, inkAttr, iterElements, localName } from "./dom";
 import { gFormat, parseViewBox } from "./geometry";
 
@@ -132,6 +133,35 @@ export function resolveStyleFills(root: Element): string[] {
   return count ? [`applied ${count} fill(s) from a <style> block onto their shapes`] : [];
 }
 
+/** Drop any full-canvas background rectangle. OpenSCAD fills every shape, so a
+ *  rectangle covering the whole viewBox would bury the drawing in one solid
+ *  block; removing it is what a tactile relief actually wants (the raised shapes
+ *  need open space around them). Only runs when other geometry remains, so the
+ *  drawing never ends up empty. */
+export function removeCanvasBackground(root: Element): string[] {
+  const backgrounds = canvasBackgrounds(root);
+  let count = 0;
+  for (const el of backgrounds) {
+    if (el.parentNode) {
+      el.parentNode.removeChild(el);
+      count += 1;
+    }
+  }
+  return count
+    ? [
+        `removed ${count} full-canvas background rectangle(s) that would import as ` +
+          "one solid block",
+      ]
+    : [];
+}
+
 export function applyFixes(root: Element): string[] {
-  return [...fixInkscapeIds(root), ...fixViewBoxOrigin(root), ...resolveStyleFills(root)];
+  // Background removal first: it reasons about raw coordinates, before
+  // fixViewBoxOrigin wraps the content in a translate.
+  return [
+    ...removeCanvasBackground(root),
+    ...fixInkscapeIds(root),
+    ...fixViewBoxOrigin(root),
+    ...resolveStyleFills(root),
+  ];
 }

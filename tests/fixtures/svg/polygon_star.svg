@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A12: a classic 5-point star (pentagram) as a single
+     <polygon>, whose vertex order makes the outline self-intersecting. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <polygon fill="black"
+           points="50,10 73.51,82.36 11.96,37.64 88.04,37.64 26.49,82.36"/>
+</svg>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A13: the <svg> root declares physical millimetre width/height
+     (width="100mm" height="100mm") while the viewBox stays "0 0 100 100";
+     the importer must map user units through the viewBox, not assume 1
+     user-unit == 1mm from width/height alone. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100">
+  <rect x="10" y="10" width="35" height="35" fill="black"/>
+  <circle cx="70" cy="70" r="20" fill="black"/>
+</svg>

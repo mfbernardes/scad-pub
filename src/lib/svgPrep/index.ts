@@ -24,7 +24,8 @@ export {
 } from "./colors";
 export type { Rgb } from "./colors";
 export { check } from "./check";
-export { applyFixes, fixInkscapeIds, fixViewBoxOrigin } from "./fixes";
+export { applyFixes, fixInkscapeIds, fixViewBoxOrigin, removeCanvasBackground } from "./fixes";
+export { canvasBackgrounds } from "./background";
 export { groupByColor } from "./groupByColor";
 export type { GroupByColorResult } from "./groupByColor";
 export {
