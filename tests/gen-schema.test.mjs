@@ -397,6 +397,18 @@ test("assets: a glob matching nothing fails with a clear error", () => {
   );
 });
 
+test("a use/include dep that escapes the source root fails the build", () => {
+  assert.throws(() => run("widget-escape.config.json"), /escapes the source root/);
+});
+
+test("an `assets` entry that escapes the source root fails the build", () => {
+  assert.throws(() => run("widget-escape-asset.config.json"), /escapes the source root/);
+});
+
+test("a design `file` that escapes the source root fails the build", () => {
+  assert.throws(() => run("widget-escape-file.config.json"), /escapes the source root/);
+});
+
 test("schema.json is written to the output dir", () => {
   const { out } = run("widget.config.json");
   const written = JSON.parse(

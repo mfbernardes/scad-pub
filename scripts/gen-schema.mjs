@@ -300,9 +300,10 @@ function resolveDesignList(config, SOURCE) {
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
-function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyAsset }) {
+function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset }) {
   return resolveDesignList(config, SOURCE).map(({ iconSrc, docSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
+    checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
     copyAsset(d.file);
     // Auto-detect a sibling OpenSCAD parameterSets file: <name>.scad -> <name>.json
@@ -322,6 +323,9 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyA
     if (iconRel) {
       const base = iconSrc ? CONFIG_DIR : dirname(abs);
       const src = mustExist(resolve(base, iconRel), `design '${d.id}' icon '${iconRel}'`);
+      // `// @icon` (unlike a config `icon`) resolves relative to the design's
+      // own file, i.e. within SOURCE — so it must stay within SOURCE too.
+      if (!iconSrc) checkContained(src, `design '${d.id}' icon '${iconRel}'`, relPosix(abs));
       const dot = iconRel.lastIndexOf(".");
       const ext = dot > 0 ? iconRel.slice(dot) : "";
       const name = `${d.id}-icon${ext}`;
@@ -338,6 +342,8 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyA
     if (docRel) {
       const base = docSrc ? CONFIG_DIR : dirname(abs);
       const src = mustExist(resolve(base, docRel), `design '${d.id}' doc '${docRel}'`);
+      // Same containment rule as icon: only the annotation-based (SOURCE-relative) path is checked.
+      if (!docSrc) checkContained(src, `design '${d.id}' doc '${docRel}'`, relPosix(abs));
       const name = `${d.id}-doc.md`;
       copyFileSync(src, join(outScadDir, name));
       doc = `scad/${name}`;
@@ -491,7 +497,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // SOURCE-bound asset resolution: source-relative paths (relPosix), config
   // `assets` expansion (files/dirs/globs), and the use/include dep-graph walk.
   // See scripts/lib/assets.mjs.
-  const { relPosix, expandConfiguredAssets, collectDeps } = createAssetTools({
+  const { relPosix, expandConfiguredAssets, collectDeps, checkContained } = createAssetTools({
     SOURCE,
     configPath,
     mustExist,
@@ -506,7 +512,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
 
   mkdirSync(outSchemaDir, { recursive: true });
 
-  const designs = buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyAsset });
+  const designs = buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset });
   const defaultDesign = resolveDefaultDesign(config, designs);
 
   // Shared dependency files: from the config's `assets` (files/directories) when
