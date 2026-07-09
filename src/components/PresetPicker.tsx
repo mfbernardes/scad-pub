@@ -68,9 +68,9 @@ export function PresetPicker({
   const [saveName, setSaveName] = useState("");
   const sectionsRef = useRef<HTMLDivElement>(null);
 
-  // Roving arrow-key navigation across every preset row (the lists are
-  // role="listbox"/option but the rows are buttons, so keyboard users get
-  // Up/Down/Home/End movement here).
+  // Roving arrow-key navigation across every preset row — the rows are plain
+  // buttons (natively tabbable), so this just layers Up/Down/Home/End
+  // movement on top for keyboard users, like a typical listbox would give.
   const onListKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
     const items = Array.from(
@@ -158,12 +158,16 @@ export function PresetPicker({
             <h3 className={sectionHeadingClass}>
               Ready-made
             </h3>
-            <ul role="listbox" aria-label="Ready-made presets">
+            <ul aria-label="Ready-made presets">
               {bundled.map((p) => {
                 const id = `bundled:${design.id}:${p.name}`;
                 return (
-                  <li key={p.name} role="option" aria-selected={selected === id}>
-                    <button className={itemClass(selected === id)} onClick={() => applyBundled(p)}>
+                  <li key={p.name}>
+                    <button
+                      className={itemClass(selected === id)}
+                      aria-pressed={selected === id}
+                      onClick={() => applyBundled(p)}
+                    >
                       {p.name}
                     </button>
                   </li>
@@ -177,18 +181,14 @@ export function PresetPicker({
             <h3 className={sectionHeadingClass}>
               Saved by you
             </h3>
-            <ul role="listbox" aria-label="Your saved presets">
+            <ul aria-label="Your saved presets">
               {userPresets.map((name) => {
                 const id = `user:${design.id}:${name}`;
                 return (
-                  <li
-                    key={name}
-                    role="option"
-                    aria-selected={selected === id}
-                    className="flex items-center gap-[0.15rem]"
-                  >
+                  <li key={name} className="flex items-center gap-[0.15rem]">
                     <button
                       className={cn(itemClass(selected === id), "min-w-0 flex-1")}
+                      aria-pressed={selected === id}
                       onClick={() => applyUser(name)}
                     >
                       {name}
