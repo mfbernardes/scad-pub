@@ -110,6 +110,25 @@ test("collapsedSections is empty when nothing is annotated", () => {
   assert.deepEqual(schema.designs[0].collapsedSections, []);
 });
 
+test("a section-shaped comment after a param on the same line doesn't create a section", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-section-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(
+    file,
+    `/* [Main] */\n` +
+      // The default string embeds a "/* [Legacy] */"-shaped substring. Only a
+      // line consisting SOLELY of a section comment should be treated as one.
+      `shape = "square /* [Legacy] */"; // [square, circle]\n`
+  );
+  const { params, sections } = parseParams(file);
+  rmSync(dir, { recursive: true, force: true });
+  assert.deepEqual(sections, ["Main"]);
+  const shape = params.find((p) => p.name === "shape");
+  assert.ok(shape, "param must not vanish");
+  assert.equal(shape.type, "enum");
+  assert.equal(shape.default, "square /* [Legacy] */");
+});
+
 test("@showIf is parsed out of the doc block, not into the label", () => {
   const { schema } = run("widget.config.json");
   const hole_d = param(schema, "hole_d");

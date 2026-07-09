@@ -5,7 +5,10 @@
 // section, exactly as OpenSCAD's own Customizer does.
 import { readFileSync } from "node:fs";
 
-const SECTION_RE = /\/\*\s*\[([^\]]+)\]\s*\*\//;
+// A section header must be the WHOLE line (leading/trailing whitespace only) —
+// otherwise a trailing section-shaped comment on a param line (`w = 10; /* [Oops] */`)
+// would be mistaken for a section header, since this is tested before PARAM_RE.
+const SECTION_RE = /^\s*\/\*\s*\[([^\]]+)\]\s*\*\/\s*$/;
 // name = default; // [hint]
 // The name uses OpenSCAD's identifier grammar — a letter or underscore, then
 // letters/digits/underscores — so camelCase (wallThickness), PascalCase
