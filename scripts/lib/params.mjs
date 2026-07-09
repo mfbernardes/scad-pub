@@ -63,11 +63,17 @@ export function humanize(stem) {
 }
 
 function parseNumberHint(hint) {
-  // "min:step:max" or "min:max"
-  const parts = hint.split(":").map((p) => Number(p.trim()));
+  // "min:step:max", "min:max", or OpenSCAD's single-value shorthand "max"
+  // (a 0..max slider, no step). An empty segment ("1::10", ":10") is NOT the
+  // same as an explicit 0 — Number("") is 0, so reject it up front rather
+  // than silently treating a typo'd/omitted bound as zero.
+  const segs = hint.split(":").map((p) => p.trim());
+  if (segs.some((s) => s === "")) return null;
+  const parts = segs.map(Number);
   if (parts.some((n) => Number.isNaN(n))) return null;
   if (parts.length === 3) return { min: parts[0], step: parts[1], max: parts[2] };
   if (parts.length === 2) return { min: parts[0], max: parts[1] };
+  if (parts.length === 1) return { min: 0, max: parts[0] };
   return null;
 }
 

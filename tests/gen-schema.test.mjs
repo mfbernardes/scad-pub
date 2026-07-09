@@ -140,6 +140,41 @@ test("@showIf is parsed out of the doc block, not into the label", () => {
   assert.equal(param(schema, "label").showIf, undefined);
 });
 
+test("number hint forms: min:step:max, min:max, max-only; empty segments are rejected", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-numhint-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(
+    file,
+    `/* [Main] */\n` +
+      `a = 3; // [1:0.5:6]\n` +
+      `b = 3; // [1:6]\n` +
+      // OpenSCAD's single-value shorthand: a 0..max slider, no step.
+      `c = 3; // [10]\n` +
+      // Empty step segment: NOT the same as an explicit step of 0.
+      `d = 3; // [1::10]\n` +
+      // Empty min segment: NOT the same as an explicit min of 0.
+      `e = 3; // [:10]\n`
+  );
+  const { params } = parseParams(file);
+  rmSync(dir, { recursive: true, force: true });
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.deepEqual(
+    { min: byName.a.min, step: byName.a.step, max: byName.a.max },
+    { min: 1, step: 0.5, max: 6 }
+  );
+  assert.deepEqual({ min: byName.b.min, max: byName.b.max }, { min: 1, max: 6 });
+  assert.equal(byName.b.step, undefined);
+  assert.deepEqual({ min: byName.c.min, max: byName.c.max }, { min: 0, max: 10 });
+  // Invalid (empty-segment) hints fall back to a plain number input: no
+  // min/max/step, just the default.
+  assert.equal(byName.d.min, undefined);
+  assert.equal(byName.d.max, undefined);
+  assert.equal(byName.d.type, "number");
+  assert.equal(byName.e.min, undefined);
+  assert.equal(byName.e.max, undefined);
+  assert.equal(byName.e.type, "number");
+});
+
 test("enum hint forms: bare, labelled, quoted", () => {
   const { schema } = run("widget.config.json");
   // bare list -> dropdown, label = value
