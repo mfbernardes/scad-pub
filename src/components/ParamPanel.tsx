@@ -166,6 +166,11 @@ export function ParamPanel({
     // Drop any pending rAF write so a frame queued just before pointer-up
     // can't fire after React commits the settled width below.
     cancelWidthFrame();
+    // Write the final width imperatively first: when liveWidthRef equals the
+    // pre-drag width, setWidth below is a no-op and React skips the render,
+    // leaving the DOM at whatever the last rAF frame applied (a few px short
+    // of the actual pointer position) — mirrors the BottomSheet drag-settle fix.
+    if (panelRef.current) panelRef.current.style.width = `${liveWidthRef.current}px`;
     setWidth(liveWidthRef.current);
   }, [cancelWidthFrame]);
 
