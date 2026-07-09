@@ -18,6 +18,16 @@ import { FileInput } from "./FileInput";
 import { Input } from "./ui/input";
 import { cn } from "../lib/utils";
 import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 
 /* One preset row. `preset-picker__item` is a JS hook too (the roving-focus
    querySelector below), not just styling. Rows read as tappable cards — a
@@ -66,6 +76,10 @@ export function PresetPicker({
   presetsLabel = "Presets",
 }: Props) {
   const [saveName, setSaveName] = useState("");
+  // The saved preset pending a delete confirmation (its name), or null when no
+  // confirmation dialog is open. Deleting a saved preset is un-undoable, so it
+  // gets the same AlertDialog guard as ResetButton's "reset to defaults".
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const sectionsRef = useRef<HTMLDivElement>(null);
 
   // Roving arrow-key navigation across every preset row — the rows are plain
@@ -195,7 +209,7 @@ export function PresetPicker({
                     </button>
                     <button
                       className="shrink-0 rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.2rem] text-[0.8rem] text-muted-foreground enabled:hover:bg-muted enabled:hover:text-warn"
-                      onClick={() => handleDelete(name)}
+                      onClick={() => setDeleteTarget(name)}
                       aria-label={`Delete preset "${name}"`}
                       title={`Delete "${name}"`}
                     >
@@ -269,7 +283,37 @@ export function PresetPicker({
     </div>
   );
 
-  if (inline) return content;
+  const deleteDialog = (
+    <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete preset?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently deletes your saved preset “{deleteTarget}”.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (deleteTarget) handleDelete(deleteTarget);
+              setDeleteTarget(null);
+            }}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  if (inline)
+    return (
+      <>
+        {content}
+        {deleteDialog}
+      </>
+    );
 
   return (
     <div className="preset-picker-popover overflow-hidden bg-card" role="dialog" aria-label={presetsLabel}>
@@ -282,6 +326,7 @@ export function PresetPicker({
         )}
       </div>
       {content}
+      {deleteDialog}
     </div>
   );
 }
