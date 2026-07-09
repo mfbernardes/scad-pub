@@ -13,11 +13,12 @@ import { X as XIcon } from "lucide-react";
 
 const ICON: Record<DiagnosticLevel, string> = { notice: "ⓘ", warning: "⚠", assert: "✗" };
 /* The ⓘ/⚠/✗ glyph colour per diagnostic level (config categories may override
-   per-notice via inline style). */
+   per-notice via inline style). An assert reads as an error, matching the
+   destructive count chip CountBadges already gives it on the console tab. */
 const ICON_COLOR: Record<DiagnosticLevel, string> = {
   notice: "text-brand",
   warning: "text-warn",
-  assert: "text-warn",
+  assert: "text-destructive",
 };
 
 interface Props {
