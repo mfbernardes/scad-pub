@@ -216,8 +216,14 @@ export function ParamPanel({
         aria-valuemax={MAX_WIDTH}
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === "ArrowLeft") setWidth((w) => Math.max(MIN_WIDTH, w - 20));
-          if (e.key === "ArrowRight") setWidth((w) => Math.min(MAX_WIDTH, w + 20));
+          // Pointer-drag direction flips with panelSide (the handle sits on
+          // the panel's outer edge — left edge when docked right), so mirror
+          // that here: for a right-docked panel ArrowLeft (handle moves left,
+          // away from the panel) grows it and ArrowRight shrinks it.
+          const grow = panelSide === "right" ? "ArrowLeft" : "ArrowRight";
+          const shrink = panelSide === "right" ? "ArrowRight" : "ArrowLeft";
+          if (e.key === shrink) setWidth((w) => Math.max(MIN_WIDTH, w - 20));
+          if (e.key === grow) setWidth((w) => Math.min(MAX_WIDTH, w + 20));
         }}
       />
 
