@@ -6,6 +6,18 @@
 import oflText from "../licenses/OFL-1.1.txt?raw";
 import type { SoftwareLicense } from "../openscad/types";
 
+// three.js's bundled version — kept as a literal (matching package.json's
+// "three": "^0.185.1") rather than `import { REVISION } from "three"`.
+// three.js ships as a single ~650kB bundled ESM file that Rollup can't
+// tree-shake down to one constant, and this modal is not lazy-loaded (see
+// App.tsx's static `import { LicensesModal }`), so that import would pull
+// three.js into the app's eager chunk — verified via `npm run build`: it
+// added a 196kB `three.core` chunk to index.html's eager `modulepreload`
+// links, defeating the Viewer's lazy-load split (see CLAUDE.md's render
+// architecture section). Bump this string when the `three` dependency's
+// minor version changes.
+const THREE_VERSION = "0.185";
+
 // The MIT permission notice (shared body; each component prepends its own
 // copyright line, which the license requires us to reproduce).
 const MIT_BODY = `Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -61,7 +73,7 @@ export const LICENSES: SoftwareLicense[] = [
   },
   {
     name: "three.js",
-    version: "0.169",
+    version: THREE_VERSION,
     license: "MIT",
     copyright: "Copyright © 2010-2024 three.js authors",
     url: "https://threejs.org/",
