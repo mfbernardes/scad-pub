@@ -2,6 +2,7 @@
 // "Save current as…" row. Used as a popover on desktop (CommandBar) and as the
 // Presets tab on mobile.
 import { useCallback, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import {
@@ -149,13 +150,21 @@ export function PresetPicker({
   // Import a parameterSets file (from this app or the desktop Customizer): each
   // named set becomes one of your saved presets.
   const handleImport = async (file: File) => {
+    let parsed;
     try {
-      const parsed = parseParameterSetsFile(design, await file.text());
-      for (const set of parsed) savePreset(design.id, set.name, set.values);
-      onPresetsChange();
-    } catch {
-      /* not a valid parameterSets file — ignore rather than crash the panel */
+      parsed = parseParameterSetsFile(design, await file.text());
+    } catch (err) {
+      toast.error(
+        `Couldn't import "${file.name}": ${err instanceof Error ? err.message : "not a valid parameterSets file."}`
+      );
+      return;
     }
+    if (parsed.length === 0) {
+      toast.error(`"${file.name}" has no parameter sets to import.`);
+      return;
+    }
+    for (const set of parsed) savePreset(design.id, set.name, set.values);
+    onPresetsChange();
   };
 
   const content = (
