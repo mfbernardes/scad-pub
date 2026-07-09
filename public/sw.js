@@ -173,7 +173,7 @@ self.addEventListener("fetch", (event) => {
         const cache = await caches.open(CACHE);
         try {
           const res = await fetch(req);
-          cache.put(SHELL_KEY, res.clone());
+          if (res.ok) cache.put(SHELL_KEY, res.clone());
           return res;
         } catch {
           return (await cache.match(SHELL_KEY)) || Response.error();
