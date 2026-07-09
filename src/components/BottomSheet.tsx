@@ -39,6 +39,13 @@ interface Props {
    *  so the parent can size the viewer to follow the sheet in real time. Fires
    *  every drag frame and on each settle. */
   onFollow?: (heightPx: number, dragging: boolean) => void;
+  /** Reports the effective "Peek" height (px) — the measured header (drag
+   *  handle + tab row), or the `peekHeight` fallback until that measurement
+   *  lands. Distinct from onFollow: this is the sheet's own geometry (how
+   *  tall the collapsed sheet is), not the live displayed height, so the
+   *  parent can anchor other fixed content (e.g. the output console overlay)
+   *  exactly above the real peek row instead of a static guess. */
+  onPeekHeightChange?: (heightPx: number) => void;
 }
 
 export function BottomSheet({
@@ -48,6 +55,7 @@ export function BottomSheet({
   peekHeight = 72,
   bottomInset = 0,
   onFollow,
+  onPeekHeightChange,
 }: Props) {
   // Detent is controlled by the parent; setDetent forwards to it.
   const setDetent = onDetentChange;
@@ -82,6 +90,14 @@ export function BottomSheet({
   peekHeightRef.current = effectivePeek;
   const bottomInsetRef = useRef(bottomInset);
   bottomInsetRef.current = bottomInset;
+
+  // Report the effective peek height whenever it changes (first measurement,
+  // font-scaling/resize-driven remeasure, …) so the parent can anchor fixed
+  // content (the output console overlay) to the real value instead of a
+  // static CSS guess.
+  useEffect(() => {
+    onPeekHeightChange?.(effectivePeek);
+  }, [effectivePeek, onPeekHeightChange]);
 
   // Measure the header (drag handle + tab row) and use that as the peek height,
   // so the collapsed sheet always shows the whole tab row regardless of device

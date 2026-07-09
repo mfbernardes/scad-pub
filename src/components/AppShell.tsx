@@ -252,6 +252,16 @@ export const AppShell = memo(function AppShell({
     el.dataset.sheetDragging = dragging ? "true" : "false";
   }, []);
 
+  // Mirror the sheet's measured "Peek" height (drag handle + tab row) into
+  // --mobile-peek-height, so the output console overlay + scrim anchor to the
+  // real row instead of the static CSS fallback, which font scaling can
+  // exceed. See BottomSheet's onPeekHeightChange doc.
+  const handleSheetPeekHeight = useCallback((heightPx: number) => {
+    const el = mobileRootRef.current;
+    if (!el) return;
+    el.style.setProperty("--mobile-peek-height", `${Math.round(heightPx)}px`);
+  }, []);
+
   // Info-level notices (config-driven `notices`) are surfaced passively by the
   // dot/count on the Output toggle. A warning or assert is different — the model
   // came out wrong in a way worth seeing — so the console auto-opens the first
@@ -481,6 +491,7 @@ export const AppShell = memo(function AppShell({
           detent={sheetDetent}
           onDetentChange={handleDetentChange}
           onFollow={handleSheetFollow}
+          onPeekHeightChange={handleSheetPeekHeight}
           peekHeight={PEEK_HEIGHT}
           bottomInset={safeAreaBottom}
         >
