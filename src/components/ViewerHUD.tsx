@@ -41,10 +41,13 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
 
   const toggleFullscreen = () => {
     const el = document.documentElement;
+    // Both can reject (permissions policy, a transient-activation edge, …);
+    // the button's own state follows the fullscreenchange event regardless,
+    // so a rejection is a silent no-op rather than an unhandled rejection.
     if (!document.fullscreenElement) {
-      el.requestFullscreen?.();
+      el.requestFullscreen?.()?.catch(() => {});
     } else {
-      document.exitFullscreen?.();
+      document.exitFullscreen?.()?.catch(() => {});
     }
   };
 
