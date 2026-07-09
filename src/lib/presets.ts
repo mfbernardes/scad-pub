@@ -92,7 +92,12 @@ type Store = Record<string, Record<string, Values>>; // designId -> name -> valu
 
 function read(): Store {
   try {
-    return JSON.parse(readLocal(KEY) || "{}") as Store;
+    const parsed: unknown = JSON.parse(readLocal(KEY) || "{}");
+    // Guard against valid-JSON-wrong-shape values ("null", "5", "[]", …) that
+    // would otherwise make every read()-based call throw on every render.
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+      return {};
+    return parsed as Store;
   } catch {
     return {};
   }

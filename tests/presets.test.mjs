@@ -1,6 +1,6 @@
 // Tests for parsing OpenSCAD parameterSets files (the desktop-Customizer
 // compatibility contract) and default extraction.
-import { test } from "node:test";
+import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   defaultsFor,
@@ -8,7 +8,33 @@ import {
   parseParameterSetsFile,
   presetLabel,
   parsePresetId,
+  listPresets,
+  savePreset,
+  loadPreset,
 } from "../src/lib/presets.ts";
+
+class MemStorage {
+  m = new Map();
+  getItem(k) {
+    return this.m.has(k) ? this.m.get(k) : null;
+  }
+  setItem(k, v) {
+    this.m.set(k, String(v));
+  }
+  removeItem(k) {
+    this.m.delete(k);
+  }
+  clear() {
+    this.m.clear();
+  }
+}
+
+globalThis.localStorage = new MemStorage();
+const STORE_KEY = "scadpub.presets.v1";
+
+beforeEach(() => {
+  globalThis.localStorage.clear();
+});
 
 const p = (name, type, def, extra = {}) => ({
   name,
@@ -147,4 +173,36 @@ test("parsePresetId returns null for a malformed id", () => {
   assert.equal(parsePresetId("type:d"), null);
   assert.equal(parsePresetId("bogus:d:Name"), null);
   assert.equal(parsePresetId("bundled::Name"), null);
+});
+
+test("listPresets tolerates valid-JSON-wrong-shape local storage (null)", () => {
+  globalThis.localStorage.setItem(STORE_KEY, "null");
+  assert.deepEqual(listPresets("d"), []);
+});
+
+test("listPresets tolerates a bare number in local storage", () => {
+  globalThis.localStorage.setItem(STORE_KEY, "5");
+  assert.deepEqual(listPresets("d"), []);
+});
+
+test("listPresets tolerates an array in local storage", () => {
+  globalThis.localStorage.setItem(STORE_KEY, "[1,2,3]");
+  assert.deepEqual(listPresets("d"), []);
+});
+
+test("listPresets tolerates malformed JSON in local storage", () => {
+  globalThis.localStorage.setItem(STORE_KEY, "{not json");
+  assert.deepEqual(listPresets("d"), []);
+});
+
+test("loadPreset returns null when local storage has an invalid shape", () => {
+  globalThis.localStorage.setItem(STORE_KEY, '"a string"');
+  assert.equal(loadPreset("d", "Some"), null);
+});
+
+test("savePreset recovers from corrupted local storage instead of throwing", () => {
+  globalThis.localStorage.setItem(STORE_KEY, "null");
+  assert.doesNotThrow(() => savePreset("d", "Mine", { text: "hi" }));
+  assert.deepEqual(listPresets("d"), ["Mine"]);
+  assert.deepEqual(loadPreset("d", "Mine"), { text: "hi" });
 });
