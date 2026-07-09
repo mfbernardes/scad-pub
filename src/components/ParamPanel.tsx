@@ -180,7 +180,10 @@ export function ParamPanel({
 
   if (!open) {
     return (
-      <div className={`param-panel-rail ${side}`}>
+      // Keep the #params id on the rail even collapsed, so the "Skip to
+      // parameters" link (AppShell) never dangles — landing on the "Open
+      // panel" button is the correct target when there's no panel to skip to.
+      <div className={`param-panel-rail ${side}`} id="params">
         <button
           className="param-panel-open-btn font-display"
           onClick={() => setOpen(true)}

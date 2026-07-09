@@ -316,10 +316,12 @@ export const AppShell = memo(function AppShell({
   };
   return (
     <div className="app-shell">
-      {/* Skip link: off-screen until focused. */}
+      {/* Skip link: off-screen until focused. Both layout trees are always
+          mounted (one CSS-hidden), each with its own #params(-mobile) target,
+          so the href must follow the layout that's actually visible/active. */}
       <a
         className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
-        href="#params"
+        href={isMobile ? "#params-mobile" : "#params"}
       >
         Skip to parameters
       </a>
@@ -477,7 +479,7 @@ export const AppShell = memo(function AppShell({
             // The tab bar shows at every detent (including peek); tapping a tab
             // raises a collapsed sheet. Auto-render + Reset are param-scoped, so
             // they live inside the Parameters tab (SheetTabs), not here.
-            <div className="sheet-content" id="params">
+            <div className="sheet-content" id="params-mobile">
               <SheetTabs
                 design={design}
                 values={values}
