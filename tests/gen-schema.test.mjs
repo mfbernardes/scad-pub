@@ -95,6 +95,23 @@ test("captures camelCase, PascalCase and leading-underscore param names", () => 
   assert.equal(param(schema, "_offset").default, 0);
 });
 
+test("a pathological trailing-whitespace line parses in well under a second", () => {
+  // PARAM_RE used to backtrack O(n²) on a line that fails to match (garbage
+  // after a long run of whitespace): two adjacent `\s*` quantifiers around an
+  // optional hint group. A 50k-char run took ~5s before the fix.
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-perf-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(
+    file,
+    `/* [Main] */\n` + `a = b;${" ".repeat(50000)}//x\n`
+  );
+  const t0 = Date.now();
+  parseParams(file);
+  const elapsed = Date.now() - t0;
+  rmSync(dir, { recursive: true, force: true });
+  assert.ok(elapsed < 2000, `parseParams took ${elapsed}ms, expected < 2000ms`);
+});
+
 test("// @collapsed marks sections collapsed; others stay open", () => {
   const { schema } = run("collapse.config.json");
   const d = schema.designs[0];

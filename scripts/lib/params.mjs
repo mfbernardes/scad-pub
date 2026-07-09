@@ -14,8 +14,13 @@ const SECTION_RE = /^\s*\/\*\s*\[([^\]]+)\]\s*\*\/\s*$/;
 // letters/digits/underscores — so camelCase (wallThickness), PascalCase
 // (FontSize) and leading-underscore (_offset) params are all captured, not just
 // lowercase ones. ($-prefixed special variables aren't Customizer params.)
+// The trailing `\s*` used to sit AFTER the optional `(?:// [hint])?` group,
+// so a failing match (trailing text that's neither whitespace nor a valid
+// hint) let two adjacent `\s*` quantifiers backtrack against each other —
+// O(n²) on a long run of whitespace. Folding it inside the group leaves a
+// single free-length `\s*` on any given path, so a non-match fails in O(n).
 const PARAM_RE =
-  /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?);\s*(?:\/\/\s*\[([^\]]*)\])?\s*$/;
+  /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?);\s*(?:\/\/\s*\[([^\]]*)\]\s*)?$/;
 // A leading line comment that documents the next parameter.
 const DOC_RE = /^\s*\/\/\s?(.*)$/;
 // `@showIf <expr>` directive inside a param's doc block (conditional visibility).
