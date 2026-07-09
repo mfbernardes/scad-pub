@@ -60,6 +60,15 @@ test("fromPresetString coerces back to the param's type", () => {
   assert.equal(fromPresetString(P("string"), "hi"), "hi");
 });
 
+test("fromPresetString rejects blank and non-finite numbers", () => {
+  const p = P("number", { default: 7 });
+  assert.equal(fromPresetString(p, ""), 7); // blank -> default, not Number("") === 0
+  assert.equal(fromPresetString(p, "   "), 7); // whitespace-only -> default
+  assert.equal(fromPresetString(p, "Infinity"), 7); // non-finite -> default
+  assert.equal(fromPresetString(p, "-Infinity"), 7);
+  assert.equal(fromPresetString(p, "NaN"), 7);
+});
+
 test("fromPresetString clamps numbers to the declared range", () => {
   const ranged = P("number", { default: 5, min: 0, max: 10 });
   assert.equal(fromPresetString(ranged, "50"), 10); // above max → clamped
