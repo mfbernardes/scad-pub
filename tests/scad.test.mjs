@@ -25,6 +25,10 @@ test("escapeScadString escapes backslash, quote, newline and tab", () => {
   assert.equal(escapeScadString('a"b\\c\nd\te'), 'a\\"b\\\\c\\nd\\te');
 });
 
+test("escapeScadString escapes carriage returns", () => {
+  assert.equal(escapeScadString("a\r\nb"), "a\\r\\nb");
+});
+
 test("toScadExpr quotes/escapes strings and enums, leaves numbers/bools bare", () => {
   assert.equal(toScadExpr(P("string"), 'hi "there"'), '"hi \\"there\\""');
   assert.equal(toScadExpr(P("enum"), "en-us"), '"en-us"');
