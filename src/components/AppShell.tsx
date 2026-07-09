@@ -402,8 +402,17 @@ export const AppShell = memo(function AppShell({
             reframeOnPreset={false}
           />
 
-          {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
-          <div className="mobile-top-bar absolute inset-x-0 top-0 z-10 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]">
+          {/* Mobile top bar — logo left, design centered, actions right (mirrors
+              desktop). Normally z-10 (below the bottom sheet, z-30, so the
+              full-detent sheet covers it and its drag handle stays grabbable).
+              While the output console is open it lifts to z-[33] — above the
+              scrim (z-[31]) and console (z-[32]) — so the design picker/⋮/bell
+              stay tappable; the console only opens at the peek detent, so this
+              never fights the full-detent sheet. */}
+          <div className={cn(
+            "mobile-top-bar absolute inset-x-0 top-0 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]",
+            outputOpen ? "z-[33]" : "z-10"
+          )}>
             <span className="inline-flex min-w-0 items-center gap-[0.4rem] justify-self-start overflow-hidden whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.92rem] font-bold">
               <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
             </span>
