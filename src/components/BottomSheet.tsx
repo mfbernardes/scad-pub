@@ -192,6 +192,25 @@ export function BottomSheet({
       const dist = Math.abs(heightFor(d) - targetH);
       if (dist < bestDist) { bestDist = dist; best = d; }
     }
+    // Imperatively restore the settled geometry for `best` right away. When
+    // `best` differs from the pre-drag detent, the setDetent below triggers a
+    // React re-render that writes the same values via JSX — harmless. But
+    // when `best` equals the current detent, React state doesn't change, so
+    // its render is skipped and the DOM would otherwise be left at whatever
+    // in-progress drag height the last rAF frame wrote (already stopped short
+    // of the committed detent height) — desynchronizing the viewer, which
+    // only follows the onFollow call below. Writing here directly keeps the
+    // DOM in lockstep with what a render for `best` would produce, so a
+    // later render (detent did change) still agrees with it.
+    const sheet = sheetRef.current;
+    if (sheet) {
+      const settledH = heightFor(best);
+      const full = fullH(bottomInsetRef.current);
+      sheet.style.setProperty("--sheet-visible-h", `${settledH}px`);
+      sheet.style.transform = `translateY(${Math.max(0, full - settledH)}px)`;
+      sheet.style.transition = "transform 0.28s cubic-bezier(0.32,0.72,0,1)";
+      onFollowRef.current?.(settledH, false);
+    }
     setDetent(best);
   }, [heightFor, cancelHeightFrame]);
 
