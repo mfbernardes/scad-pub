@@ -114,6 +114,18 @@ const checkId = (id, what = "design id") => {
   return id;
 };
 
+// A top-level array-of-strings config key (categories, features): absent ->
+// [], otherwise every entry must be a non-empty string. Used for keys that
+// are interpolated verbatim into generated output (the manifest, `--enable`
+// render flags), so a stray non-string would otherwise surface as a cryptic
+// downstream failure instead of a clear config error.
+const parseStringArray = (raw, key) => {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string" || !v.trim()))
+    throw new Error(`gen-schema: '${key}' must be an array of non-empty strings (got ${JSON.stringify(raw)})`);
+  return raw;
+};
+
 // Load + sanity-check the config. Catches typo'd / stale top-level keys before
 // doing any work — a whole-key typo would otherwise be silently ignored (see
 // KNOWN_TOP_LEVEL_KEYS).
@@ -156,7 +168,7 @@ function parseIdentity(config) {
     if (typeof val !== "string" || !COLOR_VALUE_RE.test(val.trim()))
       throw new Error(`gen-schema: '${key}' must be a CSS colour string (got ${JSON.stringify(val)})`);
   }
-  const CATEGORIES = Array.isArray(config.categories) ? config.categories : [];
+  const CATEGORIES = parseStringArray(config.categories, "categories");
   return { TITLE, SHORT_NAME, ID, DESCRIPTION, LANG, DIR, THEME_COLOR, THEME_COLOR_LIGHT, BG_COLOR, CATEGORIES };
 }
 
@@ -474,7 +486,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   mustExist(SOURCE, `source directory '${config.source ?? "."}'`);
 
   // ── Rendering ─────────────────────────────────────────────────────────────
-  const FEATURES = config.features ?? [];
+  const FEATURES = parseStringArray(config.features, "features");
   const FORMAT = parseFormat(config.format);
   const REST_ON_GRID = parseRestOnGrid(config.restOnGrid);
   // Optional build-time render tuning (heavy-render threshold + cache sizing).

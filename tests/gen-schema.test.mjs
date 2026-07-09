@@ -603,6 +603,20 @@ test("rejects an app-level id with unsafe characters", () => {
   assert.throws(() => run("widget-bad-app-id.config.json"), /config 'id' .* must match/);
 });
 
+test("'categories' must be an array of strings when present", () => {
+  assert.throws(
+    () => run("widget-bad-categories.config.json"),
+    /'categories' must be an array of non-empty strings/
+  );
+});
+
+test("'features' must be an array of strings when present", () => {
+  assert.throws(
+    () => run("widget-bad-features.config.json"),
+    /'features' must be an array of non-empty strings/
+  );
+});
+
 test("iOS splash images are generated and described in the schema", () => {
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   const schema = generate({

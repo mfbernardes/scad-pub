@@ -1,0 +1,8 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "features": "textmetrics",
+  "designs": [
+    { "id": "widget", "label": "Widget" }
+  ]
+}
