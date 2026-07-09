@@ -37,11 +37,51 @@ function readMode(): ThemeMode {
   return v === "light" || v === "dark" || v === "auto" ? v : "auto";
 }
 
-function apply(theme: Theme) {
+// index.html ships two `meta[name="theme-color"]` tags, media-scoped to dark
+// and light (dark listed first), each pre-filled by the configHtml Vite
+// plugin with the configured colour for that scheme. A plain
+// `querySelector('meta[name="theme-color"]')` always grabs the first (dark)
+// one regardless of which theme is applied, so forcing dark under a light OS
+// never updates the meta the browser actually reads, and forcing light
+// discards the configured light colour for a hardcoded white. Resolve and
+// cache both metas — and the colours their original `content` encodes — on
+// first use, then keep both in sync with whichever theme is applied.
+interface ThemeColorMetas {
+  light: Element | null;
+  dark: Element | null;
+  lightColor: string;
+  darkColor: string;
+}
+
+let themeColorMetas: ThemeColorMetas | null = null;
+
+function getThemeColorMetas(): ThemeColorMetas {
+  if (themeColorMetas) return themeColorMetas;
+  let light: Element | null = null;
+  let dark: Element | null = null;
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    const media = meta.getAttribute("media") ?? "";
+    if (media.includes("dark")) dark = meta;
+    else if (media.includes("light")) light = meta;
+  }
+  themeColorMetas = {
+    light,
+    dark,
+    lightColor: light?.getAttribute("content") || "#ffffff",
+    darkColor: dark?.getAttribute("content") || DARK_THEME_COLOR,
+  };
+  return themeColorMetas;
+}
+
+export function apply(theme: Theme) {
+  // No-op under the Node test runner (no DOM); only resolveTheme is exercised
+  // there.
+  if (typeof document === "undefined") return;
   document.documentElement.dataset.theme = theme;
-  document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", theme === "light" ? "#ffffff" : DARK_THEME_COLOR);
+  const metas = getThemeColorMetas();
+  const color = theme === "light" ? metas.lightColor : metas.darkColor;
+  metas.light?.setAttribute("content", color);
+  metas.dark?.setAttribute("content", color);
 }
 
 export function useTheme() {
