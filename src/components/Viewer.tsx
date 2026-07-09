@@ -299,7 +299,21 @@ export const Viewer = forwardRef<
       io.disconnect();
       controls.dispose();
       dimGroupRef.current?.dispose();
+      // Release the current model's and grid's GPU resources too — previously
+      // only disposed on replacement, so a desktop⇄mobile breakpoint flip
+      // (which unmounts/remounts the whole Viewer) leaked a live geometry +
+      // material set until GC. Dispose before the renderer/context so nothing
+      // still references a torn-down GL context.
+      if (modelRef.current) disposeObject(modelRef.current);
+      if (gridRef.current) {
+        gridRef.current.geometry.dispose();
+        (gridRef.current.material as THREE.Material).dispose();
+      }
       renderer.dispose();
+      // Explicitly free the WebGL context itself — dispose() alone frees GPU
+      // objects (geometries/materials/textures) but keeps the context alive
+      // until GC, so each breakpoint flip otherwise leaks a live context.
+      renderer.forceContextLoss();
       mount.removeChild(renderer.domElement);
     };
   }, []);
