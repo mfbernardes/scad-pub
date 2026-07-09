@@ -160,6 +160,11 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
         const depAbs = resolve(curDir, m[1].trim());
         if (visited.has(depAbs)) continue;
         visited.add(depAbs);
+        if (!existsSync(depAbs))
+          throw new Error(
+            `gen-schema: dependency '${m[1].trim()}' not found:\n  ${depAbs}\n` +
+              `  (referenced by ${relPosix(cur)})`
+          );
         checkContained(depAbs, `dependency '${m[1].trim()}'`, relPosix(cur));
         deps.add(relPosix(depAbs));
         queue.push(depAbs);

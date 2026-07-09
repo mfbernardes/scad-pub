@@ -409,6 +409,13 @@ test("a design `file` that escapes the source root fails the build", () => {
   assert.throws(() => run("widget-escape-file.config.json"), /escapes the source root/);
 });
 
+test("a missing use/include target names the missing path and the referencing file", () => {
+  assert.throws(
+    () => run("widget-missingdep.config.json"),
+    /dependency 'lib\/nope\.scad' not found[\s\S]*referenced by missingdep-design\.scad/
+  );
+});
+
 test("schema.json is written to the output dir", () => {
   const { out } = run("widget.config.json");
   const written = JSON.parse(
