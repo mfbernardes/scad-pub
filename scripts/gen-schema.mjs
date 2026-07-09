@@ -286,6 +286,15 @@ function resolveDesignList(config, SOURCE) {
     return raw.trim();
   };
   if (Array.isArray(config.designs) && config.designs.length) {
+    // Two designs sharing an id would clobber each other's generated
+    // <id>-icon/<id>-doc output and collide in storage/URLs (#d=<id>).
+    const seenIds = new Set();
+    for (const d of config.designs) {
+      const id = checkId(d.id);
+      if (seenIds.has(id))
+        throw new Error(`gen-schema: duplicate design id ${JSON.stringify(id)} in 'designs'`);
+      seenIds.add(id);
+    }
     return config.designs.map((d) => ({
       id: checkId(d.id),
       label: d.label ?? humanize(d.id),

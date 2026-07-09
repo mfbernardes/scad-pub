@@ -290,6 +290,10 @@ test("defaultDesign must name a configured design", () => {
   assert.throws(() => run("widget-bad-default.config.json"), /'defaultDesign' .* is not one of the configured design ids/);
 });
 
+test("duplicate design ids fail the build", () => {
+  assert.throws(() => run("widget-dup-id.config.json"), /duplicate design id "widget"/);
+});
+
 test("per-design description + icon are parsed, copied and served", () => {
   const { schema, out } = run("widget-designmeta.config.json");
   const widget = schema.designs.find((d) => d.id === "widget");
