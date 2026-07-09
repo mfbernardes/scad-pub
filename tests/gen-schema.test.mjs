@@ -421,6 +421,22 @@ test("a source-relative font path is referenced by basename", () => {
   assert.deepEqual(schema.fonts, ["Bar.ttf"]);
 });
 
+test("a configured font that resolves to no file fails a real build", () => {
+  // The existence check only bites in a real build (outPublicDir present) —
+  // that's the only context where "already in public/fonts" is checkable.
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(FIXTURES, "widget-font-missing.config.json"),
+        outSchemaDir: join(out, "schema"),
+        outScadDir: join(out, "public", "scad"),
+        outPublicDir: join(out, "public"),
+      }),
+    /font 'NoSuchFont\.ttf' not found/
+  );
+});
+
 test("source defaults to '.' (designs beside the config) when omitted", () => {
   // default-source.config.json sets no `source`; mini.scad sits next to it.
   const { schema } = run("default-source.config.json");

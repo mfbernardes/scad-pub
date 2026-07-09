@@ -169,14 +169,26 @@ function parseIdentity(config) {
 // last-resort fallback family (config.fontFallback) so an imported font can't
 // hijack Fontconfig's global default; generated into the served tree (and
 // hashed into renderHash) so the matching rules stay config-driven.
-function bundleFonts(config, SOURCE, outPublicDir) {
+function bundleFonts(config, SOURCE, outPublicDir, configPath) {
   const FONTS = (config.fonts ?? []).map((entry) => {
     const name = String(entry).split(/[\\/]/).pop();
     const srcAbs = resolve(SOURCE, entry);
-    if (outPublicDir && existsSync(srcAbs) && statSync(srcAbs).isFile()) {
-      const dest = join(outPublicDir, "fonts", name);
-      mkdirSync(dirname(dest), { recursive: true });
-      copyFileSync(srcAbs, dest);
+    if (outPublicDir) {
+      if (existsSync(srcAbs) && statSync(srcAbs).isFile()) {
+        const dest = join(outPublicDir, "fonts", name);
+        mkdirSync(dirname(dest), { recursive: true });
+        copyFileSync(srcAbs, dest);
+      } else if (!existsSync(join(outPublicDir, "fonts", name))) {
+        // Neither a source-tree path nor an already-bundled font (e.g. the
+        // Liberation fallbacks tracked under public/fonts) — a silent skip
+        // here used to ship an app whose `// @font` selector lists a face
+        // that can never load.
+        throw new Error(
+          `gen-schema: font '${entry}' not found:\n  ${srcAbs}\n` +
+            `  (and not already present in public/fonts/${name})\n` +
+            `  (referenced from ${configPath} — check its 'fonts')`
+        );
+      }
     }
     return name;
   });
@@ -459,7 +471,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Optional build-time render tuning (heavy-render threshold + cache sizing).
   // Validated; absent -> null -> the app keeps its built-in defaults.
   const RENDER = parseRender(config.render);
-  const { FONTS, FONT_FAMILIES, FONT_FACES } = bundleFonts(config, SOURCE, outPublicDir);
+  const { FONTS, FONT_FAMILIES, FONT_FACES } = bundleFonts(config, SOURCE, outPublicDir, configPath);
 
   // ── Appearance & UI behaviour ─────────────────────────────────────────────
   // Optional per-theme colour-scheme overrides. Validated against the known CSS
