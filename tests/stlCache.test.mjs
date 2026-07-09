@@ -6,7 +6,8 @@ import "fake-indexeddb/auto";
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-const { createStlCache } = await import("../src/lib/stlCache.ts");
+const { createStlCache, VERSION_KEY } = await import("../src/lib/stlCache.ts");
+const { openDb, reqToPromise, STL_META_STORE } = await import("../src/lib/idb.ts");
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const entry = (n, over = {}) => ({
@@ -24,6 +25,51 @@ let v = 0;
 let version;
 beforeEach(() => {
   version = `test-${v++}`;
+});
+
+// Must run before any other test in this file touches IndexedDB: idb.ts
+// memoizes its DB connection at module scope, so once it has resolved once,
+// nothing here can force indexedDB.open() to be called again to exercise this
+// failure path (short of a real versionchange/close, which fake-indexeddb
+// doesn't trigger for us). Runs first so the very first open is the one that
+// fails.
+test("a transient version-check failure is retried by a later operation, not stuck forever", async () => {
+  // Simulate one transient IndexedDB failure (e.g. a blocked upgrade) on the
+  // very first open this process makes, then let opens succeed normally.
+  const realOpen = indexedDB.open.bind(indexedDB);
+  let failNext = true;
+  indexedDB.open = (...args) => {
+    if (!failNext) return realOpen(...args);
+    failNext = false;
+    const req = {};
+    queueMicrotask(() => {
+      req.error = new Error("simulated transient IndexedDB failure");
+      req.onerror?.();
+    });
+    return req;
+  };
+
+  const cache = createStlCache({ version });
+  try {
+    // First operation: the simulated open failure aborts the version check
+    // before it can stamp anything; best-effort semantics swallow it (get/put
+    // themselves still work via a fresh, successful openDb() retry).
+    assert.equal(await cache.get("nope"), undefined);
+    // A later operation must retry the version check rather than treating the
+    // earlier failure as permanently done.
+    await cache.put("k", entry(8));
+    assert.ok(await cache.get("k"));
+    // Prove the version check actually completed (not just that get/put
+    // worked): the version stamp must be persisted, which only happens once
+    // checkVersion() runs to completion.
+    const db = await openDb();
+    const stored = await reqToPromise(
+      db.transaction(STL_META_STORE, "readonly").objectStore(STL_META_STORE).get(VERSION_KEY)
+    );
+    assert.equal(stored, version);
+  } finally {
+    indexedDB.open = realOpen;
+  }
 });
 
 test("a stored render round-trips through IndexedDB", async () => {
