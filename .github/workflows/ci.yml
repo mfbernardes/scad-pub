@@ -16,6 +16,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Default token permissions for every job in this workflow: read-only. The
+# build job runs PR-controlled code (npm ci + the repo's own scripts), so it
+# gets no write access to the repo/PR/packages by default. The deploy job
+# below declares its own elevated `permissions:` block for the Pages API.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
