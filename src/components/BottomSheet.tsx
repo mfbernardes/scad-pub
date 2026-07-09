@@ -106,6 +106,24 @@ export function BottomSheet({
     return () => ro.disconnect();
   }, []);
 
+  // halfH/fullH read window.innerHeight at call time, but nothing re-renders
+  // this component when the viewport changes (orientation flip, browser-chrome
+  // show/hide) without also changing the detent — so the sheet would keep a
+  // stale height/transform until the next unrelated state change. Bump this
+  // on resize purely to force a re-render; halfH/fullH/heightFor already read
+  // window.innerHeight fresh each call, so the recomputed JSX (and the
+  // onFollow effect below, keyed on displayH) pick up the new size for free.
+  const [, forceResize] = useState(0);
+  useEffect(() => {
+    const onResize = () => forceResize((n) => n + 1);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, []);
+
   // heightFor reads peekHeight from a ref so this can have empty deps and stay stable.
   const heightFor = useCallback((d: SheetDetent): number => {
     switch (d) {
