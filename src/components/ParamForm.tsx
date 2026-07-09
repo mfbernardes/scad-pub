@@ -4,7 +4,7 @@
 // strings. Each control carries an aria-label (its description) for its name.
 // Every row also carries `data-param="<var>"` — the stable hook the smoke test
 // (and extraCss) target now that variable names are hidden from users by default.
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Info as InfoIcon, RotateCcw as RevertIcon, Upload as UploadIcon } from "lucide-react";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
@@ -179,8 +179,17 @@ function NumberControl({
   const committed = committedNumber(param, value);
   const [draft, setDraft] = useState(String(committed));
   const hasRange = param.min !== undefined && param.max !== undefined;
+  // While the input is focused, an external `committed` change (our own
+  // clamped onChange echoing back through props) must NOT stomp the user's
+  // in-progress keystrokes — e.g. typing "2" en route to "25" in a min=10
+  // field commits (clamped) 10, and re-syncing the draft from that would
+  // force the field back to "10" mid-type. Blur already normalises the draft,
+  // and an external value change (e.g. a preset apply) while unfocused should
+  // still resync immediately.
+  const focusedRef = useRef(false);
 
   useEffect(() => {
+    if (focusedRef.current) return;
     setDraft(String(committed));
   }, [committed]);
 
@@ -213,14 +222,19 @@ function NumberControl({
         step={param.step ?? "any"}
         value={draft}
         aria-label={label}
+        onFocus={() => {
+          focusedRef.current = true;
+        }}
         onChange={(e) => {
           const raw = e.target.value;
           setDraft(raw);
           const n = finiteDraft(raw);
-          if (n !== null) onChange(n);
+          if (n !== null) onChange(clampNumber(param, n));
         }}
-        // Clamp on commit so intermediate keystrokes stay typeable.
+        // Clamp on commit so intermediate keystrokes stay typeable, and
+        // normalise the draft text itself (e.g. a raw value beyond the range).
         onBlur={() => {
+          focusedRef.current = false;
           const v = clampNumber(param, finiteDraft(draft) ?? param.default);
           setDraft(String(v));
           if (v !== committed) onChange(v);
