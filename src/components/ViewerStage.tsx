@@ -21,7 +21,7 @@ const Viewer = lazy(() =>
 );
 
 interface Props {
-  viewerRef: RefObject<ViewerHandle>;
+  viewerRef: RefObject<ViewerHandle | null>;
   /** Mount the Viewer only in the active layout (the other is CSS-hidden). */
   active: boolean;
   design: Design;
