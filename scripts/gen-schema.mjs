@@ -114,6 +114,18 @@ const checkId = (id, what = "design id") => {
   return id;
 };
 
+// A top-level array-of-strings config key (categories, features): absent ->
+// [], otherwise every entry must be a non-empty string. Used for keys that
+// are interpolated verbatim into generated output (the manifest, `--enable`
+// render flags), so a stray non-string would otherwise surface as a cryptic
+// downstream failure instead of a clear config error.
+const parseStringArray = (raw, key) => {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string" || !v.trim()))
+    throw new Error(`gen-schema: '${key}' must be an array of non-empty strings (got ${JSON.stringify(raw)})`);
+  return raw;
+};
+
 // Load + sanity-check the config. Catches typo'd / stale top-level keys before
 // doing any work — a whole-key typo would otherwise be silently ignored (see
 // KNOWN_TOP_LEVEL_KEYS).
@@ -156,7 +168,7 @@ function parseIdentity(config) {
     if (typeof val !== "string" || !COLOR_VALUE_RE.test(val.trim()))
       throw new Error(`gen-schema: '${key}' must be a CSS colour string (got ${JSON.stringify(val)})`);
   }
-  const CATEGORIES = Array.isArray(config.categories) ? config.categories : [];
+  const CATEGORIES = parseStringArray(config.categories, "categories");
   return { TITLE, SHORT_NAME, ID, DESCRIPTION, LANG, DIR, THEME_COLOR, THEME_COLOR_LIGHT, BG_COLOR, CATEGORIES };
 }
 
@@ -169,14 +181,26 @@ function parseIdentity(config) {
 // last-resort fallback family (config.fontFallback) so an imported font can't
 // hijack Fontconfig's global default; generated into the served tree (and
 // hashed into renderHash) so the matching rules stay config-driven.
-function bundleFonts(config, SOURCE, outPublicDir) {
+function bundleFonts(config, SOURCE, outPublicDir, configPath) {
   const FONTS = (config.fonts ?? []).map((entry) => {
     const name = String(entry).split(/[\\/]/).pop();
     const srcAbs = resolve(SOURCE, entry);
-    if (outPublicDir && existsSync(srcAbs) && statSync(srcAbs).isFile()) {
-      const dest = join(outPublicDir, "fonts", name);
-      mkdirSync(dirname(dest), { recursive: true });
-      copyFileSync(srcAbs, dest);
+    if (outPublicDir) {
+      if (existsSync(srcAbs) && statSync(srcAbs).isFile()) {
+        const dest = join(outPublicDir, "fonts", name);
+        mkdirSync(dirname(dest), { recursive: true });
+        copyFileSync(srcAbs, dest);
+      } else if (!existsSync(join(outPublicDir, "fonts", name))) {
+        // Neither a source-tree path nor an already-bundled font (e.g. the
+        // Liberation fallbacks tracked under public/fonts) — a silent skip
+        // here used to ship an app whose `// @font` selector lists a face
+        // that can never load.
+        throw new Error(
+          `gen-schema: font '${entry}' not found:\n  ${srcAbs}\n` +
+            `  (and not already present in public/fonts/${name})\n` +
+            `  (referenced from ${configPath} — check its 'fonts')`
+        );
+      }
     }
     return name;
   });
@@ -274,6 +298,15 @@ function resolveDesignList(config, SOURCE) {
     return raw.trim();
   };
   if (Array.isArray(config.designs) && config.designs.length) {
+    // Two designs sharing an id would clobber each other's generated
+    // <id>-icon/<id>-doc output and collide in storage/URLs (#d=<id>).
+    const seenIds = new Set();
+    for (const d of config.designs) {
+      const id = checkId(d.id);
+      if (seenIds.has(id))
+        throw new Error(`gen-schema: duplicate design id ${JSON.stringify(id)} in 'designs'`);
+      seenIds.add(id);
+    }
     return config.designs.map((d) => ({
       id: checkId(d.id),
       label: d.label ?? humanize(d.id),
@@ -300,9 +333,10 @@ function resolveDesignList(config, SOURCE) {
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
-function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyAsset }) {
+function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset }) {
   return resolveDesignList(config, SOURCE).map(({ iconSrc, docSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
+    checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
     copyAsset(d.file);
     // Auto-detect a sibling OpenSCAD parameterSets file: <name>.scad -> <name>.json
@@ -322,6 +356,9 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyA
     if (iconRel) {
       const base = iconSrc ? CONFIG_DIR : dirname(abs);
       const src = mustExist(resolve(base, iconRel), `design '${d.id}' icon '${iconRel}'`);
+      // `// @icon` (unlike a config `icon`) resolves relative to the design's
+      // own file, i.e. within SOURCE — so it must stay within SOURCE too.
+      if (!iconSrc) checkContained(src, `design '${d.id}' icon '${iconRel}'`, relPosix(abs));
       const dot = iconRel.lastIndexOf(".");
       const ext = dot > 0 ? iconRel.slice(dot) : "";
       const name = `${d.id}-icon${ext}`;
@@ -338,6 +375,8 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyA
     if (docRel) {
       const base = docSrc ? CONFIG_DIR : dirname(abs);
       const src = mustExist(resolve(base, docRel), `design '${d.id}' doc '${docRel}'`);
+      // Same containment rule as icon: only the annotation-based (SOURCE-relative) path is checked.
+      if (!docSrc) checkContained(src, `design '${d.id}' doc '${docRel}'`, relPosix(abs));
       const name = `${d.id}-doc.md`;
       copyFileSync(src, join(outScadDir, name));
       doc = `scad/${name}`;
@@ -447,13 +486,13 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   mustExist(SOURCE, `source directory '${config.source ?? "."}'`);
 
   // ── Rendering ─────────────────────────────────────────────────────────────
-  const FEATURES = config.features ?? [];
+  const FEATURES = parseStringArray(config.features, "features");
   const FORMAT = parseFormat(config.format);
   const REST_ON_GRID = parseRestOnGrid(config.restOnGrid);
   // Optional build-time render tuning (heavy-render threshold + cache sizing).
   // Validated; absent -> null -> the app keeps its built-in defaults.
   const RENDER = parseRender(config.render);
-  const { FONTS, FONT_FAMILIES, FONT_FACES } = bundleFonts(config, SOURCE, outPublicDir);
+  const { FONTS, FONT_FAMILIES, FONT_FACES } = bundleFonts(config, SOURCE, outPublicDir, configPath);
 
   // ── Appearance & UI behaviour ─────────────────────────────────────────────
   // Optional per-theme colour-scheme overrides. Validated against the known CSS
@@ -491,7 +530,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // SOURCE-bound asset resolution: source-relative paths (relPosix), config
   // `assets` expansion (files/dirs/globs), and the use/include dep-graph walk.
   // See scripts/lib/assets.mjs.
-  const { relPosix, expandConfiguredAssets, collectDeps } = createAssetTools({
+  const { relPosix, expandConfiguredAssets, collectDeps, checkContained } = createAssetTools({
     SOURCE,
     configPath,
     mustExist,
@@ -506,7 +545,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
 
   mkdirSync(outSchemaDir, { recursive: true });
 
-  const designs = buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, copyAsset });
+  const designs = buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset });
   const defaultDesign = resolveDefaultDesign(config, designs);
 
   // Shared dependency files: from the config's `assets` (files/directories) when

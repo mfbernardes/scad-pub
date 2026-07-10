@@ -25,6 +25,10 @@ test("escapeScadString escapes backslash, quote, newline and tab", () => {
   assert.equal(escapeScadString('a"b\\c\nd\te'), 'a\\"b\\\\c\\nd\\te');
 });
 
+test("escapeScadString escapes carriage returns", () => {
+  assert.equal(escapeScadString("a\r\nb"), "a\\r\\nb");
+});
+
 test("toScadExpr quotes/escapes strings and enums, leaves numbers/bools bare", () => {
   assert.equal(toScadExpr(P("string"), 'hi "there"'), '"hi \\"there\\""');
   assert.equal(toScadExpr(P("enum"), "en-us"), '"en-us"');
@@ -54,6 +58,15 @@ test("fromPresetString coerces back to the param's type", () => {
   assert.equal(fromPresetString(P("number", { default: 7 }), "nope"), 7);
   assert.equal(fromPresetString(P("enum"), "en-us"), "en-us");
   assert.equal(fromPresetString(P("string"), "hi"), "hi");
+});
+
+test("fromPresetString rejects blank and non-finite numbers", () => {
+  const p = P("number", { default: 7 });
+  assert.equal(fromPresetString(p, ""), 7); // blank -> default, not Number("") === 0
+  assert.equal(fromPresetString(p, "   "), 7); // whitespace-only -> default
+  assert.equal(fromPresetString(p, "Infinity"), 7); // non-finite -> default
+  assert.equal(fromPresetString(p, "-Infinity"), 7);
+  assert.equal(fromPresetString(p, "NaN"), 7);
 });
 
 test("fromPresetString clamps numbers to the declared range", () => {

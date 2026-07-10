@@ -4,7 +4,25 @@
 // Everything here reads the stable literal class hooks the app keeps for the
 // scripts (`.render-status`, `.command-bar__design-picker`, …) — keeping those
 // selectors in one place so a hook rename is a one-file fix.
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+
+// The forced-theme storage key is namespaced by the active config's `id`
+// (see src/lib/theme.ts's ns(), and vite.config.ts's %APP_THEME_KEY%); read
+// it from the generated schema (like smoke.mjs does) so these scripts work
+// against a custom-id config too. Falls back to the default "scadpub" id if
+// the schema hasn't been generated yet.
+function configId() {
+  try {
+    const schema = JSON.parse(
+      readFileSync(fileURLToPath(new URL("../../src/generated/designs.json", import.meta.url)), "utf-8")
+    );
+    return schema.id || "scadpub";
+  } catch {
+    return "scadpub";
+  }
+}
 
 /** Launch headless Chromium, honouring the executable-path override used by
  *  environments that ship their own browser (no `playwright install`). */
@@ -83,9 +101,11 @@ export async function dismissWelcomePopup(page) {
 /** Navigate to `base` with the given theme forced. Load once to establish the
  *  origin (localStorage isn't available on about:blank), set the persisted
  *  theme, then reload so it applies before first paint. The storage key is
- *  `${config.id}.theme`; these scripts drive the default "scadpub" config. */
+ *  `${config.id}.theme`, read from the generated schema so this also works
+ *  against a custom-id config (default id "scadpub" behaves as before). */
 export async function gotoWithTheme(page, base, theme) {
   await page.goto(base, { waitUntil: "load" });
-  await page.evaluate((t) => localStorage.setItem("scadpub.theme", t), theme);
+  const key = `${configId()}.theme`;
+  await page.evaluate(({ key, t }) => localStorage.setItem(key, t), { key, t: theme });
   await page.reload({ waitUntil: "load" });
 }

@@ -99,6 +99,15 @@ export function persistState(design: Design, values: Values, preset = "") {
   const params = new URLSearchParams({ d: design.id });
   if (Object.keys(diff).length) params.set("v", JSON.stringify(diff));
   if (preset) params.set("p", preset);
-  history.replaceState(null, "", "#" + params.toString());
+  // The localStorage mirror always runs, even if the history update below is
+  // throttled away, so a reload still restores the latest state.
   writeLocal(STORE_KEY, JSON.stringify({ designId: design.id, diff, preset }));
+  try {
+    history.replaceState(null, "", "#" + params.toString());
+  } catch {
+    // Safari throws SecurityError past ~100 replaceState calls in 30s; rhythmic
+    // stepper nudging at the 300ms debounce (~3.3/s) can cross that. Dropping
+    // this particular hash update is harmless — the next call, or the
+    // localStorage mirror above, keeps state in sync.
+  }
 }

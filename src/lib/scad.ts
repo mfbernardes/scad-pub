@@ -7,6 +7,7 @@ export function escapeScadString(s: string): string {
     .replace(/\\/g, "\\\\")
     .replace(/"/g, '\\"')
     .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
     .replace(/\t/g, "\\t");
 }
 
@@ -41,8 +42,11 @@ export function toPresetString(param: Param, value: ParamValue): string {
 export function fromPresetString(param: Param, raw: string): ParamValue {
   switch (param.type) {
     case "number": {
-      const n = Number(raw);
-      if (Number.isNaN(n)) return param.default;
+      // Number("") is 0 and Number("Infinity")/Number("-Infinity") are finite-
+      // check-free, so a blank or "Infinity" value from an imported preset /
+      // crafted URL hash must not sneak past as a real value.
+      const n = raw.trim() === "" ? NaN : Number(raw);
+      if (!Number.isFinite(n)) return param.default;
       let v = n;
       if (param.min !== undefined) v = Math.max(param.min, v);
       if (param.max !== undefined) v = Math.min(param.max, v);

@@ -10,5 +10,9 @@ export function download(href: string, filename: string) {
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   download(url, filename);
-  URL.revokeObjectURL(url);
+  // Defer revocation: the anchor's navigation fetches the blob URL
+  // asynchronously, and WebKit has raced a synchronous revoke into a silent
+  // no-op export. A short delay (the conventional fix) lets the fetch start
+  // first.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

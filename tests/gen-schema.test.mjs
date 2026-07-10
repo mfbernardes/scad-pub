@@ -95,6 +95,23 @@ test("captures camelCase, PascalCase and leading-underscore param names", () => 
   assert.equal(param(schema, "_offset").default, 0);
 });
 
+test("a pathological trailing-whitespace line parses in well under a second", () => {
+  // PARAM_RE used to backtrack O(n²) on a line that fails to match (garbage
+  // after a long run of whitespace): two adjacent `\s*` quantifiers around an
+  // optional hint group. A 50k-char run took ~5s before the fix.
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-perf-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(
+    file,
+    `/* [Main] */\n` + `a = b;${" ".repeat(50000)}//x\n`
+  );
+  const t0 = Date.now();
+  parseParams(file);
+  const elapsed = Date.now() - t0;
+  rmSync(dir, { recursive: true, force: true });
+  assert.ok(elapsed < 2000, `parseParams took ${elapsed}ms, expected < 2000ms`);
+});
+
 test("// @collapsed marks sections collapsed; others stay open", () => {
   const { schema } = run("collapse.config.json");
   const d = schema.designs[0];
@@ -110,6 +127,25 @@ test("collapsedSections is empty when nothing is annotated", () => {
   assert.deepEqual(schema.designs[0].collapsedSections, []);
 });
 
+test("a section-shaped comment after a param on the same line doesn't create a section", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-section-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(
+    file,
+    `/* [Main] */\n` +
+      // The default string embeds a "/* [Legacy] */"-shaped substring. Only a
+      // line consisting SOLELY of a section comment should be treated as one.
+      `shape = "square /* [Legacy] */"; // [square, circle]\n`
+  );
+  const { params, sections } = parseParams(file);
+  rmSync(dir, { recursive: true, force: true });
+  assert.deepEqual(sections, ["Main"]);
+  const shape = params.find((p) => p.name === "shape");
+  assert.ok(shape, "param must not vanish");
+  assert.equal(shape.type, "enum");
+  assert.equal(shape.default, "square /* [Legacy] */");
+});
+
 test("@showIf is parsed out of the doc block, not into the label", () => {
   const { schema } = run("widget.config.json");
   const hole_d = param(schema, "hole_d");
@@ -119,6 +155,41 @@ test("@showIf is parsed out of the doc block, not into the label", () => {
   assert.ok(!/showIf/.test(hole_d.help));
   // params without the directive have no showIf
   assert.equal(param(schema, "label").showIf, undefined);
+});
+
+test("number hint forms: min:step:max, min:max, max-only; empty segments are rejected", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-numhint-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(
+    file,
+    `/* [Main] */\n` +
+      `a = 3; // [1:0.5:6]\n` +
+      `b = 3; // [1:6]\n` +
+      // OpenSCAD's single-value shorthand: a 0..max slider, no step.
+      `c = 3; // [10]\n` +
+      // Empty step segment: NOT the same as an explicit step of 0.
+      `d = 3; // [1::10]\n` +
+      // Empty min segment: NOT the same as an explicit min of 0.
+      `e = 3; // [:10]\n`
+  );
+  const { params } = parseParams(file);
+  rmSync(dir, { recursive: true, force: true });
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.deepEqual(
+    { min: byName.a.min, step: byName.a.step, max: byName.a.max },
+    { min: 1, step: 0.5, max: 6 }
+  );
+  assert.deepEqual({ min: byName.b.min, max: byName.b.max }, { min: 1, max: 6 });
+  assert.equal(byName.b.step, undefined);
+  assert.deepEqual({ min: byName.c.min, max: byName.c.max }, { min: 0, max: 10 });
+  // Invalid (empty-segment) hints fall back to a plain number input: no
+  // min/max/step, just the default.
+  assert.equal(byName.d.min, undefined);
+  assert.equal(byName.d.max, undefined);
+  assert.equal(byName.d.type, "number");
+  assert.equal(byName.e.min, undefined);
+  assert.equal(byName.e.max, undefined);
+  assert.equal(byName.e.type, "number");
 });
 
 test("enum hint forms: bare, labelled, quoted", () => {
@@ -217,6 +288,10 @@ test("render tuning and defaultDesign pass through to the schema", () => {
 
 test("defaultDesign must name a configured design", () => {
   assert.throws(() => run("widget-bad-default.config.json"), /'defaultDesign' .* is not one of the configured design ids/);
+});
+
+test("duplicate design ids fail the build", () => {
+  assert.throws(() => run("widget-dup-id.config.json"), /duplicate design id "widget"/);
 });
 
 test("per-design description + icon are parsed, copied and served", () => {
@@ -350,6 +425,22 @@ test("a source-relative font path is referenced by basename", () => {
   assert.deepEqual(schema.fonts, ["Bar.ttf"]);
 });
 
+test("a configured font that resolves to no file fails a real build", () => {
+  // The existence check only bites in a real build (outPublicDir present) —
+  // that's the only context where "already in public/fonts" is checkable.
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(FIXTURES, "widget-font-missing.config.json"),
+        outSchemaDir: join(out, "schema"),
+        outScadDir: join(out, "public", "scad"),
+        outPublicDir: join(out, "public"),
+      }),
+    /font 'NoSuchFont\.ttf' not found/
+  );
+});
+
 test("source defaults to '.' (designs beside the config) when omitted", () => {
   // default-source.config.json sets no `source`; mini.scad sits next to it.
   const { schema } = run("default-source.config.json");
@@ -394,6 +485,25 @@ test("assets: a glob matching nothing fails with a clear error", () => {
   assert.throws(
     () => run("widget-glob-empty.config.json"),
     /asset pattern 'lib\/\*\.nope' matched no files/
+  );
+});
+
+test("a use/include dep that escapes the source root fails the build", () => {
+  assert.throws(() => run("widget-escape.config.json"), /escapes the source root/);
+});
+
+test("an `assets` entry that escapes the source root fails the build", () => {
+  assert.throws(() => run("widget-escape-asset.config.json"), /escapes the source root/);
+});
+
+test("a design `file` that escapes the source root fails the build", () => {
+  assert.throws(() => run("widget-escape-file.config.json"), /escapes the source root/);
+});
+
+test("a missing use/include target names the missing path and the referencing file", () => {
+  assert.throws(
+    () => run("widget-missingdep.config.json"),
+    /dependency 'lib\/nope\.scad' not found[\s\S]*referenced by missingdep-design\.scad/
   );
 });
 
@@ -491,6 +601,20 @@ test("rejects an app-level id with unsafe characters", () => {
   // The app id reaches index.html's inline pre-paint script as a string
   // literal (%APP_THEME_KEY%), so it gets the same charset check as design ids.
   assert.throws(() => run("widget-bad-app-id.config.json"), /config 'id' .* must match/);
+});
+
+test("'categories' must be an array of strings when present", () => {
+  assert.throws(
+    () => run("widget-bad-categories.config.json"),
+    /'categories' must be an array of non-empty strings/
+  );
+});
+
+test("'features' must be an array of strings when present", () => {
+  assert.throws(
+    () => run("widget-bad-features.config.json"),
+    /'features' must be an array of non-empty strings/
+  );
 });
 
 test("iOS splash images are generated and described in the schema", () => {

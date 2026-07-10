@@ -1,9 +1,12 @@
 // worker.ts — runs OpenSCAD-WASM off the main thread. Keeps the UI responsive
 // during renders (callMain is synchronous and CPU-bound). Fetches the WASM, the
-// shared .scad dependency files, and the bundled fonts once, then instantiates a
-// fresh module per render (the reliable pattern; Emscripten's exit state isn't
-// meant to be reused). The compiled wasm bytes are cached so only the first
-// render pays the download.
+// shared .scad dependency files, and the bundled fonts once per worker instance
+// (memoized, not re-fetched per render — see ensureAssets/loadDesignSource),
+// then instantiates a fresh module per render (the reliable pattern; Emscripten's
+// exit state isn't meant to be reused). The compiled wasm bytes are cached in
+// Cache Storage so only the first render of a session pays the download; the
+// small, build-volatile .scad sources are only memoized in memory for this
+// worker's lifetime, not persisted to Cache Storage.
 
 /// <reference lib="webworker" />
 import schema from "../generated/designs.json";
@@ -28,14 +31,23 @@ async function cleanupOldCaches() {
   await Promise.all(staleBinaryCaches(keys, BIN_CACHE).map((k) => caches.delete(k)));
 }
 
+// Fetch that throws a descriptive error naming the URL on a non-ok response, so
+// a 404/500 error page is never mistaken for real asset bytes (WASM, .scad
+// source, fonts.conf, or a font binary) and silently mounted/executed as such.
+async function checkedFetch(url: string): Promise<Response> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch failed (${res.status} ${res.statusText}): ${url}`);
+  return res;
+}
+
 // Cache-first fetch of an immutable binary into an ArrayBuffer.
 async function cachedBuffer(url: string): Promise<ArrayBuffer> {
-  if (typeof caches === "undefined") return (await fetch(url)).arrayBuffer();
+  if (typeof caches === "undefined") return (await checkedFetch(url)).arrayBuffer();
   const cache = await caches.open(BIN_CACHE);
   const hit = await cache.match(url);
   if (hit) return hit.arrayBuffer();
-  const res = await fetch(url);
-  if (res.ok) await cache.put(url, res.clone());
+  const res = await checkedFetch(url);
+  await cache.put(url, res.clone());
   return res.arrayBuffer();
 }
 
@@ -72,7 +84,13 @@ async function loadFactory(): Promise<OpenSCADFactory> {
 let assetsReady: Promise<void> | null = null;
 
 function ensureAssets(): Promise<void> {
-  return (assetsReady ??= (async () => {
+  if (assetsReady) return assetsReady;
+  // Every variable this load populates (factoryPromise, wasmBinary,
+  // wasmModulePromise, assetSources, fontsConf, fontFiles) is unconditionally
+  // reassigned at the top of the next attempt, so the only state that must be
+  // unwound on failure is the memoized promise itself: a rejected promise left
+  // in assetsReady would otherwise fail every subsequent render until reload.
+  assetsReady = (async () => {
     void cleanupOldCaches();
     factoryPromise = loadFactory();
     await Promise.all([
@@ -85,13 +103,13 @@ function ensureAssets(): Promise<void> {
         const entries = await Promise.all(
           schema.assets.map(async (p) => [
             p,
-            await (await fetch(asset(`scad/${p}`))).text(),
+            await (await checkedFetch(asset(`scad/${p}`))).text(),
           ])
         );
         assetSources = Object.fromEntries(entries) as Record<string, string>;
       })(),
       (async () => {
-        fontsConf = await (await fetch(asset("fonts/fonts.conf"))).text();
+        fontsConf = await (await checkedFetch(asset("fonts/fonts.conf"))).text();
       })(),
       (async () => {
         const entries = await Promise.all(
@@ -103,12 +121,16 @@ function ensureAssets(): Promise<void> {
         fontFiles = Object.fromEntries(entries) as Record<string, Uint8Array>;
       })(),
     ]);
-  })());
+  })().catch((err) => {
+    assetsReady = null;
+    throw err;
+  });
+  return assetsReady;
 }
 
 async function loadDesignSource(path: string): Promise<string> {
   if (!(path in designSources))
-    designSources[path] = await (await fetch(asset(`scad/${path}`))).text();
+    designSources[path] = await (await checkedFetch(asset(`scad/${path}`))).text();
   return designSources[path];
 }
 
@@ -195,9 +217,10 @@ async function render(req: RenderRequest): Promise<RenderResult> {
   const designSrc = await loadDesignSource(design.file);
   mount(design.file, designSrc);
 
-  // Skew guard: a stale cached bundle may carry parameters the freshly-fetched
-  // source has since dropped. Don't pass those to OpenSCAD (it'd warn cryptically
-  // about an unknown variable); report them so the UI can prompt for a reload.
+  // Skew guard: a stale cached bundle may carry parameters this worker's loaded
+  // source (loadDesignSource, memoized for the worker's lifetime) has since
+  // dropped. Don't pass those to OpenSCAD (it'd warn cryptically about an
+  // unknown variable); report them so the UI can prompt for a reload.
   const staleDefines = orphanedDefines(Object.keys(req.defines), designSrc);
   if (staleDefines.length)
     log.push(

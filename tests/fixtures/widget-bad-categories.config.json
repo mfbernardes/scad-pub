@@ -1,0 +1,8 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "categories": ["design", 5],
+  "designs": [
+    { "id": "widget", "label": "Widget" }
+  ]
+}

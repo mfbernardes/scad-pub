@@ -65,7 +65,13 @@ export function OutputToggle({
       <BellGlyph size={16} />
       {hasNotices ? (
         <span
-          className="pointer-events-none absolute top-[2px] right-[2px] inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-warn px-[0.3rem] text-[0.7rem] font-bold leading-none text-[#1c1f24] tabular-nums shadow-[0_0_0_2px_var(--panel)] [[data-theme=light]_&]:text-white"
+          // --warn flips luminance between themes (light amber on dark, deep
+          // amber-brown on light), so its legible text colour flips too —
+          // dark-theme text pairs with --background (near-black, close to the
+          // badge's own dark surfaces); light-theme text uses --on-accent
+          // (white), both bridged config-overridable tokens rather than raw
+          // hex, so a config colour override keeps the badge legible.
+          className="pointer-events-none absolute top-[2px] right-[2px] inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-warn px-[0.3rem] text-[0.7rem] font-bold leading-none text-background tabular-nums shadow-[0_0_0_2px_var(--panel)] [[data-theme=light]_&]:text-primary-foreground"
           aria-hidden="true"
         >
           {noticeCount}

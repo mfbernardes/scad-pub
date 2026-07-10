@@ -4,7 +4,7 @@
 // globs) via `expandConfiguredAssets`, or — when that's omitted — each design's
 // `use`/`include` graph via `collectDeps`. The helpers close over SOURCE, so
 // they're built once per generate() run by `createAssetTools`.
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { dirname, join, resolve, relative, sep } from "node:path";
 
 // A `use <path>` / `include <path>` dependency directive.
@@ -20,6 +20,22 @@ const DEP_RE = /^\s*(?:use|include)\s*<([^>]+)>/;
 export function createAssetTools({ SOURCE, configPath, mustExist }) {
   // A source-relative POSIX path (the key the renderer mounts files under).
   const relPosix = (absPath) => relative(SOURCE, absPath).split(sep).join("/");
+
+  // Fail when a resolved path escapes SOURCE. copyAsset (gen-schema.mjs) copies
+  // a dependency to `join(outScadDir, relPosix(abs))`, so an escaping path
+  // (e.g. `use <../../secret.scad>`, or a config `assets`/`designs[].file`
+  // entry doing the same) would otherwise write — or read — outside the
+  // source root. `referencedFrom` names the file that pointed at `abs`.
+  const checkContained = (abs, what, referencedFrom) => {
+    const rel = relative(SOURCE, abs);
+    if (rel === ".." || rel.startsWith(`..${sep}`))
+      throw new Error(
+        `gen-schema: ${what} escapes the source root:\n  ${abs}\n` +
+          `  (source root: ${SOURCE})\n` +
+          `  (referenced from ${referencedFrom})`
+      );
+    return abs;
+  };
 
   // Every .scad under a directory (recursively), as source-relative POSIX paths.
   const scadFilesUnder = (absDir) => {
@@ -117,6 +133,7 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
         continue;
       }
       const abs = mustExist(resolve(SOURCE, entry), `asset '${entry}'`);
+      checkContained(abs, `asset '${entry}'`, configPath);
       if (statSync(abs).isDirectory()) {
         for (const f of scadFilesUnder(abs)) set.add(f);
       } else {
@@ -143,6 +160,12 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
         const depAbs = resolve(curDir, m[1].trim());
         if (visited.has(depAbs)) continue;
         visited.add(depAbs);
+        if (!existsSync(depAbs))
+          throw new Error(
+            `gen-schema: dependency '${m[1].trim()}' not found:\n  ${depAbs}\n` +
+              `  (referenced by ${relPosix(cur)})`
+          );
+        checkContained(depAbs, `dependency '${m[1].trim()}'`, relPosix(cur));
         deps.add(relPosix(depAbs));
         queue.push(depAbs);
       }
@@ -150,5 +173,5 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
     return deps;
   };
 
-  return { relPosix, expandConfiguredAssets, collectDeps };
+  return { relPosix, expandConfiguredAssets, collectDeps, checkContained };
 }

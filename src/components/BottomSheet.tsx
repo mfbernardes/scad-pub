@@ -39,6 +39,13 @@ interface Props {
    *  so the parent can size the viewer to follow the sheet in real time. Fires
    *  every drag frame and on each settle. */
   onFollow?: (heightPx: number, dragging: boolean) => void;
+  /** Reports the effective "Peek" height (px) — the measured header (drag
+   *  handle + tab row), or the `peekHeight` fallback until that measurement
+   *  lands. Distinct from onFollow: this is the sheet's own geometry (how
+   *  tall the collapsed sheet is), not the live displayed height, so the
+   *  parent can anchor other fixed content (e.g. the output console overlay)
+   *  exactly above the real peek row instead of a static guess. */
+  onPeekHeightChange?: (heightPx: number) => void;
 }
 
 export function BottomSheet({
@@ -48,6 +55,7 @@ export function BottomSheet({
   peekHeight = 72,
   bottomInset = 0,
   onFollow,
+  onPeekHeightChange,
 }: Props) {
   // Detent is controlled by the parent; setDetent forwards to it.
   const setDetent = onDetentChange;
@@ -83,6 +91,14 @@ export function BottomSheet({
   const bottomInsetRef = useRef(bottomInset);
   bottomInsetRef.current = bottomInset;
 
+  // Report the effective peek height whenever it changes (first measurement,
+  // font-scaling/resize-driven remeasure, …) so the parent can anchor fixed
+  // content (the output console overlay) to the real value instead of a
+  // static CSS guess.
+  useEffect(() => {
+    onPeekHeightChange?.(effectivePeek);
+  }, [effectivePeek, onPeekHeightChange]);
+
   // Measure the header (drag handle + tab row) and use that as the peek height,
   // so the collapsed sheet always shows the whole tab row regardless of device
   // safe-area insets or font scaling. getBoundingClientRect reports the full
@@ -104,6 +120,24 @@ export function BottomSheet({
     const tabs = sheet.querySelector('[role="tablist"]');
     if (tabs) ro.observe(tabs);
     return () => ro.disconnect();
+  }, []);
+
+  // halfH/fullH read window.innerHeight at call time, but nothing re-renders
+  // this component when the viewport changes (orientation flip, browser-chrome
+  // show/hide) without also changing the detent — so the sheet would keep a
+  // stale height/transform until the next unrelated state change. Bump this
+  // on resize purely to force a re-render; halfH/fullH/heightFor already read
+  // window.innerHeight fresh each call, so the recomputed JSX (and the
+  // onFollow effect below, keyed on displayH) pick up the new size for free.
+  const [, forceResize] = useState(0);
+  useEffect(() => {
+    const onResize = () => forceResize((n) => n + 1);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
   }, []);
 
   // heightFor reads peekHeight from a ref so this can have empty deps and stay stable.
@@ -191,6 +225,25 @@ export function BottomSheet({
     for (const d of DETENT_ORDER) {
       const dist = Math.abs(heightFor(d) - targetH);
       if (dist < bestDist) { bestDist = dist; best = d; }
+    }
+    // Imperatively restore the settled geometry for `best` right away. When
+    // `best` differs from the pre-drag detent, the setDetent below triggers a
+    // React re-render that writes the same values via JSX — harmless. But
+    // when `best` equals the current detent, React state doesn't change, so
+    // its render is skipped and the DOM would otherwise be left at whatever
+    // in-progress drag height the last rAF frame wrote (already stopped short
+    // of the committed detent height) — desynchronizing the viewer, which
+    // only follows the onFollow call below. Writing here directly keeps the
+    // DOM in lockstep with what a render for `best` would produce, so a
+    // later render (detent did change) still agrees with it.
+    const sheet = sheetRef.current;
+    if (sheet) {
+      const settledH = heightFor(best);
+      const full = fullH(bottomInsetRef.current);
+      sheet.style.setProperty("--sheet-visible-h", `${settledH}px`);
+      sheet.style.transform = `translateY(${Math.max(0, full - settledH)}px)`;
+      sheet.style.transition = "transform 0.28s cubic-bezier(0.32,0.72,0,1)";
+      onFollowRef.current?.(settledH, false);
     }
     setDetent(best);
   }, [heightFor, cancelHeightFrame]);

@@ -40,6 +40,17 @@ test("stripFilename neutralises path-traversal upload names", () => {
   assert.equal(stripFilename(""), "file");
 });
 
+test("stripFilename falls back for names that are only dots", () => {
+  // Not a security boundary (dots can't escape the FS root), but "." and ".."
+  // are directory names themselves: mounting there would try to overwrite the
+  // FS root and throw. Neutralise them the same way as an empty name.
+  assert.equal(stripFilename("."), "file");
+  assert.equal(stripFilename(".."), "file");
+  assert.equal(stripFilename("..."), "file");
+  assert.equal(stripFilename("dir/.."), "file");
+  assert.equal(stripFilename("dir/."), "file");
+});
+
 test("userFileMountPath routes fonts to /fonts and everything else to root", () => {
   assert.equal(userFileMountPath("MyFont.ttf"), "/fonts/MyFont.ttf");
   assert.equal(userFileMountPath("emblem.svg"), "/emblem.svg");
@@ -47,6 +58,10 @@ test("userFileMountPath routes fonts to /fonts and everything else to root", () 
   assert.equal(userFileMountPath("../../sneaky.ttf"), "/fonts/sneaky.ttf");
   assert.equal(userFileMountPath("../../sneaky.svg"), "/sneaky.svg");
   assert.equal(userFileMountPath("/"), "/file");
+  // A dot-only name would otherwise mount at "/.." (the FS root) and the
+  // write would throw; it must resolve to the same safe fallback as "/".
+  assert.equal(userFileMountPath(".."), "/file");
+  assert.equal(userFileMountPath("."), "/file");
 });
 
 test("mkdirPaths returns each ancestor dir outermost-first, absolute", () => {

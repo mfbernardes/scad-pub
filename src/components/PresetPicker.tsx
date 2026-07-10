@@ -2,6 +2,7 @@
 // "Save current as…" row. Used as a popover on desktop (CommandBar) and as the
 // Presets tab on mobile.
 import { useCallback, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import {
@@ -18,6 +19,16 @@ import { FileInput } from "./FileInput";
 import { Input } from "./ui/input";
 import { cn } from "../lib/utils";
 import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 
 /* One preset row. `preset-picker__item` is a JS hook too (the roving-focus
    querySelector below), not just styling. Rows read as tappable cards — a
@@ -66,11 +77,15 @@ export function PresetPicker({
   presetsLabel = "Presets",
 }: Props) {
   const [saveName, setSaveName] = useState("");
+  // The saved preset pending a delete confirmation (its name), or null when no
+  // confirmation dialog is open. Deleting a saved preset is un-undoable, so it
+  // gets the same AlertDialog guard as ResetButton's "reset to defaults".
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const sectionsRef = useRef<HTMLDivElement>(null);
 
-  // Roving arrow-key navigation across every preset row (the lists are
-  // role="listbox"/option but the rows are buttons, so keyboard users get
-  // Up/Down/Home/End movement here).
+  // Roving arrow-key navigation across every preset row — the rows are plain
+  // buttons (natively tabbable), so this just layers Up/Down/Home/End
+  // movement on top for keyboard users, like a typical listbox would give.
   const onListKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
     const items = Array.from(
@@ -135,13 +150,21 @@ export function PresetPicker({
   // Import a parameterSets file (from this app or the desktop Customizer): each
   // named set becomes one of your saved presets.
   const handleImport = async (file: File) => {
+    let parsed;
     try {
-      const parsed = parseParameterSetsFile(design, await file.text());
-      for (const set of parsed) savePreset(design.id, set.name, set.values);
-      onPresetsChange();
-    } catch {
-      /* not a valid parameterSets file — ignore rather than crash the panel */
+      parsed = parseParameterSetsFile(design, await file.text());
+    } catch (err) {
+      toast.error(
+        `Couldn't import "${file.name}": ${err instanceof Error ? err.message : "not a valid parameterSets file."}`
+      );
+      return;
     }
+    if (parsed.length === 0) {
+      toast.error(`"${file.name}" has no parameter sets to import.`);
+      return;
+    }
+    for (const set of parsed) savePreset(design.id, set.name, set.values);
+    onPresetsChange();
   };
 
   const content = (
@@ -158,12 +181,16 @@ export function PresetPicker({
             <h3 className={sectionHeadingClass}>
               Ready-made
             </h3>
-            <ul role="listbox" aria-label="Ready-made presets">
+            <ul aria-label="Ready-made presets">
               {bundled.map((p) => {
                 const id = `bundled:${design.id}:${p.name}`;
                 return (
-                  <li key={p.name} role="option" aria-selected={selected === id}>
-                    <button className={itemClass(selected === id)} onClick={() => applyBundled(p)}>
+                  <li key={p.name}>
+                    <button
+                      className={itemClass(selected === id)}
+                      aria-pressed={selected === id}
+                      onClick={() => applyBundled(p)}
+                    >
                       {p.name}
                     </button>
                   </li>
@@ -177,25 +204,21 @@ export function PresetPicker({
             <h3 className={sectionHeadingClass}>
               Saved by you
             </h3>
-            <ul role="listbox" aria-label="Your saved presets">
+            <ul aria-label="Your saved presets">
               {userPresets.map((name) => {
                 const id = `user:${design.id}:${name}`;
                 return (
-                  <li
-                    key={name}
-                    role="option"
-                    aria-selected={selected === id}
-                    className="flex items-center gap-[0.15rem]"
-                  >
+                  <li key={name} className="flex items-center gap-[0.15rem]">
                     <button
                       className={cn(itemClass(selected === id), "min-w-0 flex-1")}
+                      aria-pressed={selected === id}
                       onClick={() => applyUser(name)}
                     >
                       {name}
                     </button>
                     <button
                       className="shrink-0 rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.2rem] text-[0.8rem] text-muted-foreground enabled:hover:bg-muted enabled:hover:text-warn"
-                      onClick={() => handleDelete(name)}
+                      onClick={() => setDeleteTarget(name)}
                       aria-label={`Delete preset "${name}"`}
                       title={`Delete "${name}"`}
                     >
@@ -269,7 +292,37 @@ export function PresetPicker({
     </div>
   );
 
-  if (inline) return content;
+  const deleteDialog = (
+    <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete preset?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently deletes your saved preset “{deleteTarget}”.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (deleteTarget) handleDelete(deleteTarget);
+              setDeleteTarget(null);
+            }}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  if (inline)
+    return (
+      <>
+        {content}
+        {deleteDialog}
+      </>
+    );
 
   return (
     <div className="preset-picker-popover overflow-hidden bg-card" role="dialog" aria-label={presetsLabel}>
@@ -282,6 +335,7 @@ export function PresetPicker({
         )}
       </div>
       {content}
+      {deleteDialog}
     </div>
   );
 }

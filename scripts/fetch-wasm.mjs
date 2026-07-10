@@ -7,7 +7,8 @@
 //
 // Pure Node (no bash/curl/unzip needed), so it runs the same on Windows, macOS,
 // and Linux. The npm predev/prebuild hooks call this on every run; an idempotent
-// stamp keeps it cheap — only a first run or a version bump hits the network.
+// stamp keeps it cheap — only a first run, a version bump, or on-disk drift
+// (see isCurrent()) hits the network.
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -30,18 +31,37 @@ const die = (msg) => {
   process.exit(1);
 };
 
+const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
+
+// OPENSCAD_VERSION overrides the pin below with nothing to verify the download
+// against — WASM_SHA256 is only meaningful for PINNED_WASM_VERSION (see the
+// integrity check further down) — so warn loudly rather than let an override
+// look as trustworthy as the pinned, checksum-verified build.
+if (VERSION !== PINNED_WASM_VERSION) {
+  log("=".repeat(72));
+  log(`WARNING: OPENSCAD_VERSION=${VERSION} overrides the pinned build (${PINNED_WASM_VERSION}).`);
+  log("  This download is UNVERIFIED: no checksum is enforced for a non-pinned version.");
+  log("=".repeat(72));
+}
+
 // Idempotent guard: skip the download when the binary + glue are already
-// present and were fetched for the requested version. Set FORCE=1 to always
-// re-download. This lets the pre-build/pre-dev hooks call us cheaply on every
-// run — only the first run (or a version bump) reaches the network.
+// present, were fetched for the requested version, AND the on-disk
+// openscad.wasm still hashes to what we recorded at install time — so
+// corruption or a substituted file forces a re-fetch instead of silently
+// being trusted. Set FORCE=1 to always re-download. A pre-hash stamp (plain
+// "VERSION\n" text) fails JSON.parse and is treated as not current.
 async function isCurrent() {
   if (process.env.FORCE === "1") return false;
   if (!ASSETS.every((name) => existsSync(join(WASM_DIR, name)))) return false;
+  let stamp;
   try {
-    return (await readFile(STAMP, "utf8")).trim() === VERSION;
+    stamp = JSON.parse(await readFile(STAMP, "utf8"));
   } catch {
     return false;
   }
+  if (stamp.version !== VERSION || typeof stamp.sha256 !== "string") return false;
+  const onDisk = sha256(await readFile(join(WASM_DIR, "openscad.wasm")));
+  return onDisk === stamp.sha256;
 }
 
 await mkdir(WASM_DIR, { recursive: true });
@@ -58,7 +78,7 @@ const zip = new Uint8Array(await res.arrayBuffer());
 
 // Verify integrity when the version matches the pin.
 if (VERSION === PINNED_WASM_VERSION) {
-  const actual = createHash("sha256").update(zip).digest("hex");
+  const actual = sha256(zip);
   if (actual !== SHA256) {
     log(`  expected ${SHA256}`);
     log(`  actual   ${actual}`);
@@ -71,5 +91,10 @@ for (const name of ASSETS) {
   if (!entries[name]) die(`${name} not found in ${URL}`);
   await writeFile(join(WASM_DIR, name), entries[name]);
 }
-await writeFile(STAMP, `${VERSION}\n`);
+// Record the extracted wasm's hash (not the zip's) so a future run can detect
+// on-disk drift regardless of how the file changed.
+await writeFile(
+  STAMP,
+  JSON.stringify({ version: VERSION, sha256: sha256(entries["openscad.wasm"]) }) + "\n"
+);
 log(`Installed openscad.js + openscad.wasm (v${VERSION}) into public/wasm/`);

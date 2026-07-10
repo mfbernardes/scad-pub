@@ -252,6 +252,16 @@ export const AppShell = memo(function AppShell({
     el.dataset.sheetDragging = dragging ? "true" : "false";
   }, []);
 
+  // Mirror the sheet's measured "Peek" height (drag handle + tab row) into
+  // --mobile-peek-height, so the output console overlay + scrim anchor to the
+  // real row instead of the static CSS fallback, which font scaling can
+  // exceed. See BottomSheet's onPeekHeightChange doc.
+  const handleSheetPeekHeight = useCallback((heightPx: number) => {
+    const el = mobileRootRef.current;
+    if (!el) return;
+    el.style.setProperty("--mobile-peek-height", `${Math.round(heightPx)}px`);
+  }, []);
+
   // Info-level notices (config-driven `notices`) are surfaced passively by the
   // dot/count on the Output toggle. A warning or assert is different — the model
   // came out wrong in a way worth seeing — so the console auto-opens the first
@@ -316,10 +326,12 @@ export const AppShell = memo(function AppShell({
   };
   return (
     <div className="app-shell">
-      {/* Skip link: off-screen until focused. */}
+      {/* Skip link: off-screen until focused. Both layout trees are always
+          mounted (one CSS-hidden), each with its own #params(-mobile) target,
+          so the href must follow the layout that's actually visible/active. */}
       <a
         className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
-        href="#params"
+        href={isMobile ? "#params-mobile" : "#params"}
       >
         Skip to parameters
       </a>
@@ -400,8 +412,17 @@ export const AppShell = memo(function AppShell({
             reframeOnPreset={false}
           />
 
-          {/* Mobile top bar — logo left, design centered, actions right (mirrors desktop) */}
-          <div className="mobile-top-bar absolute inset-x-0 top-0 z-10 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]">
+          {/* Mobile top bar — logo left, design centered, actions right (mirrors
+              desktop). Normally z-10 (below the bottom sheet, z-30, so the
+              full-detent sheet covers it and its drag handle stays grabbable).
+              While the output console is open it lifts to z-[33] — above the
+              scrim (z-[31]) and console (z-[32]) — so the design picker/⋮/bell
+              stay tappable; the console only opens at the peek detent, so this
+              never fights the full-detent sheet. */}
+          <div className={cn(
+            "mobile-top-bar absolute inset-x-0 top-0 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]",
+            outputOpen ? "z-[33]" : "z-10"
+          )}>
             <span className="inline-flex min-w-0 items-center gap-[0.4rem] justify-self-start overflow-hidden whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.92rem] font-bold">
               <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
             </span>
@@ -470,6 +491,7 @@ export const AppShell = memo(function AppShell({
           detent={sheetDetent}
           onDetentChange={handleDetentChange}
           onFollow={handleSheetFollow}
+          onPeekHeightChange={handleSheetPeekHeight}
           peekHeight={PEEK_HEIGHT}
           bottomInset={safeAreaBottom}
         >
@@ -477,7 +499,7 @@ export const AppShell = memo(function AppShell({
             // The tab bar shows at every detent (including peek); tapping a tab
             // raises a collapsed sheet. Auto-render + Reset are param-scoped, so
             // they live inside the Parameters tab (SheetTabs), not here.
-            <div className="sheet-content" id="params">
+            <div className="sheet-content" id="params-mobile">
               <SheetTabs
                 design={design}
                 values={values}

@@ -156,3 +156,23 @@ test("unknown param keys in v diff are silently ignored", () => {
   assert.equal(r.values.text, "hi");
   assert.ok(!("bogus" in r.values));
 });
+
+test("persistState survives a throttled history.replaceState (e.g. Safari)", () => {
+  const original = globalThis.history.replaceState;
+  globalThis.history.replaceState = () => {
+    throw new DOMException("attempt exceeded", "SecurityError");
+  };
+  try {
+    assert.doesNotThrow(() =>
+      persistState(design, { text: "bye", n: 5, b: true })
+    );
+    // The localStorage mirror still ran despite the thrown replaceState, so a
+    // bare reload (no hash) still restores the latest values.
+    globalThis.location.hash = "";
+    const r = readInitialState(schema);
+    assert.equal(r.values.text, "bye");
+    assert.equal(r.values.n, 5);
+  } finally {
+    globalThis.history.replaceState = original;
+  }
+});

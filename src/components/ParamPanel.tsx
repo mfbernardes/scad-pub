@@ -166,6 +166,11 @@ export function ParamPanel({
     // Drop any pending rAF write so a frame queued just before pointer-up
     // can't fire after React commits the settled width below.
     cancelWidthFrame();
+    // Write the final width imperatively first: when liveWidthRef equals the
+    // pre-drag width, setWidth below is a no-op and React skips the render,
+    // leaving the DOM at whatever the last rAF frame applied (a few px short
+    // of the actual pointer position) — mirrors the BottomSheet drag-settle fix.
+    if (panelRef.current) panelRef.current.style.width = `${liveWidthRef.current}px`;
     setWidth(liveWidthRef.current);
   }, [cancelWidthFrame]);
 
@@ -175,7 +180,10 @@ export function ParamPanel({
 
   if (!open) {
     return (
-      <div className={`param-panel-rail ${side}`}>
+      // Keep the #params id on the rail even collapsed, so the "Skip to
+      // parameters" link (AppShell) never dangles — landing on the "Open
+      // panel" button is the correct target when there's no panel to skip to.
+      <div className={`param-panel-rail ${side}`} id="params">
         <button
           className="param-panel-open-btn font-display"
           onClick={() => setOpen(true)}
@@ -211,8 +219,14 @@ export function ParamPanel({
         aria-valuemax={MAX_WIDTH}
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === "ArrowLeft") setWidth((w) => Math.max(MIN_WIDTH, w - 20));
-          if (e.key === "ArrowRight") setWidth((w) => Math.min(MAX_WIDTH, w + 20));
+          // Pointer-drag direction flips with panelSide (the handle sits on
+          // the panel's outer edge — left edge when docked right), so mirror
+          // that here: for a right-docked panel ArrowLeft (handle moves left,
+          // away from the panel) grows it and ArrowRight shrinks it.
+          const grow = panelSide === "right" ? "ArrowLeft" : "ArrowRight";
+          const shrink = panelSide === "right" ? "ArrowRight" : "ArrowLeft";
+          if (e.key === shrink) setWidth((w) => Math.max(MIN_WIDTH, w - 20));
+          if (e.key === grow) setWidth((w) => Math.min(MAX_WIDTH, w + 20));
         }}
       />
 

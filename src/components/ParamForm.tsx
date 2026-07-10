@@ -4,7 +4,7 @@
 // strings. Each control carries an aria-label (its description) for its name.
 // Every row also carries `data-param="<var>"` — the stable hook the smoke test
 // (and extraCss) target now that variable names are hidden from users by default.
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Info as InfoIcon, RotateCcw as RevertIcon, Upload as UploadIcon } from "lucide-react";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
@@ -179,8 +179,17 @@ function NumberControl({
   const committed = committedNumber(param, value);
   const [draft, setDraft] = useState(String(committed));
   const hasRange = param.min !== undefined && param.max !== undefined;
+  // While the input is focused, an external `committed` change (our own
+  // clamped onChange echoing back through props) must NOT stomp the user's
+  // in-progress keystrokes — e.g. typing "2" en route to "25" in a min=10
+  // field commits (clamped) 10, and re-syncing the draft from that would
+  // force the field back to "10" mid-type. Blur already normalises the draft,
+  // and an external value change (e.g. a preset apply) while unfocused should
+  // still resync immediately.
+  const focusedRef = useRef(false);
 
   useEffect(() => {
+    if (focusedRef.current) return;
     setDraft(String(committed));
   }, [committed]);
 
@@ -213,14 +222,19 @@ function NumberControl({
         step={param.step ?? "any"}
         value={draft}
         aria-label={label}
+        onFocus={() => {
+          focusedRef.current = true;
+        }}
         onChange={(e) => {
           const raw = e.target.value;
           setDraft(raw);
           const n = finiteDraft(raw);
-          if (n !== null) onChange(n);
+          if (n !== null) onChange(clampNumber(param, n));
         }}
-        // Clamp on commit so intermediate keystrokes stay typeable.
+        // Clamp on commit so intermediate keystrokes stay typeable, and
+        // normalise the draft text itself (e.g. a raw value beyond the range).
         onBlur={() => {
+          focusedRef.current = false;
           const v = clampNumber(param, finiteDraft(draft) ?? param.default);
           setDraft(String(v));
           if (v !== committed) onChange(v);
@@ -345,7 +359,6 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
   // visible groups only when the design, values or query change — not on every
   // unrelated render (e.g. a sibling re-render).
   const groups = useMemo(() => {
-    const collapsed = new Set(design.collapsedSections ?? []);
     return design.sections
       .map((section) => ({
         section,
@@ -363,11 +376,28 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               p.description.toLowerCase().includes(q) ||
               p.help.toLowerCase().includes(q))
         ),
-        // Force open when search is active (expand all matching groups).
-        startOpen: q ? true : !collapsed.has(section),
       }))
       .filter((g) => g.params.length > 0);
   }, [design, values, q]);
+
+  // Per-section open/closed state, controlled in React so a search can force a
+  // folded group open without losing the user's manual fold/unfold of an
+  // @collapsed (or plain) group — <details>'s `open` attribute is otherwise
+  // native DOM state React never observes, so a search-forced re-render used to
+  // stomp it back to the design's static @collapsed default. Re-derived whenever
+  // the design changes (a different design's section names shouldn't inherit
+  // this one's open/closed choices).
+  const collapsedDefault = useMemo(
+    () => new Set(design.collapsedSections ?? []),
+    [design]
+  );
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const init: Record<string, boolean> = {};
+    for (const section of design.sections) init[section] = !collapsedDefault.has(section);
+    setOpenSections(init);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [design]);
 
   return (
     <div className="param-form">
@@ -376,12 +406,24 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
           {q ? `Nothing matches “${search}”.` : "This design has nothing to customize."}
         </p>
       )}
-      {groups.map(({ section, params, startOpen }) => {
+      {groups.map(({ section, params }) => {
+        const isOpen = openSections[section] ?? !collapsedDefault.has(section);
         return (
           <details
             className="param-group mb-3 rounded-lg border bg-background/50 px-[0.8rem] open:pb-2"
             key={section}
-            open={startOpen}
+            open={q ? true : isOpen}
+            onToggle={(e) => {
+              // A search forces every matching group open without being a user
+              // choice — don't persist it, so clearing the search restores
+              // whatever the user had before searching.
+              if (q) return;
+              const next = (e.target as HTMLDetailsElement).open;
+              // Guard against feedback loops: only write when the DOM's actual
+              // state differs from what we already have (also fires when React
+              // itself flips `open`, e.g. the forced-open-by-search handoff).
+              setOpenSections((prev) => (prev[section] === next ? prev : { ...prev, [section]: next }));
+            }}
           >
             <summary className="font-display flex cursor-pointer select-none list-none items-center px-[0.2rem] py-[0.6rem] text-[0.92rem] font-semibold text-brand focus-visible:rounded-[4px]">
               {section}

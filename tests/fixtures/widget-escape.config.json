@@ -1,0 +1,7 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "designs": [
+    { "id": "escape", "label": "Escape", "file": "escape-design.scad" }
+  ]
+}
