@@ -110,7 +110,12 @@
   --glass-bg: #252935;
   --glass-border: #343a48;
   --elevation: 0 6px 18px rgba(0, 0, 0, 0.5);
-  /* Mobile layout constants — keep in sync with AppShell.tsx PEEK_HEIGHT */
+  /* Fallback only: BottomSheet measures its real header (drag handle + tab
+     row) — which can exceed this under font scaling — and AppShell writes it
+     onto the mobile root as an inline override (see handleSheetPeekHeight /
+     onPeekHeightChange), which wins once the first measurement lands. This
+     static value only matters for the brief pre-measurement flash — keep it
+     roughly in sync with AppShell.tsx PEEK_HEIGHT. */
   --mobile-peek-height: 60px;
   /* iOS home-indicator inset. The bottom sheet sits directly on the viewport
      bottom (no docked footer band) and reserves this inset below itself so its

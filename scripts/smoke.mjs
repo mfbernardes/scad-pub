@@ -241,7 +241,8 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
   for (const id of ids) {
     await selectDesign(page, id);
     await gotoPresets();
-    // Ready-made presets sit in the "Ready-made" section's listbox.
+    // Ready-made presets sit in the "Ready-made" section as a plain button list;
+    // the applied one carries aria-pressed="true" (see PresetPicker.tsx).
     const bundled = page.locator('[aria-label="Ready-made presets"] .preset-picker__item');
     if (await bundled.count()) {
       const name = (await bundled.first().textContent())?.trim() ?? "";
@@ -249,7 +250,7 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
       await waitRendered(page, `${id} + "${name}"`);
       // The applied preset shows as selected, and the choice is in the URL.
       check(
-        (await page.locator('[aria-label="Ready-made presets"] [role="option"][aria-selected="true"]').count()) >= 1,
+        (await page.locator('[aria-label="Ready-made presets"] .preset-picker__item[aria-pressed="true"]').count()) >= 1,
         `applied bundled preset "${name}"`
       );
       // persistState debounces ~300ms after the apply, so wait for the hash.
@@ -265,7 +266,7 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
       await waitRendered(page, `${id} reloaded`);
       await gotoPresets();
       check(
-        (await page.locator('[aria-label="Ready-made presets"] [role="option"][aria-selected="true"]').count()) >= 1,
+        (await page.locator('[aria-label="Ready-made presets"] .preset-picker__item[aria-pressed="true"]').count()) >= 1,
         "preset auto-selected from the URL after reload"
       );
       await gotoParams();

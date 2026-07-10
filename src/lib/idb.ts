@@ -38,6 +38,13 @@ export function openDb(): Promise<IDBDatabase> {
           db.close();
           dbPromise = undefined;
         };
+        // An abnormal close (e.g. the browser force-closing the connection
+        // under storage pressure) fires "close", not "versionchange" — without
+        // this, the cached connection stays dead and every later transaction
+        // throws InvalidStateError for the rest of the session.
+        db.onclose = () => {
+          dbPromise = undefined;
+        };
         resolve(db);
       };
       req.onerror = () => reject(req.error);

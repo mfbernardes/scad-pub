@@ -79,7 +79,7 @@ scadpub.config.json the config: title, branding, designs, help
 .github/workflows/ci.yml  unit tests + build + headless smoke; uploads dist
 ```
 
-The OpenSCAD WASM is version-pinned in `scripts/fetch-wasm.mjs` (`OPENSCAD_VERSION`) and checksum-verified.
+The OpenSCAD WASM is version-pinned in `scripts/wasm-version.mjs` (`PINNED_WASM_VERSION`) and checksum-verified; `scripts/fetch-wasm.mjs` does the actual download. Set `OPENSCAD_VERSION` to fetch a different (unverified — no checksum) version.
 
 ## Configure deployments
 

@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { resolve, relative, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
@@ -97,27 +97,54 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
   };
 }
 
+// Every file under `dir`, recursively, as absolute paths.
+function filesUnder(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const abs = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...filesUnder(abs));
+    else out.push(abs);
+  }
+  return out;
+}
+
 // Stamp a per-build version into the shipped service worker. sw.js lives in
 // public/ (copied verbatim), so without this every deploy ships a byte-identical
 // sw.js — the browser never detects a new worker and the "update available"
 // prompt never fires (src/lib/swUpdate.ts only flags an update when a *new* worker
-// reaches `waiting`). The version is a hash of every emitted, content-hashed
-// chunk/asset filename, so any code or asset change bumps it; it replaces the
-// `__SW_VERSION__` placeholder in dist/sw.js after the bundle is written.
+// reaches `waiting`). The version hashes every emitted chunk/asset's CONTENT
+// (not just its content-hashed filename, which only changes for assets Vite
+// itself fingerprints) plus every file under public/ — so a stable-URL asset
+// like extraCss, a design's <id>-doc.md, an icon, or the manifest also bumps
+// it. sw.js itself is excluded (it's what we're about to rewrite). Replaces
+// the `__SW_VERSION__` placeholder in dist/sw.js after the bundle is written.
 function swVersion(): Plugin {
   let outDir = "dist";
+  let publicDir = "";
   let version = "dev";
   return {
     name: "sw-version",
     apply: "build",
     configResolved(c) {
       outDir = c.build.outDir;
+      publicDir = c.publicDir;
     },
     generateBundle(_options, bundle) {
-      version = createHash("sha256")
-        .update(Object.keys(bundle).sort().join("\n"))
-        .digest("hex")
-        .slice(0, 16);
+      const h = createHash("sha256");
+      for (const [fileName, output] of Object.entries(bundle).sort(([a], [b]) => a.localeCompare(b))) {
+        h.update(fileName);
+        h.update(output.type === "chunk" ? output.code : output.source);
+      }
+      // public/wasm is ~10 MB, but hashing it is cheap next to the download itself.
+      if (publicDir) {
+        const swJs = join(publicDir, "sw.js");
+        for (const abs of filesUnder(publicDir).sort()) {
+          if (abs === swJs) continue;
+          h.update(relative(publicDir, abs));
+          h.update(readFileSync(abs));
+        }
+      }
+      version = h.digest("hex").slice(0, 16);
     },
     closeBundle() {
       const swPath = resolve(outDir, "sw.js");

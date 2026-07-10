@@ -13,7 +13,7 @@ import { VIEW_OPTIONS, type ViewName } from "./views";
  *  viewer HUD (IconButtons get it via className; the picker trigger below
  *  carries it directly). */
 export const HUD_GLASS_BTN =
-  "p-[0.45rem] bg-(--glass-bg) border-(color:--glass-border) shadow-[0_2px_8px_rgba(0,0,0,0.3)]";
+  "p-[0.45rem] bg-(--glass-bg) border-(color:--glass-border) shadow-(--elevation)";
 
 interface Props {
   /** The currently-applied view (checkmarked in the menu). */

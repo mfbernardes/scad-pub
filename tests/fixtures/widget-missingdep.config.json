@@ -1,0 +1,7 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "designs": [
+    { "id": "missingdep", "label": "Missing dep", "file": "missingdep-design.scad" }
+  ]
+}

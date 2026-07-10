@@ -29,6 +29,17 @@ function shouldCache(url) {
   return u.origin === self.location.origin && !BIN_RE.test(u.pathname);
 }
 
+// Build-volatile sources: the render worker deliberately fetches .scad sources
+// fresh every render (see BIN_CACHE's comment in worker.ts), keyed by the
+// build's renderHash. Serving a stale cache-first copy here after a deploy
+// would mount the previous build's source while the new bundle's renderHash
+// keys the result, permanently poisoning the persisted render cache for those
+// parameters. precache-manifest.json drives the SW's own asset list, so it
+// needs the same treatment.
+function isVolatileSource(pathname) {
+  return pathname.split("/").includes("scad") || pathname.endsWith("precache-manifest.json");
+}
+
 function addScopedUrl(urls, path) {
   if (!path) return;
   const url = new URL(path, SCOPE_URL);
@@ -173,7 +184,7 @@ self.addEventListener("fetch", (event) => {
         const cache = await caches.open(CACHE);
         try {
           const res = await fetch(req);
-          cache.put(SHELL_KEY, res.clone());
+          if (res.ok) cache.put(SHELL_KEY, res.clone());
           return res;
         } catch {
           return (await cache.match(SHELL_KEY)) || Response.error();
@@ -183,7 +194,25 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets (hashed JS/CSS, fonts, .scad, presets): stale-while-revalidate.
+  // Build-volatile sources: network-first, falling back to the cache only when
+  // offline, so a deploy is never shadowed by a previous build's cached copy.
+  if (isVolatileSource(url.pathname)) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE);
+        try {
+          const res = await fetch(req);
+          if (res.ok) cache.put(req, res.clone());
+          return res;
+        } catch {
+          return (await cache.match(req)) || Response.error();
+        }
+      })()
+    );
+    return;
+  }
+
+  // Static assets (hashed JS/CSS, fonts, presets): stale-while-revalidate.
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE);

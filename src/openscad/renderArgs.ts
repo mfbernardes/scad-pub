@@ -13,9 +13,14 @@ export function isFontFile(name: string): boolean {
 
 // Strip any directory components from an untrusted upload name so it can't escape
 // its mount dir: "../../etc/x" or "C:\\evil\\x" both collapse to "x". An empty
-// result (a name that was nothing but separators) falls back to "file".
+// result (a name that was nothing but separators) falls back to "file", as does
+// a name that is only dots (".", "..") — not a security boundary (it can't
+// escape the FS root), but "/.." resolves to the root directory itself, so
+// userFileMountPath would try to mkdir/write over it and the mount would throw.
 export function stripFilename(rawName: string): string {
-  return rawName.replace(/^.*[\\/]/, "") || "file";
+  const stripped = rawName.replace(/^.*[\\/]/, "");
+  // Empty (nothing but separators) or dot-only (".", "..") both fall back.
+  return /^\.*$/.test(stripped) ? "file" : stripped;
 }
 
 // Absolute FS mount path for an untrusted user file: fonts go into /fonts (the

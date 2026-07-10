@@ -5,14 +5,22 @@
 // section, exactly as OpenSCAD's own Customizer does.
 import { readFileSync } from "node:fs";
 
-const SECTION_RE = /\/\*\s*\[([^\]]+)\]\s*\*\//;
+// A section header must be the WHOLE line (leading/trailing whitespace only) —
+// otherwise a trailing section-shaped comment on a param line (`w = 10; /* [Oops] */`)
+// would be mistaken for a section header, since this is tested before PARAM_RE.
+const SECTION_RE = /^\s*\/\*\s*\[([^\]]+)\]\s*\*\/\s*$/;
 // name = default; // [hint]
 // The name uses OpenSCAD's identifier grammar — a letter or underscore, then
 // letters/digits/underscores — so camelCase (wallThickness), PascalCase
 // (FontSize) and leading-underscore (_offset) params are all captured, not just
 // lowercase ones. ($-prefixed special variables aren't Customizer params.)
+// The trailing `\s*` used to sit AFTER the optional `(?:// [hint])?` group,
+// so a failing match (trailing text that's neither whitespace nor a valid
+// hint) let two adjacent `\s*` quantifiers backtrack against each other —
+// O(n²) on a long run of whitespace. Folding it inside the group leaves a
+// single free-length `\s*` on any given path, so a non-match fails in O(n).
 const PARAM_RE =
-  /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?);\s*(?:\/\/\s*\[([^\]]*)\])?\s*$/;
+  /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?);\s*(?:\/\/\s*\[([^\]]*)\]\s*)?$/;
 // A leading line comment that documents the next parameter.
 const DOC_RE = /^\s*\/\/\s?(.*)$/;
 // `@showIf <expr>` directive inside a param's doc block (conditional visibility).
@@ -60,11 +68,17 @@ export function humanize(stem) {
 }
 
 function parseNumberHint(hint) {
-  // "min:step:max" or "min:max"
-  const parts = hint.split(":").map((p) => Number(p.trim()));
+  // "min:step:max", "min:max", or OpenSCAD's single-value shorthand "max"
+  // (a 0..max slider, no step). An empty segment ("1::10", ":10") is NOT the
+  // same as an explicit 0 — Number("") is 0, so reject it up front rather
+  // than silently treating a typo'd/omitted bound as zero.
+  const segs = hint.split(":").map((p) => p.trim());
+  if (segs.some((s) => s === "")) return null;
+  const parts = segs.map(Number);
   if (parts.some((n) => Number.isNaN(n))) return null;
   if (parts.length === 3) return { min: parts[0], step: parts[1], max: parts[2] };
   if (parts.length === 2) return { min: parts[0], max: parts[1] };
+  if (parts.length === 1) return { min: 0, max: parts[0] };
   return null;
 }
 

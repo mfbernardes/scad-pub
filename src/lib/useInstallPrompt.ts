@@ -31,11 +31,20 @@ export function useInstallPrompt() {
 
   const promptInstall = useCallback(async () => {
     if (!deferred) return false;
-    await deferred.prompt();
-    const { outcome } = await deferred.userChoice;
-    // A prompt can only be used once; clear it regardless of the choice.
-    setDeferred(null);
-    return outcome === "accepted";
+    try {
+      await deferred.prompt();
+      const { outcome } = await deferred.userChoice;
+      return outcome === "accepted";
+    } catch {
+      // A rejected/failed prompt (e.g. a double-click reusing the single-use
+      // prompt) is not installable; report failure instead of throwing an
+      // unhandled rejection.
+      return false;
+    } finally {
+      // A prompt can only be used once; clear it regardless of outcome so a
+      // dead prompt can't leave canInstall stuck true.
+      setDeferred(null);
+    }
   }, [deferred]);
 
   return { canInstall: deferred !== null, promptInstall };

@@ -52,9 +52,9 @@ These keys tell `gen-schema` which `.scad` files and assets to bundle:
 - **`assets`**: files or directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.
 
-Each `designs[]` entry also accepts optional `description` and `icon` fields. `description` is the short line shown under the label in the design picker. `icon` is a path relative to the config file, shown in the picker and used as the design's manifest shortcut icon. The icon may be an SVG, PNG, or WebP file. ScadPub serves SVG/WebP as-is. For PNG, the build reads the pixel dimensions so the manifest shortcut advertises the real `sizes`.
+Each `designs[]` entry also accepts optional `description`, `icon`, and `doc` fields. `description` is the short line shown under the label in the design picker. `icon` is a path relative to the config file, shown in the picker and used as the design's manifest shortcut icon. The icon may be an SVG, PNG, or WebP file. ScadPub serves SVG/WebP as-is. For PNG, the build reads the pixel dimensions so the manifest shortcut advertises the real `sizes`. `doc` is a path (also config-relative) to a Markdown file of user documentation; when present, the app shows a button that opens it in a modal.
 
-Both `description` and `icon` fall back to the design's own [`// @description` / `// @icon` annotations](annotations.md#design-metadata--description--icon) when omitted here. A config value still wins.
+All three fall back to the design's own [`// @description` / `// @icon` / `// @doc` annotations](annotations.md#design-metadata--description--icon--doc) when omitted here. A config value still wins.
 
 ### Rendering
 
