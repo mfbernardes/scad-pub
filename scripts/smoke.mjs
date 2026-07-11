@@ -193,6 +193,23 @@ async function checkThemeToggle({ page, check }) {
   }
 }
 
+// The viewer's rendering is invalidation-driven (M6): once OrbitControls'
+// damping has settled and nothing else invalidates the scene, renderer.render()
+// must stop firing every animation frame. Viewer.tsx stamps a running count
+// onto the mount node's dataset (data-render-count) on every actual render
+// call, purely for this assertion. Sample it, wait past a few animation
+// frames' worth of idle time with no input, and confirm it didn't move.
+async function checkIdleRenderCount({ page, check }) {
+  console.log("=== idle render count (invalidation-driven rendering) ===");
+  const before = await page.$eval(".viewer", (el) => Number(el.dataset.renderCount ?? "0"));
+  await page.waitForTimeout(500); // ~30 animation frames at idle, no input
+  const after = await page.$eval(".viewer", (el) => Number(el.dataset.renderCount ?? "0"));
+  check(
+    before > 0 && after === before,
+    `idle viewer issues no extra render() calls (before=${before}, after=${after})`
+  );
+}
+
 async function checkAxe({ page, check }) {
   console.log("=== accessibility (axe-core) ===");
   await page.addScriptTag({
@@ -523,6 +540,7 @@ async function main() {
     await checkWelcomePopup(ctx);
     await checkFileImport(ctx);
     await checkThemeToggle(ctx);
+    await checkIdleRenderCount(ctx);
     await checkAxe(ctx);
     await checkEveryDesignRenders(ctx);
     await checkBundledPresets(ctx);
