@@ -66,7 +66,8 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
       if (err.code === "ELOOP")
         throw new Error(
           `gen-schema: ${what} is a symlink cycle:\n  ${abs}\n` +
-            `  (referenced from ${referencedFrom})`
+            `  (referenced from ${referencedFrom})`,
+          { cause: err }
         );
       throw err;
     }
@@ -162,13 +163,6 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
     collectFiles(absDir, referencedFrom, (relParts) => {
       if (relParts[relParts.length - 1].endsWith(".scad")) out.push(relParts.join("/"));
     });
-    return out;
-  };
-
-  // Every file under a directory (recursively), as source-relative POSIX paths.
-  const filesUnder = (absDir, referencedFrom) => {
-    const out = [];
-    collectFiles(absDir, referencedFrom, (relParts) => out.push(relParts.join("/")));
     return out;
   };
 

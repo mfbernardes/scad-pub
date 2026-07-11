@@ -4,7 +4,7 @@
 // the render's virtual filesystem, points this parameter at it, and (when the
 // field binds `layers=<param>`) writes the derived colour string into that
 // second parameter — then the normal auto-render picks it up.
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Upload as UploadIcon, FileCode as FileCodeIcon } from "lucide-react";
 import type { SvgFieldMeta } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
@@ -16,6 +16,20 @@ import type { SvgWizardResult } from "./SvgWizard";
 
 function loadSvgWizard() {
   return import("./SvgWizard").then((m) => ({ default: m.SvgWizard }));
+}
+
+// A single module-scope `lazy()` component (created once, not per render)
+// so `react-hooks/static-components` doesn't flag it. `lazy()` caches its
+// loader's promise/result for the life of the component object it returns,
+// so a rejected chunk load (offline, build-hash drift, ad blocker on the
+// chunk URL, …) stays rejected on every subsequent render of *this same*
+// component — there's no in-place retry. `makeSvgWizard()` mints a fresh
+// lazy component wrapping the same loader; Retry calls it from an event
+// handler (not during render) and stores the result in state, which gives
+// the next mount an actual new import() attempt while still satisfying the
+// "don't create components during render" rule.
+function makeSvgWizard() {
+  return lazy(loadSvgWizard);
 }
 
 // Preload on user intent (hover/focus of the trigger button) so the chunk is
@@ -57,16 +71,13 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
   const [pending, setPending] = useState<{ text: string; fileName: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Bumped by the Retry action below. `lazy()` caches its promise for the
-  // life of the component it returns, so a rejected chunk load (offline,
-  // build-hash drift, ad blocker on the chunk URL, …) stays rejected on
-  // every subsequent render of the *same* lazy component — there's no way to
-  // "retry" it in place. Recreating the lazy component under a fresh key
-  // gives Retry an actual new import() attempt, and passing the same key as
-  // the boundary's `resetKey` clears the caught error the moment that new
-  // component mounts.
+  // Bumped by the Retry action below, purely as the `ErrorBoundary`'s
+  // `resetKey` (it clears the caught error the moment the new component
+  // mounts). The lazy component itself lives in state — see `makeSvgWizard`
+  // above — and Retry replaces it via `setSvgWizard`, not by recomputing it
+  // during render.
   const [wizardAttempt, setWizardAttempt] = useState(0);
-  const SvgWizard = useMemo(() => lazy(loadSvgWizard), [wizardAttempt]);
+  const [SvgWizard, setSvgWizard] = useState(() => makeSvgWizard());
 
   const loadFile = async (file: File) => {
     const reason = svgRejectionReason(file);
@@ -158,7 +169,10 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => setWizardAttempt((n) => n + 1)}
+                  onClick={() => {
+                    setSvgWizard(makeSvgWizard());
+                    setWizardAttempt((n) => n + 1);
+                  }}
                 >
                   Retry
                 </Button>

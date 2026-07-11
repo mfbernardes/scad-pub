@@ -65,8 +65,12 @@ export default tseslint.config(
       // stable-context-value design. Off, like no-explicit-any below, because
       // it fires on intentional code rather than bugs.
       'react-hooks/refs': 'off',
-      // Also new in v7. setState inside an effect is used here to sync derived
-      // UI state; keep it visible as advice without failing the lint.
+      // Also new in v7. Most call sites were refactored to the "adjust state
+      // during render" pattern, or carry a justified inline disable (see
+      // docs/architecture-review.md L2). Kept at 'warn' rather than 'error' so
+      // a legitimate future case reads as advice in-editor, but CI/pre-commit
+      // still gate on it — the repo is triaged to 0 warnings and both run
+      // `eslint . --max-warnings 0`.
       'react-hooks/set-state-in-effect': 'warn',
       // Style-only rules that don't indicate real bugs — keep the signal
       // focused on correctness/react-hooks rather than drowning in noise

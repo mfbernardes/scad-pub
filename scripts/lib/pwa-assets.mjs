@@ -164,7 +164,8 @@ export function generatePwaAssets({
       for (const f of written) if (!beforeFailure.includes(f)) rmSync(f, { force: true });
       throw new Error(
         `gen-schema: icon rasterization failed (${err.message})\n` +
-          `  (check config 'icon' / 'iconMaskable' — both must be valid SVG)`
+          `  (check config 'icon' / 'iconMaskable' — both must be valid SVG)`,
+        { cause: err }
       );
     }
   } else {

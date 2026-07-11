@@ -214,7 +214,9 @@ export const AppShell = memo(function AppShell({
   const showFullscreen = ui.fullscreen !== false;
 
   const log = result?.log ?? EMPTY_LOG;
-  const notices = schema.notices ?? [];
+  // Memoized so a config without `notices` doesn't hand a fresh `[]` to the
+  // useMemo hooks below on every render.
+  const notices = useMemo(() => schema.notices ?? [], [schema.notices]);
   const fileImport = schema.fileImport ?? null;
   const loadedFiles = useMemo(
     () => Object.entries(userFiles).map(([name, bytes]) => ({ name, size: bytes.byteLength })),

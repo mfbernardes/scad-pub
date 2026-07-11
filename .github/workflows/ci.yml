@@ -34,6 +34,12 @@ jobs:
           cache: npm
       - run: npm ci
 
+      - name: Lint
+        # See docs/architecture-review.md L2: the repo is triaged to 0 errors /
+        # 0 warnings, so this gates on a hard zero rather than a ratcheted
+        # warning budget.
+        run: npx eslint . --max-warnings 0
+
       - name: Unit tests
         run: npm test
 

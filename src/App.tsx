@@ -236,9 +236,17 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  // Clear stale presets the instant the design changes (during render, not an
+  // effect — the documented "adjusting state when a prop changes" pattern),
+  // so a design switch never briefly shows the previous design's presets
+  // while the fetch below is in flight.
+  const [bundledPresetsDesignId, setBundledPresetsDesignId] = useState(designId);
+  if (designId !== bundledPresetsDesignId) {
+    setBundledPresetsDesignId(designId);
+    setBundledPresets([]);
+  }
   useEffect(() => {
     let active = true;
-    setBundledPresets([]);
     fetchBundledPresets(design).then((p) => active && setBundledPresets(p));
     return () => { active = false; };
   }, [design]);
@@ -301,7 +309,7 @@ export default function App() {
     if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
     setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
     offerInstallHint();
-  }, [exportable, snapshot, offerInstallHint]);
+  }, [exportable, snapshot, offerInstallHint, setAnnouncement]);
 
   const savePng = useCallback(async (url: string) => {
     if (!exportable || !snapshot) return;
@@ -315,7 +323,7 @@ export default function App() {
     );
     if (outcome === "cancelled") return;
     setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Saved ${name}`);
-  }, [exportable, snapshot]);
+  }, [exportable, snapshot, setAnnouncement]);
 
   // Whether the CURRENT design/values/imports are fully described by a plain
   // share URL, and which local-only files are missing if not. Recomputed on
@@ -402,7 +410,10 @@ export default function App() {
         />
       )}
       {showDesignDoc && design.doc && (
-        <DesignDocModal design={design} onClose={() => setShowDesignDoc(false)} />
+        // Keyed on design.id so a design switch while the modal is open remounts
+        // it fresh (idle -> loading state) instead of needing to reset state
+        // imperatively inside the fetch effect.
+        <DesignDocModal key={design.id} design={design} onClose={() => setShowDesignDoc(false)} />
       )}
       {showLicenses && (
         <LicensesModal extra={schema.licenses} onClose={() => setShowLicenses(false)} />

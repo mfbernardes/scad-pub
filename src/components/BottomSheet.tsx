@@ -159,18 +159,20 @@ export function BottomSheet({
     }
   }, []);
 
-  // All handlers below are stable (created once) — they read current
-  // detent/peekHeight via refs instead of closing over state. setDetent itself
-  // is a stable React setter, so none of them need it in their deps.
+  // All handlers below are stable — they read current detent/peekHeight via
+  // refs instead of closing over state. `setDetent` (== `onDetentChange`) is
+  // itself stable because the caller passes a `useCallback` with an empty
+  // dep array (see AppShell's `handleDetentChange`), so listing it below
+  // doesn't change these handlers' identity.
   const cycleDetent = useCallback(() => {
     const idx = DETENT_ORDER.indexOf(detentRef.current);
     setDetent(DETENT_ORDER[(idx + 1) % DETENT_ORDER.length]);
-  }, []);
+  }, [setDetent]);
 
   // Raise a collapsed (peek) sheet to half — used when a tab is tapped at peek.
   const expand = useCallback(() => {
     if (detentRef.current === "peek") setDetent("half");
-  }, []);
+  }, [setDetent]);
 
   // Tap cycles detents — but only when the pointer didn't drag (a drag already
   // snapped on pointer-up, and the browser still fires a click afterwards).
@@ -256,7 +258,7 @@ export function BottomSheet({
       onFollowRef.current?.(settledH, false);
     }
     setDetent(best);
-  }, [heightFor, cancelHeightFrame]);
+  }, [heightFor, cancelHeightFrame, setDetent]);
 
   const onHandleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "ArrowUp") {
@@ -271,7 +273,7 @@ export function BottomSheet({
     } else if (e.key === "Escape") {
       setDetent("peek");
     }
-  }, [cycleDetent]);
+  }, [cycleDetent, setDetent]);
 
   // Committed height for the current detent. Drag frames update the DOM
   // directly via applyLiveHeight and don't flow through this render path.
@@ -368,7 +370,7 @@ export function BottomSheet({
       returnFocusRef.current = null;
       if (prev && document.contains(prev)) prev.focus();
     };
-  }, [detent, onDetentChange]);
+  }, [detent, setDetent]);
 
   return (
     <>

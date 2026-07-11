@@ -39,8 +39,10 @@ export function DesignDocModal({
   useEffect(() => {
     if (!design.doc) return;
     let cancelled = false;
-    setText(null);
-    setError(false);
+    // No explicit reset here: the caller keys this component on `design.id`
+    // (see App.tsx), so a design change remounts it fresh with `text`/`error`
+    // already at their initial idle values rather than needing a synchronous
+    // reset inside the effect.
     fetch(assetUrl(design.doc))
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
