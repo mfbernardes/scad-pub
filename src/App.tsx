@@ -12,7 +12,14 @@ import {
   type Values,
 } from "./lib/presets";
 import { changedParams } from "./lib/paramDiff";
-import { readInitialState, persistState, buildShareUrl } from "./lib/urlState";
+import {
+  readInitialState,
+  persistState,
+  buildShareUrl,
+  parseHashState,
+  sessionStateEquals,
+  type SessionState,
+} from "./lib/urlState";
 import { computeShareability, shareabilityWarning } from "./lib/shareability";
 import { download, downloadBlob } from "./lib/download";
 import { shareUrl, shareFileOrFallback } from "./lib/share";
@@ -150,10 +157,84 @@ export default function App() {
     [designId, resetForDesign]
   );
 
+  // M4: the ONE place external URL state (a same-document hashchange, or an
+  // installed-app launch target queued via the Web App Launch Handler) is
+  // applied to React state — atomically, the same way a design switch is.
+  // Reuses handleDesignChange's own design/values/preset reset so the render
+  // pipeline's epoch still advances and a stale render can never land under
+  // the newly-applied design. When the design is unchanged (e.g. a launch
+  // that only carries new values/preset for the current design), still update
+  // values/preset without disturbing render-pipeline epoch/reset state that a
+  // full design switch would otherwise reset for no reason.
+  const applyExternalState = useCallback(
+    (state: SessionState) => {
+      const next = schema.designs.find((d) => d.id === state.designId);
+      if (!next) return;
+      if (next.id !== designId) {
+        setDesignId(next.id);
+        resetForDesign(next);
+      }
+      setValues(state.values);
+      setPresetSel(state.preset);
+      setUserPresets(listPresets(next.id));
+    },
+    [designId, resetForDesign]
+  );
+
   useEffect(() => {
     const t = setTimeout(() => persistState(design, values, presetSel), 300);
     return () => clearTimeout(t);
   }, [design, values, presetSel]);
+
+  // M4: consume external navigations that only change the URL hash — a
+  // same-document `hashchange` (e.g. a browser/OS "navigate to #d=..." that
+  // doesn't reload the document) and the Web App Launch Handler's queued
+  // target for an installed app opened via a manifest shortcut
+  // (`navigate-existing` — see scripts/lib/pwa-assets.mjs). Neither fires a
+  // full module reload, so without this the address bar/launch target would
+  // update while the mounted app's design/value/preset state stays put.
+  // `persistState` above writes via `history.replaceState`, which per spec
+  // never fires `hashchange`, so there's no feedback loop from our own
+  // writes; the equality check below is a defensive backstop against any
+  // navigation that happens to already match current state (a no-op, not a
+  // loop).
+  // Read imperatively inside the effect below via refs (not effect deps), so
+  // the hashchange/launchQueue subscription is set up once at mount rather
+  // than being torn down and re-added on every keystroke — the effect only
+  // needs the LATEST design/values/preset at the moment a hash actually
+  // arrives, the same "mirror the latest without retriggering" idiom used by
+  // autoRenderRef in useRenderPipeline.ts.
+  const currentSessionRef = useRef<SessionState>({ designId, values, preset: presetSel });
+  currentSessionRef.current = { designId, values, preset: presetSel };
+  const applyExternalStateRef = useRef(applyExternalState);
+  applyExternalStateRef.current = applyExternalState;
+
+  useEffect(() => {
+    const applyFromHash = (hash: string) => {
+      const state = parseHashState(schema, hash);
+      if (!state) return;
+      if (sessionStateEquals(currentSessionRef.current, state)) return;
+      applyExternalStateRef.current(state);
+    };
+
+    const onHashChange = () => applyFromHash(location.hash);
+    window.addEventListener("hashchange", onHashChange);
+
+    // Installed-app launches (manifest shortcuts, `launch_handler:
+    // navigate-existing`) queue their target URL here instead of navigating
+    // the document. Unsupported in most browsers today; a no-op when absent.
+    const launchQueue = (window as Window & { launchQueue?: LaunchQueue }).launchQueue;
+    launchQueue?.setConsumer((params) => {
+      if (!params.targetURL) return;
+      try {
+        applyFromHash(new URL(params.targetURL).hash);
+      } catch {
+        /* malformed launch target — ignore */
+      }
+    });
+
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   useEffect(() => {
     let active = true;

@@ -19,6 +19,12 @@ const VERSION = "__SW_VERSION__";
 const CACHE = `${NS}-shell-${VERSION}`;
 const SHELL_KEY = "app-shell";
 const SCOPE_URL = self.registration.scope;
+// M2: SHELL_KEY (the offline fallback response for every SPA navigation) must
+// only ever be refreshed from the canonical app entry — the scope root itself
+// (this build's start_url) — never from an arbitrary in-scope navigation (a
+// Markdown/SCAD/static URL visited directly). Otherwise a direct visit to a
+// non-app URL would silently replace the offline app fallback with that page.
+const SCOPE_PATH = new URL(SCOPE_URL).pathname;
 
 // The render worker's own binary cache handles these (warmed below); keep
 // them out of the shell cache so they aren't stored twice.
@@ -27,6 +33,10 @@ const BIN_RE = /\.(wasm|ttf|otf|ttc)$/i;
 function shouldCache(url) {
   const u = typeof url === "string" ? new URL(url) : url;
   return u.origin === self.location.origin && !BIN_RE.test(u.pathname);
+}
+
+function isAppEntry(url) {
+  return url.pathname === SCOPE_PATH;
 }
 
 // Build-volatile sources: the render worker deliberately fetches .scad sources
@@ -92,7 +102,8 @@ async function addPublicAssets(urls) {
 // cachedBuffer() uses, so nothing is stored twice. The cache is shared across
 // configs on one origin by design; match-before-fetch keeps warming idempotent
 // (and cheap when another config already downloaded the binaries). Best-effort
-// per asset: an aborted 10 MB fetch must not fail the whole install.
+// per asset: an aborted 10 MB fetch must not fail the whole install — the
+// render worker fetches on demand as a fallback.
 async function precacheBin(bin) {
   if (!bin || !bin.cache || !Array.isArray(bin.urls)) return;
   const cache = await caches.open(bin.cache);
@@ -111,6 +122,10 @@ async function precacheBin(bin) {
   );
 }
 
+// Best-effort supplementary asset: a failure here must not fail install — the
+// app shell is already usable offline once the essential shell assets (see
+// cacheEssential below) have landed, and the stale-while-revalidate fetch
+// handler will pick these up on first request anyway.
 async function cacheOne(cache, url) {
   if (!shouldCache(url)) return;
   try {
@@ -121,23 +136,47 @@ async function cacheOne(cache, url) {
   }
 }
 
+// M2: unlike cacheOne, a failure here PROPAGATES — these are the minimum set
+// of bytes (the app entry document plus everything it directly references)
+// needed to boot the app offline. Install must not succeed with a broken
+// shell: a missing script/stylesheet the entry HTML references would leave a
+// cached fallback that renders a blank/broken page. Callers surface the
+// rejection through event.waitUntil so the browser retries install later.
+async function cacheEssential(cache, url) {
+  if (!shouldCache(url)) return;
+  const res = await fetch(new Request(url, { cache: "reload" }));
+  if (!res.ok) throw new Error(`shell asset fetch failed: ${url} (${res.status})`);
+  await cache.put(url, res.clone());
+}
+
 async function precacheShell() {
   const cache = await caches.open(CACHE);
-  const urls = new Set();
-  try {
-    const res = await fetch(new Request(SCOPE_URL, { cache: "reload" }));
-    if (res.ok) {
-      await cache.put(SHELL_KEY, res.clone());
-      await cache.put(SCOPE_URL, res.clone());
-      addHtmlAssets(urls, await res.text());
-    }
-  } catch {
-    /* the runtime navigation handler may still populate the shell later */
-  }
-  await addBuildAssets(urls);
-  const bin = await addPublicAssets(urls);
+
+  // The atomic minimum shell: the app entry document itself, plus every
+  // asset it directly references (the hashed JS/CSS bundle needed to boot).
+  // A failure anywhere in here rejects the whole install — see cacheEssential.
+  const res = await fetch(new Request(SCOPE_URL, { cache: "reload" }));
+  if (!res.ok) throw new Error(`shell entry fetch failed: ${res.status}`);
+  // Clone before consuming the body with .text() below — a Response's body
+  // can only be read once.
+  await cache.put(SHELL_KEY, res.clone());
+  await cache.put(SCOPE_URL, res.clone());
+  const html = await res.text();
+
+  const essential = new Set();
+  addHtmlAssets(essential, html);
+  await Promise.all([...essential].map((url) => cacheEssential(cache, url)));
+
+  // Everything below is supplementary: additional lazy chunks, icons, presets,
+  // docs, and the warmed binary cache. Best-effort — the app is already
+  // bootable offline from the essential shell above, and the runtime fetch
+  // handler (stale-while-revalidate / network-first) fills these in on first
+  // request if install couldn't reach them.
+  const extra = new Set();
+  await addBuildAssets(extra);
+  const bin = await addPublicAssets(extra);
   await Promise.all([
-    ...[...urls].map((url) => cacheOne(cache, url)),
+    ...[...extra].map((url) => cacheOne(cache, url)),
     precacheBin(bin),
   ]);
 }
@@ -151,18 +190,30 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("install", (event) => {
+  // M2: precacheShell() now rejects on a missing/broken essential shell asset
+  // instead of swallowing the failure, so a broken deploy never "succeeds"
+  // into an unusable offline fallback — the browser retries install later
+  // with the previous worker (and its cache) still fully in control.
   event.waitUntil(precacheShell());
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter((k) => k.startsWith(`${NS}-shell-`) && k !== CACHE)
-          .map((k) => caches.delete(k))
-      );
+      // M2: only retire older shell caches once this build's shell is proven
+      // present in CACHE (install already guarantees this unless something
+      // evicted it between install and activate) — never delete the last good
+      // cache before its replacement is validated.
+      const cache = await caches.open(CACHE);
+      const validated = await cache.match(SHELL_KEY);
+      if (validated) {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter((k) => k.startsWith(`${NS}-shell-`) && k !== CACHE)
+            .map((k) => caches.delete(k))
+        );
+      }
       await self.clients.claim();
     })()
   );
@@ -184,7 +235,14 @@ self.addEventListener("fetch", (event) => {
         const cache = await caches.open(CACHE);
         try {
           const res = await fetch(req);
-          if (res.ok) cache.put(SHELL_KEY, res.clone());
+          // M2: only the canonical app entry may refresh SHELL_KEY — an
+          // in-scope Markdown/SCAD/static page must never overwrite the
+          // offline app fallback. Write is tied to the event's lifetime via
+          // waitUntil rather than the response, so it completes even though
+          // respondWith already resolved with `res`.
+          if (res.ok && isAppEntry(url)) {
+            event.waitUntil(cache.put(SHELL_KEY, res.clone()));
+          }
           return res;
         } catch {
           return (await cache.match(SHELL_KEY)) || Response.error();
@@ -202,7 +260,7 @@ self.addEventListener("fetch", (event) => {
         const cache = await caches.open(CACHE);
         try {
           const res = await fetch(req);
-          if (res.ok) cache.put(req, res.clone());
+          if (res.ok) event.waitUntil(cache.put(req, res.clone()));
           return res;
         } catch {
           return (await cache.match(req)) || Response.error();

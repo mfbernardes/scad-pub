@@ -35,9 +35,8 @@ globalThis.history = {
   },
 };
 
-const { readInitialState, persistState, buildShareUrl } = await import(
-  "../src/lib/urlState.ts"
-);
+const { readInitialState, persistState, buildShareUrl, parseHashState, sessionStateEquals } =
+  await import("../src/lib/urlState.ts");
 
 const param = (name, type, def) => ({
   name,
@@ -213,4 +212,58 @@ test("persistState survives a throttled history.replaceState (e.g. Safari)", () 
   } finally {
     globalThis.history.replaceState = original;
   }
+});
+
+// M4: App.tsx's external-navigation consumer (hashchange / launchQueue) needs
+// to parse an arbitrary hash string — not just `location.hash` at module init
+// — and needs a pure loop guard so applying a same-document hashchange (or a
+// queued installed-app launch target) doesn't spin. Both pieces are pure
+// helpers, tested directly here without mounting the App component.
+
+test("parseHashState parses an arbitrary hash string, not just location.hash", () => {
+  // Simulates a same-document `hashchange` event, which carries the new hash
+  // on `location.hash` — but also a launchQueue target, which carries it as
+  // part of a full target URL (`new URL(targetURL).hash`) that never touches
+  // `location` at all.
+  const hash = "#d=d&v=" + encodeURIComponent('{"text":"from-shortcut"}');
+  const r = parseHashState(schema, hash);
+  assert.equal(r.designId, "d");
+  assert.equal(r.values.text, "from-shortcut");
+
+  // Accepts both "#d=..." and a bare "d=..." (URL#hash already strips the
+  // leading "#" in some call sites).
+  const bare = parseHashState(schema, hash.slice(1));
+  assert.deepEqual(bare, r);
+
+  // As parsed out of a full launch target URL, e.g. "./#d=d".
+  const target = new URL("https://x/app/#d=d&p=bundled%3AFoo");
+  const fromLaunch = parseHashState(schema, target.hash);
+  assert.equal(fromLaunch.designId, "d");
+  assert.equal(fromLaunch.preset, "bundled:Foo");
+});
+
+test("parseHashState returns null for an empty hash or an unknown design", () => {
+  assert.equal(parseHashState(schema, ""), null);
+  assert.equal(parseHashState(schema, "#d=nonexistent"), null);
+});
+
+test("sessionStateEquals — the external-navigation loop guard", () => {
+  const a = { designId: "d", values: { ...DEFAULTS }, preset: "" };
+  const b = { designId: "d", values: { ...DEFAULTS }, preset: "" };
+  // Same shape, different object identity — still equal (a no-op navigation
+  // must not be treated as a state change).
+  assert.equal(sessionStateEquals(a, b), true);
+
+  assert.equal(
+    sessionStateEquals(a, { ...b, designId: "other" }),
+    false
+  );
+  assert.equal(
+    sessionStateEquals(a, { ...b, preset: "bundled:Foo" }),
+    false
+  );
+  assert.equal(
+    sessionStateEquals(a, { ...b, values: { ...DEFAULTS, n: 99 } }),
+    false
+  );
 });

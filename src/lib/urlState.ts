@@ -42,10 +42,15 @@ function findDesign(schema: Schema, id: string | null): Design | undefined {
   return id ? schema.designs.find((d) => d.id === id) : undefined;
 }
 
-function fromHash(schema: Schema): SessionState | null {
-  if (!location.hash) return null;
+// M4: shared by the initial-load reader below AND by App's external-navigation
+// consumer (hashchange / launchQueue) — both need to parse the same "d=/v=/p="
+// encoding from an arbitrary hash string, not just `location.hash` at module
+// init, so a same-document hash change or an installed-app launch target can
+// be applied after the app has already booted.
+export function parseHashState(schema: Schema, hash: string): SessionState | null {
+  if (!hash) return null;
   try {
-    const params = new URLSearchParams(location.hash.slice(1));
+    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
     const design = findDesign(schema, params.get("d"));
     if (!design) return null;
     const diff = params.get("v") ? JSON.parse(params.get("v")!) : {};
@@ -57,6 +62,27 @@ function fromHash(schema: Schema): SessionState | null {
   } catch {
     return null;
   }
+}
+
+function fromHash(schema: Schema): SessionState | null {
+  return parseHashState(schema, location.hash);
+}
+
+/**
+ * M4: is `next` a no-op relative to `current`? Used as the external-navigation
+ * loop guard in App.tsx — a `hashchange`/`launchQueue` target that already
+ * matches the live design/values/preset should not trigger a redundant
+ * design-switch reset. Pure so the guard is directly unit-testable without
+ * mounting React. Value equality is by JSON shape, not reference — both sides
+ * are always built by `defaultsFor`/`applyDiff` over the same param list, so
+ * key order (and therefore JSON.stringify output) is stable for equal values.
+ */
+export function sessionStateEquals(current: SessionState, next: SessionState): boolean {
+  return (
+    current.designId === next.designId &&
+    current.preset === next.preset &&
+    JSON.stringify(current.values) === JSON.stringify(next.values)
+  );
 }
 
 function fromStore(schema: Schema): SessionState | null {
