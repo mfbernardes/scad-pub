@@ -619,3 +619,76 @@ test("a respawned worker always gets a full resend, even if files are unchanged"
   await afterRespawn;
   runner.dispose();
 });
+
+// L1 (docs/architecture-review.md): worker OWNERSHIP moved from a render-time
+// `if (!runnerRef.current) runnerRef.current = new OpenSCADRunner(...)` in
+// useRenderPipeline.ts into a useEffect whose setup constructs the runner and
+// whose cleanup disposes it. React's dev-only Strict Mode replays a
+// component's effects as mount -> cleanup -> remount on the very first mount,
+// which — for that effect — means: construct runner A, dispose runner A,
+// construct runner B. These tests exercise that exact sequence directly
+// against OpenSCADRunner (no React/jsdom available in this suite) to prove
+// the invariants useRenderPipeline.ts's effect relies on: dispose is safe to
+// call more than once, and a construct/dispose/construct replay leaves
+// exactly one live (non-terminated) worker with the first one cleanly torn
+// down and any render in flight against it rejected rather than silently
+// dropped.
+
+test("dispose is idempotent", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+  assert.doesNotThrow(() => runner.dispose());
+  assert.equal(w.terminated, true);
+  // A second dispose (e.g. a StrictMode cleanup firing twice, or a caller
+  // disposing defensively) must not throw and must not touch an already-empty
+  // pending map or a worker that's already terminated.
+  assert.doesNotThrow(() => runner.dispose());
+});
+
+test("dispose rejects an in-flight render with SupersededError instead of leaving it hanging", async () => {
+  const runner = new OpenSCADRunner();
+  const p = runner.render({ design: "x", defines: {} });
+  const rejects = assert.rejects(p, (e) => e.name === "SupersededError");
+  runner.dispose();
+  await rejects;
+});
+
+test("a StrictMode-style construct/dispose/construct replay leaves exactly one live worker", async () => {
+  // Simulates the ownership effect's mount -> cleanup -> remount replay: the
+  // effect setup for the first pass constructs runner A (spawning worker w0);
+  // its cleanup (synchronous, before the second pass's setup runs) disposes
+  // A; the second pass's setup constructs runner B (spawning worker w1).
+  const runnerA = new OpenSCADRunner();
+  const w0 = newest();
+  assert.equal(FakeWorker.instances.length, 1, "constructing a runner spawns exactly one worker");
+
+  // An in-flight render started against A during the first pass (e.g. the
+  // initial-render effect, which runs after the ownership effect in the same
+  // pass) must not hang or silently resolve once A is torn down.
+  const inFlight = runnerA.render({ design: "x", defines: {} });
+  const inFlightRejects = assert.rejects(inFlight, (e) => e.name === "SupersededError");
+
+  runnerA.dispose();
+  assert.equal(w0.terminated, true, "the first runner's worker must be terminated by cleanup");
+  await inFlightRejects;
+
+  const runnerB = new OpenSCADRunner();
+  const w1 = newest();
+  assert.equal(
+    FakeWorker.instances.length,
+    2,
+    "the replay spawns a second worker for the surviving runner"
+  );
+  assert.notStrictEqual(w1, w0, "the surviving worker is a fresh instance, not a reused one");
+
+  // End state: exactly one LIVE worker (w1) — w0 is terminated, and no third
+  // worker was ever spawned (no leak).
+  assert.equal(w0.terminated, true);
+  assert.equal(w1.terminated, false);
+  assert.equal(FakeWorker.instances.length, 2);
+
+  const b = runnerB.render({ design: "y", defines: {} });
+  w1.emit(ok(w1.last.id));
+  assert.equal((await b).ok, true);
+  runnerB.dispose();
+});

@@ -127,10 +127,6 @@ export function useRenderPipeline({
 
   const runnerRef = useRef<RunnerLike | null>(null);
   const lastKeyRef = useRef("");
-  if (!runnerRef.current) {
-    const opts: RunnerCtorOptions = { onReady: () => setReady(true), ...runner };
-    runnerRef.current = createRunner ? createRunner(opts) : new OpenSCADRunner(opts);
-  }
 
   const defines = useMemo(() => {
     const d: Record<string, string> = {};
@@ -159,6 +155,14 @@ export function useRenderPipeline({
   const doRender = useCallback(
     async () => {
       if (renderKey === lastKeyRef.current) return;
+      // Guards a narrow window that should be unreachable in practice: the
+      // runner-ownership effect below always runs (and populates runnerRef)
+      // before any effect that can call doRender, because it's declared
+      // first — see that effect's comment. Kept as a defensive no-op rather
+      // than a non-null assertion so a future reordering fails safe instead
+      // of throwing mid-render.
+      const activeRunner = runnerRef.current;
+      if (!activeRunner) return;
       const startEpoch = epochRef.current;
       const startDesignId = design.id;
       const startRenderKey = renderKey;
@@ -166,7 +170,7 @@ export function useRenderPipeline({
       const startFileSig = fileSig;
       setRendering(true);
       try {
-        const r = await runnerRef.current!.render({
+        const r = await activeRunner.render({
           design: design.id,
           defines,
           userFiles,
@@ -237,6 +241,47 @@ export function useRenderPipeline({
     [design.id, design.params, defines, userFiles, renderKey, values, fileSig, heavyMs, setAnnouncement]
   );
 
+  // Worker ownership lives in an effect, not render (see
+  // docs/architecture-review.md L1): constructing OpenSCADRunner spawns a
+  // worker as a side effect, so that has to happen in an effect's setup, never
+  // inline during the render body — a render-time `if (!runnerRef.current)
+  // runnerRef.current = new OpenSCADRunner(...)` would spawn (and leak) a
+  // second worker under Strict Mode's extra dev render pass, since that pass
+  // is discarded without ever running effects/cleanup.
+  //
+  // Declared first among this hook's effects so it always runs (and populates
+  // runnerRef) before the auto-render and initial-render effects below, which
+  // call doRender and therefore need a live runner. React fires a component's
+  // effects in declaration order within one commit, so ordering here is what
+  // guarantees that — not a coincidence to preserve carelessly.
+  //
+  // Strict Mode's dev-only mount -> cleanup -> remount replay exercises this
+  // effect twice on the same component instance (refs like runnerRef and
+  // epochRef persist across the replay; only effects re-run): the first
+  // runner is constructed, then synchronously disposed by cleanup before
+  // remounting constructs a second one. Any render that got as far as calling
+  // `activeRunner.render(...)` against the first runner has its promise
+  // rejected with SupersededError by that dispose (OpenSCADRunner.dispose
+  // rejects all pending renders) — doRender's catch block treats that as
+  // "superseded, another render owns the spinner now" and returns without
+  // touching state, so epoch/snapshot state can't be corrupted by the replay.
+  // `initialRenderFiredRef` (a ref, so it also survives the replay) stops the
+  // initial-render effect from firing a second time on remount. End state
+  // after the replay: exactly one live worker (the second runner's), zero
+  // leaked ones.
+  useEffect(() => {
+    const opts: RunnerCtorOptions = { onReady: () => setReady(true), ...runner };
+    runnerRef.current = createRunner ? createRunner(opts) : new OpenSCADRunner(opts);
+    return () => {
+      runnerRef.current?.dispose();
+      runnerRef.current = null;
+    };
+    // Intentionally mount-only: matches the previous lazy-ref-init's semantics
+    // of constructing exactly one runner for the component's lifetime and
+    // never reconstructing it when `runner`/`createRunner` identities change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!autoRender) return;
     const t = setTimeout(doRender, 400);
@@ -258,8 +303,6 @@ export function useRenderPipeline({
     initialRenderFiredRef.current = true;
     doRender();
   }, [design.id, doRender]);
-
-  useEffect(() => () => runnerRef.current?.dispose(), []);
 
   // Imported-file changes alter render inputs the key can't fully capture in
   // the persisted tiers: drop both cache tiers, forget the last key so the
