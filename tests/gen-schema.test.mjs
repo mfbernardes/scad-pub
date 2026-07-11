@@ -5,10 +5,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,
+  mkdirSync,
   existsSync,
   readFileSync,
   writeFileSync,
   copyFileSync,
+  symlinkSync,
+  readdirSync,
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1291,4 +1294,284 @@ test("a real build records the bundled fonts' embedded families + writes fonts.c
   // fonts.conf is generated into the served tree, with the configured fallback.
   const conf = readFileSync(join(out, "public", "fonts", "fonts.conf"), "utf-8");
   assert.ok(conf.includes("<string>Liberation Sans</string>"));
+});
+
+// ── H5: symlink containment ────────────────────────────────────────────────
+// Symlinks are built at test runtime (fs.symlinkSync) into a fresh temp
+// source tree rather than committed, per the review's guidance.
+
+test("a file symlink resolving outside SOURCE fails the build", () => {
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-symlink-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  const outside = join(root, "outside");
+  mkdirSync(outside, { recursive: true });
+  writeFileSync(join(outside, "secret.scad"), "function secret() = 1;\n");
+  writeFileSync(join(src, "design.scad"), `/* [Main] */\nuse <linked.scad>\nx = 1;\n`);
+  symlinkSync(join(outside, "secret.scad"), join(src, "linked.scad"));
+  writeFileSync(
+    join(root, "c.config.json"),
+    JSON.stringify({ title: "T", source: "src", designs: [{ id: "design", label: "D" }] })
+  );
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(root, "c.config.json"),
+        outSchemaDir: join(root, "out", "schema"),
+        outScadDir: join(root, "out", "scad"),
+      }),
+    /escapes the source root/
+  );
+});
+
+test("a directory symlink resolving outside SOURCE fails the build", () => {
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-symlink-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "design.scad"), `/* [Main] */\nx = 1;\n`);
+  const outsideLib = join(root, "outside-lib");
+  mkdirSync(outsideLib, { recursive: true });
+  writeFileSync(join(outsideLib, "core.scad"), "function core() = 1;\n");
+  symlinkSync(outsideLib, join(src, "lib"), "dir");
+  writeFileSync(
+    join(root, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      assets: ["lib"],
+      designs: [{ id: "design", label: "D" }],
+    })
+  );
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(root, "c.config.json"),
+        outSchemaDir: join(root, "out", "schema"),
+        outScadDir: join(root, "out", "scad"),
+      }),
+    /escapes the source root/
+  );
+});
+
+test("in-root symlinks (file and directory) work, mounted at their lexical path", () => {
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-symlink-"));
+  const src = join(root, "src");
+  mkdirSync(join(src, "real"), { recursive: true });
+  writeFileSync(join(src, "real", "util.scad"), "function util() = 42;\n");
+  writeFileSync(join(src, "design.scad"), `/* [Main] */\nx = 1;\n`);
+  // A directory symlink under SOURCE, resolving to another directory still
+  // under SOURCE.
+  symlinkSync(join(src, "real"), join(src, "alias"), "dir");
+  // A file symlink under SOURCE, resolving to a file still under SOURCE.
+  symlinkSync(join(src, "real", "util.scad"), join(src, "shortcut.scad"));
+  writeFileSync(
+    join(root, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      assets: ["alias", "shortcut.scad"],
+      designs: [{ id: "design", label: "D" }],
+    })
+  );
+  const out = join(root, "out");
+  const schema = generate({
+    configPath: join(root, "c.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "scad"),
+  });
+  // Destinations mirror the symlink's own (lexical) location, not the
+  // resolved target's location.
+  assert.deepEqual(schema.assets, ["alias/util.scad", "shortcut.scad"]);
+  assert.equal(
+    readFileSync(join(out, "scad", "alias", "util.scad"), "utf-8"),
+    "function util() = 42;\n"
+  );
+  assert.equal(
+    readFileSync(join(out, "scad", "shortcut.scad"), "utf-8"),
+    "function util() = 42;\n"
+  );
+});
+
+test("a symlink cycle through a directory's own descendant fails cleanly", () => {
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-symlink-"));
+  const src = join(root, "src");
+  mkdirSync(join(src, "a"), { recursive: true });
+  writeFileSync(join(src, "a", "f.scad"), "function f() = 1;\n");
+  writeFileSync(join(src, "design.scad"), `/* [Main] */\nx = 1;\n`);
+  // 'loop' inside 'a' points back at 'a' itself: walking it never terminates
+  // without cycle detection.
+  symlinkSync(join(src, "a"), join(src, "a", "loop"), "dir");
+  writeFileSync(
+    join(root, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      assets: ["a"],
+      designs: [{ id: "design", label: "D" }],
+    })
+  );
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(root, "c.config.json"),
+        outSchemaDir: join(root, "out", "schema"),
+        outScadDir: join(root, "out", "scad"),
+      }),
+    /symlink cycle/
+  );
+});
+
+test("a symlink pointing at itself (ELOOP) fails cleanly during directory traversal", () => {
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-symlink-"));
+  const src = join(root, "src");
+  mkdirSync(join(src, "a"), { recursive: true });
+  writeFileSync(join(src, "design.scad"), `/* [Main] */\nx = 1;\n`);
+  // A relative symlink named 'sub' whose target is the literal string 'sub'
+  // — resolves to itself, so realpath() must hit ELOOP rather than hang.
+  symlinkSync("sub", join(src, "a", "sub"));
+  writeFileSync(
+    join(root, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      assets: ["a"],
+      designs: [{ id: "design", label: "D" }],
+    })
+  );
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(root, "c.config.json"),
+        outSchemaDir: join(root, "out", "schema"),
+        outScadDir: join(root, "out", "scad"),
+      }),
+    /symlink cycle/
+  );
+});
+
+// ── H6: destination-ownership collisions ────────────────────────────────────
+
+test("extraCss colliding with a design's own output name fails, naming both owners", () => {
+  assert.throws(
+    () => run("widget-collide-extracss.config.json"),
+    /generated output collision[\s\S]*already written by: source file 'widget\.scad'[\s\S]*also requested by:\s+extraCss/
+  );
+});
+
+test("two `fonts` entries sharing a basename from different directories collide", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(FIXTURES, "widget-font-collide.config.json"),
+        outSchemaDir: join(out, "schema"),
+        outScadDir: join(out, "public", "scad"),
+        outPublicDir: join(out, "public"),
+      }),
+    /generated output collision[\s\S]*fonts-a\/Dup\.ttf[\s\S]*fonts-b\/Dup\.ttf/
+  );
+});
+
+// ── H6/M8: a failed generation leaves the previous output intact ───────────
+
+test("a failed generation leaves outScadDir's previous complete output intact", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const outScadDir = join(out, "public", "scad");
+  const opts = {
+    outSchemaDir: join(out, "schema"),
+    outScadDir,
+    outPublicDir: join(out, "public"),
+  };
+  generate({ ...opts, configPath: join(FIXTURES, "widget.config.json") });
+  const before = readdirSync(outScadDir).sort();
+  const beforeWidget = readFileSync(join(outScadDir, "widget.scad"));
+  assert.throws(
+    () => generate({ ...opts, configPath: join(FIXTURES, "widget-missingdep.config.json") }),
+    /dependency/
+  );
+  // Unchanged: neither wiped, nor partially repopulated with the failed
+  // config's (partial) output.
+  assert.deepEqual(readdirSync(outScadDir).sort(), before);
+  assert.deepEqual(readFileSync(join(outScadDir, "widget.scad")), beforeWidget);
+  assert.ok(!existsSync(join(outScadDir, "missingdep-design.scad")));
+});
+
+// ── M8: generated PWA/font output lifecycle ────────────────────────────────
+
+test("removing a font/screenshot from config leaves no orphan generated file; manifest matches disk", () => {
+  const REAL_TTF = join(HERE, "..", "public", "fonts", "LiberationSans-Regular.ttf");
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-lifecycle-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\nx = 1;\n`);
+  copyFileSync(REAL_TTF, join(src, "Face.ttf"));
+  writeFileSync(join(root, "shot.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+  const outPublicDir = join(root, "public");
+  const base = {
+    outSchemaDir: join(root, "schema"),
+    outScadDir: join(outPublicDir, "scad"),
+    outPublicDir,
+  };
+
+  const cfgWith = join(root, "with.config.json");
+  writeFileSync(
+    cfgWith,
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      fonts: ["Face.ttf"],
+      screenshots: [{ src: "shot.png", sizes: "1x1", form_factor: "narrow" }],
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+  generate({ ...base, configPath: cfgWith });
+  const fontDest = join(outPublicDir, "fonts", "Face.ttf");
+  const shotDest = join(outPublicDir, "shot.png");
+  assert.ok(existsSync(fontDest));
+  assert.ok(existsSync(shotDest));
+  const manifestPath = join(outPublicDir, ".gen-manifest.json");
+  const manifest1 = JSON.parse(readFileSync(manifestPath, "utf-8"));
+  assert.ok(manifest1.includes(fontDest));
+  assert.ok(manifest1.includes(shotDest));
+
+  // Reconfigure without the font/screenshot — as if the config entry was
+  // removed or renamed.
+  const cfgWithout = join(root, "without.config.json");
+  writeFileSync(
+    cfgWithout,
+    JSON.stringify({ title: "T", source: "src", designs: [{ id: "d", label: "D" }] })
+  );
+  generate({ ...base, configPath: cfgWithout });
+  assert.ok(!existsSync(fontDest), "stale generated font copy should be removed");
+  assert.ok(!existsSync(shotDest), "stale screenshot should be removed");
+
+  // Final manifest matches disk: every recorded path still exists, and
+  // nothing recorded is stale.
+  const manifest2 = JSON.parse(readFileSync(manifestPath, "utf-8"));
+  assert.ok(!manifest2.includes(fontDest));
+  assert.ok(!manifest2.includes(shotDest));
+  for (const p of manifest2) assert.ok(existsSync(p), `manifest entry missing on disk: ${p}`);
+});
+
+test("a malformed configured icon fails the build instead of shipping a missing/mislabeled PNG", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const outPublicDir = join(out, "public");
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(FIXTURES, "widget-badicon.config.json"),
+        outSchemaDir: join(out, "schema"),
+        outScadDir: join(outPublicDir, "scad"),
+        outPublicDir,
+      }),
+    /icon rasterization failed/
+  );
+  // No PNG was advertised or left mislabeled: none of the sizes exist, and
+  // there's no precache/manifest to reference them either way.
+  for (const f of ["icon-192.png", "icon-512.png", "icon-512-maskable.png", "icon-180.png"]) {
+    assert.ok(!existsSync(join(outPublicDir, f)), `${f} should not exist after a failed rasterization`);
+  }
+  assert.ok(!existsSync(join(outPublicDir, "manifest.webmanifest")));
+  assert.ok(!existsSync(join(outPublicDir, "precache-manifest.json")));
 });
