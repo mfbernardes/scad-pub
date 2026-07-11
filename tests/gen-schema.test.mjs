@@ -860,6 +860,84 @@ test("renderHash folds in the renderer source so flag changes invalidate it", ()
   rmSync(base, { recursive: true, force: true });
 });
 
+test("renderHash folds in the design routing map, so swapping two designs' files invalidates it", () => {
+  // H3: two configs mounting the SAME set of .scad files (widget.scad,
+  // collapsible.scad) but routing the design ids to opposite files. The
+  // scadFiles set is identical either way, so only the routing map itself can
+  // account for a hash difference — proving id->file is a hashed input, not
+  // just the file set.
+  const gen = (aFile, bFile) => {
+    const root = mkdtempSync(join(tmpdir(), "gen-schema-"));
+    writeFileSync(
+      join(root, "c.config.json"),
+      JSON.stringify({
+        title: "T",
+        source: join(FIXTURES, "src"),
+        designs: [
+          { id: "a", label: "A", file: aFile },
+          { id: "b", label: "B", file: bFile },
+        ],
+      })
+    );
+    const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+    return generate({
+      configPath: join(root, "c.config.json"),
+      outSchemaDir: join(out, "schema"),
+      outScadDir: join(out, "scad"),
+    });
+  };
+  const straight = gen("widget.scad", "collapsible.scad");
+  const swapped = gen("collapsible.scad", "widget.scad");
+  // Same mounted file set either way.
+  assert.deepEqual([...straight.designs.map((d) => d.file)].sort(), [...swapped.designs.map((d) => d.file)].sort());
+  assert.notEqual(straight.renderHash, swapped.renderHash);
+});
+
+test("renderHash folds in the openscad.js glue bytes, so a corrupted/updated glue file invalidates it (M12)", () => {
+  const gen = (glueContent) => {
+    const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+    mkdirSync(join(out, "public", "wasm"), { recursive: true });
+    writeFileSync(join(out, "public", "wasm", "openscad.js"), glueContent);
+    return generate({
+      configPath: join(FIXTURES, "widget.config.json"),
+      outSchemaDir: join(out, "schema"),
+      outScadDir: join(out, "public", "scad"),
+      outPublicDir: join(out, "public"),
+    }).renderHash;
+  };
+  assert.notEqual(gen("export default function A() {}\n"), gen("export default function B() {}\n"));
+});
+
+test("renderHash is unaffected by presentation-only config fields (title/help/notices/theme/ui labels)", () => {
+  // H3: labels, help prose, notices, theme colours and UI copy must not
+  // invalidate persisted geometry — only the render contract (routing,
+  // sources, features, format, fonts, renderer code, binaries) should.
+  const base = {
+    source: "src",
+    designs: [{ id: "widget", label: "Widget" }],
+  };
+  const gen = (overrides) => {
+    const root = mkdtempSync(join(tmpdir(), "gen-schema-"));
+    writeFileSync(join(root, "c.config.json"), JSON.stringify({ ...base, source: join(FIXTURES, "src"), ...overrides }));
+    const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+    return generate({
+      configPath: join(root, "c.config.json"),
+      outSchemaDir: join(out, "schema"),
+      outScadDir: join(out, "scad"),
+    }).renderHash;
+  };
+  const plain = gen({ title: "Plain Title" });
+  const dressedUp = gen({
+    title: "A Whole Different Title",
+    themeColor: "#123456",
+    help: "<p>Different help copy entirely.</p>",
+    notices: [{ marker: "note", label: "A note", color: "#3b82f6" }],
+    ui: { presetsLabel: "Styles", parametersLabel: "Options" },
+    designs: [{ id: "widget", label: "A Very Different Label" }],
+  });
+  assert.equal(plain, dressedUp);
+});
+
 test("firstSentence does not break on decimals or abbreviations", () => {
   assert.equal(firstSentence("Depth (mm). Must be >= 0.4 mm."), "Depth (mm).");
   assert.equal(
@@ -1238,6 +1316,130 @@ test("@svg marks a string field for the wizard and captures the layers binding",
   // No annotation -> no svg / filledBy fields.
   assert.equal(byName.note.svg, undefined);
   assert.equal(byName.note.filledBy, undefined);
+});
+
+// ── M9: annotation grammar + cross-parameter validation ────────────────────
+
+test("an unknown annotation keyword (typo) fails with file and line", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @shwoIf foo\nbar = 1;\n`),
+    /f\.scad:2: unknown annotation '@shwoIf'/
+  );
+});
+
+test("@showIf rejects an unsupported operator at generate time (not a silent always-hidden falsy lookup)", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @showIf bar > 0\nfoo = 1;\n`),
+    /f\.scad:3: unsupported @showIf clause 'bar > 0'/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @showIf bar ~= 0\nfoo = 1;\n`),
+    /f\.scad:3: unsupported @showIf clause/
+  );
+});
+
+test("@showIf referencing an unknown parameter fails with file and line", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @showIf nope\nfoo = 1;\n`),
+    /f\.scad:2: @showIf on 'foo' references unknown parameter 'nope'/
+  );
+});
+
+test("an unknown @svg option fails instead of being accepted as a bare annotation", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @svg foo=bar\nsvg_file = "a.svg";\n`),
+    /f\.scad:2: unknown @svg option 'foo=bar'/
+  );
+});
+
+test("a malformed @filledBy (no target) fails with file and line", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @filledBy\nlayers_param = "";\n`),
+    /f\.scad:2: malformed @filledBy annotation/
+  );
+});
+
+test("@svg layers= referencing a missing parameter fails with file and line", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @svg layers=missing\nsvg_file = "a.svg";\n`),
+    /f\.scad:2: @svg layers=missing on 'svg_file' references unknown parameter 'missing'/
+  );
+});
+
+test("@svg layers= referencing a wrong-typed (non-string) parameter fails", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @svg layers=count\nsvg_file = "a.svg";\ncount = 5;\n`),
+    /f\.scad:2: @svg layers=count on 'svg_file' must reference a string parameter \(got 'count' of type number\)/
+  );
+});
+
+test("@svg layers= missing its reciprocal @filledBy fails", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @svg layers=parts\nsvg_file = "a.svg";\nparts = "";\n`),
+    /f\.scad:2: @svg layers=parts on 'svg_file' has no reciprocal '\/\/ @filledBy svg_file' on 'parts'/
+  );
+});
+
+test("@filledBy referencing a parameter with no @svg annotation fails", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @filledBy plain\nparts = "";\nplain = "x";\n`),
+    /f\.scad:2: @filledBy plain on 'parts' references 'plain', which has no '@svg' annotation/
+  );
+});
+
+test("two @svg fields duplicating the same layers= target fail with file and line", () => {
+  assert.throws(
+    () =>
+      paramsOf(
+        `/* [S] */\n` +
+          `// @svg layers=shared\n` +
+          `a_file = "a.svg";\n` +
+          `// @svg layers=shared\n` +
+          `b_file = "b.svg";\n` +
+          `// @filledBy a_file\n` +
+          `shared = "";\n`
+      ),
+    /f\.scad:4: @svg layers=shared on 'b_file' duplicates the binding already declared by 'a_file'/
+  );
+});
+
+test("a self-referential @svg layers= binding is rejected as cyclic", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @svg layers=svg_file\nsvg_file = "a.svg";\n`),
+    /f\.scad:2: @svg layers=svg_file on 'svg_file' is cyclic: it targets itself/
+  );
+});
+
+test("a self-referential @filledBy binding is rejected as cyclic", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @filledBy loop\nloop = "";\n`),
+    /f\.scad:2: @filledBy loop on 'loop' is cyclic: it targets itself/
+  );
+});
+
+test("@svg / @filledBy on a non-string parameter fails instead of silently dropping the annotation", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @svg\ncount = 5;\n`),
+    /f\.scad:2: @svg on 'count' must be a string parameter \(got type number\)/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @filledBy svg_file\ncount = 5;\n// @svg layers=count\nsvg_file = "a.svg";\n`),
+    /f\.scad:2: @filledBy on 'count' must be a string parameter \(got type number\)/
+  );
+});
+
+test("the well-formed @svg/@filledBy fixture (existing test above) still passes full annotation validation", () => {
+  // Sanity: the reciprocal-binding validator doesn't reject the documented,
+  // correctly-paired usage from docs/annotations.md.
+  assert.doesNotThrow(() =>
+    paramsOf(
+      `/* [Source] */\n` +
+        `// @svg layers=svg_layers\n` +
+        `svg_file = "plan.svg";\n` +
+        `// @filledBy svg_file\n` +
+        `svg_layers = "";\n`
+    )
+  );
 });
 
 test("parseFontFallback accepts a trimmed string or null; rejects empty", () => {

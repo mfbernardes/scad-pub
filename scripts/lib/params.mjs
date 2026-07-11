@@ -53,6 +53,149 @@ const SVG_LAYERS_RE = /^layers=([A-Za-z_][A-Za-z0-9_]*)$/i;
 // the named `@svg` field, so the UI can render it demoted. Invisible to OpenSCAD.
 const FILLEDBY_RE = /^@filledBy\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i;
 
+// ── M9: annotation grammar + cross-parameter validation ────────────────────
+// A doc-comment line starting with `@word` is treated as an annotation
+// attempt. Each recognised keyword below has an explicit grammar (its *_RE
+// above); anything that starts with a recognised keyword but doesn't match
+// that grammar — or starts with an unrecognised `@word` at all — fails the
+// build with the file and line, instead of silently degrading to plain doc
+// prose (a typo'd `@shwoIf` used to just become part of the help text).
+const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "info", "svg", "filledby"]);
+const ANNOTATION_WORD_RE = /^@([A-Za-z-]+)\b/;
+
+// `@showIf` clause shapes accepted at both generate time (here) and runtime
+// (src/lib/visibility.ts mirrors this grammar defensively, in case a legacy
+// cached schema.json ever bypasses this validation). A relational operator
+// (`>`, `>=`, ...) or any other shape is rejected outright rather than
+// silently read as an unknown, always-falsy lookup.
+const SHOWIF_BARE_RE = /^!?[A-Za-z_]\w*$/;
+const SHOWIF_CMP_RE =
+  /^[A-Za-z_]\w*\s*(?:==|!=)\s*(?:"[^"]*"|'[^']*'|-?\d+(?:\.\d+)?|true|false|[A-Za-z_]\w*)$/;
+
+function fail(absPath, line, msg) {
+  throw new Error(`gen-schema: ${absPath}:${line}: ${msg}`);
+}
+
+// Validates a full `@showIf` expression's grammar (an OR of ANDs of the
+// clause shapes above); throws with file/line on the first offending clause.
+// Doesn't check that referenced parameter names exist — that needs the full
+// parameter list, so it's checked later by validateAnnotations.
+function validateShowIfGrammar(expr, absPath, line) {
+  for (const term of expr.split("||")) {
+    for (const raw of term.split("&&")) {
+      const c = raw.trim();
+      if (c === "") continue; // an empty clause (e.g. a trailing `||`) is tolerated (always truthy)
+      if (!SHOWIF_BARE_RE.test(c) && !SHOWIF_CMP_RE.test(c))
+        fail(
+          absPath,
+          line,
+          `unsupported @showIf clause '${c}' in '${expr}' ` +
+            `(supported: name, !name, name==value, name!=value)`
+        );
+    }
+  }
+}
+
+// The set of parameter names referenced by a (grammar-valid) @showIf expression.
+function showIfIdentifiers(expr) {
+  const names = new Set();
+  for (const term of expr.split("||")) {
+    for (const raw of term.split("&&")) {
+      const c = raw.trim();
+      if (!c) continue;
+      const bare = c.match(/^!?([A-Za-z_]\w*)$/);
+      if (bare) {
+        names.add(bare[1]);
+        continue;
+      }
+      const cmp = c.match(/^([A-Za-z_]\w*)\s*(?:==|!=)/);
+      if (cmp) names.add(cmp[1]);
+    }
+  }
+  return names;
+}
+
+// Cross-parameter validation, run once a design's full parameter list is
+// known: @showIf targets must exist; @svg's `layers=` target and @filledBy's
+// target must exist, be type-compatible, be reciprocal (a layers target must
+// be marked `@filledBy` back at its owner, and vice versa), and must not be
+// duplicated or cyclic (self-referential).
+function validateAnnotations(params, lineInfo, absPath) {
+  const byName = new Map(params.map((p) => [p.name, p]));
+  const usedLayerTargets = new Map(); // layers target name -> owning @svg param name
+  const usedFilledByTargets = new Map(); // @filledBy target (svg param) name -> owning param name
+
+  for (const p of params) {
+    if (p.showIf) {
+      const line = lineInfo.showIf.get(p.name);
+      for (const name of showIfIdentifiers(p.showIf)) {
+        if (!byName.has(name))
+          fail(absPath, line, `@showIf on '${p.name}' references unknown parameter '${name}'`);
+      }
+    }
+
+    if (p.svg && p.svg.layers != null) {
+      const line = lineInfo.svg.get(p.name);
+      const target = p.svg.layers;
+      if (target === p.name)
+        fail(absPath, line, `@svg layers=${target} on '${p.name}' is cyclic: it targets itself`);
+      const targetParam = byName.get(target);
+      if (!targetParam)
+        fail(absPath, line, `@svg layers=${target} on '${p.name}' references unknown parameter '${target}'`);
+      if (targetParam.type !== "string")
+        fail(
+          absPath,
+          line,
+          `@svg layers=${target} on '${p.name}' must reference a string parameter (got '${target}' of type ${targetParam.type})`
+        );
+      if (usedLayerTargets.has(target))
+        fail(
+          absPath,
+          line,
+          `@svg layers=${target} on '${p.name}' duplicates the binding already declared by '${usedLayerTargets.get(target)}'`
+        );
+      usedLayerTargets.set(target, p.name);
+      if (targetParam.filledBy !== p.name)
+        fail(
+          absPath,
+          line,
+          `@svg layers=${target} on '${p.name}' has no reciprocal '// @filledBy ${p.name}' on '${target}'`
+        );
+    }
+
+    if (p.filledBy) {
+      const line = lineInfo.filledBy.get(p.name);
+      const target = p.filledBy;
+      if (target === p.name)
+        fail(absPath, line, `@filledBy ${target} on '${p.name}' is cyclic: it targets itself`);
+      const targetParam = byName.get(target);
+      if (!targetParam)
+        fail(absPath, line, `@filledBy ${target} on '${p.name}' references unknown parameter '${target}'`);
+      else {
+        if (!targetParam.svg)
+          fail(
+            absPath,
+            line,
+            `@filledBy ${target} on '${p.name}' references '${target}', which has no '@svg' annotation`
+          );
+        if (usedFilledByTargets.has(target))
+          fail(
+            absPath,
+            line,
+            `@filledBy ${target} on '${p.name}' duplicates the binding already declared by '${usedFilledByTargets.get(target)}'`
+          );
+        usedFilledByTargets.set(target, p.name);
+        if (targetParam.svg.layers !== p.name)
+          fail(
+            absPath,
+            line,
+            `@filledBy ${target} on '${p.name}' has no reciprocal '// @svg layers=${p.name}' on '${target}'`
+          );
+      }
+    }
+  }
+}
+
 // The concise label is the first sentence of the doc block; the rest is help.
 // Split on sentence-ending .!? + whitespace + a capital/opening paren, so we
 // don't break on decimals (1.5 mm) or lowercase abbreviations (e.g., i.e.).
@@ -148,13 +291,16 @@ export function parseParams(absPath) {
   let section = null;
   let pendingDoc = [];
   let pendingShowIf = null;
+  let pendingShowIfLine = 0;
   let pendingFont = false;
   // Set by an `// @info [Label | unit]` line; consumed by the next parameter.
   let pendingInfo = null;
   // Set by an `// @svg [layers=<param>]` line; consumed by the next parameter.
   let pendingSvg = null;
+  let pendingSvgLine = 0;
   // Set by an `// @filledBy <param>` line; consumed by the next parameter.
   let pendingFilledBy = null;
+  let pendingFilledByLine = 0;
   // Set by a `// @collapsed` line; consumed by the next section header.
   let pendingSectionCollapsed = false;
   const params = [];
@@ -164,6 +310,9 @@ export function parseParams(absPath) {
   // wins. Populated regardless of section, so a header comment above the first
   // `/* [Section] */` is honoured.
   const meta = { description: null, icon: null, doc: null };
+  // The line each param's @showIf/@svg/@filledBy annotation was declared on,
+  // keyed by param name — fed into validateAnnotations below for diagnostics.
+  const lineInfo = { showIf: new Map(), svg: new Map(), filledBy: new Map() };
   const reset = () => {
     pendingDoc = [];
     pendingShowIf = null;
@@ -173,7 +322,9 @@ export function parseParams(absPath) {
     pendingFilledBy = null;
     pendingSectionCollapsed = false;
   };
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineNo = i + 1;
     // A section-collapse marker can precede the header even before the first
     // section, so handle it before the null-section guard below.
     if (COLLAPSE_RE.test(line)) {
@@ -231,33 +382,85 @@ export function parseParams(absPath) {
       if (pendingInfo) p.info = pendingInfo;
       // Mark a string SVG field for the in-app wizard (see `// @svg`), and a
       // wizard-populated target for demoted rendering (see `// @filledBy`).
-      if (pendingSvg && p.type === "string") p.svg = pendingSvg;
-      if (pendingFilledBy) p.filledBy = pendingFilledBy;
+      // M9: a type mismatch (the annotation on a non-string param) fails the
+      // build instead of silently dropping the annotation.
+      if (pendingSvg) {
+        if (p.type !== "string")
+          fail(absPath, pendingSvgLine, `@svg on '${name}' must be a string parameter (got type ${p.type})`);
+        p.svg = pendingSvg;
+        lineInfo.svg.set(name, pendingSvgLine);
+      }
+      if (pendingFilledBy) {
+        if (p.type !== "string")
+          fail(
+            absPath,
+            pendingFilledByLine,
+            `@filledBy on '${name}' must be a string parameter (got type ${p.type})`
+          );
+        p.filledBy = pendingFilledBy;
+        lineInfo.filledBy.set(name, pendingFilledByLine);
+      }
+      if (pendingShowIf) lineInfo.showIf.set(name, pendingShowIfLine);
       params.push(p);
       reset();
       continue;
     }
     const dm = line.match(DOC_RE);
     if (dm && line.trim().startsWith("//")) {
+      const content = dm[1].trim();
       // Pull `@showIf <expr>` out of the doc block so it doesn't pollute the
       // label/help; it drives conditional visibility in the UI instead.
-      const showIf = dm[1].trim().match(SHOWIF_RE);
-      const info = dm[1].trim().match(INFO_RE);
-      const svg = dm[1].trim().match(SVG_ANNOT_RE);
-      const filledBy = dm[1].trim().match(FILLEDBY_RE);
-      if (showIf) pendingShowIf = showIf[1].trim();
-      else if (FONT_ANNOT_RE.test(dm[1].trim())) pendingFont = true;
+      const showIf = content.match(SHOWIF_RE);
+      const info = content.match(INFO_RE);
+      const svg = content.match(SVG_ANNOT_RE);
+      const filledBy = content.match(FILLEDBY_RE);
+      const word = content.match(ANNOTATION_WORD_RE);
+      if (showIf) {
+        const expr = showIf[1].trim();
+        validateShowIfGrammar(expr, absPath, lineNo);
+        pendingShowIf = expr;
+        pendingShowIfLine = lineNo;
+      } else if (FONT_ANNOT_RE.test(content)) pendingFont = true;
       else if (info) {
         // `@info`, `@info Label`, or `@info Label | unit` — split on a single
         // pipe; empty parts become null (label falls back to the param's own
         // description in the UI).
         const [label, unit] = info[1].split("|").map((s) => s.trim());
         pendingInfo = { label: label || null, unit: unit || null };
-      } else if (filledBy) pendingFilledBy = filledBy[1];
-      else if (svg) {
+      } else if (filledBy) {
+        pendingFilledBy = filledBy[1];
+        pendingFilledByLine = lineNo;
+      } else if (svg) {
         // `@svg` or `@svg layers=<param>` — capture the optional layers binding.
-        const layersMatch = svg[1].trim().match(SVG_LAYERS_RE);
+        // M9: any other trailing text is an unknown @svg option, not a bare
+        // annotation — reject it instead of silently ignoring it.
+        const rest = svg[1].trim();
+        const layersMatch = rest.match(SVG_LAYERS_RE);
+        if (rest !== "" && !layersMatch)
+          fail(
+            absPath,
+            lineNo,
+            `unknown @svg option '${rest}' (expected bare '@svg' or '@svg layers=<param>')`
+          );
         pendingSvg = { layers: layersMatch ? layersMatch[1] : null };
+        pendingSvgLine = lineNo;
+      } else if (word) {
+        // A `@word` that isn't one of the annotations above: either a
+        // recognised keyword used with the wrong shape (e.g. bare `@filledBy`
+        // with no target), or a typo'd/unknown directive (`@shwoIf`). Both
+        // fail the build rather than silently becoming doc prose.
+        const keyword = word[1].toLowerCase();
+        if (KNOWN_ANNOTATIONS.has(keyword))
+          fail(
+            absPath,
+            lineNo,
+            `malformed @${word[1]} annotation: '${content}'`
+          );
+        fail(
+          absPath,
+          lineNo,
+          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @info, @svg, @filledBy, @collapsed, @description, @icon, @doc)`
+        );
       } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {
       // keep doc across blank lines
@@ -265,5 +468,6 @@ export function parseParams(absPath) {
       reset();
     }
   }
+  validateAnnotations(params, lineInfo, absPath);
   return { params, sections, collapsedSections, meta };
 }

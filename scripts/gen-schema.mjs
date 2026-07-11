@@ -35,6 +35,7 @@ import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "
 import { humanize, parseParams } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
 import { createDestinationRegistry, reconcileGenerated } from "./lib/destinations.mjs";
+import { resolveWorkerDependencyClosure } from "./lib/worker-deps.mjs";
 import { generatePwaAssets } from "./lib/pwa-assets.mjs";
 import {
   COLOR_VALUE_RE,
@@ -666,6 +667,10 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     features: FEATURES,
     format: FORMAT,
     fonts: FONTS,
+    // H3: the id -> file routing map is part of the render contract — two
+    // designs swapping files preserves the mounted file set but changes which
+    // model a cache keyed by design id should render.
+    designRouting: designs.map((d) => ({ id: d.id, file: d.file })),
     rendererFiles,
     outPublicDir,
   });
@@ -735,9 +740,12 @@ function main() {
     outSchemaDir: join(WEB, "src", "generated"),
     outScadDir: join(WEB, "public", "scad"),
     outPublicDir: join(WEB, "public"),
-    // The renderer's source fixes the OpenSCAD CLI contract (flags, mounting),
-    // so its bytes belong in renderHash — a worker change invalidates the cache.
-    rendererFiles: [join(WEB, "src", "openscad", "worker.ts")],
+    // H3: the renderer's source fixes the OpenSCAD CLI contract (flags,
+    // mounting), so its bytes belong in renderHash — a worker change
+    // invalidates the cache. Derived (not hand-listed) as worker.ts's full
+    // local-import closure, so a new helper worker.ts starts importing is
+    // automatically covered — see scripts/lib/worker-deps.mjs.
+    rendererFiles: resolveWorkerDependencyClosure(join(WEB, "src", "openscad", "worker.ts")),
   });
   console.log(
     `gen-schema: ${schema.designs.length} designs, ${schema.assets.length} ` +
