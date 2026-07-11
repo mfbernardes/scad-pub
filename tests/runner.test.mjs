@@ -43,7 +43,9 @@ class FakeWorker {
 }
 globalThis.Worker = FakeWorker;
 
-const { OpenSCADRunner, SupersededError } = await import("../src/openscad/runner.ts");
+const { OpenSCADRunner, SupersededError, MountCollisionError, fileSignature } = await import(
+  "../src/openscad/runner.ts"
+);
 
 const ok = (id, bytes = 0) => ({
   id,
@@ -486,4 +488,134 @@ test("failed renders are not written to the persistent store", async () => {
 
 test("SupersededError is exported and identifiable", () => {
   assert.equal(new SupersededError().name, "SupersededError");
+});
+
+// ---- M10: strong user-file digest, mount collisions, transport dedup ----
+
+// A real reproduced collision against the PREVIOUS 32-bit FNV-1a fileSignature
+// (`fnv32([102,191,170,4,123,252,63,207]) === fnv32([240,156,234,254,246,13,62,237])
+// === 2990537249`, found by brute-force search over random 8-byte payloads —
+// see the review's M10 evidence). Same name, same length, different bytes: the
+// old signature could not tell these two files apart. The new digest must.
+test("a same-name/same-length collision against the old 32-bit FNV-1a no longer collides", () => {
+  const a = new Uint8Array([102, 191, 170, 4, 123, 252, 63, 207]);
+  const b = new Uint8Array([240, 156, 234, 254, 246, 13, 62, 237]);
+  const sigA = fileSignature({ "user.bin": a });
+  const sigB = fileSignature({ "user.bin": b });
+  assert.notEqual(sigA, sigB, "distinct 8-byte payloads must not share a signature");
+});
+
+test("fileSignature is deterministic for the same bytes", () => {
+  const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+  assert.equal(fileSignature({ f: bytes }), fileSignature({ f: new Uint8Array(bytes) }));
+});
+
+test("render() rejects filename aliases that sanitize to the same mount path", async () => {
+  const runner = new OpenSCADRunner();
+  const req = {
+    design: "x",
+    defines: {},
+    userFiles: {
+      "a/logo.svg": new Uint8Array([1]),
+      "b/logo.svg": new Uint8Array([2]), // sanitizes to the same "/logo.svg" mount path
+    },
+  };
+  await assert.rejects(runner.render(req), (e) => {
+    assert.ok(e instanceof MountCollisionError);
+    assert.ok(e.collisions["/logo.svg"]);
+    assert.deepEqual(e.collisions["/logo.svg"].sort(), ["a/logo.svg", "b/logo.svg"]);
+    return true;
+  });
+  // Rejected before ever posting to the worker.
+  assert.equal(newest().posted.length, 0);
+  runner.dispose();
+});
+
+test("render() does not reject distinct raw names that sanitize to distinct paths", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+  const p = runner.render({
+    design: "x",
+    defines: {},
+    userFiles: {
+      "a/logo.svg": new Uint8Array([1]),
+      "b/other.svg": new Uint8Array([2]),
+    },
+  });
+  w.emit(ok(w.last.id));
+  assert.equal((await p).ok, true);
+  runner.dispose();
+});
+
+test("MountCollisionError is exported and identifiable", () => {
+  const e = new MountCollisionError({ "/x": ["a", "b"] });
+  assert.equal(e.name, "MountCollisionError");
+  assert.deepEqual(e.collisions, { "/x": ["a", "b"] });
+});
+
+test("unchanged user files are not resent to the worker on a later render", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+  const files = { "user.ttf": new Uint8Array([1, 2, 3]) };
+
+  const first = runner.render({ design: "x", defines: { a: "1" }, userFiles: files });
+  assert.ok("userFiles" in w.last, "first post to a fresh worker must include the files");
+  w.emit(ok(w.last.id, 6));
+  await first;
+
+  // A different `defines` value means a cache miss (so this must reach the
+  // worker), but the SAME file bytes — the worker already has them mounted
+  // (see worker.ts's cachedUserFiles), so this post must omit `userFiles`
+  // entirely rather than re-cloning the same bytes across the thread boundary.
+  const second = runner.render({ design: "x", defines: { a: "2" }, userFiles: files });
+  assert.equal(w.last.userFiles, undefined, "unchanged files must not be resent");
+  w.emit(ok(w.last.id, 6));
+  await second;
+  runner.dispose();
+});
+
+test("changed user files ARE resent to the worker", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+
+  const first = runner.render({
+    design: "x",
+    defines: { a: "1" },
+    userFiles: { "user.ttf": new Uint8Array([1, 2, 3]) },
+  });
+  w.emit(ok(w.last.id, 6));
+  await first;
+
+  const second = runner.render({
+    design: "x",
+    defines: { a: "2" },
+    userFiles: { "user.ttf": new Uint8Array([9, 9, 9]) },
+  });
+  assert.ok("userFiles" in w.last && w.last.userFiles, "changed files must be resent");
+  w.emit(ok(w.last.id, 6));
+  await second;
+  runner.dispose();
+});
+
+test("a respawned worker always gets a full resend, even if files are unchanged", async () => {
+  const runner = new OpenSCADRunner();
+  const files = { "user.ttf": new Uint8Array([1, 2, 3]) };
+
+  const first = runner.render({ design: "x", defines: { a: "1" }, userFiles: files });
+  const w0 = newest();
+  w0.emit(ok(w0.last.id, 6));
+  await first;
+
+  // Force a respawn (worker error), then render again with the SAME files —
+  // the new worker's module scope has no cached files, so it must NOT be
+  // skipped even though the signature matches what the old worker last saw.
+  const w1current = newest();
+  w1current.emitError("boom");
+  const afterRespawn = runner.render({ design: "y", defines: { a: "1" }, userFiles: files });
+  const w1 = newest();
+  assert.notStrictEqual(w1, w0);
+  assert.ok("userFiles" in w1.last && w1.last.userFiles, "a fresh worker must get a full resend");
+  w1.emit(ok(w1.last.id, 6));
+  await afterRespawn;
+  runner.dispose();
 });

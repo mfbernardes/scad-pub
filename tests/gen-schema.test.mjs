@@ -548,8 +548,15 @@ test("public precache manifest lists generated runtime assets", () => {
   assert.ok(!precache.shell.includes("wasm/openscad.wasm"));
   assert.ok(!precache.shell.includes("fonts/Foo.ttf"));
   assert.match(precache.bin.cache, /^openscad-wasm-bin-/);
+  // H4: content-addressed via a `?v=<digest>` query — see versionedPath in
+  // gen-schema.mjs. This fixture has no real openscad.wasm on disk, so its
+  // digest is absent and the URL stays plain; Foo.ttf IS a real bundled file,
+  // so its URL must carry a digest query.
   assert.ok(precache.bin.urls.includes("wasm/openscad.wasm"));
-  assert.ok(precache.bin.urls.includes("fonts/Foo.ttf"));
+  assert.ok(
+    precache.bin.urls.some((u) => /^fonts\/Foo\.ttf\?v=[0-9a-f]+$/.test(u)),
+    `expected a digest-versioned Foo.ttf URL, got: ${JSON.stringify(precache.bin.urls)}`
+  );
 });
 
 test("manifest carries the PWA install fields (id, launch_handler, maskable icon)", () => {

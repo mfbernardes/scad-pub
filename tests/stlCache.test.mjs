@@ -10,9 +10,13 @@ const { createStlCache, VERSION_KEY } = await import("../src/lib/stlCache.ts");
 const { openDb, reqToPromise, STL_META_STORE } = await import("../src/lib/idb.ts");
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+// M11: put() now budgets the COMPLETE record (STL bytes + a capped log), not
+// just STL bytes — an empty log here keeps every byte-budget assertion below
+// about STL bytes exactly as it was before that change; log-byte accounting
+// itself is covered by its own dedicated tests further down.
 const entry = (n, over = {}) => ({
   stl: new Uint8Array(n),
-  log: ["ok"],
+  log: [],
   exitCode: 0,
   ms: 1,
   ...over,
@@ -140,4 +144,111 @@ test("clear() drops all entries", async () => {
   assert.ok(await cache.get("k"));
   await cache.clear();
   assert.equal(await cache.get("k"), undefined);
+});
+
+// ---- M11: staleDefines round-trip ----
+
+test("staleDefines round-trips through IndexedDB", async () => {
+  const cache = createStlCache({ version });
+  await cache.put("k", entry(8, { staleDefines: ["oldParam", "otherParam"] }));
+  const got = await cache.get("k");
+  assert.deepEqual(got.staleDefines, ["oldParam", "otherParam"]);
+});
+
+test("an entry with no staleDefines round-trips without the field", async () => {
+  const cache = createStlCache({ version });
+  await cache.put("k", entry(8));
+  const got = await cache.get("k");
+  assert.equal(got.staleDefines, undefined);
+});
+
+test("an empty staleDefines array is treated the same as absent", async () => {
+  const cache = createStlCache({ version });
+  await cache.put("k", entry(8, { staleDefines: [] }));
+  const got = await cache.get("k");
+  assert.equal(got.staleDefines, undefined);
+});
+
+// ---- M11: clear/write ordering (mutations are serialized) ----
+
+test("a write that started before clear() is not repopulated after it", async () => {
+  const cache = createStlCache({ version });
+  // Seed one entry so the write below has to compete with clear()'s own
+  // eviction/version-check work, not just an empty store.
+  await cache.put("seed", entry(4));
+
+  // Fire a put() and clear() back-to-back with no await between them — the
+  // put() is still in flight (its internal ensureVersion/evictAndWrite work
+  // hasn't settled) when clear() is queued. Without serialization, the put()
+  // could complete its transaction AFTER clear()'s, leaving "k" behind.
+  const putP = cache.put("k", entry(8));
+  const clearP = cache.clear();
+  await Promise.all([putP, clearP]);
+
+  // clear() was queued after put() (both queued synchronously, in call
+  // order), so it must win: nothing put() wrote survives.
+  assert.equal(await cache.get("k"), undefined);
+  assert.equal(await cache.get("seed"), undefined);
+});
+
+test("a clear() then a later put() leaves the new entry in place", async () => {
+  const cache = createStlCache({ version });
+  await cache.put("old", entry(4));
+  await cache.clear();
+  await cache.put("new", entry(4));
+  assert.equal(await cache.get("old"), undefined);
+  assert.ok(await cache.get("new"));
+});
+
+// ---- M11: overlapping put()s respect the shared quota ----
+
+test("overlapping put()s never jointly exceed the byte budget", async () => {
+  // Budget holds exactly two 6-byte entries. Fire three put()s concurrently
+  // (no await between them) so their evict-then-write work would race under
+  // the old two-transaction design; serialized + atomic evict-and-write must
+  // still land at <= 12 bytes total no matter the interleaving.
+  const cache = createStlCache({ version, maxBytes: 12, maxEntryBytes: 12 });
+  await Promise.all([
+    cache.put("a", entry(6)),
+    cache.put("b", entry(6)),
+    cache.put("c", entry(6)),
+  ]);
+  const sizes = await Promise.all(
+    ["a", "b", "c"].map(async (k) => ((await cache.get(k))?.stl.byteLength ?? 0))
+  );
+  const total = sizes.reduce((s, n) => s + n, 0);
+  assert.ok(total <= 12, `total stored bytes ${total} exceeded the 12-byte budget`);
+});
+
+// ---- M11: large logs are budgeted independently of the STL byte budget ----
+
+test("an oversized log is truncated to a bounded size, keeping the most recent lines", async () => {
+  const cache = createStlCache({ version, maxBytes: 10_000_000, maxEntryBytes: 10_000_000 });
+  const bigLog = Array.from({ length: 5000 }, (_, i) => `line ${i} `.repeat(5));
+  await cache.put("k", entry(8, { log: bigLog }));
+  const got = await cache.get("k");
+  const totalChars = got.log.reduce((s, l) => s + l.length, 0);
+  assert.ok(totalChars < 25_000, `stored log grew to ${totalChars} chars, budget was ~20000`);
+  // The most recent line must survive (it's usually the most actionable —
+  // the final error/echo of a render), and a truncation marker precedes it.
+  assert.equal(got.log[got.log.length - 1], bigLog[bigLog.length - 1]);
+  assert.match(got.log[0], /truncated/);
+});
+
+test("a log within budget is stored verbatim", async () => {
+  const cache = createStlCache({ version });
+  const log = ["[cmd] openscad foo.scad", "[out] done"];
+  await cache.put("k", entry(8, { log }));
+  const got = await cache.get("k");
+  assert.deepEqual(got.log, log);
+});
+
+test("a large log alone can push a record over maxEntryBytes even with tiny STL bytes", async () => {
+  // maxEntryBytes is small enough that STL bytes alone would fit, but the
+  // (budgeted) log's byte cost is counted too — proving the budget covers the
+  // COMPLETE record, not STL bytes in isolation.
+  const cache = createStlCache({ version, maxBytes: 1000, maxEntryBytes: 100 });
+  const log = ["x".repeat(500)]; // well within MAX_LOG_CHARS, but > 100 bytes as UTF-16
+  await cache.put("k", entry(4, { log }));
+  assert.equal(await cache.get("k"), undefined, "record rejected: log bytes pushed it over maxEntryBytes");
 });

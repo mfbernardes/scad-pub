@@ -30,7 +30,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { WASM_VERSION } from "./wasm-version.mjs";
-import { computeRenderHash } from "./lib/hash.mjs";
+import { computeRenderHash, computeBinAssetVersions } from "./lib/hash.mjs";
 import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "./lib/fonts.mjs";
 import { humanize, parseParams } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
@@ -450,6 +450,18 @@ function copyExtraCss(config, CONFIG_DIR, outScadDir, mustExist, register) {
 //           warmed into the render worker's own BIN_CACHE (same cache,
 //           same keys — no double store) so offline rendering works even
 //           before the first render.
+// H4: append a `?v=<digest>` query to a binary asset's served path so its
+// fetch/Cache-Storage identity is content-addressed. Mirrors
+// src/lib/assetUrl.ts's versionedAssetUrl exactly (that file is TypeScript,
+// loaded by the worker/main-thread runtime; this one is the same one-line
+// scheme applied where gen-schema writes the SW's warm-up URL list — both
+// sides must compute byte-identical strings for a given (path, digest) so a
+// Cache Storage entry worker.ts writes is the exact one the service worker's
+// warm-up either finds already present or writes itself).
+function versionedPath(path, digest) {
+  return digest ? `${path}?v=${digest}` : path;
+}
+
 function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo, extraCss, iconFiles }) {
   // M8: precache only the icon files the PWA-asset step actually wrote
   // (`iconFiles`), not a fixed assumed set — otherwise a missing rasterizer
@@ -480,7 +492,15 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
     shell: [...shell].sort(),
     bin: {
       cache: `openscad-wasm-bin-${WASM_VERSION}`,
-      urls: ["wasm/openscad.wasm", ...schema.fonts.map((f) => `fonts/${f}`)].sort(),
+      // H4: content-addressed via versionedPath — see its comment. Must match
+      // exactly what worker.ts's cachedBuffer() fetches for the same file
+      // (both derive the query from schema.binAssets), so the service worker's
+      // warm-up and the worker's own first-render fetch always agree on the
+      // Cache Storage key for a given build's bytes.
+      urls: [
+        versionedPath("wasm/openscad.wasm", schema.binAssets?.wasm),
+        ...schema.fonts.map((f) => versionedPath(`fonts/${f}`, schema.binAssets?.fonts?.[f])),
+      ].sort(),
     },
   };
   writeFileSync(
@@ -675,12 +695,21 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     outPublicDir,
   });
 
+  // H4: per-file content digests for the big binary assets (wasm, glue, fonts,
+  // fonts.conf). Appended as a `?v=<digest>` query on their fetch URLs (worker.ts
+  // AND the precache-manifest `bin.urls` below use the identical scheme — see
+  // src/lib/assetUrl.ts's versionedAssetUrl) so the fetch/Cache-Storage identity
+  // is content-addressed, not just the combined renderHash used for L2 geometry.
+  const BIN_ASSETS = outPublicDir ? computeBinAssetVersions({ fonts: FONTS, outPublicDir }) : {};
+
   const schema = {
     generatedFrom: relPosix(SOURCE) || ".",
     renderHash,
     // Names the render worker's binary Cache Storage entry (and the service
     // worker's warm-up target). Single-sourced from scripts/wasm-version.mjs.
     wasmVersion: WASM_VERSION,
+    // H4: per-file digests for wasm/glue/fonts/fonts.conf — see BIN_ASSETS above.
+    binAssets: BIN_ASSETS,
     title: TITLE,
     shortName: SHORT_NAME,
     id: ID,

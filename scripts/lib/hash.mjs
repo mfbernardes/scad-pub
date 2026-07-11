@@ -103,3 +103,45 @@ export function computeRenderHash({
   }
   return h.digest("hex").slice(0, 16);
 }
+
+// computeBinAssetVersions — per-file content digests for the render worker's
+// big binary assets (H4). computeRenderHash above already folds these same
+// bytes into ONE combined hash so a change invalidates persisted L2 geometry,
+// but H4 found a separate problem: the *fetch/cache identity* (worker.ts's
+// BIN_CACHE Cache Storage keys, and the service worker's warm-up URLs) is a
+// stable filename ("fonts/<name>", "wasm/openscad.wasm"), unrelated to
+// renderHash. Replacing a bundled font's bytes without renaming it changes
+// renderHash but NOT that URL, so a browser with the old bytes already cached
+// keeps serving them under the new hash, poisoning cache identity.
+//
+// Giving each binary its own short digest, appended as a `?v=` query on its
+// fetch URL (see src/lib/assetUrl.ts's versionedAssetUrl, used identically by
+// worker.ts and the URLs this file's caller writes into
+// precache-manifest.json's `bin.urls`), makes the fetch identity itself
+// content-addressed: same bytes -> same URL -> a Cache Storage hit is always
+// correct bytes; different bytes -> a different URL -> the old cache entry
+// can never be mistaken for the new one, independent of whether wasmVersion
+// changed.
+export function computeBinAssetVersions({ fonts, outPublicDir }) {
+  const digestFile = (abs) => {
+    try {
+      return createHash("sha256").update(readFileSync(abs)).digest("hex").slice(0, 16);
+    } catch {
+      return undefined; // asset not present in this build context (e.g. a fixture build)
+    }
+  };
+  const result = {
+    wasm: digestFile(join(outPublicDir, "wasm", "openscad.wasm")),
+    // The Emscripten glue the worker dynamically imports alongside the wasm
+    // binary (see M12/H3) — versioned too so a glue-only change also busts
+    // any stale copy a browser had cached.
+    glue: digestFile(join(outPublicDir, "wasm", "openscad.js")),
+    fontsConf: digestFile(join(outPublicDir, "fonts", "fonts.conf")),
+    fonts: {},
+  };
+  for (const name of [...fonts].sort()) {
+    const d = digestFile(join(outPublicDir, "fonts", name));
+    if (d) result.fonts[name] = d;
+  }
+  return result;
+}

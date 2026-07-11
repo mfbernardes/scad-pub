@@ -31,6 +31,30 @@ export function userFileMountPath(rawName: string): string {
   return isFontFile(name) ? `/fonts/${name}` : `/${name}`;
 }
 
+// M10: two distinct raw upload names can sanitize (via stripFilename, above)
+// to the same mount path — e.g. "a/logo.svg" and "b/logo.svg" both collapse to
+// "/logo.svg", or "x.ttf" and "y/../x.ttf" both collapse to "/fonts/x.ttf".
+// Mounting both would have the last one written (Object.entries iteration
+// order, itself an unspecified detail of the caller's map) silently overwrite
+// the other, with no signal to the user that one of their uploads never took
+// effect. Returns, for each colliding mount path, every raw name that maps to
+// it — only paths with 2+ contributing names are included (a path with one
+// contributor isn't a collision). Empty object when there are no collisions.
+export function detectMountCollisions(
+  files: Record<string, Uint8Array> | undefined
+): Record<string, string[]> {
+  const byMount: Record<string, string[]> = {};
+  for (const rawName of Object.keys(files ?? {})) {
+    const mount = userFileMountPath(rawName);
+    (byMount[mount] ??= []).push(rawName);
+  }
+  const collisions: Record<string, string[]> = {};
+  for (const [mount, names] of Object.entries(byMount)) {
+    if (names.length > 1) collisions[mount] = names;
+  }
+  return collisions;
+}
+
 // The chain of ancestor directories to create for `dir`, outermost first, each
 // an absolute path — the pure half of `mkdir -p` (worker.ts's mkdirp wraps this
 // with FS.mkdir + swallow-if-exists). A leading slash, empty segments, and a
