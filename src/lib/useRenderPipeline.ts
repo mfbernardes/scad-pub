@@ -141,6 +141,13 @@ export function useRenderPipeline({
     () => JSON.stringify({ d: design.id, defines, f: fileSig }),
     [design.id, defines, fileSig]
   );
+  // The renderKey the live controls currently want, mirrored on every render so
+  // an async completion can tell whether it is still what's on screen. epochRef
+  // catches a design switch or render-input invalidation; this catches a plain
+  // values *revert* to an already-rendered key, which those don't — see the
+  // commit-time currency check in doRender.
+  const renderKeyRef = useRef(renderKey);
+  renderKeyRef.current = renderKey;
 
   // Freshness is now reported the same way in both auto and manual mode: no
   // completed attempt — success or failure — exists yet for the live
@@ -181,7 +188,7 @@ export function useRenderPipeline({
         // discards anything no longer on the current one. A discarded outcome
         // must not touch `result`, `rendering`, or the snapshot — whichever
         // render started the current epoch owns that state now.
-        const commit = resolveRenderCommit(epochRef.current, {
+        const commit = resolveRenderCommit(epochRef.current, renderKeyRef.current, {
           startEpoch,
           renderKey: startRenderKey,
           designId: startDesignId,
@@ -189,7 +196,16 @@ export function useRenderPipeline({
           fileSig: startFileSig,
           result: r,
         });
-        if (commit.discarded) return;
+        if (commit.discarded) {
+          // A "superseded" discard (the controls reverted to an already-rendered
+          // key while this render was in flight) leaves no other render running
+          // — the runner is latest-wins — so this render still owns the spinner
+          // and must clear it. An "epoch" discard is owned by a newer generation
+          // that manages `rendering` itself; don't touch it here (see the catch
+          // block's SupersededError note for the same reasoning).
+          if (commit.reason === "superseded") setRendering(false);
+          return;
+        }
         lastKeyRef.current = commit.ok ? startRenderKey : "";
         if (commit.ok) {
           setReady(true);

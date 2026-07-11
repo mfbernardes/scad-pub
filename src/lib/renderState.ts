@@ -80,27 +80,43 @@ export interface RenderOutcome {
 }
 
 export type RenderCommit =
-  | { discarded: true }
+  // `epoch`: a newer generation (design switch / invalidation) owns pipeline
+  // state now — the caller must not touch `rendering`, it belongs to that
+  // generation. `superseded`: the live controls reverted to an already-rendered
+  // key, so this completion is stale but nothing else is in flight (the runner
+  // is latest-wins) — the caller must clear `rendering` itself.
+  | { discarded: true; reason: "epoch" | "superseded" }
   | { discarded: false; ok: false }
   | { discarded: false; ok: true; snapshot: RenderSnapshot };
 
 /**
  * The single decision point for what a completed render() call is allowed to
- * do to pipeline state. Called with the pipeline's epoch *at commit time*
- * (i.e. after the await): if it no longer matches the outcome's `startEpoch`,
- * a design switch or invalidation happened while this render was in flight
- * and the result is discarded — it must never become the displayed or
- * exportable snapshot, however tempting its `renderKey` looks (H1).
+ * do to pipeline state. Called with the pipeline's epoch AND live renderKey
+ * *at commit time* (i.e. after the await):
  *
- * A discarded outcome intentionally carries no other information: the caller
- * must not touch `rendering`, `result`, or `snapshot` for it — whichever
- * render owns the current epoch owns that state now.
+ *  - If the epoch no longer matches `startEpoch`, a design switch or
+ *    invalidation happened while this render was in flight → discard
+ *    (`reason: "epoch"`); it must never become the displayed/exportable
+ *    snapshot, however tempting its `renderKey` looks (H1).
+ *  - Else if the outcome's `renderKey` no longer matches the live
+ *    `currentRenderKey`, the controls were reverted to a previously-rendered
+ *    key while this render was in flight. doRender short-circuits such a revert
+ *    (already rendered) and never issues a superseding render, so nothing
+ *    rejects this in-flight completion — discard it here (`reason:
+ *    "superseded"`) so it can't overwrite the current preview or, on failure,
+ *    clear the viewer while the current snapshot stays exportable.
+ *
+ * A discarded outcome carries only its reason (see RenderCommit): the caller
+ * must not commit its result/snapshot, and touches `rendering` only for the
+ * `superseded` reason.
  */
 export function resolveRenderCommit(
   currentEpoch: number,
+  currentRenderKey: string,
   outcome: RenderOutcome
 ): RenderCommit {
-  if (isStaleEpoch(outcome.startEpoch, currentEpoch)) return { discarded: true };
+  if (isStaleEpoch(outcome.startEpoch, currentEpoch)) return { discarded: true, reason: "epoch" };
+  if (outcome.renderKey !== currentRenderKey) return { discarded: true, reason: "superseded" };
   if (!outcome.result.ok) return { discarded: false, ok: false };
   return {
     discarded: false,

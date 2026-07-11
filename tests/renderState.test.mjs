@@ -70,7 +70,7 @@ test("isSnapshotExportable: a current-but-failed snapshot is never exportable", 
 // ---- resolveRenderCommit ----
 
 test("resolveRenderCommit: a same-epoch success produces a snapshot", () => {
-  const commit = resolveRenderCommit(0, outcome());
+  const commit = resolveRenderCommit(0, "key-A", outcome());
   assert.equal(commit.discarded, false);
   assert.equal(commit.ok, true);
   assert.deepEqual(commit.snapshot, {
@@ -84,7 +84,7 @@ test("resolveRenderCommit: a same-epoch success produces a snapshot", () => {
 });
 
 test("resolveRenderCommit: a same-epoch failure produces no snapshot", () => {
-  const commit = resolveRenderCommit(0, outcome({ result: fail() }));
+  const commit = resolveRenderCommit(0, "key-A", outcome({ result: fail() }));
   assert.equal(commit.discarded, false);
   assert.equal(commit.ok, false);
   assert.equal("snapshot" in commit, false);
@@ -94,10 +94,29 @@ test("resolveRenderCommit: an older-epoch completion is discarded outright, succ
   // Required test: edit then export before the debounce fires is really "the
   // renderKey moved on"; this test covers the sibling case — the *epoch*
   // moved on (design switch / invalidation) while a render was in flight.
-  const discardedOk = resolveRenderCommit(1, outcome({ startEpoch: 0, result: ok() }));
-  const discardedFail = resolveRenderCommit(1, outcome({ startEpoch: 0, result: fail() }));
-  assert.deepEqual(discardedOk, { discarded: true });
-  assert.deepEqual(discardedFail, { discarded: true });
+  const discardedOk = resolveRenderCommit(1, "key-A", outcome({ startEpoch: 0, result: ok() }));
+  const discardedFail = resolveRenderCommit(1, "key-A", outcome({ startEpoch: 0, result: fail() }));
+  assert.deepEqual(discardedOk, { discarded: true, reason: "epoch" });
+  assert.deepEqual(discardedFail, { discarded: true, reason: "epoch" });
+});
+
+test("resolveRenderCommit: a same-epoch completion whose key no longer matches the live controls is discarded as superseded (H1)", () => {
+  // The revert race: render B is in flight; the user reverts to already-rendered
+  // key A, which doRender short-circuits (so B is never superseded on the
+  // runner). When B completes, the live renderKey is A again — B must be
+  // discarded so it can't overwrite the current A preview, and the reason must
+  // be "superseded" (not "epoch") so the caller clears the now-orphaned spinner.
+  const discardedOk = resolveRenderCommit(0, "key-A", outcome({ renderKey: "key-B", result: ok() }));
+  const discardedFail = resolveRenderCommit(0, "key-A", outcome({ renderKey: "key-B", result: fail() }));
+  assert.deepEqual(discardedOk, { discarded: true, reason: "superseded" });
+  assert.deepEqual(discardedFail, { discarded: true, reason: "superseded" });
+});
+
+test("resolveRenderCommit: an epoch change wins over a key match (design switch beats currency)", () => {
+  // If both the epoch moved AND the key differs, epoch discard takes priority —
+  // a newer generation owns `rendering`, so the caller must NOT clear it.
+  const commit = resolveRenderCommit(1, "b-key", outcome({ startEpoch: 0, renderKey: "a-key", result: ok() }));
+  assert.deepEqual(commit, { discarded: true, reason: "epoch" });
 });
 
 // ---- Required scenario: resolve design A's deferred render AFTER switching
@@ -115,7 +134,7 @@ test("scenario: design A resolves after switching to design B (epoch discard)", 
   const currentDesignId = "design-b";
 
   // A's render now resolves. It must be discarded, not merged into B's state.
-  const commit = resolveRenderCommit(currentEpoch, aOutcome);
+  const commit = resolveRenderCommit(currentEpoch, currentRenderKey, aOutcome);
   assert.equal(commit.discarded, true);
   if (!commit.discarded) snapshot = commit.ok ? commit.snapshot : snapshot; // never reached
 
@@ -161,7 +180,7 @@ test("scenario: a newer in-flight render blocks export, including after it fails
   assert.equal(isSnapshotExportable(snapshot, liveRenderKey, "design-a"), false);
 
   // That newer render now fails.
-  const commit = resolveRenderCommit(epoch, outcome({ startEpoch: epoch, renderKey: liveRenderKey, result: fail() }));
+  const commit = resolveRenderCommit(epoch, liveRenderKey, outcome({ startEpoch: epoch, renderKey: liveRenderKey, result: fail() }));
   assert.equal(commit.discarded, false);
   assert.equal(commit.ok, false);
   // The old snapshot is untouched by a failure (resolveRenderCommit produces
