@@ -4,16 +4,19 @@
 // the render's virtual filesystem, points this parameter at it, and (when the
 // field binds `layers=<param>`) writes the derived colour string into that
 // second parameter — then the normal auto-render picks it up.
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Upload as UploadIcon, FileCode as FileCodeIcon } from "lucide-react";
 import type { SvgFieldMeta } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
 import { FileInput } from "./FileInput";
+import { ErrorBoundary } from "./ErrorBoundary";
+import { Spinner } from "./ui/spinner";
+import { Button } from "./ui/button";
 import type { SvgWizardResult } from "./SvgWizard";
 
-const SvgWizard = lazy(() =>
-  import("./SvgWizard").then((m) => ({ default: m.SvgWizard }))
-);
+function loadSvgWizard() {
+  return import("./SvgWizard").then((m) => ({ default: m.SvgWizard }));
+}
 
 // Preload on user intent (hover/focus of the trigger button) so the chunk is
 // likely already fetched by the time `pending` mounts it. The dynamic import
@@ -54,6 +57,16 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
   const [pending, setPending] = useState<{ text: string; fileName: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by the Retry action below. `lazy()` caches its promise for the
+  // life of the component it returns, so a rejected chunk load (offline,
+  // build-hash drift, ad blocker on the chunk URL, …) stays rejected on
+  // every subsequent render of the *same* lazy component — there's no way to
+  // "retry" it in place. Recreating the lazy component under a fresh key
+  // gives Retry an actual new import() attempt, and passing the same key as
+  // the boundary's `resetKey` clears the caught error the moment that new
+  // component mounts.
+  const [wizardAttempt, setWizardAttempt] = useState(0);
+  const SvgWizard = useMemo(() => lazy(loadSvgWizard), [wizardAttempt]);
 
   const loadFile = async (file: File) => {
     const reason = svgRejectionReason(file);
@@ -128,15 +141,61 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
       )}
 
       {pending && (
-        <Suspense fallback={null}>
-          <SvgWizard
-            svgText={pending.text}
-            fileName={pending.fileName}
-            deriveColours={Boolean(svg.layers)}
-            onCancel={() => setPending(null)}
-            onComplete={onComplete}
-          />
-        </Suspense>
+        <ErrorBoundary
+          resetKey={wizardAttempt}
+          fallback={
+            <div
+              role="alert"
+              className="svg-prepare__wizard-error flex flex-col items-center gap-2 rounded-(--radius-sm) border border-dashed border-destructive/60 bg-destructive/5 px-3 py-4 text-center"
+            >
+              <p className="text-sm text-foreground">
+                The SVG editor couldn't be loaded.
+              </p>
+              <p className="text-[0.78rem] text-muted-foreground">
+                Check your connection and try again.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setWizardAttempt((n) => n + 1)}
+                >
+                  Retry
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPending(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <Suspense
+            fallback={
+              <div
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+                className="svg-prepare__wizard-loading flex items-center justify-center gap-2 rounded-(--radius-sm) border border-dashed border-border bg-muted/40 px-3 py-4 text-sm text-muted-foreground"
+              >
+                <Spinner className="size-4" aria-hidden="true" />
+                Loading SVG editor…
+              </div>
+            }
+          >
+            <SvgWizard
+              svgText={pending.text}
+              fileName={pending.fileName}
+              deriveColours={Boolean(svg.layers)}
+              onCancel={() => setPending(null)}
+              onComplete={onComplete}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </div>
   );

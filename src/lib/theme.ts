@@ -3,7 +3,7 @@
 // resolved theme is written to <html data-theme>, which the CSS variables key
 // off. Persisted in localStorage; a tiny inline script in index.html applies it
 // before first paint to avoid a flash.
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { ns } from "./appId";
 import { readLocal, writeLocal } from "./safeStorage";
 
@@ -26,6 +26,27 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 function systemDark(): boolean {
   return window.matchMedia?.(DARK_QUERY).matches ?? true;
+}
+
+// useSyncExternalStore glue so "does the OS prefer dark" is one authoritative,
+// reactive value instead of a snapshot read once at resolve time. Every
+// consumer (this hook's `resolved`, and anything built on it) re-renders
+// together on a matchMedia change — no imperative apply() can run ahead of
+// the React value it's meant to mirror. `typeof window` guards module-scope
+// use under the Node test runner (no DOM/matchMedia there).
+// Exported (only) so tests/theme.test.mjs can exercise the store's
+// subscribe/snapshot contract directly — this repo has no DOM-rendering test
+// harness (no jsdom), so a full render of the `useTheme` hook isn't feasible;
+// this is the pure unit the useSyncExternalStore call above is built from.
+export function subscribeSystemDark(onChange: () => void): () => void {
+  if (typeof window === "undefined" || !window.matchMedia) return () => {};
+  const mq = window.matchMedia(DARK_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+export function getSystemDarkSnapshot(): boolean {
+  return typeof window === "undefined" ? true : systemDark();
 }
 
 export function resolveTheme(mode: ThemeMode): Theme {
@@ -86,17 +107,29 @@ export function apply(theme: Theme) {
 
 export function useTheme() {
   const [mode, setMode] = useState<ThemeMode>(readMode);
-  const resolved = resolveTheme(mode);
+  // The one subscription to the OS preference, shared by every render. In
+  // "auto" mode this — not a value captured imperatively inside an effect —
+  // is what `resolved` derives from, so DOM state (via the effect below) and
+  // the React value returned to callers (Viewer theme, BarBrand, Toaster)
+  // can never diverge: a matchMedia change re-renders this hook and every
+  // consumer reading `resolved` in the same pass.
+  const systemDark = useSyncExternalStore(
+    subscribeSystemDark,
+    getSystemDarkSnapshot,
+    getSystemDarkSnapshot
+  );
+  const resolved: Theme = mode === "auto" ? (systemDark ? "dark" : "light") : mode;
+
+  // Apply is a DOM side effect keyed off the single resolved value above, so
+  // it re-runs both on an explicit mode change and on a live OS change while
+  // in auto mode — there's no separate matchMedia listener here to fall out
+  // of sync with it.
+  useEffect(() => {
+    apply(resolved);
+  }, [resolved]);
 
   useEffect(() => {
-    apply(resolveTheme(mode));
     writeLocal(KEY, mode);
-    if (mode !== "auto") return;
-    // In auto mode, track OS changes live.
-    const mq = window.matchMedia(DARK_QUERY);
-    const onChange = () => apply(resolveTheme("auto"));
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
   }, [mode]);
 
   const cycle = () =>
