@@ -106,7 +106,7 @@ async function checkWelcomePopup({ page, check, schema }) {
 // Generic file import: the Files manager shows an "Import file" button when
 // the config sets `fileImport`. Uploading a file should surface it in the
 // file list and persist across a reload (IndexedDB).
-async function checkFileImport({ page, check, ids }) {
+async function checkFileImport({ page, check, ids, schema }) {
   console.log("=== file import ===");
   // On desktop the file manager is the panel's "Files" tab (Radix unmounts the
   // inactive tab, so it must be activated — and re-activated after each reload).
@@ -138,6 +138,45 @@ async function checkFileImport({ page, check, ids }) {
     await page
       .locator(".file-manager__name", { hasText: "smoke-overlay.svg" })
       .waitFor({ state: "detached", timeout: 3000 })
+      .catch(() => {});
+    // The UI row is removed synchronously, but the persisted copy is cleared
+    // via a fire-and-forget IndexedDB transaction. Reloading the instant the
+    // row detaches can abort that still-uncommitted transaction (page unload
+    // cancels in-flight IDB txns), leaving the file on disk to be restored on
+    // the next load. Wait for the persisted store to actually be empty before
+    // reloading so this assertion tests the guarantee, not the race.
+    const dbName = schema?.id || "scadpub";
+    await page
+      .waitForFunction(
+        (name) =>
+          new Promise((resolve) => {
+            let req;
+            try {
+              req = indexedDB.open(name);
+            } catch {
+              return resolve(true); // storage unavailable — nothing persisted
+            }
+            req.onerror = () => resolve(true);
+            req.onsuccess = () => {
+              const db = req.result;
+              if (!db.objectStoreNames.contains("fonts")) {
+                db.close();
+                return resolve(true);
+              }
+              const countReq = db.transaction("fonts", "readonly").objectStore("fonts").count();
+              countReq.onsuccess = () => {
+                db.close();
+                resolve(countReq.result === 0);
+              };
+              countReq.onerror = () => {
+                db.close();
+                resolve(true);
+              };
+            };
+          }),
+        dbName,
+        { timeout: 5000 }
+      )
       .catch(() => {});
     await page.reload({ waitUntil: "load" });
     await waitRendered(page, ids[0]);
