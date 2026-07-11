@@ -382,8 +382,17 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // Auto-detect a sibling OpenSCAD parameterSets file: <name>.scad -> <name>.json
     // next to it. One file can hold many named sets; absent -> no bundled presets.
     const presetRel = d.file.replace(/\.scad$/, ".json");
-    const presets = existsSync(join(SOURCE, presetRel)) ? [presetRel] : [];
-    if (presets.length) copyAsset(presetRel);
+    const presetAbs = join(SOURCE, presetRel);
+    // H5: the sibling parameterSets file is copied into the served tree like the
+    // .scad above, so it must clear the same symlink-containment check first —
+    // otherwise a <name>.json symlinked outside SOURCE would be followed and its
+    // target copied into public/scad/ (exactly the escape checkContained refuses
+    // for the design's own source). checkContained throws on an escape.
+    const presets = existsSync(presetAbs) ? [presetRel] : [];
+    if (presets.length) {
+      checkContained(presetAbs, `design '${d.id}' parameterSets file '${presetRel}'`, `design '${d.id}'`);
+      copyAsset(presetRel);
+    }
     // Description + icon each fall back to the design's own `// @description` /
     // `// @icon` annotation when the config `designs[]` entry omits them (config
     // wins). A config icon is config-relative (like logo); a `// @icon` path is
