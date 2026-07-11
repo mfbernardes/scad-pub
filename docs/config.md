@@ -86,6 +86,64 @@ These keys add copy and third-party notices to the generated app:
 
 Missing `source`, `assets`, design, `logo`, or design-`icon` paths fail the build with a clear error. An **unknown top-level key** also fails the build. A whole-key typo like `"popups"` or `"fontfallback"` fails rather than being silently ignored. Add a `"$schema"` key for editor tooling if you want; it is allowed.
 
+## SVG asset trust model
+
+ScadPub builds a static site from **your own** OpenSCAD designs and config
+(`source`, `assets`, `logo`, `icon`, `iconMaskable`, `screenshots`, design
+`icon`/`doc`, `extraCss`, bundled fonts, …). Every one of those paths is
+**trusted operator input** — the same trust you already extend to any script
+or dependency you add to your own build. `gen-schema` is not a sandbox: it
+does not, and is not intended to, defend the app against a *malicious*
+`.scad`/`.svg`/`.json` file in your own `source` or config tree.
+
+If you want to host designs or assets supplied by people you don't trust as
+much as your own build (e.g. user-submitted `.scad` files), that is **out of
+scope for ScadPub as shipped** and needs its own isolation boundary in front
+of it — for example, a review/moderation step before a file ever reaches
+`source`, or building/serving untrusted designs from a separate, sandboxed
+deployment (different origin, no shared cookies/storage) rather than mixing
+them into a trusted operator's site. The in-browser OpenSCAD-WASM sandbox
+protects the *renderer* from a hostile `.scad` file (it can't reach the
+network or the filesystem outside its mount); it says nothing about assets
+that are served as-is and rendered by the *browser* — see below.
+
+**What this means concretely for SVGs.** `gen-schema` copies two different
+kinds of SVG into the served output, and treats them differently:
+
+- **Render-input SVGs** — files reached via `assets` or a design's
+  `use`/`include` graph, copied byte-for-byte into `public/scad/` because
+  OpenSCAD's `import()`/`surface()` reads them as path/geometry data. These
+  are never modified by the build: rewriting bytes here risks silently
+  changing what gets rendered. They're safe in that role (import/surface read
+  geometry, not markup), but they are also served as a plain static file at a
+  guessable `/scad/...` URL. A browser that's ever navigated to that URL
+  *directly* (as opposed to used inside the app's `<img>`/`<use>`/canvas
+  context) would load the SVG as an active HTML-like document and could
+  execute a `<script>` it contains, in the app's own origin. This is why
+  `public/_headers` locks down `/scad/*` with a restrictive
+  `Content-Security-Policy` and `X-Content-Type-Options: nosniff` (see the
+  comment there) — defense-in-depth against exactly that direct-navigation
+  case, without touching the geometry.
+- **Browser-facing SVGs** — the app `logo`, the PWA `icon`, and each design's
+  picker `icon` — are only ever displayed, never read as geometry. `gen-schema`
+  runs these through a minimal sanitizer
+  (`scripts/lib/svg-sanitize.mjs`) before writing them: it strips
+  `<script>`/`<foreignObject>` elements, `on*` event-handler attributes, and
+  any `href`/`xlink:href` carrying a URI scheme (`javascript:`, `data:`,
+  `http(s):`, …). This is regex-based, not a full XML sanitizer — it is a
+  second layer on top of the operator-trust boundary above, not a substitute
+  for it, and it does not attempt to sanitize `iconMaskable` source pixels or
+  anything under `public/scad/` (see above).
+
+**Deployment-target caveat.** `public/_headers` is the Cloudflare Pages /
+Netlify custom-headers convention. **GitHub Pages serves no custom response
+headers at all** and silently ignores `_headers` — if you deploy there, the
+CSP/`nosniff` layer described above does not apply, and the SVG sanitization
+above is your only defense-in-depth layer for `logo`/`icon` assets (render-
+input SVGs under `/scad/` get none). This is one more reason the trust model
+above is load-bearing: on GitHub Pages, treat everything under `source` and
+every config-referenced path as fully trusted, full stop.
+
 ## Title and logo
 
 These keys control the browser title and the brand shown in the app header:

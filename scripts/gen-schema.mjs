@@ -35,6 +35,7 @@ import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "
 import { humanize, parseParams } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
 import { createDestinationRegistry, reconcileGenerated } from "./lib/destinations.mjs";
+import { sanitizeSvg } from "./lib/svg-sanitize.mjs";
 import { resolveWorkerDependencyClosure } from "./lib/worker-deps.mjs";
 import { generatePwaAssets } from "./lib/pwa-assets.mjs";
 import {
@@ -264,6 +265,25 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
   return { FONTS, FONT_FAMILIES, FONT_FACES };
 }
 
+// Copy a BROWSER-FACING file (logo, design picker icon, PWA icon — always
+// rendered in an <img>/<use>/CSS context, never fed to OpenSCAD) from `src` to
+// `dest`. An .svg source is run through sanitizeSvg() first (M13 — see
+// docs/config.md "SVG asset trust model" and scripts/lib/svg-sanitize.mjs):
+// cheap defense-in-depth so a served SVG can't execute as an active document
+// if it's ever navigated to directly, without needing to trust every byte of
+// operator-supplied markup. Anything else (PNG, …) copies verbatim. Deliberately
+// NOT used for render-input assets (copyAsset, below) — those are geometry
+// OpenSCAD's import()/surface() reads, not display markup, and are covered by
+// the operator-input trust boundary + public/_headers instead.
+function copyBrowserFacing(src, dest) {
+  if (/\.svg$/i.test(src)) {
+    const { text } = sanitizeSvg(readFileSync(src, "utf-8"));
+    writeFileSync(dest, text);
+  } else {
+    copyFileSync(src, dest);
+  }
+}
+
 // Optional header logo, per theme. `logo` may be a string (used for both
 // themes) or { light, dark } (either may be omitted -> the other is used).
 // Each referenced file is copied into the served tree; returns the resolved
@@ -294,7 +314,7 @@ function copyLogoAssets(config, CONFIG_DIR, outScadDir, mustExist, register) {
     usedNames.add(name);
     const dest = join(outScadDir, name);
     register(dest, `logo '${src}'`);
-    copyFileSync(abs, dest);
+    copyBrowserFacing(abs, dest);
     const url = `scad/${name}`;
     copiedByAbs.set(abs, url);
     return url;
@@ -384,7 +404,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       const name = `${d.id}-icon${ext}`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' icon`);
-      copyFileSync(src, dest);
+      copyBrowserFacing(src, dest);
       icon = `scad/${name}`;
     }
     // User documentation, same fallback + base rules as icon: config `doc` wins

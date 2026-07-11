@@ -7,6 +7,7 @@
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { xmlEscape } from "./config-parsers.mjs";
+import { sanitizeSvg } from "./svg-sanitize.mjs";
 
 // Read a PNG's pixel dimensions from its IHDR chunk (the first chunk, right
 // after the 8-byte signature: 4-byte length + "IHDR" + 4-byte width + height,
@@ -79,13 +80,19 @@ export function generatePwaAssets({
   mkdirSync(outPublicDir, { recursive: true });
 
   // Build (or use the default) icon SVG source.
+  // M13: the app icon is browser-facing (rendered in an <img>/manifest
+  // context and directly navigable at /icon.svg), so — unlike render-input
+  // SVGs under public/scad/ — it's run through sanitizeSvg() first: cheap
+  // defense-in-depth against a served SVG executing as an active document.
+  // See docs/config.md "SVG asset trust model" and scripts/lib/svg-sanitize.mjs.
   let iconSvg;
   if (config.icon) {
-    iconSvg = readFileSync(
+    const raw = readFileSync(
       mustExist(resolve(CONFIG_DIR, config.icon), `icon '${config.icon}'`),
       "utf-8"
     );
-    copy(resolve(CONFIG_DIR, config.icon), "icon.svg", "config 'icon'");
+    iconSvg = sanitizeSvg(raw).text;
+    write("icon.svg", iconSvg, "config 'icon'");
   } else {
     // Neutral default icon when the config supplies none.
     iconSvg =

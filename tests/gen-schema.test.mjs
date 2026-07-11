@@ -37,6 +37,7 @@ import {
   parseRender,
   renderFontsConf,
 } from "../scripts/gen-schema.mjs";
+import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "fixtures");
@@ -1783,4 +1784,107 @@ test("a malformed configured icon fails the build instead of shipping a missing/
   }
   assert.ok(!existsSync(join(outPublicDir, "manifest.webmanifest")));
   assert.ok(!existsSync(join(outPublicDir, "precache-manifest.json")));
+});
+
+// M13 — browser-facing SVGs (logo, PWA icon, design picker icon) are run
+// through scripts/lib/svg-sanitize.mjs; render-input SVGs (config `assets` /
+// a design's use/include graph, copied into public/scad/ for OpenSCAD's
+// import()/surface()) are deliberately left byte-for-byte untouched. See
+// docs/config.md "SVG asset trust model".
+test("a hostile logo/icon SVG is sanitized; a hostile render-input SVG asset is not", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const outPublicDir = join(out, "public");
+  const schema = generate({
+    configPath: join(FIXTURES, "widget-hostile-svg.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(outPublicDir, "scad"),
+    outPublicDir,
+  });
+
+  const hostileMarkers = [
+    "<script",
+    "onload=",
+    "onclick=",
+    "javascript:",
+    "https://evil.example",
+  ];
+
+  // Logo (both themes resolve to the same copied file here).
+  const logoPath = join(outPublicDir, schema.logo.light);
+  assert.ok(existsSync(logoPath));
+  const logoText = readFileSync(logoPath, "utf-8");
+  for (const marker of hostileMarkers)
+    assert.ok(!logoText.includes(marker), `logo should not contain ${marker}`);
+  assert.ok(!logoText.includes("<foreignObject"));
+  // Same-document fragment refs (safe, used for gradients/<use>/clip-paths)
+  // are preserved.
+  assert.ok(logoText.includes('href="#local-safe-ref"'));
+  // Inert visual content survives sanitization.
+  assert.ok(logoText.includes('<rect width="10" height="10" fill="red"/>'));
+
+  // Design picker icon.
+  const designIcon = schema.designs.find((d) => d.id === "widget").icon;
+  const designIconPath = join(outPublicDir, designIcon);
+  assert.ok(existsSync(designIconPath));
+  const designIconText = readFileSync(designIconPath, "utf-8");
+  for (const marker of hostileMarkers)
+    assert.ok(!designIconText.includes(marker), `design icon should not contain ${marker}`);
+  assert.ok(!designIconText.includes("<foreignObject"));
+
+  // PWA app icon (config `icon`).
+  const pwaIconPath = join(outPublicDir, "icon.svg");
+  assert.ok(existsSync(pwaIconPath));
+  const pwaIconText = readFileSync(pwaIconPath, "utf-8");
+  for (const marker of hostileMarkers)
+    assert.ok(!pwaIconText.includes(marker), `PWA icon should not contain ${marker}`);
+  assert.ok(!pwaIconText.includes("<foreignObject"));
+
+  // Render-input SVG (a config `assets` entry, mounted for OpenSCAD's
+  // import()/surface()) is copied verbatim — sanitizing it risks perturbing
+  // geometry, and it's covered by the operator-trust boundary + response
+  // headers instead (public/_headers), not build-time rewriting.
+  const renderAssetPath = join(outPublicDir, "scad", "hostile-assets", "hostile-render.svg");
+  assert.ok(existsSync(renderAssetPath));
+  const renderAssetText = readFileSync(renderAssetPath, "utf-8");
+  const sourceText = readFileSync(
+    join(FIXTURES, "hostile-src", "hostile-assets", "hostile-render.svg"),
+    "utf-8"
+  );
+  assert.equal(renderAssetText, sourceText);
+  assert.ok(renderAssetText.includes("<script>alert('xss')</script>"));
+});
+
+test("sanitizeSvg strips script/event-handlers/foreignObject/off-document hrefs, leaves the rest alone", () => {
+  const { text, removed } = sanitizeSvg(
+    readFileSync(join(FIXTURES, "hostile.svg"), "utf-8")
+  );
+  assert.ok(removed.length > 0);
+  assert.ok(!text.includes("<script"));
+  assert.ok(!text.includes("onload="));
+  assert.ok(!text.includes("onclick="));
+  assert.ok(!text.includes("javascript:"));
+  assert.ok(!text.includes("https://evil.example"));
+  assert.ok(!text.includes("<foreignObject"));
+  // Same-document fragment reference (safe) survives untouched.
+  assert.ok(text.includes('href="#local-safe-ref"'));
+  // Non-attacker markup (the rect it draws) survives untouched.
+  assert.ok(text.includes('<rect width="10" height="10" fill="red"/>'));
+});
+
+test("sanitizeSvg is a no-op on an already-inert SVG", () => {
+  const clean = readFileSync(join(FIXTURES, "logo.svg"), "utf-8");
+  const { text, removed } = sanitizeSvg(clean);
+  assert.equal(text, clean);
+  assert.deepEqual(removed, []);
+});
+
+test("sanitizeSvg strips a data: href but keeps a same-file fragment href", () => {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg">' +
+    '<image href="data:image/svg+xml;base64,PHNjcmlwdD4="/>' +
+    '<use href="#ok"/>' +
+    "</svg>";
+  const { text } = sanitizeSvg(svg);
+  assert.ok(!text.includes("data:"));
+  assert.ok(text.includes('href="#ok"'));
 });

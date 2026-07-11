@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="10" height="10" onload="alert(1)">
+  <script>alert('xss')</script>
+  <script>
+    alert('xss-2');
+  </script>
+  <rect width="10" height="10" onclick="alert(2)" fill="red"/>
+  <a href="javascript:alert(3)"><rect width="4" height="4"/></a>
+  <a xlink:href="javascript:alert(4)"><rect width="4" height="4"/></a>
+  <image href="https://evil.example/track.png" width="1" height="1"/>
+  <use xlink:href="https://evil.example/sprite.svg#icon"/>
+  <use href="#local-safe-ref"/>
+  <foreignObject width="10" height="10"><body xmlns="http://www.w3.org/1999/xhtml"><script>alert(5)</script></body></foreignObject>
+  <defs><rect id="local-safe-ref" width="1" height="1"/></defs>
+</svg>
