@@ -110,6 +110,8 @@ export default function App() {
     autoRender,
     setAutoRender,
     stalePreview,
+    exportable,
+    snapshot,
     bundleStale,
     doRender,
     invalidate,
@@ -199,10 +201,15 @@ export default function App() {
     });
   }, [canInstall, promptInstall]);
 
+  // Gated on `exportable` (a successful render that still matches the live
+  // controls, not just "some render succeeded at some point") and named from
+  // the exported snapshot's own designId rather than the live `design.id`, so
+  // a design switch racing the export can never mislabel the bytes it sends
+  // out. See docs/architecture-review.md H1.
   const exportModel = useCallback(async () => {
-    if (!result?.ok) return;
-    const name = `${design.id}.${schema.format}`;
-    const blob = new Blob([result.stl as BlobPart], { type: `model/${schema.format}` });
+    if (!exportable || !snapshot?.result.ok) return;
+    const name = `${snapshot.designId}.${schema.format}`;
+    const blob = new Blob([snapshot.result.stl as BlobPart], { type: `model/${schema.format}` });
     // Prefer the native share sheet on capable devices (send straight to a
     // slicer / Files / AirDrop); fall back to a plain download otherwise.
     const outcome = await shareFileOrFallback(
@@ -212,10 +219,11 @@ export default function App() {
     if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
     setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
     offerInstallHint();
-  }, [result, design.id, offerInstallHint]);
+  }, [exportable, snapshot, offerInstallHint]);
 
   const savePng = useCallback(async (url: string) => {
-    const name = `${design.id}.png`;
+    if (!exportable || !snapshot) return;
+    const name = `${snapshot.designId}.png`;
     // The snapshot is a data: URL — turn it into a File so it can go to the
     // native share sheet (like the model export); fall back to a download.
     const blob = await (await fetch(url)).blob();
@@ -225,7 +233,7 @@ export default function App() {
     );
     if (outcome === "cancelled") return;
     setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Saved ${name}`);
-  }, [design.id]);
+  }, [exportable, snapshot]);
 
   const copyLink = useCallback(async () => {
     const url = location.href;
@@ -321,6 +329,7 @@ export default function App() {
           ready={ready}
           autoRender={autoRender}
           stalePreview={stalePreview}
+          exportable={exportable}
           theme={theme}
           themeMode={themeMode}
           openPickerSignal={openPickerSignal}

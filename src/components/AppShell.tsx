@@ -78,6 +78,9 @@ interface Props {
   ready: boolean;
   autoRender: boolean;
   stalePreview: boolean;
+  /** A successful render that still matches the live controls — the only
+   * state Download/Image may act on. See docs/architecture-review.md H1. */
+  exportable: boolean;
   theme: "dark" | "light";
   themeMode: "light" | "dark" | "auto";
   /** Incremented by the intro popup's primary CTA to open the design picker. */
@@ -104,6 +107,7 @@ export const AppShell = memo(function AppShell({
   ready,
   autoRender,
   stalePreview,
+  exportable,
   theme,
   themeMode,
   openPickerSignal,
@@ -320,7 +324,7 @@ export const AppShell = memo(function AppShell({
   };
   const outputProps = { log, diagnostics, badges, metrics: renderMetrics, open: outputOpen, onClose: closeOutput };
   const actionButtonsProps = {
-    hasResult: !!result?.ok,
+    canExport: exportable,
     modelFormat: schema.format,
     onSavePng: handleSavePng,
   };

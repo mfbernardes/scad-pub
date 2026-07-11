@@ -14,12 +14,16 @@ import { Button } from "./ui/button";
 import { Download as DownloadIcon, Image as ImageIcon, Link2 as LinkIcon } from "lucide-react";
 
 interface Props {
-  hasResult: boolean;
+  /** A successful render that still matches the live controls (see
+   * useRenderPipeline's `exportable` / docs/architecture-review.md H1) — not
+   * just "some render has ever succeeded". Gates both Download and Image so
+   * neither can ever act on a stale or superseded result. */
+  canExport: boolean;
   modelFormat: string;
   onSavePng: () => void;
 }
 
-export function ActionButtons({ hasResult, modelFormat, onSavePng }: Props) {
+export function ActionButtons({ canExport, modelFormat, onSavePng }: Props) {
   const { exportModel, copyLink } = useAppActions();
   const fmt = modelFormat.toUpperCase();
 
@@ -32,12 +36,12 @@ export function ActionButtons({ hasResult, modelFormat, onSavePng }: Props) {
         variant="default"
         className="hover:bg-primary hover:brightness-[1.08]"
         onClick={exportModel}
-        disabled={!hasResult}
+        disabled={!canExport}
         aria-label={`Download ${fmt}`}
       >
         <DownloadIcon size={16} /> Download {fmt}
       </Button>
-      <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!hasResult} aria-label="Save image">
+      <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!canExport} aria-label="Save image">
         <ImageIcon size={16} /> Image
       </Button>
       <Button size="sm" variant="ghost" onClick={copyLink} aria-label="Copy share link">
