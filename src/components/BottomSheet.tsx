@@ -1,7 +1,13 @@
 // BottomSheet.tsx — persistent, detented bottom sheet for mobile (< 860px).
 // Three snap points: Peek (collapsed header) / Half (~50vh) / Full (full-height).
 // Never fully dismissed. Drag handle tap cycles detents; Arrow Up/Down adjusts.
-// Non-modal at Peek/Half (canvas stays interactive); scrim only at Full.
+// Non-modal at Peek/Half (canvas stays interactive, background stays reachable
+// by keyboard/AT). Modal at Full (see docs/architecture-review.md M16): the
+// sheet visually covers the background there, so the effect below traps
+// keyboard focus inside the sheet (+ scrim), sends initial focus in, restores
+// it to the triggering control on close, and Escape collapses it from
+// anywhere in the trap. The parent (AppShell) marks the background `inert`
+// for the complementary half of the fix — see mobileBackgroundRef there.
 import {
   useCallback,
   useEffect,
@@ -20,6 +26,10 @@ const DETENT_ORDER: SheetDetent[] = ["peek", "half", "full"];
 export const HALF_VH_RATIO = 0.52;
 // Movement (px) past which a pointer interaction counts as a drag, not a tap.
 const DRAG_THRESHOLD = 6;
+// Elements a focus trap should consider reachable — the standard "visible,
+// operable" set (no [hidden], no disabled, no roving -1 tabindex).
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function halfH(inset: number) { return Math.round((window.innerHeight - inset) * HALF_VH_RATIO); }
 function fullH(inset: number) { return window.innerHeight - inset; }
@@ -274,11 +284,98 @@ export function BottomSheet({
     if (!dragging) onFollow?.(displayH, dragging);
   }, [displayH, dragging, onFollow]);
 
+  // M16: the Full detent is modal (the sheet visually covers the app behind
+  // it — see the file header). While at Full:
+  //  - remember whatever held focus beforehand, and restore it on the way out
+  //    (mirrors standard dialog behavior — the trigger gets focus back).
+  //  - send initial focus into the sheet (or the scrim) if it isn't already
+  //    there, so a keyboard user landing on Full doesn't stay parked on a
+  //    control that's about to go `inert` behind it (AppShell inerts the
+  //    background for this detent).
+  //  - trap focus two ways: (1) Tab/Shift+Tab are intercepted directly and
+  //    wrapped to the other end of the trap's focusable list — needed
+  //    because tabbing off the LAST focusable element doesn't move focus to
+  //    any DOM node (the browser just leaves the document, and
+  //    document.activeElement falls back to <body> without a `focusin`
+  //    event ever firing), so a focusin-only redirect can't catch it; (2) a
+  //    `focusin` listener still redirects any focus that lands outside the
+  //    trap by other means (e.g. a programmatic .focus() call).
+  //  - Escape collapses to Half from anywhere in the trap, not just the
+  //    drag handle (onHandleKeyDown above only fires when the handle itself
+  //    has focus).
+  const scrimRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (detent !== "full") return;
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const inTrap = (node: Node | null) =>
+      !!node && (sheet.contains(node) || node === scrimRef.current);
+    // DOM/tab order: the scrim (when present) precedes the sheet.
+    // FOCUSABLE_SELECTOR alone isn't enough: Radix's inactive TabsContent
+    // panels carry tabindex="0" (for programmatic/AT focus management) while
+    // `hidden`, which the browser's real Tab key already skips — filter
+    // those out too, or "last focusable" here would disagree with what Tab
+    // actually visits and the wrap-around below would never trigger.
+    const isReachable = (el: HTMLElement) => !el.closest("[hidden]") && el.offsetParent !== null;
+    const trapFocusables = () => {
+      const list = Array.from(sheet.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+        isReachable
+      );
+      return scrimRef.current ? [scrimRef.current, ...list] : list;
+    };
+    const focusFirst = () => {
+      const focusables = trapFocusables();
+      (focusables[0] ?? sheet).focus();
+    };
+    if (!inTrap(document.activeElement)) focusFirst();
+    const onFocusIn = (e: FocusEvent) => {
+      if (!inTrap(e.target as Node)) focusFirst();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setDetent("half");
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusables = trapFocusables();
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const current = document.activeElement;
+      // Wrap at either end (or if focus is somehow already outside the trap)
+      // instead of letting Tab walk off the document.
+      if (e.shiftKey) {
+        if (current === first || !inTrap(current)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (current === last || !inTrap(current)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("keydown", onKeyDown);
+      // Leaving Full (detent changed, or the sheet unmounted): give focus
+      // back to whatever triggered it, if it's still around.
+      const prev = returnFocusRef.current;
+      returnFocusRef.current = null;
+      if (prev && document.contains(prev)) prev.focus();
+    };
+  }, [detent, onDetentChange]);
+
   return (
     <>
       {/* Scrim only at Full detent */}
       {detent === "full" && (
         <button
+          ref={scrimRef}
           type="button"
           className="sheet-scrim"
           style={bottomInset ? { bottom: bottomInset } : undefined}

@@ -1,12 +1,11 @@
 // SheetTabs.tsx — segmented tabs (shadcn/ui Tabs) inside the mobile bottom sheet.
 // Parameters / Presets / Files. Prevents the stacked-sheet anti-pattern.
-import { useState } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
-import { useInitialTab } from "../lib/useInitialTab";
+import type { PanelTab } from "../lib/usePanelState";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
@@ -16,7 +15,7 @@ import { PanelFooter } from "./PanelFooter";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 
-type Tab = "params" | "presets" | "files";
+type Tab = PanelTab;
 
 interface Props {
   design: Design;
@@ -48,6 +47,14 @@ interface Props {
   /** Configurable tab labels (default "Presets" / "Parameters"). */
   presetsLabel?: string;
   parametersLabel?: string;
+  /** Active tab + search query, hoisted to AppShell (usePanelState) so they
+   *  survive a desktop/mobile remount — see docs/architecture-review.md M7. */
+  tab: PanelTab;
+  onTabChange: (tab: PanelTab) => void;
+  search: string;
+  onSearchChange: (search: string) => void;
+  onSearchFocus?: () => void;
+  onSearchBlur?: () => void;
 }
 
 export function SheetTabs({
@@ -70,6 +77,12 @@ export function SheetTabs({
   autoRender,
   presetsLabel = "Presets",
   parametersLabel = "Customize",
+  tab,
+  onTabChange,
+  search,
+  onSearchChange,
+  onSearchFocus,
+  onSearchBlur,
 }: Props) {
   const {
     change,
@@ -81,12 +94,8 @@ export function SheetTabs({
     clearFiles,
   } = useAppActions();
   const hasFiles = fileImport != null;
-  // Presets first on mobile, then Customize, then Files. Landing tab (Presets
-  // when the design ships ready-made presets, else the controls) — shared with
-  // the desktop panel via useInitialTab.
+  // Presets first on mobile, then Customize, then Files.
   const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
-  const [tab, setTab] = useInitialTab<Tab>(bundled.length > 0);
-  const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 150);
 
   const triggerClass = cn(chipTabTrigger, "flex-1");
@@ -94,7 +103,7 @@ export function SheetTabs({
   return (
     <Tabs
       value={tab}
-      onValueChange={(v) => setTab(v as Tab)}
+      onValueChange={(v) => onTabChange(v as Tab)}
       className="sheet-tabs min-h-0 flex-1 gap-0"
     >
       <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
@@ -113,7 +122,13 @@ export function SheetTabs({
             presetName={presetName}
             changedParams={changedParams}
           />
-          <ParamSearch value={search} onChange={setSearch} onClear={() => setSearch("")} />
+          <ParamSearch
+            value={search}
+            onChange={onSearchChange}
+            onClear={() => onSearchChange("")}
+            onFocus={onSearchFocus}
+            onBlur={onSearchBlur}
+          />
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
             <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} />
           </div>

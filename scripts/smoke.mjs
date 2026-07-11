@@ -21,6 +21,7 @@ import {
   renderStatusText,
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
+  dismissWelcomePopup,
 } from "./lib/browser.mjs";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
@@ -507,6 +508,162 @@ async function checkSignageDesign({ page, check, ids }) {
   await waitRendered(page, "arrow");
 }
 
+// M7 + M16 (docs/architecture-review.md): responsive layout mounting and
+// mobile bottom-sheet focus behavior. These need a real mobile-sized
+// viewport/context (the default page above is desktop-sized), so this opens
+// its own context rather than reusing `page`. Covers:
+//  - M7: exactly one interactive layout (ParamForm) is in the DOM at a given
+//    breakpoint, and a breakpoint change preserves active tab, search text,
+//    search focus, and (on the way back) the sheet's detent.
+//  - M16: at Peek/Half the mobile background stays keyboard-reachable
+//    (not `inert`); at Full it's `inert` and focus is trapped inside the
+//    sheet — Tab never lands on a covered background control — with Escape
+//    collapsing back out and focus returning to the sheet.
+async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
+  console.log("=== responsive layout: single mounted tree + state across a breakpoint change (M7) ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // Only the active (mobile) layout is in the DOM — the desktop tree isn't
+    // mounted at all.
+    check(
+      (await page.locator(".app-shell__mobile").count()) === 1 &&
+        (await page.locator(".app-shell__desktop").count()) === 0,
+      "mobile viewport mounts only the mobile layout tree"
+    );
+
+    // Raise the sheet to Half and switch to the Parameters tab (tapping a tab
+    // at Peek also raises it, but starting from Half keeps this deterministic
+    // regardless of the landing tab). The design may land on Presets (bundled
+    // presets), so ParamForm only mounts once Parameters is active — Radix
+    // Tabs unmounts inactive tab content.
+    await page.locator(".sheet-handle").click(); // peek -> half
+    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
+    await page.getByRole("tab", { name: paramsTabName }).first().click();
+    await page.waitForSelector(".param-form", { timeout: 3000 });
+    check((await page.locator(".param-form").count()) === 1, "exactly one ParamForm is mounted");
+
+    // Type into the search box and leave it focused.
+    const mobileSearch = page.locator("#param-search-input");
+    await mobileSearch.click();
+    await mobileSearch.fill("thick");
+    check(
+      await page.evaluate((id) => document.activeElement?.id === id, "param-search-input"),
+      "search input holds focus before the breakpoint change"
+    );
+
+    // Flip the breakpoint (a real device rotation crossing 860px would fire
+    // the same matchMedia change useIsMobile listens for).
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForSelector(".app-shell__desktop", { timeout: 3000 });
+    check(
+      (await page.locator(".app-shell__mobile").count()) === 0 &&
+        (await page.locator(".param-form").count()) === 1,
+      "switching to desktop remounts to a single layout tree"
+    );
+    check(
+      (await page.locator("#param-search-input").inputValue()) === "thick",
+      "search query survives the breakpoint change"
+    );
+    check(
+      (await page.getByRole("tab", { name: paramsTabName }).first().getAttribute("aria-selected")) === "true",
+      "active tab survives the breakpoint change"
+    );
+    check(
+      await page.evaluate((id) => document.activeElement?.id === id, "param-search-input"),
+      "search focus is restored after the breakpoint change"
+    );
+
+    // Back to mobile: the sheet detent set above (Half) must not have reset
+    // to Peek just because the layout remounted.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForSelector(".app-shell__mobile", { timeout: 3000 });
+    check(
+      (await page.locator(".bottom-sheet--half").count()) === 1,
+      "sheet detent survives a round-trip breakpoint change"
+    );
+
+    console.log("=== mobile bottom sheet: focus at peek/half/full (M16) ===");
+    // Peek/Half: non-modal — the background (top bar etc.) is not inert and
+    // stays keyboard-reachable. Currently at Half (set above); cycle the
+    // handle taps (cycleDetent order is peek -> half -> full -> peek) back to
+    // Peek deterministically.
+    for (let i = 0; i < 3 && !(await page.locator(".bottom-sheet--peek").count()); i++) {
+      await page.locator(".sheet-handle").click();
+      await page.waitForTimeout(50);
+    }
+    check((await page.locator(".bottom-sheet--peek").count()) === 1, "sheet returned to peek");
+    check(
+      !(await page.locator(".app-shell__mobile-background").getAttribute("inert").catch(() => null)),
+      "background is not inert at peek"
+    );
+    const outputBell = page.locator(".mobile-top-bar__output");
+    await outputBell.focus();
+    check(
+      await page.evaluate(() => document.activeElement?.classList.contains("mobile-top-bar__output")),
+      "a background control is keyboard-focusable at peek"
+    );
+
+    await page.locator(".sheet-handle").click(); // peek -> half
+    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
+    check(
+      !(await page.locator(".app-shell__mobile-background").getAttribute("inert").catch(() => null)),
+      "background is not inert at half"
+    );
+
+    // Full: modal — background goes inert, and Tab must never escape the sheet.
+    await page.locator(".sheet-handle").click(); // half -> full
+    await page.waitForSelector(".bottom-sheet--full", { timeout: 3000 });
+    check(
+      (await page.locator(".app-shell__mobile-background").getAttribute("inert")) === "",
+      "background is inert at full"
+    );
+    check(
+      await page.evaluate(() => {
+        const sheet = document.querySelector(".bottom-sheet");
+        const el = document.activeElement;
+        return !!sheet && !!el && (sheet.contains(el) || el.classList.contains("sheet-scrim"));
+      }),
+      "focus moves into the sheet on entering full"
+    );
+    // Tab repeatedly (well past the sheet's focusable count) and confirm
+    // focus never lands in the inert background or on <body>.
+    let escaped = false;
+    for (let i = 0; i < 25; i++) {
+      await page.keyboard.press("Tab");
+      escaped = await page.evaluate(() => {
+        const sheet = document.querySelector(".bottom-sheet");
+        const bg = document.querySelector(".app-shell__mobile-background");
+        const el = document.activeElement;
+        if (!el || el === document.body) return true;
+        if (bg?.contains(el)) return true;
+        return !(sheet?.contains(el) || el.classList.contains("sheet-scrim"));
+      });
+      if (escaped) break;
+    }
+    check(!escaped, "Tab never escapes the sheet (or lands on <body>) while full is modal");
+
+    // Escape collapses the modal detent and un-inerts the background.
+    await page.keyboard.press("Escape");
+    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
+    check(
+      !(await page.locator(".app-shell__mobile-background").getAttribute("inert").catch(() => null)),
+      "Escape collapses full and un-inerts the background"
+    );
+  } finally {
+    await context.close();
+  }
+}
+
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
@@ -536,7 +693,7 @@ async function main() {
     console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);
     await waitRendered(page, ids[0]);
 
-    const ctx = { page, check, base, dir, schema, ids, presetsTabName, paramsTabName };
+    const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName };
     await checkWelcomePopup(ctx);
     await checkFileImport(ctx);
     await checkThemeToggle(ctx);
@@ -550,6 +707,7 @@ async function main() {
     await checkServiceWorker(ctx);
     await checkTagDesign(ctx);
     await checkSignageDesign(ctx);
+    await checkResponsiveLayout(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);
