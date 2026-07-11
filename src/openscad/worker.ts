@@ -97,7 +97,18 @@ let fontFiles: Record<string, Uint8Array> | null = null;
 let fontsConf: string | null = null;
 
 async function loadFactory(): Promise<OpenSCADFactory> {
-  const mod = await import(/* @vite-ignore */ asset("wasm/openscad.js"));
+  // H3/M12: content-address the WASM glue (openscad.js) by schema.binAssets.glue,
+  // exactly as the wasm binary and fonts are below. The glue is a render input
+  // folded into renderHash, so a deploy that changes it MUST change its fetch
+  // URL — otherwise the service worker's stale-while-revalidate route can serve
+  // the old glue to the new bundle and persist that geometry under the new
+  // renderHash. `?v=<digest>` makes each build's glue a distinct URL.
+  const mod = await import(
+    /* @vite-ignore */ versionedAssetUrl(
+      "wasm/openscad.js",
+      (schema as { binAssets?: { glue?: string } }).binAssets?.glue
+    )
+  );
   return mod.default as OpenSCADFactory;
 }
 
@@ -171,7 +182,18 @@ const ensureAssets = retryableOnce(async () => {
         assetSources = Object.fromEntries(entries) as Record<string, string>;
       })(),
       (async () => {
-        fontsConf = await (await checkedFetch(asset("fonts/fonts.conf"))).text();
+        // H3: content-address fonts.conf by schema.binAssets.fontsConf for the
+        // same reason as the wasm/glue/font binaries — Fontconfig rules are a
+        // render input folded into renderHash, so a change must not be served
+        // stale under an unchanged URL by the service worker's SWR route.
+        fontsConf = await (
+          await checkedFetch(
+            versionedAssetUrl(
+              "fonts/fonts.conf",
+              (schema as { binAssets?: { fontsConf?: string } }).binAssets?.fontsConf
+            )
+          )
+        ).text();
       })(),
       (async () => {
         // H4: same content-addressed treatment as the wasm binary above — a
