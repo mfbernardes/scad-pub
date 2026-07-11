@@ -620,6 +620,36 @@ test("a respawned worker always gets a full resend, even if files are unchanged"
   runner.dispose();
 });
 
+test("a fatal bootstrap result forces the next render to resend user files (same worker)", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+  const files = { "user.ttf": new Uint8Array([1, 2, 3]) };
+
+  // First render carries the files, but the worker's bootstrap fails fatally
+  // (BootstrapError -> { ok:false, fatal:true }) BEFORE it records them into its
+  // cross-render cache. A fatal result arrives as a normal message (not
+  // onerror), so the worker is NOT respawned and is reused for the retry.
+  const first = runner.render({ design: "x", defines: { a: "1" }, userFiles: files });
+  assert.ok("userFiles" in w.last, "first post to a fresh worker must include the files");
+  w.emit({ id: w.last.id, ok: false, fatal: true, exitCode: 1, stl: new Uint8Array(0), log: [], ms: 0 });
+  await first;
+
+  // Same (unchanged) file set on the retry: without the fix the runner would
+  // treat them as already-sent and omit them, and the reused worker — which
+  // never cached them — would mount nothing and render wrong geometry. The
+  // fatal result must have cleared the sent signature, so the files are resent.
+  const sameWorker = newest();
+  assert.strictEqual(sameWorker, w, "a fatal bootstrap must NOT respawn the worker");
+  const retry = runner.render({ design: "x", defines: { a: "1" }, userFiles: files });
+  assert.ok(
+    "userFiles" in w.last && w.last.userFiles,
+    "after a fatal bootstrap the unchanged files must be resent, not skipped"
+  );
+  w.emit(ok(w.last.id, 6));
+  await retry;
+  runner.dispose();
+});
+
 // L1 (docs/architecture-review.md): worker OWNERSHIP moved from a render-time
 // `if (!runnerRef.current) runnerRef.current = new OpenSCADRunner(...)` in
 // useRenderPipeline.ts into a useEffect whose setup constructs the runner and

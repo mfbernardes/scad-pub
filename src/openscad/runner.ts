@@ -279,6 +279,18 @@ export class OpenSCADRunner {
       if (p) {
         this.pending.delete(result.id);
         if (this.inflightId === result.id) {
+          // M10/H3: a fatal bootstrap failure throws inside the worker's
+          // ensureAssets(), BEFORE it records this request's userFiles into its
+          // cross-render cache (worker.ts only stores them once bootstrap
+          // succeeds). We already marked that file set as "sent" optimistically
+          // when we posted it, and this worker is reused for the retry (a fatal
+          // result arrives as a normal message, not onerror, so spawn() never
+          // runs and lastSentFileSig is retained). Forget the sent signature so
+          // the next render resends the full file set — otherwise the retry
+          // omits the unchanged bytes and the worker mounts nothing, producing
+          // (and caching) wrong geometry under a key that claims those files
+          // were present.
+          if (result.fatal) this.lastSentFileSig = null;
           if (this.inflightKey) {
             this.remember(this.inflightKey, result); // L1
             // M11: staleDefines is correctness-relevant (it's what tells the
