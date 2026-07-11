@@ -93,12 +93,21 @@ export function readInitialState(schema: Schema): SessionState {
   );
 }
 
-/** Write the current state to the URL hash and localStorage (no history entry). */
-export function persistState(design: Design, values: Values, preset = "") {
+// The single source of the "d=/v=/p=" hash encoding, shared by `persistState`
+// (debounced, mirrors to the URL bar + localStorage) and `buildShareUrl`
+// (synchronous, used by Share) — see docs/architecture-review.md H2. Reusing
+// one function means the two can never encode a design's state differently.
+function buildShareState(design: Design, values: Values, preset: string) {
   const diff = diffFromDefaults(design, values);
   const params = new URLSearchParams({ d: design.id });
   if (Object.keys(diff).length) params.set("v", JSON.stringify(diff));
   if (preset) params.set("p", preset);
+  return { diff, params };
+}
+
+/** Write the current state to the URL hash and localStorage (no history entry). */
+export function persistState(design: Design, values: Values, preset = "") {
+  const { diff, params } = buildShareState(design, values, preset);
   // The localStorage mirror always runs, even if the history update below is
   // throttled away, so a reload still restores the latest state.
   writeLocal(STORE_KEY, JSON.stringify({ designId: design.id, diff, preset }));
@@ -110,4 +119,17 @@ export function persistState(design: Design, values: Values, preset = "") {
     // this particular hash update is harmless — the next call, or the
     // localStorage mirror above, keeps state in sync.
   }
+}
+
+/**
+ * The share URL for the CURRENT design/values/preset, built synchronously —
+ * unlike `persistState`, which is debounced 300ms behind React state, this
+ * must never lag an edit (docs/architecture-review.md H2: a quick edit-then-
+ * Share must not copy the pre-edit URL). Only `location.origin`/`pathname`/
+ * `search` are read, since those aren't debounced or state-derived — the hash
+ * itself is always rebuilt from the arguments, never from `location.hash`.
+ */
+export function buildShareUrl(design: Design, values: Values, preset = ""): string {
+  const { params } = buildShareState(design, values, preset);
+  return `${location.origin}${location.pathname}${location.search}#${params.toString()}`;
 }

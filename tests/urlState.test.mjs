@@ -21,7 +21,12 @@ class MemStorage {
 }
 
 globalThis.localStorage = new MemStorage();
-globalThis.location = { hash: "" };
+globalThis.location = {
+  hash: "",
+  origin: "http://x",
+  pathname: "/app/",
+  search: "",
+};
 globalThis.history = {
   replaceState(_s, _t, url) {
     globalThis.location.hash = String(url).startsWith("#")
@@ -30,7 +35,9 @@ globalThis.history = {
   },
 };
 
-const { readInitialState, persistState } = await import("../src/lib/urlState.ts");
+const { readInitialState, persistState, buildShareUrl } = await import(
+  "../src/lib/urlState.ts"
+);
 
 const param = (name, type, def) => ({
   name,
@@ -155,6 +162,37 @@ test("unknown param keys in v diff are silently ignored", () => {
   assert.equal(r.values.n, 7);
   assert.equal(r.values.text, "hi");
   assert.ok(!("bogus" in r.values));
+});
+
+test("buildShareUrl reflects the current values synchronously, without waiting on persistState's debounce", () => {
+  // Simulate App.tsx: persistState is scheduled behind a 300ms setTimeout, but
+  // Share must never depend on that timer having fired yet.
+  persistState(design, { ...DEFAULTS }); // "pre-edit" state already persisted
+  const edited = { text: "just typed", n: 2, b: false };
+  // No persistState(edited, ...) call here — the debounce hasn't fired.
+  const url = buildShareUrl(design, edited);
+  assert.match(url, /v=/);
+  const hash = new URL(url).hash;
+  const params = new URLSearchParams(hash.slice(1));
+  assert.deepEqual(JSON.parse(params.get("v")), { text: "just typed" });
+  // The stale hash left behind by the last persistState call must NOT be what
+  // got shared.
+  assert.notEqual(globalThis.location.hash, hash);
+});
+
+test("buildShareUrl preserves origin/pathname/search and encodes design+preset", () => {
+  const url = buildShareUrl(design, { text: "bye", n: 5, b: true }, "bundled:Foo");
+  assert.ok(url.startsWith("http://x/app/#"));
+  const params = new URLSearchParams(new URL(url).hash.slice(1));
+  assert.equal(params.get("d"), "d");
+  assert.equal(params.get("p"), "bundled:Foo");
+  assert.deepEqual(JSON.parse(params.get("v")), { text: "bye", n: 5, b: true });
+});
+
+test("buildShareUrl omits v= for default-only values, like persistState", () => {
+  const url = buildShareUrl(design, { ...DEFAULTS });
+  assert.ok(!url.includes("v="));
+  assert.ok(!url.includes("p="));
 });
 
 test("persistState survives a throttled history.replaceState (e.g. Safari)", () => {

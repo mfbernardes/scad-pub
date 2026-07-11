@@ -12,7 +12,8 @@ import {
   type Values,
 } from "./lib/presets";
 import { changedParams } from "./lib/paramDiff";
-import { readInitialState, persistState } from "./lib/urlState";
+import { readInitialState, persistState, buildShareUrl } from "./lib/urlState";
+import { computeShareability, shareabilityWarning } from "./lib/shareability";
 import { download, downloadBlob } from "./lib/download";
 import { shareUrl, shareFileOrFallback } from "./lib/share";
 import { useTheme } from "./lib/theme";
@@ -235,18 +236,38 @@ export default function App() {
     setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Saved ${name}`);
   }, [exportable, snapshot]);
 
+  // Whether the CURRENT design/values/imports are fully described by a plain
+  // share URL, and which local-only files are missing if not. Recomputed on
+  // every change so `copyLink` never has to guess after the fact.
+  // See docs/architecture-review.md H2.
+  const shareability = useMemo(
+    () => computeShareability(design, values, userFiles, schema.fontFamilies),
+    [design, values, userFiles]
+  );
+
   const copyLink = useCallback(async () => {
-    const url = location.href;
+    // Built synchronously from the live design/values/preset — never from
+    // `location.href`, which only reflects the last debounced `persistState`
+    // write and can lag a just-made edit by up to 300ms.
+    const url = buildShareUrl(design, values, presetSel);
+    const warning = shareabilityWarning(shareability);
     // Native share sheet where available (mobile); otherwise copy to clipboard.
+    // Either way, a local-only dependency gets an explicit warning naming the
+    // missing files — the plain URL is copied/shared regardless (no upload;
+    // see docs/architecture-review.md H2), but never silently implied complete.
     const outcome = await shareUrl(url, schema.title);
-    if (outcome === "shared" || outcome === "cancelled") return;
+    if (outcome === "cancelled") return;
+    if (outcome === "shared") {
+      if (warning) setAnnouncement(warning);
+      return;
+    }
     try {
       await navigator.clipboard.writeText(url);
-      setAnnouncement("Copied share link");
+      setAnnouncement(warning ?? "Copied share link");
     } catch {
       setAnnouncement("Couldn't copy — copy the URL from the address bar");
     }
-  }, []);
+  }, [design, values, presetSel, shareability, setAnnouncement]);
 
   const handleReset = useCallback(() => { setValues(defaultsFor(design)); setPresetSel(""); }, [design]);
   const showHelpModal = useCallback(() => setShowHelp(true), []);
