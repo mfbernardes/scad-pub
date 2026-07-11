@@ -255,12 +255,29 @@ async function checkAxe({ page, check }) {
   await page.addScriptTag({
     path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
   });
+  // axe's color-contrast check reads *computed* colours. Several controls (the
+  // tab chips especially) carry `transition-[color,box-shadow]`, and a theme
+  // swap animates every colour token, so sampling an element mid-transition
+  // yields an intermediate colour and a spurious contrast violation. A fixed
+  // wait was flaky (the transition outlasts a short sleep on slower CI); wait
+  // for all running CSS transitions/animations to actually settle instead.
+  const settle = async () => {
+    await page.waitForTimeout(50); // let a just-started transition register first
+    await page
+      .waitForFunction(
+        () => document.getAnimations().every((a) => a.playState !== "running"),
+        null,
+        { timeout: 3000 }
+      )
+      .catch(() => {});
+  };
   // Palettes are per-theme (and config-overridable per theme), so a contrast
   // regression can hide in whichever theme a single sweep doesn't visit: run
   // the AA sweep in the current theme, then toggle and sweep the other. The
   // second toggle also returns the app to the theme it started the section in.
   for (let pass = 0; pass < 2; pass++) {
     const theme = await page.getAttribute("html", "data-theme");
+    await settle();
     const axeRes = await page.evaluate(async () =>
       // WCAG 2.1 AA tags; report only violations.
       window.axe.run(document, {
@@ -276,7 +293,6 @@ async function checkAxe({ page, check }) {
     check(serious.length === 0, `axe (${theme}): ${serious.length} serious/critical violation(s)`);
     if (pass === 0) {
       await page.locator('.command-bar__right button[aria-label^="Switch to"]').first().click();
-      await page.waitForTimeout(80); // let the palette swap land before the next sweep
     }
   }
 }
