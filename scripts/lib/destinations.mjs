@@ -22,17 +22,25 @@
 // before and (b) it did not write this run — never a path outside that
 // remembered set. A first run (no manifest yet) deletes nothing.
 import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, relative, resolve, isAbsolute } from "node:path";
 
 /** A fresh per-generate() destination registry (H6). */
 export function createDestinationRegistry() {
   const owners = new Map(); // absPath -> label
 
-  // Reserve `absPath` for `label`. Throws — naming both owners — if something
-  // already claimed it. Call this before writing, for every generated file.
+  // Reserve `absPath` for `label`. Throws — naming both owners — if a
+  // DIFFERENT owner already claimed it. Call this before writing, for every
+  // generated file. Re-registering the same destination under the SAME label
+  // is idempotent, not a collision: the label encodes the source (e.g.
+  // `source file 'widget.scad'`), so an identical label means the identical
+  // source copied to the identical destination. That happens for supported
+  // configs where a catch-all re-includes a file already copied — e.g.
+  // `assets: ["."]` or `assets: ["**/*.scad"]` picking up a design's own
+  // .scad that buildDesigns already staged. Only a different owner writing the
+  // same path is the silent-clobber this guard exists to catch.
   function register(absPath, label) {
     const existing = owners.get(absPath);
-    if (existing)
+    if (existing !== undefined && existing !== label)
       throw new Error(
         `gen-schema: generated output collision at\n  ${absPath}\n` +
           `  already written by: ${existing}\n` +
@@ -46,31 +54,46 @@ export function createDestinationRegistry() {
 }
 
 // Reconcile a set of paths this tool owns end-to-end (outside outScadDir,
-// which is wiped wholesale) against what it wrote last time (M8). `manifestPath`
-// stores the previous run's file list (JSON array of absolute paths);
-// `currentAbsPaths` is every path this run actually wrote (including the
-// manifest's own directory need not be created — callers pass real output
-// paths only). A missing/corrupt manifest is treated as "nothing to clean up"
-// (e.g. first run after this feature shipped) rather than a failure.
-export function reconcileGenerated(manifestPath, currentAbsPaths) {
-  let prev = [];
+// which is wiped wholesale) against what it wrote last time (M8).
+//
+// Entries are stored and compared RELATIVE to `root` (the reconciliation
+// boundary — e.g. public/), never as absolute host paths: absolute paths in
+// the persisted manifest leaked the build-host checkout path into any copy of
+// it and made it a stale/tampered manifest an authority to `rmSync` files
+// anywhere on disk. Storing relative and re-resolving under `root` — plus a
+// containment check before every delete — means a moved, copied, or hand-
+// edited manifest can only ever remove files inside the current output root.
+// The manifest file itself lives OUTSIDE `root` (see the caller) so it isn't
+// swept up into the built site.
+//
+// `currentAbsPaths` is every path this run actually wrote. A missing/corrupt/
+// non-array manifest is treated as "nothing to clean up" (e.g. first run after
+// this feature shipped) rather than a failure.
+export function reconcileGenerated(manifestPath, root, currentAbsPaths) {
+  let prevRel = [];
   if (existsSync(manifestPath)) {
     try {
-      prev = JSON.parse(readFileSync(manifestPath, "utf-8"));
+      const parsed = JSON.parse(readFileSync(manifestPath, "utf-8"));
+      if (Array.isArray(parsed)) prevRel = parsed.filter((e) => typeof e === "string");
     } catch {
-      prev = [];
+      prevRel = [];
     }
   }
-  const current = new Set(currentAbsPaths);
-  for (const f of prev) {
-    if (!current.has(f)) {
-      try {
-        rmSync(f, { force: true });
-      } catch {
-        /* already gone */
-      }
+  const currentRel = new Set(currentAbsPaths.map((p) => relative(root, p)));
+  for (const rel of prevRel) {
+    if (currentRel.has(rel)) continue;
+    // Containment: never delete an entry that isn't a relative path strictly
+    // inside `root`. `relative(root, resolve(root, rel))` starting with ".."
+    // (or `rel` being absolute) means it escapes — skip it rather than trust it.
+    if (isAbsolute(rel) || rel.startsWith("..")) continue;
+    const abs = resolve(root, rel);
+    if (relative(root, abs).startsWith("..")) continue;
+    try {
+      rmSync(abs, { force: true });
+    } catch {
+      /* already gone */
     }
   }
   mkdirSync(dirname(manifestPath), { recursive: true });
-  writeFileSync(manifestPath, JSON.stringify([...current].sort(), null, 2) + "\n");
+  writeFileSync(manifestPath, JSON.stringify([...currentRel].sort(), null, 2) + "\n");
 }

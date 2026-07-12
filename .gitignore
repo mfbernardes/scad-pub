@@ -33,6 +33,7 @@ public/precache-manifest.json
 # Ownership manifest for generated files outside public/scad/ (fonts copied
 # from source, PWA root assets) — scripts/lib/destinations.mjs uses it to
 # clean up files a removed/renamed config entry left behind (M8).
+/.gen-manifest.json
 public/.gen-manifest.json
 
 # Playwright artifacts (if a contributor runs `playwright test`)

@@ -500,8 +500,13 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
   const shell = new Set([
     ...iconFiles,
     "manifest.webmanifest",
-    "wasm/openscad.js",
-    "fonts/fonts.conf",
+    // H3: the render worker fetches the WASM glue and fonts.conf content-
+    // addressed (versionedAssetUrl in worker.ts), so precache the SAME
+    // ?v=<digest> URLs here. Cache Storage matches the query string, so an
+    // unversioned shell entry is a miss for the worker's versioned request —
+    // an app taken offline before its first render would fail to bootstrap.
+    versionedPath("wasm/openscad.js", schema.binAssets?.glue),
+    versionedPath("fonts/fonts.conf", schema.binAssets?.fontsConf),
   ]);
   for (const splash of appleSplash) shell.add(splash.href);
   for (const asset of assets) shell.add(`scad/${asset}`);
@@ -669,24 +674,23 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
 
   const extraCss = copyExtraCss(config, CONFIG_DIR, stageScadDir, mustExist, registry.register);
 
-  // Every write into outScadDir is done (design/preset/dependency/logo/icon/
-  // doc/extraCss copies above): atomically replace the live outScadDir with
-  // the staged tree now (H6/M8), before generatePwaAssets below — it reads a
-  // design icon's real PNG dimensions back from `outPublicDir/scad/…`
-  // (`d.icon`), which must resolve to the final location, not the stage. A
-  // PWA-asset failure past this point (e.g. a malformed configured icon)
-  // still fails the whole build, but outScadDir itself — the render sources,
-  // whose collision-freedom and containment were validated above — no longer
-  // needs to roll back for it; see scripts/lib/destinations.mjs for how the
-  // PWA/font outputs' own lifecycle is reconciled instead of staged.
-  rmSync(outScadDir, { recursive: true, force: true });
-  renameSync(stageScadDir, outScadDir);
+  // The staged scad tree is complete, but it is NOT committed to the live
+  // outScadDir yet: the swap is deferred to the very end (below), after the
+  // fallible PWA generation and once the schema is in hand, so the whole
+  // output — render sources, PWA/font assets, and designs.json — commits as
+  // one unit. A failure in generatePwaAssets (e.g. a malformed configured
+  // icon) therefore leaves the PREVIOUS complete output entirely intact: the
+  // old scad tree, the old schema, and the old icons all still match. (PWA
+  // icon writes are themselves non-destructive on failure — see
+  // pwa-assets.mjs, which rasterizes the whole batch before writing any of it.)
 
   // Generate the PWA icon set, iOS splash images and manifest.webmanifest
   // (skipped for the fixture-driven unit tests, which pass no outPublicDir).
   // Returns the iOS splash <link> descriptors vite injects into index.html,
   // the icon files actually written (M8), and every path this call wrote
-  // (for the M8 lifecycle reconciliation below).
+  // (for the M8 lifecycle reconciliation below). It reads design picker-icon
+  // dimensions from the STAGING scad dir (scadDir), since the live swap hasn't
+  // happened yet.
   let appleSplash = [];
   let iconFiles = ["icon.svg"];
   let pwaWritten = [];
@@ -707,6 +711,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
       designs,
       mustExist,
       register: registry.register,
+      scadDir: stageScadDir,
     }));
   }
 
@@ -768,10 +773,20 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     assets: [...assets].sort(),
     designs: designs.map(({ abs, ...d }) => d),
   };
+
+  // COMMIT POINT (H6/M8): every fallible step — design parsing, containment
+  // checks, PWA rasterization — has now succeeded and the schema is in hand, so
+  // atomically swap the staged scad tree into the live location. Everything
+  // past here (precache manifest, reconciliation, designs.json) is a plain
+  // non-fallible write, so scad sources, PWA/font assets, and the schema all
+  // land together: a failure earlier left the entire previous output intact.
+  rmSync(outScadDir, { recursive: true, force: true });
+  renameSync(stageScadDir, outScadDir);
+
   if (outPublicDir) {
     writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo, extraCss, iconFiles });
     // M8: reconcile the generated files this run wrote OUTSIDE outScadDir
-    // (which is fully replaced above) — source-copied fonts under
+    // (which was fully replaced as a unit just above) — source-copied fonts under
     // public/fonts, plus the PWA root assets (icons, splashes, manifest,
     // screenshots) — against what a previous run generated, so removing or
     // renaming a config entry (a dropped font, a renamed screenshot) doesn't
@@ -779,7 +794,19 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     // recorded writing previously; a tracked bundled .ttf or an unrelated
     // file a contributor placed under public/ was never in that manifest, so
     // it's never a deletion candidate. See scripts/lib/destinations.mjs.
-    reconcileGenerated(join(outPublicDir, ".gen-manifest.json"), [...fontCopies, ...pwaWritten]);
+    //
+    // The manifest lives ABOVE public/ (repo root), not inside it: Vite copies
+    // everything under public/ into dist/ verbatim, so a manifest kept there
+    // shipped host-absolute checkout paths into the built site. Its entries are
+    // stored relative to public/ and only ever resolve/delete within it.
+    // Sweep away a legacy in-public manifest from older builds so it can't be
+    // deployed or read as an absolute-path authority.
+    rmSync(join(outPublicDir, ".gen-manifest.json"), { force: true });
+    reconcileGenerated(
+      join(outPublicDir, "..", ".gen-manifest.json"),
+      outPublicDir,
+      [...fontCopies, ...pwaWritten]
+    );
   }
   writeFileSync(
     join(outSchemaDir, "designs.json"),

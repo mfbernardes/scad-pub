@@ -15,7 +15,7 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, relative, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   generate,
@@ -534,8 +534,6 @@ test("public precache manifest lists generated runtime assets", () => {
   for (const path of [
     "icon.svg",
     "manifest.webmanifest",
-    "wasm/openscad.js",
-    "fonts/fonts.conf",
     "scad/widget.scad",
     "scad/widget.json",
     "scad/lib/core.scad",
@@ -544,6 +542,20 @@ test("public precache manifest lists generated runtime assets", () => {
   ]) {
     assert.ok(precache.shell.includes(path), `${path} should be shell-precached`);
   }
+  // H3: the render worker fetches the WASM glue and fonts.conf content-
+  // addressed, so the shell precaches the SAME ?v=<digest> URLs (Cache Storage
+  // matches the query string, so an unversioned entry would miss the worker's
+  // versioned request offline). This fixture has no real openscad.js on disk,
+  // so its glue digest is absent and the URL stays plain; fonts.conf IS a
+  // generated file, so its shell URL must carry a digest query.
+  assert.ok(
+    precache.shell.some((u) => u === "wasm/openscad.js" || /^wasm\/openscad\.js\?v=[0-9a-f]+$/.test(u)),
+    `glue must be shell-precached, got: ${JSON.stringify(precache.shell)}`
+  );
+  assert.ok(
+    precache.shell.some((u) => /^fonts\/fonts\.conf\?v=[0-9a-f]+$/.test(u)),
+    `expected a digest-versioned fonts.conf shell URL, got: ${JSON.stringify(precache.shell)}`
+  );
   // The big binaries (WASM + font files) go to the render worker's own
   // versioned cache, not the shell cache.
   assert.ok(!precache.shell.includes("wasm/openscad.wasm"));
@@ -1740,10 +1752,16 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
   const shotDest = join(outPublicDir, "shot.png");
   assert.ok(existsSync(fontDest));
   assert.ok(existsSync(shotDest));
-  const manifestPath = join(outPublicDir, ".gen-manifest.json");
+  // The manifest lives ABOVE public/ (so Vite never ships it) and stores paths
+  // relative to public/ (never host-absolute — no checkout-path leak, and a
+  // stray manifest can't authorize deletes outside the output root).
+  const manifestPath = join(outPublicDir, "..", ".gen-manifest.json");
+  const relTo = (abs) => relative(outPublicDir, abs);
+  assert.ok(!existsSync(join(outPublicDir, ".gen-manifest.json")), "manifest must not sit inside public/");
   const manifest1 = JSON.parse(readFileSync(manifestPath, "utf-8"));
-  assert.ok(manifest1.includes(fontDest));
-  assert.ok(manifest1.includes(shotDest));
+  assert.ok(manifest1.every((e) => !isAbsolute(e)), "manifest entries must be relative, not absolute");
+  assert.ok(manifest1.includes(relTo(fontDest)));
+  assert.ok(manifest1.includes(relTo(shotDest)));
 
   // Reconfigure without the font/screenshot — as if the config entry was
   // removed or renamed.
@@ -1759,9 +1777,10 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
   // Final manifest matches disk: every recorded path still exists, and
   // nothing recorded is stale.
   const manifest2 = JSON.parse(readFileSync(manifestPath, "utf-8"));
-  assert.ok(!manifest2.includes(fontDest));
-  assert.ok(!manifest2.includes(shotDest));
-  for (const p of manifest2) assert.ok(existsSync(p), `manifest entry missing on disk: ${p}`);
+  assert.ok(!manifest2.includes(relTo(fontDest)));
+  assert.ok(!manifest2.includes(relTo(shotDest)));
+  for (const p of manifest2)
+    assert.ok(existsSync(join(outPublicDir, p)), `manifest entry missing on disk: ${p}`);
 });
 
 test("a malformed configured icon fails the build instead of shipping a missing/mislabeled PNG", () => {
@@ -1784,6 +1803,60 @@ test("a malformed configured icon fails the build instead of shipping a missing/
   }
   assert.ok(!existsSync(join(outPublicDir, "manifest.webmanifest")));
   assert.ok(!existsSync(join(outPublicDir, "precache-manifest.json")));
+});
+
+test("a catch-all `assets` entry that re-includes a design's own .scad is idempotent, not a collision", () => {
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-idem-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\nx = 1;\n`);
+  const cfg = join(root, "c.config.json");
+  writeFileSync(
+    cfg,
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      // The catch-all picks up d.scad, which buildDesigns already copied — the
+      // same source to the same destination. That must NOT be a collision.
+      assets: ["."],
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+  const outPublicDir = join(root, "public");
+  const schema = generate({
+    configPath: cfg,
+    outSchemaDir: join(root, "schema"),
+    outScadDir: join(outPublicDir, "scad"),
+    outPublicDir,
+  });
+  assert.ok(existsSync(join(outPublicDir, "scad", "d.scad")));
+  assert.ok(schema.assets.includes("d.scad"));
+});
+
+test("a PWA/icon failure after a prior successful build leaves the previous output intact (transactional)", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-txn-"));
+  const outPublicDir = join(out, "public");
+  const outScadDir = join(outPublicDir, "scad");
+  const outSchemaDir = join(out, "schema");
+  const base = { outSchemaDir, outScadDir, outPublicDir };
+  // A good build first.
+  generate({ ...base, configPath: join(FIXTURES, "widget.config.json") });
+  const beforeScad = readdirSync(outScadDir).sort();
+  const beforeSchema = readFileSync(join(outSchemaDir, "designs.json"));
+  const iconPath = join(outPublicDir, "icon-192.png");
+  const beforeIcon = existsSync(iconPath) ? readFileSync(iconPath) : null;
+
+  // A build whose configured icon can't rasterize fails AFTER staging the new
+  // scad but before the commit — so scad, schema, and the icons must all stay
+  // exactly as the last good build left them (no new-scad/old-schema mismatch,
+  // no clobbered/deleted last-good icon).
+  assert.throws(
+    () => generate({ ...base, configPath: join(FIXTURES, "widget-badicon.config.json") }),
+    /icon rasterization failed/
+  );
+  assert.deepEqual(readdirSync(outScadDir).sort(), beforeScad);
+  assert.deepEqual(readFileSync(join(outSchemaDir, "designs.json")), beforeSchema);
+  if (beforeIcon) assert.deepEqual(readFileSync(iconPath), beforeIcon);
 });
 
 // M13 — browser-facing SVGs (logo, PWA icon, design picker icon) are run
