@@ -36,7 +36,12 @@ export function computeRenderHash({
   scadFiles,
   features,
   format,
-  fonts,
+  // `fontPaths` (name -> current abs path, e.g. a source file before the build
+  // commits the copy) and `fontsConf` (the rendered config content) are passed
+  // in rather than read from public/fonts, so the hash can be computed before
+  // the font tree is written into the live output (see bundleFonts).
+  fontPaths = {},
+  fontsConf = null,
   designRouting = [],
   rendererFiles,
   outPublicDir,
@@ -71,20 +76,20 @@ export function computeRenderHash({
         /* renderer source unavailable in this build context */
       }
     }
-    for (const name of [...fonts].sort()) {
+    for (const name of Object.keys(fontPaths).sort()) {
       h.update(`font\0${name}\0`);
       try {
-        h.update(readFileSync(join(outPublicDir, "fonts", name)));
+        h.update(readFileSync(fontPaths[name]));
       } catch {
-        /* font not bundled here */
+        /* font not readable here */
       }
     }
-    // fontconfig matching rules — they steer which glyphs the text() geometry uses.
-    try {
+    // fontconfig matching rules — they steer which glyphs the text() geometry
+    // uses. Hash the rendered content (identical bytes to the file written at
+    // commit), so this is stable whether or not the copy has landed yet.
+    if (fontsConf != null) {
       h.update("fonts.conf\0");
-      h.update(readFileSync(join(outPublicDir, "fonts", "fonts.conf")));
-    } catch {
-      /* no bundled fonts.conf */
+      h.update(Buffer.from(fontsConf));
     }
     try {
       h.update(readFileSync(join(outPublicDir, "wasm", "openscad.wasm")));
@@ -122,10 +127,11 @@ export function computeRenderHash({
 // correct bytes; different bytes -> a different URL -> the old cache entry
 // can never be mistaken for the new one, independent of whether wasmVersion
 // changed.
-export function computeBinAssetVersions({ fonts, outPublicDir }) {
+export function computeBinAssetVersions({ fontPaths = {}, fontsConf = null, outPublicDir }) {
+  const digestBytes = (bytes) => createHash("sha256").update(bytes).digest("hex").slice(0, 16);
   const digestFile = (abs) => {
     try {
-      return createHash("sha256").update(readFileSync(abs)).digest("hex").slice(0, 16);
+      return digestBytes(readFileSync(abs));
     } catch {
       return undefined; // asset not present in this build context (e.g. a fixture build)
     }
@@ -136,11 +142,14 @@ export function computeBinAssetVersions({ fonts, outPublicDir }) {
     // binary (see M12/H3) — versioned too so a glue-only change also busts
     // any stale copy a browser had cached.
     glue: digestFile(join(outPublicDir, "wasm", "openscad.js")),
-    fontsConf: digestFile(join(outPublicDir, "fonts", "fonts.conf")),
+    // fonts.conf and the fonts are digested from their pre-commit sources
+    // (rendered content / source files), identical to the bytes written at
+    // commit — see bundleFonts / computeRenderHash.
+    fontsConf: fontsConf != null ? digestBytes(Buffer.from(fontsConf)) : undefined,
     fonts: {},
   };
-  for (const name of [...fonts].sort()) {
-    const d = digestFile(join(outPublicDir, "fonts", name));
+  for (const name of Object.keys(fontPaths).sort()) {
+    const d = digestFile(fontPaths[name]);
     if (d) result.fonts[name] = d;
   }
   return result;

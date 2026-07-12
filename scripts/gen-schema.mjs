@@ -195,6 +195,18 @@ function parseIdentity(config) {
 // "already present" branch below is a no-op), so they never enter the list
 // and stay outside the M8 generated-font lifecycle the caller reconciles.
 function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained, register, fontCopies } = {}) {
+  // The font tree is generated output too, so — like the scad tree — it is
+  // validated, digested and family/face-read here but NOT written into the live
+  // public/fonts until generate()'s commit point (see the caller). Otherwise a
+  // later fallible step (design parsing, asset validation, PWA rasterization)
+  // would leave a replaced font (or a rewritten fonts.conf) paired with the
+  // PREVIOUS build's scad/schema — an internally inconsistent last-good set.
+  // `fontWrites` are the deferred source->dest copies; `fontsConf` is the
+  // rendered config content to write at commit; `fontPaths` maps each font name
+  // to where its bytes can be READ right now (its source file, or an
+  // already-present public/fonts fallback) so hashing works before the copy.
+  const fontWrites = [];
+  const fontPaths = {};
   const FONTS = (config.fonts ?? []).map((entry) => {
     const name = String(entry).split(/[\\/]/).pop();
     const srcAbs = resolve(SOURCE, entry);
@@ -203,14 +215,17 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
         checkContained?.(srcAbs, `font '${entry}'`, configPath);
         const dest = join(outPublicDir, "fonts", name);
         register?.(dest, `font '${entry}'`);
-        mkdirSync(dirname(dest), { recursive: true });
-        copyFileSync(srcAbs, dest);
+        fontWrites.push({ src: srcAbs, dest });
         fontCopies?.push(dest);
-      } else if (!existsSync(join(outPublicDir, "fonts", name))) {
-        // Neither a source-tree path nor an already-bundled font (e.g. the
-        // Liberation fallbacks tracked under public/fonts) — a silent skip
-        // here used to ship an app whose `// @font` selector lists a face
-        // that can never load.
+        fontPaths[name] = srcAbs; // source bytes == the bytes that will be copied
+      } else if (existsSync(join(outPublicDir, "fonts", name))) {
+        // An already-bundled font (e.g. the Liberation fallbacks tracked under
+        // public/fonts) — read it in place; it isn't rewritten, so no staging.
+        fontPaths[name] = join(outPublicDir, "fonts", name);
+      } else {
+        // Neither a source-tree path nor an already-bundled font — a silent skip
+        // here used to ship an app whose `// @font` selector lists a face that
+        // can never load.
         throw new Error(
           `gen-schema: font '${entry}' not found:\n  ${srcAbs}\n` +
             `  (and not already present in public/fonts/${name})\n` +
@@ -221,14 +236,11 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
     return name;
   });
   const FONT_FALLBACK = parseFontFallback(config.fontFallback);
-  if (outPublicDir) {
-    mkdirSync(join(outPublicDir, "fonts"), { recursive: true });
-    writeFileSync(join(outPublicDir, "fonts", "fonts.conf"), renderFontsConf(FONT_FALLBACK));
-  }
+  const fontsConf = outPublicDir ? renderFontsConf(FONT_FALLBACK) : null;
   // The bundled fonts' real embedded family names, so the app can decide font
   // availability by family rather than filename — plus their face descriptions
   // ({ family, style }), which the app's font selector lists under friendly
-  // names. Read from the copied files in the served tree; only meaningful in a
+  // names. Read from each font's current source location; only meaningful in a
   // real build (outPublicDir present).
   const FONT_FAMILIES = [];
   const FONT_FACES = [];
@@ -238,9 +250,9 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
     for (const name of FONTS) {
       let buf;
       try {
-        buf = readFileSync(join(outPublicDir, "fonts", name));
+        buf = readFileSync(fontPaths[name]);
       } catch {
-        continue; // font not bundled here (e.g. a fixture's placeholder name)
+        continue; // font not resolvable here (e.g. a fixture's placeholder name)
       }
       for (const fam of fontFamilyNames(buf)) {
         const key = fam.toLowerCase();
@@ -262,7 +274,7 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
       (a, b) => a.family.localeCompare(b.family) || a.style.localeCompare(b.style)
     );
   }
-  return { FONTS, FONT_FAMILIES, FONT_FACES };
+  return { FONTS, FONT_FAMILIES, FONT_FACES, fontPaths, fontsConf, fontWrites };
 }
 
 // Copy a BROWSER-FACING file (logo, design picker icon, PWA icon — always
@@ -594,11 +606,17 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Optional build-time render tuning (heavy-render threshold + cache sizing).
   // Validated; absent -> null -> the app keeps its built-in defaults.
   const RENDER = parseRender(config.render);
-  const { FONTS, FONT_FAMILIES, FONT_FACES } = bundleFonts(config, SOURCE, outPublicDir, configPath, {
-    checkContained,
-    register: registry.register,
-    fontCopies,
-  });
+  const { FONTS, FONT_FAMILIES, FONT_FACES, fontPaths, fontsConf, fontWrites } = bundleFonts(
+    config,
+    SOURCE,
+    outPublicDir,
+    configPath,
+    {
+      checkContained,
+      register: registry.register,
+      fontCopies,
+    }
+  );
 
   // ── Appearance & UI behaviour ─────────────────────────────────────────────
   // Optional per-theme colour-scheme overrides. Validated against the known CSS
@@ -720,7 +738,8 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     scadFiles: [...designs.map((d) => d.file), ...assets],
     features: FEATURES,
     format: FORMAT,
-    fonts: FONTS,
+    fontPaths,
+    fontsConf,
     // H3: the id -> file routing map is part of the render contract — two
     // designs swapping files preserves the mounted file set but changes which
     // model a cache keyed by design id should render.
@@ -734,7 +753,9 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // AND the precache-manifest `bin.urls` below use the identical scheme — see
   // src/lib/assetUrl.ts's versionedAssetUrl) so the fetch/Cache-Storage identity
   // is content-addressed, not just the combined renderHash used for L2 geometry.
-  const BIN_ASSETS = outPublicDir ? computeBinAssetVersions({ fonts: FONTS, outPublicDir }) : {};
+  const BIN_ASSETS = outPublicDir
+    ? computeBinAssetVersions({ fontPaths, fontsConf, outPublicDir })
+    : {};
 
   const schema = {
     generatedFrom: relPosix(SOURCE) || ".",
@@ -777,11 +798,26 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // COMMIT POINT (H6/M8): every fallible step — design parsing, containment
   // checks, PWA rasterization — has now succeeded and the schema is in hand, so
   // atomically swap the staged scad tree into the live location. Everything
-  // past here (precache manifest, reconciliation, designs.json) is a plain
-  // non-fallible write, so scad sources, PWA/font assets, and the schema all
-  // land together: a failure earlier left the entire previous output intact.
+  // past here (font copies, precache manifest, reconciliation, designs.json) is
+  // a plain non-fallible write, so scad sources, PWA/font assets, and the
+  // schema all land together: a failure earlier left the entire previous output
+  // intact and internally consistent.
   rmSync(outScadDir, { recursive: true, force: true });
   renameSync(stageScadDir, outScadDir);
+
+  // The generated font tree is committed here too (deferred from bundleFonts):
+  // copy the source-referenced fonts into public/fonts and write fonts.conf,
+  // now that all fallible work has succeeded. A source font overwriting a
+  // same-named previous one, and the rewritten fonts.conf, therefore never
+  // outlive a build that later failed.
+  if (outPublicDir) {
+    mkdirSync(join(outPublicDir, "fonts"), { recursive: true });
+    for (const { src, dest } of fontWrites) {
+      mkdirSync(dirname(dest), { recursive: true });
+      copyFileSync(src, dest);
+    }
+    if (fontsConf != null) writeFileSync(join(outPublicDir, "fonts", "fonts.conf"), fontsConf);
+  }
 
   if (outPublicDir) {
     writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo, extraCss, iconFiles });

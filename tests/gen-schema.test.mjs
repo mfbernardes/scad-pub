@@ -1891,6 +1891,53 @@ test("a PWA/icon failure after a prior successful build leaves the previous outp
   if (beforeIcon) assert.deepEqual(readFileSync(iconPath), beforeIcon);
 });
 
+test("changing a font then failing a later step leaves the prior font bytes and fonts.conf unchanged", () => {
+  const REGULAR = join(HERE, "..", "public", "fonts", "LiberationSans-Regular.ttf");
+  const BOLD = join(HERE, "..", "public", "fonts", "LiberationSans-Bold.ttf");
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-fonttxn-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\nx = 1;\n`);
+  copyFileSync(REGULAR, join(src, "Face.ttf"));
+
+  const outPublicDir = join(root, "public");
+  const base = {
+    outSchemaDir: join(root, "schema"),
+    outScadDir: join(outPublicDir, "scad"),
+    outPublicDir,
+  };
+
+  // Good build with the Regular face and one fallback.
+  const good = join(root, "good.config.json");
+  writeFileSync(
+    good,
+    JSON.stringify({ title: "T", source: "src", fonts: ["Face.ttf"], fontFallback: "Alpha", designs: [{ id: "d", label: "D" }] })
+  );
+  generate({ ...base, configPath: good });
+  const fontDest = join(outPublicDir, "fonts", "Face.ttf");
+  const confDest = join(outPublicDir, "fonts", "fonts.conf");
+  const beforeFont = readFileSync(fontDest);
+  const beforeConf = readFileSync(confDest);
+
+  // Now swap Face.ttf to the Bold bytes and change the fallback (both would
+  // rewrite the live font tree), but make the build fail at PWA rasterization
+  // via a malformed icon — after bundleFonts, before the commit.
+  copyFileSync(BOLD, join(src, "Face.ttf"));
+  writeFileSync(join(root, "bad.svg"), `<svg xmlns="http://www.w3.org/2000/svg"><not-closed`);
+  const bad = join(root, "bad.config.json");
+  writeFileSync(
+    bad,
+    JSON.stringify({ title: "T", source: "src", fonts: ["Face.ttf"], fontFallback: "Beta", icon: "bad.svg", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(() => generate({ ...base, configPath: bad }), /icon rasterization failed/);
+
+  // The last-good font bytes and fonts.conf must be untouched.
+  assert.deepEqual(readFileSync(fontDest), beforeFont, "font bytes must survive the failed build");
+  assert.deepEqual(readFileSync(confDest), beforeConf, "fonts.conf must survive the failed build");
+  // Sanity: the Bold source really is different bytes, so the assertion above is meaningful.
+  assert.notDeepEqual(readFileSync(BOLD), beforeFont);
+});
+
 // M13 — browser-facing SVGs (logo, PWA icon, design picker icon) are run
 // through scripts/lib/svg-sanitize.mjs; render-input SVGs (config `assets` /
 // a design's use/include graph, copied into public/scad/ for OpenSCAD's
