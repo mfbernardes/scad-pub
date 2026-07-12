@@ -56,9 +56,22 @@ function addScopedUrl(urls, path) {
   if (shouldCache(url)) urls.add(url.href);
 }
 
-function addHtmlAssets(urls, html) {
+// The entry document links two kinds of asset: boot-critical code (the module
+// script + stylesheets + JS preloads it needs to render at all) and PWA
+// metadata/artwork (the webmanifest, icons, and Apple splash images). Only the
+// former is install-fatal; a missing or transient splash PNG must not reject
+// the whole service-worker install/update when the app boots fine without it.
+// Classify by extension — boot code is always .js/.mjs/.css; everything else
+// the HTML references here is metadata/artwork.
+const BOOT_CRITICAL_RE = /\.(?:m?js|css)$/i;
+
+function addHtmlAssets(essential, extra, html) {
   const attr = /\b(?:src|href)=["']([^"']+)["']/g;
-  for (const match of html.matchAll(attr)) addScopedUrl(urls, match[1]);
+  for (const match of html.matchAll(attr)) {
+    const path = match[1];
+    const bare = path.split(/[?#]/)[0];
+    addScopedUrl(BOOT_CRITICAL_RE.test(bare) ? essential : extra, path);
+  }
 }
 
 async function addBuildAssets(urls) {
@@ -164,15 +177,18 @@ async function precacheShell() {
   const html = await res.text();
 
   const essential = new Set();
-  addHtmlAssets(essential, html);
+  const extra = new Set();
+  // JS/CSS the entry needs -> essential (install-fatal); the webmanifest,
+  // icons, and Apple splash images it also links -> extra (best-effort).
+  addHtmlAssets(essential, extra, html);
   await Promise.all([...essential].map((url) => cacheEssential(cache, url)));
 
-  // Everything below is supplementary: additional lazy chunks, icons, presets,
-  // docs, and the warmed binary cache. Best-effort — the app is already
-  // bootable offline from the essential shell above, and the runtime fetch
-  // handler (stale-while-revalidate / network-first) fills these in on first
-  // request if install couldn't reach them.
-  const extra = new Set();
+  // Everything below is supplementary: the HTML-linked PWA metadata/artwork
+  // collected above, plus additional lazy chunks, icons, presets, docs, and the
+  // warmed binary cache. Best-effort — the app is already bootable offline from
+  // the essential shell above, and the runtime fetch handler (stale-while-
+  // revalidate / network-first) fills these in on first request if install
+  // couldn't reach them.
   await addBuildAssets(extra);
   const bin = await addPublicAssets(extra);
   await Promise.all([

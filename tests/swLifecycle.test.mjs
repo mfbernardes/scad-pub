@@ -192,6 +192,50 @@ test("a failing best-effort supplementary asset does not block install", async (
   assert.ok(await cache.match("app-shell"));
 });
 
+test("a failing PWA icon/splash/manifest linked from index.html does not block install", async () => {
+  // The entry links boot-critical JS/CSS AND PWA metadata/artwork (manifest,
+  // icons, an Apple splash image). Only the former is install-fatal: here the
+  // manifest errors, the apple-touch-icon 404s, and the splash is absent, yet
+  // install must still succeed because the app boots fine without them.
+  const RICH_HTML = `<!doctype html><html><head>
+<link rel="stylesheet" href="/${NS}/assets/index.css">
+<link rel="manifest" href="/${NS}/manifest.webmanifest">
+<link rel="icon" href="/${NS}/icon.svg">
+<link rel="apple-touch-icon" href="/${NS}/icon-180.png">
+<link rel="apple-touch-startup-image" href="/${NS}/apple-splash-1170x2532.png">
+</head><body><script type="module" src="/${NS}/assets/index.js"></script></body></html>`;
+  const routes = new Map([
+    [SCOPE_URL, { body: RICH_HTML }],
+    [ENTRY_JS, { body: "console.log(1)" }],
+    [ENTRY_CSS, { body: "body{}" }],
+    [new URL("manifest.webmanifest", SCOPE_URL).href, { fail: true }],
+    [new URL("icon.svg", SCOPE_URL).href, { body: "<svg/>" }],
+    [new URL("icon-180.png", SCOPE_URL).href, { status: 404 }],
+    // apple-splash-1170x2532.png intentionally unregistered -> 404
+  ]);
+  const { listeners, fakeCaches } = loadSw({ routes });
+  await fireInstall(listeners); // must NOT reject despite the failing metadata/artwork
+
+  const cache = await fakeCaches.open(`${NS}-shell-__SW_VERSION__`);
+  assert.ok(await cache.match(ENTRY_JS), "boot-critical JS still cached");
+  assert.ok(await cache.match(ENTRY_CSS), "boot-critical CSS still cached");
+});
+
+test("install still rejects when boot-critical JS fails even if PWA metadata is present", async () => {
+  const RICH_HTML = `<!doctype html><html><head>
+<link rel="stylesheet" href="/${NS}/assets/index.css">
+<link rel="manifest" href="/${NS}/manifest.webmanifest">
+</head><body><script type="module" src="/${NS}/assets/index.js"></script></body></html>`;
+  const routes = new Map([
+    [SCOPE_URL, { body: RICH_HTML }],
+    [ENTRY_JS, { fail: true }], // boot-critical -> install must fail
+    [ENTRY_CSS, { body: "body{}" }],
+    [new URL("manifest.webmanifest", SCOPE_URL).href, { body: "{}" }],
+  ]);
+  const { listeners } = loadSw({ routes });
+  await assert.rejects(() => fireInstall(listeners));
+});
+
 test("activate retains the old cache until the new shell validates, then deletes it", async () => {
   // Case 1: CACHE has no validated shell yet (e.g. evicted between install and
   // activate) — the old cache must survive activation.
