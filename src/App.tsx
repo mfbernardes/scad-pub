@@ -330,7 +330,7 @@ export default function App() {
   // every change so `copyLink` never has to guess after the fact.
   // See docs/architecture-review.md H2.
   const shareability = useMemo(
-    () => computeShareability(design, values, userFiles, schema.fontFamilies),
+    () => computeShareability(design, values, userFiles, schema.fontFaces ?? []),
     [design, values, userFiles]
   );
 

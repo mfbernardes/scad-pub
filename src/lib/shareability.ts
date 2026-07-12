@@ -8,8 +8,8 @@
 // unit-testable and safe to call on every keystroke.
 import type { Design } from "../openscad/types";
 import type { Values } from "./presets";
-import { familyOf, normalizeFamily } from "./fonts";
-import { fontFamilyNames } from "./fontNameTable.mjs";
+import { familyOf, styleOf, faceKeyOf } from "./fonts";
+import { fontFaces } from "./fontNameTable.mjs";
 
 const FONT_EXTENSION_RE = /\.(ttf|otf|ttc)$/i;
 
@@ -30,23 +30,23 @@ export interface Shareability {
   localOnly: LocalOnlyInput[];
 }
 
-/** Family name -> the imported filename that provides it (first match wins). */
-function importedFontFamilies(userFiles: Record<string, Uint8Array>): Map<string, string> {
-  const byFamily = new Map<string, string>();
+/** Face key (family+style) -> the imported filename that provides it (first match wins). */
+function importedFontFaces(userFiles: Record<string, Uint8Array>): Map<string, string> {
+  const byFace = new Map<string, string>();
   for (const [name, bytes] of Object.entries(userFiles)) {
     if (!FONT_EXTENSION_RE.test(name)) continue;
-    let families: string[];
+    let faces: { family: string; style: string }[];
     try {
-      families = fontFamilyNames(bytes);
+      faces = fontFaces(bytes);
     } catch {
       continue; // unparseable font bytes — nothing to key by, skip
     }
-    for (const family of families) {
-      const key = normalizeFamily(family);
-      if (!byFamily.has(key)) byFamily.set(key, name);
+    for (const { family, style } of faces) {
+      const key = faceKeyOf(family, style);
+      if (!byFace.has(key)) byFace.set(key, name);
     }
   }
-  return byFamily;
+  return byFace;
 }
 
 /**
@@ -58,11 +58,11 @@ export function computeShareability(
   design: Design,
   values: Values,
   userFiles: Record<string, Uint8Array>,
-  bundledFontFamilies: string[]
+  bundledFontFaces: { family: string; style: string }[]
 ): Shareability {
   const localOnly: LocalOnlyInput[] = [];
-  const bundledFamilies = new Set(bundledFontFamilies.map(normalizeFamily));
-  const importedFonts = importedFontFamilies(userFiles);
+  const bundledFaces = new Set(bundledFontFaces.map((f) => faceKeyOf(f.family, f.style)));
+  const importedFaces = importedFontFaces(userFiles);
 
   for (const p of design.params) {
     if (p.type !== "string" && p.type !== "enum") continue;
@@ -70,12 +70,17 @@ export function computeShareability(
     if (typeof value !== "string" || !value) continue;
 
     if (p.isFont) {
-      const family = normalizeFamily(familyOf(value));
-      if (bundledFamilies.has(family)) continue; // ships with the app — portable
-      const fileName = importedFonts.get(family);
-      // Only an *imported* font is a share-completeness problem; a family
-      // that's neither bundled nor imported is already broken independent of
-      // sharing (nothing here renders it either), so it's out of scope.
+      // Portability is a FACE property, not a family one: a design may select
+      // `Family:style=Italic` while the app bundles only Family Regular/Bold —
+      // a recipient still can't reproduce the Italic face. Compare the exact
+      // face (family+style), and when it isn't bundled, name the specific
+      // imported file that supplies THAT face (not merely the family's first).
+      const face = faceKeyOf(familyOf(value), styleOf(value));
+      if (bundledFaces.has(face)) continue; // this exact face ships with the app — portable
+      const fileName = importedFaces.get(face);
+      // Only an *imported* font is a share-completeness problem; a face that's
+      // neither bundled nor imported is already broken independent of sharing
+      // (nothing here renders it either), so it's out of scope.
       if (fileName) localOnly.push({ kind: "font", param: p.name, name: fileName });
       continue;
     }

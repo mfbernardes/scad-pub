@@ -13,7 +13,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const FONT_BYTES = new Uint8Array(
   readFileSync(join(HERE, "..", "public", "fonts", "LiberationSans-Regular.ttf"))
 );
-// Embedded family is "Liberation Sans" (see tests/fonts.test.mjs).
+const BOLD_BYTES = new Uint8Array(
+  readFileSync(join(HERE, "..", "public", "fonts", "LiberationSans-Bold.ttf"))
+);
+// Embedded family is "Liberation Sans" (see tests/fonts.test.mjs); the two files
+// provide the Regular and Bold faces of that one family.
+const face = (family, style) => ({ family, style });
 
 const param = (name, type, extra = {}) => ({
   name,
@@ -42,10 +47,10 @@ test("a config with no local-only inputs reports complete", () => {
   assert.equal(shareabilityWarning(result), null);
 });
 
-test("a bundled font family is portable, not local-only", () => {
+test("a bundled font face is portable, not local-only", () => {
   const d = design([param("font", "string", { isFont: true })]);
   const values = { font: "Liberation Sans" };
-  const result = computeShareability(d, values, {}, ["Liberation Sans"]);
+  const result = computeShareability(d, values, {}, [face("Liberation Sans", "Regular")]);
   assert.equal(result.complete, true);
 });
 
@@ -59,11 +64,41 @@ test("an imported font not in the bundled set is detected as local-only", () => 
   assert.match(shareabilityWarning(result), /MyFont\.ttf/);
 });
 
-test("a font family that is neither bundled nor imported is not flagged (unrelated to sharing)", () => {
+test("a font face that is neither bundled nor imported is not flagged (unrelated to sharing)", () => {
   const d = design([param("font", "string", { isFont: true })]);
   const values = { font: "Some Random Font" };
-  const result = computeShareability(d, values, {}, ["Liberation Sans"]);
+  const result = computeShareability(d, values, {}, [face("Liberation Sans", "Regular")]);
   assert.equal(result.complete, true);
+});
+
+test("an imported Italic/Bold face is flagged even when the family's Regular is bundled (face, not family)", () => {
+  const d = design([param("font", "string", { isFont: true })]);
+  // Only the Regular face of "Liberation Sans" is bundled...
+  const bundled = [face("Liberation Sans", "Regular")];
+  // ...but the design selects the Bold face, supplied only by an imported file.
+  const values = { font: "Liberation Sans:style=Bold" };
+  const userFiles = { "MySansBold.ttf": BOLD_BYTES };
+  const result = computeShareability(d, values, userFiles, bundled);
+  assert.equal(result.complete, false, "the Bold face is not reproducible from the bundled Regular");
+  assert.deepEqual(result.localOnly, [{ kind: "font", param: "font", name: "MySansBold.ttf" }]);
+});
+
+test("a bundled Bold face makes the Bold selection portable", () => {
+  const d = design([param("font", "string", { isFont: true })]);
+  const bundled = [face("Liberation Sans", "Regular"), face("Liberation Sans", "Bold")];
+  const values = { font: "Liberation Sans:style=Bold" };
+  const result = computeShareability(d, values, { "MySansBold.ttf": BOLD_BYTES }, bundled);
+  assert.equal(result.complete, true);
+});
+
+test("names the imported file that actually provides the selected face, not the family's first import", () => {
+  const d = design([param("font", "string", { isFont: true })]);
+  const values = { font: "Liberation Sans:style=Bold" };
+  // Two files for the same family, different styles — the Bold selection must
+  // name the Bold file, even though the Regular one was imported first.
+  const userFiles = { "Regular.ttf": FONT_BYTES, "Bold.ttf": BOLD_BYTES };
+  const result = computeShareability(d, values, userFiles, [] /* nothing bundled */);
+  assert.deepEqual(result.localOnly, [{ kind: "font", param: "font", name: "Bold.ttf" }]);
 });
 
 test("SVG wizard output is detected as local-only", () => {
