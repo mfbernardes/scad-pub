@@ -21,7 +21,12 @@ class MemStorage {
 }
 
 globalThis.localStorage = new MemStorage();
-globalThis.location = { hash: "" };
+globalThis.location = {
+  hash: "",
+  origin: "http://x",
+  pathname: "/app/",
+  search: "",
+};
 globalThis.history = {
   replaceState(_s, _t, url) {
     globalThis.location.hash = String(url).startsWith("#")
@@ -30,7 +35,8 @@ globalThis.history = {
   },
 };
 
-const { readInitialState, persistState } = await import("../src/lib/urlState.ts");
+const { readInitialState, persistState, buildShareUrl, parseHashState, sessionStateEquals } =
+  await import("../src/lib/urlState.ts");
 
 const param = (name, type, def) => ({
   name,
@@ -157,6 +163,37 @@ test("unknown param keys in v diff are silently ignored", () => {
   assert.ok(!("bogus" in r.values));
 });
 
+test("buildShareUrl reflects the current values synchronously, without waiting on persistState's debounce", () => {
+  // Simulate App.tsx: persistState is scheduled behind a 300ms setTimeout, but
+  // Share must never depend on that timer having fired yet.
+  persistState(design, { ...DEFAULTS }); // "pre-edit" state already persisted
+  const edited = { text: "just typed", n: 2, b: false };
+  // No persistState(edited, ...) call here — the debounce hasn't fired.
+  const url = buildShareUrl(design, edited);
+  assert.match(url, /v=/);
+  const hash = new URL(url).hash;
+  const params = new URLSearchParams(hash.slice(1));
+  assert.deepEqual(JSON.parse(params.get("v")), { text: "just typed" });
+  // The stale hash left behind by the last persistState call must NOT be what
+  // got shared.
+  assert.notEqual(globalThis.location.hash, hash);
+});
+
+test("buildShareUrl preserves origin/pathname/search and encodes design+preset", () => {
+  const url = buildShareUrl(design, { text: "bye", n: 5, b: true }, "bundled:Foo");
+  assert.ok(url.startsWith("http://x/app/#"));
+  const params = new URLSearchParams(new URL(url).hash.slice(1));
+  assert.equal(params.get("d"), "d");
+  assert.equal(params.get("p"), "bundled:Foo");
+  assert.deepEqual(JSON.parse(params.get("v")), { text: "bye", n: 5, b: true });
+});
+
+test("buildShareUrl omits v= for default-only values, like persistState", () => {
+  const url = buildShareUrl(design, { ...DEFAULTS });
+  assert.ok(!url.includes("v="));
+  assert.ok(!url.includes("p="));
+});
+
 test("persistState survives a throttled history.replaceState (e.g. Safari)", () => {
   const original = globalThis.history.replaceState;
   globalThis.history.replaceState = () => {
@@ -175,4 +212,58 @@ test("persistState survives a throttled history.replaceState (e.g. Safari)", () 
   } finally {
     globalThis.history.replaceState = original;
   }
+});
+
+// M4: App.tsx's external-navigation consumer (hashchange / launchQueue) needs
+// to parse an arbitrary hash string — not just `location.hash` at module init
+// — and needs a pure loop guard so applying a same-document hashchange (or a
+// queued installed-app launch target) doesn't spin. Both pieces are pure
+// helpers, tested directly here without mounting the App component.
+
+test("parseHashState parses an arbitrary hash string, not just location.hash", () => {
+  // Simulates a same-document `hashchange` event, which carries the new hash
+  // on `location.hash` — but also a launchQueue target, which carries it as
+  // part of a full target URL (`new URL(targetURL).hash`) that never touches
+  // `location` at all.
+  const hash = "#d=d&v=" + encodeURIComponent('{"text":"from-shortcut"}');
+  const r = parseHashState(schema, hash);
+  assert.equal(r.designId, "d");
+  assert.equal(r.values.text, "from-shortcut");
+
+  // Accepts both "#d=..." and a bare "d=..." (URL#hash already strips the
+  // leading "#" in some call sites).
+  const bare = parseHashState(schema, hash.slice(1));
+  assert.deepEqual(bare, r);
+
+  // As parsed out of a full launch target URL, e.g. "./#d=d".
+  const target = new URL("https://x/app/#d=d&p=bundled%3AFoo");
+  const fromLaunch = parseHashState(schema, target.hash);
+  assert.equal(fromLaunch.designId, "d");
+  assert.equal(fromLaunch.preset, "bundled:Foo");
+});
+
+test("parseHashState returns null for an empty hash or an unknown design", () => {
+  assert.equal(parseHashState(schema, ""), null);
+  assert.equal(parseHashState(schema, "#d=nonexistent"), null);
+});
+
+test("sessionStateEquals — the external-navigation loop guard", () => {
+  const a = { designId: "d", values: { ...DEFAULTS }, preset: "" };
+  const b = { designId: "d", values: { ...DEFAULTS }, preset: "" };
+  // Same shape, different object identity — still equal (a no-op navigation
+  // must not be treated as a state change).
+  assert.equal(sessionStateEquals(a, b), true);
+
+  assert.equal(
+    sessionStateEquals(a, { ...b, designId: "other" }),
+    false
+  );
+  assert.equal(
+    sessionStateEquals(a, { ...b, preset: "bundled:Foo" }),
+    false
+  );
+  assert.equal(
+    sessionStateEquals(a, { ...b, values: { ...DEFAULTS, n: 99 } }),
+    false
+  );
 });

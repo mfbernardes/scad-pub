@@ -5,9 +5,19 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 let systemPrefersDark = true;
+// A minimal mock matchMedia MediaQueryList that supports exactly one
+// "change" listener — enough to prove the M5 store's subscribe/unsubscribe
+// contract without a real browser.
+let changeListener = null;
 globalThis.window = {
   matchMedia: (q) => ({
     matches: /dark/.test(q) ? systemPrefersDark : !systemPrefersDark,
+    addEventListener: (type, fn) => {
+      if (type === "change") changeListener = fn;
+    },
+    removeEventListener: (type, fn) => {
+      if (type === "change" && changeListener === fn) changeListener = null;
+    },
   }),
 };
 
@@ -36,7 +46,8 @@ globalThis.document = {
   querySelectorAll: () => [darkMeta, lightMeta],
 };
 
-const { resolveTheme, apply } = await import("../src/lib/theme.ts");
+const { resolveTheme, apply, subscribeSystemDark, getSystemDarkSnapshot } =
+  await import("../src/lib/theme.ts");
 
 test("explicit modes resolve to themselves", () => {
   assert.equal(resolveTheme("light"), "light");
@@ -64,4 +75,51 @@ test("apply sets <html data-theme> and updates both theme-color metas", () => {
   // meta's original content) on both metas, not a hardcoded "#ffffff".
   assert.equal(darkMeta.content, "#eeeeee");
   assert.equal(lightMeta.content, "#eeeeee");
+});
+
+// M5: in auto mode, `useTheme`'s `resolved` is driven by
+// useSyncExternalStore(subscribeSystemDark, getSystemDarkSnapshot) rather
+// than a value computed once and left stale until an unrelated render. These
+// tests exercise that store directly — the pure unit the hook is built
+// from — proving a bare `matchMedia` "change" event (no other interaction)
+// both notifies subscribers and immediately changes what the snapshot
+// getter returns, so every consumer reading it (DOM token via `apply` in
+// the hook's effect, BarBrand's `theme` prop, Toaster's `theme` prop, and
+// conceptually the Viewer canvas) re-renders from the same authoritative
+// value in the same pass.
+test("subscribeSystemDark notifies on a matchMedia change with no other interaction", () => {
+  systemPrefersDark = true;
+  assert.equal(getSystemDarkSnapshot(), true);
+
+  let notified = 0;
+  const unsubscribe = subscribeSystemDark(() => {
+    notified++;
+  });
+
+  // Flip the OS preference and fire the mocked MediaQueryList's "change"
+  // event — nothing else touches the app.
+  systemPrefersDark = false;
+  assert.ok(changeListener, "subscribe must register a change listener");
+  changeListener();
+
+  assert.equal(notified, 1, "the change callback fires exactly once");
+  // The snapshot is authoritative *before* the subscriber even re-renders:
+  // useSyncExternalStore calls getSnapshot again after notification, and it
+  // must already reflect the new system preference.
+  assert.equal(getSystemDarkSnapshot(), false);
+
+  unsubscribe();
+  assert.equal(changeListener, null, "unsubscribe removes the listener");
+
+  // No listener left — a further flip does not throw and is simply unheard.
+  systemPrefersDark = true;
+  assert.equal(getSystemDarkSnapshot(), true);
+});
+
+test("getSystemDarkSnapshot mirrors resolveTheme('auto') at every point", () => {
+  for (const pref of [true, false, true]) {
+    systemPrefersDark = pref;
+    assert.equal(getSystemDarkSnapshot(), pref);
+    assert.equal(resolveTheme("auto"), pref ? "dark" : "light");
+  }
 });

@@ -42,10 +42,15 @@ function findDesign(schema: Schema, id: string | null): Design | undefined {
   return id ? schema.designs.find((d) => d.id === id) : undefined;
 }
 
-function fromHash(schema: Schema): SessionState | null {
-  if (!location.hash) return null;
+// M4: shared by the initial-load reader below AND by App's external-navigation
+// consumer (hashchange / launchQueue) — both need to parse the same "d=/v=/p="
+// encoding from an arbitrary hash string, not just `location.hash` at module
+// init, so a same-document hash change or an installed-app launch target can
+// be applied after the app has already booted.
+export function parseHashState(schema: Schema, hash: string): SessionState | null {
+  if (!hash) return null;
   try {
-    const params = new URLSearchParams(location.hash.slice(1));
+    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
     const design = findDesign(schema, params.get("d"));
     if (!design) return null;
     const diff = params.get("v") ? JSON.parse(params.get("v")!) : {};
@@ -57,6 +62,27 @@ function fromHash(schema: Schema): SessionState | null {
   } catch {
     return null;
   }
+}
+
+function fromHash(schema: Schema): SessionState | null {
+  return parseHashState(schema, location.hash);
+}
+
+/**
+ * M4: is `next` a no-op relative to `current`? Used as the external-navigation
+ * loop guard in App.tsx — a `hashchange`/`launchQueue` target that already
+ * matches the live design/values/preset should not trigger a redundant
+ * design-switch reset. Pure so the guard is directly unit-testable without
+ * mounting React. Value equality is by JSON shape, not reference — both sides
+ * are always built by `defaultsFor`/`applyDiff` over the same param list, so
+ * key order (and therefore JSON.stringify output) is stable for equal values.
+ */
+export function sessionStateEquals(current: SessionState, next: SessionState): boolean {
+  return (
+    current.designId === next.designId &&
+    current.preset === next.preset &&
+    JSON.stringify(current.values) === JSON.stringify(next.values)
+  );
 }
 
 function fromStore(schema: Schema): SessionState | null {
@@ -93,12 +119,21 @@ export function readInitialState(schema: Schema): SessionState {
   );
 }
 
-/** Write the current state to the URL hash and localStorage (no history entry). */
-export function persistState(design: Design, values: Values, preset = "") {
+// The single source of the "d=/v=/p=" hash encoding, shared by `persistState`
+// (debounced, mirrors to the URL bar + localStorage) and `buildShareUrl`
+// (synchronous, used by Share) — see docs/architecture-review.md H2. Reusing
+// one function means the two can never encode a design's state differently.
+function buildShareState(design: Design, values: Values, preset: string) {
   const diff = diffFromDefaults(design, values);
   const params = new URLSearchParams({ d: design.id });
   if (Object.keys(diff).length) params.set("v", JSON.stringify(diff));
   if (preset) params.set("p", preset);
+  return { diff, params };
+}
+
+/** Write the current state to the URL hash and localStorage (no history entry). */
+export function persistState(design: Design, values: Values, preset = "") {
+  const { diff, params } = buildShareState(design, values, preset);
   // The localStorage mirror always runs, even if the history update below is
   // throttled away, so a reload still restores the latest state.
   writeLocal(STORE_KEY, JSON.stringify({ designId: design.id, diff, preset }));
@@ -110,4 +145,17 @@ export function persistState(design: Design, values: Values, preset = "") {
     // this particular hash update is harmless — the next call, or the
     // localStorage mirror above, keeps state in sync.
   }
+}
+
+/**
+ * The share URL for the CURRENT design/values/preset, built synchronously —
+ * unlike `persistState`, which is debounced 300ms behind React state, this
+ * must never lag an edit (docs/architecture-review.md H2: a quick edit-then-
+ * Share must not copy the pre-edit URL). Only `location.origin`/`pathname`/
+ * `search` are read, since those aren't debounced or state-derived — the hash
+ * itself is always rebuilt from the arguments, never from `location.hash`.
+ */
+export function buildShareUrl(design: Design, values: Values, preset = ""): string {
+  const { params } = buildShareState(design, values, preset);
+  return `${location.origin}${location.pathname}${location.search}#${params.toString()}`;
 }

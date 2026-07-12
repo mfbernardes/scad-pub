@@ -10,7 +10,7 @@ import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
-import { useInitialTab } from "../lib/useInitialTab";
+import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
 import { ParamForm } from "./ParamForm";
@@ -27,8 +27,6 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
 } from "lucide-react";
-
-type PanelTab = "presets" | "params" | "files";
 
 const panelTabClass = cn(chipTabTrigger, "flex-1");
 
@@ -69,6 +67,14 @@ interface Props {
   /** Configurable tab labels (default "Presets" / "Parameters"). */
   presetsLabel?: string;
   parametersLabel?: string;
+  /** Active tab + search query, hoisted to AppShell (usePanelState) so they
+   *  survive a desktop/mobile remount — see docs/architecture-review.md M7. */
+  panelTab: PanelTab;
+  onPanelTabChange: (tab: PanelTab) => void;
+  search: string;
+  onSearchChange: (search: string) => void;
+  onSearchFocus?: () => void;
+  onSearchBlur?: () => void;
 }
 
 export function ParamPanel({
@@ -92,6 +98,12 @@ export function ParamPanel({
   autoRender,
   presetsLabel = "Presets",
   parametersLabel = "Customize",
+  panelTab,
+  onPanelTabChange,
+  search,
+  onSearchChange,
+  onSearchFocus,
+  onSearchBlur,
 }: Props) {
   const {
     change,
@@ -110,11 +122,7 @@ export function ParamPanel({
     const w = parseInt(readLocal(PANEL_WIDTH_KEY) || "0");
     return w >= MIN_WIDTH && w <= MAX_WIDTH ? w : DEFAULT_WIDTH;
   });
-  const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 150);
-  // Landing tab (Presets when the design ships ready-made presets, else the
-  // controls) — shared with the mobile sheet via useInitialTab.
-  const [panelTab, setPanelTab] = useInitialTab<PanelTab>(bundled.length > 0);
 
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -232,7 +240,7 @@ export function ParamPanel({
 
       <Tabs
         value={panelTab}
-        onValueChange={(v) => setPanelTab(v as PanelTab)}
+        onValueChange={(v) => onPanelTabChange(v as PanelTab)}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
         {/* Tab row (Presets / Parameters / Files) with the collapse control on
@@ -275,7 +283,13 @@ export function ParamPanel({
             presetName={presetName}
             changedParams={changedParams}
           />
-          <ParamSearch value={search} onChange={setSearch} onClear={() => setSearch("")} />
+          <ParamSearch
+            value={search}
+            onChange={onSearchChange}
+            onClear={() => onSearchChange("")}
+            onFocus={onSearchFocus}
+            onBlur={onSearchBlur}
+          />
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} />
           </div>

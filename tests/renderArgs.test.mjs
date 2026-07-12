@@ -9,6 +9,7 @@ import {
   isFontFile,
   stripFilename,
   userFileMountPath,
+  detectMountCollisions,
   mkdirPaths,
   mountDir,
   exportFor,
@@ -62,6 +63,53 @@ test("userFileMountPath routes fonts to /fonts and everything else to root", () 
   // write would throw; it must resolve to the same safe fallback as "/".
   assert.equal(userFileMountPath(".."), "/file");
   assert.equal(userFileMountPath("."), "/file");
+});
+
+// ---- M10: sanitized mount-path collisions ----
+
+test("detectMountCollisions is empty for distinct sanitized names", () => {
+  const files = {
+    "a/logo.svg": new Uint8Array(),
+    "b/other.svg": new Uint8Array(),
+    "font.ttf": new Uint8Array(),
+  };
+  assert.deepEqual(detectMountCollisions(files), {});
+});
+
+test("detectMountCollisions finds two raw names that sanitize to the same path", () => {
+  const files = {
+    "a/logo.svg": new Uint8Array(),
+    "b/logo.svg": new Uint8Array(), // both strip to "/logo.svg"
+  };
+  const collisions = detectMountCollisions(files);
+  assert.deepEqual(Object.keys(collisions), ["/logo.svg"]);
+  assert.deepEqual(collisions["/logo.svg"].sort(), ["a/logo.svg", "b/logo.svg"]);
+});
+
+test("detectMountCollisions finds font aliases colliding under /fonts", () => {
+  const files = {
+    "x.ttf": new Uint8Array(),
+    "sub/x.ttf": new Uint8Array(), // both strip to "/fonts/x.ttf"
+  };
+  const collisions = detectMountCollisions(files);
+  assert.deepEqual(Object.keys(collisions), ["/fonts/x.ttf"]);
+});
+
+test("detectMountCollisions can report multiple independent collisions", () => {
+  const files = {
+    "a/logo.svg": new Uint8Array(),
+    "b/logo.svg": new Uint8Array(),
+    "x.ttf": new Uint8Array(),
+    "y/x.ttf": new Uint8Array(),
+    "unique.svg": new Uint8Array(),
+  };
+  const collisions = detectMountCollisions(files);
+  assert.deepEqual(Object.keys(collisions).sort(), ["/fonts/x.ttf", "/logo.svg"]);
+});
+
+test("detectMountCollisions handles undefined/empty file sets", () => {
+  assert.deepEqual(detectMountCollisions(undefined), {});
+  assert.deepEqual(detectMountCollisions({}), {});
 });
 
 test("mkdirPaths returns each ancestor dir outermost-first, absolute", () => {

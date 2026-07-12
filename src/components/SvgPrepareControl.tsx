@@ -9,11 +9,24 @@ import { Upload as UploadIcon, FileCode as FileCodeIcon } from "lucide-react";
 import type { SvgFieldMeta } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
 import { FileInput } from "./FileInput";
+import { ErrorBoundary } from "./ErrorBoundary";
+import { Spinner } from "./ui/spinner";
+import { Button } from "./ui/button";
 import type { SvgWizardResult } from "./SvgWizard";
 
-const SvgWizard = lazy(() =>
-  import("./SvgWizard").then((m) => ({ default: m.SvgWizard }))
-);
+function loadSvgWizard() {
+  return import("./SvgWizard").then((m) => ({ default: m.SvgWizard }));
+}
+
+// A single module-scope `lazy()` component (created once, not per render, so
+// `react-hooks/static-components` is satisfied). A rejected chunk load
+// (offline, build-hash drift after a deploy, an ad blocker on the chunk URL, …)
+// is cached by the browser's module map for the document's lifetime: re-running
+// the same dynamic `import()` — even from a freshly minted `lazy()` wrapper —
+// just re-throws the cached rejection, so there is no in-place re-fetch. The
+// only reliable recovery is a full reload, which re-requests every chunk from
+// the network; the error fallback below offers exactly that (see finding #14).
+const SvgWizardLazy = lazy(loadSvgWizard);
 
 // Preload on user intent (hover/focus of the trigger button) so the chunk is
 // likely already fetched by the time `pending` mounts it. The dynamic import
@@ -128,15 +141,63 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
       )}
 
       {pending && (
-        <Suspense fallback={null}>
-          <SvgWizard
-            svgText={pending.text}
-            fileName={pending.fileName}
-            deriveColours={Boolean(svg.layers)}
-            onCancel={() => setPending(null)}
-            onComplete={onComplete}
-          />
-        </Suspense>
+        <ErrorBoundary
+          fallback={
+            <div
+              role="alert"
+              className="svg-prepare__wizard-error flex flex-col items-center gap-2 rounded-(--radius-sm) border border-dashed border-destructive/60 bg-destructive/5 px-3 py-4 text-center"
+            >
+              <p className="text-sm text-foreground">
+                The SVG editor couldn't be loaded.
+              </p>
+              <p className="text-[0.78rem] text-muted-foreground">
+                Check your connection, then reload to try again.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  // The browser caches the failed chunk load for the page's
+                  // life, so an in-place retry can't re-fetch it (see #14) — a
+                  // reload re-requests every chunk from the network.
+                  onClick={() => window.location.reload()}
+                >
+                  Reload
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPending(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <Suspense
+            fallback={
+              <div
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+                className="svg-prepare__wizard-loading flex items-center justify-center gap-2 rounded-(--radius-sm) border border-dashed border-border bg-muted/40 px-3 py-4 text-sm text-muted-foreground"
+              >
+                <Spinner className="size-4" aria-hidden="true" />
+                Loading SVG editor…
+              </div>
+            }
+          >
+            <SvgWizardLazy
+              svgText={pending.text}
+              fileName={pending.fileName}
+              deriveColours={Boolean(svg.layers)}
+              onCancel={() => setPending(null)}
+              onComplete={onComplete}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </div>
   );

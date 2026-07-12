@@ -391,13 +391,23 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
     () => new Set(design.collapsedSections ?? []),
     [design]
   );
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-  useEffect(() => {
+  const initOpenSections = (d: Design, defaultClosed: Set<string>) => {
     const init: Record<string, boolean> = {};
-    for (const section of design.sections) init[section] = !collapsedDefault.has(section);
-    setOpenSections(init);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [design]);
+    for (const section of d.sections) init[section] = !defaultClosed.has(section);
+    return init;
+  };
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
+    initOpenSections(design, collapsedDefault)
+  );
+  // Re-derive whenever `design` changes, during render rather than in an
+  // effect (the documented "adjusting state when a prop changes" pattern) —
+  // this is a synchronous reset of state fully derived from `design`, not a
+  // side effect on an external system.
+  const lastOpenSectionsDesign = useRef(design);
+  if (lastOpenSectionsDesign.current !== design) {
+    lastOpenSectionsDesign.current = design;
+    setOpenSections(initOpenSections(design, collapsedDefault));
+  }
 
   return (
     <div className="param-form">

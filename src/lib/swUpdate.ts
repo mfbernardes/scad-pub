@@ -17,22 +17,37 @@ export function isWaitingUpdate(state: string, hasController: boolean): boolean 
 
 /**
  * Nuclear escape hatch for a tab wedged on a stale build (e.g. a service worker
- * that never activated its update). Unregisters every worker and drops the
- * app-shell caches, then hard-reloads so index.html and its hashed chunks are
- * refetched from the network. The big version-pinned WASM binary cache
- * (`openscad-wasm-bin-*`, shared across deploys) is deliberately left intact so
- * the reload doesn't re-download ~10 MB. Best-effort: it reloads regardless.
+ * that never activated its update). Unregisters this app's own worker and
+ * drops its own shell cache, then hard-reloads so index.html and its hashed
+ * chunks are refetched from the network. The big version-pinned WASM binary
+ * cache (`openscad-wasm-bin-*`, shared across deploys) is deliberately left
+ * intact so the reload doesn't re-download ~10 MB. Best-effort: it reloads
+ * regardless.
+ *
+ * M3: scoped to THIS app only — never every worker/cache on the origin. The
+ * app-id/scope namespacing (`APP_ID`, `sw.js`'s `?ns=` param, `${APP_ID}-shell-*`
+ * cache names) exists specifically so multiple ScadPub configs (or any other
+ * app) can share an origin; a force-update for one must not unregister or
+ * evict another's offline state.
+ *
+ * Exported (not just used internally by `forceUpdate` below) so its scoping
+ * behavior is directly unit-testable without a real browser.
  */
-async function forceReload(): Promise<void> {
+export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void> {
   try {
     if ("serviceWorker" in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map((r) => r.unregister()));
+      // Prefer the registration this hook already holds for its own scope
+      // (set by the effect below); fall back to looking it up by BASE_URL if
+      // called before that completes (e.g. `forceUpdate` fired very early).
+      const r =
+        reg ?? (await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL));
+      await r?.unregister();
     }
     if (typeof caches !== "undefined") {
       const keys = await caches.keys();
+      const prefix = `${APP_ID}-shell-`;
       await Promise.all(
-        keys.filter((k) => k.includes("-shell-")).map((k) => caches.delete(k))
+        keys.filter((k) => k.startsWith(prefix)).map((k) => caches.delete(k))
       );
     }
   } catch {
@@ -45,6 +60,9 @@ async function forceReload(): Promise<void> {
 export function useServiceWorkerUpdate() {
   const [updateReady, setUpdateReady] = useState(false);
   const waitingRef = useRef<ServiceWorker | null>(null);
+  // This app's own scoped registration — captured so forceUpdate's escape
+  // hatch (M3) can target only it, never every worker on the origin.
+  const regRef = useRef<ServiceWorkerRegistration | undefined>(undefined);
   // Set when the user accepts, so the resulting controllerchange reloads (and a
   // first-install clients.claim() doesn't trigger a spurious reload).
   const applyingRef = useRef(false);
@@ -76,6 +94,7 @@ export function useServiceWorkerUpdate() {
     })
       .then((r) => {
         reg = r;
+        regRef.current = r;
         // An update may already be waiting from a previous visit.
         if (r.waiting && sw.controller) promote(r.waiting);
         r.addEventListener("updatefound", () => {
@@ -118,7 +137,7 @@ export function useServiceWorkerUpdate() {
   // staged an update), fall back to the nuclear unregister-and-reload.
   const forceUpdate = () => {
     if (waitingRef.current) applyUpdate();
-    else void forceReload();
+    else void forceReload(regRef.current);
   };
 
   const dismiss = () => setUpdateReady(false);

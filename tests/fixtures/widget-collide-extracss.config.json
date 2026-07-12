@@ -1,0 +1,6 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "extraCss": "evil-css/widget.scad",
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

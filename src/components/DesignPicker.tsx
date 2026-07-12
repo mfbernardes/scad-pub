@@ -60,6 +60,11 @@ export function DesignPicker({ designs, value, onChange, openSignal, active = tr
   useEffect(() => {
     if (openSignal !== undefined && openSignal !== lastSignal.current) {
       lastSignal.current = openSignal;
+      // Deliberate: `openSignal` is an external one-shot broadcast (a CTA
+      // click elsewhere in the tree), not state derived from props, so it
+      // can't be computed during render — a ref already tracks "last seen"
+      // to make this idempotent against re-renders.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (active) setOpen(true);
     }
   }, [openSignal, active]);

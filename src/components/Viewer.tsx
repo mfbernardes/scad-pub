@@ -208,7 +208,14 @@ export const Viewer = forwardRef<
       const s = sceneRef.current;
       const c = camRef.current;
       if (!r || !s || !c || !modelRef.current) return null;
-      r.render(s, c); // refresh the preserved buffer before reading it
+      // Explicit render-then-read: with rendering now invalidation-driven (and
+      // preserveDrawingBuffer off, see the renderer setup below), the drawing
+      // buffer isn't guaranteed to still hold a frame by the time this is
+      // called. Render synchronously and read back the same buffer before
+      // control returns to the browser — the UA only swaps/clears the default
+      // framebuffer once the current task yields, so a same-task render then
+      // toDataURL() is reliable without paying for a permanently preserved buffer.
+      r.render(s, c);
       return r.domElement.toDataURL("image/png");
     },
     resetView() {
@@ -227,9 +234,24 @@ export const Viewer = forwardRef<
   }));
 
   // Tracks whether the canvas is intersecting the viewport. Used to skip
-  // renderer.render() calls when the viewer is off-screen (e.g. bottom sheet
-  // at full detent, or a background tab), saving GPU/battery.
+  // renderer.render() calls when the viewer is off-screen (e.g. scrolled away,
+  // or a background tab), saving GPU/battery. This is a *geometric*
+  // intersection signal only — it does not detect the mobile bottom sheet
+  // visually occluding the canvas at its full detent, since the sheet is a
+  // separate overlay element and the viewer's own bounding box is unchanged.
   const visibleRef = useRef(true);
+  // Tracks page visibility (backgrounded/minimised tab). Distinct from
+  // visibleRef so both gates are independently inspectable/testable.
+  const pageVisibleRef = useRef(!document.hidden);
+  // Lets effects outside the one-time setup effect below (theme, dimension
+  // toggle, new geometry) request a render without re-running setup. Sending
+  // this through a ref rather than lifting the whole render loop keeps the
+  // scene-setup effect's dependency array empty, as before.
+  const requestRenderRef = useRef<() => void>(() => {});
+  // Test/instrumentation hook: counts renderer.render() calls actually issued
+  // (i.e. gated by visibility). Exposed on the DOM node so smoke/vis scripts
+  // can assert idle frames stay bounded instead of climbing forever.
+  const renderCountRef = useRef(0);
 
   // One-time scene setup.
   useEffect(() => {
@@ -242,12 +264,16 @@ export const Viewer = forwardRef<
     cam.up.set(0, 0, 1); // OpenSCAD is Z-up
     camRef.current = cam;
 
-    // preserveDrawingBuffer lets us read the canvas back as a PNG snapshot.
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      preserveDrawingBuffer: true,
-    });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    // preserveDrawingBuffer is intentionally left off (the default): rendering
+    // is now invalidation-driven rather than continuous, so keeping a
+    // permanently preserved backbuffer around would cost memory/perf for no
+    // benefit. PNG snapshots instead render-then-read synchronously — see the
+    // imperative handle's snapshot() above.
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Bounded DPR: uncapped devicePixelRatio on 3x+ phones/Retina displays
+    // multiplies fragment-shading cost for no visible benefit at this canvas
+    // size.
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     rendererRef.current = renderer;
     mount.appendChild(renderer.domElement);
 
@@ -264,39 +290,93 @@ export const Viewer = forwardRef<
     controlsRef.current = controls;
 
     const io = new IntersectionObserver(
-      ([entry]) => { visibleRef.current = entry.isIntersecting; },
+      ([entry]) => {
+        visibleRef.current = entry.isIntersecting;
+        if (entry.isIntersecting) requestRender();
+      },
       { threshold: 0 }
     );
     io.observe(mount);
 
-    // Resize from inside the RAF loop so the drawing buffer is resized and
-    // re-rendered in the same frame: setSize() clears the canvas, and resizing
-    // out-of-band (e.g. an async ResizeObserver) left a blank frame before the
-    // next render, which flickered while the bottom sheet animated the viewer's
-    // height. Polling the mount size each frame is cheap — the read only forces
-    // layout when something actually changed it (e.g. a sheet drag).
-    let lastW = 0;
-    let lastH = 0;
+    const onVisibilityChange = () => {
+      pageVisibleRef.current = !document.hidden;
+      if (!document.hidden) requestRender();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    // Invalidation-driven rendering: render only in response to something
+    // that could change the picture (camera/controls movement, resize,
+    // geometry/material/theme changes, initial mount) instead of every
+    // animation frame at idle. `tick` re-arms itself via requestAnimationFrame
+    // only while OrbitControls' damping is still settling (its update()
+    // returns true while the camera is still moving); once the camera is
+    // still, the loop stops until the next invalidation.
     let raf = 0;
-    const animate = () => {
-      controls.update();
+    let looping = false;
+
+    const renderNow = () => {
+      if (!visibleRef.current || !pageVisibleRef.current) return;
+      renderer.render(scene, cam);
+      renderCountRef.current++;
+      // Test/instrumentation hook (smoke/vis): lets a script assert idle
+      // render count stays flat instead of climbing every frame.
+      mount.dataset.renderCount = String(renderCountRef.current);
+    };
+
+    const tick = () => {
+      const stillMoving = controls.update(); // advances damping; true while settling
+      renderNow();
+      if (stillMoving && visibleRef.current && pageVisibleRef.current) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        looping = false;
+        raf = 0;
+      }
+    };
+
+    const requestRender = () => {
+      if (looping) return; // a frame is already pending/looping
+      if (!visibleRef.current || !pageVisibleRef.current) return; // resumes on visibility
+      looping = true;
+      raf = requestAnimationFrame(tick);
+    };
+    requestRenderRef.current = requestRender;
+
+    // OrbitControls dispatches "change" both from our own tick() calling
+    // update() (damping decay) and directly from pointer/wheel handlers
+    // during user interaction (which call update() synchronously, outside
+    // this loop) — so listening here both keeps the damping loop alive and
+    // wakes a stopped loop back up on the next user input.
+    controls.addEventListener("change", requestRender);
+
+    // ResizeObserver replaces per-frame layout polling. Resize + render
+    // happen synchronously inside the same callback (rather than deferring to
+    // the next rAF tick) so the drawing buffer is never left blank between a
+    // setSize() clear and the next paint — this preserved the no-flicker
+    // behaviour the previous per-frame-polling approach relied on, e.g. while
+    // the mobile bottom sheet animates the viewer's height.
+    const ro = new ResizeObserver(() => {
       const w = mount.clientWidth;
       const h = mount.clientHeight;
-      if (w !== lastW || h !== lastH) {
-        renderer.setSize(w, h, false);
-        cam.aspect = w / Math.max(1, h);
-        cam.updateProjectionMatrix();
-        lastW = w;
-        lastH = h;
-      }
-      if (visibleRef.current) renderer.render(scene, cam);
-      raf = requestAnimationFrame(animate);
-    };
-    animate();
+      renderer.setSize(w, h, false);
+      cam.aspect = w / Math.max(1, h);
+      cam.updateProjectionMatrix();
+      renderNow();
+    });
+    ro.observe(mount);
+
+    // Initial paint: ResizeObserver's first callback normally fires async
+    // shortly after observe(), but request one explicitly too so the very
+    // first frame doesn't wait on it.
+    requestRender();
 
     return () => {
       cancelAnimationFrame(raf);
+      controls.removeEventListener("change", requestRender);
+      ro.disconnect();
       io.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      requestRenderRef.current = () => {};
       controls.dispose();
       dimGroupRef.current?.dispose();
       // Release the current model's and grid's GPU resources too — previously
@@ -349,6 +429,7 @@ export const Viewer = forwardRef<
         retintAutoVertices(v.attr, v.original, model);
       // Re-tint the dimension overlay too (rebuilt with the new --viewer-dim).
       syncDimensions(showDimensions);
+      requestRenderRef.current(); // theme change doesn't move the camera — invalidate explicitly
     });
     return () => cancelAnimationFrame(raf);
     // showDimensions is read fresh on a theme change; its own effect handles toggles.
@@ -358,6 +439,7 @@ export const Viewer = forwardRef<
   // Show/hide the dimension overlay on toggle (geometry stays put).
   useEffect(() => {
     syncDimensions(showDimensions);
+    requestRenderRef.current();
   }, [showDimensions]);
 
   // Swap geometry when a new model arrives.
@@ -375,6 +457,7 @@ export const Viewer = forwardRef<
       modelSizeRef.current = null;
       syncDimensions(false); // drop any overlay when geometry clears
       onMeasureRef.current?.(null);
+      requestRenderRef.current(); // redraw the now-empty scene
       return;
     }
 
@@ -464,8 +547,10 @@ export const Viewer = forwardRef<
     // (this effect) and use *its* bounds, not the stale ones.
     const frameKey = reframeOnPreset ? `${designId}\n${presetId}` : designId;
     if (framedKeyRef.current !== frameKey) {
-      frameView(r);
+      frameView(r); // moves the camera, which self-invalidates via controls' "change" event
       framedKeyRef.current = frameKey;
+    } else {
+      requestRenderRef.current(); // same framing (e.g. a param tweak) — camera didn't move, so invalidate explicitly
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stl]);

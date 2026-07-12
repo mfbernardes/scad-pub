@@ -11,6 +11,24 @@
 import { CACHE_VERSION, MB, createStlCache } from "../lib/stlCache";
 import type { StlCacheStore, StoredStl } from "../lib/stlCache";
 import type { RenderRequest, RenderResult } from "./types";
+import { detectMountCollisions } from "./renderArgs";
+
+// M10: a user file set that sanitizes to a colliding mount path (see
+// detectMountCollisions) is a request-shape error, not a render outcome — it's
+// rejected before touching either cache tier or the worker, so the caller
+// finds out immediately which raw names collided rather than getting a render
+// of whichever one happened to mount last.
+export class MountCollisionError extends Error {
+  readonly collisions: Record<string, string[]>;
+  constructor(collisions: Record<string, string[]>) {
+    const detail = Object.entries(collisions)
+      .map(([mount, names]) => `${mount} <- ${names.join(", ")}`)
+      .join("; ");
+    super(`user files collide after sanitizing to the same mount path: ${detail}`);
+    this.name = "MountCollisionError";
+    this.collisions = collisions;
+  }
+}
 
 export class SupersededError extends Error {
   constructor() {
@@ -63,19 +81,52 @@ function hasFiles(files: RenderRequest["userFiles"]): files is Record<string, Ui
   return Object.keys(files ?? {}).length > 0;
 }
 
+// M10: FNV-1a-64 (BigInt), one pass over the bytes. `seed` lets the same byte
+// stream produce two statistically-independent 64-bit outputs cheaply (see
+// strongDigest) instead of one 32-bit output — the review reproduced an actual
+// same-name/same-length collision against the previous 32-bit FNV-1a, which a
+// 64-bit (let alone combined 128-bit-equivalent) space makes practically
+// unreachable for a same-length forged collision.
+const FNV64_PRIME = 0x100000001b3n;
+const MASK64 = 0xffffffffffffffffn;
+
+function fnv1a64(bytes: Uint8Array, seed: bigint): string {
+  let h = seed;
+  for (const b of bytes) {
+    h ^= BigInt(b);
+    h = (h * FNV64_PRIME) & MASK64;
+  }
+  return h.toString(16).padStart(16, "0");
+}
+
+// A strong, SYNCHRONOUS per-file digest: two independent FNV-1a-64 passes
+// (different seeds) concatenated into a 128-bit-equivalent hex string.
+// crypto.subtle.digest (SHA-256) is async, which would break the synchronous
+// `fileSignature` contract useRenderPipeline.ts's renderKey useMemo relies on
+// (`useMemo(() => fileSignature(userFiles), [userFiles])`) — staying
+// synchronous keeps that call site unchanged while making a same-length
+// collision astronomically less likely than the previous single 32-bit pass.
+function strongDigest(bytes: Uint8Array): string {
+  return fnv1a64(bytes, 0xcbf29ce484222325n) + fnv1a64(bytes, 0x84222325cbf29ce4n);
+}
+
+// M10: NOT memoized by object identity — a caller that mutates a Uint8Array's
+// bytes in place (rather than supplying a new object, the app's normal
+// pattern — see useFileImports.ts) must still be detected as a different file
+// set on the next render(); recomputing the digest fresh each call is what
+// makes that possible (see the "mutate in place" runner.test.mjs case). Files
+// are typically small (fonts/SVGs/data — KBs, not MBs), so a full re-hash per
+// render stays cheap; the actually expensive part this finding also calls
+// out — retransmitting unchanged bytes to the worker on every render — is
+// addressed separately in OpenSCADRunner.render() by only including
+// `userFiles` in the postMessage payload when this signature has changed
+// since the last message a given worker instance received.
 export function fileSignature(files: RenderRequest["userFiles"]): string {
   if (!hasFiles(files)) return "";
   return JSON.stringify(
     Object.entries(files)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, bytes]) => {
-        let h = 0x811c9dc5;
-        for (const b of bytes) {
-          h ^= b;
-          h = Math.imul(h, 0x01000193);
-        }
-        return [name, bytes.byteLength, h >>> 0];
-      })
+      .map(([name, bytes]) => [name, bytes.byteLength, strongDigest(bytes)])
   );
 }
 
@@ -111,6 +162,12 @@ export class OpenSCADRunner {
   private readonly onReady?: () => void;
   private readyFired = false;
   private workerFailed = false;
+  // M10: the user-file signature last actually POSTED to the current worker
+  // instance (as opposed to served from a cache tier without ever reaching
+  // the worker). null after spawn() — a fresh worker's module scope starts
+  // with no mounted user files, so the first post to it must always include
+  // them regardless of what a previous (now-terminated) worker last saw.
+  private lastSentFileSig: string | null = null;
 
   constructor(
     opts: {
@@ -188,6 +245,11 @@ export class OpenSCADRunner {
 
   private spawn() {
     this.workerFailed = false;
+    // M10: a fresh worker's module scope holds no mounted user files (see
+    // worker.ts's `cachedUserFiles`), so whatever this runner last sent to a
+    // now-terminated worker is irrelevant — the next render() must send the
+    // full current file set again, not skip it as "unchanged".
+    this.lastSentFileSig = null;
     const worker = new Worker(new URL("./worker.ts", import.meta.url), {
       type: "module",
     });
@@ -217,15 +279,33 @@ export class OpenSCADRunner {
       if (p) {
         this.pending.delete(result.id);
         if (this.inflightId === result.id) {
+          // M10/H3: a fatal bootstrap failure throws inside the worker's
+          // ensureAssets(), BEFORE it records this request's userFiles into its
+          // cross-render cache (worker.ts only stores them once bootstrap
+          // succeeds). We already marked that file set as "sent" optimistically
+          // when we posted it, and this worker is reused for the retry (a fatal
+          // result arrives as a normal message, not onerror, so spawn() never
+          // runs and lastSentFileSig is retained). Forget the sent signature so
+          // the next render resends the full file set — otherwise the retry
+          // omits the unchanged bytes and the worker mounts nothing, producing
+          // (and caching) wrong geometry under a key that claims those files
+          // were present.
+          if (result.fatal) this.lastSentFileSig = null;
           if (this.inflightKey) {
             this.remember(this.inflightKey, result); // L1
+            // M11: staleDefines is correctness-relevant (it's what tells the
+            // UI "reload — this build is skewed relative to the design
+            // source"), so it must survive an L2 round-trip exactly like every
+            // other field here; omitting it would let a later reload serve a
+            // skewed successful result with no reload warning attached.
             if (this.store && result.ok)
               void this.store.put(this.inflightKey, {
                 stl: result.stl,
                 log: result.log,
                 exitCode: result.exitCode,
                 ms: result.ms,
-              }); // L2, write-through (fire-and-forget)
+                ...(result.staleDefines?.length ? { staleDefines: result.staleDefines } : {}),
+              }); // L2, write-through (serialized by the store itself — see stlCache.ts)
           }
           this.inflightId = null;
           this.inflightKey = null;
@@ -257,6 +337,15 @@ export class OpenSCADRunner {
   }
 
   async render(req: Omit<RenderRequest, "id">): Promise<RenderResult> {
+    // M10: reject a colliding user-file set up front — before it can consume
+    // an id, touch either cache tier, or reach the worker — so the caller
+    // finds out immediately which raw names collided. (worker.ts carries a
+    // defense-in-depth copy of this same check, since it's the actual
+    // mounting authority; this one gives faster, richer feedback without a
+    // worker round-trip.)
+    const collisions = detectMountCollisions(req.userFiles);
+    if (Object.keys(collisions).length > 0) throw new MountCollisionError(collisions);
+
     const id = this.nextId++;
     this.latestId = id;
     const key = cacheKey(req, this.version);
@@ -292,6 +381,10 @@ export class OpenSCADRunner {
           log: stored.log,
           ms: stored.ms,
           cached: true,
+          // M11: reconstruct staleDefines from the persisted record (see the
+          // matching write-through above) so a skewed result served from L2
+          // still carries the reload prompt it had when first rendered.
+          ...(stored.staleDefines?.length ? { staleDefines: stored.staleDefines } : {}),
         };
         this.remember(key, result); // promote into L1
         return result;
@@ -302,9 +395,22 @@ export class OpenSCADRunner {
 
     this.inflightId = id;
     this.inflightKey = key;
+    // M10: only include `userFiles` in the postMessage payload when the file
+    // set has changed since the last message THIS worker instance received —
+    // worker.ts retains the last-mounted set across renders (its module scope
+    // survives even though it instantiates a fresh WASM module per render),
+    // so re-sending unchanged bytes (a full structured-clone copy) on every
+    // param-only render is pure waste. spawn() resets lastSentFileSig to null,
+    // so a fresh worker (which starts with no mounted files) always gets a
+    // full send regardless of what a previous worker last saw.
+    const fileSig = fileSignature(req.userFiles);
+    const filesUnchanged = fileSig === this.lastSentFileSig;
+    const payload: RenderRequest = { ...req, id };
+    if (filesUnchanged) delete payload.userFiles;
+    else this.lastSentFileSig = fileSig;
     return new Promise<RenderResult>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ ...req, id });
+      this.worker.postMessage(payload);
     });
   }
 

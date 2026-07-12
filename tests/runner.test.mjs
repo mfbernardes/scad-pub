@@ -43,7 +43,9 @@ class FakeWorker {
 }
 globalThis.Worker = FakeWorker;
 
-const { OpenSCADRunner, SupersededError } = await import("../src/openscad/runner.ts");
+const { OpenSCADRunner, SupersededError, MountCollisionError, fileSignature } = await import(
+  "../src/openscad/runner.ts"
+);
 
 const ok = (id, bytes = 0) => ({
   id,
@@ -486,4 +488,237 @@ test("failed renders are not written to the persistent store", async () => {
 
 test("SupersededError is exported and identifiable", () => {
   assert.equal(new SupersededError().name, "SupersededError");
+});
+
+// ---- M10: strong user-file digest, mount collisions, transport dedup ----
+
+// A real reproduced collision against the PREVIOUS 32-bit FNV-1a fileSignature
+// (`fnv32([102,191,170,4,123,252,63,207]) === fnv32([240,156,234,254,246,13,62,237])
+// === 2990537249`, found by brute-force search over random 8-byte payloads —
+// see the review's M10 evidence). Same name, same length, different bytes: the
+// old signature could not tell these two files apart. The new digest must.
+test("a same-name/same-length collision against the old 32-bit FNV-1a no longer collides", () => {
+  const a = new Uint8Array([102, 191, 170, 4, 123, 252, 63, 207]);
+  const b = new Uint8Array([240, 156, 234, 254, 246, 13, 62, 237]);
+  const sigA = fileSignature({ "user.bin": a });
+  const sigB = fileSignature({ "user.bin": b });
+  assert.notEqual(sigA, sigB, "distinct 8-byte payloads must not share a signature");
+});
+
+test("fileSignature is deterministic for the same bytes", () => {
+  const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+  assert.equal(fileSignature({ f: bytes }), fileSignature({ f: new Uint8Array(bytes) }));
+});
+
+test("render() rejects filename aliases that sanitize to the same mount path", async () => {
+  const runner = new OpenSCADRunner();
+  const req = {
+    design: "x",
+    defines: {},
+    userFiles: {
+      "a/logo.svg": new Uint8Array([1]),
+      "b/logo.svg": new Uint8Array([2]), // sanitizes to the same "/logo.svg" mount path
+    },
+  };
+  await assert.rejects(runner.render(req), (e) => {
+    assert.ok(e instanceof MountCollisionError);
+    assert.ok(e.collisions["/logo.svg"]);
+    assert.deepEqual(e.collisions["/logo.svg"].sort(), ["a/logo.svg", "b/logo.svg"]);
+    return true;
+  });
+  // Rejected before ever posting to the worker.
+  assert.equal(newest().posted.length, 0);
+  runner.dispose();
+});
+
+test("render() does not reject distinct raw names that sanitize to distinct paths", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+  const p = runner.render({
+    design: "x",
+    defines: {},
+    userFiles: {
+      "a/logo.svg": new Uint8Array([1]),
+      "b/other.svg": new Uint8Array([2]),
+    },
+  });
+  w.emit(ok(w.last.id));
+  assert.equal((await p).ok, true);
+  runner.dispose();
+});
+
+test("MountCollisionError is exported and identifiable", () => {
+  const e = new MountCollisionError({ "/x": ["a", "b"] });
+  assert.equal(e.name, "MountCollisionError");
+  assert.deepEqual(e.collisions, { "/x": ["a", "b"] });
+});
+
+test("unchanged user files are not resent to the worker on a later render", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+  const files = { "user.ttf": new Uint8Array([1, 2, 3]) };
+
+  const first = runner.render({ design: "x", defines: { a: "1" }, userFiles: files });
+  assert.ok("userFiles" in w.last, "first post to a fresh worker must include the files");
+  w.emit(ok(w.last.id, 6));
+  await first;
+
+  // A different `defines` value means a cache miss (so this must reach the
+  // worker), but the SAME file bytes — the worker already has them mounted
+  // (see worker.ts's cachedUserFiles), so this post must omit `userFiles`
+  // entirely rather than re-cloning the same bytes across the thread boundary.
+  const second = runner.render({ design: "x", defines: { a: "2" }, userFiles: files });
+  assert.equal(w.last.userFiles, undefined, "unchanged files must not be resent");
+  w.emit(ok(w.last.id, 6));
+  await second;
+  runner.dispose();
+});
+
+test("changed user files ARE resent to the worker", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+
+  const first = runner.render({
+    design: "x",
+    defines: { a: "1" },
+    userFiles: { "user.ttf": new Uint8Array([1, 2, 3]) },
+  });
+  w.emit(ok(w.last.id, 6));
+  await first;
+
+  const second = runner.render({
+    design: "x",
+    defines: { a: "2" },
+    userFiles: { "user.ttf": new Uint8Array([9, 9, 9]) },
+  });
+  assert.ok("userFiles" in w.last && w.last.userFiles, "changed files must be resent");
+  w.emit(ok(w.last.id, 6));
+  await second;
+  runner.dispose();
+});
+
+test("a respawned worker always gets a full resend, even if files are unchanged", async () => {
+  const runner = new OpenSCADRunner();
+  const files = { "user.ttf": new Uint8Array([1, 2, 3]) };
+
+  const first = runner.render({ design: "x", defines: { a: "1" }, userFiles: files });
+  const w0 = newest();
+  w0.emit(ok(w0.last.id, 6));
+  await first;
+
+  // Force a respawn (worker error), then render again with the SAME files —
+  // the new worker's module scope has no cached files, so it must NOT be
+  // skipped even though the signature matches what the old worker last saw.
+  const w1current = newest();
+  w1current.emitError("boom");
+  const afterRespawn = runner.render({ design: "y", defines: { a: "1" }, userFiles: files });
+  const w1 = newest();
+  assert.notStrictEqual(w1, w0);
+  assert.ok("userFiles" in w1.last && w1.last.userFiles, "a fresh worker must get a full resend");
+  w1.emit(ok(w1.last.id, 6));
+  await afterRespawn;
+  runner.dispose();
+});
+
+test("a fatal bootstrap result forces the next render to resend user files (same worker)", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+  const files = { "user.ttf": new Uint8Array([1, 2, 3]) };
+
+  // First render carries the files, but the worker's bootstrap fails fatally
+  // (BootstrapError -> { ok:false, fatal:true }) BEFORE it records them into its
+  // cross-render cache. A fatal result arrives as a normal message (not
+  // onerror), so the worker is NOT respawned and is reused for the retry.
+  const first = runner.render({ design: "x", defines: { a: "1" }, userFiles: files });
+  assert.ok("userFiles" in w.last, "first post to a fresh worker must include the files");
+  w.emit({ id: w.last.id, ok: false, fatal: true, exitCode: 1, stl: new Uint8Array(0), log: [], ms: 0 });
+  await first;
+
+  // Same (unchanged) file set on the retry: without the fix the runner would
+  // treat them as already-sent and omit them, and the reused worker — which
+  // never cached them — would mount nothing and render wrong geometry. The
+  // fatal result must have cleared the sent signature, so the files are resent.
+  const sameWorker = newest();
+  assert.strictEqual(sameWorker, w, "a fatal bootstrap must NOT respawn the worker");
+  const retry = runner.render({ design: "x", defines: { a: "1" }, userFiles: files });
+  assert.ok(
+    "userFiles" in w.last && w.last.userFiles,
+    "after a fatal bootstrap the unchanged files must be resent, not skipped"
+  );
+  w.emit(ok(w.last.id, 6));
+  await retry;
+  runner.dispose();
+});
+
+// L1 (docs/architecture-review.md): worker OWNERSHIP moved from a render-time
+// `if (!runnerRef.current) runnerRef.current = new OpenSCADRunner(...)` in
+// useRenderPipeline.ts into a useEffect whose setup constructs the runner and
+// whose cleanup disposes it. React's dev-only Strict Mode replays a
+// component's effects as mount -> cleanup -> remount on the very first mount,
+// which — for that effect — means: construct runner A, dispose runner A,
+// construct runner B. These tests exercise that exact sequence directly
+// against OpenSCADRunner (no React/jsdom available in this suite) to prove
+// the invariants useRenderPipeline.ts's effect relies on: dispose is safe to
+// call more than once, and a construct/dispose/construct replay leaves
+// exactly one live (non-terminated) worker with the first one cleanly torn
+// down and any render in flight against it rejected rather than silently
+// dropped.
+
+test("dispose is idempotent", async () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+  assert.doesNotThrow(() => runner.dispose());
+  assert.equal(w.terminated, true);
+  // A second dispose (e.g. a StrictMode cleanup firing twice, or a caller
+  // disposing defensively) must not throw and must not touch an already-empty
+  // pending map or a worker that's already terminated.
+  assert.doesNotThrow(() => runner.dispose());
+});
+
+test("dispose rejects an in-flight render with SupersededError instead of leaving it hanging", async () => {
+  const runner = new OpenSCADRunner();
+  const p = runner.render({ design: "x", defines: {} });
+  const rejects = assert.rejects(p, (e) => e.name === "SupersededError");
+  runner.dispose();
+  await rejects;
+});
+
+test("a StrictMode-style construct/dispose/construct replay leaves exactly one live worker", async () => {
+  // Simulates the ownership effect's mount -> cleanup -> remount replay: the
+  // effect setup for the first pass constructs runner A (spawning worker w0);
+  // its cleanup (synchronous, before the second pass's setup runs) disposes
+  // A; the second pass's setup constructs runner B (spawning worker w1).
+  const runnerA = new OpenSCADRunner();
+  const w0 = newest();
+  assert.equal(FakeWorker.instances.length, 1, "constructing a runner spawns exactly one worker");
+
+  // An in-flight render started against A during the first pass (e.g. the
+  // initial-render effect, which runs after the ownership effect in the same
+  // pass) must not hang or silently resolve once A is torn down.
+  const inFlight = runnerA.render({ design: "x", defines: {} });
+  const inFlightRejects = assert.rejects(inFlight, (e) => e.name === "SupersededError");
+
+  runnerA.dispose();
+  assert.equal(w0.terminated, true, "the first runner's worker must be terminated by cleanup");
+  await inFlightRejects;
+
+  const runnerB = new OpenSCADRunner();
+  const w1 = newest();
+  assert.equal(
+    FakeWorker.instances.length,
+    2,
+    "the replay spawns a second worker for the surviving runner"
+  );
+  assert.notStrictEqual(w1, w0, "the surviving worker is a fresh instance, not a reused one");
+
+  // End state: exactly one LIVE worker (w1) — w0 is terminated, and no third
+  // worker was ever spawned (no leak).
+  assert.equal(w0.terminated, true);
+  assert.equal(w1.terminated, false);
+  assert.equal(FakeWorker.instances.length, 2);
+
+  const b = runnerB.render({ design: "y", defines: {} });
+  w1.emit(ok(w1.last.id));
+  assert.equal((await b).ok, true);
+  runnerB.dispose();
 });

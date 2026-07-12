@@ -18,6 +18,14 @@ repos:
         pass_filenames: false
         files: \.(ts|tsx)$
 
+      - id: eslint
+        # 0 errors / 0 warnings is a hard gate — see docs/architecture-review.md L2.
+        name: ESLint
+        language: system
+        entry: npx eslint . --max-warnings 0
+        pass_filenames: false
+        files: \.(ts|tsx|mjs)$
+
       - id: tests
         name: Unit tests
         language: system

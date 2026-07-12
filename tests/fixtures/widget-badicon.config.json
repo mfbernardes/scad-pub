@@ -1,0 +1,6 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "icon": "bad-icon.svg",
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

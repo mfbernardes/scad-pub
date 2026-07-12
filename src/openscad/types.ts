@@ -39,6 +39,18 @@ export interface RenderResult {
    * UI uses it to prompt the user to reload.
    */
   staleDefines?: string[];
+  /**
+   * True when this failure means the renderer's asset bootstrap (WASM/glue
+   * import, shared sources, fonts) never completed — as opposed to an
+   * ordinary model failure (bad OpenSCAD source/parameters). See M1: the
+   * worker resets its bootstrap state on such a failure, so the very next
+   * render() call retries the whole bootstrap automatically. A caller may use
+   * this to avoid presenting a "that combination of settings didn't work"
+   * message about a renderer that never started, or to surface a distinct
+   * "renderer failed to start, retrying…" state. Absent on ordinary results
+   * (successes and model failures alike).
+   */
+  fatal?: boolean;
 }
 
 // ---- Parameter schema (produced by scripts/gen-schema.mjs) ----
@@ -345,6 +357,23 @@ export interface Schema {
    * binaries everywhere in one edit.
    */
   wasmVersion?: string;
+  /**
+   * H4: per-file content digests (short sha256 hex) for the render worker's big
+   * binary assets — the pinned wasm binary and each bundled font. The worker
+   * (worker.ts) and the service worker's precache warm-up (via
+   * precache-manifest.json's `bin.urls`, generated from this same field) both
+   * append `?v=<digest>` to a binary's fetch URL, so the fetch/Cache-Storage
+   * identity is content-addressed: replacing a font's bytes without renaming
+   * it changes its digest and therefore its URL, so a browser with the old
+   * bytes cached can never serve them under the new build. Absent/partial in
+   * fixture builds that don't produce a real public/wasm or public/fonts tree.
+   */
+  binAssets?: {
+    wasm?: string;
+    glue?: string;
+    fontsConf?: string;
+    fonts?: Record<string, string>;
+  };
   /** Page/header title (used as the document title and the header text). */
   title: string;
   /** Optional stable id; namespaces this configurator's browser storage so two

@@ -1,8 +1,34 @@
-# Cloudflare Workers static-assets headers (ignored by other hosts).
-# Hashed build output is immutable; the WASM is version-pinned but served
-# under a stable filename, so it gets a day of browser cache (the app's own
-# versioned Cache Storage makes browser-cache lifetime mostly moot anyway).
+# Cloudflare Pages / Netlify static-headers convention (ignored by other
+# hosts — notably GitHub Pages, which serves no custom headers at all; see
+# docs/config.md "SVG asset trust model" for what that means for that
+# deployment target). Hashed build output is immutable; the WASM is
+# version-pinned but served under a stable filename, so it gets a day of
+# browser cache (the app's own versioned Cache Storage makes browser-cache
+# lifetime mostly moot anyway).
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 /wasm/*
   Cache-Control: public, max-age=86400
+
+# M13 — design/config sources (including the SVGs mounted under /scad/: use/
+# include assets consumed by OpenSCAD's import()/surface(), plus the copied
+# logo/design-icon files) and the generated /icon.svg are trusted OPERATOR
+# input, not sandboxed third-party content — see docs/config.md "SVG asset
+# trust model". They're safe wherever they're actually used (<img>, <use>,
+# CSS, OpenSCAD's WASM FS), but an SVG can carry <script>, and a browser that
+# is navigated to one *directly* would otherwise execute it in this app's
+# origin. These headers are cheap defense-in-depth against exactly that direct
+# -navigation case; they don't restrict — and can't break — the app's own
+# <img>/<use>/CSS/import() consumption of the same files, since a CSP header
+# only governs the fetched resource when *it* is the top-level document (or an
+# embedded document, e.g. an iframe), not when it's decoded as an image or
+# mounted into the WASM filesystem.
+/scad/*
+  Content-Security-Policy: default-src 'none'; sandbox
+  X-Content-Type-Options: nosniff
+/icon.svg
+  Content-Security-Policy: default-src 'none'; sandbox
+  X-Content-Type-Options: nosniff
+/*.svg
+  Content-Security-Policy: default-src 'none'; sandbox
+  X-Content-Type-Options: nosniff

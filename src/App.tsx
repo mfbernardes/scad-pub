@@ -12,7 +12,15 @@ import {
   type Values,
 } from "./lib/presets";
 import { changedParams } from "./lib/paramDiff";
-import { readInitialState, persistState } from "./lib/urlState";
+import {
+  readInitialState,
+  persistState,
+  buildShareUrl,
+  parseHashState,
+  sessionStateEquals,
+  type SessionState,
+} from "./lib/urlState";
+import { computeShareability, shareabilityWarning } from "./lib/shareability";
 import { download, downloadBlob } from "./lib/download";
 import { shareUrl, shareFileOrFallback } from "./lib/share";
 import { useTheme } from "./lib/theme";
@@ -110,6 +118,8 @@ export default function App() {
     autoRender,
     setAutoRender,
     stalePreview,
+    exportable,
+    snapshot,
     bundleStale,
     doRender,
     invalidate,
@@ -147,14 +157,96 @@ export default function App() {
     [designId, resetForDesign]
   );
 
+  // M4: the ONE place external URL state (a same-document hashchange, or an
+  // installed-app launch target queued via the Web App Launch Handler) is
+  // applied to React state — atomically, the same way a design switch is.
+  // Reuses handleDesignChange's own design/values/preset reset so the render
+  // pipeline's epoch still advances and a stale render can never land under
+  // the newly-applied design. When the design is unchanged (e.g. a launch
+  // that only carries new values/preset for the current design), still update
+  // values/preset without disturbing render-pipeline epoch/reset state that a
+  // full design switch would otherwise reset for no reason.
+  const applyExternalState = useCallback(
+    (state: SessionState) => {
+      const next = schema.designs.find((d) => d.id === state.designId);
+      if (!next) return;
+      if (next.id !== designId) {
+        setDesignId(next.id);
+        resetForDesign(next);
+      }
+      setValues(state.values);
+      setPresetSel(state.preset);
+      setUserPresets(listPresets(next.id));
+    },
+    [designId, resetForDesign]
+  );
+
   useEffect(() => {
     const t = setTimeout(() => persistState(design, values, presetSel), 300);
     return () => clearTimeout(t);
   }, [design, values, presetSel]);
 
+  // M4: consume external navigations that only change the URL hash — a
+  // same-document `hashchange` (e.g. a browser/OS "navigate to #d=..." that
+  // doesn't reload the document) and the Web App Launch Handler's queued
+  // target for an installed app opened via a manifest shortcut
+  // (`navigate-existing` — see scripts/lib/pwa-assets.mjs). Neither fires a
+  // full module reload, so without this the address bar/launch target would
+  // update while the mounted app's design/value/preset state stays put.
+  // `persistState` above writes via `history.replaceState`, which per spec
+  // never fires `hashchange`, so there's no feedback loop from our own
+  // writes; the equality check below is a defensive backstop against any
+  // navigation that happens to already match current state (a no-op, not a
+  // loop).
+  // Read imperatively inside the effect below via refs (not effect deps), so
+  // the hashchange/launchQueue subscription is set up once at mount rather
+  // than being torn down and re-added on every keystroke — the effect only
+  // needs the LATEST design/values/preset at the moment a hash actually
+  // arrives, the same "mirror the latest without retriggering" idiom used by
+  // autoRenderRef in useRenderPipeline.ts.
+  const currentSessionRef = useRef<SessionState>({ designId, values, preset: presetSel });
+  currentSessionRef.current = { designId, values, preset: presetSel };
+  const applyExternalStateRef = useRef(applyExternalState);
+  applyExternalStateRef.current = applyExternalState;
+
+  useEffect(() => {
+    const applyFromHash = (hash: string) => {
+      const state = parseHashState(schema, hash);
+      if (!state) return;
+      if (sessionStateEquals(currentSessionRef.current, state)) return;
+      applyExternalStateRef.current(state);
+    };
+
+    const onHashChange = () => applyFromHash(location.hash);
+    window.addEventListener("hashchange", onHashChange);
+
+    // Installed-app launches (manifest shortcuts, `launch_handler:
+    // navigate-existing`) queue their target URL here instead of navigating
+    // the document. Unsupported in most browsers today; a no-op when absent.
+    const launchQueue = (window as Window & { launchQueue?: LaunchQueue }).launchQueue;
+    launchQueue?.setConsumer((params) => {
+      if (!params.targetURL) return;
+      try {
+        applyFromHash(new URL(params.targetURL).hash);
+      } catch {
+        /* malformed launch target — ignore */
+      }
+    });
+
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // Clear stale presets the instant the design changes (during render, not an
+  // effect — the documented "adjusting state when a prop changes" pattern),
+  // so a design switch never briefly shows the previous design's presets
+  // while the fetch below is in flight.
+  const [bundledPresetsDesignId, setBundledPresetsDesignId] = useState(designId);
+  if (designId !== bundledPresetsDesignId) {
+    setBundledPresetsDesignId(designId);
+    setBundledPresets([]);
+  }
   useEffect(() => {
     let active = true;
-    setBundledPresets([]);
     fetchBundledPresets(design).then((p) => active && setBundledPresets(p));
     return () => { active = false; };
   }, [design]);
@@ -199,10 +291,15 @@ export default function App() {
     });
   }, [canInstall, promptInstall]);
 
+  // Gated on `exportable` (a successful render that still matches the live
+  // controls, not just "some render succeeded at some point") and named from
+  // the exported snapshot's own designId rather than the live `design.id`, so
+  // a design switch racing the export can never mislabel the bytes it sends
+  // out. See docs/architecture-review.md H1.
   const exportModel = useCallback(async () => {
-    if (!result?.ok) return;
-    const name = `${design.id}.${schema.format}`;
-    const blob = new Blob([result.stl as BlobPart], { type: `model/${schema.format}` });
+    if (!exportable || !snapshot?.result.ok) return;
+    const name = `${snapshot.designId}.${schema.format}`;
+    const blob = new Blob([snapshot.result.stl as BlobPart], { type: `model/${schema.format}` });
     // Prefer the native share sheet on capable devices (send straight to a
     // slicer / Files / AirDrop); fall back to a plain download otherwise.
     const outcome = await shareFileOrFallback(
@@ -212,10 +309,11 @@ export default function App() {
     if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
     setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
     offerInstallHint();
-  }, [result, design.id, offerInstallHint]);
+  }, [exportable, snapshot, offerInstallHint, setAnnouncement]);
 
   const savePng = useCallback(async (url: string) => {
-    const name = `${design.id}.png`;
+    if (!exportable || !snapshot) return;
+    const name = `${snapshot.designId}.png`;
     // The snapshot is a data: URL — turn it into a File so it can go to the
     // native share sheet (like the model export); fall back to a download.
     const blob = await (await fetch(url)).blob();
@@ -225,20 +323,40 @@ export default function App() {
     );
     if (outcome === "cancelled") return;
     setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Saved ${name}`);
-  }, [design.id]);
+  }, [exportable, snapshot, setAnnouncement]);
+
+  // Whether the CURRENT design/values/imports are fully described by a plain
+  // share URL, and which local-only files are missing if not. Recomputed on
+  // every change so `copyLink` never has to guess after the fact.
+  // See docs/architecture-review.md H2.
+  const shareability = useMemo(
+    () => computeShareability(design, values, userFiles, schema.fontFaces ?? []),
+    [design, values, userFiles]
+  );
 
   const copyLink = useCallback(async () => {
-    const url = location.href;
+    // Built synchronously from the live design/values/preset — never from
+    // `location.href`, which only reflects the last debounced `persistState`
+    // write and can lag a just-made edit by up to 300ms.
+    const url = buildShareUrl(design, values, presetSel);
+    const warning = shareabilityWarning(shareability);
     // Native share sheet where available (mobile); otherwise copy to clipboard.
+    // Either way, a local-only dependency gets an explicit warning naming the
+    // missing files — the plain URL is copied/shared regardless (no upload;
+    // see docs/architecture-review.md H2), but never silently implied complete.
     const outcome = await shareUrl(url, schema.title);
-    if (outcome === "shared" || outcome === "cancelled") return;
+    if (outcome === "cancelled") return;
+    if (outcome === "shared") {
+      if (warning) setAnnouncement(warning);
+      return;
+    }
     try {
       await navigator.clipboard.writeText(url);
-      setAnnouncement("Copied share link");
+      setAnnouncement(warning ?? "Copied share link");
     } catch {
       setAnnouncement("Couldn't copy — copy the URL from the address bar");
     }
-  }, []);
+  }, [design, values, presetSel, shareability, setAnnouncement]);
 
   const handleReset = useCallback(() => { setValues(defaultsFor(design)); setPresetSel(""); }, [design]);
   const showHelpModal = useCallback(() => setShowHelp(true), []);
@@ -292,7 +410,10 @@ export default function App() {
         />
       )}
       {showDesignDoc && design.doc && (
-        <DesignDocModal design={design} onClose={() => setShowDesignDoc(false)} />
+        // Keyed on design.id so a design switch while the modal is open remounts
+        // it fresh (idle -> loading state) instead of needing to reset state
+        // imperatively inside the fetch effect.
+        <DesignDocModal key={design.id} design={design} onClose={() => setShowDesignDoc(false)} />
       )}
       {showLicenses && (
         <LicensesModal extra={schema.licenses} onClose={() => setShowLicenses(false)} />
@@ -321,6 +442,7 @@ export default function App() {
           ready={ready}
           autoRender={autoRender}
           stalePreview={stalePreview}
+          exportable={exportable}
           theme={theme}
           themeMode={themeMode}
           openPickerSignal={openPickerSignal}

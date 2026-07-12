@@ -26,10 +26,34 @@ export function binCacheName(wasmVersion?: string): string {
   return `${BIN_CACHE_PREFIX}${wasmVersion ?? DEFAULT_WASM_VERSION}`;
 }
 
+// H4 (point 3): how many openscad-wasm-bin-* caches to retain at once,
+// including the current one. Evicting every OTHER version unconditionally
+// (the pre-H4 behavior) meant a second ScadPub deployment/scope sharing this
+// origin — pinned to a different wasmVersion, or mid-rollout of a new one —
+// could have its offline binaries deleted out from under it by the first
+// scope's worker to run cleanupOldCaches(). Retaining a small bounded set
+// instead lets a few versions coexist; eviction still bounds total storage
+// (each entry is the ~10 MB wasm binary plus bundled fonts) rather than
+// growing forever.
+export const MAX_RETAINED_BIN_CACHES = 3;
+
 // Of the given Cache Storage keys, the stale binary caches to delete: every
-// openscad-wasm-bin-* entry except the one currently in use. Keys that aren't
-// one of our binary caches (the service worker's shell cache, other apps on the
-// origin) are left untouched.
-export function staleBinaryCaches(keys: readonly string[], current: string): string[] {
-  return keys.filter((k) => k.startsWith(BIN_CACHE_PREFIX) && k !== current);
+// openscad-wasm-bin-* entry except the current one and up to
+// MAX_RETAINED_BIN_CACHES - 1 others (kept in lexical order, which sorts
+// pinned OpenSCAD version strings like "2026.06.12" chronologically). Keys
+// that aren't one of our binary caches (the service worker's shell cache,
+// other apps on the origin) are left untouched.
+export function staleBinaryCaches(
+  keys: readonly string[],
+  current: string,
+  retain: number = MAX_RETAINED_BIN_CACHES
+): string[] {
+  const others = keys.filter((k) => k.startsWith(BIN_CACHE_PREFIX) && k !== current);
+  const keepCount = Math.max(0, retain - 1);
+  if (keepCount <= 0) return others;
+  // Sort ascending, then keep the lexically-last `keepCount` entries — for
+  // date-like version strings that keeps the most recent ones.
+  const sorted = [...others].sort();
+  const kept = new Set(sorted.slice(sorted.length - keepCount));
+  return others.filter((k) => !kept.has(k));
 }
