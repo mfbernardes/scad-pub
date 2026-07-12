@@ -1614,6 +1614,38 @@ test("in-root symlinks (file and directory) work, mounted at their lexical path"
   );
 });
 
+test("a glob emits every distinct lexical path, even when a symlink aliases an already-walked directory", () => {
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-alias-"));
+  const src = join(root, "src");
+  mkdirSync(join(src, "real"), { recursive: true });
+  writeFileSync(join(src, "real", "util.scad"), "function util() = 42;\n");
+  writeFileSync(join(src, "design.scad"), `/* [Main] */\nx = 1;\n`);
+  // 'alias' resolves to the same real directory as 'real'. A realpath-keyed
+  // global visited set would emit only whichever of real/ or alias/ the walk
+  // reached first (order-dependent); a design importing the omitted lexical
+  // path would then fail at render time. Both must be emitted.
+  symlinkSync(join(src, "real"), join(src, "alias"), "dir");
+  writeFileSync(
+    join(root, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      assets: ["**/util.scad"], // matches BOTH real/util.scad and alias/util.scad
+      designs: [{ id: "design", label: "D" }],
+    })
+  );
+  const out = join(root, "out");
+  const schema = generate({
+    configPath: join(root, "c.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "scad"),
+  });
+  assert.ok(schema.assets.includes("real/util.scad"), `got: ${JSON.stringify(schema.assets)}`);
+  assert.ok(schema.assets.includes("alias/util.scad"), `got: ${JSON.stringify(schema.assets)}`);
+  assert.ok(existsSync(join(out, "scad", "real", "util.scad")));
+  assert.ok(existsSync(join(out, "scad", "alias", "util.scad")));
+});
+
 test("a symlink cycle through a directory's own descendant fails cleanly", () => {
   const root = mkdtempSync(join(tmpdir(), "gen-schema-symlink-"));
   const src = join(root, "src");

@@ -124,10 +124,14 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
   // realAbs)` for each. `ancestors` is the set of canonical directory paths on
   // the current recursion stack: a directory (or a directory-resolving
   // symlink) that points back at one of them is a cycle and fails with a
-  // diagnostic instead of recursing forever. `visited` dedupes distinct paths
-  // that resolve to the same canonical directory (e.g. two symlinks pointing
-  // at the same target) so they aren't walked twice.
-  const walkFiles = (absDir, relParts, referencedFrom, onFile, ancestors, visited) => {
+  // diagnostic instead of recursing forever. Cycle detection uses ONLY the
+  // ancestor stack — deliberately not a global visited-by-realpath set. Two
+  // distinct lexical paths that resolve to the same real directory (e.g.
+  // `real/` and a sibling `alias -> real`) are separate mount points a design
+  // may `use`/`include` independently, so both must be emitted; suppressing
+  // the second globally would drop a path some design imports, failing at
+  // render time. A genuine cycle still resolves back to an ancestor and throws.
+  const walkFiles = (absDir, relParts, referencedFrom, onFile, ancestors) => {
     for (const e of listSafe(absDir, referencedFrom)) {
       const nextRel = [...relParts, e.name];
       if (e.isDir) {
@@ -136,10 +140,8 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
             `gen-schema: symlink cycle: '${nextRel.join("/")}' resolves back to an ancestor directory\n` +
               `  (referenced from ${referencedFrom})`
           );
-        if (visited.has(e.real)) continue;
-        visited.add(e.real);
         ancestors.add(e.real);
-        walkFiles(e.real, nextRel, referencedFrom, onFile, ancestors, visited);
+        walkFiles(e.real, nextRel, referencedFrom, onFile, ancestors);
         ancestors.delete(e.real);
       } else if (e.isFile) {
         onFile(nextRel, e.real);
@@ -148,13 +150,13 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
   };
 
   // Start a walkFiles() traversal rooted at `absDir` (itself already
-  // containment-checked by the caller), seeding the cycle/dedupe sets with its
+  // containment-checked by the caller), seeding the ancestor stack with its
   // own canonical path and the SOURCE-relative prefix so emitted relative
   // paths are rooted at SOURCE (matching relPosix), not at absDir.
   const collectFiles = (absDir, referencedFrom, onFile) => {
     const real0 = realpathSync(absDir);
     const initRel = relative(SOURCE, absDir).split(sep).filter(Boolean);
-    walkFiles(absDir, initRel, referencedFrom, onFile, new Set([real0]), new Set([real0]));
+    walkFiles(absDir, initRel, referencedFrom, onFile, new Set([real0]));
   };
 
   // Every .scad under a directory (recursively), as source-relative POSIX paths.
@@ -194,19 +196,20 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
     const referencedFrom = `${configPath} (asset pattern '${pattern}')`;
     const segments = pattern.split("/").filter(Boolean);
     const out = [];
-    const descend = (e, parts, cb, ancestors, visited) => {
+    // Cycle detection uses only the ancestor stack (see walkFiles) — no global
+    // visited-by-realpath set, so a symlink alias to an already-matched real
+    // directory still contributes its own distinct lexical path.
+    const descend = (e, parts, cb, ancestors) => {
       if (ancestors.has(e.real))
         throw new Error(
           `gen-schema: symlink cycle: '${parts.join("/")}' resolves back to an ancestor directory\n` +
             `  (referenced from ${referencedFrom})`
         );
-      if (visited.has(e.real)) return;
-      visited.add(e.real);
       ancestors.add(e.real);
       cb();
       ancestors.delete(e.real);
     };
-    const walk = (absDir, relParts, segIdx, ancestors, visited) => {
+    const walk = (absDir, relParts, segIdx, ancestors) => {
       const seg = segments[segIdx];
       const last = segIdx === segments.length - 1;
       const entries = listSafe(absDir, referencedFrom);
@@ -219,17 +222,16 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
               descend(
                 e,
                 parts,
-                () => walkFiles(e.real, parts, referencedFrom, (rp) => out.push(rp.join("/")), ancestors, visited),
-                ancestors,
-                visited
+                () => walkFiles(e.real, parts, referencedFrom, (rp) => out.push(rp.join("/")), ancestors),
+                ancestors
               );
           }
           return;
         }
-        walk(absDir, relParts, segIdx + 1, ancestors, visited);
+        walk(absDir, relParts, segIdx + 1, ancestors);
         for (const e of entries) {
           if (e.isDir)
-            descend(e, [...relParts, e.name], () => walk(e.real, [...relParts, e.name], segIdx, ancestors, visited), ancestors, visited);
+            descend(e, [...relParts, e.name], () => walk(e.real, [...relParts, e.name], segIdx, ancestors), ancestors);
         }
         return;
       }
@@ -240,12 +242,12 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
         if (last) {
           if (e.isFile) out.push(parts.join("/"));
         } else if (e.isDir) {
-          descend(e, parts, () => walk(e.real, parts, segIdx + 1, ancestors, visited), ancestors, visited);
+          descend(e, parts, () => walk(e.real, parts, segIdx + 1, ancestors), ancestors);
         }
       }
     };
     const real0 = realpathSync(SOURCE);
-    walk(SOURCE, [], 0, new Set([real0]), new Set([real0]));
+    walk(SOURCE, [], 0, new Set([real0]));
     return out;
   };
 
