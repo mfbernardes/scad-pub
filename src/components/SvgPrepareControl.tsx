@@ -18,19 +18,15 @@ function loadSvgWizard() {
   return import("./SvgWizard").then((m) => ({ default: m.SvgWizard }));
 }
 
-// A single module-scope `lazy()` component (created once, not per render)
-// so `react-hooks/static-components` doesn't flag it. `lazy()` caches its
-// loader's promise/result for the life of the component object it returns,
-// so a rejected chunk load (offline, build-hash drift, ad blocker on the
-// chunk URL, …) stays rejected on every subsequent render of *this same*
-// component — there's no in-place retry. `makeSvgWizard()` mints a fresh
-// lazy component wrapping the same loader; Retry calls it from an event
-// handler (not during render) and stores the result in state, which gives
-// the next mount an actual new import() attempt while still satisfying the
-// "don't create components during render" rule.
-function makeSvgWizard() {
-  return lazy(loadSvgWizard);
-}
+// A single module-scope `lazy()` component (created once, not per render, so
+// `react-hooks/static-components` is satisfied). A rejected chunk load
+// (offline, build-hash drift after a deploy, an ad blocker on the chunk URL, …)
+// is cached by the browser's module map for the document's lifetime: re-running
+// the same dynamic `import()` — even from a freshly minted `lazy()` wrapper —
+// just re-throws the cached rejection, so there is no in-place re-fetch. The
+// only reliable recovery is a full reload, which re-requests every chunk from
+// the network; the error fallback below offers exactly that (see finding #14).
+const SvgWizardLazy = lazy(loadSvgWizard);
 
 // Preload on user intent (hover/focus of the trigger button) so the chunk is
 // likely already fetched by the time `pending` mounts it. The dynamic import
@@ -71,13 +67,6 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
   const [pending, setPending] = useState<{ text: string; fileName: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Bumped by the Retry action below, purely as the `ErrorBoundary`'s
-  // `resetKey` (it clears the caught error the moment the new component
-  // mounts). The lazy component itself lives in state — see `makeSvgWizard`
-  // above — and Retry replaces it via `setSvgWizard`, not by recomputing it
-  // during render.
-  const [wizardAttempt, setWizardAttempt] = useState(0);
-  const [SvgWizard, setSvgWizard] = useState(() => makeSvgWizard());
 
   const loadFile = async (file: File) => {
     const reason = svgRejectionReason(file);
@@ -153,7 +142,6 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
 
       {pending && (
         <ErrorBoundary
-          resetKey={wizardAttempt}
           fallback={
             <div
               role="alert"
@@ -163,18 +151,18 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
                 The SVG editor couldn't be loaded.
               </p>
               <p className="text-[0.78rem] text-muted-foreground">
-                Check your connection and try again.
+                Check your connection, then reload to try again.
               </p>
               <div className="flex gap-2">
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => {
-                    setSvgWizard(makeSvgWizard());
-                    setWizardAttempt((n) => n + 1);
-                  }}
+                  // The browser caches the failed chunk load for the page's
+                  // life, so an in-place retry can't re-fetch it (see #14) — a
+                  // reload re-requests every chunk from the network.
+                  onClick={() => window.location.reload()}
                 >
-                  Retry
+                  Reload
                 </Button>
                 <Button
                   type="button"
@@ -201,7 +189,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
               </div>
             }
           >
-            <SvgWizard
+            <SvgWizardLazy
               svgText={pending.text}
               fileName={pending.fileName}
               deriveColours={Boolean(svg.layers)}
