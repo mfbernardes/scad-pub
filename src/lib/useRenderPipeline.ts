@@ -291,6 +291,18 @@ export function useRenderPipeline({
     return () => {
       runnerRef.current?.dispose();
       runnerRef.current = null;
+      // Re-arm the initial-render one-shot: it was armed against the runner we
+      // just disposed. Under Strict Mode's dev mount -> cleanup -> remount
+      // replay, the first pass sets the flag and starts the initial render on
+      // runner A; disposing A rejects that render with SupersededError (so it
+      // never commits and `rendering` stays true), and without this reset the
+      // remount's initial-render effect would skip — because the flag survived
+      // the replay — leaving a manual-mode (heavy) design, whose ONLY render
+      // trigger is that effect, stuck on the loading overlay. Resetting here
+      // lets the replacement runner B get its own initial render. In production
+      // (no replay) this cleanup runs only on real unmount, so the "exactly one
+      // initial render per design view" guarantee is unchanged.
+      initialRenderFiredRef.current = false;
     };
     // Intentionally mount-only: matches the previous lazy-ref-init's semantics
     // of constructing exactly one runner for the component's lifetime and
