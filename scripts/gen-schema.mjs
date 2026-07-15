@@ -774,6 +774,16 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     ? computeBinAssetVersions({ fontPaths, fontsConf, outPublicDir })
     : {};
 
+  // Byte size of the pinned WASM binary — same file computeBinAssetVersions
+  // above just digested (public/wasm/openscad.wasm, populated by
+  // fetch-wasm.mjs before this script runs). Display-only (the render
+  // worker's "engine" loading phase uses it for a "one-time download — about
+  // N MB" line before a real Content-Length is known); guarded exactly like
+  // BIN_ASSETS for the same dev-edge case — a `npm test`/fixture run with no
+  // outPublicDir, or one before fetch-wasm.mjs has populated public/wasm/.
+  const wasmPath = outPublicDir ? join(outPublicDir, "wasm", "openscad.wasm") : null;
+  const engineBytes = wasmPath && existsSync(wasmPath) ? statSync(wasmPath).size : undefined;
+
   const schema = {
     generatedFrom: relPosix(SOURCE) || ".",
     renderHash,
@@ -782,6 +792,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     wasmVersion: WASM_VERSION,
     // H4: per-file digests for wasm/glue/fonts/fonts.conf — see BIN_ASSETS above.
     binAssets: BIN_ASSETS,
+    ...(engineBytes !== undefined ? { engineBytes } : {}),
     title: TITLE,
     shortName: SHORT_NAME,
     id: ID,

@@ -53,6 +53,36 @@ export interface RenderResult {
   fatal?: boolean;
 }
 
+/**
+ * Progress update posted by the worker during its one-time asset bootstrap
+ * (worker.ts's `ensureAssets`), before the one-shot "ready" message. Only the
+ * ~10 MB OpenSCAD WASM binary download is instrumented — it dominates a cold
+ * first load; the small `.scad`/fonts.conf/font-binary fetches alongside it
+ * aren't worth a progress channel. Nothing is posted at all on a Cache
+ * Storage HIT (there's no download to report on that path) — a consumer that
+ * never sees a `progress` message before `ready` should treat the engine as
+ * having loaded instantly from cache.
+ */
+export interface WorkerProgress {
+  type: "progress";
+  /**
+   * The only stage currently emitted: downloading the WASM binary. Typed as a
+   * literal (not a wider union) so a future stage can be added additively
+   * without every existing switch/consumer needing an `default` arm today.
+   */
+  stage: "engine";
+  /** Bytes downloaded so far. */
+  loaded: number;
+  /**
+   * Total bytes from the response's `Content-Length`, when present and the
+   * response isn't compressed in a way that makes that header unreliable
+   * (see worker.ts's `readWithProgress`); null when unknown, in which case a
+   * consumer should render an indeterminate progress indicator rather than a
+   * percentage.
+   */
+  total: number | null;
+}
+
 // ---- Parameter schema (produced by scripts/gen-schema.mjs) ----
 
 export interface EnumChoice {
@@ -415,6 +445,16 @@ export interface Schema {
     fontsConf?: string;
     fonts?: Record<string, string>;
   };
+  /**
+   * Byte size of the pinned OpenSCAD WASM binary (public/wasm/openscad.wasm)
+   * at build time, derived (not config) — used only to show a "~N MB
+   * one-time download" line while the engine phase's progress channel has no
+   * `Content-Length` to report a live total from, or as the label for a
+   * determinate one. Absent when the file didn't exist at gen time (e.g. a
+   * dev run before `fetch-wasm.mjs` populated public/wasm/), in which case
+   * the UI simply omits the size line.
+   */
+  engineBytes?: number;
   /** Page/header title (used as the document title and the header text). */
   title: string;
   /** Optional stable id; namespaces this configurator's browser storage so two

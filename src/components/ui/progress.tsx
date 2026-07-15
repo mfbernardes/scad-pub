@@ -16,8 +16,13 @@ function Progress({
     >
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
-        className="bg-primary h-full w-full flex-1 transition-all"
-        style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
+        // A null/undefined `value` (Radix: "indeterminate", exposed as
+        // data-state="indeterminate" — no aria-valuenow either, per the WAI-ARIA
+        // progressbar pattern) has no percentage to translate to, so it gets a
+        // looping sweep animation instead of the determinate translateX; see
+        // the `progress-indeterminate` keyframes in index.css.
+        className="bg-primary h-full w-full flex-1 transition-all data-[state=indeterminate]:w-1/3 data-[state=indeterminate]:animate-[progress-indeterminate_1.4s_ease-in-out_infinite] motion-reduce:data-[state=indeterminate]:animate-none"
+        style={value != null ? { transform: `translateX(-${100 - value}%)` } : undefined}
       />
     </ProgressPrimitive.Root>
   );

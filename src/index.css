@@ -465,8 +465,11 @@ button:disabled { cursor: default; }
   }
 }
 
-/* "Preview out of date" — top-centre over the viewer. */
-.stale-banner {
+/* "Preview out of date" (manual mode) / "Updating preview…" (auto mode) —
+   top-centre over the viewer. Share one slot: the two are mutually exclusive
+   (ViewerStage/StaleBanner gate on autoRender so only one of them can be
+   mounted at a time), so one position rule covers both. */
+.stale-banner, .updating-chip {
   position: absolute;
   top: calc(0.75rem + env(safe-area-inset-top, 0px));
   left: 50%;
@@ -476,7 +479,7 @@ button:disabled { cursor: default; }
 
 /* Mobile: drop below the floating top bar (and any notch). */
 @media (max-width: 860px) {
-  .app-shell__mobile .stale-banner {
+  .app-shell__mobile .stale-banner, .app-shell__mobile .updating-chip {
     top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
   }
 }
@@ -488,6 +491,15 @@ button:disabled { cursor: default; }
 @keyframes pill-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
+}
+
+/* Indeterminate download progress (ui/progress.tsx): a fixed-width bar
+   sweeping left-to-right, for the engine loading phase when the WASM
+   fetch's Content-Length isn't known. motion-reduce disables the animation
+   (see the component's motion-reduce:data-[state=indeterminate]:animate-none). */
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
 }
 
 /* ═══════════════════════════════════════════════════════════════

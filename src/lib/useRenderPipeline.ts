@@ -19,7 +19,7 @@
 // only while it stays current per `isSnapshotCurrent`.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { Design, RenderRequest, RenderResult } from "../openscad/types";
+import type { Design, RenderRequest, RenderResult, WorkerProgress } from "../openscad/types";
 import {
   fileSignature,
   OpenSCADRunner,
@@ -112,6 +112,13 @@ export function useRenderPipeline({
   // callback and disturb the debounce/auto-render invariants.
   const prevRenderedValuesRef = useRef<Values>(initialValues);
   const [ready, setReady] = useState(false);
+  // The render worker's bootstrap-download progress (see WorkerProgress),
+  // forwarded by the runner's onProgress. Cleared the moment `ready` fires —
+  // once the worker is up, this stops meaning anything for the current
+  // worker instance, and the runner itself suppresses any further/late
+  // progress messages after ready (see runner.ts's onProgress doc), so this
+  // never gets set again for that instance.
+  const [loadProgress, setLoadProgress] = useState<WorkerProgress | null>(null);
   const [autoRender, setAutoRenderState] = useState(!design.heavy);
   // Mirrored on every render so async work (doRender) reads the latest value
   // without retriggering the effects that depend on it.
@@ -306,7 +313,14 @@ export function useRenderPipeline({
   // after the replay: exactly one live worker (the second runner's), zero
   // leaked ones.
   useEffect(() => {
-    const opts: RunnerCtorOptions = { onReady: () => setReady(true), ...runner };
+    const opts: RunnerCtorOptions = {
+      onReady: () => {
+        setReady(true);
+        setLoadProgress(null);
+      },
+      onProgress: (p) => setLoadProgress(p),
+      ...runner,
+    };
     runnerRef.current = createRunner ? createRunner(opts) : new OpenSCADRunner(opts);
     return () => {
       runnerRef.current?.dispose();
@@ -391,6 +405,7 @@ export function useRenderPipeline({
     result,
     rendering,
     ready,
+    loadProgress,
     renderedValues,
     renderMetrics,
     autoRender,

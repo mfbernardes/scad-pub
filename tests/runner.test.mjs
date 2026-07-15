@@ -366,6 +366,98 @@ test("the ready signal fires onReady exactly once", () => {
   runner.dispose();
 });
 
+// ---- Bootstrap-download progress channel (see worker.ts's WorkerProgress) ----
+
+test("progress messages before ready are forwarded to onProgress", () => {
+  const progress = [];
+  const runner = new OpenSCADRunner({ onProgress: (p) => progress.push(p) });
+  const w = newest();
+  w.emit({ type: "progress", stage: "engine", loaded: 1000, total: 10_000_000 });
+  w.emit({ type: "progress", stage: "engine", loaded: 2000, total: 10_000_000 });
+  assert.deepEqual(progress, [
+    { type: "progress", stage: "engine", loaded: 1000, total: 10_000_000 },
+    { type: "progress", stage: "engine", loaded: 2000, total: 10_000_000 },
+  ]);
+  runner.dispose();
+});
+
+test("progress messages are suppressed once ready has fired", () => {
+  const progress = [];
+  let ready = 0;
+  const runner = new OpenSCADRunner({
+    onReady: () => ready++,
+    onProgress: (p) => progress.push(p),
+  });
+  const w = newest();
+  w.emit({ type: "progress", stage: "engine", loaded: 1000, total: 10_000_000 });
+  w.emit({ type: "ready" });
+  // A late/stale progress message arriving after ready (e.g. from a slow
+  // in-flight read that resolves after bootstrap already announced ready)
+  // must not resurrect the pre-ready loading UI.
+  w.emit({ type: "progress", stage: "engine", loaded: 9_000_000, total: 10_000_000 });
+  assert.equal(ready, 1);
+  assert.equal(progress.length, 1);
+  assert.equal(progress[0].loaded, 1000);
+  runner.dispose();
+});
+
+test("progress from a respawned worker is still forwarded when ready hasn't fired yet", async () => {
+  // A render superseding an in-flight one terminates + respawns the worker
+  // (latest-wins). If the FIRST worker never reached ready, the respawned one
+  // re-runs bootstrap and its own progress messages must still reach
+  // onProgress — only an ALREADY-fired ready suppresses later messages, not
+  // "this is a different worker instance than the one progress first came
+  // from".
+  const progress = [];
+  const runner = new OpenSCADRunner({ onProgress: (p) => progress.push(p) });
+  const w0 = newest();
+  w0.emit({ type: "progress", stage: "engine", loaded: 500, total: 10_000_000 });
+
+  const a = runner.render({ design: "x", defines: {} });
+  const aRejects = assert.rejects(a, (e) => e.name === "SupersededError");
+  const b = runner.render({ design: "y", defines: {} }); // supersedes a -> respawns the worker
+  await aRejects;
+  const w1 = newest();
+  assert.notStrictEqual(w1, w0);
+
+  w1.emit({ type: "progress", stage: "engine", loaded: 700, total: 10_000_000 });
+  assert.deepEqual(
+    progress.map((p) => p.loaded),
+    [500, 700]
+  );
+  w1.emit(ok(w1.last.id));
+  await b;
+  runner.dispose();
+});
+
+test("progress from a respawned worker is suppressed once ready already fired on a prior worker", async () => {
+  let ready = 0;
+  const progress = [];
+  const runner = new OpenSCADRunner({
+    onReady: () => ready++,
+    onProgress: (p) => progress.push(p),
+  });
+  const w0 = newest();
+  w0.emit({ type: "ready" });
+  assert.equal(ready, 1);
+
+  // A worker error only marks the worker failed; the actual respawn happens
+  // lazily on the NEXT render() call (see OpenSCADRunner.render's `if
+  // (this.workerFailed) this.spawn();`) — readyFired stays true for the life
+  // of this runner regardless, so a fresh worker's own bootstrap progress
+  // (however unlikely once assets are already cached) must not resurface the
+  // loading UI.
+  w0.emitError("boom");
+  const afterError = runner.render({ design: "x", defines: {} });
+  const w1 = newest();
+  assert.notStrictEqual(w1, w0);
+  w1.emit({ type: "progress", stage: "engine", loaded: 100, total: 10_000_000 });
+  assert.equal(progress.length, 0);
+  w1.emit(ok(w1.last.id));
+  await afterError;
+  runner.dispose();
+});
+
 // ---- Persistent L2 cache (injected store) ----
 // The runner only takes the async L2 path when a store is present; with no
 // store (as in the tests above, and in Node where IndexedDB is undefined) it

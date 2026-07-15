@@ -7,7 +7,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
-import type { RenderResult } from "../openscad/types";
+import type { RenderResult, WorkerProgress } from "../openscad/types";
 import type { RenderMetrics } from "../lib/renderMetrics";
 import type { SettingsView, ExperienceMode } from "../lib/useExperience";
 import type { PauseReason } from "../lib/renderState";
@@ -91,6 +91,10 @@ interface Props {
   result: RenderResult | null;
   rendering: boolean;
   ready: boolean;
+  /** The render worker's bootstrap-download progress, or null once ready (or
+   *  when nothing was ever downloaded — a warm Cache Storage hit). Flows to
+   *  ViewerStage's pre-first-render loading overlay. */
+  loadProgress: WorkerProgress | null;
   autoRender: boolean;
   stalePreview: boolean;
   /** Why live preview is currently paused ("heavy" brake / "manual-design"
@@ -132,6 +136,7 @@ export const AppShell = memo(function AppShell({
   result,
   rendering,
   ready,
+  loadProgress,
   autoRender,
   stalePreview,
   pauseReason,
@@ -423,6 +428,8 @@ export const AppShell = memo(function AppShell({
     result,
     ready,
     rendering,
+    loadProgress,
+    engineBytes: schema.engineBytes,
     autoRender,
     stalePreview,
     pauseReason,
