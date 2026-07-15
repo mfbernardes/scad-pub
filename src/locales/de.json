@@ -61,11 +61,16 @@
   "checklist.preview": "Vorschau",
   "checklist.exportModel": "Modell exportieren",
   "checklist.ready": "fertig",
+  "checklist.building": "wird erstellt",
+  "checklist.failed": "fehlgeschlagen",
+  "checklist.done": "erledigt",
   "checklist.dismiss": "Verwerfen",
 
   "hint.rotateZoomMouse": "Ziehen zum Drehen · Scrollen zum Zoomen",
   "hint.rotateZoomTouch": "Ziehen zum Drehen · Zwei-Finger-Zoom",
   "hint.dragForSettings": "Nach oben ziehen für alle Einstellungen",
+
+  "help.replayChecklist": "Checkliste für den Einstieg erneut anzeigen",
 
   "sheet.detentPeek": "Einstellungsleiste eingeklappt",
   "sheet.detentHalf": "Einstellungsleiste halb geöffnet",

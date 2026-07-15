@@ -4,12 +4,14 @@ import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import type { SettingsView } from "../lib/useExperience";
+import type { ChecklistState } from "../lib/checklist";
 import { useAppActions } from "../lib/appActions";
 import type { PanelTab } from "../lib/usePanelState";
 import { CustomizeTab } from "./CustomizeTab";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
 import { PanelFooter } from "./PanelFooter";
+import { GettingStarted } from "./GettingStarted";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 
@@ -57,6 +59,11 @@ interface Props {
   settingsView: SettingsView;
   /** Forwarded to CustomizeTab — see its own doc. */
   focusHiddenDiffSignal?: number;
+  /** The getting-started checklist's derived state — see ParamPanel.tsx's
+   *  matching prop doc (this mirrors it for the mobile layout). */
+  checklist: ChecklistState;
+  /** Forwarded to GettingStarted — see its own doc. */
+  checklistReplaySignal?: number;
 }
 
 export function SheetTabs({
@@ -87,6 +94,8 @@ export function SheetTabs({
   onSearchBlur,
   settingsView,
   focusHiddenDiffSignal,
+  checklist,
+  checklistReplaySignal,
 }: Props) {
   const {
     applyPreset,
@@ -103,69 +112,74 @@ export function SheetTabs({
   const triggerClass = cn(chipTabTrigger, "flex-1");
 
   return (
-    <Tabs
-      value={tab}
-      onValueChange={(v) => onTabChange(v as Tab)}
-      className="sheet-tabs min-h-0 flex-1 gap-0"
-    >
-      <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
-        {tabs.map((t) => (
-          <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
-            {t === "params" ? parametersLabel : t === "presets" ? presetsLabel : "Files"}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <CustomizeTab
-            design={design}
-            values={values}
-            presetBaseline={presetBaseline}
-            presetName={presetName}
-            baseline={baseline}
-            changedParams={changedParams}
-            showVarName={showVarName}
-            availableFontFamilies={availableFontFamilies}
-            fontSuggestion={fontSuggestion}
-            installedFonts={installedFonts}
-            settingsView={settingsView}
-            search={search}
-            onSearchChange={onSearchChange}
-            onSearchFocus={onSearchFocus}
-            onSearchBlur={onSearchBlur}
-            focusHiddenDiffSignal={focusHiddenDiffSignal}
-          />
-          {/* Auto-render is parameter-scoped, so it pins to the bottom of this
-              tab only — not on Presets/Files (mirrors the desktop panel). Reset
-              lives in PresetDiffBar above now (the unified restore control). */}
-          <PanelFooter autoRender={autoRender} className="sheet-footer" />
-        </TabsContent>
-        <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <PresetPicker
-            design={design}
-            bundled={bundled}
-            userPresets={userPresets}
-            selected={selected}
-            values={values}
-            onApply={applyPreset}
-            onSelectedChange={selectedPresetChange}
-            onPresetsChange={presetsChange}
-            showPowerTools={settingsView === "all"}
-            inline
-          />
-        </TabsContent>
-        {hasFiles && (
-          <TabsContent value="files" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-            <FileBar
-              fileImport={fileImport}
-              loadedFiles={loadedFiles}
-              onAddFile={addFile}
-              onRemoveFile={removeFile}
-              onClearFiles={clearFiles}
+    <>
+      {/* Above the tab strip — mirrors ParamPanel's desktop mount point, so
+          the card is visible regardless of which tab is active. */}
+      <GettingStarted state={checklist} replaySignal={checklistReplaySignal} />
+      <Tabs
+        value={tab}
+        onValueChange={(v) => onTabChange(v as Tab)}
+        className="sheet-tabs min-h-0 flex-1 gap-0"
+      >
+        <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
+          {tabs.map((t) => (
+            <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
+              {t === "params" ? parametersLabel : t === "presets" ? presetsLabel : "Files"}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
+            <CustomizeTab
+              design={design}
+              values={values}
+              presetBaseline={presetBaseline}
+              presetName={presetName}
+              baseline={baseline}
+              changedParams={changedParams}
+              showVarName={showVarName}
+              availableFontFamilies={availableFontFamilies}
+              fontSuggestion={fontSuggestion}
+              installedFonts={installedFonts}
+              settingsView={settingsView}
+              search={search}
+              onSearchChange={onSearchChange}
+              onSearchFocus={onSearchFocus}
+              onSearchBlur={onSearchBlur}
+              focusHiddenDiffSignal={focusHiddenDiffSignal}
+            />
+            {/* Auto-render is parameter-scoped, so it pins to the bottom of this
+                tab only — not on Presets/Files (mirrors the desktop panel). Reset
+                lives in PresetDiffBar above now (the unified restore control). */}
+            <PanelFooter autoRender={autoRender} className="sheet-footer" />
+          </TabsContent>
+          <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
+            <PresetPicker
+              design={design}
+              bundled={bundled}
+              userPresets={userPresets}
+              selected={selected}
+              values={values}
+              onApply={applyPreset}
+              onSelectedChange={selectedPresetChange}
+              onPresetsChange={presetsChange}
+              showPowerTools={settingsView === "all"}
+              inline
             />
           </TabsContent>
-        )}
-      </div>
-    </Tabs>
+          {hasFiles && (
+            <TabsContent value="files" className="mt-0 min-h-0 flex-1 overflow-y-auto">
+              <FileBar
+                fileImport={fileImport}
+                loadedFiles={loadedFiles}
+                onAddFile={addFile}
+                onRemoveFile={removeFile}
+                onClearFiles={clearFiles}
+              />
+            </TabsContent>
+          )}
+        </div>
+      </Tabs>
+    </>
   );
 }

@@ -17,6 +17,7 @@ import { UpdatingChip } from "./UpdatingChip";
 import { DimensionInfo } from "./DimensionInfo";
 import { Spinner } from "./ui/spinner";
 import { Progress } from "./ui/progress";
+import { ViewerGestureHint } from "./ViewerGestureHint";
 import { useAppActions } from "../lib/appActions";
 import { cn } from "../lib/utils";
 import { t } from "../lib/i18n";
@@ -63,6 +64,9 @@ interface Props {
   /** Values behind the current render — what the measurements panel reads. */
   renderedValues: Values;
   computedInfo: ComputedInfo[];
+  /** Whether the one-time viewer gesture hint (ViewerGestureHint) may show —
+   *  resolved by the caller from experienceMode (guided only). */
+  showGestureHint: boolean;
   children?: ReactNode;
 }
 
@@ -88,6 +92,7 @@ export function ViewerStage({
   measured,
   renderedValues,
   computedInfo,
+  showGestureHint,
   children,
 }: Props) {
   const { render } = useAppActions();
@@ -165,6 +170,10 @@ export function ViewerStage({
           {copy.sizeLine && <p className="text-[0.78rem] text-muted-foreground/80">{copy.sizeLine}</p>}
         </div>
       )}
+
+      {/* One-time orbit-gesture hint (guided experience, after the first
+          successful render) — bottom-centre, above the action cluster. */}
+      <ViewerGestureHint enabled={showGestureHint} resultOk={!!result?.ok} />
 
       {/* "Updating preview…" chip — the auto-render analogue of StaleBanner's
           manual-mode "Updating…" state (see the gating comment above). */}

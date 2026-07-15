@@ -204,6 +204,8 @@ export function validateSchema(raw: unknown): Schema {
         fail(`'ui.${key}' must be a string`);
     if (ui.gallery !== undefined && typeof ui.gallery !== "boolean")
       fail("'ui.gallery' must be a boolean");
+    if (ui.checklist !== undefined && typeof ui.checklist !== "boolean")
+      fail("'ui.checklist' must be a boolean");
   }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;

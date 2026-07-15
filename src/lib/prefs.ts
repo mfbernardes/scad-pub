@@ -5,7 +5,7 @@
 // (private mode, quota, blocking policies) degrades to "never seen, can't
 // remember" rather than throwing.
 import { ns } from "./appId";
-import { readLocal, writeLocal } from "./safeStorage";
+import { readLocal, writeLocal, removeLocal } from "./safeStorage";
 
 /** Read a namespaced preference. `key` excludes the app-id prefix (ns() adds
  *  it), e.g. readPref("experience.v1"). Storage unavailable reads as null,
@@ -24,11 +24,13 @@ export function writePref(key: string, value: string): boolean {
 /** A versioned once-flag: `seen()` reports whether `remember()` has already
  *  persisted for this key; `remember()` persists it and reports whether the
  *  write succeeded (storage unavailable -> false, letting the caller decide
- *  not to suppress the UI it's guarding). */
-export function makeOnceFlag(key: string): { seen(): boolean; remember(): boolean } {
+ *  not to suppress the UI it's guarding); `forget()` clears it (e.g. a
+ *  "show this again" replay action) so a later `seen()` reads false again. */
+export function makeOnceFlag(key: string): { seen(): boolean; remember(): boolean; forget(): void } {
   return {
     seen: () => readPref(key) !== null,
     remember: () => writePref(key, "1"),
+    forget: () => removeLocal(ns(key)),
   };
 }
 

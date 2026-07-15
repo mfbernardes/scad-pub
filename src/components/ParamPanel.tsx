@@ -8,6 +8,7 @@ import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import type { SettingsView } from "../lib/useExperience";
+import type { ChecklistState } from "../lib/checklist";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import type { PanelTab } from "../lib/usePanelState";
@@ -18,6 +19,7 @@ import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
 import { IconButton } from "./IconButton";
 import { PanelFooter } from "./PanelFooter";
+import { GettingStarted } from "./GettingStarted";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
@@ -77,6 +79,12 @@ interface Props {
   settingsView: SettingsView;
   /** Forwarded to CustomizeTab — see its own doc. */
   focusHiddenDiffSignal?: number;
+  /** The getting-started checklist's derived state (src/lib/checklist.ts) —
+   *  see GettingStarted.tsx. Mounted above the tab strip, not inside
+   *  CustomizeTab, so it's visible regardless of which tab is active. */
+  checklist: ChecklistState;
+  /** Forwarded to GettingStarted — see its own doc. */
+  checklistReplaySignal?: number;
 }
 
 export function ParamPanel({
@@ -108,6 +116,8 @@ export function ParamPanel({
   onSearchBlur,
   settingsView,
   focusHiddenDiffSignal,
+  checklist,
+  checklistReplaySignal,
 }: Props) {
   const {
     applyPreset,
@@ -239,6 +249,10 @@ export function ParamPanel({
           if (e.key === grow) setWidth((w) => Math.min(MAX_WIDTH, w + 20));
         }}
       />
+
+      {/* Above the tab strip — see the checklist prop's own doc for why it
+          isn't nested inside CustomizeTab's params tab. */}
+      <GettingStarted state={checklist} replaySignal={checklistReplaySignal} />
 
       <Tabs
         value={panelTab}

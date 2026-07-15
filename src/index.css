@@ -465,6 +465,33 @@ button:disabled { cursor: default; }
   }
 }
 
+/* One-time viewer gesture hint (ViewerGestureHint) — bottom-centre, riding
+   above the action cluster (roughly its height + gap higher) so it never
+   overlaps the Export/PNG/Share row. Non-interactive (pointer-events:none on
+   the component itself), so no z-index fight with anything below it matters.
+   Unlike .action-cluster, this lives INSIDE .viewer-wrap on BOTH layouts (it's
+   rendered by ViewerStage itself, not passed in as layout-specific children —
+   see ViewerStage.tsx) — on mobile, .viewer-wrap's own bottom edge already
+   tracks the sheet (its ancestor .app-shell__mobile-viewer's `bottom` is
+   var(--sheet-top), transitioned), so a plain rem offset here rides along for
+   free with no extra --sheet-top arithmetic or transition needed. */
+.viewer-hint {
+  position: absolute;
+  bottom: calc(3.85rem + var(--safe-area-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+}
+
+/* Mobile: .viewer-wrap's bottom already sits at the sheet's live top edge, so
+   this only needs to clear the action cluster's own height above that — no
+   safe-area or --sheet-top term (both already folded into the ancestor). */
+@media (max-width: 860px) {
+  .app-shell__mobile .viewer-hint {
+    bottom: 3.2rem;
+  }
+}
+
 /* "Preview out of date" (manual mode) / "Updating preview…" (auto mode) —
    top-centre over the viewer. Share one slot: the two are mutually exclusive
    (ViewerStage/StaleBanner gate on autoRender so only one of them can be

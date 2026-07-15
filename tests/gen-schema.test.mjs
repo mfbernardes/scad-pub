@@ -840,6 +840,15 @@ test("ui.gallery defaults to false, accepts a boolean, rejects non-booleans", ()
   assert.throws(() => parseUi({ gallery: 1 }), /'ui\.gallery' must be a boolean/);
 });
 
+test("ui.checklist defaults to true, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).checklist, true);
+  assert.equal(parseUi({}).checklist, true);
+  assert.equal(parseUi({ checklist: false }).checklist, false);
+  assert.equal(parseUi({ checklist: true }).checklist, true);
+  assert.throws(() => parseUi({ checklist: "no" }), /'ui\.checklist' must be a boolean/);
+  assert.throws(() => parseUi({ checklist: 0 }), /'ui\.checklist' must be a boolean/);
+});
+
 test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
   assert.equal(parseUi(undefined).presetsLabel, "Presets");
   assert.equal(parseUi(undefined).parametersLabel, "Customize");

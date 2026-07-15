@@ -80,6 +80,26 @@ test("makeOnceFlag: blocked storage fails open (remember false, seen stays false
   assert.equal(flag.seen(), false);
 });
 
+test("makeOnceFlag: forget() clears a remembered flag so seen() reads false again", () => {
+  const flag = makeOnceFlag("replay.v1");
+  flag.remember();
+  assert.equal(flag.seen(), true);
+  flag.forget();
+  assert.equal(flag.seen(), false);
+});
+
+test("makeOnceFlag: forget() on an already-unset flag is a harmless no-op", () => {
+  const flag = makeOnceFlag("replay.v1");
+  assert.doesNotThrow(() => flag.forget());
+  assert.equal(flag.seen(), false);
+});
+
+test("makeOnceFlag: forget() never throws even when storage is blocked", () => {
+  globalThis.localStorage = new BlockedStorage();
+  const flag = makeOnceFlag("replay.v1");
+  assert.doesNotThrow(() => flag.forget());
+});
+
 test("contentHash is stable for identical input", () => {
   assert.equal(contentHash("hello"), contentHash("hello"));
 });

@@ -12,6 +12,7 @@ import type { RenderMetrics } from "../lib/renderMetrics";
 import type { SettingsView, ExperienceMode } from "../lib/useExperience";
 import type { PauseReason } from "../lib/renderState";
 import type { ViewerHandle, Dimensions } from "./Viewer";
+import type { ChecklistState } from "../lib/checklist";
 import { initialSheetDetent } from "../lib/sheetDetent";
 import { makeOnceFlag } from "../lib/prefs";
 import { pauseReasonText } from "../lib/pauseReason";
@@ -121,10 +122,23 @@ interface Props {
   /** Essentials/all settings-view (see src/lib/useExperience.ts). Flows down
    *  to the Customize tab in both layouts; the setter joins AppActions. */
   settingsView: SettingsView;
-  /** Guided/standard experience mode (see src/lib/useExperience.ts). Read
-   *  only for the mobile sheet's initial-detent policy (sheetDetent.ts) —
-   *  guided mode never otherwise changes AppShell's own behavior. */
+  /** Guided/standard experience mode (see src/lib/useExperience.ts). Also
+   *  gates the getting-started checklist and the viewer gesture hint below,
+   *  in addition to the mobile sheet's initial-detent policy (sheetDetent.ts). */
   experienceMode: ExperienceMode;
+  /** Real, session-scoped progress facts the getting-started checklist reads
+   *  (src/lib/checklist.ts) — owned by App.tsx since they must also be
+   *  readable from the Help modal's replay row, a sibling of AppShell. See
+   *  the checklistState computation below for how they combine with
+   *  schema/render state already available here. */
+  checklistProgress: {
+    designChanged: boolean;
+    paramInteracted: boolean;
+    exported: boolean;
+  };
+  /** Bumped by the Help modal's "show the checklist again" row to clear the
+   *  dismiss flag and bring GettingStarted back — see its own doc. */
+  checklistReplaySignal: number;
 }
 
 export const AppShell = memo(function AppShell({
@@ -156,6 +170,8 @@ export const AppShell = memo(function AppShell({
   openPickerSignal,
   settingsView,
   experienceMode,
+  checklistProgress,
+  checklistReplaySignal,
 }: Props) {
   const actions = useAppActions();
   const desktopViewerRef = useRef<ViewerHandle>(null);
@@ -290,6 +306,27 @@ export const AppShell = memo(function AppShell({
   const showZoom = ui.zoom === true;
   // Whether the viewer offers the fullscreen toggle (where it works at all).
   const showFullscreen = ui.fullscreen !== false;
+  // Guided-only surfaces: the getting-started checklist (config can opt out
+  // even in guided mode via `ui.checklist: false`) and the viewer gesture
+  // hint (no config switch — it's a single short-lived chip, not standing
+  // chrome). Both stay off entirely in standard experience.
+  const guided = experienceMode === "guided";
+  const showChecklist = guided && ui.checklist !== false;
+  const showGestureHint = guided;
+  // The getting-started checklist's full input state (src/lib/checklist.ts):
+  // schema/render facts already available here, plus the session-scoped
+  // progress App.tsx tracks (checklistProgress, threaded down because the
+  // Help modal replay row — a sibling of AppShell — must reach the same
+  // dismiss flag; see GettingStarted.tsx).
+  const checklistState: ChecklistState = {
+    enabled: showChecklist,
+    designCount: designs.length,
+    designChanged: checklistProgress.designChanged,
+    paramInteracted: checklistProgress.paramInteracted,
+    exported: checklistProgress.exported,
+    rendering,
+    resultOk: result ? result.ok : null,
+  };
 
   const log = result?.log ?? EMPTY_LOG;
   // Memoized so a config without `notices` doesn't hand a fresh `[]` to the
@@ -504,6 +541,7 @@ export const AppShell = memo(function AppShell({
     measured,
     renderedValues,
     computedInfo,
+    showGestureHint,
   };
   const hudProps = {
     // The HUD (camera controls) follows whatever model is actually displayed:
@@ -714,6 +752,8 @@ export const AppShell = memo(function AppShell({
                   onSearchBlur={handleSearchBlur}
                   settingsView={settingsView}
                   focusHiddenDiffSignal={reviewHiddenSignal}
+                  checklist={checklistState}
+                  checklistReplaySignal={checklistReplaySignal}
                 />
               </div>
             )}
@@ -770,6 +810,8 @@ export const AppShell = memo(function AppShell({
               onSearchBlur={handleSearchBlur}
               settingsView={settingsView}
               focusHiddenDiffSignal={reviewHiddenSignal}
+              checklist={checklistState}
+              checklistReplaySignal={checklistReplaySignal}
             />
 
             {/* Canvas */}

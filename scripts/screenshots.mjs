@@ -36,6 +36,10 @@ const MASK_CSS = `
   /* Measurements panel (bounding box + @info values): appears only once a
      render lands, so its presence depends on render timing. */
   .dimension-info { visibility: hidden !important; }
+  /* One-time viewer gesture hint (PR8): appears only after the first
+     successful render (guided experience), so its presence depends on render
+     timing relative to the screenshot. Exercised by smoke.mjs instead. */
+  .viewer-hint { visibility: hidden !important; }
   /* Output console: auto-opens when the default design's render surfaces its
      notices — open/closed depends on render timing — and its Log tab carries
      run-dependent OpenSCAD output. display:none (not visibility) so an opened

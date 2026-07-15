@@ -121,6 +121,111 @@ async function checkWelcomePopup({ page, check, schema }) {
   }
 }
 
+// Getting-started checklist (PR8): a dismissible onboarding card, shown only
+// in guided experience — the dogfood config's default (ui.experience.default)
+// — above the panel's tab strip in both layouts. Runs immediately after the
+// welcome popup (which only OPENS/closes the design picker via Escape,
+// picking nothing) and before any other check switches design or settings
+// view, so the "fresh visitor" assertions below are honest. Ends by
+// restoring defaults so later checks see the same pristine state they'd
+// otherwise expect.
+async function checkGettingStarted({ page, check, ids, paramsTabName }) {
+  console.log("=== getting-started checklist ===");
+  const card = page.locator(".getting-started");
+  check((await card.count()) === 1, "getting-started checklist shown on a fresh guided-experience load");
+
+  const rows = card.locator("li");
+  const expectedRowCount = ids.length > 1 ? 4 : 3;
+  check(
+    (await rows.count()) === expectedRowCount,
+    `checklist shows ${expectedRowCount} row(s) for ${ids.length} design(s)`
+  );
+  const designRow = card.locator("li", { hasText: "Choose a design" });
+  if (ids.length > 1) {
+    check((await designRow.count()) === 1, "\"Choose a design\" row present for a multi-design build");
+  }
+  const reviewRow = card.locator("li", { hasText: "Review the essential settings" });
+  const exportRow = card.locator("li", { hasText: "Export the model" });
+  const previewRow = card.locator("li", { hasText: "Preview" });
+  check(!/done/.test((await reviewRow.textContent()) ?? ""), "\"Review the essential settings\" starts pending");
+  check(!/done/.test((await exportRow.textContent()) ?? ""), "\"Export the model\" starts pending");
+  check(
+    /ready/.test((await previewRow.textContent()) ?? ""),
+    "\"Preview\" status row reads \"ready\" once the initial render has already succeeded"
+  );
+
+  await runAxe(page, check, "getting-started checklist visible");
+
+  // A real param edit completes "Review the essential settings" — and, per
+  // the documented rule (src/lib/checklist.ts), implicitly "Choose a design"
+  // too (reviewing settings is only possible once a design is settled on).
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  const widthInput = paramRow(page, "width").locator('input[type="number"]');
+  await widthInput.fill("95");
+  await widthInput.blur();
+  await waitRendered(page, "width edited (checklist)");
+  check(/done/.test((await reviewRow.textContent()) ?? ""), "\"Review the essential settings\" completes on a real param edit");
+  if (ids.length > 1) {
+    check(
+      /done/.test((await designRow.textContent()) ?? ""),
+      "\"Choose a design\" completes implicitly once settings are reviewed"
+    );
+  }
+
+  // Dismiss: hides the card and persists across a reload (the checklist.v1
+  // once-flag) — settleFirstVisit's own `.getting-started__dismiss` click is
+  // exercised by every OTHER check via its call at the top of main(); this
+  // exercises the dismiss button itself and its persistence explicitly.
+  await card.locator(".getting-started__dismiss").click();
+  check((await card.count()) === 0, "dismiss hides the checklist");
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "reloaded after checklist dismiss");
+  check((await page.locator(".getting-started").count()) === 0, "dismissal persists across a reload");
+
+  // Help modal's replay row. Not selected by accessible name: Radix sets
+  // aria-labelledby to the rendered DialogTitle (the modal's title text),
+  // which wins over Modal's own aria-label prop per ARIA name computation —
+  // only one dialog is open at this point, so an unfiltered role suffices.
+  await page.getByRole("button", { name: "Help", exact: true }).click();
+  const helpDialog = page.getByRole("dialog");
+  await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  const replayBtn = helpDialog.getByRole("button", { name: /show the getting-started checklist again/i });
+  check((await replayBtn.count()) === 1, "Help modal offers the \"show checklist again\" row");
+  await replayBtn.click();
+  await page.keyboard.press("Escape");
+  await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".getting-started").count()) === 1, "Help modal's replay row brings the checklist back");
+
+  // Clean up: dismiss again and restore the width edited above, so later
+  // checks see the same pristine defaults they'd otherwise expect.
+  await page.locator(".getting-started__dismiss").click().catch(() => {});
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  await resetDefaults(page);
+  await waitRendered(page, "defaults restored (checklist)");
+}
+
+// Viewer gesture hint (PR8): a one-time, non-blocking chip over the viewer,
+// shown only in guided experience once the first successful render has
+// landed (already true here — the initial render completed in main() before
+// any of these checks ran).
+async function checkViewerHint({ page, check }) {
+  console.log("=== viewer gesture hint ===");
+  const hint = page.locator(".viewer-hint");
+  check((await hint.count()) === 1, "viewer-hint shown after the first successful render (guided experience)");
+  check(/rotate/i.test((await hint.textContent()) ?? ""), "viewer-hint carries the rotate/zoom gesture copy");
+
+  // A pointerdown anywhere inside the viewer dismisses it (dispatchEvent
+  // bypasses the chip's own pointer-events:none, matching a real user's
+  // pointerdown landing on the canvas underneath it).
+  await page.locator(".viewer-wrap").first().dispatchEvent("pointerdown");
+  await hint.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  check((await hint.count()) === 0, "a pointerdown on the viewer dismisses the hint");
+
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "reloaded after viewer hint dismiss");
+  check((await page.locator(".viewer-hint").count()) === 0, "dismissal persists across a reload");
+}
+
 // Generic file import: the Files manager shows an "Import file" button when
 // the config sets `fileImport`. Uploading a file should surface it in the
 // file list and persist across a reload (IndexedDB).
@@ -1000,6 +1105,8 @@ async function main() {
 
     const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName };
     await checkWelcomePopup(ctx);
+    await checkGettingStarted(ctx);
+    await checkViewerHint(ctx);
     await checkDesignPickerDialog(ctx);
     await checkSettingsView(ctx);
     await checkFileImport(ctx);

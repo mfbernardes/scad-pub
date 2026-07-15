@@ -363,11 +363,12 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
 - **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
 - **`gallery`**: `false` by default, or `true`. Replaces the top-bar design switcher's dropdown Select with `DesignPickerDialog`, a card-grid dialog showing each design's `image` (falling back to `icon`, then a letter glyph) plus its label and description. Only takes effect with more than one design. A search box appears once there are more than six designs. See [Per-design `image`](#design-sources) and the annotations doc's [`// @image`](annotations.md#design-metadata--description--icon--image--doc)
+- **`checklist`**: `true` by default, or `false`. Whether the getting-started checklist (a small dismissible "Choose a design / Review settings / Preview / Export" card) may show at all. It's only ever shown in guided experience regardless of this flag — set `false` to suppress it there too
 - **`experience`**: seeds the client-side guided/standard experience. See [Experience mode (`ui.experience`)](#experience-mode-uiexperience)
 
 ### Experience mode (`ui.experience`)
 
-The optional `ui.experience` object seeds the client-side "experience mode" and "settings view" states that `src/lib/useExperience.ts` exposes to the UI (the UI that reads them ships in a later milestone; the config surface and the state hook exist now). None of these fields affect geometry, so `ui.experience` never invalidates the render cache.
+The optional `ui.experience` object seeds the client-side "experience mode" and "settings view" states that `src/lib/useExperience.ts` exposes to the UI: guided experience shows a reduced essentials-only settings view, a one-time mobile sheet-handle hint, the getting-started checklist (`ui.checklist` above), and a one-time viewer gesture hint. None of these fields affect geometry, so `ui.experience` never invalidates the render cache.
 
 ```jsonc
 {
