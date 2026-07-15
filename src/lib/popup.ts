@@ -2,19 +2,15 @@
 // should be shown, and remembers a dismissal. Persistence is namespaced by the
 // app id so two configs on one origin don't share a flag, and is keyed by a
 // content hash of the popup so changing its text re-shows it to returning users.
-import { ns } from "./appId";
-import { readLocal, writeLocal } from "./safeStorage";
+import { contentHash, readPref, writePref } from "./prefs";
 import type { PopupNotice } from "../openscad/types";
 
 const KEY = "popup.seen.v1";
 
 // A small, stable hash of the popup's content + mode. Lets "once"/"dismissible"
 // re-appear when a deploy changes the message, instead of staying hidden forever.
-function contentHash(popup: PopupNotice): string {
-  const s = `${popup.mode}\n${popup.header}\n${popup.body}\n${popup.button ?? ""}`;
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return (h >>> 0).toString(36);
+function popupHash(popup: PopupNotice): string {
+  return contentHash(`${popup.mode}\n${popup.header}\n${popup.body}\n${popup.button ?? ""}`);
 }
 
 /**
@@ -27,11 +23,11 @@ export function shouldShowPopup(popup: PopupNotice | null): boolean {
   if (popup.mode === "always") return true;
   // Storage blocked (private mode, etc.) reads as null ≠ hash — fail open and
   // show the notice.
-  return readLocal(ns(KEY)) !== contentHash(popup);
+  return readPref(KEY) !== popupHash(popup);
 }
 
 /** Persist that the user has dismissed this popup, so it won't show again.
  *  Storage unavailable — the popup simply shows again next visit. */
 export function rememberPopup(popup: PopupNotice): void {
-  writeLocal(ns(KEY), contentHash(popup));
+  writePref(KEY, popupHash(popup));
 }

@@ -30,8 +30,7 @@ import { useOnline } from "./lib/useOnline";
 import { useRenderPipeline } from "./lib/useRenderPipeline";
 import { useFileImports } from "./lib/useFileImports";
 import { useAppNotices } from "./lib/useAppNotices";
-import { ns } from "./lib/appId";
-import { readLocal, writeLocal } from "./lib/safeStorage";
+import { makeOnceFlag } from "./lib/prefs";
 import { toast } from "sonner";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
@@ -55,7 +54,7 @@ const cacheConfig = schema.render?.cache;
 
 const popup = schema.popup ?? null;
 const installMode = schema.ui?.install ?? "auto";
-const INSTALL_HINT_KEY = ns("install.hint.seen");
+const installHintFlag = makeOnceFlag("install.hint.seen");
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
@@ -280,9 +279,9 @@ export default function App() {
   // the UX plan — never a standing prompt.
   const offerInstallHint = useCallback(() => {
     if (!canInstall || installMode === "off") return;
-    if (readLocal(INSTALL_HINT_KEY)) return;
+    if (installHintFlag.seen()) return;
     // Storage unavailable — skip the hint rather than risk repeating it.
-    if (!writeLocal(INSTALL_HINT_KEY, "1")) return;
+    if (!installHintFlag.remember()) return;
     toast("Install this configurator for quick, offline access?", {
       id: "install-hint",
       duration: 12000,

@@ -17,7 +17,7 @@ import { startServer } from "./serve-dist.mjs";
 import {
   launchChromium,
   gotoWithTheme,
-  dismissWelcomePopup,
+  settleFirstVisit,
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
 } from "./lib/browser.mjs";
@@ -95,7 +95,7 @@ async function captureViewport(context, base, kind, theme) {
   // 1. Welcome popup (config-driven schema.popup, shown on first visit).
   if (await page.locator('[role="dialog"]').count()) {
     await shot(page, dir, "01-welcome-popup");
-    await dismissWelcomePopup(page);
+    await settleFirstVisit(page);
     await sleep(250);
   }
 

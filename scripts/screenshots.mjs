@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import { startServer } from "./serve-dist.mjs";
-import { launchChromium, gotoWithTheme, dismissWelcomePopup } from "./lib/browser.mjs";
+import { launchChromium, gotoWithTheme, settleFirstVisit } from "./lib/browser.mjs";
 
 const UPDATE = process.argv.includes("--update");
 const BASELINE_DIR = fileURLToPath(new URL("../tests/screenshots", import.meta.url));
@@ -49,9 +49,9 @@ const MASK_CSS = `
 
 async function shoot(page, base, theme) {
   await gotoWithTheme(page, base, theme);
-  // Dismiss the first-visit welcome popup if present so it doesn't cover the
-  // panel (and would block the tab click below).
-  await dismissWelcomePopup(page);
+  // Dismiss any first-visit surface so it doesn't cover the panel (and would
+  // block the tab click below).
+  await settleFirstVisit(page);
   // The panel opens on the Presets tab; switch to Parameters so the baseline
   // keeps exercising the param form (a richer regression surface).
   await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});

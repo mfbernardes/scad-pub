@@ -98,14 +98,37 @@ export async function dismissWelcomePopup(page) {
   await page.keyboard.press("Escape").catch(() => {});
 }
 
+/** Dismiss every first-visit surface, not just the welcome popup: the popup
+ *  itself, then (future-proofing — these are no-ops until later milestones
+ *  add them) a getting-started dismiss button if present, then a stray
+ *  Escape to close anything left open. Scripts should call this instead of
+ *  dismissWelcomePopup directly so a new first-visit surface only needs
+ *  wiring up here, not at every call site. */
+export async function settleFirstVisit(page) {
+  await dismissWelcomePopup(page);
+  const dismiss = page.locator(".getting-started__dismiss");
+  if (await dismiss.count()) await dismiss.first().click().catch(() => {});
+  await page.keyboard.press("Escape").catch(() => {});
+}
+
 /** Navigate to `base` with the given theme forced. Load once to establish the
  *  origin (localStorage isn't available on about:blank), set the persisted
  *  theme, then reload so it applies before first paint. The storage key is
  *  `${config.id}.theme`, read from the generated schema so this also works
- *  against a custom-id config (default id "scadpub" behaves as before). */
-export async function gotoWithTheme(page, base, theme) {
+ *  against a custom-id config (default id "scadpub" behaves as before).
+ *  `seedFlags` (default none) writes app-id-namespaced localStorage keys as
+ *  "1" before the reload, e.g. to pre-mark a once-flag "seen" so later
+ *  milestones' vis baselines don't have to fight a first-visit surface. */
+export async function gotoWithTheme(page, base, theme, { seedFlags = [] } = {}) {
   await page.goto(base, { waitUntil: "load" });
-  const key = `${configId()}.theme`;
-  await page.evaluate(({ key, t }) => localStorage.setItem(key, t), { key, t: theme });
+  const id = configId();
+  const key = `${id}.theme`;
+  await page.evaluate(
+    ({ key, t, id, flags }) => {
+      localStorage.setItem(key, t);
+      for (const flag of flags) localStorage.setItem(`${id}.${flag}`, "1");
+    },
+    { key, t: theme, id, flags: seedFlags }
+  );
   await page.reload({ waitUntil: "load" });
 }

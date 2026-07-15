@@ -21,7 +21,7 @@ import {
   renderStatusText,
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
-  dismissWelcomePopup,
+  settleFirstVisit,
 } from "./lib/browser.mjs";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
@@ -585,7 +585,7 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
   const page = await context.newPage();
   try {
     await page.goto(base, { waitUntil: "load" });
-    await dismissWelcomePopup(page);
+    await settleFirstVisit(page);
     await waitRenderDone(page).catch(() => {});
 
     // Only the active (mobile) layout is in the DOM — the desktop tree isn't
