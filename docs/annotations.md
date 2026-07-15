@@ -7,13 +7,14 @@ content plan: define each supported OpenSCAD comment annotation, show its syntax
 
 ScadPub adds a handful of comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
 
-## Design metadata (`// @description`, `// @icon`, `// @doc`)
+## Design metadata (`// @description`, `// @icon`, `// @image`, `// @doc`)
 
 A design can describe itself from its own `.scad` file instead of the config. Put these anywhere in the file. A header comment above the first section is the natural home:
 
 ```openscad
 // @description Auto-sized flat name plate for a door, shelf, or desk.
 // @icon icons/nameplate.svg
+// @image icons/nameplate-photo.jpg
 // @doc nameplate.md
 
 /* [Text] */
@@ -21,10 +22,11 @@ label = "Room 1";
 ```
 
 - **`@description`**: the design's picker sub-label. It sets the same value as `description` on a config `designs[]` entry.
-- **`@icon`**: a path to the design's thumbnail. The path resolves **relative to the design's own `.scad` file**, unlike a config `icon`, which is relative to the config. It may be a Scalable Vector Graphics (SVG), PNG, or WebP file. ScadPub serves it as-is and reuses it as the design's manifest shortcut icon.
+- **`@icon`**: a path to the design's small thumbnail. The path resolves **relative to the design's own `.scad` file**, unlike a config `icon`, which is relative to the config. It may be a Scalable Vector Graphics (SVG), PNG, or WebP file. ScadPub serves it as-is and reuses it as the design's manifest shortcut icon.
+- **`@image`**: a path to a larger picker-card photo or render — a real picture of the printed/rendered model, distinct from the small `@icon` glyph. Same path-resolution rule as `@icon`, and the same accepted formats. Shown by [`DesignPickerDialog`](config.md#ui-behaviour-and-pwa) (the card-grid design switcher enabled by `ui.gallery`); the classic dropdown Select never shows it. Not reused for the manifest shortcut icon — that stays `@icon`.
 - **`@doc`**: a path to the design's own user-documentation Markdown file, same path-resolution rule as `@icon`. It sets the same value as `doc` on a config `designs[]` entry. When present, the app shows a documentation button that opens the file's contents in a modal.
 
-All three are **fallbacks**: a value on the design's config `designs[]` entry wins. First occurrence in the file wins; blank values are ignored. This keeps a design self-describing (and works even with auto-discovery, when the config lists no `designs[]` at all), while still letting a deployment override any of them from the config.
+All four are **fallbacks**: a value on the design's config `designs[]` entry wins. First occurrence in the file wins; blank values are ignored. This keeps a design self-describing (and works even with auto-discovery, when the config lists no `designs[]` at all), while still letting a deployment override any of them from the config.
 
 ## Conditional parameters (`// @showIf`)
 

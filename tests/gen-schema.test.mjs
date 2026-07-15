@@ -315,6 +315,26 @@ test("per-design description + icon are parsed, copied and served", () => {
   assert.ok(existsSync(join(out, "scad", "collapsible-icon.svg")));
 });
 
+test("per-design image is parsed, copied and served (config + annotation paths, distinct from icon)", () => {
+  const { schema, out } = run("widget-designmeta.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  const collapsible = schema.designs.find((d) => d.id === "collapsible");
+  // Config `designs[].image` wins, resolved config-relative (like `icon`), and
+  // copied under a distinct <id>-image.<ext> name so a design can carry both.
+  assert.equal(widget.image, "scad/widget-image.svg");
+  assert.notEqual(widget.image, widget.icon);
+  assert.ok(existsSync(join(out, "scad", "widget-image.svg")));
+  // collapsible sets no config image, so it falls back to its `// @image`
+  // annotation (resolved relative to the design file).
+  assert.equal(collapsible.image, "scad/collapsible-image.svg");
+  assert.ok(existsSync(join(out, "scad", "collapsible-image.svg")));
+});
+
+test("a design with no image / @image has image null", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].image ?? null, null);
+});
+
 test("per-design @doc is resolved, copied and served (config + annotation paths)", () => {
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   const schema = generate({
@@ -352,16 +372,17 @@ test("a missing @doc target fails the build", () => {
   );
 });
 
-test("parseParams captures file-level @description / @icon / @doc metadata", () => {
+test("parseParams captures file-level @description / @icon / @image / @doc metadata", () => {
   const { meta } = parseParams(join(FIXTURES, "src", "collapsible.scad"));
   assert.deepEqual(meta, {
     description: "A collapsible gadget.",
     icon: "assets/emblem.svg",
+    image: "assets/emblem.svg",
     doc: "collapsible-doc.md",
   });
   // A design file with no such annotations reports nulls.
   const plain = parseParams(join(FIXTURES, "mini.scad"));
-  assert.deepEqual(plain.meta, { description: null, icon: null, doc: null });
+  assert.deepEqual(plain.meta, { description: null, icon: null, image: null, doc: null });
 });
 
 test("lang/dir + per-design shortcut icons + screenshot fields reach the manifest", () => {
@@ -808,6 +829,15 @@ test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () =>
   assert.equal(parseUi({ zoom: true }).zoom, true);
   assert.throws(() => parseUi({ zoom: "no" }), /'ui\.zoom' must be a boolean/);
   assert.throws(() => parseUi({ zoom: 1 }), /'ui\.zoom' must be a boolean/);
+});
+
+test("ui.gallery defaults to false, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).gallery, false);
+  assert.equal(parseUi({}).gallery, false);
+  assert.equal(parseUi({ gallery: true }).gallery, true);
+  assert.equal(parseUi({ gallery: false }).gallery, false);
+  assert.throws(() => parseUi({ gallery: "yes" }), /'ui\.gallery' must be a boolean/);
+  assert.throws(() => parseUi({ gallery: 1 }), /'ui\.gallery' must be a boolean/);
 });
 
 test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {

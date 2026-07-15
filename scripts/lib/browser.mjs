@@ -50,31 +50,58 @@ export async function waitRendered(page, { timeout = 60000 } = {}) {
   );
 }
 
+// The two design-switcher UIs a build can ship (see DesignPicker.tsx /
+// DesignPickerDialog.tsx / ui.gallery): the classic dropdown Select, or (with
+// `ui.gallery: true`) a top-bar button that opens a card-grid dialog. Both
+// live in the same wrapper element per layout, so probing for the
+// gallery-mode button's hook class first and falling back to the Select
+// covers either build without the caller needing to know which one it is.
+const centerSel = (mobile) =>
+  mobile ? ".mobile-top-bar__center" : ".command-bar__design-picker";
+
+// Clear the cached "ok" render-status text so a following waitRendered()
+// can't pass on the previous design's stale render.
+async function clearRenderStatus(page) {
+  await page
+    .waitForFunction(
+      () => !/\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
+      { timeout: 5000 }
+    )
+    .catch(() => {});
+}
+
 /**
  * Switch to the design with the given picker label and kick off its render.
- * The picker is a shadcn/ui (Radix) Select with no native <option> elements, so
- * we click the trigger then the option by its visible text. Single-design
- * configs have no picker — the click is skipped. Pass `label: undefined` to
- * skip the picker entirely and just nudge the current design to render.
- * Does not wait for completion — follow with waitRendered().
+ * Branches on which design switcher the build shipped:
+ *  - `ui.gallery: true` — a `.design-picker-button` opens DesignPickerDialog;
+ *    click the `.design-picker-dialog__card` whose visible label (exact) text
+ *    matches, not its accessible name (a card's name also includes its
+ *    description, so an exact role-based match would never hit).
+ *  - otherwise — the classic shadcn/ui (Radix) Select, with no native
+ *    <option> elements: click the trigger, then the option by its visible text.
+ * Single-design configs have no switcher at all — the click is skipped either
+ * way. Pass `label: undefined` to skip design-switching entirely and just
+ * nudge the current design to render. Does not wait for completion — follow
+ * with waitRendered().
  */
 export async function selectDesign(page, label, { mobile = false } = {}) {
   if (label !== undefined) {
-    const sel = mobile
-      ? '.mobile-top-bar__center [data-slot="select-trigger"]'
-      : '.command-bar__design-picker [data-slot="select-trigger"]';
-    const trigger = page.locator(sel);
-    if (await trigger.count()) {
-      await trigger.click();
-      await page.getByRole("option", { name: label, exact: true }).click();
-      // Clear the cached "ok" state so a following waitRendered can't pass on
-      // the previous design's render.
-      await page
-        .waitForFunction(
-          () => !/\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
-          { timeout: 5000 }
-        )
-        .catch(() => {});
+    const center = page.locator(centerSel(mobile));
+    const galleryButton = center.locator(".design-picker-button");
+    if (await galleryButton.count()) {
+      await galleryButton.click();
+      const card = page
+        .locator(".design-picker-dialog__card")
+        .filter({ has: page.getByText(label, { exact: true }) });
+      await card.first().click();
+      await clearRenderStatus(page);
+    } else {
+      const trigger = center.locator('[data-slot="select-trigger"]');
+      if (await trigger.count()) {
+        await trigger.click();
+        await page.getByRole("option", { name: label, exact: true }).click();
+        await clearRenderStatus(page);
+      }
     }
   }
   // Every design renders once on first view; if a "Render now" button is present

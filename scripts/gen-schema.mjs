@@ -382,6 +382,7 @@ function resolveDesignList(config, SOURCE) {
       // relative paths, resolved/copied to served URLs once outScadDir exists).
       description: checkDesignString(d.description, d.id, "description"),
       iconSrc: checkDesignString(d.icon, d.id, "icon"),
+      imageSrc: checkDesignString(d.image, d.id, "image"),
       docSrc: checkDesignString(d.doc, d.id, "doc"),
     }));
   }
@@ -390,14 +391,14 @@ function resolveDesignList(config, SOURCE) {
     .sort()
     .map((f) => {
       const id = f.replace(/\.scad$/, "");
-      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null, docSrc: null };
+      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null, imageSrc: null, docSrc: null };
     });
 }
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
 function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register }) {
-  return resolveDesignList(config, SOURCE).map(({ iconSrc, docSrc, ...d }) => {
+  return resolveDesignList(config, SOURCE).map(({ iconSrc, imageSrc, docSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
@@ -439,6 +440,28 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       copyBrowserFacing(src, dest);
       icon = `scad/${name}`;
     }
+    // Picker-card artwork: same fallback/copy/validation rules as `icon` above
+    // (config `image` wins over `// @image`; first occurrence in the file
+    // wins), just a distinct served name so a design can carry both a small
+    // icon glyph and a larger photo/render. Any raster/vector format `icon`
+    // accepts works here too (SVG is sanitized; everything else copies as-is
+    // — see copyBrowserFacing).
+    let image = null;
+    const imageRel = imageSrc ?? meta.image;
+    if (imageRel) {
+      const base = imageSrc ? CONFIG_DIR : dirname(abs);
+      const src = mustExist(resolve(base, imageRel), `design '${d.id}' image '${imageRel}'`);
+      // `// @image` (unlike a config `image`) resolves relative to the
+      // design's own file, i.e. within SOURCE — so it must stay within SOURCE too.
+      if (!imageSrc) checkContained(src, `design '${d.id}' image '${imageRel}'`, relPosix(abs));
+      const dot = imageRel.lastIndexOf(".");
+      const ext = dot > 0 ? imageRel.slice(dot) : "";
+      const name = `${d.id}-image${ext}`;
+      const dest = join(outScadDir, name);
+      register(dest, `design '${d.id}' image`);
+      copyBrowserFacing(src, dest);
+      image = `scad/${name}`;
+    }
     // User documentation, same fallback + base rules as icon: config `doc` wins
     // (config-relative) over a `// @doc` annotation (relative to the .scad). The
     // Markdown file is copied verbatim under a deterministic `<id>-doc.md` name;
@@ -457,7 +480,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       copyFileSync(src, dest);
       doc = `scad/${name}`;
     }
-    return { ...d, description, icon, doc, presets, abs, sections, collapsedSections, params };
+    return { ...d, description, icon, image, doc, presets, abs, sections, collapsedSections, params };
   });
 }
 
@@ -537,6 +560,7 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
     shell.add(`scad/${d.file}`);
     for (const preset of d.presets) shell.add(`scad/${preset}`);
     if (d.icon) shell.add(d.icon);
+    if (d.image) shell.add(d.image);
     if (d.doc) shell.add(d.doc);
   }
   if (logo) {

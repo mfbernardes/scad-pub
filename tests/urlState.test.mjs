@@ -35,8 +35,14 @@ globalThis.history = {
   },
 };
 
-const { readInitialState, persistState, buildShareUrl, parseHashState, sessionStateEquals } =
-  await import("../src/lib/urlState.ts");
+const {
+  readInitialState,
+  persistState,
+  buildShareUrl,
+  parseHashState,
+  sessionStateEquals,
+  hashDesignIdMissing,
+} = await import("../src/lib/urlState.ts");
 
 const param = (name, type, def) => ({
   name,
@@ -245,6 +251,21 @@ test("parseHashState parses an arbitrary hash string, not just location.hash", (
 test("parseHashState returns null for an empty hash or an unknown design", () => {
   assert.equal(parseHashState(schema, ""), null);
   assert.equal(parseHashState(schema, "#d=nonexistent"), null);
+});
+
+// PR7: App.tsx opens DesignPickerDialog once on load when the visit's deep
+// link named a design id this build doesn't have — a stale/broken link. This
+// is a distinct signal from parseHashState's own null return (which already
+// covers "no hash" and "unknown design" the same way, for the ordinary
+// fallback-to-defaults runtime behavior).
+test("hashDesignIdMissing: true only for a d= naming an unknown design", () => {
+  assert.equal(hashDesignIdMissing(schema, "#d=nonexistent"), true);
+  assert.equal(hashDesignIdMissing(schema, "d=nonexistent"), true); // no leading '#'
+  assert.equal(hashDesignIdMissing(schema, "#d=d"), false); // a real design
+  assert.equal(hashDesignIdMissing(schema, "#d=d&v=%7B%7D"), false);
+  assert.equal(hashDesignIdMissing(schema, ""), false); // no hash at all — not "broken"
+  assert.equal(hashDesignIdMissing(schema, "#p=bundled:Foo"), false); // no d= param at all
+  assert.equal(hashDesignIdMissing(schema, "#d="), true); // empty id still names no design
 });
 
 test("sessionStateEquals — the external-navigation loop guard", () => {

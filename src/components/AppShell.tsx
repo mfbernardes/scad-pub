@@ -53,6 +53,7 @@ import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
+import { DesignPickerButton } from "./DesignPickerButton";
 import { BarBrand } from "./BarBrand";
 import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { parseComputedInfo } from "../lib/computedInfo";
@@ -593,7 +594,9 @@ export const AppShell = memo(function AppShell({
                   <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
                 </span>
                 <div className="mobile-top-bar__center inline-flex min-w-0 items-center justify-self-center">
-                  {designs.length > 1 ? (
+                  {designs.length > 1 && schema.ui?.gallery ? (
+                    <DesignPickerButton design={design} />
+                  ) : designs.length > 1 ? (
                     <DesignPicker
                       designs={designs}
                       value={design.id}

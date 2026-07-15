@@ -37,6 +37,7 @@ export interface AppActions {
   showHelp: () => void;
   showDesignDoc: () => void;
   showLicenses: () => void;
+  showPicker: () => void;
 }
 
 const AppActionsContext = createContext<AppActions | null>(null);
@@ -77,6 +78,7 @@ export function AppActionsProvider({
       showHelp: () => latest.current.showHelp(),
       showDesignDoc: () => latest.current.showDesignDoc(),
       showLicenses: () => latest.current.showLicenses(),
+      showPicker: () => latest.current.showPicker(),
     };
   return createElement(AppActionsContext.Provider, { value: stable.current }, children);
 }

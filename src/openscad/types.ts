@@ -191,6 +191,12 @@ export interface Design {
   /** Optional served URL of the design's icon (shown in the picker and used as
    *  the design's manifest-shortcut icon). Null/absent for none. */
   icon?: string | null;
+  /** Optional served URL of the design's picker-card artwork — a real model
+   *  photo/render, distinct from the small `icon` glyph. Shown at a fixed 4:3
+   *  aspect in DesignPickerDialog's card grid; falls back to `icon` (centred),
+   *  then a letter glyph, when absent. Never used for the manifest shortcut
+   *  icon (that stays `icon`). Null/absent for none. */
+  image?: string | null;
   /** Optional served URL of the design's own user-documentation Markdown
    *  (scad/<id>-doc.md), fetched on demand and rendered in the doc modal.
    *  Null/absent hides the "Design guide" affordance. */
@@ -383,6 +389,13 @@ export interface UiConfig {
   presetsLabel?: string;
   /** Label for the "Customize" (parameters) tab/section (default "Customize"). */
   parametersLabel?: string;
+  /**
+   * Whether the top-bar design switcher is the card-grid DesignPickerDialog
+   * (true) instead of the classic dropdown Select (default false). Only takes
+   * effect with more than one design; a single-design config is unaffected
+   * either way. See src/components/DesignPickerDialog.tsx.
+   */
+  gallery?: boolean;
   /**
    * Optional seeds for the client-side guided/standard experience (see
    * src/lib/useExperience.ts). Every field here only decides the FIRST-EVER

@@ -18,6 +18,7 @@ import {
   buildShareUrl,
   parseHashState,
   sessionStateEquals,
+  hashDesignIdMissing,
   type SessionState,
 } from "./lib/urlState";
 import { computeShareability, shareabilityWarning } from "./lib/shareability";
@@ -40,6 +41,7 @@ import { LicensesModal } from "./components/LicensesModal";
 import { HelpModal } from "./components/HelpModal";
 import { DesignDocModal } from "./components/DesignDocModal";
 import { PopupModal } from "./components/PopupModal";
+import { DesignPickerDialog } from "./components/DesignPickerDialog";
 import { shouldShowPopup, rememberPopup } from "./lib/popup";
 
 const schema = validateSchema(schemaJson);
@@ -56,6 +58,16 @@ const cacheConfig = schema.render?.cache;
 const popup = schema.popup ?? null;
 const installMode = schema.ui?.install ?? "auto";
 const installHintFlag = makeOnceFlag("install.hint.seen");
+// PR7: the card-grid DesignPickerDialog replaces the dropdown Select when
+// `ui.gallery` is on — meaningless with zero/one design, so also require more
+// than one. Computed once at module scope (like `popup`/`installMode` above)
+// since it never changes at runtime.
+const galleryEnabled = schema.ui?.gallery === true && schema.designs.length > 1;
+// A stale/broken deep link (a `#d=<id>` naming a design this build doesn't
+// have) — computed once from the hash the page loaded with, same source
+// `readInitialState` already read above. Only meaningful when the dialog
+// exists at all (`galleryEnabled`); the classic Select has no such recovery UI.
+const initialBrokenLink = galleryEnabled && hashDesignIdMissing(schema, location.hash);
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
@@ -94,11 +106,53 @@ export default function App() {
   };
   // Bumped by the popup's primary CTA to open the design picker (the obvious
   // first step). AppShell routes it to whichever layout's picker is visible.
+  // Only meaningful for the classic Select (see DesignPicker.tsx); when
+  // `galleryEnabled`, the CTA opens the DesignPickerDialog below instead.
   const [openPickerSignal, setOpenPickerSignal] = useState(0);
+  // DesignPickerDialog (PR7): App owns its open state, same as
+  // showHelp/showDesignDoc/showLicenses above. `pickerReason` carries why it
+  // opened uninvited (a stale deep link) so the dialog can show a short
+  // explanation just that once; any deliberate open (button/CTA/⌘K) clears it.
+  const [showPicker, setShowPicker] = useState(initialBrokenLink);
+  const [pickerReason, setPickerReason] = useState<"brokenLink" | null>(
+    initialBrokenLink ? "brokenLink" : null
+  );
+  const openPicker = useCallback(() => {
+    setPickerReason(null);
+    setShowPicker(true);
+  }, []);
+  const closePicker = useCallback(() => setShowPicker(false), []);
   const popupPrimary = (remember: boolean) => {
     closePopup(remember);
-    if (schema.designs.length > 1) setOpenPickerSignal((n) => n + 1);
+    if (schema.designs.length > 1) {
+      if (galleryEnabled) openPicker();
+      else setOpenPickerSignal((n) => n + 1);
+    }
   };
+
+  // ⌘K / Ctrl-K opens the design picker dialog from anywhere — a small power-
+  // user affordance, only wired up when the dialog actually exists
+  // (`galleryEnabled`). Ignored while typing in a field (so it doesn't
+  // interrupt entering a "k" into a text/number param or the picker's own
+  // search box) or while any dialog is already open (any Radix Dialog
+  // instance — help/licenses/doc/popup/the picker itself — carries
+  // role="dialog"), so it can't stack a second modal on top of one that's
+  // already up.
+  useEffect(() => {
+    if (!galleryEnabled) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "k" || !(e.metaKey || e.ctrlKey)) return;
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (typing || document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      openPicker();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [openPicker]);
 
   // File imports and the render pipeline are mutually coupled — imports feed
   // the render key, and an import must invalidate the render cache. The ref
@@ -390,6 +444,7 @@ export default function App() {
     showHelp: showHelpModal,
     showDesignDoc: showDesignDocModal,
     showLicenses: showLicensesModal,
+    showPicker: openPicker,
   };
 
   useAppNotices({
@@ -422,6 +477,18 @@ export default function App() {
       )}
       {showLicenses && (
         <LicensesModal extra={schema.licenses} onClose={() => setShowLicenses(false)} />
+      )}
+      {showPicker && (
+        <DesignPickerDialog
+          designs={schema.designs}
+          value={design.id}
+          onSelect={(id) => {
+            handleDesignChange(id);
+            closePicker();
+          }}
+          onClose={closePicker}
+          reason={pickerReason}
+        />
       )}
 
       <Toaster theme={theme} />

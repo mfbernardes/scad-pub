@@ -55,12 +55,14 @@ const ESSENTIAL_LINE_RE = /^\s*\/\/\s*(@essential\b.*)$/i;
 const ESSENTIAL_BARE_RE = /^@essential$/i;
 // File-level design metadata, read anywhere in the file (typically a header
 // comment, so it works even before the first section). `@description` is the
-// design's picker sub-label; `@icon` is a path to its thumbnail; `@doc` is a
-// path to the design's own user-documentation Markdown file. All three resolve
-// relative to the design's own .scad file, are ScadPub-only fallbacks — a
-// config `designs[]` entry still overrides them — and invisible to OpenSCAD.
+// design's picker sub-label; `@icon` is a path to its thumbnail; `@image` is a
+// path to a larger picker-card photo/render; `@doc` is a path to the design's
+// own user-documentation Markdown file. All four resolve relative to the
+// design's own .scad file, are ScadPub-only fallbacks — a config `designs[]`
+// entry still overrides them — and invisible to OpenSCAD.
 const DESCRIPTION_RE = /^\s*\/\/\s*@description\b\s*(.*)$/i;
 const ICON_RE = /^\s*\/\/\s*@icon\b\s*(.*)$/i;
+const IMAGE_RE = /^\s*\/\/\s*@image\b\s*(.*)$/i;
 const FILEDOC_RE = /^\s*\/\/\s*@doc\b\s*(.*)$/i;
 // `@svg [layers=<param>]` directive: marks a string parameter as an SVG file the
 // in-app wizard prepares (check / fix / import). The optional `layers=<param>`
@@ -350,10 +352,10 @@ export function parseParams(absPath) {
   const params = [];
   const sections = [];
   const collapsedSections = [];
-  // File-level design metadata (`// @description` / `// @icon`); first non-empty
-  // wins. Populated regardless of section, so a header comment above the first
-  // `/* [Section] */` is honoured.
-  const meta = { description: null, icon: null, doc: null };
+  // File-level design metadata (`// @description` / `// @icon` / `// @image` /
+  // `// @doc`); first non-empty wins. Populated regardless of section, so a
+  // header comment above the first `/* [Section] */` is honoured.
+  const meta = { description: null, icon: null, image: null, doc: null };
   // The line each param's @showIf/@svg/@filledBy annotation was declared on,
   // keyed by param name — fed into validateAnnotations below for diagnostics.
   const lineInfo = { showIf: new Map(), svg: new Map(), filledBy: new Map() };
@@ -418,6 +420,11 @@ export function parseParams(absPath) {
     const imeta = line.match(ICON_RE);
     if (imeta) {
       if (meta.icon === null && imeta[1].trim()) meta.icon = imeta[1].trim();
+      continue;
+    }
+    const immeta = line.match(IMAGE_RE);
+    if (immeta) {
+      if (meta.image === null && immeta[1].trim()) meta.image = immeta[1].trim();
       continue;
     }
     const docmeta = line.match(FILEDOC_RE);
@@ -574,7 +581,7 @@ export function parseParams(absPath) {
         fail(
           absPath,
           lineNo,
-          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @info, @svg, @filledBy, @collapsed, @description, @icon, @doc, @advanced, @essential)`
+          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @info, @svg, @filledBy, @collapsed, @description, @icon, @image, @doc, @advanced, @essential)`
         );
       } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {

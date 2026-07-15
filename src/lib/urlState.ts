@@ -69,6 +69,28 @@ function fromHash(schema: Schema): SessionState | null {
 }
 
 /**
+ * True when `hash` names a `d=<id>` design that ISN'T in this schema — a
+ * stale/broken deep link (a design renamed or removed since the link was
+ * shared). `parseHashState` already treats this the same as no hash at all
+ * (falls back to the stored session, then defaults), which is the right
+ * runtime behavior; this is a separate, narrower check so App.tsx can additionally
+ * surface it — the DesignPickerDialog opens once on load with a short
+ * explanation instead of silently substituting a different design. A hash with
+ * no `d=` at all (or an empty hash) is not "broken", just absent, so this
+ * returns false for both.
+ */
+export function hashDesignIdMissing(schema: Schema, hash: string): boolean {
+  if (!hash) return false;
+  try {
+    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+    const id = params.get("d");
+    return id !== null && !schema.designs.some((d) => d.id === id);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * M4: is `next` a no-op relative to `current`? Used as the external-navigation
  * loop guard in App.tsx — a `hashchange`/`launchQueue` target that already
  * matches the live design/values/preset should not trigger a redundant

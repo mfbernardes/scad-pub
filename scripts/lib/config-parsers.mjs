@@ -401,7 +401,7 @@ function parseExperience(raw) {
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, presetsLabel: "Presets", parametersLabel: "Customize" };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, presetsLabel: "Presets", parametersLabel: "Customize", gallery: false };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -466,6 +466,11 @@ export function parseUi(raw) {
         throw new Error(`gen-schema: 'ui.${key}' must be a non-empty string`);
       out[key] = raw[key].trim();
     }
+  }
+  if (raw.gallery !== undefined) {
+    if (typeof raw.gallery !== "boolean")
+      throw new Error("gen-schema: 'ui.gallery' must be a boolean");
+    out.gallery = raw.gallery;
   }
   if (raw.experience !== undefined && raw.experience !== null) {
     out.experience = parseExperience(raw.experience);

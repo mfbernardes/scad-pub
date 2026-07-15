@@ -52,9 +52,9 @@ These keys tell `gen-schema` which `.scad` files and assets to bundle:
 - **`assets`**: files or directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.
 
-Each `designs[]` entry also accepts optional `description`, `icon`, and `doc` fields. `description` is the short line shown under the label in the design picker. `icon` is a path relative to the config file, shown in the picker and used as the design's manifest shortcut icon. The icon may be an SVG, PNG, or WebP file. ScadPub serves SVG/WebP as-is. For PNG, the build reads the pixel dimensions so the manifest shortcut advertises the real `sizes`. `doc` is a path (also config-relative) to a Markdown file of user documentation; when present, the app shows a button that opens it in a modal.
+Each `designs[]` entry also accepts optional `description`, `icon`, `image`, and `doc` fields. `description` is the short line shown under the label in the design picker. `icon` is a path relative to the config file, shown in the picker and used as the design's manifest shortcut icon. The icon may be an SVG, PNG, or WebP file. ScadPub serves SVG/WebP as-is. For PNG, the build reads the pixel dimensions so the manifest shortcut advertises the real `sizes`. `image` is a path (same formats, same config-relative resolution) to picker-card artwork — a real photo or render of the model — shown by the [card-grid design picker](#ui-behaviour-and-pwa) (`ui.gallery`); `icon` stays the small glyph used everywhere else (the classic dropdown, the manifest shortcut) and is never replaced by `image`. An easy way to produce one: the app's own **Image** snapshot button on a rendered design, or a still from `npm run screens`. `doc` is a path (also config-relative) to a Markdown file of user documentation; when present, the app shows a button that opens it in a modal.
 
-All three fall back to the design's own [`// @description` / `// @icon` / `// @doc` annotations](annotations.md#design-metadata--description--icon--doc) when omitted here. A config value still wins.
+All four fall back to the design's own [`// @description` / `// @icon` / `// @image` / `// @doc` annotations](annotations.md#design-metadata--description--icon--image--doc) when omitted here. A config value still wins.
 
 ### Rendering
 
@@ -85,7 +85,7 @@ These keys add copy and third-party notices to the generated app:
 - **`licenses`**: optional list of extra third-party software/license notices. ScadPub appends them to the built-in open-source attributions in the ⓘ panel. See [Open-source notices](#open-source-notices-licenses)
 - **`strings`**: optional per-deployment overrides of the built-in UI text. See [Localization](#localization-strings)
 
-Missing `source`, `assets`, design, `logo`, or design-`icon` paths fail the build with a clear error. An **unknown top-level key** also fails the build. A whole-key typo like `"popups"` or `"fontfallback"` fails rather than being silently ignored. Add a `"$schema"` key for editor tooling if you want; it is allowed.
+Missing `source`, `assets`, design, `logo`, or design-`icon`/`image` paths fail the build with a clear error. An **unknown top-level key** also fails the build. A whole-key typo like `"popups"` or `"fontfallback"` fails rather than being silently ignored. Add a `"$schema"` key for editor tooling if you want; it is allowed.
 
 ## SVG asset trust model
 
@@ -362,6 +362,7 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
 - **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
 - **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
+- **`gallery`**: `false` by default, or `true`. Replaces the top-bar design switcher's dropdown Select with `DesignPickerDialog`, a card-grid dialog showing each design's `image` (falling back to `icon`, then a letter glyph) plus its label and description. Only takes effect with more than one design. A search box appears once there are more than six designs. See [Per-design `image`](#design-sources) and the annotations doc's [`// @image`](annotations.md#design-metadata--description--icon--image--doc)
 - **`experience`**: seeds the client-side guided/standard experience. See [Experience mode (`ui.experience`)](#experience-mode-uiexperience)
 
 ### Experience mode (`ui.experience`)

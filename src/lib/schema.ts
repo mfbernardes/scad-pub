@@ -42,6 +42,8 @@ function checkDesign(d: unknown): void {
     fail(`design '${id}' 'description' must be a string`);
   if (design.icon != null && typeof design.icon !== "string")
     fail(`design '${id}' 'icon' must be a string URL`);
+  if (design.image != null && typeof design.image !== "string")
+    fail(`design '${id}' 'image' must be a string URL`);
   if (design.doc != null && typeof design.doc !== "string")
     fail(`design '${id}' 'doc' must be a string URL`);
   if (
@@ -200,6 +202,8 @@ export function validateSchema(raw: unknown): Schema {
     for (const key of ["presetsLabel", "parametersLabel"] as const)
       if (ui[key] !== undefined && typeof ui[key] !== "string")
         fail(`'ui.${key}' must be a string`);
+    if (ui.gallery !== undefined && typeof ui.gallery !== "boolean")
+      fail("'ui.gallery' must be a boolean");
   }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;

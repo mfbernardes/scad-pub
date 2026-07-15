@@ -83,20 +83,38 @@ async function checkWelcomePopup({ page, check, schema }) {
     if (await dontShow.count()) await dontShow.check();
     await cta.click();
     await popup.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
-    check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
+    // Named by the popup's own header, not a bare dialog-role count — with
+    // `ui.gallery` on, the same click also opens DesignPickerDialog (a
+    // *different* named dialog) in the same tick (see below), so "no dialog
+    // at all" would be the wrong assertion there.
+    check((await popup.count()) === 0, "popup dismissed");
     // The primary CTA also opens the design picker (when there's more than one
     // design) so the user's next step — choosing what to make — is obvious.
+    // Which picker UI that is depends on `ui.gallery` (see DesignPickerDialog
+    // vs. the classic dropdown Select in DesignPicker.tsx).
     if (schema.designs.length > 1) {
-      const listbox = page.getByRole("listbox");
-      const opened = await listbox
-        .first()
-        .waitFor({ state: "visible", timeout: 3000 })
-        .then(() => true)
-        .catch(() => false);
-      check(opened, "primary CTA opens the design picker");
-      // Close it so it doesn't intercept the later checks' interactions.
-      await page.keyboard.press("Escape");
-      await listbox.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+      if (schema.ui?.gallery) {
+        const dialog = page.locator(".design-picker-dialog");
+        const opened = await dialog
+          .first()
+          .waitFor({ state: "visible", timeout: 3000 })
+          .then(() => true)
+          .catch(() => false);
+        check(opened, "primary CTA opens the design picker dialog");
+        await page.keyboard.press("Escape");
+        await dialog.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+      } else {
+        const listbox = page.getByRole("listbox");
+        const opened = await listbox
+          .first()
+          .waitFor({ state: "visible", timeout: 3000 })
+          .then(() => true)
+          .catch(() => false);
+        check(opened, "primary CTA opens the design picker");
+        // Close it so it doesn't intercept the later checks' interactions.
+        await page.keyboard.press("Escape");
+        await listbox.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+      }
     }
   } else {
     console.log("  (no popup in this config — skipped)");
@@ -295,6 +313,48 @@ async function checkAxe({ page, check }) {
       await page.locator('.command-bar__right button[aria-label^="Switch to"]').first().click();
     }
   }
+}
+
+// The card-grid DesignPickerDialog (`ui.gallery: true`, PR7): the top bar
+// shows a `.design-picker-button` instead of the classic Select; it opens a
+// dialog with one card per design, a click switches design + renders, the
+// dialog is axe-clean while open, and ⌘K/Ctrl-K opens it from anywhere.
+async function checkDesignPickerDialog({ page, check, ids, schema }) {
+  if (!(schema.ui?.gallery && schema.designs.length > 1)) return;
+  console.log("=== design picker dialog (ui.gallery) ===");
+  const dialog = page.locator(".design-picker-dialog");
+  const button = page.locator(".command-bar__design-picker .design-picker-button");
+  check((await button.count()) === 1, "design-picker-button shown in the top bar (desktop)");
+  await button.click();
+  await dialog.waitFor({ state: "visible", timeout: 3000 });
+  const cards = page.locator(".design-picker-dialog__card");
+  check((await cards.count()) === ids.length, `dialog shows one card per design (${ids.length})`);
+  await runAxe(page, check, "design picker dialog open");
+
+  // Selecting a card (other than the current design) switches design and renders.
+  const targetId = ids.find((id) => id !== ids[0]) ?? ids[0];
+  const targetLabel = designLabels[targetId] ?? targetId;
+  await page
+    .locator(".design-picker-dialog__card")
+    .filter({ has: page.getByText(targetLabel, { exact: true }) })
+    .first()
+    .click();
+  await dialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  await waitRendered(page, targetId);
+  check(
+    (await page.evaluate(() => location.hash)).includes(`d=${targetId}`),
+    "selecting a card switches the design"
+  );
+  // Back to the first design for the checks that follow.
+  await selectDesign(page, ids[0]);
+
+  console.log("=== ⌘K / Ctrl-K opens the design picker ===");
+  await page.keyboard.press("Control+k");
+  await dialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(await dialog.isVisible().catch(() => false), "Ctrl-K opens the design picker dialog");
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  check((await dialog.count()) === 0, "Escape closes the design picker dialog");
 }
 
 async function checkEveryDesignRenders({ page, ids }) {
@@ -940,6 +1000,7 @@ async function main() {
 
     const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName };
     await checkWelcomePopup(ctx);
+    await checkDesignPickerDialog(ctx);
     await checkSettingsView(ctx);
     await checkFileImport(ctx);
     await checkThemeToggle(ctx);

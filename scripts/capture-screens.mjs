@@ -178,6 +178,19 @@ async function captureViewport(context, base, kind, theme) {
   await shot(page, dir, aboutName);
   await closeDialog(page);
 
+  // Design picker dialog (only when the build has `ui.gallery: true` — it
+  // replaces the top bar's dropdown Select with a `.design-picker-button`
+  // that opens this card grid; see DesignPickerDialog.tsx). Absent otherwise.
+  const pickerButtonSel = `${kind === "mobile" ? ".mobile-top-bar__center" : ".command-bar__design-picker"} .design-picker-button`;
+  const pickerName = kind === "mobile" ? "12-design-picker" : "08-design-picker";
+  if (await page.locator(pickerButtonSel).count()) {
+    await page.locator(pickerButtonSel).click();
+    await page.waitForSelector(".design-picker-dialog", { timeout: 5000 }).catch(() => {});
+    await sleep(250);
+    await shot(page, dir, pickerName);
+    await closeDialog(page);
+  }
+
   await page.close();
 }
 

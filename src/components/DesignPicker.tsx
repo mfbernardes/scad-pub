@@ -31,7 +31,7 @@ interface Props {
 // group's run starts where its first design appears, and ungrouped designs
 // (group null/absent) stay as a headerless run. Falls back to a flat list when
 // no design declares a group.
-function groupDesigns(designs: Design[]): { group: string | null; items: Design[] }[] {
+export function groupDesigns(designs: Design[]): { group: string | null; items: Design[] }[] {
   const runs: { group: string | null; items: Design[] }[] = [];
   for (const d of designs) {
     const group = d.group ?? null;

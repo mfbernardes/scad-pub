@@ -5,8 +5,8 @@
 
   "source": "examples",
   "designs": [
-    { "id": "tag", "label": "Tag", "description": "Personalised name tag with text.", "icon": "examples/tag-icon.svg" },
-    { "id": "coin", "label": "Coin", "description": "Round coin with an embossed emblem.", "icon": "examples/coin-icon.svg" },
+    { "id": "tag", "label": "Tag", "description": "Personalised name tag with text.", "icon": "examples/tag-icon.svg", "image": "examples/tag-image.png" },
+    { "id": "coin", "label": "Coin", "description": "Round coin with an embossed emblem.", "icon": "examples/coin-icon.svg", "image": "examples/coin-image.png" },
     { "id": "panel", "label": "Panel", "description": "An SVG extruded as a coloured relief panel." }
   ],
   "assets": ["emblem.svg", "panel.svg"],
@@ -17,7 +17,7 @@
     "LiberationSans-Regular.ttf"
   ],
 
-  "ui": { "install": "off", "experience": { "default": "guided", "mobileInitialSheet": "half" } },
+  "ui": { "install": "off", "gallery": true, "experience": { "default": "guided", "mobileInitialSheet": "half" } },
   "fileImport": true,
 
   "popup": {

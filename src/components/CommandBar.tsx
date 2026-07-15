@@ -8,6 +8,7 @@ import { BookOpen as GuideIcon } from "lucide-react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
 import { DesignPicker } from "./DesignPicker";
+import { DesignPickerButton } from "./DesignPickerButton";
 import { BarBrand } from "./BarBrand";
 import { BarActions } from "./BarActions";
 import { OutputToggle } from "./OutputToggle";
@@ -64,7 +65,9 @@ export const CommandBar = memo(function CommandBar({
 
       {/* Design picker, centered in the bar */}
       <div className="command-bar__design-picker inline-flex items-center gap-[0.4rem] justify-self-center whitespace-nowrap">
-        {designs.length > 1 ? (
+        {designs.length > 1 && schema.ui?.gallery ? (
+          <DesignPickerButton design={currentDesign ?? designs[0]} />
+        ) : designs.length > 1 ? (
           <DesignPicker
             designs={designs}
             value={designId}

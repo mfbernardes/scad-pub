@@ -75,6 +75,9 @@
   "picker.current": "Current",
   "picker.title": "Choose a design",
   "picker.subtitle": "Pick what you want to make.",
+  "picker.button": "Choose a design",
+  "picker.empty": "No designs match your search.",
+  "picker.brokenLink": "That link pointed to a design that isn't here — pick one to continue.",
 
   "export.formatNote": "{format} · for slicers and print services",
   "export.downloaded": "Model downloaded",

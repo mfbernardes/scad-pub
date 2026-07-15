@@ -75,6 +75,9 @@
   "picker.current": "Aktuell",
   "picker.title": "Design auswählen",
   "picker.subtitle": "Wählen Sie aus, was Sie erstellen möchten.",
+  "picker.button": "Design auswählen",
+  "picker.empty": "Keine Designs entsprechen Ihrer Suche.",
+  "picker.brokenLink": "Der Link verwies auf ein Design, das hier nicht existiert — wählen Sie eines aus, um fortzufahren.",
 
   "export.formatNote": "{format} · für Slicer und Druckdienste",
   "export.downloaded": "Modell heruntergeladen",

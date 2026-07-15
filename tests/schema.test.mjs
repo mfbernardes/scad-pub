@@ -93,6 +93,27 @@ test("validates the model format", () => {
   assert.throws(() => validateSchema({ ...validBase(), format: "obj" }), /'format' must be/);
 });
 
+test("validates the optional ui.gallery flag", () => {
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { gallery: true } }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { gallery: false } }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: {} }));
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { gallery: "yes" } }),
+    /'ui\.gallery' must be a boolean/
+  );
+});
+
+test("validates the optional per-design image (distinct from icon)", () => {
+  const ok = validBase();
+  ok.designs[0].image = "scad/x-image.png";
+  assert.doesNotThrow(() => validateSchema(ok));
+  ok.designs[0].image = null;
+  assert.doesNotThrow(() => validateSchema(ok));
+  const bad = validBase();
+  bad.designs[0].image = 5;
+  assert.throws(() => validateSchema(bad), /design 'x' 'image' must be a string URL/);
+});
+
 test("validates the optional per-design collapsedSections", () => {
   const ok = validBase();
   ok.designs[0].collapsedSections = ["Advanced"];
