@@ -55,6 +55,8 @@ interface Props {
   onSearchBlur?: () => void;
   /** Essentials/all settings-view (see src/lib/useExperience.ts). */
   settingsView: SettingsView;
+  /** Forwarded to CustomizeTab — see its own doc. */
+  focusHiddenDiffSignal?: number;
 }
 
 export function SheetTabs({
@@ -84,6 +86,7 @@ export function SheetTabs({
   onSearchFocus,
   onSearchBlur,
   settingsView,
+  focusHiddenDiffSignal,
 }: Props) {
   const {
     applyPreset,
@@ -130,6 +133,7 @@ export function SheetTabs({
             onSearchChange={onSearchChange}
             onSearchFocus={onSearchFocus}
             onSearchBlur={onSearchBlur}
+            focusHiddenDiffSignal={focusHiddenDiffSignal}
           />
           {/* Auto-render is parameter-scoped, so it pins to the bottom of this
               tab only — not on Presets/Files (mirrors the desktop panel). Reset

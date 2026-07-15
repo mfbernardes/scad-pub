@@ -48,6 +48,7 @@
   "loading.switchingDesign": "Wechsel zu {design} …",
 
   "failure.title": "Vorschau konnte nicht aktualisiert werden",
+  "failure.engineFailed": "Die 3D-Engine konnte nicht gestartet werden — überprüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
   "failure.body": "Ihre letzte funktionierende Vorschau wird weiterhin angezeigt — nichts geht verloren.",
   "failure.reviewSettings": "Einstellungen überprüfen",
   "failure.reviewHidden": "Ausgeblendete Einstellungen überprüfen",

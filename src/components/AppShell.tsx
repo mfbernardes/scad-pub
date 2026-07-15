@@ -16,6 +16,9 @@ import { initialSheetDetent } from "../lib/sheetDetent";
 import { makeOnceFlag } from "../lib/prefs";
 import { pauseReasonText } from "../lib/pauseReason";
 import { t } from "../lib/i18n";
+import { friendlyRenderError } from "../lib/friendlyErrors";
+import { hiddenAdvancedDiff } from "../lib/paramFilter";
+import { defaultsFor } from "../lib/presets";
 
 // Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
 // ending at the tab underline — no sliver of the tab's content.
@@ -89,6 +92,11 @@ interface Props {
   changedParams: Set<string>;
   userFiles: Record<string, Uint8Array>;
   result: RenderResult | null;
+  /** The last successful render kept on display while the LATEST render
+   *  failed (see renderState.ts's retainedResultAfterFailure) — null whenever
+   *  the latest render succeeded, or no same-design success exists to keep.
+   *  Display-only: `exportable` below is untouched by it. */
+  retainedResult: RenderResult | null;
   rendering: boolean;
   ready: boolean;
   /** The render worker's bootstrap-download progress, or null once ready (or
@@ -134,6 +142,7 @@ export const AppShell = memo(function AppShell({
   changedParams,
   userFiles,
   result,
+  retainedResult,
   rendering,
   ready,
   loadProgress,
@@ -340,6 +349,58 @@ export const AppShell = memo(function AppShell({
   // values the design surfaced at render time (see lib/computedInfo.ts).
   const computedInfo = useMemo(() => parseComputedInfo(log), [log]);
 
+  // Friendly render-failure summary (see src/lib/friendlyErrors.ts) — null
+  // whenever the latest render didn't fail. Recomputed only when `result`
+  // itself changes (title/body/technical are a pure function of it).
+  const friendlyError = useMemo(() => friendlyRenderError(result), [result]);
+  // hiddenAdvancedDiff's inputs, mirroring CustomizeTab's own computation
+  // exactly — the friendly-error card's "Review hidden settings" action must
+  // use the SAME deterministic rule as the Customize tab's "Review" chip, not
+  // a re-derived approximation.
+  const defaults = useMemo(() => defaultsFor(design), [design]);
+  const hasHiddenDiff = useMemo(
+    () => hiddenAdvancedDiff(design.params, values, defaults, settingsView).length > 0,
+    [design, values, defaults, settingsView]
+  );
+  // Whether a previous successful render's geometry is genuinely still what
+  // the viewer shows: exactly when the pipeline retained one (see
+  // retainedResultAfterFailure — latest render failed, a same-design success
+  // exists). ViewerStage displays that retained geometry (dimmed) whenever
+  // this prop is non-null, so the friendly-error card's "your last working
+  // preview is still shown" line is true precisely when it renders.
+  const lastPreviewKept = !!retainedResult;
+
+  // "Review settings" (FriendlyError's contextual action): switch to the
+  // Customize tab and focus its search field — the same tab-switch state path
+  // AppShell already uses to restore focus across a layout switch (see the
+  // wasMobileRef effect above). Mobile also raises the sheet to half so the
+  // panel is actually visible, mirroring the "Drag up for all settings" hint.
+  const focusPanelSearch = useCallback(() => {
+    requestAnimationFrame(() => {
+      document.getElementById(PARAM_SEARCH_INPUT_ID)?.focus();
+    });
+  }, []);
+  const handleReviewSettings = useCallback(() => {
+    panelState.setTab("params");
+    if (isMobile) setSheetDetent("half");
+    focusPanelSearch();
+  }, [panelState, isMobile, focusPanelSearch]);
+
+  // "Review hidden settings": the exact same action as CustomizeTab's own
+  // "Review" chip (settingsViewChange("all") + focus the first hidden-diff
+  // param) — but the button lives in FriendlyError, a sibling of CustomizeTab
+  // (both descend from OutputConsole vs. ParamPanel/SheetTabs), so it can't
+  // call CustomizeTab's internal reviewHiddenDiff() directly. Bumping this
+  // nonce (mirroring DesignPicker's openSignal prop) is how AppShell tells
+  // whichever CustomizeTab instance is mounted to run that same function —
+  // see CustomizeTab's focusHiddenDiffSignal prop/effect.
+  const [reviewHiddenSignal, setReviewHiddenSignal] = useState(0);
+  const handleReviewHiddenSettings = useCallback(() => {
+    panelState.setTab("params");
+    if (isMobile) setSheetDetent("half");
+    setReviewHiddenSignal((n) => n + 1);
+  }, [panelState, isMobile]);
+
   const handleSavePng = useCallback(() => {
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
     if (url) actions.savePng(url);
@@ -426,6 +487,7 @@ export const AppShell = memo(function AppShell({
   const stageProps = {
     design,
     result,
+    retainedResult,
     ready,
     rendering,
     loadProgress,
@@ -443,7 +505,9 @@ export const AppShell = memo(function AppShell({
     computedInfo,
   };
   const hudProps = {
-    visible: !!result?.ok,
+    // The HUD (camera controls) follows whatever model is actually displayed:
+    // the latest success, or the retained last-good geometry after a failure.
+    visible: !!result?.ok || lastPreviewKept,
     measure: showMeasure,
     showDimensions,
     onToggleDimensions: toggleDimensions,
@@ -454,7 +518,20 @@ export const AppShell = memo(function AppShell({
     view,
     onSelectView: handleSelectView,
   };
-  const outputProps = { log, diagnostics: outputDiagnostics, badges, metrics: renderMetrics, open: outputOpen, onClose: closeOutput };
+  const outputProps = {
+    log,
+    diagnostics: outputDiagnostics,
+    badges,
+    metrics: renderMetrics,
+    open: outputOpen,
+    onClose: closeOutput,
+    friendlyError,
+    lastPreviewKept,
+    showReviewHidden: hasHiddenDiff,
+    onReviewSettings: handleReviewSettings,
+    onReviewHiddenSettings: handleReviewHiddenSettings,
+    onRetryRender: actions.render,
+  };
   const actionButtonsProps = {
     canExport: exportable,
     modelFormat: schema.format,
@@ -633,6 +710,7 @@ export const AppShell = memo(function AppShell({
                   onSearchFocus={handleSearchFocus}
                   onSearchBlur={handleSearchBlur}
                   settingsView={settingsView}
+                  focusHiddenDiffSignal={reviewHiddenSignal}
                 />
               </div>
             )}
@@ -688,6 +766,7 @@ export const AppShell = memo(function AppShell({
               onSearchFocus={handleSearchFocus}
               onSearchBlur={handleSearchBlur}
               settingsView={settingsView}
+              focusHiddenDiffSignal={reviewHiddenSignal}
             />
 
             {/* Canvas */}

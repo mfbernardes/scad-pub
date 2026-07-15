@@ -48,6 +48,7 @@
   "loading.switchingDesign": "Switching to {design}…",
 
   "failure.title": "Preview could not be updated",
+  "failure.engineFailed": "The 3D engine couldn't start — check your connection and try again.",
   "failure.body": "Your last working preview is still shown — nothing is lost.",
   "failure.reviewSettings": "Review settings",
   "failure.reviewHidden": "Review hidden settings",

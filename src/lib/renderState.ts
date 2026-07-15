@@ -66,6 +66,36 @@ export function isStaleEpoch(startEpoch: number, currentEpoch: number): boolean 
   return startEpoch !== currentEpoch;
 }
 
+/**
+ * The last successful render to keep showing when the LATEST render failed —
+ * the "your last working preview is still shown" behavior. Non-null exactly
+ * when all of:
+ *  - the latest completed render failed (`result && !result.ok`; a null
+ *    result means no completed attempt to be reassuring about, e.g. right
+ *    after a design switch, whose resetForDesign clears `result`), and
+ *  - a previous successful snapshot exists, and
+ *  - that snapshot belongs to the CURRENT design — resetForDesign already
+ *    nulls the snapshot on a switch, so this check is defense-in-depth
+ *    against ever showing design A's geometry under design B, mirroring
+ *    isSnapshotCurrent's own designId re-check.
+ *
+ * Deliberately does NOT require the snapshot's renderKey to match the live
+ * controls: the whole point is showing the previous (necessarily
+ * different-key) good geometry while the current key's render failed. That is
+ * why this must never feed export gating — `isSnapshotExportable` (which DOES
+ * require key match) remains the only authority for Download/Image.
+ */
+export function retainedResultAfterFailure(
+  result: RenderResult | null,
+  snapshot: RenderSnapshot | null,
+  currentDesignId: string
+): RenderResult | null {
+  if (!result || result.ok) return null;
+  if (!snapshot?.result.ok) return null;
+  if (snapshot.designId !== currentDesignId) return null;
+  return snapshot.result;
+}
+
 /** Everything doRender knows about a render call at the moment it started —
  * captured before the `await`, so the eventual commit decision is judged
  * against the inputs that were actually live when the runner was asked to

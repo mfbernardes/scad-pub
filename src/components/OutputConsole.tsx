@@ -5,10 +5,12 @@
 import { useState } from "react";
 import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
 import { type RenderMetrics, formatDuration } from "../lib/renderMetrics";
+import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { CountBadges } from "./CountBadges";
 import { IconButton } from "./IconButton";
+import { FriendlyError } from "./FriendlyError";
 import { X as XIcon } from "lucide-react";
 
 const ICON: Record<DiagnosticLevel, string> = { notice: "ⓘ", warning: "⚠", assert: "✗" };
@@ -31,9 +33,38 @@ interface Props {
   onClose: () => void;
   /** Layout-specific sizing/positioning (desktop band vs mobile overlay). */
   className?: string;
+  /** Friendly render-failure summary (see src/lib/friendlyErrors.ts) — null
+   *  whenever the latest render didn't fail, in which case the Notices tab
+   *  shows only the plain diagnostics list, as before. */
+  friendlyError?: FriendlyErrorInfo | null;
+  /** True when the viewer is genuinely still showing the last successful
+   *  render's (dimmed) geometry despite the failed latest render — see
+   *  renderState.ts's retainedResultAfterFailure and ViewerStage. Gates the
+   *  "your last working preview is still shown" reassurance line. */
+  lastPreviewKept?: boolean;
+  /** hiddenAdvancedDiff(...).length > 0 in the current view — gates the
+   *  "Review hidden settings" action; never inferred from the error text. */
+  showReviewHidden?: boolean;
+  onReviewSettings?: () => void;
+  onReviewHiddenSettings?: () => void;
+  onRetryRender?: () => void;
 }
 
-export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose, className }: Props) {
+export function OutputConsole({
+  log,
+  diagnostics,
+  badges,
+  metrics,
+  open,
+  onClose,
+  className,
+  friendlyError,
+  lastPreviewKept = false,
+  showReviewHidden = false,
+  onReviewSettings,
+  onReviewHiddenSettings,
+  onRetryRender,
+}: Props) {
   const [tab, setTab] = useState("notices");
 
   if (!open) return null;
@@ -68,6 +99,16 @@ export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <TabsContent value="notices" className="mt-0">
+            {friendlyError && (
+              <FriendlyError
+                error={friendlyError}
+                lastPreviewKept={lastPreviewKept}
+                showReviewHidden={showReviewHidden}
+                onReviewSettings={() => onReviewSettings?.()}
+                onReviewHiddenSettings={() => onReviewHiddenSettings?.()}
+                onRetry={() => onRetryRender?.()}
+              />
+            )}
             {diagnostics.length ? (
               <ul className="px-3 py-[0.4rem]" aria-live="polite">
                 {diagnostics.map((d, i) => (

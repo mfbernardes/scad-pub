@@ -75,6 +75,8 @@ interface Props {
   onSearchBlur?: () => void;
   /** Essentials/all settings-view (see src/lib/useExperience.ts). */
   settingsView: SettingsView;
+  /** Forwarded to CustomizeTab — see its own doc. */
+  focusHiddenDiffSignal?: number;
 }
 
 export function ParamPanel({
@@ -105,6 +107,7 @@ export function ParamPanel({
   onSearchFocus,
   onSearchBlur,
   settingsView,
+  focusHiddenDiffSignal,
 }: Props) {
   const {
     applyPreset,
@@ -292,6 +295,7 @@ export function ParamPanel({
             onSearchChange={onSearchChange}
             onSearchFocus={onSearchFocus}
             onSearchBlur={onSearchBlur}
+            focusHiddenDiffSignal={focusHiddenDiffSignal}
           />
         </TabsContent>
 

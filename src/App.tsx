@@ -112,6 +112,7 @@ export default function App() {
 
   const {
     result,
+    retainedResult,
     rendering,
     ready,
     loadProgress,
@@ -442,6 +443,7 @@ export default function App() {
           changedParams={changedNames}
           userFiles={userFiles}
           result={result}
+          retainedResult={retainedResult}
           rendering={rendering}
           ready={ready}
           loadProgress={loadProgress}

@@ -29,12 +29,14 @@ import { toScadExpr } from "./scad";
 import { defaultsFor, type Values } from "./presets";
 import { changedParamLabels, emptyMetrics, recordRender, type RenderMetrics } from "./renderMetrics";
 import { t } from "./i18n";
+import { friendlyRenderError } from "./friendlyErrors";
 import {
   isSnapshotCurrent,
   isSnapshotExportable,
   isStaleEpoch,
   nextPauseReason,
   resolveRenderCommit,
+  retainedResultAfterFailure,
   shouldFireInitialRender,
   type PauseReason,
   type RenderSnapshot,
@@ -184,6 +186,13 @@ export function useRenderPipeline({
   // The only thing Download/Image may ever act on: a successful render that
   // still matches the live controls. Never true for a stale or failed result.
   const exportable = isSnapshotExportable(snapshot, renderKey, design.id);
+  // The last successful render to keep DISPLAYING while the latest render
+  // failed (see retainedResultAfterFailure) — the viewer shows this instead
+  // of clearing to an empty canvas, and the friendly-error card's "your last
+  // working preview is still shown" line renders exactly when it's non-null.
+  // Display-only: `exportable` above stays the sole authority for
+  // Download/Image, so a failed latest render still disables both.
+  const retainedResult = retainedResultAfterFailure(result, snapshot, design.id);
 
   const doRender = useCallback(
     async () => {
@@ -250,7 +259,11 @@ export function useRenderPipeline({
         setResult(r);
         setResultKey(startRenderKey);
         if (!r.ok)
-          toast.error(t("toast.renderFailed"), {
+          // Same title mapping as the Notices tab's friendly-error card (see
+          // friendlyErrors.ts) — a fatal bootstrap failure and an ordinary
+          // model failure read differently there, so the toast that announces
+          // it shouldn't say something else. Stable id/description unchanged.
+          toast.error(friendlyRenderError(r)?.title ?? t("toast.renderFailed"), {
             id: "render-failed",
             description: t("toast.renderFailedDescription"),
           });
@@ -403,6 +416,7 @@ export function useRenderPipeline({
 
   return {
     result,
+    retainedResult,
     rendering,
     ready,
     loadProgress,

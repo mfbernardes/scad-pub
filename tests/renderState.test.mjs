@@ -14,6 +14,7 @@ import {
   isStaleEpoch,
   nextPauseReason,
   resolveRenderCommit,
+  retainedResultAfterFailure,
   shouldFireInitialRender,
 } from "../src/lib/renderState.ts";
 
@@ -188,6 +189,50 @@ test("scenario: a newer in-flight render blocks export, including after it fails
   // no snapshot on failure), so it remains what it was — still not current,
   // still not exportable, against the now-failed live key.
   assert.equal(isSnapshotExportable(snapshot, liveRenderKey, "design-a"), false);
+});
+
+// ---- retainedResultAfterFailure (PR6: keep the last working preview) ----
+
+function okSnapshot(overrides = {}) {
+  return { epoch: 0, renderKey: "key-A", designId: "design-a", values: {}, fileSig: "", result: ok(), ...overrides };
+}
+
+test("retainedResultAfterFailure: a same-design failure retains the last successful result", () => {
+  const snap = okSnapshot();
+  assert.equal(retainedResultAfterFailure(fail(), snap, "design-a"), snap.result);
+});
+
+test("retainedResultAfterFailure: an ok latest render retains nothing (the live result is shown)", () => {
+  assert.equal(retainedResultAfterFailure(ok(), okSnapshot(), "design-a"), null);
+});
+
+test("retainedResultAfterFailure: no completed render yet (null result) retains nothing", () => {
+  // A design switch resets `result` to null (resetForDesign) — there's no
+  // failure on screen to be reassuring about.
+  assert.equal(retainedResultAfterFailure(null, okSnapshot(), "design-a"), null);
+});
+
+test("retainedResultAfterFailure: no previous success (null snapshot) retains nothing", () => {
+  // e.g. the very first render of a design view failed — the canvas was
+  // empty before, so there is no "last working preview" to keep.
+  assert.equal(retainedResultAfterFailure(fail(), null, "design-a"), null);
+});
+
+test("retainedResultAfterFailure: a design switch clears retention — never design A's model under design B", () => {
+  // resetForDesign nulls the snapshot on a real switch; the designId check
+  // here is the defense-in-depth twin (mirrors isSnapshotCurrent's).
+  const snapA = okSnapshot({ designId: "design-a" });
+  assert.equal(retainedResultAfterFailure(fail(), snapA, "design-b"), null);
+});
+
+test("retainedResultAfterFailure: retention is display-only — the failed key stays non-exportable", () => {
+  // The retained snapshot's key (the previous, successful controls) never
+  // matches the failed live key, so isSnapshotExportable stays false —
+  // Download/Image remain disabled while retained geometry is displayed.
+  const snap = okSnapshot({ renderKey: "key-A" });
+  const liveFailedKey = "key-B";
+  assert.equal(retainedResultAfterFailure(fail(), snap, "design-a"), snap.result);
+  assert.equal(isSnapshotExportable(snap, liveFailedKey, "design-a"), false);
 });
 
 // ---- shouldFireInitialRender (M15) ----

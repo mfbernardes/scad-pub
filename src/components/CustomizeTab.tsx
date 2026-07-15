@@ -6,7 +6,7 @@
 // of being duplicated per layout — PanelFooter (the Live-preview switch) is
 // the one piece that stays outside, since the two layouts dock it
 // differently (see ParamPanel.tsx / SheetTabs.tsx).
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Design } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
@@ -41,6 +41,12 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
+  /** Bumped externally (e.g. by the friendly-error card's "Review hidden
+   *  settings" action — see AppShell) to trigger the exact same reveal+focus
+   *  as the "Review" chip below, without this component owning that trigger
+   *  itself. Mirrors DesignPicker's `openSignal` prop. Undefined/unchanged is
+   *  a no-op. */
+  focusHiddenDiffSignal?: number;
 }
 
 const noteClass =
@@ -64,6 +70,7 @@ export function CustomizeTab({
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
+  focusHiddenDiffSignal,
 }: Props) {
   const { change, settingsViewChange } = useAppActions();
   const debouncedSearch = useDebounce(search, 150);
@@ -89,6 +96,23 @@ export function CustomizeTab({
     const first = hiddenDiff[0];
     if (first) setFocusParam({ name: first.name, nonce: Date.now() });
   };
+
+  // External trigger for the same action (the friendly-error card's "Review
+  // hidden settings" button lives in OutputConsole, a sibling of this
+  // component — see AppShell). Fires only on a genuine signal CHANGE (not on
+  // mount, where focusHiddenDiffSignal may already be a nonzero initial
+  // value from a previous card interaction this design view), same guard
+  // shape as ParamForm's own focusParam nonce.
+  const lastHiddenSignal = useRef(focusHiddenDiffSignal);
+  useEffect(() => {
+    if (focusHiddenDiffSignal === undefined || focusHiddenDiffSignal === lastHiddenSignal.current) return;
+    lastHiddenSignal.current = focusHiddenDiffSignal;
+    reviewHiddenDiff();
+    // reviewHiddenDiff is recreated every render (it closes over hiddenDiff);
+    // depending on the signal alone is intentional — it always reads the
+    // latest closure when it actually fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusHiddenDiffSignal]);
 
   return (
     <>

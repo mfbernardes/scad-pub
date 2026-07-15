@@ -632,6 +632,12 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
     await input.fill(String(value));
     await input.blur();
   };
+  // Quality (facet_angle/facet_size) is @advanced and untouched (still at its
+  // defaults) — switch back to the essentials view so the friendly-error
+  // checks below exercise the real "nothing hidden differs from defaults"
+  // case, not the trivially-empty "all settings" case (hiddenAdvancedDiff is
+  // always [] in "all" — see paramFilter.ts).
+  await switchSettingsView(page, "essentials");
   await setNum("thickness", 1);
   await setNum("text_depth", 2);
   check(
@@ -647,9 +653,54 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
     "an assert failure raises an asserts badge"
   );
 
-  // Restore a clean, rendering state for the checks that follow.
+  console.log("=== friendly render-failure summary (tag) ===");
+  check(
+    (await page.locator(".friendly-error").count()) === 1,
+    "the friendly error card is shown in Notices on a failed render"
+  );
+  const friendlyText = await page.locator(".friendly-error").innerText();
+  check(
+    friendlyText.includes(
+      "engraved text is deeper than the plate is thick; reduce text depth or thicken the plate"
+    ),
+    "the friendly error's body is the assert's authored message, verbatim and unquoted"
+  );
+  // A successful tag render preceded this failure, so the pipeline retains
+  // it: the reassurance line must be present AND true — the viewer keeps the
+  // last good geometry (dimmed) instead of clearing to an empty canvas.
+  check(
+    friendlyText.includes("Your last working preview is still shown"),
+    "the reassurance line is shown (a previous successful render is retained)"
+  );
+  check(
+    (await page.locator(".viewer-wrap .opacity-55").count()) > 0,
+    "the retained last-good geometry is displayed dimmed while the latest render failed"
+  );
+  check(
+    (await page.locator(".friendly-error").getByRole("button", { name: "Review hidden settings" }).count()) === 0,
+    "Quality (advanced, still default) means no hidden setting differs, so 'Review hidden settings' is not offered"
+  );
+  await page.locator(".friendly-error").getByText("Show technical details").click();
+  const technicalText = await page.locator(".friendly-error details").innerText();
+  check(
+    /Assertion '.*' failed/.test(technicalText),
+    "the technical details disclosure reveals the raw assertion line"
+  );
+  await runAxe(page, check, "Notices tab: friendly-error card visible");
+
+  // Restore a clean, rendering state for the checks that follow — and confirm
+  // the canvas recovers: the render succeeds again, the friendly card clears,
+  // and the retained-geometry dimming lifts.
   await resetDefaults(page);
   await waitRendered(page, "tag");
+  check(
+    await waitFor(() => document.querySelector(".friendly-error") === null),
+    "the friendly error card clears once a render succeeds again"
+  );
+  check(
+    (await page.locator(".viewer-wrap .opacity-55").count()) === 0,
+    "the dimmed retained-geometry treatment lifts after recovery"
+  );
 }
 
 // @showIf arrow_style — exercised on a "signage" design when present. (No

@@ -32,6 +32,12 @@ interface Props {
   active: boolean;
   design: Design;
   result: RenderResult | null;
+  /** The last successful render kept on display while the LATEST render
+   *  failed (renderState.ts's retainedResultAfterFailure; null otherwise) —
+   *  shown dimmed, so the stale model never reads as the failed settings'
+   *  own output. resetForDesign clears the snapshot behind it, so a design
+   *  switch can never show the previous design's geometry here. */
+  retainedResult: RenderResult | null;
   ready: boolean;
   rendering: boolean;
   /** The render worker's bootstrap-download progress; null once ready (or
@@ -65,6 +71,7 @@ export function ViewerStage({
   active,
   design,
   result,
+  retainedResult,
   ready,
   rendering,
   loadProgress,
@@ -103,6 +110,16 @@ export function ViewerStage({
   // underneath so the chip's message is legible without hiding the geometry.
   const showUpdatingChip = autoRender && rendering && !!result?.ok;
 
+  // The latest render failed but a previous same-design success is retained
+  // (see the retainedResult prop doc): keep showing IT instead of clearing
+  // the canvas, with the same dim treatment the UpdatingChip uses so the
+  // stale geometry never reads as the failed settings' own output. The
+  // failure toast + the Messages friendly-error card carry the explanation.
+  const showRetained = !result?.ok && !!retainedResult;
+  // What the viewer actually displays: the latest success, or the retained
+  // last-good geometry after a failure, or nothing.
+  const shownResult = result?.ok ? result : retainedResult;
+
   return (
     <div className="viewer-wrap">
       <ErrorBoundary resetKey={result}>
@@ -111,12 +128,12 @@ export function ViewerStage({
             <div
               className={cn(
                 "flex flex-1 min-h-0",
-                showUpdatingChip && "opacity-55 transition-opacity duration-300"
+                (showUpdatingChip || showRetained) && "opacity-55 transition-opacity duration-300"
               )}
             >
               <Viewer
                 ref={viewerRef}
-                stl={result?.ok ? result.stl : null}
+                stl={shownResult?.ok ? shownResult.stl : null}
                 theme={theme}
                 designId={design.id}
                 presetId={selectedPreset}
@@ -172,7 +189,12 @@ export function ViewerStage({
           design={design}
           size={measured}
           values={renderedValues}
-          stale={stalePreview}
+          // Retained-after-failure geometry is stale by definition (it was
+          // rendered from earlier values, not the failed controls), even
+          // though stalePreview itself reads false once the failed attempt
+          // completes for the current key — so its figures get the same
+          // dim+italic treatment as an out-of-date preview.
+          stale={stalePreview || showRetained}
           computed={computedInfo}
         />
       )}
