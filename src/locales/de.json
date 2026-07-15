@@ -1,0 +1,75 @@
+{
+  "viewer.loading": "Alles wird vorbereitet …",
+  "viewer.building": "Vorschau wird erstellt …",
+
+  "stale.banner": "Vorschau ist veraltet",
+  "stale.update": "Aktualisieren",
+  "stale.updating": "Wird aktualisiert …",
+  "stale.ariaUpdating": "Vorschau wird aktualisiert",
+  "stale.ariaOutOfDate": "Vorschau ist veraltet — jetzt aktualisieren",
+
+  "action.download": "{format} herunterladen",
+  "action.image": "Bild",
+  "action.share": "Teilen",
+  "action.saveImage": "Bild speichern",
+  "action.copyShareLink": "Link zum Teilen kopieren",
+  "action.export": "3D-Modell exportieren",
+
+  "toast.renderFailed": "Diese Kombination von Einstellungen hat nicht funktioniert",
+  "toast.renderFailedDescription": "Öffnen Sie „Nachrichten“ (die Glocke in der oberen Leiste) für Details.",
+  "toast.heavyRenderPaused": "Dieses Design braucht länger zum Erstellen ({seconds} s), daher ist die Live-Vorschau pausiert — klicken Sie nach Änderungen auf „Aktualisieren“.",
+
+  "settings.essential": "Wichtigste Einstellungen",
+  "settings.all": "Alle Einstellungen",
+  "settings.hiddenCount#one": "{count} ausgeblendete Einstellung",
+  "settings.hiddenCount#other": "{count} ausgeblendete Einstellungen",
+  "settings.hiddenDiffer#one": "{count} ausgeblendete Einstellung weicht von den Standardwerten ab",
+  "settings.hiddenDiffer#other": "{count} ausgeblendete Einstellungen weichen von den Standardwerten ab",
+  "settings.review": "Überprüfen",
+  "settings.showAll": "Alle anzeigen",
+  "settings.showThem": "Anzeigen",
+  "settings.searchIncludesHidden": "Die Suche umfasst auch ausgeblendete Einstellungen.",
+
+  "loading.preparingEngine": "3D-Engine wird vorbereitet …",
+  "loading.startingEngine": "Engine wird gestartet",
+  "loading.engineDownloaded": "Engine heruntergeladen",
+  "loading.buildingPreview": "Vorschau wird erstellt",
+  "loading.downloadSize": "Einmaliger Download — etwa {size}",
+  "loading.engineOffline": "Die 3D-Engine ist jetzt offline verfügbar",
+  "loading.readyOffline": "Dieser Konfigurator ist bereit für die Offline-Nutzung",
+  "loading.updatingPreview": "Vorschau wird aktualisiert … bis das neue Modell bereit ist, bleibt die vorherige Version sichtbar",
+  "loading.switchingDesign": "Wechsel zu {design} …",
+
+  "failure.title": "Vorschau konnte nicht aktualisiert werden",
+  "failure.body": "Ihre letzte funktionierende Vorschau wird weiterhin angezeigt — nichts geht verloren.",
+  "failure.reviewSettings": "Einstellungen überprüfen",
+  "failure.reviewHidden": "Ausgeblendete Einstellungen überprüfen",
+  "failure.retry": "Vorschau erneut versuchen",
+  "failure.showDetails": "Technische Details anzeigen",
+
+  "checklist.createModel": "Modell erstellen",
+  "checklist.chooseDesign": "Design auswählen",
+  "checklist.reviewEssential": "Wichtigste Einstellungen überprüfen",
+  "checklist.preview": "Vorschau",
+  "checklist.exportModel": "Modell exportieren",
+  "checklist.ready": "fertig",
+  "checklist.dismiss": "Verwerfen",
+
+  "hint.rotateZoomMouse": "Ziehen zum Drehen · Scrollen zum Zoomen",
+  "hint.rotateZoomTouch": "Ziehen zum Drehen · Zwei-Finger-Zoom",
+  "hint.dragForSettings": "Nach oben ziehen für alle Einstellungen",
+
+  "picker.search": "Designs durchsuchen …",
+  "picker.current": "Aktuell",
+  "picker.title": "Design auswählen",
+  "picker.subtitle": "Wählen Sie aus, was Sie erstellen möchten.",
+
+  "export.formatNote": "{format} · für Slicer und Druckdienste",
+  "export.downloaded": "Modell heruntergeladen",
+  "export.shareCompleted": "Teilen abgeschlossen",
+  "export.readyToShare": "Modell bereit zum Teilen",
+  "export.printingGuide": "Druckanleitung",
+
+  "common.close": "Schließen",
+  "common.reset": "Zurücksetzen"
+}

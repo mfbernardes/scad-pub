@@ -1,0 +1,75 @@
+{
+  "viewer.loading": "Getting things ready…",
+  "viewer.building": "Building your preview…",
+
+  "stale.banner": "Preview out of date",
+  "stale.update": "Update",
+  "stale.updating": "Updating…",
+  "stale.ariaUpdating": "Updating the preview",
+  "stale.ariaOutOfDate": "Preview out of date — update now",
+
+  "action.download": "Download {format}",
+  "action.image": "Image",
+  "action.share": "Share",
+  "action.saveImage": "Save image",
+  "action.copyShareLink": "Copy share link",
+  "action.export": "Export 3D model",
+
+  "toast.renderFailed": "That combination of settings didn't work",
+  "toast.renderFailedDescription": "Open Messages (the bell in the top bar) for details.",
+  "toast.heavyRenderPaused": "This design takes a while to build ({seconds} s), so live preview is paused — press \"Update\" after making changes.",
+
+  "settings.essential": "Essential settings",
+  "settings.all": "All settings",
+  "settings.hiddenCount#one": "{count} hidden setting",
+  "settings.hiddenCount#other": "{count} hidden settings",
+  "settings.hiddenDiffer#one": "{count} hidden setting differs from defaults",
+  "settings.hiddenDiffer#other": "{count} hidden settings differ from defaults",
+  "settings.review": "Review",
+  "settings.showAll": "Show all",
+  "settings.showThem": "Show them",
+  "settings.searchIncludesHidden": "Search results also include hidden settings.",
+
+  "loading.preparingEngine": "Preparing the 3D engine…",
+  "loading.startingEngine": "Starting the engine",
+  "loading.engineDownloaded": "Engine downloaded",
+  "loading.buildingPreview": "Building your preview",
+  "loading.downloadSize": "One-time download — about {size}",
+  "loading.engineOffline": "The 3D engine is now available offline",
+  "loading.readyOffline": "This configurator is ready for offline use",
+  "loading.updatingPreview": "Updating preview… the previous version is shown until the new model is ready",
+  "loading.switchingDesign": "Switching to {design}…",
+
+  "failure.title": "Preview could not be updated",
+  "failure.body": "Your last working preview is still shown — nothing is lost.",
+  "failure.reviewSettings": "Review settings",
+  "failure.reviewHidden": "Review hidden settings",
+  "failure.retry": "Retry preview",
+  "failure.showDetails": "Show technical details",
+
+  "checklist.createModel": "Create your model",
+  "checklist.chooseDesign": "Choose a design",
+  "checklist.reviewEssential": "Review the essential settings",
+  "checklist.preview": "Preview",
+  "checklist.exportModel": "Export the model",
+  "checklist.ready": "ready",
+  "checklist.dismiss": "Dismiss",
+
+  "hint.rotateZoomMouse": "Drag to rotate · scroll to zoom",
+  "hint.rotateZoomTouch": "Drag to rotate · pinch to zoom",
+  "hint.dragForSettings": "Drag up for all settings",
+
+  "picker.search": "Search designs…",
+  "picker.current": "Current",
+  "picker.title": "Choose a design",
+  "picker.subtitle": "Pick what you want to make.",
+
+  "export.formatNote": "{format} · for slicers and print services",
+  "export.downloaded": "Model downloaded",
+  "export.shareCompleted": "Share completed",
+  "export.readyToShare": "Model ready to share",
+  "export.printingGuide": "Printing guide",
+
+  "common.close": "Close",
+  "common.reset": "Reset"
+}

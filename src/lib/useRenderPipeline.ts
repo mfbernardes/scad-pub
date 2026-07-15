@@ -28,6 +28,7 @@ import {
 import { toScadExpr } from "./scad";
 import { defaultsFor, type Values } from "./presets";
 import { changedParamLabels, emptyMetrics, recordRender, type RenderMetrics } from "./renderMetrics";
+import { t } from "./i18n";
 import {
   isSnapshotCurrent,
   isSnapshotExportable,
@@ -224,16 +225,16 @@ export function useRenderPipeline({
         setResult(r);
         setResultKey(startRenderKey);
         if (!r.ok)
-          toast.error("That combination of settings didn't work", {
+          toast.error(t("toast.renderFailed"), {
             id: "render-failed",
-            description: "Open Messages (the bell in the top bar) for details.",
+            description: t("toast.renderFailedDescription"),
           });
         if (r.staleDefines?.length) setBundleStale(true);
         setRendering(false);
         if (r.ok && !r.cached && r.ms > heavyMs && autoRenderRef.current) {
           setAutoRender(false);
           setAnnouncement(
-            `This design takes a while to build (${(r.ms / 1000).toFixed(1)} s), so live preview is paused — press "Update" after making changes.`
+            t("toast.heavyRenderPaused", { seconds: (r.ms / 1000).toFixed(1) })
           );
         }
       } catch (e) {

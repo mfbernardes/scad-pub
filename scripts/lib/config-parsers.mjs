@@ -415,3 +415,74 @@ export function parseUi(raw) {
   }
   return out;
 }
+
+// Levenshtein edit distance, used only to offer a "did you mean" suggestion
+// for a typo'd `strings` key. Deliberately simple (no memoized matrix beyond a
+// single rolling row) — catalogue keys are short and this only runs on a
+// build-time validation error path.
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) {
+      row[j] =
+        a[i - 1] === b[j - 1]
+          ? prev[j - 1]
+          : 1 + Math.min(prev[j - 1], prev[j], row[j - 1]);
+    }
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+// The closest known key to an unrecognised `strings` key, when the edit
+// distance is small enough that it's plausibly a typo rather than an
+// unrelated string. Returns null when nothing is close.
+function suggestKey(badKey, validKeys) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const key of validKeys) {
+    const dist = editDistance(badKey, key);
+    if (dist < bestDist) {
+      best = key;
+      bestDist = dist;
+    }
+  }
+  // Trivial-near-miss threshold: allow a couple of edits, but scale with the
+  // key's length so a short key doesn't match everything.
+  const threshold = Math.max(2, Math.floor(badKey.length / 3));
+  return best !== null && bestDist <= threshold ? best : null;
+}
+
+// Validate and normalise the optional `strings` config block: per-deployment
+// overrides of the built-in UI text catalogue (src/locales/en.json), keyed by
+// the same dot-namespaced keys (including plural `#category` variants, e.g.
+// "foo.count#other") that src/lib/i18n.ts's `t`/`tn` resolve. Consulted first,
+// ahead of the active/English bundles — see i18n.ts's resolution order. Every
+// key must already exist in the English catalogue; `validKeys` is the caller's
+// (gen-schema's) already-loaded key set so this module stays free of file I/O.
+// Fails the build with a clear message (a "did you mean" suggestion when the
+// bad key is a plausible typo of a real one) rather than silently accepting a
+// key `t()` will never resolve. Returns {} when unset.
+export function parseStrings(raw, validKeys) {
+  if (raw == null) return {};
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'strings' must be an object of key: string pairs");
+  const known = new Set(validKeys);
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!known.has(key)) {
+      const suggestion = suggestKey(key, known);
+      throw new Error(
+        `gen-schema: unknown 'strings' key '${key}'.\n` +
+          (suggestion
+            ? `  Did you mean '${suggestion}'?`
+            : `  See src/locales/en.json for the full list of valid keys.`)
+      );
+    }
+    if (typeof value !== "string")
+      throw new Error(`gen-schema: 'strings.${key}' must be a string (got ${JSON.stringify(value)})`);
+    out[key] = value;
+  }
+  return out;
+}

@@ -15,6 +15,7 @@ import { StaleBanner } from "./StaleBanner";
 import { DimensionInfo } from "./DimensionInfo";
 import { Spinner } from "./ui/spinner";
 import { useAppActions } from "../lib/appActions";
+import { t } from "../lib/i18n";
 
 const Viewer = lazy(() =>
   import("./Viewer").then((m) => ({ default: m.Viewer }))
@@ -87,7 +88,7 @@ export function ViewerStage({
       {(!ready || (rendering && !result)) && (
         <div className="viewer-overlay pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-[0.8rem] bg-(--overlay) text-[0.9rem] text-muted-foreground">
           <Spinner className="size-9 text-muted-foreground" />
-          <p>{ready ? "Building your preview…" : "Getting things ready…"}</p>
+          <p>{ready ? t("viewer.building") : t("viewer.loading")}</p>
         </div>
       )}
 

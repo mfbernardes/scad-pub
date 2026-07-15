@@ -8,6 +8,7 @@
 import { RefreshCw as RefreshIcon } from "lucide-react";
 import { Spinner } from "./ui/spinner";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 
 interface Props {
   autoRender: boolean;
@@ -34,11 +35,11 @@ export function StaleBanner({ autoRender, rendering, stalePreview, onRender, cla
       )}
       onClick={rendering ? undefined : onRender}
       disabled={rendering}
-      aria-label={rendering ? "Updating the preview" : "Preview out of date — update now"}
+      aria-label={rendering ? t("stale.ariaUpdating") : t("stale.ariaOutOfDate")}
     >
       {rendering ? (
         <>
-          <Spinner className="size-4" /> Updating…
+          <Spinner className="size-4" /> {t("stale.updating")}
         </>
       ) : (
         <>
@@ -47,9 +48,9 @@ export function StaleBanner({ autoRender, rendering, stalePreview, onRender, cla
             className="size-[7px] shrink-0 animate-[pill-pulse_1.4s_ease-in-out_infinite] rounded-full bg-warn motion-reduce:animate-none"
             aria-hidden="true"
           />
-          Preview out of date
+          {t("stale.banner")}
           <span className="inline-flex items-center gap-[0.3rem] rounded-(--radius-sm) bg-primary px-2 py-[0.2rem] font-semibold text-primary-foreground group-hover:brightness-[1.08]">
-            <RefreshIcon size={14} /> Update
+            <RefreshIcon size={14} /> {t("stale.update")}
           </span>
         </>
       )}

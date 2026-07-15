@@ -35,6 +35,7 @@ import {
   parseLang,
   parseDir,
   parseRender,
+  parseStrings,
   renderFontsConf,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
@@ -1222,6 +1223,58 @@ test("parsePopup: defaults, modes, links and errors", () => {
     () => parsePopup({ header: "x", body: "y", button: "  " }),
     /'popup\.button', when set, must be a non-empty string/
   );
+});
+
+test("strings: valid overrides pass through into the schema", () => {
+  const { schema } = run("widget-strings.config.json");
+  assert.deepEqual(schema.strings, {
+    "action.image": "Bild",
+    "action.share": "Teilen",
+  });
+});
+
+test("strings: absent -> {}", () => {
+  const { schema } = run("widget-autodeps.config.json");
+  assert.deepEqual(schema.strings, {});
+});
+
+test("strings: unknown key fails the build with a did-you-mean suggestion", () => {
+  assert.throws(
+    () => run("widget-bad-strings.config.json"),
+    /unknown 'strings' key 'action\.imag'[\s\S]*Did you mean 'action\.image'/
+  );
+});
+
+test("parseStrings validates shape and key membership", () => {
+  const validKeys = ["a.b", "a.c"];
+  // Absent -> {}.
+  assert.deepEqual(parseStrings(undefined, validKeys), {});
+  assert.deepEqual(parseStrings(null, validKeys), {});
+  // A recognised key passes through verbatim.
+  assert.deepEqual(parseStrings({ "a.b": "Hi" }, validKeys), { "a.b": "Hi" });
+  // Wrong shapes / non-string values / unrecognised keys -> clear errors.
+  assert.throws(() => parseStrings([], validKeys), /'strings' must be an object/);
+  assert.throws(() => parseStrings({ "a.b": 5 }, validKeys), /'strings\.a\.b' must be a string/);
+  assert.throws(() => parseStrings({ "a.bb": "Hi" }, validKeys), /unknown 'strings' key 'a\.bb'/);
+  // A key unrelated to any real one still fails, without a bogus suggestion.
+  assert.throws(
+    () => parseStrings({ "totally.unrelated.key": "Hi" }, validKeys),
+    /unknown 'strings' key 'totally\.unrelated\.key'/
+  );
+});
+
+test("scadpub's own strings, once defined, must resolve in src/locales/en.json", () => {
+  // Guards KNOWN_TOP_LEVEL_KEYS/parseStrings drift the same way the top-level
+  // key test above guards KNOWN_TOP_LEVEL_KEYS: any 'strings' override the
+  // dogfood config someday adds must name a real catalogue key.
+  const config = JSON.parse(
+    readFileSync(join(HERE, "..", "scadpub.config.json"), "utf-8")
+  );
+  const en = JSON.parse(
+    readFileSync(join(HERE, "..", "src", "locales", "en.json"), "utf-8")
+  );
+  for (const key of Object.keys(config.strings ?? {}))
+    assert.ok(key in en, `scadpub.config.json 'strings.${key}' is not a known catalogue key`);
 });
 
 test("parseEnumHint ignores single-item and non-enum hints", () => {

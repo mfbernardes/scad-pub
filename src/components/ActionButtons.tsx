@@ -12,6 +12,7 @@
 import { useAppActions } from "../lib/appActions";
 import { Button } from "./ui/button";
 import { Download as DownloadIcon, Image as ImageIcon, Link2 as LinkIcon } from "lucide-react";
+import { t } from "../lib/i18n";
 
 interface Props {
   /** A successful render that still matches the live controls (see
@@ -26,6 +27,9 @@ interface Props {
 export function ActionButtons({ canExport, modelFormat, onSavePng }: Props) {
   const { exportModel, copyLink } = useAppActions();
   const fmt = modelFormat.toUpperCase();
+  // Same key drives both the visible label and the aria-label, so they never
+  // drift apart — scripts/smoke.mjs selects [aria-label^="Download "].
+  const downloadLabel = t("action.download", { format: fmt });
 
   return (
     <>
@@ -37,15 +41,15 @@ export function ActionButtons({ canExport, modelFormat, onSavePng }: Props) {
         className="hover:bg-primary hover:brightness-[1.08]"
         onClick={exportModel}
         disabled={!canExport}
-        aria-label={`Download ${fmt}`}
+        aria-label={downloadLabel}
       >
-        <DownloadIcon size={16} /> Download {fmt}
+        <DownloadIcon size={16} /> {downloadLabel}
       </Button>
-      <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!canExport} aria-label="Save image">
-        <ImageIcon size={16} /> Image
+      <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!canExport} aria-label={t("action.saveImage")}>
+        <ImageIcon size={16} /> {t("action.image")}
       </Button>
-      <Button size="sm" variant="ghost" onClick={copyLink} aria-label="Copy share link">
-        <LinkIcon size={16} /> Share
+      <Button size="sm" variant="ghost" onClick={copyLink} aria-label={t("action.copyShareLink")}>
+        <LinkIcon size={16} /> {t("action.share")}
       </Button>
     </>
   );

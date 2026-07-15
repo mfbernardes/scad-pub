@@ -383,6 +383,15 @@ export interface Schema {
   lang?: string;
   /** Document / manifest text direction. Default "ltr". */
   dir?: "ltr" | "rtl" | "auto";
+  /**
+   * Optional per-deployment UI text overrides (config's `strings` key), keyed
+   * by the same dot-namespaced catalogue keys as src/locales/en.json (e.g.
+   * "action.image", plural variants like "foo.count#other"). Validated at
+   * build time (scripts/lib/config-parsers.mjs's parseStrings) so every key
+   * must exist in the English bundle. Consulted first by src/lib/i18n.ts's
+   * `t`/`tn`, ahead of the active/English bundles. Empty object when unset.
+   */
+  strings?: Record<string, string>;
   /** Optional help content shown in the Help modal. When null, a generic,
    *  project-agnostic default is used. */
   help: HelpContent | null;

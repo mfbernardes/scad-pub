@@ -83,6 +83,7 @@ These keys add copy and third-party notices to the generated app:
 - **`help`**: optional Help dialog content. Use `sections` for a single pane or `tabs` for a tabbed guide. Omit it for a generic default. See [Help content](#help-content-help)
 - **`notices`**: see [Notice badges](#notice-badges-notices)
 - **`licenses`**: optional list of extra third-party software/license notices. ScadPub appends them to the built-in open-source attributions in the ⓘ panel. See [Open-source notices](#open-source-notices-licenses)
+- **`strings`**: optional per-deployment overrides of the built-in UI text. See [Localization](#localization-strings)
 
 Missing `source`, `assets`, design, `logo`, or design-`icon` paths fail the build with a clear error. An **unknown top-level key** also fails the build. A whole-key typo like `"popups"` or `"fontfallback"` fails rather than being silently ignored. Add a `"$schema"` key for editor tooling if you want; it is allowed.
 
@@ -403,6 +404,39 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 Omit `notices`, or set it to `[]`, and no marker categories are recognised. Design echoes appear only in the raw log. The bundled example config (`scadpub.config.json`) opts in with `alert` and `note` categories. The example `tag` design echoes them in specific, parameter-driven situations so you can see the badges appear.
 
 > **Hardcoded, not configurable:** OpenSCAD's own `WARNING:` lines surface as warning messages, and `assert()` failures (`ERROR: Assertion …`) surface as a message **and** an `asserts` count badge. These work regardless of `notices`.
+
+## Localization (`strings`)
+
+ScadPub's own UI chrome (buttons, banners, loading/failure copy — everything
+that isn't your design's parameter labels) is picked from a bundled text
+catalogue selected by [`lang`](#app-identity-and-pwa): `"de"` and BCP-47 tags
+whose primary subtag is `"de"` (e.g. `"de-AT"`) get the German catalogue;
+everything else falls back to English. `strings` lets a deployment override
+individual entries — to fix a word choice, retarget copy for a specific
+audience, or add a language the app doesn't bundle yet (in which case
+`strings` is the *entire* translation, since there's no matching bundle to
+fall back into except English) — without forking the app:
+
+```jsonc
+{
+  "lang": "de",
+  "strings": {
+    "action.share": "Weitergeben"
+  }
+}
+```
+
+Each key is looked up ahead of the active bundle and the English bundle, so an
+override always wins. The full set of valid keys — and their current English
+text, which doubles as the fallback for every unset key/locale — lives in
+[`src/locales/en.json`](../src/locales/en.json); `src/locales/de.json` is the
+bundled German catalogue. A `strings` key that isn't in `en.json` fails the
+build (with a "did you mean" suggestion for a likely typo).
+
+Two conventions to know when writing overrides:
+
+- **Plural forms** are separate key variants with a CLDR category suffix, e.g. `"foo.count#one"` / `"foo.count#other"`. Override the specific variant(s) you want to change, not a bare `"foo.count"` key
+- **Placeholders** are `{name}` tokens interpolated at render time, e.g. `"action.download"` is `"Download {format}"`. Keep every placeholder from the original string in your override — the app doesn't validate this, so a dropped placeholder silently loses that value
 
 ## Help content (`help`)
 
