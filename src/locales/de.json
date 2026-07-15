@@ -7,6 +7,8 @@
   "stale.updating": "Wird aktualisiert …",
   "stale.ariaUpdating": "Vorschau wird aktualisiert",
   "stale.ariaOutOfDate": "Vorschau ist veraltet — jetzt aktualisieren",
+  "stale.pauseReason.heavy": "Die Live-Vorschau ist pausiert — dieses Design braucht länger zum Erstellen.",
+  "stale.pauseReason.manualDesign": "Die Live-Vorschau ist pausiert — dieses Design startet im manuellen Modus.",
 
   "action.download": "{format} herunterladen",
   "action.image": "Bild",
@@ -63,6 +65,10 @@
   "hint.rotateZoomMouse": "Ziehen zum Drehen · Scrollen zum Zoomen",
   "hint.rotateZoomTouch": "Ziehen zum Drehen · Zwei-Finger-Zoom",
   "hint.dragForSettings": "Nach oben ziehen für alle Einstellungen",
+
+  "sheet.detentPeek": "Einstellungsleiste eingeklappt",
+  "sheet.detentHalf": "Einstellungsleiste halb geöffnet",
+  "sheet.detentFull": "Einstellungsleiste vollständig geöffnet",
 
   "picker.search": "Designs durchsuchen …",
   "picker.current": "Aktuell",

@@ -18,10 +18,21 @@ import {
 } from "react";
 import { tapFeedback } from "../lib/haptics";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
+import { t } from "../lib/i18n";
 
 export type SheetDetent = "peek" | "half" | "full";
 
 const DETENT_ORDER: SheetDetent[] = ["peek", "half", "full"];
+// i18n keys for the polite live-region announcement fired on every detent
+// change (drag-snap, tap-cycle, or Arrow Up/Down) — see the announcement
+// effect below. Not fired on mount (only on a subsequent change), so a
+// visitor who lands directly on Half (guided policy — see sheetDetent.ts)
+// doesn't hear an announcement before they've done anything.
+const DETENT_ANNOUNCE_KEY: Record<SheetDetent, string> = {
+  peek: "sheet.detentPeek",
+  half: "sheet.detentHalf",
+  full: "sheet.detentFull",
+};
 // Slightly above 50% to clear browser chrome at the bottom.
 export const HALF_VH_RATIO = 0.52;
 // Movement (px) past which a pointer interaction counts as a drag, not a tap.
@@ -56,6 +67,20 @@ interface Props {
    *  parent can anchor other fixed content (e.g. the output console overlay)
    *  exactly above the real peek row instead of a static guess. */
   onPeekHeightChange?: (heightPx: number) => void;
+  /** Fires at the start of any handle interaction — pointer-down (drag start;
+   *  a plain tap also passes through pointer-down before its click) — so a
+   *  caller showing a one-time hint (see `hint` below) can dismiss it on the
+   *  visitor's first touch of the handle, not just on a settled detent
+   *  change. Keyboard resizing (Arrow Up/Down) doesn't call this separately —
+   *  it already changes the detent, which the parent's onDetentChange
+   *  handles dismissing from. */
+  onHandleInteract?: () => void;
+  /** A one-time hint rendered next to the handle (see AppShell's
+   *  `sheetHintVisible` — the guided+half onboarding hint), or undefined to
+   *  render nothing. Purely decorative: `aria-hidden` and non-interactive
+   *  (`pointer-events-none`) so it can never intercept a tap/drag meant for
+   *  the handle underneath it. */
+  hint?: ReactNode;
 }
 
 export function BottomSheet({
@@ -66,6 +91,8 @@ export function BottomSheet({
   bottomInset = 0,
   onFollow,
   onPeekHeightChange,
+  onHandleInteract,
+  hint,
 }: Props) {
   // Detent is controlled by the parent; setDetent forwards to it.
   const setDetent = onDetentChange;
@@ -87,11 +114,22 @@ export function BottomSheet({
   onFollowRef.current = onFollow;
 
   // A short haptic tick whenever the sheet settles on a new detent (drag-snap,
-  // tap-cycle or keyboard) — Android only; silent on iOS / reduced-motion.
+  // tap-cycle or keyboard) — Android only; silent on iOS / reduced-motion —
+  // plus a polite SR announcement of the new state (WCAG: a detent change
+  // moves a large amount of on-screen content without a focus change, which a
+  // screen-reader user gets no other signal of). Both skip the very first
+  // render — a visitor who lands directly on Half via the guided policy
+  // shouldn't hear an announcement, or feel a tick, before they've touched
+  // anything.
   const didMount = useRef(false);
+  const [detentAnnouncement, setDetentAnnouncement] = useState("");
   useEffect(() => {
-    if (didMount.current) tapFeedback();
-    else didMount.current = true;
+    if (didMount.current) {
+      tapFeedback();
+      setDetentAnnouncement(t(DETENT_ANNOUNCE_KEY[detent]));
+    } else {
+      didMount.current = true;
+    }
   }, [detent]);
   // Effective peek height: the measured header height, or the fallback prop
   // until the first measurement lands.
@@ -189,7 +227,8 @@ export function BottomSheet({
     setDragging(true);
     // Capture on the handle itself so move/up keep arriving even off-element.
     e.currentTarget.setPointerCapture(e.pointerId);
-  }, [heightFor]);
+    onHandleInteract?.();
+  }, [heightFor, onHandleInteract]);
 
   // Apply the live drag height imperatively (rAF-batched direct DOM write),
   // bypassing React render for pointer-move frequency updates. Only called
@@ -401,7 +440,7 @@ export function BottomSheet({
         <div className="sheet-frame">
           {/* Drag handle — single visible control; tap cycles, arrow keys resize. */}
           <div
-            className="sheet-handle"
+            className="sheet-handle relative"
             role="button"
             tabIndex={0}
             aria-label={`Parameter panel — ${detent}. Tap to cycle, Arrow Up/Down to resize`}
@@ -413,12 +452,32 @@ export function BottomSheet({
             onKeyDown={onHandleKeyDown}
           >
             <div className="sheet-handle__bar" aria-hidden />
+            {/* One-time onboarding hint (AppShell's guided+half policy) —
+                aria-hidden + pointer-events-none: purely decorative, and must
+                never steal a tap/drag meant for the handle beneath it. */}
+            {hint && (
+              <span
+                className="sheet-hint pointer-events-none absolute -top-1 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-(--radius-sm) border border-(color:--glass-border) bg-(--glass-bg) px-2 py-1 text-[0.72rem] text-muted-foreground shadow-(--elevation) transition-opacity duration-300 motion-reduce:transition-none"
+                aria-hidden="true"
+              >
+                {hint}
+              </span>
+            )}
           </div>
 
           <div className="sheet-body">
             {children(detent, expand)}
           </div>
         </div>
+      </div>
+
+      {/* Polite live region: announces the settled detent on every change
+          (drag-snap, tap-cycle, Arrow Up/Down) — a WCAG signal for screen-
+          reader users, who get no other cue that a large amount of on-screen
+          content just moved. Silent on mount (see the announcement effect
+          above) and visually hidden (sr-only). */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {detentAnnouncement}
       </div>
     </>
   );

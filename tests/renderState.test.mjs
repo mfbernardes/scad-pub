@@ -12,6 +12,7 @@ import {
   isSnapshotCurrent,
   isSnapshotExportable,
   isStaleEpoch,
+  nextPauseReason,
   resolveRenderCommit,
   shouldFireInitialRender,
 } from "../src/lib/renderState.ts";
@@ -206,4 +207,40 @@ test("shouldFireInitialRender: the predicate takes no readiness input at all", (
   // only a render itself produces, deadlocking heavy designs. The fix is
   // structural — this predicate has no readiness parameter to gate on.
   assert.equal(shouldFireInitialRender.length, 2);
+});
+
+// ---- nextPauseReason (PR4: live-preview pause reason) ----
+
+test("nextPauseReason: a design switch resolves from scratch, ignoring `current`", () => {
+  assert.equal(nextPauseReason(null, { type: "design-switch", heavy: true }), "manual-design");
+  assert.equal(nextPauseReason(null, { type: "design-switch", heavy: false }), null);
+  // Switching TO a light design always clears whatever reason a previous
+  // heavy design (or a brake) left behind.
+  assert.equal(nextPauseReason("heavy", { type: "design-switch", heavy: false }), null);
+  assert.equal(nextPauseReason("manual-design", { type: "design-switch", heavy: false }), null);
+  // Switching TO a heavy design always reports "manual-design", even if the
+  // previous design's reason was "heavy" (a fresh design view is a fresh
+  // manual start, not a leftover brake).
+  assert.equal(nextPauseReason("heavy", { type: "design-switch", heavy: true }), "manual-design");
+});
+
+test("nextPauseReason: the heavy brake always reports \"heavy\", regardless of `current`", () => {
+  assert.equal(nextPauseReason(null, { type: "heavy-brake" }), "heavy");
+  assert.equal(nextPauseReason("manual-design", { type: "heavy-brake" }), "heavy");
+  assert.equal(nextPauseReason("heavy", { type: "heavy-brake" }), "heavy");
+});
+
+test("nextPauseReason: re-enabling auto-render always clears the reason", () => {
+  assert.equal(nextPauseReason("heavy", { type: "auto-render-toggle", enabled: true }), null);
+  assert.equal(nextPauseReason("manual-design", { type: "auto-render-toggle", enabled: true }), null);
+  assert.equal(nextPauseReason(null, { type: "auto-render-toggle", enabled: true }), null);
+});
+
+test("nextPauseReason: turning auto-render off (the user's own choice) leaves the reason as-is", () => {
+  // In practice this is always called with `current === null` (nothing else
+  // sets a reason without also turning auto-render off itself), but the
+  // reducer is still exercised directly against every `current` value so the
+  // "no reason for a user's own choice" contract can't silently regress.
+  assert.equal(nextPauseReason(null, { type: "auto-render-toggle", enabled: false }), null);
+  assert.equal(nextPauseReason("heavy", { type: "auto-render-toggle", enabled: false }), "heavy");
 });

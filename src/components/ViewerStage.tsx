@@ -7,6 +7,7 @@
 import { lazy, Suspense, type ReactNode, type RefObject } from "react";
 import type { Design, RenderResult } from "../openscad/types";
 import type { Values } from "../lib/presets";
+import type { PauseReason } from "../lib/renderState";
 import type { ViewerHandle, Dimensions } from "./Viewer";
 import type { ViewName } from "./views";
 import type { ComputedInfo } from "../lib/computedInfo";
@@ -31,6 +32,9 @@ interface Props {
   rendering: boolean;
   autoRender: boolean;
   stalePreview: boolean;
+  /** Why live preview is paused, forwarded to StaleBanner's explanation line
+   *  (see renderState.ts's PauseReason doc). */
+  pauseReason: PauseReason;
   theme: "dark" | "light";
   selectedPreset: string;
   reframeOnPreset?: boolean;
@@ -54,6 +58,7 @@ export function ViewerStage({
   rendering,
   autoRender,
   stalePreview,
+  pauseReason,
   theme,
   selectedPreset,
   reframeOnPreset,
@@ -99,6 +104,7 @@ export function ViewerStage({
         autoRender={autoRender}
         rendering={rendering}
         stalePreview={stalePreview}
+        pauseReason={pauseReason}
         onRender={render}
       />
 

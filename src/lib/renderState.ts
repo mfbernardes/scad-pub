@@ -144,3 +144,46 @@ export function resolveRenderCommit(
 export function shouldFireInitialRender(alreadyFired: boolean, autoRender: boolean): boolean {
   return !alreadyFired && !autoRender;
 }
+
+/**
+ * Why live preview is currently paused (auto-render off), for the UI to
+ * explain rather than just show a bare "Update" button:
+ *  - "heavy": the heavy-render brake fired — a successful, uncached render
+ *    took longer than `heavyMs`, so useRenderPipeline auto-paused it.
+ *  - "manual-design": the design is flagged `heavy` and started in manual
+ *    mode (no brake has necessarily fired yet this session).
+ *  - null: live preview is on, or the user turned it off themselves — their
+ *    own choice needs no explanation.
+ */
+export type PauseReason = "heavy" | "manual-design" | null;
+
+/** The event vocabulary `nextPauseReason` reduces over — the three places
+ * useRenderPipeline's `pauseReason` can change. Modeled as a pure reducer
+ * (current + event -> next) rather than three inline setPauseReason calls so
+ * every transition is independently testable without mounting the hook. */
+export type PauseReasonEvent =
+  // A design switch (or the pipeline's own initial mount, which reduces over
+  // `null` the same way) — resolves from scratch, ignoring `current`.
+  | { type: "design-switch"; heavy: boolean }
+  // The heavy-render brake just fired.
+  | { type: "heavy-brake" }
+  // The user toggled auto-render (Live preview) themselves. Turning it ON
+  // always clears the reason — whatever paused it no longer applies once
+  // live preview is back on. Turning it OFF is the user's own choice, which
+  // carries no "why" to show, but is otherwise a no-op on `current`: nothing
+  // in this codebase invokes this event with `enabled: false` while a reason
+  // is already set (see useRenderPipeline's setAutoRender wrapper), so this
+  // branch never actually has a non-null `current` to preserve in practice —
+  // it's still handled explicitly rather than assumed unreachable.
+  | { type: "auto-render-toggle"; enabled: boolean };
+
+export function nextPauseReason(current: PauseReason, event: PauseReasonEvent): PauseReason {
+  switch (event.type) {
+    case "design-switch":
+      return event.heavy ? "manual-design" : null;
+    case "heavy-brake":
+      return "heavy";
+    case "auto-render-toggle":
+      return event.enabled ? null : current;
+  }
+}

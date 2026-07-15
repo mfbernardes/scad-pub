@@ -59,7 +59,7 @@ const installHintFlag = makeOnceFlag("install.hint.seen");
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
-  const { settingsView, setSettingsView } = useExperience();
+  const { experienceMode, settingsView, setSettingsView } = useExperience();
   const { canInstall, promptInstall } = useInstallPrompt();
   const online = useOnline();
   const {
@@ -119,6 +119,7 @@ export default function App() {
     autoRender,
     setAutoRender,
     stalePreview,
+    pauseReason,
     exportable,
     snapshot,
     bundleStale,
@@ -444,11 +445,13 @@ export default function App() {
           ready={ready}
           autoRender={autoRender}
           stalePreview={stalePreview}
+          pauseReason={pauseReason}
           exportable={exportable}
           theme={theme}
           themeMode={themeMode}
           openPickerSignal={openPickerSignal}
           settingsView={settingsView}
+          experienceMode={experienceMode}
         />
       </AppActionsProvider>
     </>

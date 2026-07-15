@@ -7,6 +7,8 @@
   "stale.updating": "Updating…",
   "stale.ariaUpdating": "Updating the preview",
   "stale.ariaOutOfDate": "Preview out of date — update now",
+  "stale.pauseReason.heavy": "Live preview is paused — this design takes a while to build.",
+  "stale.pauseReason.manualDesign": "Live preview is paused — this design starts in manual mode.",
 
   "action.download": "Download {format}",
   "action.image": "Image",
@@ -63,6 +65,10 @@
   "hint.rotateZoomMouse": "Drag to rotate · scroll to zoom",
   "hint.rotateZoomTouch": "Drag to rotate · pinch to zoom",
   "hint.dragForSettings": "Drag up for all settings",
+
+  "sheet.detentPeek": "Parameter panel collapsed",
+  "sheet.detentHalf": "Parameter panel half open",
+  "sheet.detentFull": "Parameter panel fully open",
 
   "picker.search": "Search designs…",
   "picker.current": "Current",

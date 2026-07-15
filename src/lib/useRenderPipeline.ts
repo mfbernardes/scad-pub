@@ -33,8 +33,10 @@ import {
   isSnapshotCurrent,
   isSnapshotExportable,
   isStaleEpoch,
+  nextPauseReason,
   resolveRenderCommit,
   shouldFireInitialRender,
+  type PauseReason,
   type RenderSnapshot,
 } from "./renderState";
 
@@ -110,11 +112,27 @@ export function useRenderPipeline({
   // callback and disturb the debounce/auto-render invariants.
   const prevRenderedValuesRef = useRef<Values>(initialValues);
   const [ready, setReady] = useState(false);
-  const [autoRender, setAutoRender] = useState(!design.heavy);
+  const [autoRender, setAutoRenderState] = useState(!design.heavy);
   // Mirrored on every render so async work (doRender) reads the latest value
   // without retriggering the effects that depend on it.
   const autoRenderRef = useRef(autoRender);
   autoRenderRef.current = autoRender;
+  // Why live preview is currently off — see renderState.ts's PauseReason doc.
+  // Seeded the same way a design switch resolves it (nextPauseReason's
+  // "design-switch" branch ignores `current`, so seeding from `null` here is
+  // equivalent to resetForDesign's own call below).
+  const [pauseReason, setPauseReason] = useState<PauseReason>(() =>
+    nextPauseReason(null, { type: "design-switch", heavy: !!design.heavy })
+  );
+  // The external setter (returned below, wired to the "Live preview" toggle):
+  // wraps the raw setAutoRenderState so turning it back on always clears
+  // pauseReason too — re-enabling live preview means whatever paused it no
+  // longer applies, regardless of whether that was the heavy brake or a
+  // heavy design's manual start.
+  const setAutoRender = useCallback((next: boolean) => {
+    setAutoRenderState(next);
+    setPauseReason((prev) => nextPauseReason(prev, { type: "auto-render-toggle", enabled: next }));
+  }, []);
 
   // Bumped by resetForDesign (design switch) and invalidate (render-input
   // invalidation). doRender captures the epoch at render start and compares it
@@ -232,7 +250,8 @@ export function useRenderPipeline({
         if (r.staleDefines?.length) setBundleStale(true);
         setRendering(false);
         if (r.ok && !r.cached && r.ms > heavyMs && autoRenderRef.current) {
-          setAutoRender(false);
+          setAutoRenderState(false);
+          setPauseReason((prev) => nextPauseReason(prev, { type: "heavy-brake" }));
           setAnnouncement(
             t("toast.heavyRenderPaused", { seconds: (r.ms / 1000).toFixed(1) })
           );
@@ -357,7 +376,8 @@ export function useRenderPipeline({
     setSnapshot(null);
     setRendering(false);
     lastKeyRef.current = "";
-    setAutoRender(!next.heavy);
+    setAutoRenderState(!next.heavy);
+    setPauseReason((prev) => nextPauseReason(prev, { type: "design-switch", heavy: !!next.heavy }));
     setRenderMetrics(emptyMetrics);
     initialRenderFiredRef.current = false;
     // Seed the diff baseline with the new design's defaults — what App resets
@@ -376,6 +396,7 @@ export function useRenderPipeline({
     autoRender,
     setAutoRender,
     stalePreview,
+    pauseReason,
     isCurrent,
     exportable,
     snapshot,

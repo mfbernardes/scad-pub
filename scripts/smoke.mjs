@@ -675,10 +675,11 @@ async function checkSignageDesign({ page, check, ids }) {
   await waitRendered(page, "arrow");
 }
 
-// M7 + M16 (docs/architecture-review.md): responsive layout mounting and
-// mobile bottom-sheet focus behavior. These need a real mobile-sized
-// viewport/context (the default page above is desktop-sized), so this opens
-// its own context rather than reusing `page`. Covers:
+// M7 + M16 (docs/architecture-review.md) + PR4 (guided mobile sheet policy):
+// responsive layout mounting and mobile bottom-sheet focus behavior. These
+// need a real mobile-sized viewport/context (the default page above is
+// desktop-sized), so this opens its own context rather than reusing `page`.
+// Covers:
 //  - M7: exactly one interactive layout (ParamForm) is in the DOM at a given
 //    breakpoint, and a breakpoint change preserves active tab, search text,
 //    search focus, and (on the way back) the sheet's detent.
@@ -686,6 +687,11 @@ async function checkSignageDesign({ page, check, ids }) {
 //    (not `inert`); at Full it's `inert` and focus is trapped inside the
 //    sheet — Tab never lands on a covered background control — with Escape
 //    collapsing back out and focus returning to the sheet.
+//  - PR4: the dogfood config sets guided experience + `mobileInitialSheet:
+//    "half"` (scadpub.config.json), so a fresh mobile visit lands the sheet
+//    at Half (not the long-standing Peek default) with a one-time
+//    "Drag up for all settings" hint on the handle — dismissed by the first
+//    detent change and never shown again (once-flag), even across a reload.
 async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
   console.log("=== responsive layout: single mounted tree + state across a breakpoint change (M7) ===");
   const context = await browser.newContext({
@@ -708,13 +714,16 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
       "mobile viewport mounts only the mobile layout tree"
     );
 
-    // Raise the sheet to Half and switch to the Parameters tab (tapping a tab
-    // at Peek also raises it, but starting from Half keeps this deterministic
-    // regardless of the landing tab). The design may land on Presets (bundled
-    // presets), so ParamForm only mounts once Parameters is active — Radix
-    // Tabs unmounts inactive tab content.
-    await page.locator(".sheet-handle").click(); // peek -> half
-    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
+    // PR4: guided experience + mobileInitialSheet "half" (the dogfood config)
+    // lands a fresh visit's sheet at Half, not Peek, with the one-time handle
+    // hint showing.
+    check((await page.locator(".bottom-sheet--half").count()) === 1, "guided+half policy starts the sheet at half");
+    check((await page.locator(".sheet-hint").count()) === 1, "one-time sheet hint shows on first load");
+
+    // Switch to the Parameters tab (the sheet is already at Half via the
+    // policy above, so no handle tap is needed to raise it here). The design
+    // may land on Presets (bundled presets), so ParamForm only mounts once
+    // Parameters is active — Radix Tabs unmounts inactive tab content.
     await page.getByRole("tab", { name: paramsTabName }).first().click();
     await page.waitForSelector(".param-form", { timeout: 3000 });
     check((await page.locator(".param-form").count()) === 1, "exactly one ParamForm is mounted");
@@ -769,6 +778,9 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
       await page.waitForTimeout(50);
     }
     check((await page.locator(".bottom-sheet--peek").count()) === 1, "sheet returned to peek");
+    // PR4: the loop above changed detents at least once (half -> full and/or
+    // full -> peek) — the one-time hint must be dismissed by now.
+    check((await page.locator(".sheet-hint").count()) === 0, "sheet hint is dismissed after a detent change");
     check(
       !(await page.locator(".app-shell__mobile-background").getAttribute("inert").catch(() => null)),
       "background is not inert at peek"
@@ -825,6 +837,21 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
     check(
       !(await page.locator(".app-shell__mobile-background").getAttribute("inert").catch(() => null)),
       "Escape collapses full and un-inerts the background"
+    );
+
+    // PR4: the hint's once-flag is a persisted (localStorage) preference —
+    // reloading must not re-arm it, even though the guided+half policy still
+    // lands the sheet at Half every time (it isn't itself persisted).
+    await page.reload({ waitUntil: "load" });
+    await settleFirstVisit(page);
+    await waitRenderDone(page).catch(() => {});
+    check(
+      (await page.locator(".bottom-sheet--half").count()) === 1,
+      "guided+half policy still starts the sheet at half after reload"
+    );
+    check(
+      (await page.locator(".sheet-hint").count()) === 0,
+      "sheet hint does not return after reload (once-flag)"
     );
   } finally {
     await context.close();

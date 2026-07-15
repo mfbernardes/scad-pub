@@ -9,8 +9,13 @@ import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
 import type { RenderMetrics } from "../lib/renderMetrics";
-import type { SettingsView } from "../lib/useExperience";
+import type { SettingsView, ExperienceMode } from "../lib/useExperience";
+import type { PauseReason } from "../lib/renderState";
 import type { ViewerHandle, Dimensions } from "./Viewer";
+import { initialSheetDetent } from "../lib/sheetDetent";
+import { makeOnceFlag } from "../lib/prefs";
+import { pauseReasonText } from "../lib/pauseReason";
+import { t } from "../lib/i18n";
 
 // Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
 // ending at the tab underline — no sliver of the tab's content.
@@ -22,6 +27,13 @@ const EMPTY_LOG: string[] = [];
 // padding/border lands once.
 const ACTION_CLUSTER_CLASS =
   "action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation)";
+// One-time onboarding hint gate for the sheet handle (see sheetHintVisible
+// below) — a fresh key, distinct from the pre-existing hint.* i18n strings it
+// reuses text from, so it never collides with an unrelated once-flag.
+const sheetHintFlag = makeOnceFlag("hint.sheet.v1");
+// How long the sheet-handle hint stays up before auto-dismissing if the
+// visitor never touches the handle.
+const SHEET_HINT_TIMEOUT_MS = 5000;
 
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
@@ -81,6 +93,11 @@ interface Props {
   ready: boolean;
   autoRender: boolean;
   stalePreview: boolean;
+  /** Why live preview is currently paused ("heavy" brake / "manual-design"
+   *  start / null — see renderState.ts's PauseReason doc). Flows to
+   *  ViewerStage -> StaleBanner's explanation line and into the Messages
+   *  Notices list below. */
+  pauseReason: PauseReason;
   /** A successful render that still matches the live controls — the only
    * state Download/Image may act on. See docs/architecture-review.md H1. */
   exportable: boolean;
@@ -91,6 +108,10 @@ interface Props {
   /** Essentials/all settings-view (see src/lib/useExperience.ts). Flows down
    *  to the Customize tab in both layouts; the setter joins AppActions. */
   settingsView: SettingsView;
+  /** Guided/standard experience mode (see src/lib/useExperience.ts). Read
+   *  only for the mobile sheet's initial-detent policy (sheetDetent.ts) —
+   *  guided mode never otherwise changes AppShell's own behavior. */
+  experienceMode: ExperienceMode;
 }
 
 export const AppShell = memo(function AppShell({
@@ -113,11 +134,13 @@ export const AppShell = memo(function AppShell({
   ready,
   autoRender,
   stalePreview,
+  pauseReason,
   exportable,
   theme,
   themeMode,
   openPickerSignal,
   settingsView,
+  experienceMode,
 }: Props) {
   const actions = useAppActions();
   const desktopViewerRef = useRef<ViewerHandle>(null);
@@ -153,7 +176,42 @@ export const AppShell = memo(function AppShell({
   outputOpenRef.current = outputOpen;
   // Sheet detent state (peek/half/full). On mobile the output overlay now covers
   // the sheet, so it no longer has to be positioned relative to the detent.
-  const [sheetDetent, setSheetDetent] = useState<SheetDetent>("peek");
+  // Initial value: the guided+half policy (sheetDetent.ts) — Peek unless the
+  // visitor is in guided experience, the config opts in
+  // (ui.experience.mobileInitialSheet === "half"), and the viewport is tall
+  // enough not to be a landscape-short phone. Desktop mounts never read this
+  // state at all (isMobile below gates which layout renders), so evaluating
+  // it here unconditionally costs nothing when the initial viewport is
+  // desktop-sized.
+  const [sheetDetent, setSheetDetent] = useState<SheetDetent>(() =>
+    initialSheetDetent(experienceMode, schema, window.innerHeight)
+  );
+
+  // One-time "Drag up for all settings" hint on the sheet handle: shown only
+  // when the guided+half policy actually landed the sheet at Half on this
+  // mount AND the visitor hasn't seen it before (sheetHintFlag). Computed
+  // once at mount (sheetDetent's own initializer already resolved the
+  // policy) — a later detent change or config change never re-arms it this
+  // session.
+  const [sheetHintVisible, setSheetHintVisible] = useState(
+    () => sheetDetent === "half" && !sheetHintFlag.seen()
+  );
+  // Dismiss the hint and remember it was seen, so it never shows again on a
+  // later visit. Safe to call unconditionally (e.g. on every detent change,
+  // every handle touch) — a no-op once already dismissed.
+  const dismissSheetHint = useCallback(() => {
+    setSheetHintVisible((visible) => {
+      if (visible) sheetHintFlag.remember();
+      return false;
+    });
+  }, []);
+  // Auto-dismiss after a few seconds if the visitor never touches the handle,
+  // so the hint doesn't linger indefinitely over the model.
+  useEffect(() => {
+    if (!sheetHintVisible) return;
+    const timer = setTimeout(dismissSheetHint, SHEET_HINT_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [sheetHintVisible, dismissSheetHint]);
 
   // Panel tab + search state (see M7): hoisted here — above the desktop/mobile
   // split below — so ONLY the active layout mounts (ParamPanel or SheetTabs,
@@ -256,9 +314,23 @@ export const AppShell = memo(function AppShell({
   }, [schema.fontFaces, userFiles]);
 
   // Parse the log once here; the OutputConsole (Notices tab count chips) reads
-  // this derived data instead of re-parsing it.
+  // this derived data instead of re-parsing it. Kept as the RAW model
+  // diagnostics — the auto-open/auto-close effects below (hasNotices,
+  // hasProblem) intentionally key off this, not outputDiagnostics, so a
+  // pause explanation (which is about the render pipeline, not the model)
+  // never itself triggers those transitions.
   const diagnostics = useMemo(() => parseDiagnostics(log, notices), [log, notices]);
   const badges = useMemo(() => countBadges(log, notices), [log, notices]);
+  // What OutputConsole's Notices tab actually renders: the model's own
+  // diagnostics, plus — least-invasively, as an extra notice row rather than
+  // a new console surface — an explanation of a paused live preview, so a
+  // visitor who missed the StaleBanner's toast/explanation still finds the
+  // "why" in Messages. Deliberately NOT folded into `diagnostics` itself
+  // (see the comment above).
+  const outputDiagnostics = useMemo(
+    () => (pauseReason ? [{ level: "notice" as const, text: pauseReasonText(pauseReason) }, ...diagnostics] : diagnostics),
+    [pauseReason, diagnostics]
+  );
   // Rows from `echo("@info", label, unit, value)` — internally-calculated
   // values the design surfaced at render time (see lib/computedInfo.ts).
   const computedInfo = useMemo(() => parseComputedInfo(log), [log]);
@@ -293,7 +365,8 @@ export const AppShell = memo(function AppShell({
   const handleDetentChange = useCallback((d: SheetDetent) => {
     setSheetDetent(d);
     if (d !== "peek") setOutputOpen(false);
-  }, []);
+    dismissSheetHint();
+  }, [dismissSheetHint]);
 
   // Size the mobile viewer to follow the sheet's live height: write the sheet
   // height (px) into --sheet-follow-h, which sets the viewer's bottom edge (the
@@ -352,6 +425,7 @@ export const AppShell = memo(function AppShell({
     rendering,
     autoRender,
     stalePreview,
+    pauseReason,
     theme,
     selectedPreset,
     showDimensions,
@@ -373,7 +447,7 @@ export const AppShell = memo(function AppShell({
     view,
     onSelectView: handleSelectView,
   };
-  const outputProps = { log, diagnostics, badges, metrics: renderMetrics, open: outputOpen, onClose: closeOutput };
+  const outputProps = { log, diagnostics: outputDiagnostics, badges, metrics: renderMetrics, open: outputOpen, onClose: closeOutput };
   const actionButtonsProps = {
     canExport: exportable,
     modelFormat: schema.format,
@@ -515,6 +589,8 @@ export const AppShell = memo(function AppShell({
             onDetentChange={handleDetentChange}
             onFollow={handleSheetFollow}
             onPeekHeightChange={handleSheetPeekHeight}
+            onHandleInteract={dismissSheetHint}
+            hint={sheetHintVisible ? t("hint.dragForSettings") : undefined}
             peekHeight={PEEK_HEIGHT}
             bottomInset={safeAreaBottom}
           >
