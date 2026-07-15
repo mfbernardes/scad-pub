@@ -437,6 +437,114 @@ async function checkServiceWorker({ page, check, base }) {
 // of ui.showVarName), shared by the tag + signage checks.
 const paramRow = (page, name) => page.locator(`.param[data-param="${name}"]`);
 
+// Click the essentials/all settings-view segmented control (CustomizeTab /
+// SettingsViewToggle) — present only when the active design has at least one
+// @advanced param. No-op (rather than a throw) when it's absent, so callers
+// that run against a design/config without any advanced params stay safe.
+async function switchSettingsView(page, view) {
+  const label = view === "all" ? "All settings" : "Essential settings";
+  const btn = page.locator(".settings-view-toggle").getByRole("button", { name: label, exact: true });
+  if (await btn.count()) await btn.click();
+}
+
+// A standalone axe-core sweep (WCAG 2.1 AA, serious/critical only), reusable
+// outside the dedicated checkAxe() pass below — used by checkSettingsView to
+// confirm both the essentials and All settings states of the Customize tab
+// are accessible, not just the default state checkAxe() happens to catch.
+async function runAxe(page, check, label) {
+  await page.addScriptTag({
+    path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
+  });
+  const axeRes = await page.evaluate(async () =>
+    window.axe.run(document, {
+      resultTypes: ["violations"],
+      runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
+    })
+  );
+  const serious = axeRes.violations.filter((v) => ["serious", "critical"].includes(v.impact));
+  for (const v of serious)
+    console.log(`  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node(s)) -> ${v.nodes.map((n) => n.target.join(" ")).join("; ")}`);
+  check(serious.length === 0, `axe (${label}): ${serious.length} serious/critical violation(s)`);
+}
+
+// Essentials/all settings view (the essentials/beginner milestone): the
+// dogfood config's guided default (ui.experience.default) starts a FRESH
+// visitor on the essentials view, which hides every @advanced param — tag's
+// Quality section (facet_angle/facet_size). Must run before any other check
+// has touched the settingsView preference (it reads the still-fresh page
+// straight after the welcome popup is dismissed), and deliberately ends with
+// the choice persisted as "all" — later checks (bundled presets' Import/
+// Export row, the @showIf/@collapsed checks in checkTagDesign) expect the
+// full, ungated panel.
+async function checkSettingsView({ page, check, ids, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== settings view (essentials/all) ===");
+  await selectDesign(page, "tag");
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+
+  const toggle = page.locator(".settings-view-toggle");
+  check((await toggle.count()) === 1, "settings-view toggle shown for a design with @advanced params");
+  check(
+    (await toggle.getByRole("button", { name: "Essential settings" }).getAttribute("aria-pressed")) === "true",
+    "fresh visitor starts on the Essential settings view (config ui.experience.default)"
+  );
+
+  const facet = paramRow(page, "facet_angle");
+  check((await facet.count()) === 0, "essentials view: the @advanced facet_angle control isn't in the DOM at all");
+  const hiddenNote = page.locator(".settings-hidden-note");
+  check((await hiddenNote.count()) === 1, "hidden-settings note shown at the bottom of the form in essentials view");
+  const hiddenNoteText = ((await hiddenNote.textContent()) ?? "").trim();
+  check(/\b2\b/.test(hiddenNoteText), `hidden-settings note reports the right count (saw "${hiddenNoteText}")`);
+  await runAxe(page, check, "essentials view, tag Customize tab");
+
+  // A search term matching only a hidden (advanced) param surfaces the
+  // "N matching settings are in All settings — Show them" note; clicking it
+  // switches view and (via ParamForm's existing search-force-open behavior)
+  // reveals the match.
+  const search = page.locator("#param-search-input");
+  await search.fill("facet");
+  const searchNote = page.locator(".settings-search-note");
+  await searchNote.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await searchNote.count()) === 1, "search note shown when a query matches only hidden (essentials-demoted) settings");
+  await searchNote.getByRole("button", { name: "Show them" }).click();
+  await facet.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(
+    (await facet.count()) > 0 && (await facet.first().isVisible()),
+    "\"Show them\" switches to All settings and reveals the matching hidden setting"
+  );
+  check(
+    (await toggle.getByRole("button", { name: "All settings" }).getAttribute("aria-pressed")) === "true",
+    "toggle reflects the switch to All settings"
+  );
+  await search.fill("");
+  await search.press("Escape").catch(() => {});
+  await runAxe(page, check, "all settings view, tag Customize tab");
+
+  // The switch persists across a reload.
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "tag reloaded (settings view)");
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  check(
+    (await paramRow(page, "facet_angle").count()) > 0,
+    "the All-settings choice is honored (persisted) after a reload"
+  );
+  check(
+    (await page.locator(".settings-view-toggle").getByRole("button", { name: "All settings" }).getAttribute("aria-pressed")) === "true",
+    "toggle still reads All settings after reload"
+  );
+
+  // The toggle itself (not just the shortcut links) switches views.
+  await switchSettingsView(page, "essentials");
+  check(
+    (await paramRow(page, "facet_angle").count()) === 0,
+    "clicking \"Essential settings\" on the toggle hides facet_angle again"
+  );
+  // Leave the suite in All settings — the checks that follow (bundled
+  // presets' Import/Export row, checkTagDesign's @showIf/@collapsed checks)
+  // expect the full, ungated panel.
+  await switchSettingsView(page, "all");
+}
+
 // @showIf + @collapsed — exercised on the example "tag" design when present.
 // Param rows are located by their stable data-param hook, which exists
 // regardless of ui.showVarName, so this block runs in every config.
@@ -458,7 +566,11 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   await waitRendered(page, "tag reloaded");
   // Back to the Customize tab (the file-import test left the panel on Files).
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
-
+  // "Quality" (facet_angle/facet_size) is @advanced — the config's guided
+  // default starts in the essentials view, which hides it entirely. Switch to
+  // All settings so the @showIf/@collapsed checks below see it at all; the
+  // essentials-view behavior itself is covered by checkSettingsView.
+  await switchSettingsView(page, "all");
 
   // @collapsed: the "Quality" group starts folded; its params are hidden
   // until the group header is opened.
@@ -750,6 +862,7 @@ async function main() {
 
     const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName };
     await checkWelcomePopup(ctx);
+    await checkSettingsView(ctx);
     await checkFileImport(ctx);
     await checkThemeToggle(ctx);
     await checkIdleRenderCount(ctx);

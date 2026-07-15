@@ -3,14 +3,12 @@
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
+import type { SettingsView } from "../lib/useExperience";
 import { useAppActions } from "../lib/appActions";
-import { useDebounce } from "../lib/useDebounce";
 import type { PanelTab } from "../lib/usePanelState";
-import { ParamForm } from "./ParamForm";
+import { CustomizeTab } from "./CustomizeTab";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
-import { PresetDiffBar } from "./PresetDiffBar";
-import { ParamSearch } from "./ParamSearch";
 import { PanelFooter } from "./PanelFooter";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
@@ -55,6 +53,8 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
+  /** Essentials/all settings-view (see src/lib/useExperience.ts). */
+  settingsView: SettingsView;
 }
 
 export function SheetTabs({
@@ -83,9 +83,9 @@ export function SheetTabs({
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
+  settingsView,
 }: Props) {
   const {
-    change,
     applyPreset,
     selectedPresetChange,
     presetsChange,
@@ -96,7 +96,6 @@ export function SheetTabs({
   const hasFiles = fileImport != null;
   // Presets first on mobile, then Customize, then Files.
   const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
-  const debouncedSearch = useDebounce(search, 150);
 
   const triggerClass = cn(chipTabTrigger, "flex-1");
 
@@ -115,23 +114,23 @@ export function SheetTabs({
       </TabsList>
       <div className="flex min-h-0 flex-1 flex-col">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <PresetDiffBar
+          <CustomizeTab
             design={design}
             values={values}
             presetBaseline={presetBaseline}
             presetName={presetName}
+            baseline={baseline}
             changedParams={changedParams}
+            showVarName={showVarName}
+            availableFontFamilies={availableFontFamilies}
+            fontSuggestion={fontSuggestion}
+            installedFonts={installedFonts}
+            settingsView={settingsView}
+            search={search}
+            onSearchChange={onSearchChange}
+            onSearchFocus={onSearchFocus}
+            onSearchBlur={onSearchBlur}
           />
-          <ParamSearch
-            value={search}
-            onChange={onSearchChange}
-            onClear={() => onSearchChange("")}
-            onFocus={onSearchFocus}
-            onBlur={onSearchBlur}
-          />
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} />
-          </div>
           {/* Auto-render is parameter-scoped, so it pins to the bottom of this
               tab only — not on Presets/Files (mirrors the desktop panel). Reset
               lives in PresetDiffBar above now (the unified restore control). */}
@@ -147,6 +146,7 @@ export function SheetTabs({
             onApply={applyPreset}
             onSelectedChange={selectedPresetChange}
             onPresetsChange={presetsChange}
+            showPowerTools={settingsView === "all"}
             inline
           />
         </TabsContent>

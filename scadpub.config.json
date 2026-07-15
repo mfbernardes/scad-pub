@@ -17,7 +17,7 @@
     "LiberationSans-Regular.ttf"
   ],
 
-  "ui": { "install": "off" },
+  "ui": { "install": "off", "experience": { "default": "guided" } },
   "fileImport": true,
 
   "popup": {

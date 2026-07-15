@@ -9,6 +9,7 @@ import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
 import type { RenderMetrics } from "../lib/renderMetrics";
+import type { SettingsView } from "../lib/useExperience";
 import type { ViewerHandle, Dimensions } from "./Viewer";
 
 // Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
@@ -87,6 +88,9 @@ interface Props {
   themeMode: "light" | "dark" | "auto";
   /** Incremented by the intro popup's primary CTA to open the design picker. */
   openPickerSignal: number;
+  /** Essentials/all settings-view (see src/lib/useExperience.ts). Flows down
+   *  to the Customize tab in both layouts; the setter joins AppActions. */
+  settingsView: SettingsView;
 }
 
 export const AppShell = memo(function AppShell({
@@ -113,6 +117,7 @@ export const AppShell = memo(function AppShell({
   theme,
   themeMode,
   openPickerSignal,
+  settingsView,
 }: Props) {
   const actions = useAppActions();
   const desktopViewerRef = useRef<ViewerHandle>(null);
@@ -544,6 +549,7 @@ export const AppShell = memo(function AppShell({
                   onSearchChange={panelState.setSearch}
                   onSearchFocus={handleSearchFocus}
                   onSearchBlur={handleSearchBlur}
+                  settingsView={settingsView}
                 />
               </div>
             )}
@@ -598,6 +604,7 @@ export const AppShell = memo(function AppShell({
               onSearchChange={panelState.setSearch}
               onSearchFocus={handleSearchFocus}
               onSearchBlur={handleSearchBlur}
+              settingsView={settingsView}
             />
 
             {/* Canvas */}

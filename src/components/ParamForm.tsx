@@ -8,8 +8,9 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Info as InfoIcon, RotateCcw as RevertIcon, Upload as UploadIcon } from "lucide-react";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
+import type { SettingsView } from "../lib/useExperience";
 import { displayValue } from "../lib/paramDiff";
-import { isVisible } from "../lib/visibility";
+import { isShown, paramMatchesQuery } from "../lib/paramFilter";
 import { familyOf, normalizeFamily, withFamily, type InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { FileInput } from "./FileInput";
@@ -63,6 +64,21 @@ interface Props {
   /** The selected preset's display name, used to name the revert target in the
    *  per-field revert button ("to <preset>" vs "to default" when none). */
   presetName?: string | null;
+  /** Essentials/all settings-view: composed with `@showIf` visibility (see
+   *  isShown) to decide which params render. Defaults to "all" (no
+   *  filtering) so a caller that doesn't care about the view still compiles. */
+  view?: SettingsView;
+  /** Set (with a fresh `nonce` per request, so a repeat click on the same
+   *  param retriggers) to open that param's section, scroll it into view and
+   *  focus its control — the "hidden settings differ from defaults — Review"
+   *  chip's target action. */
+  focusParam?: FocusParamRequest | null;
+}
+
+/** A request to reveal + focus one parameter's control — see `focusParam` above. */
+export interface FocusParamRequest {
+  name: string;
+  nonce: number;
 }
 
 // Inline, non-alarming hint shown under a `font` control when the selected
@@ -352,33 +368,27 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, baseline, changedParams, presetName }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, baseline, changedParams, presetName, view = "all", focusParam }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
-  // visible groups only when the design, values or query change — not on every
-  // unrelated render (e.g. a sibling re-render).
+  // visible groups only when the design, values, view or query change — not
+  // on every unrelated render (e.g. a sibling re-render).
   const groups = useMemo(() => {
     return design.sections
       .map((section) => ({
         section,
-        // Hide parameters whose @showIf condition is currently false, and drop
-        // a section that ends up with no visible parameters.
+        // Hide parameters whose @showIf condition is currently false or that
+        // the essentials view demotes (isShown), and drop a section that
+        // ends up with no visible parameters. Match the variable name, the
+        // label, and the full help text, so a term that only appears in the
+        // detail (surfaced via the info popover) is still findable.
         params: design.params.filter(
-          (p) =>
-            p.section === section &&
-            isVisible(p, values) &&
-            // Match the variable name, the label, and the full help text, so a
-            // term that only appears in the detail (surfaced via the info
-            // popover) is still findable.
-            (!q ||
-              p.name.toLowerCase().includes(q) ||
-              p.description.toLowerCase().includes(q) ||
-              p.help.toLowerCase().includes(q))
+          (p) => p.section === section && isShown(p, values, view) && paramMatchesQuery(p, q)
         ),
       }))
       .filter((g) => g.params.length > 0);
-  }, [design, values, q]);
+  }, [design, values, view, q]);
 
   // Per-section open/closed state, controlled in React so a search can force a
   // folded group open without losing the user's manual fold/unfold of an
@@ -408,6 +418,32 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
     lastOpenSectionsDesign.current = design;
     setOpenSections(initOpenSections(design, collapsedDefault));
   }
+
+  // The "hidden settings differ from defaults — Review" chip's target action:
+  // reveal one param's control. Runs only once per `nonce` (a fresh request
+  // even for the same param re-clicked), so it doesn't refire on every
+  // unrelated render while `focusParam` is still set. Opens the param's
+  // section first (it may be `@collapsed`, independent of the essentials/all
+  // switch that made the param itself visible), then waits a frame for that
+  // — and any settingsView switch the caller made in the same click — to
+  // commit and paint before querying the DOM for the now-real row/control.
+  const lastFocusNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!focusParam || focusParam.nonce === lastFocusNonce.current) return;
+    lastFocusNonce.current = focusParam.nonce;
+    const target = design.params.find((p) => p.name === focusParam.name);
+    if (target) setOpenSections((prev) => ({ ...prev, [target.section]: true }));
+    const raf = requestAnimationFrame(() => {
+      const row = document.querySelector(`[data-param="${CSS.escape(focusParam.name)}"]`);
+      const control = row?.querySelector<HTMLElement>(
+        'input, button, select, textarea, [role="switch"]'
+      );
+      const el = (control ?? row) as HTMLElement | null;
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      el?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [focusParam, design]);
 
   return (
     <div className="param-form">

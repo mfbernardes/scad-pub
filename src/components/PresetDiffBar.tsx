@@ -7,6 +7,7 @@
 // 2) markers, which share the same baseline.
 import type { Design } from "../openscad/types";
 import type { Values } from "../lib/presets";
+import type { SettingsView } from "../lib/useExperience";
 import { useAppActions } from "../lib/appActions";
 import { ResetButton } from "./ResetButton";
 import { RotateCcw as ResetIcon } from "lucide-react";
@@ -20,9 +21,21 @@ interface Props {
   presetName: string | null;
   /** Names of params whose value differs from the baseline. */
   changedParams: Set<string>;
+  /** Essentials/all settings-view — passed through to ResetButton so its
+   *  confirmation copy can mention hidden-by-view params the reset also
+   *  affects. Optional so a future caller without the view concept still
+   *  compiles (ResetButton treats an omitted view as "all", i.e. nothing hidden). */
+  settingsView?: SettingsView;
 }
 
-export function PresetDiffBar({ design, values, presetBaseline, presetName, changedParams }: Props) {
+export function PresetDiffBar({
+  design,
+  values,
+  presetBaseline,
+  presetName,
+  changedParams,
+  settingsView,
+}: Props) {
   const { applyPreset, reset } = useAppActions();
   const changedCount = changedParams.size;
   if (changedCount === 0) return null;
@@ -56,7 +69,7 @@ export function PresetDiffBar({ design, values, presetBaseline, presetName, chan
       <span>
         {count} from <b className="font-semibold text-foreground">defaults</b>
       </span>
-      <ResetButton design={design} values={values} onReset={reset} className={actionBtnClass}>
+      <ResetButton design={design} values={values} onReset={reset} view={settingsView} className={actionBtnClass}>
         <ResetIcon size={13} className="shrink-0" /> Reset to defaults
       </ResetButton>
     </div>

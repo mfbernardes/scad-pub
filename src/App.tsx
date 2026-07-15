@@ -30,6 +30,7 @@ import { useOnline } from "./lib/useOnline";
 import { useRenderPipeline } from "./lib/useRenderPipeline";
 import { useFileImports } from "./lib/useFileImports";
 import { useAppNotices } from "./lib/useAppNotices";
+import { useExperience } from "./lib/useExperience";
 import { makeOnceFlag } from "./lib/prefs";
 import { toast } from "sonner";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
@@ -58,6 +59,7 @@ const installHintFlag = makeOnceFlag("install.hint.seen");
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
+  const { settingsView, setSettingsView } = useExperience();
   const { canInstall, promptInstall } = useInstallPrompt();
   const online = useOnline();
   const {
@@ -371,6 +373,7 @@ export default function App() {
     applyPreset: setValues,
     selectedPresetChange: setPresetSel,
     presetsChange: refreshUserPresets,
+    settingsViewChange: setSettingsView,
     render: doRender,
     exportModel,
     savePng,
@@ -445,6 +448,7 @@ export default function App() {
           theme={theme}
           themeMode={themeMode}
           openPickerSignal={openPickerSignal}
+          settingsView={settingsView}
         />
       </AppActionsProvider>
     </>

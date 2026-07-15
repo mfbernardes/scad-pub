@@ -14,6 +14,7 @@ import {
 } from "react";
 import type { ParamValue } from "../openscad/types";
 import type { Values } from "./presets";
+import type { SettingsView } from "./useExperience";
 
 export interface AppActions {
   install: () => void;
@@ -22,6 +23,7 @@ export interface AppActions {
   applyPreset: (v: Values) => void;
   selectedPresetChange: (id: string) => void;
   presetsChange: () => void;
+  settingsViewChange: (view: SettingsView) => void;
   render: () => void;
   exportModel: () => void;
   savePng: (url: string) => void;
@@ -61,6 +63,7 @@ export function AppActionsProvider({
       applyPreset: (v) => latest.current.applyPreset(v),
       selectedPresetChange: (id) => latest.current.selectedPresetChange(id),
       presetsChange: () => latest.current.presetsChange(),
+      settingsViewChange: (view) => latest.current.settingsViewChange(view),
       render: () => latest.current.render(),
       exportModel: () => latest.current.exportModel(),
       savePng: (url) => latest.current.savePng(url),

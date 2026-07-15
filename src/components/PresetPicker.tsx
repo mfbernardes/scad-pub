@@ -61,6 +61,14 @@ interface Props {
   onClose?: () => void;
   /** Popover title/aria-label (default "Presets"). */
   presetsLabel?: string;
+  /**
+   * Whether to show the parameterSets Import/Export row — power-user tools
+   * for round-tripping presets with the desktop OpenSCAD Customizer. Default
+   * true. The essentials settings view hides this row (Save + the saved-
+   * presets list stay either way): a beginner picking a ready-made preset or
+   * saving their own doesn't need a JSON file interchange affordance.
+   */
+  showPowerTools?: boolean;
 }
 
 export function PresetPicker({
@@ -75,6 +83,7 @@ export function PresetPicker({
   inline = false,
   onClose,
   presetsLabel = "Presets",
+  showPowerTools = true,
 }: Props) {
   const [saveName, setSaveName] = useState("");
   // The saved preset pending a delete confirmation (its name), or null when no
@@ -260,35 +269,38 @@ export function PresetPicker({
 
       {/* Import / export saved presets as an OpenSCAD parameterSets file — the
           same format the desktop Customizer reads and writes, so presets carry
-          between the two. */}
-      <div className="flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-[0.4rem]">
-        <FileInput accept=".json,application/json" onFile={handleImport}>
-          {(open) => (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={open}
-              title="Import presets from an OpenSCAD parameterSets file"
-            >
-              <UploadIcon size={14} /> Import…
-            </Button>
-          )}
-        </FileInput>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          onClick={handleExport}
-          disabled={userPresets.length === 0}
-          title={
-            userPresets.length
-              ? "Export your saved presets as an OpenSCAD parameterSets file"
-              : "Save a preset first"
-          }
-        >
-          <DownloadIcon size={14} /> Export
-        </Button>
-      </div>
+          between the two. Power-user tools: hidden in the essentials settings
+          view (showPowerTools=false) — Save and the saved list above stay. */}
+      {showPowerTools && (
+        <div className="flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-[0.4rem]">
+          <FileInput accept=".json,application/json" onFile={handleImport}>
+            {(open) => (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={open}
+                title="Import presets from an OpenSCAD parameterSets file"
+              >
+                <UploadIcon size={14} /> Import…
+              </Button>
+            )}
+          </FileInput>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onClick={handleExport}
+            disabled={userPresets.length === 0}
+            title={
+              userPresets.length
+                ? "Export your saved presets as an OpenSCAD parameterSets file"
+                : "Save a preset first"
+            }
+          >
+            <DownloadIcon size={14} /> Export
+          </Button>
+        </div>
+      )}
     </div>
   );
 

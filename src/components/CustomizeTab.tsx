@@ -1,0 +1,159 @@
+// CustomizeTab.tsx — the Customize (Parameters) tab's shared content: the
+// essentials/all settings-view toggle, the hidden-but-different chip, the
+// preset-diff strip, search (plus its "hidden matches" note), and the
+// parameter form itself. Used verbatim by the desktop ParamPanel and the
+// mobile SheetTabs so this whole stack of behavior/markup lands once instead
+// of being duplicated per layout — PanelFooter (the Live-preview switch) is
+// the one piece that stays outside, since the two layouts dock it
+// differently (see ParamPanel.tsx / SheetTabs.tsx).
+import { useMemo, useState } from "react";
+import type { Design } from "../openscad/types";
+import type { Values } from "../lib/presets";
+import type { InstalledFont } from "../lib/fonts";
+import type { SettingsView } from "../lib/useExperience";
+import { defaultsFor } from "../lib/presets";
+import { hiddenAdvancedCount, hiddenAdvancedDiff, hiddenSearchMatches } from "../lib/paramFilter";
+import { useAppActions } from "../lib/appActions";
+import { useDebounce } from "../lib/useDebounce";
+import { t, tn } from "../lib/i18n";
+import { ParamForm, type FocusParamRequest } from "./ParamForm";
+import { ParamSearch } from "./ParamSearch";
+import { PresetDiffBar } from "./PresetDiffBar";
+import { SettingsViewToggle } from "./SettingsViewToggle";
+
+interface Props {
+  design: Design;
+  values: Values;
+  /** The selected preset's values, or null when no preset is selected (baseline is defaults). */
+  presetBaseline: Values | null;
+  /** The selected preset's display name, or null when no preset is selected. */
+  presetName: string | null;
+  /** Values the current params are diffed against — presetBaseline, or design defaults. */
+  baseline: Values;
+  /** Names of params whose value differs from `baseline`. */
+  changedParams: Set<string>;
+  showVarName: boolean;
+  availableFontFamilies?: Set<string>;
+  fontSuggestion?: string | null;
+  installedFonts?: InstalledFont[];
+  settingsView: SettingsView;
+  search: string;
+  onSearchChange: (search: string) => void;
+  onSearchFocus?: () => void;
+  onSearchBlur?: () => void;
+}
+
+const noteClass =
+  "flex shrink-0 flex-wrap items-center gap-x-[0.4rem] gap-y-1 border-b bg-muted px-3 py-[0.4rem] text-[0.8rem] text-muted-foreground";
+const noteActionClass =
+  "inline-flex shrink-0 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent p-0 font-medium text-brand hover:underline focus-visible:outline-offset-2";
+
+export function CustomizeTab({
+  design,
+  values,
+  presetBaseline,
+  presetName,
+  baseline,
+  changedParams,
+  showVarName,
+  availableFontFamilies,
+  fontSuggestion,
+  installedFonts,
+  settingsView,
+  search,
+  onSearchChange,
+  onSearchFocus,
+  onSearchBlur,
+}: Props) {
+  const { change, settingsViewChange } = useAppActions();
+  const debouncedSearch = useDebounce(search, 150);
+  const hasAdvanced = useMemo(() => design.params.some((p) => p.advanced), [design]);
+  const defaults = useMemo(() => defaultsFor(design), [design]);
+  const hiddenCount = useMemo(
+    () => hiddenAdvancedCount(design.params, values, settingsView),
+    [design, values, settingsView]
+  );
+  const hiddenDiff = useMemo(
+    () => hiddenAdvancedDiff(design.params, values, defaults, settingsView),
+    [design, values, defaults, settingsView]
+  );
+  const q = debouncedSearch.trim().toLowerCase();
+  const searchHidden = useMemo(
+    () => hiddenSearchMatches(design.params, values, settingsView, q),
+    [design, values, settingsView, q]
+  );
+  const [focusParam, setFocusParam] = useState<FocusParamRequest | null>(null);
+
+  const reviewHiddenDiff = () => {
+    settingsViewChange("all");
+    const first = hiddenDiff[0];
+    if (first) setFocusParam({ name: first.name, nonce: Date.now() });
+  };
+
+  return (
+    <>
+      {hasAdvanced && <SettingsViewToggle view={settingsView} />}
+      {settingsView === "essentials" && hiddenDiff.length > 0 && (
+        <button
+          type="button"
+          className="settings-hidden-diff flex shrink-0 items-center gap-[0.4rem] border-b bg-muted px-3 py-[0.4rem] text-left text-[0.8rem] font-medium text-foreground hover:bg-secondary"
+          onClick={reviewHiddenDiff}
+        >
+          <span className="flex-1">{tn("settings.hiddenDiffer", hiddenDiff.length)}</span>
+          <span aria-hidden="true">—</span>
+          <span className={noteActionClass}>{t("settings.review")}</span>
+        </button>
+      )}
+      <PresetDiffBar
+        design={design}
+        values={values}
+        presetBaseline={presetBaseline}
+        presetName={presetName}
+        changedParams={changedParams}
+        settingsView={settingsView}
+      />
+      <ParamSearch
+        value={search}
+        onChange={onSearchChange}
+        onClear={() => onSearchChange("")}
+        onFocus={onSearchFocus}
+        onBlur={onSearchBlur}
+      />
+      {settingsView === "essentials" && searchHidden.length > 0 && (
+        <div className={`settings-search-note ${noteClass}`} role="status">
+          <span>{tn("settings.hiddenMatches", searchHidden.length)}</span>
+          <span aria-hidden="true">—</span>
+          <button type="button" className={noteActionClass} onClick={() => settingsViewChange("all")}>
+            {t("settings.showThem")}
+          </button>
+        </div>
+      )}
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <ParamForm
+          design={design}
+          values={values}
+          onChange={change}
+          search={debouncedSearch}
+          showVarName={showVarName}
+          availableFontFamilies={availableFontFamilies}
+          fontSuggestion={fontSuggestion}
+          installedFonts={installedFonts}
+          baseline={baseline}
+          changedParams={changedParams}
+          presetName={presetName}
+          view={settingsView}
+          focusParam={focusParam}
+        />
+      </div>
+      {settingsView === "essentials" && hiddenCount > 0 && (
+        <div className={`settings-hidden-note ${noteClass}`}>
+          <span>{tn("settings.hiddenCount", hiddenCount)}</span>
+          <span aria-hidden="true">—</span>
+          <button type="button" className={noteActionClass} onClick={() => settingsViewChange("all")}>
+            {t("settings.showAll")}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
