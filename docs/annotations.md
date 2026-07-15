@@ -64,6 +64,53 @@ mounting = "none"; // [none, screw, countersunk]
 
 Collapsed parameters remain in the DOM and are still sent to OpenSCAD.
 
+## Essential and advanced settings (`// @advanced`, `// @essential`)
+
+Mark a parameter, or a whole section, `// @advanced` to demote it into an "all settings" view, leaving only the "essentials" visible by default. This is unrelated to `// @collapsed`: a collapsed section is still fully shown, just folded; an advanced parameter can be hidden from the default view entirely, in a client-side settings mode the next milestone builds on top of these annotations.
+
+`// @advanced` works in two positions:
+
+- **Parameter-level** — a bare marker in a parameter's doc-comment block, exactly like `// @font`:
+
+  ```scad
+  // Facet count override. Leave at 0 to use the render's global $fn.
+  // @advanced
+  facet_override = 0; // [0:1:64]
+  ```
+
+- **Section-level** — directly above a `/* [Section] */` header, exactly like `// @collapsed`. It marks every parameter in that section occurrence advanced:
+
+  ```scad
+  // @advanced
+  /* [Coin edge] */
+  edge_style = "plain"; // [plain, reeded, milled]
+  edge_depth = 0.6; // [0.1:0.1:2]
+  ```
+
+  "That section *occurrence*" matters when a section name repeats in the file: `// @advanced` applies only to the header it directly precedes, not to every section sharing that name.
+
+`// @essential` is parameter-level only — a bare marker that overrides a section-level `// @advanced` back to non-advanced for that one parameter:
+
+```scad
+// @advanced
+/* [Coin edge] */
+edge_style = "plain"; // [plain, reeded, milled]
+
+// Always shown, even though the rest of this section is advanced.
+// @essential
+edge_depth = 0.6; // [0.1:0.1:2]
+```
+
+Precedence, resolved per parameter:
+
+1. A parameter-level `// @advanced` always wins — the parameter is advanced.
+2. Otherwise, a parameter-level `// @essential` always wins — the parameter is **not** advanced, even inside an advanced section.
+3. Otherwise, the parameter is advanced exactly when its section occurrence is `// @advanced`.
+
+`// @essential` on a parameter whose section is not advanced is legal and a no-op — it simply has nothing to override. A single parameter carrying **both** `// @advanced` and `// @essential` is a contradiction and fails the build. `// @advanced` and `// @essential` are also rejected inside the `[Hidden]` section, same as any other annotation on a parameter that never reaches the schema.
+
+`// @showIf` composes with `// @advanced` as an AND: an advanced parameter that's also conditionally hidden needs both the "all settings" view active *and* its `@showIf` condition true to show its control. Like `@showIf` and `@collapsed`, this is UI-only: an advanced parameter's value is still retained and always sent to OpenSCAD, whether or not its control is currently shown.
+
 ## Font selectors (`// @font`)
 
 Mark a string parameter as a font selector. In the app, it renders as a **font dropdown** listing every face the renderer can use: bundled fonts plus imported fonts. Friendly names come from the font files themselves, such as "Liberation Sans Bold", never the raw Fontconfig `Family:style=Style` string. The list updates the moment you import a font, and the menu includes an **Import font…** action.

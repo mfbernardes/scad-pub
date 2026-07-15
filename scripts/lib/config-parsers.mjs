@@ -343,6 +343,60 @@ export function parseNotices(raw) {
   });
 }
 
+// The client-side experience-mode seeds a config may set under `ui.experience`.
+// Every field only seeds the FIRST-EVER client state — src/lib/useExperience.ts
+// reads a persisted user preference ahead of these, and once the user changes
+// either state client-side, the persisted choice wins on every later visit.
+export const EXPERIENCE_DEFAULTS = ["guided", "standard"];
+export const EXPERIENCE_SETTINGS_VIEWS = ["essentials", "all"];
+export const EXPERIENCE_MOBILE_SHEETS = ["peek", "half"];
+const EXPERIENCE_KEYS = ["default", "settingsView", "mobileInitialSheet"];
+
+// Validate and normalise the optional `ui.experience` config block. Unlike
+// `ui`'s other keys (flat booleans/enums with built-in defaults merged in by
+// parseUi below), every field here is left absent when unset — the hook
+// itself decides the final fallback — so this returns only the keys the
+// config actually set. Unknown nested keys fail the build, matching this
+// file's convention for nested objects (see `colors`' token check above)
+// rather than being silently ignored.
+function parseExperience(raw) {
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'ui.experience' must be an object");
+  for (const key of Object.keys(raw)) {
+    if (!EXPERIENCE_KEYS.includes(key))
+      throw new Error(
+        `gen-schema: unknown 'ui.experience' key '${key}'.\n` +
+          `  Valid keys: ${EXPERIENCE_KEYS.join(", ")}`
+      );
+  }
+  const out = {};
+  if (raw.default !== undefined) {
+    if (!EXPERIENCE_DEFAULTS.includes(raw.default))
+      throw new Error(
+        `gen-schema: 'ui.experience.default' must be one of ${EXPERIENCE_DEFAULTS.map((s) => `"${s}"`).join(", ")} ` +
+          `(got ${JSON.stringify(raw.default)})`
+      );
+    out.default = raw.default;
+  }
+  if (raw.settingsView !== undefined) {
+    if (!EXPERIENCE_SETTINGS_VIEWS.includes(raw.settingsView))
+      throw new Error(
+        `gen-schema: 'ui.experience.settingsView' must be one of ${EXPERIENCE_SETTINGS_VIEWS.map((s) => `"${s}"`).join(", ")} ` +
+          `(got ${JSON.stringify(raw.settingsView)})`
+      );
+    out.settingsView = raw.settingsView;
+  }
+  if (raw.mobileInitialSheet !== undefined) {
+    if (!EXPERIENCE_MOBILE_SHEETS.includes(raw.mobileInitialSheet))
+      throw new Error(
+        `gen-schema: 'ui.experience.mobileInitialSheet' must be one of ${EXPERIENCE_MOBILE_SHEETS.map((s) => `"${s}"`).join(", ")} ` +
+          `(got ${JSON.stringify(raw.mobileInitialSheet)})`
+      );
+    out.mobileInitialSheet = raw.mobileInitialSheet;
+  }
+  return out;
+}
+
 // Validate and normalise the optional `ui` config block: build-time UI behaviour
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
@@ -412,6 +466,9 @@ export function parseUi(raw) {
         throw new Error(`gen-schema: 'ui.${key}' must be a non-empty string`);
       out[key] = raw[key].trim();
     }
+  }
+  if (raw.experience !== undefined && raw.experience !== null) {
+    out.experience = parseExperience(raw.experience);
   }
   return out;
 }

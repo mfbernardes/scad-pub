@@ -1,8 +1,9 @@
 // params.mjs — parse OpenSCAD's Customizer syntax (the `// [Section]` headers,
 // `name = default; // [hint]` parameter lines, and the doc comments above them,
-// plus ScadPub's `@showIf` / `@font` / `@info` / `@collapsed` annotations) into
-// the typed parameter schema the UI is generated from. Skips the [Hidden]
-// section, exactly as OpenSCAD's own Customizer does.
+// plus ScadPub's `@showIf` / `@font` / `@info` / `@collapsed` / `@advanced` /
+// `@essential` annotations) into the typed parameter schema the UI is
+// generated from. Skips the [Hidden] section, exactly as OpenSCAD's own
+// Customizer does.
 import { readFileSync } from "node:fs";
 
 // A section header must be the WHOLE line (leading/trailing whitespace only) —
@@ -34,6 +35,24 @@ const FONT_ANNOT_RE = /^@font\s*$/i;
 const INFO_RE = /^@info\b\s*(.*)$/i;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
+// `@advanced` on its own line: valid in TWO positions, disambiguated by
+// whatever it directly precedes — a parameter (marks that one parameter
+// advanced, exactly like `@font`'s pending-flag/consume mechanics) or a
+// `/* [Section] */` header (marks every parameter in that section *occurrence*
+// advanced, exactly like `@collapsed`'s). Matched here, before the
+// null-section guard below, so — like `@collapsed` — it also works directly
+// above the very first section in the file. `ADVANCED_LINE_RE` captures the
+// trailing text so a same-line typo ("@advanced x") is caught immediately as
+// malformed, regardless of which position it turns out to precede.
+const ADVANCED_LINE_RE = /^\s*\/\/\s*(@advanced\b.*)$/i;
+const ADVANCED_BARE_RE = /^@advanced$/i;
+// `@essential` on its own line: parameter-level ONLY (bare marker in a param's
+// doc-comment block, exactly like `@font`). It overrides a section-level
+// `@advanced` for that one parameter. Directly above a section header is a
+// build error (malformed) — matched early for the same reason as `@advanced`
+// above, so that misuse is caught even above the very first section.
+const ESSENTIAL_LINE_RE = /^\s*\/\/\s*(@essential\b.*)$/i;
+const ESSENTIAL_BARE_RE = /^@essential$/i;
 // File-level design metadata, read anywhere in the file (typically a header
 // comment, so it works even before the first section). `@description` is the
 // design's picker sub-label; `@icon` is a path to its thumbnail; `@doc` is a
@@ -60,7 +79,16 @@ const FILLEDBY_RE = /^@filledBy\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i;
 // that grammar — or starts with an unrecognised `@word` at all — fails the
 // build with the file and line, instead of silently degrading to plain doc
 // prose (a typo'd `@shwoIf` used to just become part of the help text).
-const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "info", "svg", "filledby"]);
+const KNOWN_ANNOTATIONS = new Set([
+  "showif",
+  "show-if",
+  "font",
+  "info",
+  "svg",
+  "filledby",
+  "advanced",
+  "essential",
+]);
 const ANNOTATION_WORD_RE = /^@([A-Za-z-]+)\b/;
 
 // `@showIf` clause shapes accepted at both generate time (here) and runtime
@@ -303,6 +331,22 @@ export function parseParams(absPath) {
   let pendingFilledByLine = 0;
   // Set by a `// @collapsed` line; consumed by the next section header.
   let pendingSectionCollapsed = false;
+  // Set by a `// @advanced` line; consumed by whichever comes next — a
+  // section header (section-level) or a parameter (param-level). See
+  // ADVANCED_LINE_RE above.
+  let pendingAdvanced = false;
+  let pendingAdvancedLine = 0;
+  // Set by a `// @essential` line; consumed only by the next parameter (a
+  // section header instead is a malformed-annotation build error).
+  let pendingEssential = false;
+  let pendingEssentialLine = 0;
+  // Whether the CURRENT section occurrence was marked `@advanced` — set when
+  // its `/* [Section] */` header is entered, unlike the per-param pending
+  // flags above, this persists across every parameter in the section (not
+  // cleared by `reset()`) until the next section header re-derives it. Repeat
+  // occurrences of the same section name are independent, matching
+  // `@collapsed`'s "applies to the occurrence it precedes" semantics.
+  let currentSectionAdvanced = false;
   const params = [];
   const sections = [];
   const collapsedSections = [];
@@ -321,6 +365,10 @@ export function parseParams(absPath) {
     pendingSvg = null;
     pendingFilledBy = null;
     pendingSectionCollapsed = false;
+    pendingAdvanced = false;
+    pendingAdvancedLine = 0;
+    pendingEssential = false;
+    pendingEssentialLine = 0;
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -329,6 +377,35 @@ export function parseParams(absPath) {
     // section, so handle it before the null-section guard below.
     if (COLLAPSE_RE.test(line)) {
       pendingSectionCollapsed = true;
+      continue;
+    }
+    // `@advanced` / `@essential` are matched here — before the null-section
+    // guard, like @collapsed above — rather than through the generic per-line
+    // `@word` dispatch further down, so (a) a same-line typo ("@advanced x")
+    // fails immediately as malformed regardless of which position it turns
+    // out to precede, and (b) both work directly above the very first section
+    // in the file, exactly like `@collapsed`. Note `section` here still holds
+    // whatever section was current *before* this line, which is ambiguous for
+    // the `[Hidden]` restriction (a marker directly above the `[Hidden]`
+    // header itself reads `section` as the *previous*, non-Hidden section) —
+    // that restriction is instead checked at each consumption point below,
+    // once it's known what the marker actually attached to.
+    const advLine = line.match(ADVANCED_LINE_RE);
+    if (advLine) {
+      const content = advLine[1].trim();
+      if (!ADVANCED_BARE_RE.test(content))
+        fail(absPath, lineNo, `malformed @advanced annotation: '${content}'`);
+      pendingAdvanced = true;
+      pendingAdvancedLine = lineNo;
+      continue;
+    }
+    const essLine = line.match(ESSENTIAL_LINE_RE);
+    if (essLine) {
+      const content = essLine[1].trim();
+      if (!ESSENTIAL_BARE_RE.test(content))
+        fail(absPath, lineNo, `malformed @essential annotation: '${content}'`);
+      pendingEssential = true;
+      pendingEssentialLine = lineNo;
       continue;
     }
     // File-level metadata is section-independent, so capture it before the
@@ -355,10 +432,34 @@ export function parseParams(absPath) {
         sections.push(section);
       if (pendingSectionCollapsed && section !== "Hidden" && !collapsedSections.includes(section))
         collapsedSections.push(section);
+      // `@essential` is parameter-level only — directly above a section
+      // header is malformed. `@advanced` on the [Hidden] section itself is
+      // equally nonsensical (its params are skipped entirely below), so it's
+      // rejected the same way as `@advanced` on a param inside [Hidden].
+      if (pendingEssential)
+        fail(
+          absPath,
+          pendingEssentialLine,
+          `malformed @essential annotation: '@essential' is a parameter-level annotation, not valid directly above a section header`
+        );
+      if (pendingAdvanced && section === "Hidden")
+        fail(absPath, pendingAdvancedLine, `@advanced is not allowed on the [Hidden] section`);
+      // This section OCCURRENCE is advanced only when this header was
+      // directly preceded by `@advanced` — a later occurrence of the same
+      // section name without the marker is not advanced, and vice versa.
+      currentSectionAdvanced = pendingAdvanced && section !== "Hidden";
       reset();
       continue;
     }
     if (section === null || section === "Hidden") {
+      // A marker that fell through to here (rather than being consumed by the
+      // SECTION_RE branch above) was directly attached to something inside
+      // the [Hidden] section — a parameter, or another doc/blank line before
+      // one — which is the build error the annotations document.
+      if (section === "Hidden" && pendingAdvanced)
+        fail(absPath, pendingAdvancedLine, `@advanced is not allowed inside the [Hidden] section`);
+      if (section === "Hidden" && pendingEssential)
+        fail(absPath, pendingEssentialLine, `@essential is not allowed inside the [Hidden] section`);
       reset();
       continue;
     }
@@ -378,6 +479,20 @@ export function parseParams(absPath) {
       // renders) and still get the in-app import / fallback affordance.
       if ((p.type === "string" || p.type === "enum") && pendingFont)
         p.isFont = true;
+      // Resolve the "advanced" (settings-view demotion) flag: a param-level
+      // `@advanced` always wins; a param-level `@essential` overrides a
+      // section-level `@advanced` for this one param (and is a documented
+      // no-op when the section isn't advanced); having BOTH markers on the
+      // same param is a contradiction. The field is emitted only when true,
+      // matching how the other optional fields here are emitted sparsely.
+      if (pendingAdvanced && pendingEssential)
+        fail(
+          absPath,
+          pendingAdvancedLine,
+          `parameter '${name}' has both '@advanced' and '@essential' annotations — remove one`
+        );
+      if (pendingAdvanced || (currentSectionAdvanced && !pendingEssential))
+        p.advanced = true;
       // Surface this param's value in the viewer info panel (see `// @info`).
       if (pendingInfo) p.info = pendingInfo;
       // Mark a string SVG field for the in-app wizard (see `// @svg`), and a
@@ -459,7 +574,7 @@ export function parseParams(absPath) {
         fail(
           absPath,
           lineNo,
-          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @info, @svg, @filledBy, @collapsed, @description, @icon, @doc)`
+          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @info, @svg, @filledBy, @collapsed, @description, @icon, @doc, @advanced, @essential)`
         );
       } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {

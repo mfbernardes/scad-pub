@@ -819,6 +819,45 @@ test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-stri
   assert.throws(() => parseUi({ parametersLabel: 5 }), /'ui\.parametersLabel' must be a non-empty string/);
 });
 
+test("ui.experience is absent by default and accepts each valid field", () => {
+  assert.equal(parseUi(undefined).experience, undefined);
+  assert.equal(parseUi({}).experience, undefined);
+  assert.deepEqual(parseUi({ experience: { default: "guided" } }).experience, { default: "guided" });
+  assert.deepEqual(parseUi({ experience: { settingsView: "essentials" } }).experience, {
+    settingsView: "essentials",
+  });
+  assert.deepEqual(parseUi({ experience: { mobileInitialSheet: "half" } }).experience, {
+    mobileInitialSheet: "half",
+  });
+  assert.deepEqual(
+    parseUi({
+      experience: { default: "standard", settingsView: "all", mobileInitialSheet: "peek" },
+    }).experience,
+    { default: "standard", settingsView: "all", mobileInitialSheet: "peek" }
+  );
+});
+
+test("ui.experience rejects invalid enum values and unknown nested keys", () => {
+  assert.throws(
+    () => parseUi({ experience: { default: "expert" } }),
+    /'ui\.experience\.default' must be one of "guided", "standard"/
+  );
+  assert.throws(
+    () => parseUi({ experience: { settingsView: "basic" } }),
+    /'ui\.experience\.settingsView' must be one of "essentials", "all"/
+  );
+  assert.throws(
+    () => parseUi({ experience: { mobileInitialSheet: "full" } }),
+    /'ui\.experience\.mobileInitialSheet' must be one of "peek", "half"/
+  );
+  assert.throws(
+    () => parseUi({ experience: { defualt: "guided" } }),
+    /unknown 'ui\.experience' key 'defualt'/
+  );
+  assert.throws(() => parseUi({ experience: "guided" }), /'ui\.experience' must be an object/);
+  assert.throws(() => parseUi({ experience: [] }), /'ui\.experience' must be an object/);
+});
+
 test("notices are off by default (omitted -> [])", () => {
   assert.deepEqual(parseNotices(undefined), []);
   assert.deepEqual(parseNotices(null), []);
@@ -1513,6 +1552,141 @@ test("the well-formed @svg/@filledBy fixture (existing test above) still passes 
         `svg_layers = "";\n`
     )
   );
+});
+
+// ── @advanced / @essential ──────────────────────────────────────────────────
+
+test("@advanced on a parameter marks it advanced; unmarked parameters are not", () => {
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Facet override.\n` +
+      `// @advanced\n` +
+      `facets = 0; // [0:1:64]\n` +
+      `// A plain parameter.\n` +
+      `width = 10;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.facets.advanced, true);
+  // The annotation line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.facets.help.includes("@advanced"));
+  assert.equal(byName.width.advanced, undefined);
+});
+
+test("@advanced directly above a section header marks every parameter in that occurrence advanced", () => {
+  const params = paramsOf(
+    `// @advanced\n` +
+      `/* [Extras] */\n` +
+      `edge_style = "plain"; // [plain, reeded]\n` +
+      `edge_depth = 0.6;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.edge_style.advanced, true);
+  assert.equal(byName.edge_depth.advanced, true);
+});
+
+test("a section-level @advanced applies only to the occurrence it directly precedes", () => {
+  // "Extras" appears twice; only the first occurrence is marked.
+  const params = paramsOf(
+    `// @advanced\n` +
+      `/* [Extras] */\n` +
+      `a = 1;\n` +
+      `/* [Extras] */\n` +
+      `b = 2;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.a.advanced, true);
+  assert.equal(byName.b.advanced, undefined);
+});
+
+test("@essential overrides a section-level @advanced for that one parameter", () => {
+  const params = paramsOf(
+    `// @advanced\n` +
+      `/* [Extras] */\n` +
+      `edge_style = "plain"; // [plain, reeded]\n` +
+      `// @essential\n` +
+      `edge_depth = 0.6;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.edge_style.advanced, true);
+  assert.equal(byName.edge_depth.advanced, undefined);
+});
+
+test("@essential outside an advanced section is a legal no-op", () => {
+  const params = paramsOf(`/* [Main] */\n// @essential\nnote = "hi";\n`);
+  assert.equal(params[0].advanced, undefined);
+});
+
+test("a param-level @advanced wins even when its section isn't advanced", () => {
+  const params = paramsOf(`/* [Main] */\n// @advanced\nfacets = 0;\n`);
+  assert.equal(params[0].advanced, true);
+});
+
+test("@advanced with trailing junk is malformed", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @advanced x\nbar = 1;\n`),
+    /f\.scad:2: malformed @advanced annotation: '@advanced x'/
+  );
+});
+
+test("@essential with trailing junk is malformed", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @essential x\nbar = 1;\n`),
+    /f\.scad:2: malformed @essential annotation: '@essential x'/
+  );
+});
+
+test("@essential directly above a section header is malformed", () => {
+  assert.throws(
+    () => paramsOf(`// @essential\n/* [S] */\nbar = 1;\n`),
+    /f\.scad:1: malformed @essential annotation/
+  );
+});
+
+test("@advanced inside the [Hidden] section is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [Hidden] */\n// @advanced\nsecret = 1;\n`),
+    /f\.scad:2: @advanced is not allowed inside the \[Hidden\] section/
+  );
+});
+
+test("@essential inside the [Hidden] section is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [Hidden] */\n// @essential\nsecret = 1;\n`),
+    /f\.scad:2: @essential is not allowed inside the \[Hidden\] section/
+  );
+});
+
+test("@advanced directly above the [Hidden] section header is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [Main] */\na = 1;\n// @advanced\n/* [Hidden] */\nsecret = 1;\n`),
+    /f\.scad:3: @advanced is not allowed on the \[Hidden\] section/
+  );
+});
+
+test("a parameter with both @advanced and @essential fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @advanced\n// @essential\nbar = 1;\n`),
+    /f\.scad:2: parameter 'bar' has both '@advanced' and '@essential' annotations/
+  );
+});
+
+test("the unknown-annotation error message lists @advanced and @essential", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @shwoIf foo\nbar = 1;\n`),
+    /expected one of:.*@advanced, @essential/
+  );
+});
+
+test("@advanced / @essential resolve end to end through generate()", () => {
+  const { schema } = run("advanced.config.json");
+  const d = schema.designs[0];
+  const byName = Object.fromEntries(d.params.map((p) => [p.name, p]));
+  assert.equal(byName.width.advanced, undefined);
+  assert.equal(byName.facets.advanced, true); // param-level @advanced
+  assert.equal(byName.edge_style.advanced, true); // section-level @advanced
+  assert.equal(byName.edge_depth.advanced, undefined); // @essential override
+  assert.equal(byName.note.advanced, undefined); // @essential no-op outside an advanced section
+  assert.equal(byName.finish.advanced, undefined); // repeated "Extras" occurrence, unmarked
 });
 
 test("parseFontFallback accepts a trimmed string or null; rejects empty", () => {

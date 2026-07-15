@@ -362,6 +362,29 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
 - **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
 - **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
+- **`experience`**: seeds the client-side guided/standard experience. See [Experience mode (`ui.experience`)](#experience-mode-uiexperience)
+
+### Experience mode (`ui.experience`)
+
+The optional `ui.experience` object seeds the client-side "experience mode" and "settings view" states that `src/lib/useExperience.ts` exposes to the UI (the UI that reads them ships in a later milestone; the config surface and the state hook exist now). None of these fields affect geometry, so `ui.experience` never invalidates the render cache.
+
+```jsonc
+{
+  "ui": {
+    "experience": {
+      "default": "guided",           // "guided" | "standard"; default "standard"
+      "settingsView": "essentials",  // "essentials" | "all"; defaults from `default`
+      "mobileInitialSheet": "peek"   // "peek" | "half"; default "peek"
+    }
+  }
+}
+```
+
+- **`default`**: the experience mode a **first-ever** visit starts in. `"guided"` surfaces a curated, reduced control set; `"standard"` (the default) shows the classic full panel showing every parameter.
+- **`settingsView`**: the settings view a first-ever visit starts on. `"essentials"` shows only parameters that aren't marked [`@advanced`](annotations.md#essential-and-advanced-settings--advanced--essential); `"all"` shows every parameter. When omitted, it's derived from `default`: `"guided"` implies `"essentials"`, `"standard"` implies `"all"`.
+- **`mobileInitialSheet`**: which snap position the mobile bottom sheet opens to on first load — `"peek"` (the default, mostly closed) or `"half"` (half-open).
+
+Each field only seeds the **first-ever** client state. The moment a visitor changes either the experience mode or the settings view, that choice is persisted (namespaced local storage, like every other ScadPub preference) and wins on every later visit — ahead of these config defaults. `default` and `settingsView` are independent settings with independent persisted keys; changing one client-side never touches the other's stored value or its config default.
 
 ### PWA manifest
 

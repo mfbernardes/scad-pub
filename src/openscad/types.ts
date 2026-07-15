@@ -82,6 +82,20 @@ export interface ParamBase {
    * value is the name of the `@svg` field that fills it. It stays editable.
    */
   filledBy?: string;
+  /**
+   * Resolved `@advanced` state (gen-schema's `scripts/lib/params.mjs`): true
+   * when this parameter should be demoted behind the "all settings" view
+   * rather than shown in the default "essentials" view. Set by a param-level
+   * `// @advanced` on this parameter, or by a section-level `// @advanced`
+   * directly above this parameter's section-header occurrence — unless this
+   * parameter also carries `// @essential`, which overrides the
+   * section back to non-advanced for it alone. Omitted (not just `false`)
+   * when not advanced, matching how the other optional fields here are
+   * emitted sparsely. Like `@showIf`, this is UI-only filtering: an advanced
+   * parameter's value is still retained and always sent to OpenSCAD, whether
+   * or not its control is currently shown.
+   */
+  advanced?: boolean;
 }
 
 /**
@@ -339,6 +353,33 @@ export interface UiConfig {
   presetsLabel?: string;
   /** Label for the "Customize" (parameters) tab/section (default "Customize"). */
   parametersLabel?: string;
+  /**
+   * Optional seeds for the client-side guided/standard experience (see
+   * src/lib/useExperience.ts). Every field here only decides the FIRST-EVER
+   * client state: once the user changes either state, a persisted preference
+   * (namespaced local storage) wins on every later visit, ahead of these.
+   * None affect geometry (absent from renderHash).
+   */
+  experience?: {
+    /**
+     * Initial experience mode when no persisted preference exists yet:
+     * "guided" surfaces a curated, reduced control set; "standard" shows the
+     * classic full panel. Default "standard".
+     */
+    default?: "guided" | "standard";
+    /**
+     * Initial settings view when no persisted preference exists yet:
+     * "essentials" shows only non-`@advanced` parameters; "all" shows every
+     * parameter. Defaults to whichever the initial mode implies (guided ->
+     * "essentials", standard -> "all") when omitted.
+     */
+    settingsView?: "essentials" | "all";
+    /**
+     * Initial mobile bottom-sheet snap position on first load: "peek" (mostly
+     * closed, a thin handle showing) or "half" (half-open). Default "peek".
+     */
+    mobileInitialSheet?: "peek" | "half";
+  };
 }
 
 export interface Schema {
