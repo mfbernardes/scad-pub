@@ -438,29 +438,40 @@ button:disabled { cursor: default; }
   }
 }
 
-/* Floating bottom-center action cluster (Export / PNG / Share). Desktop hovers
-   it over the viewer bottom; mobile rides it on the sheet's top edge — see the
-   mobile override below. */
-.action-cluster {
+/* Floating bottom-center dock (Export/PNG/Share cluster, plus the after-export
+   panel above it when shown). Desktop hovers it over the viewer bottom; mobile
+   rides it on the sheet's top edge — see the mobile override below. Anchoring
+   the DOCK's bottom edge (not the cluster's own) means the cluster's screen
+   position never moves when the panel above it appears/disappears — the box's
+   height is auto, so it only ever grows upward. See AppShell's
+   ACTION_DOCK_CLASS doc. */
+.action-dock {
   position: absolute;
   bottom: calc(0.75rem + var(--safe-area-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
+  /* An absolutely-positioned box with only `left` set sizes to its content's
+     preferred (max-content) width, uncapped by the viewport — without this,
+     a narrow viewport (the export CTA's format line especially) would push
+     the dock past both screen edges instead of the cluster row wrapping.
+     Both the cluster and the after-export panel below cap their own widths
+     against this same budget. */
+  max-width: calc(100vw - 1.5rem);
 }
 
-/* Mobile: ride the cluster 0.6rem above the sheet's live top edge (--sheet-top,
+/* Mobile: ride the dock 0.6rem above the sheet's live top edge (--sheet-top,
    shared with the viewer bottom), so it tracks the sheet up from peek to the
    half detent and stays visible there. Past half it stays pinned at the half
-   line while the sheet (z-30) rises over it, so the cluster is covered only once
+   line while the sheet (z-30) rises over it, so the dock is covered only once
    the sheet is (near) full. Easing mirrors the viewer's; data-sheet-dragging
    disables it so the pill tracks the finger 1:1. */
 @media (max-width: 860px) {
-  .app-shell__mobile .action-cluster {
+  .app-shell__mobile .action-dock {
     bottom: calc(var(--sheet-top) + 0.6rem);
     transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
-  .app-shell__mobile[data-sheet-dragging="true"] .action-cluster {
+  .app-shell__mobile[data-sheet-dragging="true"] .action-dock {
     transition: none;
   }
 }
@@ -469,15 +480,17 @@ button:disabled { cursor: default; }
    above the action cluster (roughly its height + gap higher) so it never
    overlaps the Export/PNG/Share row. Non-interactive (pointer-events:none on
    the component itself), so no z-index fight with anything below it matters.
-   Unlike .action-cluster, this lives INSIDE .viewer-wrap on BOTH layouts (it's
+   Unlike .action-dock, this lives INSIDE .viewer-wrap on BOTH layouts (it's
    rendered by ViewerStage itself, not passed in as layout-specific children —
    see ViewerStage.tsx) — on mobile, .viewer-wrap's own bottom edge already
    tracks the sheet (its ancestor .app-shell__mobile-viewer's `bottom` is
    var(--sheet-top), transitioned), so a plain rem offset here rides along for
-   free with no extra --sheet-top arithmetic or transition needed. */
+   free with no extra --sheet-top arithmetic or transition needed. The offset
+   clears the two-line Export button's slightly taller cluster (PR9's outcome
+   + format-line CTA) with a little headroom to spare. */
 .viewer-hint {
   position: absolute;
-  bottom: calc(3.85rem + var(--safe-area-bottom));
+  bottom: calc(4.5rem + var(--safe-area-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 9;
@@ -488,7 +501,7 @@ button:disabled { cursor: default; }
    safe-area or --sheet-top term (both already folded into the ancestor). */
 @media (max-width: 860px) {
   .app-shell__mobile .viewer-hint {
-    bottom: 3.2rem;
+    bottom: 3.85rem;
   }
 }
 

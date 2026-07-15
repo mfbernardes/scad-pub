@@ -397,6 +397,35 @@ function parseExperience(raw) {
   return out;
 }
 
+// The optional after-export success-panel config a config may set under
+// `ui.afterExport` (see src/components/ExportSuccess.tsx). Every field is a
+// plain non-empty string override; the app's own i18n defaults apply to any
+// field left unset. Unlike `ui.experience`, `helpTab` can't be validated here
+// — it names a tab in this same config's `help` block, parsed separately in
+// gen-schema's generate() — so that cross-field check happens there, once
+// both are available (search generate() for 'ui.afterExport.helpTab').
+const AFTER_EXPORT_KEYS = ["title", "body", "helpTab"];
+function parseAfterExport(raw) {
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'ui.afterExport' must be an object");
+  for (const key of Object.keys(raw)) {
+    if (!AFTER_EXPORT_KEYS.includes(key))
+      throw new Error(
+        `gen-schema: unknown 'ui.afterExport' key '${key}'.\n` +
+          `  Valid keys: ${AFTER_EXPORT_KEYS.join(", ")}`
+      );
+  }
+  const out = {};
+  for (const key of AFTER_EXPORT_KEYS) {
+    if (raw[key] !== undefined) {
+      if (typeof raw[key] !== "string" || !raw[key].trim())
+        throw new Error(`gen-schema: 'ui.afterExport.${key}' must be a non-empty string`);
+      out[key] = raw[key].trim();
+    }
+  }
+  return out;
+}
+
 // Validate and normalise the optional `ui` config block: build-time UI behaviour
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
@@ -479,6 +508,9 @@ export function parseUi(raw) {
   }
   if (raw.experience !== undefined && raw.experience !== null) {
     out.experience = parseExperience(raw.experience);
+  }
+  if (raw.afterExport !== undefined && raw.afterExport !== null) {
+    out.afterExport = parseAfterExport(raw.afterExport);
   }
   return out;
 }

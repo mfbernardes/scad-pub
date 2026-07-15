@@ -30,7 +30,25 @@ const EMPTY_LOG: string[] = [];
 // card shared verbatim by the desktop and mobile clusters so a tweak to
 // padding/border lands once.
 const ACTION_CLUSTER_CLASS =
-  "action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation)";
+  // flex-wrap + a viewport-relative max-width (matching .action-dock's own
+  // budget in index.css — a plain `max-w-full`/100% doesn't resolve
+  // reliably here since this row's containing block, .action-dock, is
+  // itself shrink-to-fit rather than a definite width): at a narrow
+  // viewport the three buttons' combined preferred width (the two-line
+  // export CTA especially) can exceed even a fully shrunk row, so instead
+  // of relying on shrinking alone (which can only go so far — the CTA's own
+  // main label deliberately stays on one line), the row wraps Image/Share
+  // onto a second line below Export rather than spilling past the screen
+  // edge. Verified at a 320px viewport (the narrowest realistic target).
+  "action-cluster flex w-[min(calc(100vw-1.5rem),24rem)] flex-wrap items-center justify-center gap-[0.3rem] rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation)";
+// Wraps the action cluster (and, when present, the after-export panel riding
+// above it) — see .action-dock in index.css for the shared bottom-anchored
+// positioning both layouts used to put directly on .action-cluster. Anchoring
+// the WRAPPER's bottom edge, not the cluster's own, means the cluster's own
+// screen position never moves when the panel appears/disappears above it: the
+// box just grows upward, since its height is auto and only its bottom edge is
+// pinned.
+const ACTION_DOCK_CLASS = "action-dock flex flex-col items-center gap-2";
 // One-time onboarding hint gate for the sheet handle (see sheetHintVisible
 // below) — a fresh key, distinct from the pre-existing hint.* i18n strings it
 // reuses text from, so it never collides with an unrelated once-flag.
@@ -42,6 +60,7 @@ const SHEET_HINT_TIMEOUT_MS = 5000;
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
+import { ExportSuccess, type ExportSuccessState } from "./ExportSuccess";
 import { OutputToggle } from "./OutputToggle";
 import { BarActions } from "./BarActions";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
@@ -139,6 +158,12 @@ interface Props {
   /** Bumped by the Help modal's "show the checklist again" row to clear the
    *  dismiss flag and bring GettingStarted back — see its own doc. */
   checklistReplaySignal: number;
+  /** The after-export panel's current state (null -> not shown: no export
+   *  yet, `ui.afterExport` isn't configured, or it was dismissed/auto-hid).
+   *  Owned by App.tsx (like checklistProgress) since exportModel is what
+   *  actually knows the real export outcome. See ExportSuccess.tsx. */
+  exportSuccess: ExportSuccessState | null;
+  onDismissExportSuccess: () => void;
 }
 
 export const AppShell = memo(function AppShell({
@@ -172,6 +197,8 @@ export const AppShell = memo(function AppShell({
   experienceMode,
   checklistProgress,
   checklistReplaySignal,
+  exportSuccess,
+  onDismissExportSuccess,
 }: Props) {
   const actions = useAppActions();
   const desktopViewerRef = useRef<ViewerHandle>(null);
@@ -306,6 +333,10 @@ export const AppShell = memo(function AppShell({
   const showZoom = ui.zoom === true;
   // Whether the viewer offers the fullscreen toggle (where it works at all).
   const showFullscreen = ui.fullscreen !== false;
+  // The after-export panel's config overrides (title/body/helpTab), if any —
+  // see ExportSuccess.tsx. Absent -> the panel is off, so `exportSuccess`
+  // (App.tsx's state) is always null in that case too.
+  const afterExport = ui.afterExport ?? null;
   // Guided-only surfaces: the getting-started checklist (config can opt out
   // even in guided mode via `ui.checklist: false`) and the viewer gesture
   // hint (no config switch — it's a single short-lived chip, not standing
@@ -679,9 +710,22 @@ export const AppShell = memo(function AppShell({
                 (it follows the sheet up to the half detent via
                 --sheet-follow-h) instead of a solid docked footer band that
                 would reserve a strip of the viewport. Identical markup +
-                buttons to the desktop cluster. */}
-            <div className={ACTION_CLUSTER_CLASS}>
-              <ActionButtons {...actionButtonsProps} />
+                buttons to the desktop cluster. The after-export panel (when
+                shown) rides directly above it in the same dock, never
+                covering it — see ACTION_DOCK_CLASS's doc. */}
+            <div className={ACTION_DOCK_CLASS}>
+              {exportSuccess && (
+                <ExportSuccess
+                  state={exportSuccess}
+                  title={afterExport?.title}
+                  body={afterExport?.body}
+                  helpTab={afterExport?.helpTab}
+                  onDismiss={onDismissExportSuccess}
+                />
+              )}
+              <div className={ACTION_CLUSTER_CLASS}>
+                <ActionButtons {...actionButtonsProps} />
+              </div>
             </div>
 
             <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
@@ -819,9 +863,22 @@ export const AppShell = memo(function AppShell({
               <ViewerStage {...stageProps} viewerRef={desktopViewerRef} active>
                 {/* Floating controls live inside viewer-wrap so they hover over the
                     canvas — which shrinks when the output console docks below it —
-                    rather than overlapping the console's notices. */}
-                <div className={ACTION_CLUSTER_CLASS}>
-                  <ActionButtons {...actionButtonsProps} />
+                    rather than overlapping the console's notices. The after-export
+                    panel (when shown) rides directly above the cluster in the same
+                    dock, never covering it — see ACTION_DOCK_CLASS's doc. */}
+                <div className={ACTION_DOCK_CLASS}>
+                  {exportSuccess && (
+                    <ExportSuccess
+                      state={exportSuccess}
+                      title={afterExport?.title}
+                      body={afterExport?.body}
+                      helpTab={afterExport?.helpTab}
+                      onDismiss={onDismissExportSuccess}
+                    />
+                  )}
+                  <div className={ACTION_CLUSTER_CLASS}>
+                    <ActionButtons {...actionButtonsProps} />
+                  </div>
                 </div>
                 <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
               </ViewerStage>

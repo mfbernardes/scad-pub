@@ -365,6 +365,7 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`gallery`**: `false` by default, or `true`. Replaces the top-bar design switcher's dropdown Select with `DesignPickerDialog`, a card-grid dialog showing each design's `image` (falling back to `icon`, then a letter glyph) plus its label and description. Only takes effect with more than one design. A search box appears once there are more than six designs. See [Per-design `image`](#design-sources) and the annotations doc's [`// @image`](annotations.md#design-metadata--description--icon--image--doc)
 - **`checklist`**: `true` by default, or `false`. Whether the getting-started checklist (a small dismissible "Choose a design / Review settings / Preview / Export" card) may show at all. It's only ever shown in guided experience regardless of this flag — set `false` to suppress it there too
 - **`experience`**: seeds the client-side guided/standard experience. See [Experience mode (`ui.experience`)](#experience-mode-uiexperience)
+- **`afterExport`**: turns on the inline after-export success panel. Absent by default (no panel). See [After-export panel (`ui.afterExport`)](#after-export-panel-uiafterexport)
 
 ### Experience mode (`ui.experience`)
 
@@ -387,6 +388,28 @@ The optional `ui.experience` object seeds the client-side "experience mode" and 
 - **`mobileInitialSheet`**: which snap position the mobile bottom sheet opens to on first load — `"peek"` (the default, mostly closed) or `"half"` (half-open).
 
 Each field only seeds the **first-ever** client state. The moment a visitor changes either the experience mode or the settings view, that choice is persisted (namespaced local storage, like every other ScadPub preference) and wins on every later visit — ahead of these config defaults. `default` and `settingsView` are independent settings with independent persisted keys; changing one client-side never touches the other's stored value or its config default.
+
+### After-export panel (`ui.afterExport`)
+
+The optional `ui.afterExport` object turns on a compact, non-modal panel (`src/components/ExportSuccess.tsx`) that appears above the floating action cluster right after a successful model export. Absent entirely (the default) -> no panel is ever shown, on any export. Every field inside it is also optional:
+
+```jsonc
+{
+  "ui": {
+    "afterExport": {
+      "title": "Model downloaded",     // optional; defaults to outcome-led i18n wording
+      "body": "Slice it and print.",   // optional; defaults to export.nextSteps
+      "helpTab": "Printing"            // optional; must name an existing help.tabs[].label
+    }
+  }
+}
+```
+
+- **`title`**: overrides the panel's headline. Left unset, the app picks it from what actually happened — a real browser download reads `export.downloaded`; handing the file to the native share sheet reads the more modest `export.readyToShare` (the Web Share API only confirms the OS handed the file to the chosen app, not that anything happened there, so the wording never overclaims a completed share)
+- **`body`**: overrides the panel's one-line next step. Defaults to `export.nextSteps`
+- **`helpTab`**: when set, the panel shows a "Printing guide" action that opens Help scrolled straight to the tab with this exact label (`HelpModal`'s `initialTab`, matched by [`help.tabs[].label`](#help-content-help)). **Validated at build time**: `gen-schema` fails the build if no tab in this config's `help` carries that label. Omit to hide the action
+
+The panel is dismissible (an X, and it auto-hides itself — longer on the very first export a browser ever makes, quieter after that) and never appears while a native share sheet is open — it's only ever shown once the export's share-or-download outcome has actually settled. On a build where `ui.afterExport` is configured, it also takes over the export flow's one-time "install this app" nudge entirely (the two never stack on the same export); leave `ui.afterExport` unset to keep the install nudge as the export's only follow-up.
 
 ### PWA manifest
 
@@ -461,7 +484,7 @@ build (with a "did you mean" suggestion for a likely typo).
 Two conventions to know when writing overrides:
 
 - **Plural forms** are separate key variants with a CLDR category suffix, e.g. `"foo.count#one"` / `"foo.count#other"`. Override the specific variant(s) you want to change, not a bare `"foo.count"` key
-- **Placeholders** are `{name}` tokens interpolated at render time, e.g. `"action.download"` is `"Download {format}"`. Keep every placeholder from the original string in your override — the app doesn't validate this, so a dropped placeholder silently loses that value
+- **Placeholders** are `{name}` tokens interpolated at render time, e.g. `"export.formatNote"` is `"{format} · for slicers and print services"`. Keep every placeholder from the original string in your override — the app doesn't validate this, so a dropped placeholder silently loses that value
 
 ## Help content (`help`)
 

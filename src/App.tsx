@@ -33,6 +33,8 @@ import { useFileImports } from "./lib/useFileImports";
 import { useAppNotices } from "./lib/useAppNotices";
 import { useExperience } from "./lib/useExperience";
 import { makeOnceFlag } from "./lib/prefs";
+import { shouldOfferInstallHint, type ExportOutcomeKind } from "./lib/exportOutcome";
+import type { ExportSuccessState } from "./components/ExportSuccess";
 import { toast } from "sonner";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
@@ -58,6 +60,17 @@ const cacheConfig = schema.render?.cache;
 const popup = schema.popup ?? null;
 const installMode = schema.ui?.install ?? "auto";
 const installHintFlag = makeOnceFlag("install.hint.seen");
+// PR9: the optional inline after-export success panel (ExportSuccess.tsx).
+// Absent -> null -> the feature is off entirely, exportModel never sets any
+// export-success state, and the install hint keeps its old behaviour below
+// (see shouldOfferInstallHint's doc for the precedence rule this implies).
+const afterExportConfig = schema.ui?.afterExport ?? null;
+// First-vs-later show for the panel's auto-hide duration (see
+// src/lib/exportOutcome.ts's afterExportAutoHideMs) — a separate flag from
+// checklistExportedFlag below: that one tracks "has this browser ever
+// exported", this one tracks "has this browser ever SEEN THE PANEL",
+// independent of whether afterExport was configured at the time.
+const afterExportFlag = makeOnceFlag("afterexport.v1");
 // The getting-started checklist's "Export the model" item persists across
 // visits — once a browser has exported successfully, that's real, durable
 // progress, so it stays checked on a later reload rather than resetting
@@ -118,6 +131,17 @@ export default function App() {
   }, []);
   const [showLicenses, setShowLicenses] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // Which Help tab to open straight to, set only via a deep-linked showHelp()
+  // call (the after-export panel's "Printing guide" action) — see
+  // AppActions.showHelp's doc and HelpModal's initialTab.
+  const [helpInitialTab, setHelpInitialTab] = useState<string | undefined>(undefined);
+  // The after-export panel's current state (null -> not shown). `key`
+  // increments on every export so the panel's auto-hide timer restarts even
+  // when two exports in a row land on the same outcome — see
+  // ExportSuccess.tsx's own doc.
+  const [exportSuccess, setExportSuccess] = useState<ExportSuccessState | null>(null);
+  const exportSuccessKeyRef = useRef(0);
+  const dismissExportSuccess = useCallback(() => setExportSuccess(null), []);
   const [showDesignDoc, setShowDesignDoc] = useState(false);
   const [showPopup, setShowPopup] = useState(() => shouldShowPopup(popup));
   const closePopup = (remember: boolean) => {
@@ -391,13 +415,33 @@ export default function App() {
     const blob = new Blob([snapshot.result.stl as BlobPart], { type: `model/${schema.format}` });
     // Prefer the native share sheet on capable devices (send straight to a
     // slicer / Files / AirDrop); fall back to a plain download otherwise.
+    // Only ever read/set post-export UI state (the panel or the toast) AFTER
+    // this settles, so neither can ever appear over, or race, the share sheet.
     const outcome = await shareFileOrFallback(
       new File([blob], name, { type: blob.type }),
       () => downloadBlob(blob, name)
     );
     if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
-    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
-    offerInstallHint();
+    // "fell-back" is a real browser download (shareFile was unsupported/
+    // failed, so the fallback ran); "shared" is navigator.share() resolving.
+    // See src/lib/exportOutcome.ts's file doc for why "shared" still maps to
+    // the modest readyToShare wording rather than an overclaiming "completed".
+    const kind: ExportOutcomeKind = outcome === "shared" ? "shared" : "downloaded";
+    if (afterExportConfig) {
+      // The panel is this deployment's one and only post-export surface (see
+      // shouldOfferInstallHint's precedence doc below) — it replaces the
+      // plain announcement toast entirely rather than stacking with it.
+      const isFirstShow = !afterExportFlag.seen();
+      afterExportFlag.remember();
+      exportSuccessKeyRef.current += 1;
+      setExportSuccess({ outcome: kind, key: exportSuccessKeyRef.current, isFirstShow });
+    } else {
+      setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
+    }
+    // Precedence rule (src/lib/exportOutcome.ts): the install hint only ever
+    // fires on a deployment that hasn't configured the after-export panel —
+    // the simplest rule that can never stack the two on the same export.
+    if (shouldOfferInstallHint(!!afterExportConfig)) offerInstallHint();
     // The checklist's "Export the model" item: a real export just completed
     // (share OR download — either is a genuine export, not a dismissed
     // sheet, which returned above). It happened regardless of whether the
@@ -455,7 +499,10 @@ export default function App() {
   }, [design, values, presetSel, shareability, setAnnouncement]);
 
   const handleReset = useCallback(() => { setValues(defaultsFor(design)); setPresetSel(""); }, [design]);
-  const showHelpModal = useCallback(() => setShowHelp(true), []);
+  const showHelpModal = useCallback((tab?: string) => {
+    setHelpInitialTab(tab);
+    setShowHelp(true);
+  }, []);
   const showDesignDocModal = useCallback(() => setShowDesignDoc(true), []);
   const showLicensesModal = useCallback(() => setShowLicenses(true), []);
 
@@ -515,11 +562,15 @@ export default function App() {
       {showHelp && (
         <HelpModal
           help={schema.help}
-          onClose={() => setShowHelp(false)}
+          onClose={() => {
+            setShowHelp(false);
+            setHelpInitialTab(undefined);
+          }}
           canInstall={canInstall && installMode !== "off"}
           onInstall={promptInstall}
           canReplayChecklist={canReplayChecklist}
           onReplayChecklist={replayChecklist}
+          initialTab={helpInitialTab}
         />
       )}
       {showDesignDoc && design.doc && (
@@ -578,6 +629,8 @@ export default function App() {
           experienceMode={experienceMode}
           checklistProgress={checklistProgress}
           checklistReplaySignal={checklistReplaySignal}
+          exportSuccess={exportSuccess}
+          onDismissExportSuccess={dismissExportSuccess}
         />
       </AppActionsProvider>
     </>

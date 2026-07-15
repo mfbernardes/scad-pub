@@ -9,6 +9,18 @@
 // both layouts, so it's no longer here. Render-mode (auto-render) and the "needs
 // re-render" call-to-action live elsewhere — the params footer and the viewer's
 // StaleBanner respectively — so this bar has a single, stable shape.
+//
+// PR9 CTA rewrite: the primary button used to read "Download {format}" — the
+// universal word for "get the file", with the format riding along because the
+// slicer needs it. That undersold what the button actually does (produce a
+// ready-to-print 3D model, not an arbitrary file) and buried the one piece of
+// information a first-time visitor needs to trust the button at all — what
+// format they're about to get. The outcome now leads ("Export 3D model"); the
+// format stays visible (not hidden in a tooltip — tooltips don't exist on
+// touch) as a small, deliberately quiet secondary line so the button doesn't
+// blow out the compact action cluster. Both strings are ordinary catalogue
+// keys (`action.export` / `export.formatNote`), so a deployment can still
+// override either one via `strings` same as before.
 import { useAppActions } from "../lib/appActions";
 import { Button } from "./ui/button";
 import { Download as DownloadIcon, Image as ImageIcon, Link2 as LinkIcon } from "lucide-react";
@@ -27,23 +39,40 @@ interface Props {
 export function ActionButtons({ canExport, modelFormat, onSavePng }: Props) {
   const { exportModel, copyLink } = useAppActions();
   const fmt = modelFormat.toUpperCase();
-  // Same key drives both the visible label and the aria-label, so they never
-  // drift apart — scripts/smoke.mjs selects [aria-label^="Download "].
-  const downloadLabel = t("action.download", { format: fmt });
+  const exportLabel = t("action.export");
+  const formatLine = t("export.formatNote", { format: fmt });
+  // A dedicated aria/title key (not a concatenation of the two visible lines)
+  // so the parenthetical form stays natural per-locale rather than assuming
+  // English's "X (Y)" punctuation — scripts/smoke.mjs selects `.action-export`
+  // (a stable hook, not the label text, which is expected to keep evolving).
+  const exportAria = t("action.exportAria", { format: fmt });
 
   return (
     <>
-      {/* "Download", not "Export": the universal word for "get the file". The
-          format rides along because the slicer needs it. */}
       <Button
         size="sm"
         variant="default"
-        className="hover:bg-primary hover:brightness-[1.08]"
+        // min-w-0 lets this flex item shrink below its content's natural
+        // width instead of forcing the row (and the whole cluster) wider
+        // than the viewport; whitespace-normal then lets the longer format
+        // line wrap onto a second line once it's squeezed that far — the
+        // short main label keeps fitting on one line regardless. Verified
+        // at a 320px viewport (the narrowest realistic target).
+        className="action-export h-auto min-w-0 flex-col items-stretch gap-0 whitespace-normal py-[0.4rem] hover:bg-primary hover:brightness-[1.08]"
         onClick={exportModel}
         disabled={!canExport}
-        aria-label={downloadLabel}
+        aria-label={exportAria}
+        title={exportAria}
       >
-        <DownloadIcon size={16} /> {downloadLabel}
+        <span className="inline-flex items-center justify-center gap-[0.35rem] whitespace-nowrap">
+          <DownloadIcon size={16} /> {exportLabel}
+        </span>
+        {/* Visible, not a tooltip (tooltips fail on touch); kept small and
+            light-weight (not dimmed via opacity — axe's dark-theme contrast
+            check failed a semi-transparent white-on-accent-solid combination
+            at this size, since small text needs 4.5:1) so the two-line
+            button doesn't blow out the action cluster while staying AA. */}
+        <span className="text-center text-[0.68rem] leading-tight font-normal">{formatLine}</span>
       </Button>
       <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!canExport} aria-label={t("action.saveImage")}>
         <ImageIcon size={16} /> {t("action.image")}

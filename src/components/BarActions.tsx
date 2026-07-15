@@ -77,7 +77,11 @@ export function BarActions({ themeMode, collapse = false }: Props) {
   return (
     <>
       <ThemeToggle mode={themeMode} onCycle={cycleTheme} />
-      <IconButton label="Help" title="Help & keyboard shortcuts" onClick={showHelp}>
+      {/* showHelp takes an optional deep-link tab (see AppActions); called with
+          no args here for the default "first tab" behaviour, and wrapped
+          rather than passed directly so IconButton's synthetic click event
+          can never be forwarded into it as that argument. */}
+      <IconButton label="Help" title="Help & keyboard shortcuts" onClick={() => showHelp()}>
         <HelpIcon size={16} />
       </IconButton>
       <IconButton label={LICENSES_LABEL} title={LICENSES_LABEL} onClick={showLicenses}>

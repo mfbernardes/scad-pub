@@ -49,12 +49,12 @@ function HelpSections({
 
 /** Tab strip + panels, built on the shared Radix Tabs primitive (which provides
  *  the full ARIA tabs pattern — roving tabindex, arrow/Home/End nav — for free). */
-function HelpTabs({ tabs }: { tabs: HelpTab[] }) {
+function HelpTabs({ tabs, defaultTab }: { tabs: HelpTab[]; defaultTab: string }) {
   // `min-h-0 flex-1` lets this tab block fill the dialog's remaining height and,
   // crucially, shrink below its content — otherwise the default `min-height:auto`
   // makes it grow past the dialog, which clips (rather than scrolls) long tabs.
   return (
-    <Tabs defaultValue="0" className="min-h-0 flex-1 gap-0">
+    <Tabs defaultValue={defaultTab} className="min-h-0 flex-1 gap-0">
       <TabsList
         className="mx-4 mt-2 h-auto w-auto flex-wrap justify-start rounded-none border-0 border-b bg-transparent p-0"
         aria-label="Help topics"
@@ -88,6 +88,7 @@ export function HelpModal({
   onInstall,
   canReplayChecklist = false,
   onReplayChecklist,
+  initialTab,
 }: {
   help?: HelpContent | null;
   onClose: () => void;
@@ -102,6 +103,13 @@ export function HelpModal({
   /** Clears the checklist's dismiss flag and brings GettingStarted back —
    *  see src/components/GettingStarted.tsx. */
   onReplayChecklist?: () => void;
+  /** Open straight to the tab whose label matches this (e.g. from the
+   *  after-export panel's "Printing guide" action — see App.tsx's showHelp
+   *  and gen-schema's `ui.afterExport.helpTab` validation, which guarantees
+   *  a configured value always names a real tab). Unmatched or absent ->
+   *  the first tab, same as before this existed. Ignored when the config has
+   *  no tabs at all. */
+  initialTab?: string;
 }) {
   const content = help ?? DEFAULT_HELP;
   // Normalise to tabs when the config supplies any. Top-level `sections` (the
@@ -115,6 +123,11 @@ export function HelpModal({
         ...content.tabs,
       ]
     : null;
+  // Radix Tabs indexes panels by position (see HelpTabs' `value={String(i)}`),
+  // so the deep link resolves to that same index string. A miss (stale
+  // config, no match) falls back to the first tab exactly like before.
+  const initialTabIndex = tabs && initialTab ? tabs.findIndex((tab) => tab.label === initialTab) : -1;
+  const defaultTab = initialTabIndex >= 0 ? String(initialTabIndex) : "0";
 
   return (
     <Modal title={content.title ?? "How to use this configurator"} label="Help" onClose={onClose}>
@@ -124,7 +137,7 @@ export function HelpModal({
         </div>
       )}
       {tabs ? (
-        <HelpTabs tabs={tabs} />
+        <HelpTabs tabs={tabs} defaultTab={defaultTab} />
       ) : (
         <div className={HELP_BODY}>
           <HelpSections sections={content.sections ?? []} />

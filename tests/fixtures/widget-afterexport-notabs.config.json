@@ -1,0 +1,9 @@
+{
+  "source": "src",
+  "features": [],
+  "fonts": [],
+  "ui": {
+    "afterExport": { "helpTab": "Printing" }
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

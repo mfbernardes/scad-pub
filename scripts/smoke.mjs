@@ -540,18 +540,63 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
   await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
 }
 
-// Export 3MF + PNG on the first design.
+// Export 3MF + PNG on the first design, plus the after-export panel it drives
+// (PR9): the dogfood config sets `ui.afterExport.helpTab` ("Printing"), so
+// every completed export here should surface the panel.
 async function checkExports({ page, check, ids, dir }) {
   await selectDesign(page, ids[0]);
   console.log("=== export 3MF ===");
   const [model] = await Promise.all([
     page.waitForEvent("download"),
-    // ActionCluster uses aria-label="Export STL/3MF"; button text is just the format
-    page.click('[aria-label^="Download "]'),
+    // PR9: the CTA reads "Export 3D model" now, not "Download {format}" — the
+    // label is expected to keep evolving, so smoke selects the stable
+    // `.action-export` hook rather than the visible text/aria-label.
+    page.click(".action-export"),
   ]);
   const modelOut = join(dir, await model.suggestedFilename());
   await model.saveAs(modelOut);
   check((await stat(modelOut)).size > 0, `${await model.suggestedFilename()} (${(await stat(modelOut)).size} bytes)`);
+  check(
+    (await page.getByLabel(/Export 3D model/i).count()) >= 1,
+    "the renamed export CTA is present with its outcome-led label"
+  );
+
+  console.log("=== after-export panel ===");
+  // Headless Chromium has no Web Share API target here, so exportModel falls
+  // back to a plain browser download — the panel should show the
+  // "downloaded" wording (src/lib/exportOutcome.ts's exportOutcomeTitleKey).
+  const successPanel = page.locator(".export-success");
+  await successPanel.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await successPanel.count()) === 1, "export-success panel appears after a completed 3MF export");
+  check(
+    /downloaded/i.test((await successPanel.textContent()) ?? ""),
+    "export-success panel shows the downloaded wording for a plain browser download"
+  );
+  await runAxe(page, check, "export-success panel visible");
+
+  const guideLink = successPanel.getByRole("button", { name: "Printing guide" });
+  check((await guideLink.count()) === 1, 'export-success panel offers a "Printing guide" action');
+  await guideLink.click();
+  const helpDialog = page.getByRole("dialog");
+  await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  const printingTab = helpDialog.getByRole("tab", { name: "Printing" });
+  check(
+    (await printingTab.getAttribute("aria-selected")) === "true",
+    '"Printing guide" opens Help deep-linked to the Printing tab'
+  );
+  await page.keyboard.press("Escape");
+  await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+
+  // Export again (the panel from the first export never got its own X) to
+  // exercise the dismiss button itself.
+  const [model2] = await Promise.all([
+    page.waitForEvent("download"),
+    page.click(".action-export"),
+  ]);
+  await model2.saveAs(join(dir, `redownload-${await model2.suggestedFilename()}`));
+  await successPanel.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await successPanel.locator(".export-success__dismiss").click();
+  check((await successPanel.count()) === 0, "export-success panel's dismiss (X) hides it");
 
   console.log("=== save PNG ===");
   const [png] = await Promise.all([
@@ -563,6 +608,9 @@ async function checkExports({ page, check, ids, dir }) {
   const head = (await readFile(pngOut)).subarray(0, 4);
   const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
   check(isPng && (await stat(pngOut)).size > 0, `${await png.suggestedFilename()} (png=${isPng})`);
+  // The PNG snapshot is about a picture of the model, not the printable model
+  // itself — it must never surface the export-success panel.
+  check((await successPanel.count()) === 0, "Image export does not show the export-success panel");
 }
 
 async function checkPreviewControls({ page, check }) {

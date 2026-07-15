@@ -10,12 +10,12 @@
   "stale.pauseReason.heavy": "Live preview is paused — this design takes a while to build.",
   "stale.pauseReason.manualDesign": "Live preview is paused — this design starts in manual mode.",
 
-  "action.download": "Download {format}",
   "action.image": "Image",
   "action.share": "Share",
   "action.saveImage": "Save image",
   "action.copyShareLink": "Copy share link",
   "action.export": "Export 3D model",
+  "action.exportAria": "Export 3D model ({format})",
 
   "toast.renderFailed": "That combination of settings didn't work",
   "toast.renderFailedDescription": "Open Messages (the bell in the top bar) for details.",
@@ -86,9 +86,9 @@
 
   "export.formatNote": "{format} · for slicers and print services",
   "export.downloaded": "Model downloaded",
-  "export.shareCompleted": "Share completed",
   "export.readyToShare": "Model ready to share",
   "export.printingGuide": "Printing guide",
+  "export.nextSteps": "Next, open it in a slicer or send it to a print service.",
 
   "common.close": "Close",
   "common.reset": "Reset"

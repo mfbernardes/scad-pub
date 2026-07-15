@@ -430,6 +430,28 @@ export interface UiConfig {
      */
     mobileInitialSheet?: "peek" | "half";
   };
+  /**
+   * Optional inline success panel shown above the action cluster after a
+   * successful export (see src/components/ExportSuccess.tsx). Absent ->
+   * the feature is off entirely — no panel is ever shown, on any export.
+   * All fields are optional even when the object is present; omitted
+   * `title`/`body` fall back to i18n defaults (the outcome-led
+   * `export.downloaded` / `export.readyToShare`, and `export.nextSteps`).
+   * None of these fields affect geometry (absent from renderHash).
+   */
+  afterExport?: {
+    /** Overrides the outcome-led i18n title. */
+    title?: string;
+    /** Overrides the i18n default body (`export.nextSteps`). */
+    body?: string;
+    /**
+     * Help-modal tab label to deep-link the panel's "Printing guide" action
+     * to (see HelpModal's `initialTab`). Validated at build time against
+     * this config's `help` tabs — gen-schema fails the build if no tab
+     * carries this exact label. Omit to hide the action entirely.
+     */
+    helpTab?: string;
+  };
 }
 
 export interface Schema {

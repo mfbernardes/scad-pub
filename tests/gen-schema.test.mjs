@@ -1131,6 +1131,54 @@ test("help defaults to null when omitted", () => {
   assert.equal(schema.help, null);
 });
 
+test("ui.afterExport is absent by default and accepts each valid field", () => {
+  assert.equal(parseUi(undefined).afterExport, undefined);
+  assert.equal(parseUi({}).afterExport, undefined);
+  assert.deepEqual(parseUi({ afterExport: { title: "Done" } }).afterExport, { title: "Done" });
+  assert.deepEqual(parseUi({ afterExport: { body: "Next steps" } }).afterExport, { body: "Next steps" });
+  assert.deepEqual(parseUi({ afterExport: { helpTab: "Printing" } }).afterExport, { helpTab: "Printing" });
+  assert.deepEqual(
+    parseUi({ afterExport: { title: " Done ", body: "Next", helpTab: "Printing" } }).afterExport,
+    { title: "Done", body: "Next", helpTab: "Printing" }
+  );
+});
+
+test("ui.afterExport rejects empty/wrong-typed fields, unknown keys and wrong shapes", () => {
+  assert.throws(
+    () => parseUi({ afterExport: { title: "" } }),
+    /'ui\.afterExport\.title' must be a non-empty string/
+  );
+  assert.throws(
+    () => parseUi({ afterExport: { helpTab: 3 } }),
+    /'ui\.afterExport\.helpTab' must be a non-empty string/
+  );
+  assert.throws(
+    () => parseUi({ afterExport: { subtitle: "x" } }),
+    /unknown 'ui\.afterExport' key 'subtitle'/
+  );
+  assert.throws(() => parseUi({ afterExport: "on" }), /'ui\.afterExport' must be an object/);
+  assert.throws(() => parseUi({ afterExport: [] }), /'ui\.afterExport' must be an object/);
+});
+
+test("ui.afterExport.helpTab: build succeeds when it names a real help tab", () => {
+  const { schema } = run("widget-afterexport-ok.config.json");
+  assert.equal(schema.ui.afterExport.helpTab, "Printing");
+});
+
+test("ui.afterExport.helpTab: build fails when no help tab has that label", () => {
+  assert.throws(
+    () => run("widget-afterexport-bad.config.json"),
+    /'ui\.afterExport\.helpTab' is "Nope", but no 'help' tab has that label/
+  );
+});
+
+test("ui.afterExport.helpTab: build fails with a clear message when the config has no help tabs at all", () => {
+  assert.throws(
+    () => run("widget-afterexport-notabs.config.json"),
+    /This config's 'help' has no tabs defined/
+  );
+});
+
 test("licenses: extra entries are appended, sanitised, and unknown keys dropped", () => {
   const { schema } = run("widget-licenses.config.json");
   assert.equal(schema.licenses.length, 2);

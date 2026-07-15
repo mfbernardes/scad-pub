@@ -10,12 +10,12 @@
   "stale.pauseReason.heavy": "Die Live-Vorschau ist pausiert — dieses Design braucht länger zum Erstellen.",
   "stale.pauseReason.manualDesign": "Die Live-Vorschau ist pausiert — dieses Design startet im manuellen Modus.",
 
-  "action.download": "{format} herunterladen",
   "action.image": "Bild",
   "action.share": "Teilen",
   "action.saveImage": "Bild speichern",
   "action.copyShareLink": "Link zum Teilen kopieren",
   "action.export": "3D-Modell exportieren",
+  "action.exportAria": "3D-Modell exportieren ({format})",
 
   "toast.renderFailed": "Diese Kombination von Einstellungen hat nicht funktioniert",
   "toast.renderFailedDescription": "Öffnen Sie „Nachrichten“ (die Glocke in der oberen Leiste) für Details.",
@@ -86,9 +86,9 @@
 
   "export.formatNote": "{format} · für Slicer und Druckdienste",
   "export.downloaded": "Modell heruntergeladen",
-  "export.shareCompleted": "Teilen abgeschlossen",
   "export.readyToShare": "Modell bereit zum Teilen",
   "export.printingGuide": "Druckanleitung",
+  "export.nextSteps": "Öffnen Sie es als Nächstes in einem Slicer oder senden Sie es an einen Druckdienst.",
 
   "common.close": "Schließen",
   "common.reset": "Zurücksetzen"

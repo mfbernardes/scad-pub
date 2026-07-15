@@ -34,7 +34,10 @@ export interface AppActions {
   clearFiles: () => void;
   autoRenderChange: (v: boolean) => void;
   cycleTheme: () => void;
-  showHelp: () => void;
+  /** Opens the Help modal, optionally straight to the tab whose label matches
+   *  `tab` (see HelpModal's `initialTab`) — used by the after-export panel's
+   *  "Printing guide" action. Omit for the default "first tab" behaviour. */
+  showHelp: (tab?: string) => void;
   showDesignDoc: () => void;
   showLicenses: () => void;
   showPicker: () => void;
@@ -75,7 +78,7 @@ export function AppActionsProvider({
       clearFiles: () => latest.current.clearFiles(),
       autoRenderChange: (v) => latest.current.autoRenderChange(v),
       cycleTheme: () => latest.current.cycleTheme(),
-      showHelp: () => latest.current.showHelp(),
+      showHelp: (tab) => latest.current.showHelp(tab),
       showDesignDoc: () => latest.current.showDesignDoc(),
       showLicenses: () => latest.current.showLicenses(),
       showPicker: () => latest.current.showPicker(),
