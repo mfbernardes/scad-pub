@@ -105,6 +105,18 @@ interface Props {
    * navigation. Unused by ParamForm today.
    */
   sectionChrome?: "details" | "flat";
+  /**
+   * "flat" chrome only: whether each section's own name renders as a small
+   * heading above its params (default true). QuickStart passes false for a
+   * step with exactly one section — the step's own heading already names it,
+   * so repeating the (often differently-worded) underlying section name
+   * directly below reads as a confusing double heading rather than useful
+   * structure. A step spanning several sections (see docs/annotations.md's
+   * "Sharing a step across sections") still wants them, to tell the
+   * sub-groups apart — so this stays true there. Ignored for "details"
+   * chrome, whose <summary> IS the section name and can't be a duplicate.
+   */
+  showSectionHeadings?: boolean;
 }
 
 /** A request to reveal + focus one parameter's control — see `focusParam` above. */
@@ -416,6 +428,7 @@ export const ParamRows = memo(function ParamRows({
   view = "all",
   focusParam,
   sectionChrome = "details",
+  showSectionHeadings = true,
 }: Props) {
   const q = search.toLowerCase();
   // Apply @showIf/settings-view visibility and the search query to each
@@ -595,9 +608,11 @@ export const ParamRows = memo(function ParamRows({
           // navigation — no <details> fold on top of it, params always shown.
           return (
             <div className="param-group param-group--flat mb-3" key={section}>
-              <div className="font-display px-[0.2rem] py-[0.6rem] text-[0.92rem] font-semibold text-brand">
-                {section}
-              </div>
+              {showSectionHeadings && (
+                <div className="font-display px-[0.2rem] py-[0.6rem] text-[0.92rem] font-semibold text-brand">
+                  {section}
+                </div>
+              )}
               {params.map(renderRow)}
             </div>
           );

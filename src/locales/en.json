@@ -90,6 +90,16 @@
   "export.printingGuide": "Printing guide",
   "export.nextSteps": "Next, open it in a slicer or send it to a print service.",
 
+  "quickstart.stepsAriaLabel": "Guided steps",
+  "quickstart.export": "Export",
+  "quickstart.visited": "Visited",
+  "quickstart.alsoAvailable": "Also available",
+  "quickstart.exportHeading": "Ready to export",
+  "quickstart.exportHint": "Happy with the preview? Use {export} below.",
+  "quickstart.back": "Back",
+  "quickstart.next": "Next",
+  "quickstart.nextExport": "Next: Export",
+
   "common.close": "Close",
   "common.reset": "Reset"
 }

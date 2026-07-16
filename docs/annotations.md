@@ -115,7 +115,7 @@ Precedence, resolved per parameter:
 
 ## Guided steps (`// @step`)
 
-Mark a section `// @step <id>` (or `// @step <id> | <label>`) to fold it into a named step of a guided, wizard-style flow — a curated subset of sections presented one at a time instead of the full scrolling form. This milestone only parses the annotation and emits `Design.steps`; the stepper UI that actually renders steps one-at-a-time is the next milestone. Declaring `// @step` today has no visible effect on the form.
+Mark a section `// @step <id>` (or `// @step <id> | <label>`) to fold it into a named step of QuickStart, a guided, curated-subset-at-a-time navigation over the same form — never a destructive wizard: nothing unmounts, earlier steps stay reachable via their chip, and every value lives in the same app state regardless of which step is showing. QuickStart replaces the classic scrolling form only in guided experience's essentials settings view, for a design that declares at least one `// @step` (and `ui.quickStart` — see [`ui.quickStart`](config.md#ui-behaviour-and-pwa) — hasn't opted out); standard experience, the All settings view, and an active search query always show the classic form instead, one action (the settings-view toggle, or just clearing the search box) away. See `src/components/QuickStart.tsx`.
 
 `// @step` is **section-level only** — directly above a `/* [Section] */` header, exactly like `// @collapsed` and section-level `// @advanced`:
 
@@ -134,7 +134,7 @@ height = 25; // [10:1:100]
 mounting = "none"; // [none, screw, countersunk]
 ```
 
-- **`<id>`**: a bare token, `[A-Za-z0-9_-]+` — stable and never shown; it's what other tooling (and, in the next milestone, the stepper's own state) refers to the step by.
+- **`<id>`**: a bare token, `[A-Za-z0-9_-]+` — stable and never shown; it's what other tooling (and QuickStart's own current-step state) refers to the step by.
 - **`<label>`** (optional): free text, trimmed, shown as the step's own name in the UI. Omit it (bare `// @step mounting`) and the label defaults to the section name of that id's *first* occurrence in the file — here, "Mounting".
 
 ### Sharing a step across sections
@@ -157,7 +157,7 @@ Both `[Text]` and `[Mounting]` belong to the `tag` step here; its label is "Tag 
 
 ### Sections without a step
 
-A section without `// @step` is perfectly legal in a stepped design: the next milestone's stepper renders it in an always-visible tail below the step navigation, alongside the active step's own sections. This is deliberate for a section that doesn't belong in the guided flow — a `[Hidden]`-adjacent power-user section, for instance.
+A section without `// @step` is perfectly legal in a stepped design. When it's *essential* (see below) it still isn't lost: QuickStart lists it under an "Also available" heading below the current step's content, alongside whichever step is active. An all-`@advanced` un-stepped section instead stays behind the All settings view, exactly like an advanced param anywhere else. This is deliberate for a section that doesn't belong in the guided flow — a `[Hidden]`-adjacent power-user section, for instance.
 
 What's *not* deliberate, most of the time, is simply forgetting to tag a section that should be part of the flow. gen-schema flags that case: once a design declares at least one `// @step`, every remaining **essential** section (one with at least one parameter that isn't `// @advanced` — see above) that carries no step gets a build-time warning listing it by name. An all-`@advanced` section left un-stepped never triggers this in either mode, since it was already going to be hidden from the default "essentials" view regardless.
 

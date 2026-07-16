@@ -462,6 +462,18 @@ export interface UiConfig {
    * renderHash) — it's a gen-schema-time authoring lint, not a render input.
    */
   strictSteps?: boolean;
+  /**
+   * Whether a stepped design (one declaring at least one `// @step`) shows
+   * the QuickStart step navigation (src/components/QuickStart.tsx) in place
+   * of the classic scrolling form. Default true — declaring `@step` sections
+   * at all is the opt-in; set false to keep the classic form even for a
+   * stepped design (e.g. while a design's steps are still being authored).
+   * Only takes effect in guided experience's essentials settings view; the
+   * classic form always renders otherwise (standard experience, All
+   * settings, or an active search query). Never affects geometry (absent
+   * from renderHash).
+   */
+  quickStart?: boolean;
   afterExport?: {
     /** Overrides the outcome-led i18n title. */
     title?: string;

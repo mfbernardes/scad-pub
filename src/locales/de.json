@@ -90,6 +90,16 @@
   "export.printingGuide": "Druckanleitung",
   "export.nextSteps": "Öffnen Sie es als Nächstes in einem Slicer oder senden Sie es an einen Druckdienst.",
 
+  "quickstart.stepsAriaLabel": "Geführte Schritte",
+  "quickstart.export": "Export",
+  "quickstart.visited": "Besucht",
+  "quickstart.alsoAvailable": "Ebenfalls verfügbar",
+  "quickstart.exportHeading": "Bereit zum Export",
+  "quickstart.exportHint": "Zufrieden mit der Vorschau? Nutzen Sie unten „{export}“.",
+  "quickstart.back": "Zurück",
+  "quickstart.next": "Weiter",
+  "quickstart.nextExport": "Weiter: Export",
+
   "common.close": "Schließen",
   "common.reset": "Zurücksetzen"
 }

@@ -758,6 +758,91 @@ async function checkSettingsView({ page, check, ids, paramsTabName }) {
   await switchSettingsView(page, "all");
 }
 
+// QuickStart step navigation (this milestone, PR11): shown instead of the
+// classic scrolling form when guided + essentials + a stepped design (tag,
+// via examples/tag.scad's `@step` annotations) + `ui.quickStart` (default
+// true). Runs right after checkSettingsView, which conveniently leaves the
+// suite on "All settings" — switch to essentials here to exercise QuickStart,
+// and leave the suite back on "All settings" at the end (per
+// checkSettingsView's own comment, later checks — bundled presets' Import/
+// Export row, checkTagDesign's @showIf/@collapsed checks — expect the full,
+// ungated panel).
+async function checkQuickStart({ page, check, ids, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== QuickStart step navigation ===");
+  await selectDesign(page, "tag");
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  await switchSettingsView(page, "essentials");
+
+  const quickStart = page.locator(".quick-start");
+  await quickStart.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await quickStart.count()) === 1, "QuickStart shown in guided + essentials for a stepped design (tag)");
+
+  const chips = page.locator(".quick-start__step");
+  check((await chips.count()) === 5, "5 chips shown (4 @step sections + Export)");
+  check((await chips.nth(0).getAttribute("aria-current")) === "step", "the first step chip starts current");
+
+  await runAxe(page, check, "QuickStart visible (essentials view, tag)");
+
+  // Next walks steps: size -> text -> emblem -> hole -> Export.
+  const nextBtn = page.locator(".quick-start__next");
+  await nextBtn.click();
+  check((await chips.nth(1).getAttribute("aria-current")) === "step", "Next advances to the second step");
+
+  // A param edit inside the current step re-renders the preview — the same
+  // pipeline as the classic form, just mounted through ParamRows' flat
+  // chrome here (the "text" step is current after the Next click above).
+  const labelInput = paramRow(page, "label").locator('input[type="text"]');
+  if (await labelInput.count()) {
+    await labelInput.fill("QuickStart");
+    await labelInput.blur();
+    await waitRendered(page, "quickstart param edit");
+  }
+
+  await nextBtn.click(); // -> emblem
+  await nextBtn.click(); // -> hole (the last real step)
+  check(
+    ((await nextBtn.textContent()) ?? "").trim() === "Next: Export",
+    "Next reads \"Next: Export\" on the last step"
+  );
+  await nextBtn.click(); // -> Export chip
+  check((await chips.last().getAttribute("aria-current")) === "step", "Next from the last step lands on the Export chip");
+  check((await page.locator(".quick-start__next").count()) === 0, "no Next button on the Export chip");
+  check(
+    /Export 3D model/.test((await page.locator(".quick-start__export").textContent()) ?? ""),
+    "the Export chip's content points at the Export action rather than duplicating it"
+  );
+
+  // Jump via chip: clicking a chip directly jumps there (free navigation).
+  await chips.nth(0).click();
+  check((await chips.nth(0).getAttribute("aria-current")) === "step", "clicking a chip jumps directly to it");
+
+  // All settings escape: switching to All settings shows the classic form
+  // (and facet_angle — the @advanced Quality section, per PR3's toggle
+  // behavior) instead of QuickStart; switching back to essentials brings
+  // QuickStart back.
+  await switchSettingsView(page, "all");
+  check((await page.locator(".quick-start").count()) === 0, "All settings shows the classic form, not QuickStart");
+  check((await paramRow(page, "facet_angle").count()) > 0, "facet_angle (advanced) is reachable in All settings");
+  await switchSettingsView(page, "essentials");
+  await quickStart.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".quick-start").count()) === 1, "QuickStart returns when switching back to essentials");
+
+  // Search interplay: typing a query bypasses QuickStart for the classic
+  // filtered form; clearing it restores QuickStart.
+  const search = page.locator("#param-search-input");
+  await search.fill("width");
+  await page.locator(".quick-start").waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".quick-start").count()) === 0, "a search query shows the classic filtered form, not QuickStart");
+  check((await paramRow(page, "width").count()) > 0, "the search actually filters to the matching param");
+  await search.fill("");
+  await quickStart.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".quick-start").count()) === 1, "clearing the search restores QuickStart");
+
+  // Leave the suite in All settings for the checks that follow.
+  await switchSettingsView(page, "all");
+}
+
 // @showIf + @collapsed — exercised on the example "tag" design when present.
 // Param rows are located by their stable data-param hook, which exists
 // regardless of ui.showVarName, so this block runs in every config.
@@ -849,9 +934,14 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   // defaults) — switch back to the essentials view so the friendly-error
   // checks below exercise the real "nothing hidden differs from defaults"
   // case, not the trivially-empty "all settings" case (hiddenAdvancedDiff is
-  // always [] in "all" — see paramFilter.ts).
+  // always [] in "all" — see paramFilter.ts). This (re-)mounts QuickStart
+  // fresh (tag is a stepped design), starting on its first step ("Size",
+  // which holds `thickness`) — jump to the "Text" step's chip before editing
+  // `text_depth`, which QuickStart only mounts for the CURRENT step.
   await switchSettingsView(page, "essentials");
   await setNum("thickness", 1);
+  if (await page.locator(".quick-start").count())
+    await page.locator(".quick-start__step").filter({ hasText: "Text" }).first().click();
   await setNum("text_depth", 2);
   check(
     await waitFor(() =>
@@ -1157,6 +1247,7 @@ async function main() {
     await checkViewerHint(ctx);
     await checkDesignPickerDialog(ctx);
     await checkSettingsView(ctx);
+    await checkQuickStart(ctx);
     await checkFileImport(ctx);
     await checkThemeToggle(ctx);
     await checkIdleRenderCount(ctx);

@@ -344,6 +344,11 @@ export const AppShell = memo(function AppShell({
   const guided = experienceMode === "guided";
   const showChecklist = guided && ui.checklist !== false;
   const showGestureHint = guided;
+  // QuickStart's build-time opt-out (see docs/config.md's `ui.quickStart`) —
+  // default true, since declaring `@step` sections on a design is itself the
+  // opt-in. Threaded to CustomizeTab (via ParamPanel/SheetTabs), which also
+  // gates on experienceMode/settingsView/design.steps — see quickStartAvailable.
+  const quickStartEnabled = ui.quickStart !== false;
   // The getting-started checklist's full input state (src/lib/checklist.ts):
   // schema/render facts already available here, plus the session-scoped
   // progress App.tsx tracks (checklistProgress, threaded down because the
@@ -795,6 +800,8 @@ export const AppShell = memo(function AppShell({
                   onSearchFocus={handleSearchFocus}
                   onSearchBlur={handleSearchBlur}
                   settingsView={settingsView}
+                  experienceMode={experienceMode}
+                  quickStartEnabled={quickStartEnabled}
                   focusHiddenDiffSignal={reviewHiddenSignal}
                   checklist={checklistState}
                   checklistReplaySignal={checklistReplaySignal}
@@ -853,6 +860,8 @@ export const AppShell = memo(function AppShell({
               onSearchFocus={handleSearchFocus}
               onSearchBlur={handleSearchBlur}
               settingsView={settingsView}
+              experienceMode={experienceMode}
+              quickStartEnabled={quickStartEnabled}
               focusHiddenDiffSignal={reviewHiddenSignal}
               checklist={checklistState}
               checklistReplaySignal={checklistReplaySignal}

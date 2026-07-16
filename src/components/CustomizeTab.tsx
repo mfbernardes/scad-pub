@@ -10,9 +10,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Design } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
-import type { SettingsView } from "../lib/useExperience";
+import type { ExperienceMode, SettingsView } from "../lib/useExperience";
 import { defaultsFor } from "../lib/presets";
 import { hiddenAdvancedCount, hiddenAdvancedDiff, hiddenSearchMatches } from "../lib/paramFilter";
+import { quickStartAvailable } from "../lib/quickStart";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
 import { t, tn } from "../lib/i18n";
@@ -20,6 +21,7 @@ import { ParamForm, type FocusParamRequest } from "./ParamForm";
 import { ParamSearch } from "./ParamSearch";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { SettingsViewToggle } from "./SettingsViewToggle";
+import { QuickStart } from "./QuickStart";
 
 interface Props {
   design: Design;
@@ -37,6 +39,12 @@ interface Props {
   fontSuggestion?: string | null;
   installedFonts?: InstalledFont[];
   settingsView: SettingsView;
+  /** Guided/standard experience mode (src/lib/useExperience.ts) — gates
+   *  whether QuickStart may show at all (see quickStartAvailable). */
+  experienceMode: ExperienceMode;
+  /** Build-time `ui.quickStart` opt-out (default true — declaring `@step`
+   *  sections at all is the opt-in). See docs/config.md's `ui.quickStart`. */
+  quickStartEnabled: boolean;
   search: string;
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
@@ -66,6 +74,8 @@ export function CustomizeTab({
   fontSuggestion,
   installedFonts,
   settingsView,
+  experienceMode,
+  quickStartEnabled,
   search,
   onSearchChange,
   onSearchFocus,
@@ -90,6 +100,15 @@ export function CustomizeTab({
     [design, values, settingsView, q]
   );
   const [focusParam, setFocusParam] = useState<FocusParamRequest | null>(null);
+
+  // QuickStart replaces the classic form when the four-way gate is open AND
+  // there's no active search query — a search always beats stepping through
+  // steps (finding a setting by name shouldn't require knowing which step
+  // it lives in), so it falls back to the classic filtered form for the
+  // query's duration and restores QuickStart the moment the query is
+  // cleared (this is purely a function of `q`, so it "restores" for free —
+  // no extra state to reset).
+  const showQuickStart = quickStartAvailable(design, experienceMode, settingsView, quickStartEnabled) && !q;
 
   const reviewHiddenDiff = () => {
     settingsViewChange("all");
@@ -153,21 +172,37 @@ export function CustomizeTab({
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <ParamForm
-          design={design}
-          values={values}
-          onChange={change}
-          search={debouncedSearch}
-          showVarName={showVarName}
-          availableFontFamilies={availableFontFamilies}
-          fontSuggestion={fontSuggestion}
-          installedFonts={installedFonts}
-          baseline={baseline}
-          changedParams={changedParams}
-          presetName={presetName}
-          view={settingsView}
-          focusParam={focusParam}
-        />
+        {showQuickStart ? (
+          <QuickStart
+            design={design}
+            values={values}
+            onChange={change}
+            view={settingsView}
+            showVarName={showVarName}
+            availableFontFamilies={availableFontFamilies}
+            fontSuggestion={fontSuggestion}
+            installedFonts={installedFonts}
+            baseline={baseline}
+            changedParams={changedParams}
+            presetName={presetName}
+          />
+        ) : (
+          <ParamForm
+            design={design}
+            values={values}
+            onChange={change}
+            search={debouncedSearch}
+            showVarName={showVarName}
+            availableFontFamilies={availableFontFamilies}
+            fontSuggestion={fontSuggestion}
+            installedFonts={installedFonts}
+            baseline={baseline}
+            changedParams={changedParams}
+            presetName={presetName}
+            view={settingsView}
+            focusParam={focusParam}
+          />
+        )}
       </div>
       {settingsView === "essentials" && hiddenCount > 0 && (
         <div className={`settings-hidden-note ${noteClass}`}>

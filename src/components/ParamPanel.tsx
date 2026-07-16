@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
-import type { SettingsView } from "../lib/useExperience";
+import type { ExperienceMode, SettingsView } from "../lib/useExperience";
 import type { ChecklistState } from "../lib/checklist";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
@@ -77,6 +77,11 @@ interface Props {
   onSearchBlur?: () => void;
   /** Essentials/all settings-view (see src/lib/useExperience.ts). */
   settingsView: SettingsView;
+  /** Guided/standard experience mode — forwarded to CustomizeTab, which gates
+   *  QuickStart on it (see quickStartAvailable). */
+  experienceMode: ExperienceMode;
+  /** Build-time `ui.quickStart` opt-out — forwarded to CustomizeTab. */
+  quickStartEnabled: boolean;
   /** Forwarded to CustomizeTab — see its own doc. */
   focusHiddenDiffSignal?: number;
   /** The getting-started checklist's derived state (src/lib/checklist.ts) —
@@ -115,6 +120,8 @@ export function ParamPanel({
   onSearchFocus,
   onSearchBlur,
   settingsView,
+  experienceMode,
+  quickStartEnabled,
   focusHiddenDiffSignal,
   checklist,
   checklistReplaySignal,
@@ -305,6 +312,8 @@ export function ParamPanel({
             fontSuggestion={fontSuggestion}
             installedFonts={installedFonts}
             settingsView={settingsView}
+            experienceMode={experienceMode}
+            quickStartEnabled={quickStartEnabled}
             search={search}
             onSearchChange={onSearchChange}
             onSearchFocus={onSearchFocus}

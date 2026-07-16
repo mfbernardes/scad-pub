@@ -48,6 +48,20 @@ async function shot(page, dir, name) {
   console.log(`  ✅ ${name}.png`);
 }
 
+// QuickStart (PR11): the guided step navigation shown in place of the classic
+// form for a stepped design (tag) in guided + essentials — already the
+// default state, so it's naturally in every Customize-tab shot at its first
+// step. Jump to a middle step chip here so the navigated-mid-flow state gets
+// its own shot too. A no-op (no shot taken) when QuickStart isn't showing
+// (e.g. a config with `ui.quickStart: false`, or a design without `@step`s).
+async function shootQuickStartStep(page, dir, name) {
+  const chips = page.locator(".quick-start__step");
+  if ((await chips.count()) <= 2) return;
+  await chips.nth(2).click();
+  await sleep(250);
+  await shot(page, dir, name);
+}
+
 async function selectDesign(page, kind, label) {
   await pickDesign(page, label, { mobile: kind === "mobile" });
   await waitRendered(page);
@@ -137,6 +151,7 @@ async function captureViewport(context, base, kind, theme) {
       await page.getByRole("tab", { name: tab }).click().catch(() => {});
       await sleep(250);
       await shot(page, dir, `${n}-tab-${tab.toLowerCase()}`);
+      if (tab === "Customize") await shootQuickStartStep(page, dir, "07b-tab-customize-step");
     }
     await sheetTo(page, "peek");
   } else {
@@ -147,6 +162,7 @@ async function captureViewport(context, base, kind, theme) {
     await shot(page, dir, "04-presets");
     await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});
     await sleep(200);
+    await shootQuickStartStep(page, dir, "04b-quickstart-step");
   }
 
   // 9 / 5. Output console. The Output bell lives in the top bar in both layouts —

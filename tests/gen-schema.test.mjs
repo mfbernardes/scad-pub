@@ -1984,6 +1984,15 @@ test("parseUi: strictSteps defaults false and validates as a boolean", () => {
   assert.throws(() => parseUi({ strictSteps: "yes" }), /'ui\.strictSteps' must be a boolean/);
 });
 
+test("parseUi: quickStart defaults true (declaring @step sections is the opt-in) and validates as a boolean", () => {
+  assert.equal(parseUi(undefined).quickStart, true);
+  assert.equal(parseUi({}).quickStart, true);
+  assert.equal(parseUi({ quickStart: false }).quickStart, false);
+  assert.equal(parseUi({ quickStart: true }).quickStart, true);
+  assert.throws(() => parseUi({ quickStart: "no" }), /'ui\.quickStart' must be a boolean/);
+  assert.throws(() => parseUi({ quickStart: 0 }), /'ui\.quickStart' must be a boolean/);
+});
+
 test("parseFontFallback accepts a trimmed string or null; rejects empty", () => {
   assert.equal(parseFontFallback(undefined), null);
   assert.equal(parseFontFallback(null), null);
