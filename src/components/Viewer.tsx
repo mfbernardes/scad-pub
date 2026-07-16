@@ -423,7 +423,7 @@ export const Viewer = forwardRef<
       gridRef.current = grid;
       // Recolour any uncoloured geometry so it follows a live theme switch; the
       // model's own explicit colours are left untouched.
-      const model = cssColor("--viewer-model", "#6f93ff");
+      const model = cssColor("--viewer-model", "#8eaaff");
       for (const m of themedMaterialsRef.current) m.color.copy(model);
       for (const v of themedVertexRef.current)
         retintAutoVertices(v.attr, v.original, model);
@@ -466,7 +466,7 @@ export const Viewer = forwardRef<
       stl.byteOffset + stl.byteLength
     ) as ArrayBuffer;
 
-    const themeColor = cssColor("--viewer-model", "#6f93ff");
+    const themeColor = cssColor("--viewer-model", "#8eaaff");
     const themedMaterials: ThemedMaterial[] = [];
     const themedVertices: { attr: THREE.BufferAttribute; original: Float32Array }[] = [];
     let obj: THREE.Object3D;

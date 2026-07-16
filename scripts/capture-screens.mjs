@@ -194,8 +194,13 @@ async function captureViewport(context, base, kind, theme) {
   // Help + About dialogs.
   const helpName = kind === "mobile" ? "10-help" : "06-help";
   const aboutName = kind === "mobile" ? "11-about-licenses" : "07-about-licenses";
+  // Both layouts' Help control has the accessible name "Help" (IconButton
+  // sets aria-label from BarActions' `t("bar.help")`; its `title` — "Help &
+  // keyboard shortcuts" on desktop — is a tooltip only and does not win over
+  // aria-label in accessible-name computation, so matching on the title text
+  // here previously never found the button and silently no-opped).
   await openOverflow();
-  await page.getByRole("button", { name: kind === "mobile" ? "Help" : "Help & keyboard shortcuts" })
+  await page.getByRole("button", { name: "Help", exact: true })
     .first().click().catch(() => {});
   await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
   await sleep(300);

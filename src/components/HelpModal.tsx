@@ -11,6 +11,7 @@ import { cn } from "../lib/utils";
 import { HardDriveDownload as InstallIcon, ListChecks as ChecklistIcon } from "lucide-react";
 import { DEFAULT_HELP } from "../lib/defaultHelp";
 import { t } from "../lib/i18n";
+import { useIsMobile } from "../lib/useIsMobile";
 import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
 
 /* The help sections' typography, applied to the scrolling body wrapper (the
@@ -50,17 +51,28 @@ function HelpSections({
 /** Tab strip + panels, built on the shared Radix Tabs primitive (which provides
  *  the full ARIA tabs pattern — roving tabindex, arrow/Home/End nav — for free). */
 function HelpTabs({ tabs, defaultTab }: { tabs: HelpTab[]; defaultTab: string }) {
+  // Narrow screens: a handful of tab chips (5+ in the dogfood config) no
+  // longer fit one line at 320px, so `flex-wrap` used to wrap them onto a
+  // second/third row, pushing the active tab's content further down before
+  // it even starts. Below the mobile breakpoint the strip instead scrolls
+  // horizontally on one row (`flex-nowrap overflow-x-auto`, each chip
+  // `shrink-0` so it keeps its natural width rather than being squeezed).
+  // Desktop keeps the original wrapping behaviour untouched.
+  const isMobile = useIsMobile();
   // `min-h-0 flex-1` lets this tab block fill the dialog's remaining height and,
   // crucially, shrink below its content — otherwise the default `min-height:auto`
   // makes it grow past the dialog, which clips (rather than scrolls) long tabs.
   return (
     <Tabs defaultValue={defaultTab} className="min-h-0 flex-1 gap-0">
       <TabsList
-        className="mx-4 mt-2 h-auto w-auto flex-wrap justify-start rounded-none border-0 border-b bg-transparent p-0"
+        className={cn(
+          "mx-4 mt-2 h-auto w-full min-w-0 justify-start rounded-none border-0 border-b bg-transparent p-0",
+          isMobile ? "flex-nowrap overflow-x-auto" : "flex-wrap"
+        )}
         aria-label={t("help.topicsAria")}
       >
         {tabs.map((tab, i) => (
-          <TabsTrigger key={i} value={String(i)} className={cn(chipTabTrigger, "px-3")}>
+          <TabsTrigger key={i} value={String(i)} className={cn(chipTabTrigger, "shrink-0 px-3")}>
             {tab.label}
           </TabsTrigger>
         ))}
@@ -128,13 +140,31 @@ export function HelpModal({
   // config, no match) falls back to the first tab exactly like before.
   const initialTabIndex = tabs && initialTab ? tabs.findIndex((tab) => tab.label === initialTab) : -1;
   const defaultTab = initialTabIndex >= 0 ? String(initialTabIndex) : "0";
+  // On mobile the config-level intro used to sit above the tab strip on every
+  // tab, pushing the tabs (and their content) further down the already-short
+  // viewport for a paragraph most visitors skip past. Below the mobile
+  // breakpoint it collapses into a closed <details> "About" disclosure so the
+  // tab strip + content lead; opening it is one tap away. Desktop is
+  // unchanged — the intro still renders open, as before.
+  const isMobile = useIsMobile();
 
   return (
     <Modal title={content.title ?? t("help.defaultTitle")} label={t("help.label")} onClose={onClose}>
       {content.intro && (
-        <div className={MODAL_INTRO}>
-          <Markdown body={content.intro} />
-        </div>
+        isMobile ? (
+          <details className="help-about mx-4 mt-[0.6rem] text-[0.85rem] text-muted-foreground [&_p]:m-0">
+            <summary className="cursor-pointer font-medium text-foreground select-none">
+              {t("help.aboutSummary")}
+            </summary>
+            <div className="mt-[0.4rem]">
+              <Markdown body={content.intro} />
+            </div>
+          </details>
+        ) : (
+          <div className={MODAL_INTRO}>
+            <Markdown body={content.intro} />
+          </div>
+        )
       )}
       {tabs ? (
         <HelpTabs tabs={tabs} defaultTab={defaultTab} />

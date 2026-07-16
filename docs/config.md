@@ -252,26 +252,29 @@ Load order, last wins: app bundle CSS -> `colors` `<style>` -> `extraCss` `<link
 
 ## Import file (`fileImport`)
 
-Designs sometimes need a file the app cannot bundle, such as a license-restricted font, an SVG to `import()`, or a `surface()` data file. Setting `fileImport` adds one **Import file** button to the preset panel. You can supply those files at runtime, entirely client-side. Nothing is uploaded to a server.
+Designs sometimes need a file the app cannot bundle, such as a license-restricted font, an SVG to `import()`, or a `surface()` data file. Setting `fileImport` turns on the **Files** tab. You can supply those files at runtime, entirely client-side. Nothing is uploaded to a server.
+
+The tab itself is schema-driven: it shows a **font card** when the active design has any `@font` parameter, and an **SVG/graphics card** when it has any `@svg` parameter (see [Annotations](annotations.md)) — each with its own fixed, project-agnostic copy and file-picker filter, so a design that doesn't use one never sees copy about it. If the design's selected font isn't currently loaded, the font card leads with that instead of its usual blurb. A generic **Other files** card is always present underneath for anything else a design references by a plain filename (e.g. a `surface()` data file).
 
 ```jsonc
 {
-  // Shorthand: enable with defaults (accepts any file type).
+  // Shorthand: enable with defaults (the "Other files" card accepts any file type).
   "fileImport": true
 
-  // …or an options object:
+  // …or an options object — every field scopes to the "Other files" card only
+  // (the font/SVG cards' own copy and filters aren't configurable):
   "fileImport": {
-    "accept": ".svg,.ttf,.otf",  // optional: file-picker filter (omit to accept any file)
-    "label": "Import file",      // optional: button label (default "Import file")
-    "note": "…",                 // optional: help text shown above the file list (Markdown)
-    "maxBytes": 5242880          // optional: reject uploads larger than this (bytes)
+    "accept": ".dat",            // optional: "Other files" file-picker filter (omit to accept any file)
+    "label": "Import file",      // optional: "Other files" button label (default "Import file")
+    "note": "…",                 // optional: "Other files" help text (Markdown)
+    "maxBytes": 5242880          // optional: reject uploads larger than this (bytes), enforced on every card
   }
 }
 ```
 
 When **`maxBytes`** is set, an upload larger than the cap is rejected with a friendly toast (showing the file's size and the limit) and is never stored; omit it for no cap.
 
-`note` is rendered as a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content.
+`note` is rendered as a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `*emphasis*`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content.
 
 ### How uploads reach OpenSCAD
 

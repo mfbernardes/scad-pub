@@ -272,25 +272,33 @@ export interface SoftwareLicense {
 }
 
 /**
- * Config for the generic "Import file" button. A single control that accepts
- * any file (or font); whether an upload is treated as a font is decided by its
- * extension, not by config — so one button covers both cases.
+ * Config for the Files tab (`fileImport: true` or an options object; `null`/
+ * absent hides the tab entirely). The tab itself renders as schema-driven
+ * task cards (src/components/FileBar.tsx) — a font card and/or an SVG card
+ * appear automatically when the active design has `@font`/`@svg` params, each
+ * with its own fixed, project-agnostic copy and `accept` filter. This config
+ * block's fields (`accept`/`label`/`note`) scope specifically to the always-
+ * present "Other files" catch-all card (any file a design references by a
+ * plain filename, e.g. a `surface()` data file) — they no longer describe the
+ * whole tab, since fonts/SVGs get their own dedicated cards now.
  */
 export interface FileImport {
   /**
-   * `accept` attribute for the file picker (e.g. ".svg" or ".ttf,.otf"). Omit to
-   * accept any file type.
+   * `accept` attribute for the "Other files" card's file picker (e.g. ".dat").
+   * Omit to accept any file type.
    */
   accept?: string;
-  /** Button label (default "Import file"). */
+  /** "Other files" card's import button label (default "Import file"). */
   label?: string;
   /**
-   * Optional help text shown above the file list. Rendered as a Markdown
-   * subset (paragraphs, bullet lists, **bold**, `code`, links).
+   * Optional help text for the "Other files" card, shown above its import
+   * button. Rendered as a Markdown subset (paragraphs, bullet lists,
+   * **bold**, `code`, links).
    */
   note?: string;
   /**
-   * Optional max upload size in bytes. A larger file is rejected with a friendly
+   * Optional max upload size in bytes, enforced on every card's upload (font,
+   * SVG, and "Other files" alike). A larger file is rejected with a friendly
    * message instead of being stored. Omit for no cap.
    */
   maxBytes?: number;

@@ -452,6 +452,99 @@ async function checkFileImport({ page, check, ids, schema }) {
   }
 }
 
+// Files tab task cards (PR19 item 1): a font card only for a design with
+// @font params, an SVG card only for one with @svg params, and the generic
+// "Other files" card always. The dogfood config's example designs cover every
+// combination without a bespoke fixture: `tag` has both @font and @svg
+// params (examples/tag.scad), `coin` has only @font, `panel` has only @svg.
+async function checkFilesCards({ page, check, ids, paramsTabName, schema }) {
+  if (!schema?.fileImport || !ids.includes("tag")) return;
+  console.log("=== Files tab: schema-driven task cards ===");
+  const gotoFiles = () => page.getByRole("tab", { name: "Files" }).click().catch(() => {});
+  const gotoParams = () => page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+
+  await selectDesign(page, "tag");
+  await gotoFiles();
+  check((await page.locator(".file-card").count()) === 2, "tag (font + svg params) shows both the font and SVG cards");
+  check(
+    (await page.getByRole("button", { name: /Import font/i }).count()) === 1,
+    "font card offers its own Import action"
+  );
+  check(
+    (await page.getByRole("button", { name: /Import SVG/i }).count()) === 1,
+    "SVG card offers its own Import action"
+  );
+  check(
+    (await page.locator(".file-manager__data").count()) === 1,
+    "the generic 'Other files' card is always present too"
+  );
+  check(
+    (await page.locator('.file-card[role="status"]').count()) === 0,
+    "no card leads with the attention-styled state while the selected font is loaded"
+  );
+  await runAxe(page, check, "Files tab (tag: font + SVG cards)");
+
+  if (ids.includes("coin")) {
+    await selectDesign(page, "coin");
+    await gotoFiles();
+    check(
+      (await page.getByRole("button", { name: /Import font/i }).count()) === 1,
+      "coin (font-only design) shows the font card"
+    );
+    check(
+      (await page.getByRole("button", { name: /Import SVG/i }).count()) === 0,
+      "coin (no @svg params) does not show the SVG card"
+    );
+  }
+
+  if (ids.includes("panel")) {
+    await selectDesign(page, "panel");
+    await gotoFiles();
+    check(
+      (await page.getByRole("button", { name: /Import SVG/i }).count()) === 1,
+      "panel (svg-only design) shows the SVG card"
+    );
+    check(
+      (await page.getByRole("button", { name: /Import font/i }).count()) === 0,
+      "panel (no @font params) does not show the font card"
+    );
+  }
+
+  await selectDesign(page, "tag");
+  await gotoParams();
+}
+
+// The Files tab's font card leads with the "not loaded" state — reusing the
+// same URL-state trick as checkReadiness (a missing font family encoded
+// directly into the share-link hash) so the two surfaces are proven to agree
+// about what "missing" means, not just asserted to by comment.
+async function checkFilesFontMissingCard({ page, check, ids, base, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== Files tab: font card leads with the missing-font state ===");
+  const hash = `d=tag&v=${encodeURIComponent(JSON.stringify({ font: "No Such Font" }))}`;
+  await page.goto(`${base}#${hash}`, { waitUntil: "load" });
+  await page.reload({ waitUntil: "load" });
+  await settleFirstVisit(page).catch(() => {});
+  await waitRendered(page, "tag with a missing font family (Files tab card)");
+
+  await page.getByRole("tab", { name: "Files" }).click().catch(() => {});
+  const leadCard = page.locator('.file-card[role="status"]');
+  await leadCard.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await leadCard.count()) === 1, "exactly one file-card leads with the attention-styled state");
+  check(
+    ((await leadCard.textContent()) ?? "").includes("No Such Font"),
+    "the leading card names the missing family, same as the Customize tab's attention chip"
+  );
+  await runAxe(page, check, "Files tab with the missing-font card");
+
+  // Restore defaults so later checks that reuse `tag` start clean.
+  await page.goto(`${base}#d=tag`, { waitUntil: "load" });
+  await page.reload({ waitUntil: "load" });
+  await settleFirstVisit(page).catch(() => {});
+  await waitRendered(page, "tag reloaded with defaults (Files card cleanup)");
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+}
+
 async function checkThemeToggle({ page, check }) {
   console.log("=== theme toggle ===");
   const bg0 = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
@@ -692,6 +785,73 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
   );
   await importedItem.first().waitFor({ state: "attached", timeout: 3000 }).catch(() => {});
   check((await importedItem.count()) >= 1, "imported parameterSets file added a saved preset");
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+}
+
+// "Save as preset…" (PR19 item 2): demoted from an always-visible input row
+// to a button that reveals it on demand, auto-focused; Escape or a blur while
+// still empty collapses it back.
+async function checkPresetSaveReveal({ page, check, ids, presetsTabName, paramsTabName }) {
+  console.log("=== presets: \"Save as preset…\" reveals inline, Escape/blur-empty collapses ===");
+  await selectDesign(page, ids[0]);
+  await page.getByRole("tab", { name: presetsTabName }).first().click().catch(() => {});
+
+  const trigger = page.locator(".preset-picker__save-trigger");
+  await trigger.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await trigger.count()) === 1, "the 'Save as preset…' trigger button is shown");
+  check((await page.locator(".preset-picker__save-row").count()) === 0, "the inline save row is collapsed by default");
+
+  const row = page.locator(".preset-picker__save-row");
+
+  await trigger.click();
+  await row.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await row.count()) === 1, "clicking the trigger reveals the inline save row");
+  check(
+    await row.locator("input").evaluate((el) => el === document.activeElement),
+    "the revealed input is auto-focused"
+  );
+
+  // Escape collapses back to the trigger, discarding whatever was typed.
+  await row.locator("input").fill("Throwaway");
+  await page.keyboard.press("Escape");
+  await trigger.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".preset-picker__save-row").count()) === 0, "Escape collapses the reveal back to the trigger");
+
+  // A blur while the field is still empty also collapses it.
+  await trigger.click();
+  await row.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await page.keyboard.press("Tab");
+  await trigger.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".preset-picker__save-row").count()) === 0, "blurring the still-empty input also collapses it");
+
+  // A real save: reveal, type a name, press Enter — the row collapses and the
+  // preset lists under "Saved by you".
+  await trigger.click();
+  await row.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  const name = "Smoke Saved Preset";
+  await row.locator("input").fill(name);
+  await page.keyboard.press("Enter");
+  const savedItem = page.locator('[aria-label="Your saved presets"] .preset-picker__item', { hasText: name });
+  await savedItem.first().waitFor({ state: "attached", timeout: 3000 }).catch(() => {});
+  check((await savedItem.count()) >= 1, "Enter saves the preset and it appears under 'Saved by you'");
+  check((await page.locator(".preset-picker__save-row").count()) === 0, "saving collapses the reveal back to the trigger");
+
+  await runAxe(page, check, "Presets tab (save-as-preset reveal/collapse)");
+
+  // Clean up: delete the smoke-created preset so it doesn't pollute later
+  // checks that iterate "Saved by you" (e.g. a rerun's own checkPresetImport).
+  await page
+    .locator('[aria-label="Your saved presets"] li', { hasText: name })
+    .getByRole("button", { name: /^Delete/i })
+    .click()
+    .catch(() => {});
+  const deleteDlg = page.getByRole("alertdialog");
+  const deleteDlgShown = await deleteDlg
+    .waitFor({ state: "visible", timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  if (deleteDlgShown) await deleteDlg.getByRole("button", { name: /^Delete$/ }).click();
+  await savedItem.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
   await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
 }
 
@@ -1994,6 +2154,66 @@ async function checkMobileActionBar({ browser, base, check }) {
   }
 }
 
+// Help modal mobile polish (PR19 item 4): the config-level intro collapses
+// into a closed <details> "About" disclosure below the mobile breakpoint (so
+// tabs + content lead instead of being pushed down), and the tab strip
+// scrolls horizontally on one row instead of wrapping to several. Desktop is
+// covered implicitly (untouched) by every other Help-modal check in this
+// suite, which all run at the desktop viewport.
+async function checkHelpModalMobile({ browser, base, check }) {
+  console.log("=== Help modal (mobile): intro collapses to \"About\", tab strip scrolls without wrapping ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await settleFirstVisit(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // The mobile top bar collapses theme/help/licenses into a "⋮" overflow
+    // popover (BarActions.tsx's `collapse` presentation) — open it first.
+    await page.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("button", { name: "Help", exact: true }).click();
+    const helpDialog = page.getByRole("dialog");
+    await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+
+    const about = helpDialog.locator("details.help-about");
+    check((await about.count()) === 1, "the config intro renders as a collapsible <details> \"About\" disclosure on mobile");
+    check(
+      !(await about.evaluate((el) => el.open)),
+      "the About disclosure starts collapsed, so the tabs aren't pushed down by it"
+    );
+    await about.locator("summary").click();
+    check(await about.evaluate((el) => el.open), "tapping the summary opens the About disclosure");
+    await about.locator("summary").click(); // collapse again before the rest of this check
+
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.waitForTimeout(150); // let the reflow settle
+      const rows = await page.evaluate(() => {
+        const tabs = Array.from(document.querySelectorAll('[role="dialog"] [role="tab"]'));
+        const tops = tabs.map((el) => el.getBoundingClientRect().top);
+        return { count: tabs.length, sameRow: tops.every((y) => Math.abs(y - tops[0]) < 1) };
+      });
+      check(rows.count >= 3, `at least the config's ${rows.count} help tabs are present at ${width}px`);
+      check(rows.sameRow, `all tab chips share one row at ${width}px — scrolling, not wrapping`);
+      const overflowX = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+      );
+      check(overflowX <= 0, `no horizontal page overflow at ${width}px (excess ${overflowX}px)`);
+    }
+
+    await runAxe(page, check, "Help modal open on mobile (About collapsed, tabs scrollable)");
+    await page.keyboard.press("Escape");
+  } finally {
+    await context.close();
+  }
+}
+
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
@@ -2053,23 +2273,27 @@ async function main() {
     await checkSettingsView(ctx);
     await checkQuickStart(ctx);
     await checkFileImport(ctx);
+    await checkFilesCards(ctx);
     await checkThemeToggle(ctx);
     await checkIdleRenderCount(ctx);
     await checkAxe(ctx);
     await checkEveryDesignRenders(ctx);
     await checkBundledPresets(ctx);
     await checkPresetImport(ctx);
+    await checkPresetSaveReveal(ctx);
     await checkExports(ctx);
     await checkPreviewControls(ctx);
     await checkServiceWorker(ctx);
     await checkTagDesign(ctx);
     await checkReadiness(ctx);
+    await checkFilesFontMissingCard(ctx);
     await checkSignageDesign(ctx);
     await checkResponsiveLayout(ctx);
     await checkQuickStartMobile(ctx);
     await checkMobileChecklistPeek(ctx);
     await checkMobileOutputConsole(ctx);
     await checkMobileActionBar(ctx);
+    await checkHelpModalMobile(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);

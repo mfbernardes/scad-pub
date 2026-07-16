@@ -95,7 +95,14 @@
   --viewer-bg: #0e1016; /* deep slate, darker than the chrome to frame the model */
   --viewer-grid: #565f6e; /* centre axes: ~3:1 vs --viewer-bg for orientation */
   --viewer-grid-2: #20242e; /* grid lines: deliberately subtle */
-  --viewer-model: #6f93ff; /* the rendered model's material — brand blue, the hero */
+  --viewer-model: #8eaaff; /* the rendered model's material — brand blue, the hero.
+    Lightened (same hue/saturation, +6% lightness) from the original #6f93ff:
+    against --viewer-bg (#0e1016, near-black) the darker value read as ~6.6:1,
+    which is plenty for a plain contrast ratio but the model still looked
+    under-separated from the background in review (a solid-colour, single-
+    material mesh gets none of text's stroke/weight cues) — the lighter value
+    measures ~8.5:1 and reads noticeably more separated while staying clearly
+    "brand blue", not a different colour. PR19 item 5. */
   --viewer-dim: #ffd7a1; /* dimension callouts — warm amber, contrasts the blue model */
   /* Typography — --font-sans is the workhorse; --font-display carries the
      brand voice (wordmark, headings, tabs, buttons). Both are configurable
