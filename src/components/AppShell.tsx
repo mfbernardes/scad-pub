@@ -73,6 +73,7 @@ import { ViewerStage } from "./ViewerStage";
 import { ViewerHUD } from "./ViewerHUD";
 import { DEFAULT_VIEW, type ViewName } from "./views";
 import { OutputConsole } from "./OutputConsole";
+import { Dialog, DialogContent } from "./ui/dialog";
 import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
@@ -555,11 +556,22 @@ export const AppShell = memo(function AppShell({
     (isMobile ? mobileViewerRef : desktopViewerRef).current?.setView(next);
   }, [isMobile]);
 
-  // Open the overlay and collapse the sheet to peek, so the overlay's fixed
-  // anchor (just above the peek tab row) never overlaps an expanded sheet.
+  // Open Messages. PR16: on mobile this now mounts as a full-height MODAL
+  // DIALOG (see the mobile JSX below), not a second surface riding above the
+  // sheet — so it no longer needs to force the sheet down to Peek just to
+  // keep an overlay from colliding with it. The sheet's tab/scroll/detent are
+  // left completely alone, which is also what makes "close restores prior
+  // state" free: nothing was ever moved, so there's nothing to restore. The
+  // one exception is Full: that detent runs its own modal focus-trap +
+  // background-inert wiring (BottomSheet.tsx's M16 effect), and stacking this
+  // dialog's OWN trap on top of it would leave two independent keyboard traps
+  // fighting over every focus event — so step Full down to Half first
+  // (mirrors what Escape already does to leave Full's trap). Nothing is
+  // visibly lost by that step-down: the dialog is about to cover the whole
+  // screen regardless of which non-Full detent the sheet was at.
   const openOutput = useCallback(() => {
     setOutputOpen(true);
-    setSheetDetent("peek");
+    setSheetDetent((d) => (d === "full" ? "half" : d));
   }, []);
 
   const toggleOutput = useCallback(() => {
@@ -567,12 +579,13 @@ export const AppShell = memo(function AppShell({
     else openOutput();
   }, [openOutput]);
 
-  // Raising the sheet off peek (dragging the handle OR tapping a tab) would slide
-  // its content up under the overlay — close the overlay on any such change so
-  // the two are never shown at once.
+  // A detent change no longer needs to close Messages: the console is a
+  // full-height dialog now, not an overlay anchored to the sheet's peek edge,
+  // so the two can never visually collide — and in practice the sheet is
+  // unreachable (inert + covered by the dialog's own overlay) while Messages
+  // is open, so a detent change can't happen during that window anyway.
   const handleDetentChange = useCallback((d: SheetDetent) => {
     setSheetDetent(d);
-    if (d !== "peek") setOutputOpen(false);
     dismissSheetHint();
   }, [dismissSheetHint]);
 
@@ -589,9 +602,10 @@ export const AppShell = memo(function AppShell({
   }, []);
 
   // Mirror the sheet's measured "Peek" height (drag handle + tab row) into
-  // --mobile-peek-height, so the output console overlay + scrim anchor to the
-  // real row instead of the static CSS fallback, which font scaling can
-  // exceed. See BottomSheet's onPeekHeightChange doc.
+  // --mobile-peek-height: --sheet-top (index.css, sizes the viewer + action
+  // dock) falls back to this var before the first live sheet drag, so the
+  // real measured row wins over the static CSS fallback, which font scaling
+  // can exceed. See BottomSheet's onPeekHeightChange doc.
   const handleSheetPeekHeight = useCallback((heightPx: number) => {
     const el = mobileRootRef.current;
     if (!el) return;
@@ -616,10 +630,7 @@ export const AppShell = memo(function AppShell({
   const [prevHasProblem, setPrevHasProblem] = useState(hasProblem);
   if (hasProblem !== prevHasProblem) {
     setPrevHasProblem(hasProblem);
-    if (hasProblem) {
-      setOutputOpen(true);
-      setSheetDetent("peek"); // mobile: anchor the overlay above the peek sheet
-    }
+    if (hasProblem) openOutput();
   }
 
   const closeOutput = useCallback(() => setOutputOpen(false), []);
@@ -722,17 +733,14 @@ export const AppShell = memo(function AppShell({
               />
 
               {/* Mobile top bar — logo left, design centered, actions right
-                  (mirrors desktop). Normally z-10 (below the bottom sheet,
-                  z-30, so the full-detent sheet covers it and its drag handle
-                  stays grabbable). While the output console is open it lifts
-                  to z-[33] — above the scrim (z-[31]) and console (z-[32]) —
-                  so the design picker/⋮/bell stay tappable; the console only
-                  opens at the peek detent, so this never fights the
-                  full-detent sheet. */}
-              <div className={cn(
-                "mobile-top-bar absolute inset-x-0 top-0 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]",
-                outputOpen ? "z-[33]" : "z-10"
-              )}>
+                  (mirrors desktop). z-10, below the bottom sheet (z-30), so
+                  the full-detent sheet covers it and its drag handle stays
+                  grabbable. PR16: Messages used to be an overlay riding above
+                  this bar, which needed a z-lift to stay tappable underneath
+                  it — now it's a full-height dialog (z-50, see the mobile
+                  JSX below) that covers this bar entirely while open, so no
+                  such lift is needed any more. */}
+              <div className="mobile-top-bar absolute inset-x-0 top-0 z-10 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]">
                 <span className="inline-flex min-w-0 items-center gap-[0.4rem] justify-self-start overflow-hidden whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.92rem] font-bold">
                   <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
                 </span>
@@ -805,24 +813,42 @@ export const AppShell = memo(function AppShell({
             <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
           </div>
 
-          {/* Output console (mobile): a dismissible overlay that slides up just
-              above the COLLAPSED (peek) sheet — the sheet's tab row stays visible
-              and tappable beneath it — with a scrim dimming only the viewer.
-              Only ever shown at the peek detent (handleDetentChange closes it
-              on any other change), so it never competes with the Full-detent
-              modal sheet above. */}
+          {/* Output console (mobile): PR16 — a full-height MODAL DIALOG rather
+              than a second surface stacked over the sheet. Two review-
+              sanctioned options existed: (a) replace the sheet's own content
+              area in place (raise it to Half, swap its tab content for the
+              console, restore the prior tab/detent on close), or (b) this —
+              a full-height dialog. (b) wins: it reuses the exact Dialog +
+              focus-trap + background-inert machinery every other overlay in
+              the app already relies on (Help, licenses, the design doc — see
+              Modal.tsx) instead of a bespoke save-then-restore dance for the
+              sheet, and "close the dialog" is already the right mental model
+              for skimming Messages — open it, read it, dismiss it, land back
+              exactly where the sheet already was, because the sheet's own
+              tab/scroll/detent were never touched (see openOutput's doc).
+              Radix's own hideOthers marks the rest of the page — including
+              the bottom sheet — aria-hidden while this is open, and its
+              overlay covers it visually and to the pointer, so the two
+              surfaces are never simultaneously reachable: never two stacked
+              bottom surfaces. The console's own Notices/Log/Metrics markup is
+              untouched — this mounts the SAME <OutputConsole> desktop docks
+              inline below its viewer; only the wrapper differs.
+              showCloseButton is off because OutputConsole supplies its own
+              `.output-console__close` (a stable hook scripts/smoke.mjs and
+              scripts/capture-screens.mjs both already depend on) — a second
+              Radix close button would be a confusing duplicate. */}
           {outputOpen && (
-            <button
-              type="button"
-              className="output-console__scrim absolute inset-x-0 top-0 bottom-[calc(var(--safe-area-bottom)+var(--mobile-peek-height))] z-[31] bg-black/40"
-              onClick={closeOutput}
-              aria-label="Close messages"
-            />
+            <Dialog open onOpenChange={(o) => { if (!o) closeOutput(); }}>
+              <DialogContent
+                showCloseButton={false}
+                aria-label="Messages from the design"
+                aria-describedby={undefined}
+                className="output-console-modal fixed inset-0 z-50 flex flex-col gap-0 rounded-none border-0 p-0 max-w-none translate-x-0 translate-y-0 sm:max-w-none"
+              >
+                <OutputConsole {...outputProps} className="h-full max-h-none border-t-0" />
+              </DialogContent>
+            </Dialog>
           )}
-          <OutputConsole
-            {...outputProps}
-            className="absolute inset-x-0 bottom-[calc(var(--safe-area-bottom)+var(--mobile-peek-height))] z-[32] max-h-[55vh] rounded-t-(--radius) border-b-0 shadow-(--elevation)"
-          />
 
           {/* Persistent bottom sheet. Modal at the Full detent — see
               BottomSheet's own focus-trap/restore effect, and the

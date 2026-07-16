@@ -10,6 +10,15 @@
 // re-render" call-to-action live elsewhere — the params footer and the viewer's
 // StaleBanner respectively — so this bar has a single, stable shape.
 //
+// PR16: mobile forces this row to a single line (index.css's `.action-cluster`
+// mobile override, keyed off `.app-shell__mobile` — CSS only, not a JS
+// isMobile branch, since this component is shared verbatim by both layouts).
+// To make room, Image/Share drop their visible `.action-btn-label` text on
+// mobile (their accessible name lives on `aria-label` regardless, so nothing
+// is lost for assistive tech) and Export's secondary format line shrinks
+// further via `.action-export__format-line`. Desktop is untouched — both
+// hook classes are plain no-ops there.
+//
 // PR9 CTA rewrite: the primary button used to read "Download {format}" — the
 // universal word for "get the file", with the format riding along because the
 // slicer needs it. That undersold what the button actually does (produce a
@@ -84,7 +93,7 @@ export function ActionButtons({ canExport, modelFormat, onSavePng, hasAttention 
             check failed a semi-transparent white-on-accent-solid combination
             at this size, since small text needs 4.5:1) so the two-line
             button doesn't blow out the action cluster while staying AA. */}
-        <span className="text-center text-[0.68rem] leading-tight font-normal">{formatLine}</span>
+        <span className="action-export__format-line text-center text-[0.68rem] leading-tight font-normal">{formatLine}</span>
         {hasAttention && (
           <span
             aria-hidden="true"
@@ -98,10 +107,10 @@ export function ActionButtons({ canExport, modelFormat, onSavePng, hasAttention 
         </span>
       )}
       <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!canExport} aria-label={t("action.saveImage")}>
-        <ImageIcon size={16} /> {t("action.image")}
+        <ImageIcon size={16} /> <span className="action-btn-label">{t("action.image")}</span>
       </Button>
       <Button size="sm" variant="ghost" onClick={copyLink} aria-label={t("action.copyShareLink")}>
-        <LinkIcon size={16} /> {t("action.share")}
+        <LinkIcon size={16} /> <span className="action-btn-label">{t("action.share")}</span>
       </Button>
     </>
   );

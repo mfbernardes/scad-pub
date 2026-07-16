@@ -805,6 +805,15 @@ async function checkServiceWorker({ page, check, base }) {
 // of ui.showVarName), shared by the tag + signage checks.
 const paramRow = (page, name) => page.locator(`.param[data-param="${name}"]`);
 
+// Fill a number param's own numeric input (the box beside its slider) and
+// blur to commit — shared by checkTagDesign's assert-trip flow and the PR16
+// mobile Messages check, which reproduces the same trip on a mobile context.
+const setNumField = async (page, name, value) => {
+  const input = paramRow(page, name).locator('input[type="number"]');
+  await input.fill(String(value));
+  await input.blur();
+};
+
 // Click the essentials/all settings-view segmented control (CustomizeTab /
 // SettingsViewToggle) — present only when the active design has at least one
 // @advanced param. No-op (rather than a throw) when it's absent, so callers
@@ -1216,11 +1225,7 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
 
   // Making the engraving deeper than the plate trips a hard assert(): the
   // render fails and the hardcoded "asserts" badge appears.
-  const setNum = async (name, value) => {
-    const input = paramRow(page, name).locator('input[type="number"]');
-    await input.fill(String(value));
-    await input.blur();
-  };
+  const setNum = (name, value) => setNumField(page, name, value);
   // Quality (facet_angle/facet_size) is @advanced and untouched (still at its
   // defaults) — switch back to the essentials view so the friendly-error
   // checks below exercise the real "nothing hidden differs from defaults"
@@ -1718,6 +1723,206 @@ async function checkMobileChecklistPeek({ browser, base, check }) {
   }
 }
 
+// PR16: mobile Messages is a full-height MODAL DIALOG, not a second bottom
+// surface stacked over the persistent sheet (see AppShell.tsx's own doc on
+// openOutput / the mobile JSX for the full rationale). Covers:
+//  - opening via the bell mounts exactly one surface: the reused
+//    <OutputConsole> lives INSIDE the dialog, and the sheet is hidden from
+//    assistive tech (Radix's own hideOthers) while it's up — never two
+//    stacked bottom surfaces.
+//  - closing (the console's own `.output-console__close`, or Escape) leaves
+//    the sheet's detent exactly where it was — nothing was ever moved by
+//    opening it, so there's nothing to "restore".
+//  - the bell still opens it (the toggle's close branch is exercised by the
+//    desktop checks elsewhere in this suite — see openConsole/closeOutput —
+//    since on mobile the bell sits UNDER the now-opaque dialog and can't be
+//    clicked at all while it's open, same as every other modal in the app).
+//  - the pre-existing auto-open-on-first-warning effect (AppShell's
+//    hasProblem) still fires on mobile, still doesn't touch the sheet's
+//    detent, and the one deliberate exception — stepping Full down to Half
+//    so this dialog's focus trap doesn't stack under the sheet's own Full-
+//    detent trap — actually holds a keyboard user inside a single trap.
+//  - axe with the console open on mobile.
+async function checkMobileOutputConsole({ browser, base, check, ids, paramsTabName }) {
+  console.log("=== mobile Messages: one bottom surface at a time (PR16) ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  const sheetInert = () =>
+    page.evaluate(() => {
+      let el = document.querySelector(".bottom-sheet");
+      while (el) {
+        if (el.getAttribute("aria-hidden") === "true") return true;
+        el = el.parentElement;
+      }
+      return false;
+    });
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await settleFirstVisit(page);
+    await waitRenderDone(page).catch(() => {});
+
+    check((await page.locator(".output-console").count()) === 0, "Messages starts closed");
+    // Guided+half policy (see checkResponsiveLayout) lands a fresh visit at Half.
+    check((await page.locator(".bottom-sheet--half").count()) === 1, "sheet starts at half");
+
+    console.log("--- opening via the bell ---");
+    await page.locator(".mobile-top-bar__output").click();
+    await page.waitForSelector('[role="dialog"]', { timeout: 3000 });
+    check((await page.locator('[role="dialog"]').count()) === 1, "the bell opens a single modal dialog");
+    check(
+      (await page.locator('[role="dialog"] .output-console').count()) === 1,
+      "the reused OutputConsole (Notices/Log/Metrics) lives INSIDE the dialog"
+    );
+    check((await page.locator(".output-console").count()) === 1, "exactly one .output-console in the DOM");
+    check(await sheetInert(), "the sheet is hidden from assistive tech while the dialog is open — never two stacked surfaces");
+    check(
+      (await page.locator(".bottom-sheet--half").count()) === 1,
+      "opening Messages left the sheet's own detent (half) untouched"
+    );
+
+    await runAxe(page, check, "mobile Messages open (modal dialog)");
+
+    console.log("--- closing restores nothing, because nothing moved ---");
+    await page.locator(".output-console__close").click();
+    await page.waitForSelector('[role="dialog"]', { state: "detached", timeout: 3000 });
+    check((await page.locator('[role="dialog"]').count()) === 0, "closing Messages removes the dialog");
+    check(!(await sheetInert()), "the sheet is reachable again once the dialog is gone");
+    check(
+      (await page.locator(".bottom-sheet--half").count()) === 1,
+      "the sheet is still exactly where it was (half) after closing"
+    );
+
+    if (ids.includes("tag")) {
+      console.log("--- auto-open on the first warning/assert (AppShell's hasProblem effect) ---");
+      await page.getByRole("tab", { name: paramsTabName }).first().click();
+      await page.waitForSelector(".quick-start", { timeout: 5000 }).catch(() => {});
+      if (await page.locator(".quick-start__step").count())
+        await page.locator(".quick-start__step").filter({ hasText: "Text" }).first().click();
+
+      // Raise the sheet to Full FIRST, driving the trip from controls INSIDE
+      // it (not the top bar bell — M16 marks the background `inert` and
+      // covers it with the sheet's own scrim at Full, so a bell click can
+      // never reach it there in the first place; the sheet's own content
+      // stays fully reachable at every detent, including Full). This is the
+      // one path that actually exercises openOutput's Full -> Half step-down
+      // (see its own doc in AppShell.tsx): the auto-open effect fires from
+      // this state change, not a click, so it's a faithful repro of the only
+      // way a maker could realistically hit "Messages wants to open while
+      // the sheet already covers the screen at Full".
+      for (let i = 0; i < 3 && !(await page.locator(".bottom-sheet--full").count()); i++) {
+        await page.locator(".sheet-handle").click();
+        await page.waitForTimeout(50);
+      }
+      check((await page.locator(".bottom-sheet--full").count()) === 1, "sheet reached full for this scenario");
+
+      await paramRow(page, "engrave_text").getByRole("switch").click();
+      // engrave_text && label != "" (default "ScadPub") && text_depth(3) >= thickness(3, default) -> assert.
+      await setNumField(page, "text_depth", 3);
+      await page
+        .waitForFunction(() => /Failed/.test(document.querySelector(".render-status")?.textContent || ""), {
+          timeout: 30000,
+        })
+        .catch(() => {});
+      check(
+        (await page.locator(".bottom-sheet--half").count()) === 1,
+        "auto-opening Messages from Full steps the sheet down to Half (avoids the sheet's own Full-detent trap stacking under the dialog's)"
+      );
+      let escaped = false;
+      for (let i = 0; i < 20; i++) {
+        await page.keyboard.press("Tab");
+        escaped = await page.evaluate(() => {
+          const dialog = document.querySelector('[role="dialog"]');
+          const el = document.activeElement;
+          return !el || el === document.body || !dialog?.contains(el);
+        });
+        if (escaped) break;
+      }
+      check(!escaped, "Tab never escapes the dialog while it's open (a single, unambiguous trap)");
+      check(
+        (await page.locator('[role="dialog"] .output-console').count()) === 1,
+        "a failed-assert render auto-opens Messages as the same modal dialog, unprompted"
+      );
+      check(
+        /engraved text is deeper than the plate/.test((await page.locator(".output-console").textContent()) ?? ""),
+        "the auto-opened console shows the assert's own message"
+      );
+      await page.locator(".output-console__close").click();
+      await page.waitForSelector('[role="dialog"]', { state: "detached", timeout: 3000 });
+    }
+  } finally {
+    await context.close();
+  }
+}
+
+// PR16: single-row mobile action bar. ActionButtons.tsx is the exact same
+// component/markup on both layouts (see its own doc) — only CSS
+// (index.css's `.app-shell__mobile .action-cluster` rules) makes mobile
+// behave differently: Image/Share drop to icon-only and Export's format line
+// shrinks further, freeing enough width that the row never wraps to a second
+// line, even at 320px (the WCAG 1.4.10 Reflow floor this suite otherwise
+// doesn't have a dedicated check for). Desktop's own two-row-tolerant wrap
+// (ACTION_CLUSTER_CLASS's doc) is untouched and not exercised here.
+async function checkMobileActionBar({ browser, base, check }) {
+  console.log("=== mobile action bar: single row, no wrap down to 320px (PR16) ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await settleFirstVisit(page);
+    await waitRenderDone(page).catch(() => {});
+
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.waitForTimeout(150); // let the reflow settle
+      const box = await page.locator(".action-cluster").boundingBox();
+      // A wrapped (two-row) cluster is roughly 2x a single row's height; a
+      // single row — even with Export's own two-line CTA — measures well
+      // under this. 70px comfortably separates the two cases (observed
+      // single-row height ~60px, wrapped ~110px+) without pinning an exact,
+      // font/DPI-brittle figure.
+      check(!!box && box.height < 70, `action row is a single line at ${width}px (height ${box?.height})`);
+      check(!!box && box.x >= 0 && box.x + box.width <= width, `action row stays within the ${width}px viewport`);
+    }
+
+    console.log("--- Image/Share are icon-only but stay reachable by aria-label ---");
+    const img = page.locator('[aria-label="Save image"]');
+    const share = page.locator('[aria-label="Copy share link"]');
+    check((await img.count()) === 1 && (await img.isVisible()), "Image is reachable by its aria-label");
+    check((await share.count()) === 1 && (await share.isVisible()), "Share is reachable by its aria-label");
+    check(
+      !(await img.locator(".action-btn-label").isVisible().catch(() => false)),
+      "Image's visible text label is hidden on mobile (icon-only) — the aria-label above is unaffected"
+    );
+
+    console.log("--- export + the after-export panel still work (minimal — see checkExports for the full desktop flow) ---");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(100);
+    const [dl] = await Promise.all([page.waitForEvent("download"), page.click(".action-export")]);
+    check(!!dl, "Export still produces a download on the compact mobile bar");
+    const successPanel = page.locator(".export-success");
+    await successPanel.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    check((await successPanel.count()) === 1, "the after-export panel still appears");
+    const successBox = await successPanel.boundingBox();
+    const clusterBox = await page.locator(".action-cluster").boundingBox();
+    check(
+      !!successBox && !!clusterBox && successBox.y + successBox.height <= clusterBox.y + 1,
+      "the after-export panel rides above the action cluster (PR9's .action-dock), not overlapping it"
+    );
+  } finally {
+    await context.close();
+  }
+}
+
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
@@ -1792,6 +1997,8 @@ async function main() {
     await checkResponsiveLayout(ctx);
     await checkQuickStartMobile(ctx);
     await checkMobileChecklistPeek(ctx);
+    await checkMobileOutputConsole(ctx);
+    await checkMobileActionBar(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);

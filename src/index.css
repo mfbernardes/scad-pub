@@ -476,6 +476,32 @@ button:disabled { cursor: default; }
   }
 }
 
+/* PR16: compact single-row mobile action bar. ActionButtons.tsx is the exact
+   same component/markup on both layouts (see its own doc) — desktop keeps
+   ACTION_CLUSTER_CLASS's own flex-wrap (it has width to spare, so Image/Share
+   drop to a second line rather than spilling offscreen); mobile instead
+   forces one row and trims the two icon-only buttons + Export's secondary
+   line so all three genuinely fit without wrapping to a second row that used
+   to eat viewport height above the sheet. Verified against a 320px viewport —
+   the narrowest realistic target (mirrors ACTION_CLUSTER_CLASS's own note). */
+@media (max-width: 860px) {
+  .app-shell__mobile .action-cluster {
+    flex-wrap: nowrap;
+  }
+  /* Image / Share: icon-only on mobile. The accessible name still lives on
+     the button's aria-label (ActionButtons.tsx), so nothing is lost for
+     assistive tech — only the redundant visible word goes. */
+  .app-shell__mobile .action-cluster .action-btn-label {
+    display: none;
+  }
+  /* Export's secondary "{format} · for slicers…" line: tightened further
+     than the desktop size so the two-line CTA doesn't dominate the row's
+     width budget. */
+  .app-shell__mobile .action-cluster .action-export__format-line {
+    font-size: 0.6rem;
+  }
+}
+
 /* One-time viewer gesture hint (ViewerGestureHint) — bottom-centre, riding
    above the action cluster (roughly its height + gap higher) so it never
    overlaps the Export/PNG/Share row. Non-interactive (pointer-events:none on
