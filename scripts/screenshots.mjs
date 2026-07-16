@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import { startServer } from "./serve-dist.mjs";
-import { launchChromium, gotoWithTheme, settleFirstVisit } from "./lib/browser.mjs";
+import { launchChromium, gotoWithTheme, dismissWelcomePopup } from "./lib/browser.mjs";
 
 const UPDATE = process.argv.includes("--update");
 const BASELINE_DIR = fileURLToPath(new URL("../tests/screenshots", import.meta.url));
@@ -60,9 +60,18 @@ async function shoot(page, base, theme) {
   // (and its ~150ms settle race against the mask/screenshot below) a source
   // of nondeterministic diffs. See gotoWithTheme's own doc for the mechanism.
   await gotoWithTheme(page, base, theme, { seedFlags: ["offline.claim.v1"] });
-  // Dismiss any first-visit surface so it doesn't cover the panel (and would
-  // block the tab click below).
-  await settleFirstVisit(page);
+  // Dismiss the welcome popup only — it would cover the panel and block the
+  // tab click below. The getting-started checklist is deliberately left
+  // showing (PR14): the dogfood config's default landing (tag, guided,
+  // essentials, QuickStart enabled) makes QuickStart the active guide, so
+  // the checklist renders its COMPACT one-line form here, not the old
+  // half-viewport full card — light enough now to be part of the
+  // deterministic chrome this baseline covers, rather than something that
+  // has to be forced away first. Its progress count ("0 of N complete")
+  // depends only on task state (design/review/export), never on render
+  // timing, so it's as deterministic as everything else in this baseline —
+  // see src/lib/checklist.ts's checklistTaskProgress doc.
+  await dismissWelcomePopup(page);
   // The panel opens on the Presets tab; switch to Parameters so the baseline
   // keeps exercising the param form (a richer regression surface).
   await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});

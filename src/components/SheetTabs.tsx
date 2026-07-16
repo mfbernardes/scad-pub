@@ -6,6 +6,7 @@ import type { InstalledFont } from "../lib/fonts";
 import type { ExperienceMode, SettingsView } from "../lib/useExperience";
 import type { ChecklistState } from "../lib/checklist";
 import type { AttentionItem } from "../lib/readiness";
+import type { SheetDetent } from "./BottomSheet";
 import { useAppActions } from "../lib/appActions";
 import type { PanelTab } from "../lib/usePanelState";
 import { CustomizeTab } from "./CustomizeTab";
@@ -55,7 +56,7 @@ interface Props {
   search: string;
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
-  onSearchBlur?: () => void;
+  onSearchBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   /** Essentials/all settings-view (see src/lib/useExperience.ts). */
   settingsView: SettingsView;
   /** Guided/standard experience mode — forwarded to CustomizeTab, which gates
@@ -70,6 +71,15 @@ interface Props {
   checklist: ChecklistState;
   /** Forwarded to GettingStarted — see its own doc. */
   checklistReplaySignal?: number;
+  /** Forwarded to GettingStarted — see ParamPanel's matching prop doc (this
+   *  mirrors it for the mobile layout). */
+  quickStartActive?: boolean;
+  /** The bottom sheet's current detent (BottomSheet.tsx), forwarded to
+   *  GettingStarted so it can render nothing but a slim progress line at
+   *  Peek instead of the compact/full card — see GettingStarted.tsx's own
+   *  doc for why Peek can't afford either. Desktop (ParamPanel) has no
+   *  sheet, so it never passes this. */
+  sheetDetent?: SheetDetent;
   /** Forwarded to CustomizeTab — see its own doc. */
   attention: AttentionItem[];
   /** Forwarded to CustomizeTab — see its own doc. */
@@ -108,6 +118,8 @@ export function SheetTabs({
   focusHiddenDiffSignal,
   checklist,
   checklistReplaySignal,
+  quickStartActive = false,
+  sheetDetent,
   attention,
   onOpenMessages,
 }: Props) {
@@ -128,8 +140,15 @@ export function SheetTabs({
   return (
     <>
       {/* Above the tab strip — mirrors ParamPanel's desktop mount point, so
-          the card is visible regardless of which tab is active. */}
-      <GettingStarted state={checklist} replaySignal={checklistReplaySignal} />
+          the card is visible regardless of which tab is active. Peek (rule
+          3) is threaded through so this renders a slim progress line instead
+          of the compact/full card at that detent — see GettingStarted.tsx. */}
+      <GettingStarted
+        state={checklist}
+        replaySignal={checklistReplaySignal}
+        quickStartActive={quickStartActive}
+        peek={sheetDetent === "peek"}
+      />
       <Tabs
         value={tab}
         onValueChange={(v) => onTabChange(v as Tab)}

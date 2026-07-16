@@ -121,3 +121,20 @@ export function deriveChecklistItems(state: ChecklistState): ChecklistItem[] {
 export function checklistAllDone(items: ChecklistItem[]): boolean {
   return items.every((item) => item.kind !== "task" || item.status === "done");
 }
+
+/**
+ * Task-only progress counts behind the checklist's COMPACT form (PR14 —
+ * shown whenever QuickStart is the active guide for the current design+view,
+ * see GettingStarted.tsx's `quickStartActive` prop): how many task-kind items
+ * (design/review/export) are done, out of how many exist. Deliberately
+ * EXCLUDES the "Preview" status row, for two reasons — it mirrors
+ * checklistAllDone's own task-only filter (the status row was never a user
+ * task to "finish"), and it keeps the compact count independent of render
+ * timing: a render still in flight would otherwise make the count itself
+ * flicker on every keystroke, which the full card avoids today only because
+ * the Preview row never contributes a checkmark to begin with.
+ */
+export function checklistTaskProgress(items: ChecklistItem[]): { completed: number; total: number } {
+  const tasks = items.filter((item): item is ChecklistTaskItem => item.kind === "task");
+  return { completed: tasks.filter((task) => task.status === "done").length, total: tasks.length };
+}

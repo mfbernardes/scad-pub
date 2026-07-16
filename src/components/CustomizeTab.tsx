@@ -49,7 +49,7 @@ interface Props {
   search: string;
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
-  onSearchBlur?: () => void;
+  onSearchBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   /** Bumped externally (e.g. by the friendly-error card's "Review hidden
    *  settings" action — see AppShell) to trigger the exact same reveal+focus
    *  as the "Review" chip below, without this component owning that trigger

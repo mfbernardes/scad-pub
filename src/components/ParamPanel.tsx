@@ -75,7 +75,7 @@ interface Props {
   search: string;
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
-  onSearchBlur?: () => void;
+  onSearchBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   /** Essentials/all settings-view (see src/lib/useExperience.ts). */
   settingsView: SettingsView;
   /** Guided/standard experience mode — forwarded to CustomizeTab, which gates
@@ -91,6 +91,12 @@ interface Props {
   checklist: ChecklistState;
   /** Forwarded to GettingStarted — see its own doc. */
   checklistReplaySignal?: number;
+  /** Whether QuickStart is the active guide for the current design+view
+   *  (src/lib/quickStart.ts's quickStartAvailable) — forwarded to
+   *  GettingStarted, which uses it to pick the compact vs. full form. Same
+   *  value CustomizeTab derives its own showQuickStart from; computed once
+   *  in AppShell and threaded to both so they can never disagree. */
+  quickStartActive?: boolean;
   /** Forwarded to CustomizeTab — see its own doc. */
   attention: AttentionItem[];
   /** Forwarded to CustomizeTab — see its own doc. */
@@ -130,6 +136,7 @@ export function ParamPanel({
   focusHiddenDiffSignal,
   checklist,
   checklistReplaySignal,
+  quickStartActive = false,
   attention,
   onOpenMessages,
 }: Props) {
@@ -266,7 +273,7 @@ export function ParamPanel({
 
       {/* Above the tab strip — see the checklist prop's own doc for why it
           isn't nested inside CustomizeTab's params tab. */}
-      <GettingStarted state={checklist} replaySignal={checklistReplaySignal} />
+      <GettingStarted state={checklist} replaySignal={checklistReplaySignal} quickStartActive={quickStartActive} />
 
       <Tabs
         value={panelTab}

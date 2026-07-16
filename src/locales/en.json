@@ -59,7 +59,9 @@
   "checklist.attention": "needs attention",
   "checklist.failed": "failed",
   "checklist.done": "done",
-  "checklist.dismiss": "Dismiss",
+  "checklist.progress": "{completed} of {total} complete",
+  "checklist.hideGuide": "Hide guide",
+  "checklist.hide": "Hide",
 
   "attention.fontFallback": "Font needed: {family} — the preview uses a substitute",
   "attention.notice": "{count} {label}",

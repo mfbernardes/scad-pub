@@ -59,7 +59,9 @@
   "checklist.attention": "bitte prüfen",
   "checklist.failed": "fehlgeschlagen",
   "checklist.done": "erledigt",
-  "checklist.dismiss": "Verwerfen",
+  "checklist.progress": "{completed} von {total} erledigt",
+  "checklist.hideGuide": "Anleitung ausblenden",
+  "checklist.hide": "Ausblenden",
 
   "attention.fontFallback": "Schrift fehlt: {family} — die Vorschau verwendet einen Ersatz",
   "attention.notice": "{count} {label}",

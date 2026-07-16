@@ -1,14 +1,17 @@
 // Tests the pure checklist item-state derivation behind the getting-started
-// checklist (src/lib/checklist.ts): deriveChecklistItems + checklistAllDone.
-// GettingStarted.tsx itself (dismiss/replay/once-flag chrome) isn't exercised
-// here — this repo has no DOM-rendering test harness for React components
-// (see tests/useExperience.test.mjs's own doc) — so these are the pure units
-// the component is built from, covering every branch directly. End-to-end
-// behaviour (dismiss persists, replay row, single vs. multi-design counts) is
-// covered by scripts/smoke.mjs against the built app.
+// checklist (src/lib/checklist.ts): deriveChecklistItems + checklistAllDone +
+// checklistTaskProgress (PR14's compact-form counts). GettingStarted.tsx
+// itself (dismiss/replay/once-flag/compact-expand/retirement chrome) isn't
+// exercised here — this repo has no DOM-rendering test harness for React
+// components (see tests/useExperience.test.mjs's own doc) — so these are the
+// pure units the component is built from, covering every branch directly.
+// End-to-end behaviour (dismiss persists, replay row, single vs. multi-design
+// counts, the compact form's chevron expand/collapse, the mobile Peek strip,
+// and retirement-after-export) is covered by scripts/smoke.mjs against the
+// built app.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deriveChecklistItems, checklistAllDone } from "../src/lib/checklist.ts";
+import { deriveChecklistItems, checklistAllDone, checklistTaskProgress } from "../src/lib/checklist.ts";
 
 // A fully "nothing has happened yet" baseline — tests override just the
 // field(s) they care about, so each test reads as "what changed".
@@ -196,4 +199,45 @@ test("checklistAllDone: true for a single-design build once review + export are 
 
 test("checklistAllDone: an empty item list is vacuously all-done", () => {
   assert.equal(checklistAllDone([]), true);
+});
+
+// PR14: the compact one-line form's "N of M complete" counts — task-kind
+// items only, the "Preview" status row never contributes either way.
+test("checklistTaskProgress: counts only task-kind items, excluding the Preview status row", () => {
+  const items = deriveChecklistItems(baseState({ designCount: 2 }));
+  const { completed, total } = checklistTaskProgress(items);
+  assert.equal(total, 3, "design + review + export, not the Preview row too");
+  assert.equal(completed, 0);
+});
+
+test("checklistTaskProgress: single-design build has 2 tasks (no 'Choose a design')", () => {
+  const items = deriveChecklistItems(baseState({ designCount: 1 }));
+  assert.deepEqual(checklistTaskProgress(items), { completed: 0, total: 2 });
+});
+
+test("checklistTaskProgress: reflects real completed tasks", () => {
+  const items = deriveChecklistItems(
+    baseState({ designCount: 2, designChanged: true, paramInteracted: true })
+  );
+  // design done (explicit) + review done (paramInteracted) = 2; export still pending.
+  assert.deepEqual(checklistTaskProgress(items), { completed: 2, total: 3 });
+});
+
+test("checklistTaskProgress: reads 'all done' once every task is, matching checklistAllDone", () => {
+  const items = deriveChecklistItems(
+    baseState({ designCount: 1, paramInteracted: true, exported: true })
+  );
+  assert.deepEqual(checklistTaskProgress(items), { completed: 2, total: 2 });
+  assert.equal(checklistAllDone(items), true);
+});
+
+test("checklistTaskProgress: unaffected by rendering/resultOk/hasAttention (the Preview row alone carries those)", () => {
+  const building = checklistTaskProgress(
+    deriveChecklistItems(baseState({ designCount: 2, rendering: true }))
+  );
+  const attention = checklistTaskProgress(
+    deriveChecklistItems(baseState({ designCount: 2, resultOk: true, hasAttention: true }))
+  );
+  assert.deepEqual(building, { completed: 0, total: 3 });
+  assert.deepEqual(attention, { completed: 0, total: 3 });
 });

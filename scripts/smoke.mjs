@@ -22,6 +22,7 @@ import {
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
   settleFirstVisit,
+  dismissWelcomePopup,
 } from "./lib/browser.mjs";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
@@ -42,6 +43,16 @@ async function resetDefaults(page) {
   const dlg = page.getByRole("alertdialog");
   const shown = await dlg.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false);
   if (shown) await dlg.getByRole("button", { name: /^Reset$/ }).click();
+}
+
+// Expands the compact one-line checklist (PR14 rule 1 — shown whenever
+// QuickStart is the active guide for the current design+view) into its full
+// row list. A no-op when the full card is already showing (single-design
+// builds, All settings, a design without @step, ui.quickStart:false) — those
+// never render the `.getting-started__expand` chevron in the first place.
+async function expandChecklist(page) {
+  const expand = page.locator(".getting-started__expand");
+  if (await expand.count()) await expand.click();
 }
 
 async function waitRendered(page, label) {
@@ -150,24 +161,45 @@ async function checkWelcomePopup({ page, check, schema }) {
   }
 }
 
-// Getting-started checklist (PR8): a dismissible onboarding card, shown only
-// in guided experience — the dogfood config's default (ui.experience.default)
-// — above the panel's tab strip in both layouts. Runs immediately after the
-// welcome popup (which only OPENS/closes the design picker via Escape,
-// picking nothing) and before any other check switches design or settings
-// view, so the "fresh visitor" assertions below are honest. Ends by
-// restoring defaults so later checks see the same pristine state they'd
-// otherwise expect.
+// Getting-started checklist (PR8; compact/peek/retirement — PR14): a
+// dismissible onboarding checklist, shown only in guided experience — the
+// dogfood config's default (ui.experience.default) — above the panel's tab
+// strip in both layouts. Runs immediately after the welcome popup (which
+// only OPENS/closes the design picker via Escape, picking nothing) and
+// before any other check switches design or settings view, so the "fresh
+// visitor" assertions below are honest.
+//
+// The dogfood config's default landing (tag, guided, essentials, quickStart
+// enabled by default) makes QuickStart the active guide from the very first
+// load — so PR14's rule 1 applies immediately: the checklist starts in its
+// COMPACT one-line form, not the full row list (src/components/
+// GettingStarted.tsx's `quickStartActive` branch). Deliberately does NOT
+// dismiss the checklist at the end (unlike its PR8-era self) — it leaves the
+// card alive, restored to a fresh compact state, for checkChecklistRetirement
+// (run immediately after this one) to drive its own export through.
 async function checkGettingStarted({ page, check, ids, paramsTabName }) {
-  console.log("=== getting-started checklist ===");
+  console.log("=== getting-started checklist: compact form (QuickStart active) ===");
   const card = page.locator(".getting-started");
   check((await card.count()) === 1, "getting-started checklist shown on a fresh guided-experience load");
+  check(
+    (await card.locator("li").count()) === 0,
+    "starts in the compact one-line form (QuickStart is the active guide for tag/essentials)"
+  );
+  const totalTasks = ids.length > 1 ? 3 : 2; // design (multi-design only) + review + export
+  check(
+    new RegExp(`0 of ${totalTasks} complete`).test((await card.textContent()) ?? ""),
+    `compact line reads "0 of ${totalTasks} complete" before any progress`
+  );
 
+  await runAxe(page, check, "getting-started checklist visible (compact)");
+
+  console.log("=== getting-started checklist: expand chevron reveals the full card ===");
+  await card.locator(".getting-started__expand").click();
   const rows = card.locator("li");
   const expectedRowCount = ids.length > 1 ? 4 : 3;
   check(
     (await rows.count()) === expectedRowCount,
-    `checklist shows ${expectedRowCount} row(s) for ${ids.length} design(s)`
+    `expanding shows ${expectedRowCount} row(s) for ${ids.length} design(s)`
   );
   const designRow = card.locator("li", { hasText: "Choose a design" });
   if (ids.length > 1) {
@@ -183,7 +215,7 @@ async function checkGettingStarted({ page, check, ids, paramsTabName }) {
     "\"Preview\" status row reads \"ready\" once the initial render has already succeeded"
   );
 
-  await runAxe(page, check, "getting-started checklist visible");
+  await runAxe(page, check, "getting-started checklist visible (expanded)");
 
   // A real param edit completes "Review the essential settings" — and, per
   // the documented rule (src/lib/checklist.ts), implicitly "Choose a design"
@@ -201,12 +233,29 @@ async function checkGettingStarted({ page, check, ids, paramsTabName }) {
     );
   }
 
+  // Collapse back: the compact count reflects the very same progress live.
+  await card.locator(".getting-started__expand").click();
+  check((await card.locator("li").count()) === 0, "collapsing returns to the one-line form");
+  const doneTasks = ids.length > 1 ? 2 : 1; // design (implicit) + review; export still pending
+  check(
+    new RegExp(`${doneTasks} of ${totalTasks} complete`).test((await card.textContent()) ?? ""),
+    `compact line updates live to "${doneTasks} of ${totalTasks} complete"`
+  );
+
+  console.log("=== getting-started checklist: dismiss + replay ===");
+  await card.locator(".getting-started__expand").click(); // re-expand for the full-card dismiss control below
+  const dismissBtn = card.locator(".getting-started__dismiss");
+  check(
+    ((await dismissBtn.textContent()) ?? "").trim() === "Hide guide",
+    "the full card's dismiss control reads \"Hide guide\", not a bare \"×\""
+  );
   // Dismiss: hides the card and persists across a reload (the checklist.v1
   // once-flag) — settleFirstVisit's own `.getting-started__dismiss` click is
   // exercised by every OTHER check via its call at the top of main(); this
-  // exercises the dismiss button itself and its persistence explicitly.
-  await card.locator(".getting-started__dismiss").click();
-  check((await card.count()) === 0, "dismiss hides the checklist");
+  // exercises the control itself (hook unchanged) and its persistence
+  // explicitly.
+  await dismissBtn.click();
+  check((await card.count()) === 0, "\"Hide guide\" hides the checklist");
   await page.reload({ waitUntil: "load" });
   await waitRendered(page, "reloaded after checklist dismiss");
   check((await page.locator(".getting-started").count()) === 0, "dismissal persists across a reload");
@@ -225,12 +274,71 @@ async function checkGettingStarted({ page, check, ids, paramsTabName }) {
   await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
   check((await page.locator(".getting-started").count()) === 1, "Help modal's replay row brings the checklist back");
 
-  // Clean up: dismiss again and restore the width edited above, so later
-  // checks see the same pristine defaults they'd otherwise expect.
-  await page.locator(".getting-started__dismiss").click().catch(() => {});
+  // Restore the width edited above so later checks see pristine defaults.
+  // Deliberately does NOT dismiss the checklist again — checkChecklistRetirement
+  // (run immediately after this) needs a live, un-dismissed checklist to
+  // drive its own export through and observe the retirement rule.
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
   await resetDefaults(page);
   await waitRendered(page, "defaults restored (checklist)");
+}
+
+// Retirement after first export (PR14, rule 2): once an export completes,
+// the checklist doesn't retire mid-session (a `useState` lazy initializer in
+// GettingStarted.tsx only ever runs at mount, so the session that performs
+// the export keeps showing its current state normally, same as before this
+// milestone) — but the NEXT app load reads the persisted
+// `checklist.exported.v1` flag and skips rendering the checklist outright,
+// no dismiss needed. The simpler of the two options the milestone brief
+// offered (vs. a ~5s timed auto-hide): fully deterministic, no race against
+// paint/render timing. Runs immediately after checkGettingStarted, which
+// deliberately leaves the checklist alive (compact, undismissed) for this.
+async function checkChecklistRetirement({ page, check, ids, dir }) {
+  console.log("=== getting-started checklist: retires on the next load after an export ===");
+  await selectDesign(page, ids[0]);
+  const card = page.locator(".getting-started");
+  check((await card.count()) === 1, "checklist still alive going into the export (left visible by the previous check)");
+
+  // Drive a real export (same technique checkExports uses below).
+  const [model] = await Promise.all([
+    page.waitForEvent("download"),
+    page.click(".action-export"),
+  ]);
+  await model.saveAs(join(dir, `retirement-${await model.suggestedFilename()}`));
+
+  // Same session: the mounted card does NOT retroactively hide itself —
+  // it keeps showing, with "Export the model" now done.
+  check((await card.count()) === 1, "the checklist stays visible in the SAME session the export completed in");
+  await card.locator(".getting-started__expand").click();
+  const exportRow = card.locator("li", { hasText: "Export the model" });
+  check(/done/.test((await exportRow.textContent()) ?? ""), "\"Export the model\" completes on a real export");
+
+  // Close whatever the export itself opened so it doesn't intercept the reload below.
+  await page.locator(".export-success__dismiss").click().catch(() => {});
+
+  // Next app load: retires permanently — simply never rendered, no dismiss
+  // click involved.
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "reloaded after the export that retires the checklist");
+  check((await page.locator(".getting-started").count()) === 0, "checklist auto-retires on the next load after an export");
+
+  // Stays retired on a further reload too — persisted, not a one-off.
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "reloaded again (retirement persists)");
+  check((await page.locator(".getting-started").count()) === 0, "retirement persists across further reloads");
+
+  // Help replay is still the one deliberate escape hatch out of retirement.
+  await page.getByRole("button", { name: "Help", exact: true }).click();
+  const helpDialog = page.getByRole("dialog");
+  await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await helpDialog.getByRole("button", { name: /show the getting-started checklist again/i }).click();
+  await page.keyboard.press("Escape");
+  await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".getting-started").count()) === 1, "Help replay still resurrects a retired checklist");
+
+  // Leave the suite in a clean, dismissed state for the checks that follow
+  // (checkReadiness's own comment already documents relying on exactly this).
+  await page.locator(".getting-started__dismiss").click().catch(() => {});
 }
 
 // Viewer gesture hint (PR8): a one-time, non-blocking chip over the viewer,
@@ -1120,6 +1228,10 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   await page.keyboard.press("Escape");
   await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
 
+  // QuickStart is the active guide here too (tag/essentials/guided), so the
+  // replayed checklist lands in its compact one-line form — expand it (PR14)
+  // before reading the Preview row.
+  await expandChecklist(page);
   const previewRow = page.locator(".getting-started li", { hasText: "Preview" });
   await previewRow.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
   check(
@@ -1201,6 +1313,7 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   await helpDialog.getByRole("button", { name: /show the getting-started checklist again/i }).click();
   await page.keyboard.press("Escape");
   await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  await expandChecklist(page); // compact by default here too — see above
   const previewRow2 = page.locator(".getting-started li", { hasText: "Preview" });
   await previewRow2.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
   const previewText2 = (await previewRow2.textContent()) ?? "";
@@ -1315,10 +1428,15 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
       (await page.getByRole("tab", { name: paramsTabName }).first().getAttribute("aria-selected")) === "true",
       "active tab survives the breakpoint change"
     );
-    check(
-      await page.evaluate((id) => document.activeElement?.id === id, "param-search-input"),
-      "search focus is restored after the breakpoint change"
-    );
+    // Poll rather than snapshot: the restore lands in a layout effect after
+    // the desktop tree commits, and other mount-time focus (Radix tabs) can
+    // hold the active element for a frame or two first. A bounded wait is
+    // what a user experiences; a one-shot read here was a long-lived flake.
+    const focusRestored = await page
+      .waitForFunction((id) => document.activeElement?.id === id, "param-search-input", { timeout: 2000 })
+      .then(() => true)
+      .catch(() => false);
+    check(focusRestored, "search focus is restored after the breakpoint change");
 
     // Back to mobile: the sheet detent set above (Half) must not have reset
     // to Peek just because the layout remounted.
@@ -1419,6 +1537,66 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
   }
 }
 
+// Mobile peek is a real peek (PR14, rule 3): at the sheet's Peek detent, the
+// checklist card (compact OR full) must NOT mount inside the sheet — only a
+// slim, non-dismissible progress line may. BottomSheet measures the Peek
+// height from whatever sits between the sheet's top edge and its tab strip
+// (see BottomSheet.tsx's `measure()`), so a full card there balloons Peek
+// past "handle + tab strip", exactly the bug this milestone fixes. Needs its
+// own fresh mobile context: checkResponsiveLayout's context deliberately
+// dismisses every first-visit surface (settleFirstVisit) before it starts,
+// since ITS assertions are about focus/tab-order, not the checklist.
+async function checkMobileChecklistPeek({ browser, base, check }) {
+  console.log("=== mobile bottom sheet: checklist at peek/half/full (PR14) ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // The dogfood config's guided+half policy lands a fresh mobile visit at
+    // Half, not Peek — the checklist (compact; QuickStart is active for tag)
+    // shows normally there, above the tab strip.
+    check((await page.locator(".bottom-sheet--half").count()) === 1, "fresh mobile load starts at half (guided+half policy)");
+    check((await page.locator(".getting-started").count()) === 1, "checklist card shown inside the sheet at half");
+    check((await page.locator(".getting-started-peek").count()) === 0, "no peek strip while at half");
+
+    // Collapse to Peek (cycleDetent order is peek -> half -> full -> peek;
+    // nudge the handle deterministically the same way checkResponsiveLayout does).
+    for (let i = 0; i < 3 && !(await page.locator(".bottom-sheet--peek").count()); i++) {
+      await page.locator(".sheet-handle").click();
+      await page.waitForTimeout(50);
+    }
+    check((await page.locator(".bottom-sheet--peek").count()) === 1, "sheet reached peek");
+    check((await page.locator(".getting-started").count()) === 0, "no checklist card (compact or full) inside the sheet at peek");
+    const peekLine = page.locator(".getting-started-peek");
+    check((await peekLine.count()) === 1, "a slim progress line takes its place at peek");
+    check(/of \d+ complete/.test((await peekLine.textContent()) ?? ""), "the peek line carries the same task-progress copy");
+
+    await runAxe(page, check, "mobile sheet at peek with the checklist progress strip");
+
+    // Half again: the full checklist mounts back inside the sheet.
+    await page.locator(".sheet-handle").click(); // peek -> half
+    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
+    check((await page.locator(".getting-started").count()) === 1, "checklist card returns inside the sheet at half");
+    check((await page.locator(".getting-started-peek").count()) === 0, "peek strip is gone once raised off peek");
+
+    // Full: same rule (card mounts, not the slim strip).
+    await page.locator(".sheet-handle").click(); // half -> full
+    await page.waitForSelector(".bottom-sheet--full", { timeout: 3000 });
+    check((await page.locator(".getting-started").count()) === 1, "checklist card shown inside the sheet at full");
+    check((await page.locator(".getting-started-peek").count()) === 0, "no peek strip at full");
+  } finally {
+    await context.close();
+  }
+}
+
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
@@ -1465,7 +1643,15 @@ async function main() {
     await checkOfflineClaimToast(ctx);
     await checkWelcomePopup(ctx);
     await checkGettingStarted(ctx);
+    // Runs BEFORE checkChecklistRetirement (which drives a real export
+    // through several reload/dialog round-trips) — the viewer gesture hint
+    // auto-fades 8s after its first successful render if untouched
+    // (ViewerGestureHint.tsx's FADE_TIMEOUT_MS), and that fade PERSISTS (the
+    // same once-flag a real dismiss uses) — ordering it here keeps this
+    // check's own wall-clock budget short and deterministic instead of
+    // racing checkChecklistRetirement's heavier round-trips.
     await checkViewerHint(ctx);
+    await checkChecklistRetirement(ctx);
     await checkDesignPickerDialog(ctx);
     await checkSettingsView(ctx);
     await checkQuickStart(ctx);
@@ -1483,6 +1669,7 @@ async function main() {
     await checkReadiness(ctx);
     await checkSignageDesign(ctx);
     await checkResponsiveLayout(ctx);
+    await checkMobileChecklistPeek(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);

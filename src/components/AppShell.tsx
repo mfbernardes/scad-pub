@@ -15,6 +15,7 @@ import type { ViewerHandle, Dimensions } from "./Viewer";
 import type { ChecklistState } from "../lib/checklist";
 import type { NoticeAttentionInput } from "../lib/readiness";
 import { deriveAttention } from "../lib/readiness";
+import { quickStartAvailable } from "../lib/quickStart";
 import { initialSheetDetent } from "../lib/sheetDetent";
 import { makeOnceFlag } from "../lib/prefs";
 import { pauseReasonText } from "../lib/pauseReason";
@@ -300,8 +301,23 @@ export const AppShell = memo(function AppShell({
   const restoreSearchFocusRef = useRef(false);
   if (wasMobileRef.current !== isMobile) {
     wasMobileRef.current = isMobile;
-    restoreSearchFocusRef.current = document.activeElement?.id === PARAM_SEARCH_INPUT_ID;
+    // ||=, not =: the media-query path below may already have flagged the
+    // restore before this render ever ran (see onParamSearchHiddenBlur).
+    if (document.activeElement?.id === PARAM_SEARCH_INPUT_ID) restoreSearchFocusRef.current = true;
   }
+  // The render-time capture above has a hole: the layouts are ALSO gated by a
+  // CSS media query (index.css hides .app-shell__mobile/__desktop at the same
+  // 860px breakpoint React switches on). On a viewport resize the browser's
+  // style recalc can hide the focused input — blurring it to <body> — BEFORE
+  // React's matchMedia listener gets to render, so the capture reads <body>
+  // and the restore never fires (an intermittent, scheduling-dependent loss a
+  // real user hits too). Detect that exact case at the blur itself: a blur
+  // whose target is still mounted but no longer rendered (no client rects)
+  // can only mean "hidden out from under the user", never a deliberate
+  // focus move — flag it, and let the same layout effect below consume it.
+  const onParamSearchHiddenBlur = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+    if (e.target.getClientRects().length === 0) restoreSearchFocusRef.current = true;
+  }, []);
   // Layout effect so the restore fires after the new layout's DOM is
   // committed, before the browser paints — otherwise the switch would
   // visibly drop focus to <body> for a frame even when it does recover.
@@ -362,6 +378,12 @@ export const AppShell = memo(function AppShell({
   // opt-in. Threaded to CustomizeTab (via ParamPanel/SheetTabs), which also
   // gates on experienceMode/settingsView/design.steps — see quickStartAvailable.
   const quickStartEnabled = ui.quickStart !== false;
+  // Whether QuickStart is the active guide for the CURRENT design+view — the
+  // same predicate CustomizeTab gates its own step UI on (quickStart.ts),
+  // computed ONCE here and threaded to both GettingStarted mount points
+  // (ParamPanel/SheetTabs) so the checklist's compact-vs-full form (PR14)
+  // can never disagree with whether QuickStart is actually showing.
+  const quickStartActive = quickStartAvailable(design, experienceMode, settingsView, quickStartEnabled);
   // The getting-started checklist's full input state (src/lib/checklist.ts):
   // schema/render facts already available here, plus the session-scoped
   // progress App.tsx tracks (checklistProgress, threaded down because the
@@ -844,12 +866,15 @@ export const AppShell = memo(function AppShell({
                   onTabChange={panelState.setTab}
                   search={panelState.search}
                   onSearchChange={panelState.setSearch}
+                  onSearchBlur={onParamSearchHiddenBlur}
                   settingsView={settingsView}
                   experienceMode={experienceMode}
                   quickStartEnabled={quickStartEnabled}
                   focusHiddenDiffSignal={reviewHiddenSignal}
                   checklist={checklistState}
                   checklistReplaySignal={checklistReplaySignal}
+                  quickStartActive={quickStartActive}
+                  sheetDetent={sheetDetent}
                   attention={attention}
                   onOpenMessages={openOutput}
                 />
@@ -904,12 +929,14 @@ export const AppShell = memo(function AppShell({
               onPanelTabChange={panelState.setTab}
               search={panelState.search}
               onSearchChange={panelState.setSearch}
+              onSearchBlur={onParamSearchHiddenBlur}
               settingsView={settingsView}
               experienceMode={experienceMode}
               quickStartEnabled={quickStartEnabled}
               focusHiddenDiffSignal={reviewHiddenSignal}
               checklist={checklistState}
               checklistReplaySignal={checklistReplaySignal}
+              quickStartActive={quickStartActive}
               attention={attention}
               onOpenMessages={openOutput}
             />

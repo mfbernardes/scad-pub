@@ -21,7 +21,7 @@ interface Props {
    *  consumer wires these up today (see PARAM_SEARCH_INPUT_ID's own doc for
    *  why the desktop/mobile focus-restore doesn't need them). */
   onFocus?: () => void;
-  onBlur?: () => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
 }
 
 export function ParamSearch({ value, onChange, onClear, onFocus, onBlur }: Props) {
