@@ -450,8 +450,9 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 - **`marker`**: required. The design-defined word, matched as `: <marker>:` inside an echo, case-insensitive. The first configured category that matches a line claims it
 - **`label`**: optional badge noun, such as `"alerts"`. Defaults to the `marker`
 - **`color`**: optional badge fill, as a plain CSS colour. For `#rgb`/`#rrggbb`, the badge text auto-switches between black and white to stay legible. Other colour forms keep the default badge text, so their contrast is your responsibility. Omit to use the default accent badge styling
+- **`attention`**: optional boolean, default `false`. Flags this category as a production-readiness concern rather than a routine, passive notice: a pending notice in a flagged category surfaces the Customize tab's attention chip and a small indicator on the Export button — not just the Output bell's badge. Reach for this on messages that mean the exported model may not match what the controls show (a warning worth acting on before printing), not on cosmetic/informational notes
 
-Omit `notices`, or set it to `[]`, and no marker categories are recognised. Design echoes appear only in the raw log. The bundled example config (`scadpub.config.json`) opts in with `alert` and `note` categories. The example `tag` design echoes them in specific, parameter-driven situations so you can see the badges appear.
+Omit `notices`, or set it to `[]`, and no marker categories are recognised. Design echoes appear only in the raw log. The bundled example config (`scadpub.config.json`) opts in with `alert` and `note` categories (neither flagged `attention` — they're demo notices, not real readiness gaps). The example `tag` design echoes them in specific, parameter-driven situations so you can see the badges appear.
 
 > **Hardcoded, not configurable:** OpenSCAD's own `WARNING:` lines surface as warning messages, and `assert()` failures (`ERROR: Assertion …`) surface as a message **and** an `asserts` count badge. These work regardless of `notices`.
 

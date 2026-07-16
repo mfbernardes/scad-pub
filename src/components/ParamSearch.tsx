@@ -8,13 +8,18 @@ import { Search as SearchIcon, X as XIcon } from "lucide-react";
 // Stable id for the search input. Only one layout is ever mounted at a time
 // (see docs/architecture-review.md M7), so this id is never duplicated in the
 // DOM — AppShell uses it to restore keyboard focus to the input after a
-// desktop/mobile switch remounts it (see usePanelState's searchFocusedRef).
+// desktop/mobile switch remounts it (see AppShell.tsx's own doc on its
+// restoreSearchFocusRef — captured via document.activeElement, not via
+// this component's onFocus/onBlur).
 export const PARAM_SEARCH_INPUT_ID = "param-search-input";
 
 interface Props {
   value: string;
   onChange: (value: string) => void;
   onClear: () => void;
+  /** Kept as generic optional hooks for a future caller — no built-in
+   *  consumer wires these up today (see PARAM_SEARCH_INPUT_ID's own doc for
+   *  why the desktop/mobile focus-restore doesn't need them). */
   onFocus?: () => void;
   onBlur?: () => void;
 }

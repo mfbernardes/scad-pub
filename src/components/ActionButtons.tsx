@@ -34,9 +34,19 @@ interface Props {
   canExport: boolean;
   modelFormat: string;
   onSavePng: () => void;
+  /**
+   * Unresolved production-readiness gaps for the current render (src/lib/
+   * readiness.ts's deriveAttention — a font fallback in use, or a flagged
+   * notice pending). Surfaces as a small amber corner dot on Export plus an
+   * `aria-describedby` caution, so a maker who skips the Customize tab
+   * entirely still gets a signal right where they're about to act. Export
+   * NEVER gets additionally disabled by this — `canExport` alone decides
+   * that; a rendered-but-uncertain model is still a real file worth having.
+   */
+  hasAttention?: boolean;
 }
 
-export function ActionButtons({ canExport, modelFormat, onSavePng }: Props) {
+export function ActionButtons({ canExport, modelFormat, onSavePng, hasAttention = false }: Props) {
   const { exportModel, copyLink } = useAppActions();
   const fmt = modelFormat.toUpperCase();
   const exportLabel = t("action.export");
@@ -57,12 +67,14 @@ export function ActionButtons({ canExport, modelFormat, onSavePng }: Props) {
         // than the viewport; whitespace-normal then lets the longer format
         // line wrap onto a second line once it's squeezed that far — the
         // short main label keeps fitting on one line regardless. Verified
-        // at a 320px viewport (the narrowest realistic target).
-        className="action-export h-auto min-w-0 flex-col items-stretch gap-0 whitespace-normal py-[0.4rem] hover:bg-primary hover:brightness-[1.08]"
+        // at a 320px viewport (the narrowest realistic target). `relative`
+        // positions the attention dot below.
+        className="action-export relative h-auto min-w-0 flex-col items-stretch gap-0 whitespace-normal py-[0.4rem] hover:bg-primary hover:brightness-[1.08]"
         onClick={exportModel}
         disabled={!canExport}
         aria-label={exportAria}
         title={exportAria}
+        aria-describedby={hasAttention ? "export-attention-hint" : undefined}
       >
         <span className="inline-flex items-center justify-center gap-[0.35rem] whitespace-nowrap">
           <DownloadIcon size={16} /> {exportLabel}
@@ -73,7 +85,18 @@ export function ActionButtons({ canExport, modelFormat, onSavePng }: Props) {
             at this size, since small text needs 4.5:1) so the two-line
             button doesn't blow out the action cluster while staying AA. */}
         <span className="text-center text-[0.68rem] leading-tight font-normal">{formatLine}</span>
+        {hasAttention && (
+          <span
+            aria-hidden="true"
+            className="action-export__attention-dot pointer-events-none absolute top-[2px] right-[2px] size-[8px] rounded-full bg-warn shadow-[0_0_0_2px_var(--panel)]"
+          />
+        )}
       </Button>
+      {hasAttention && (
+        <span id="export-attention-hint" className="sr-only">
+          {t("export.attentionHint")}
+        </span>
+      )}
       <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!canExport} aria-label={t("action.saveImage")}>
         <ImageIcon size={16} /> {t("action.image")}
       </Button>

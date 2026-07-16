@@ -28,7 +28,12 @@ const TASK_LABEL_KEY: Record<"design" | "review" | "export", string> = {
 
 // Reuses renderStatus.ts's own state->dot-colour mapping (read-only import;
 // that file is not touched) so the preview row's dot matches the same green/
-// amber-pulse/red vocabulary the Output bell already wears elsewhere.
+// amber-pulse/red vocabulary the Output bell already wears elsewhere. "attention"
+// has no renderStatus.ts counterpart (it isn't a render outcome — see
+// readiness.ts), so it's handled as its own branch below with the same
+// `bg-warn` token FontMissingHint/the attention chip already wear, rather
+// than stretching renderStatus.ts's RenderState to cover a concept it was
+// never meant to model.
 function previewRenderState(status: "building" | "ready" | "failed"): RenderState {
   if (status === "ready") return "ok";
   if (status === "failed") return "error";
@@ -37,6 +42,16 @@ function previewRenderState(status: "building" | "ready" | "failed"): RenderStat
 
 function ChecklistRow({ item }: { item: ChecklistItem }) {
   if (item.kind === "status") {
+    if (item.previewStatus === "attention") {
+      return (
+        <li className="flex items-center gap-2 text-muted-foreground">
+          <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-warn" />
+          <span>
+            {t("checklist.preview")} — {t("checklist.attention")}
+          </span>
+        </li>
+      );
+    }
     const renderState = previewRenderState(item.previewStatus);
     const style = STATE_STYLES[renderState];
     return (

@@ -13,6 +13,8 @@ import type { SettingsView, ExperienceMode } from "../lib/useExperience";
 import type { PauseReason } from "../lib/renderState";
 import type { ViewerHandle, Dimensions } from "./Viewer";
 import type { ChecklistState } from "../lib/checklist";
+import type { NoticeAttentionInput } from "../lib/readiness";
+import { deriveAttention } from "../lib/readiness";
 import { initialSheetDetent } from "../lib/sheetDetent";
 import { makeOnceFlag } from "../lib/prefs";
 import { pauseReasonText } from "../lib/pauseReason";
@@ -277,26 +279,37 @@ export const AppShell = memo(function AppShell({
   // the tab, clear the search box, or drop focus, since neither component owns
   // this state locally anymore.
   const panelState = usePanelState(bundled.length > 0);
-  // Restore keyboard focus to the search input across a layout switch when it
-  // held focus just before the switch (tracked by ParamSearch's onFocus/onBlur
-  // via searchFocusedRef). Runs in a layout effect so it fires after the new
-  // layout's DOM (with the same #param-search-input id) is committed, before
-  // the browser paints — otherwise the switch would silently drop focus to
-  // <body>.
+  // Restore keyboard focus to the search input across a layout switch (M7
+  // fully swaps the mounted tree — desktop <-> mobile — so the search input
+  // is a BRAND NEW DOM node either way, even though it keeps the same
+  // #param-search-input id).
+  //
+  // "Was it focused" is captured synchronously DURING RENDER, not via
+  // ParamSearch's onFocus/onBlur populating a ref for a later effect to
+  // read — that raced the OLD input's removal: unmounting a focused element
+  // fires a synchronous "blur" as part of the very same commit that swaps
+  // the tree, which could clear such a ref before the effect ever got to
+  // read it (observed as an intermittent smoke-test flake, not just a test
+  // artifact — a real user could lose the restore on the same timing).
+  // `document.activeElement` during render still reflects the OLD tree —
+  // nothing is mutated until after render completes — so this is the one
+  // point that's guaranteed race-free. Mirrors the "adjust state during
+  // render" idiom already used elsewhere (e.g. ParamRows' design-identity
+  // reset, QuickStart's own current-step reconciliation).
   const wasMobileRef = useRef(isMobile);
-  useLayoutEffect(() => {
-    if (wasMobileRef.current === isMobile) return;
+  const restoreSearchFocusRef = useRef(false);
+  if (wasMobileRef.current !== isMobile) {
     wasMobileRef.current = isMobile;
-    if (panelState.searchFocusedRef.current) {
-      document.getElementById(PARAM_SEARCH_INPUT_ID)?.focus();
-    }
-  }, [isMobile, panelState.searchFocusedRef]);
-  const handleSearchFocus = useCallback(() => {
-    panelState.searchFocusedRef.current = true;
-  }, [panelState.searchFocusedRef]);
-  const handleSearchBlur = useCallback(() => {
-    panelState.searchFocusedRef.current = false;
-  }, [panelState.searchFocusedRef]);
+    restoreSearchFocusRef.current = document.activeElement?.id === PARAM_SEARCH_INPUT_ID;
+  }
+  // Layout effect so the restore fires after the new layout's DOM is
+  // committed, before the browser paints — otherwise the switch would
+  // visibly drop focus to <body> for a frame even when it does recover.
+  useLayoutEffect(() => {
+    if (!restoreSearchFocusRef.current) return;
+    restoreSearchFocusRef.current = false;
+    document.getElementById(PARAM_SEARCH_INPUT_ID)?.focus();
+  }, [isMobile]);
 
   // M16: at the Full sheet detent the sheet visually covers the mobile
   // background (top bar + viewer + floating controls), so treat that detent
@@ -353,16 +366,8 @@ export const AppShell = memo(function AppShell({
   // schema/render facts already available here, plus the session-scoped
   // progress App.tsx tracks (checklistProgress, threaded down because the
   // Help modal replay row — a sibling of AppShell — must reach the same
-  // dismiss flag; see GettingStarted.tsx).
-  const checklistState: ChecklistState = {
-    enabled: showChecklist,
-    designCount: designs.length,
-    designChanged: checklistProgress.designChanged,
-    paramInteracted: checklistProgress.paramInteracted,
-    exported: checklistProgress.exported,
-    rendering,
-    resultOk: result ? result.ok : null,
-  };
+  // dismiss flag; see GettingStarted.tsx). Assembled below, once `attention`
+  // (readiness.ts) is available — see that computation's own comment.
 
   const log = result?.log ?? EMPTY_LOG;
   // Memoized so a config without `notices` doesn't hand a fresh `[]` to the
@@ -409,6 +414,47 @@ export const AppShell = memo(function AppShell({
   // never itself triggers those transitions.
   const diagnostics = useMemo(() => parseDiagnostics(log, notices), [log, notices]);
   const badges = useMemo(() => countBadges(log, notices), [log, notices]);
+
+  // src/lib/readiness.ts's attention items: real, verifiable gaps between a
+  // successful render and genuine production-readiness (a font param whose
+  // selected family isn't loaded, or a flagged `notices` category with a
+  // pending notice this render — see NoticeCategory.attention). Pairs each
+  // configured category with its live pending count from `badges` (already
+  // computed above), so a category flagged `attention: true` in the config
+  // only surfaces here once it actually has something pending, not merely
+  // because it's configured.
+  const noticeAttentionInputs = useMemo<NoticeAttentionInput[]>(
+    () =>
+      notices.map((n) => ({
+        marker: n.marker,
+        label: n.label,
+        attention: n.attention === true,
+        count: badges.find((b) => b.key === `notice:${n.marker}`)?.count ?? 0,
+      })),
+    [notices, badges]
+  );
+  const attention = useMemo(
+    () =>
+      deriveAttention({
+        params: design.params,
+        values,
+        availableFontFamilies,
+        notices: noticeAttentionInputs,
+      }),
+    [design, values, availableFontFamilies, noticeAttentionInputs]
+  );
+
+  const checklistState: ChecklistState = {
+    enabled: showChecklist,
+    designCount: designs.length,
+    designChanged: checklistProgress.designChanged,
+    paramInteracted: checklistProgress.paramInteracted,
+    exported: checklistProgress.exported,
+    rendering,
+    resultOk: result ? result.ok : null,
+    hasAttention: attention.length > 0,
+  };
+
   // What OutputConsole's Notices tab actually renders: the model's own
   // diagnostics, plus — least-invasively, as an extra notice row rather than
   // a new console surface — an explanation of a paused live preview, so a
@@ -611,6 +657,7 @@ export const AppShell = memo(function AppShell({
     canExport: exportable,
     modelFormat: schema.format,
     onSavePng: handleSavePng,
+    hasAttention: attention.length > 0,
   };
   return (
     <div className="app-shell">
@@ -797,14 +844,14 @@ export const AppShell = memo(function AppShell({
                   onTabChange={panelState.setTab}
                   search={panelState.search}
                   onSearchChange={panelState.setSearch}
-                  onSearchFocus={handleSearchFocus}
-                  onSearchBlur={handleSearchBlur}
                   settingsView={settingsView}
                   experienceMode={experienceMode}
                   quickStartEnabled={quickStartEnabled}
                   focusHiddenDiffSignal={reviewHiddenSignal}
                   checklist={checklistState}
                   checklistReplaySignal={checklistReplaySignal}
+                  attention={attention}
+                  onOpenMessages={openOutput}
                 />
               </div>
             )}
@@ -857,14 +904,14 @@ export const AppShell = memo(function AppShell({
               onPanelTabChange={panelState.setTab}
               search={panelState.search}
               onSearchChange={panelState.setSearch}
-              onSearchFocus={handleSearchFocus}
-              onSearchBlur={handleSearchBlur}
               settingsView={settingsView}
               experienceMode={experienceMode}
               quickStartEnabled={quickStartEnabled}
               focusHiddenDiffSignal={reviewHiddenSignal}
               checklist={checklistState}
               checklistReplaySignal={checklistReplaySignal}
+              attention={attention}
+              onOpenMessages={openOutput}
             />
 
             {/* Canvas */}

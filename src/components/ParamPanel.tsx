@@ -9,6 +9,7 @@ import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import type { ExperienceMode, SettingsView } from "../lib/useExperience";
 import type { ChecklistState } from "../lib/checklist";
+import type { AttentionItem } from "../lib/readiness";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import type { PanelTab } from "../lib/usePanelState";
@@ -90,6 +91,10 @@ interface Props {
   checklist: ChecklistState;
   /** Forwarded to GettingStarted — see its own doc. */
   checklistReplaySignal?: number;
+  /** Forwarded to CustomizeTab — see its own doc. */
+  attention: AttentionItem[];
+  /** Forwarded to CustomizeTab — see its own doc. */
+  onOpenMessages?: () => void;
 }
 
 export function ParamPanel({
@@ -125,6 +130,8 @@ export function ParamPanel({
   focusHiddenDiffSignal,
   checklist,
   checklistReplaySignal,
+  attention,
+  onOpenMessages,
 }: Props) {
   const {
     applyPreset,
@@ -319,6 +326,8 @@ export function ParamPanel({
             onSearchFocus={onSearchFocus}
             onSearchBlur={onSearchBlur}
             focusHiddenDiffSignal={focusHiddenDiffSignal}
+            attention={attention}
+            onOpenMessages={onOpenMessages}
           />
         </TabsContent>
 

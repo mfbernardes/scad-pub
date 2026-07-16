@@ -396,7 +396,11 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
             absorbs the padding so the row layout is unchanged. */}
         <button
           type="button"
-          className="-m-[5px] inline-flex shrink-0 cursor-pointer items-center justify-center self-center rounded-[4px] border-none bg-transparent p-[5px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
+          // param-help-trigger: excluded from the focusParam effect's control
+          // query below — it renders before the actual control in DOM order
+          // (the label line comes first), so an unqualified query would focus
+          // this info popover instead of the control it's meant to reveal.
+          className="param-help-trigger -m-[5px] inline-flex shrink-0 cursor-pointer items-center justify-center self-center rounded-[4px] border-none bg-transparent p-[5px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
           aria-label={`Help for ${label}`}
         >
           <InfoIcon aria-hidden="true" focusable="false" />
@@ -492,8 +496,11 @@ export const ParamRows = memo(function ParamRows({
       setOpenSections((prev) => ({ ...prev, [target.section]: true }));
     const raf = requestAnimationFrame(() => {
       const row = document.querySelector(`[data-param="${CSS.escape(focusParam.name)}"]`);
+      // Excludes .param-help-trigger: the info popover button (when the
+      // param has extra help text) renders before the actual control in DOM
+      // order — an unqualified query would land focus there instead.
       const control = row?.querySelector<HTMLElement>(
-        'input, button, select, textarea, [role="switch"]'
+        'input, select, textarea, [role="switch"], button:not(.param-help-trigger)'
       );
       const el = (control ?? row) as HTMLElement | null;
       el?.scrollIntoView({ block: "center", behavior: "smooth" });

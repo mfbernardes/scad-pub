@@ -298,13 +298,18 @@ export function parsePopup(raw) {
 // notice categories surfaced on the "OpenSCAD output" panel. A design echoes
 // `ECHO: "<context>: <marker>: <message>"` and each configured category turns
 // matching echoes into a friendly notice and a coloured count badge. Each entry
-// is { marker (required), label?, color? }:
+// is { marker (required), label?, color?, attention? }:
 //   - marker: the design-defined string matched as `: <marker>:` in an echo
 //     (e.g. "alert", "note"); case-insensitive.
 //   - label: the badge / notice noun (e.g. "alerts"); defaults to marker.
 //   - color: an optional badge fill colour, validated as a plain CSS colour
 //     (same strictness as `colors`) so it can't break out of the inline style
 //     it gets interpolated into.
+//   - attention: optional boolean (default false). Flags this category as a
+//     production-readiness concern (src/lib/readiness.ts) — a pending notice
+//     surfaces the Customize tab's attention chip and the export button's
+//     indicator, not just the passive Output-bell badge. Sparse: only emitted
+//     when true.
 // Notices don't affect geometry, so they're absent from renderHash. Off by
 // default: omitted (or []) -> no notice categories. OpenSCAD's own WARNING/ERROR
 // lines and assert failures stay hardcoded (see lib/diagnostics).
@@ -338,6 +343,11 @@ export function parseNotices(raw) {
             `(got ${JSON.stringify(entry.color)})`
         );
       out.color = entry.color.trim();
+    }
+    if (entry.attention !== undefined && entry.attention !== null) {
+      if (typeof entry.attention !== "boolean")
+        throw new Error(`gen-schema: 'notices[${i}].attention' must be a boolean`);
+      if (entry.attention) out.attention = true;
     }
     return out;
   });

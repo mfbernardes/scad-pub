@@ -36,10 +36,21 @@ export interface ChecklistState {
   /** The latest render's outcome: true (succeeded), false (failed), or null
    *  (no render has landed yet — still loading/about to render). */
   resultOk: boolean | null;
+  /**
+   * Whether src/lib/readiness.ts found any unresolved attention items for the
+   * CURRENT render (a font param whose selected family isn't loaded, or a
+   * flagged notice category with a pending notice — see AttentionItem).
+   * Demotes an otherwise-successful render from "ready" to "attention": it
+   * rendered, but not necessarily what the controls actually say (PR13's own
+   * "rendered ≠ production-ready" distinction). Mirrors readiness.ts's
+   * `readinessState` precedence (failed > attention > ready) once a render
+   * has actually landed.
+   */
+  hasAttention: boolean;
 }
 
 export type ChecklistItemStatus = "pending" | "done";
-export type PreviewStatus = "building" | "ready" | "failed";
+export type PreviewStatus = "building" | "ready" | "attention" | "failed";
 
 /** A checkable task row (a real circle/check, can be "done"). */
 export interface ChecklistTaskItem {
@@ -87,7 +98,9 @@ export function deriveChecklistItems(state: ChecklistState): ChecklistItem[] {
     previewStatus: state.rendering
       ? "building"
       : state.resultOk === true
-        ? "ready"
+        ? state.hasAttention
+          ? "attention" // rendered fine, but not necessarily what the controls say — see hasAttention's doc
+          : "ready"
         : state.resultOk === false
           ? "failed"
           : "building", // no render has landed yet — same "in progress" copy as an active render

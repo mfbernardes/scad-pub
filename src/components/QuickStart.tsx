@@ -27,10 +27,11 @@ import {
   resolveCurrentStep,
   unsteppedSectionNames,
   visibleSteps,
+  type QuickStartStep,
 } from "../lib/quickStart";
 import { t } from "../lib/i18n";
 import { cn } from "../lib/utils";
-import { ParamRows, type ParamSectionGroup } from "./ParamRows";
+import { ParamRows, type FocusParamRequest, type ParamSectionGroup } from "./ParamRows";
 import { Button } from "./ui/button";
 
 interface Props {
@@ -47,6 +48,29 @@ interface Props {
   baseline?: Values;
   changedParams?: Set<string>;
   presetName?: string | null;
+  /**
+   * Set (fresh `nonce` per request) to reveal + focus one parameter's
+   * control — the attention chip's "Go to setting" action (see
+   * CustomizeTab's `focusOnParam`), composed here with QuickStart's own step
+   * navigation: jumps to the step containing the param's section first (if
+   * it isn't already current), THEN hands the same request to ParamRows so
+   * its existing scroll/focus effect does the rest — see the effect below
+   * for why the hand-off is buffered through local state rather than
+   * forwarding the prop straight through. A param outside every step (the
+   * "Also available" tail) needs no jump — that section is always rendered
+   * regardless of the current step.
+   */
+  focusParam?: FocusParamRequest | null;
+  /**
+   * Param names with an unresolved attention item (src/lib/readiness.ts) —
+   * currently only font-fallbacks, since a flagged notice isn't tied to one
+   * parameter. A step whose sections contain one of these gets a small
+   * amber dot on its chip, so the same signal that drives the attention
+   * chip also nudges a visitor toward the right step without them having to
+   * open it first. Skipped when empty/omitted — no extra cost for a design
+   * with nothing to flag.
+   */
+  attentionParams?: Set<string>;
 }
 
 const chipClass =
@@ -70,6 +94,8 @@ export function QuickStart({
   baseline,
   changedParams,
   presetName,
+  focusParam,
+  attentionParams,
 }: Props) {
   const steps = visibleSteps(design, values, view);
   const stepOrder = [...steps.map((s) => s.id), EXPORT_STEP_ID];
@@ -122,6 +148,33 @@ export function QuickStart({
     setVisited((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   };
 
+  // The `focusParam` request, handed to ParamRows only once the right step is
+  // actually showing (see the prop's own doc). Buffered through local state
+  // rather than forwarding the incoming prop straight to ParamRows: children's
+  // effects fire before a parent's, so if ParamRows saw the prop directly it
+  // would consume the nonce (and query the DOM) on the SAME render the step
+  // jump below is still only queued, before `select`'s state update has
+  // landed — a guaranteed miss. Setting `rowFocus` here instead means both
+  // land in the same commit: `select` updates `currentId` (so `sections`
+  // already reflects the target step) and `rowFocus` first receives this
+  // nonce together, so by the time ParamRows' own effect runs, the row it's
+  // looking for actually exists.
+  const [rowFocus, setRowFocus] = useState<FocusParamRequest | null>(null);
+  const lastFocusNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!focusParam || focusParam.nonce === lastFocusNonce.current) return;
+    lastFocusNonce.current = focusParam.nonce;
+    const target = design.params.find((p) => p.name === focusParam.name);
+    const step = target ? steps.find((s) => s.sections.includes(target.section)) : undefined;
+    if (step && step.id !== effectiveCurrentId) select(step.id);
+    setRowFocus(focusParam);
+    // select/steps/effectiveCurrentId are recreated every render (steps
+    // closes over design/values/view); depending on the nonce alone is
+    // intentional — the effect always reads the latest closure when it fires,
+    // matching CustomizeTab's own focusHiddenDiffSignal effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusParam]);
+
   const currentIndex = stepOrder.indexOf(effectiveCurrentId);
   const isExportCurrent = effectiveCurrentId === EXPORT_STEP_ID;
   const currentStep = steps.find((s) => s.id === effectiveCurrentId) ?? null;
@@ -148,13 +201,21 @@ export function QuickStart({
     changedParams,
     presetName,
     view,
+    focusParam: rowFocus,
   };
+
+  // Whether a step contains a param with an unresolved attention item — see
+  // `attentionParams`' own doc.
+  const stepNeedsAttention = (step: QuickStartStep) =>
+    !!attentionParams?.size &&
+    design.params.some((p) => step.sections.includes(p.section) && attentionParams.has(p.name));
 
   return (
     <div className="quick-start flex flex-col gap-3">
       <nav className="quick-start__strip flex flex-wrap gap-[0.4rem]" aria-label={t("quickstart.stepsAriaLabel")}>
         {steps.map((step, i) => {
           const isCurrent = step.id === effectiveCurrentId;
+          const needsAttention = stepNeedsAttention(step);
           return (
             <button
               key={step.id}
@@ -170,6 +231,13 @@ export function QuickStart({
                 {i + 1}
               </span>
               {step.label}
+              {needsAttention && (
+                <span
+                  aria-hidden="true"
+                  className="quick-start__step-attention size-[6px] shrink-0 rounded-full bg-warn"
+                />
+              )}
+              {needsAttention && <span className="sr-only"> — {t("checklist.attention")}</span>}
               {visited.has(step.id) && <span className="sr-only"> — {t("quickstart.visited")}</span>}
             </button>
           );

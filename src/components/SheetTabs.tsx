@@ -5,6 +5,7 @@ import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import type { ExperienceMode, SettingsView } from "../lib/useExperience";
 import type { ChecklistState } from "../lib/checklist";
+import type { AttentionItem } from "../lib/readiness";
 import { useAppActions } from "../lib/appActions";
 import type { PanelTab } from "../lib/usePanelState";
 import { CustomizeTab } from "./CustomizeTab";
@@ -69,6 +70,10 @@ interface Props {
   checklist: ChecklistState;
   /** Forwarded to GettingStarted — see its own doc. */
   checklistReplaySignal?: number;
+  /** Forwarded to CustomizeTab — see its own doc. */
+  attention: AttentionItem[];
+  /** Forwarded to CustomizeTab — see its own doc. */
+  onOpenMessages?: () => void;
 }
 
 export function SheetTabs({
@@ -103,6 +108,8 @@ export function SheetTabs({
   focusHiddenDiffSignal,
   checklist,
   checklistReplaySignal,
+  attention,
+  onOpenMessages,
 }: Props) {
   const {
     applyPreset,
@@ -156,6 +163,8 @@ export function SheetTabs({
               onSearchFocus={onSearchFocus}
               onSearchBlur={onSearchBlur}
               focusHiddenDiffSignal={focusHiddenDiffSignal}
+              attention={attention}
+              onOpenMessages={onOpenMessages}
             />
             {/* Auto-render is parameter-scoped, so it pins to the bottom of this
                 tab only — not on Presets/Files (mirrors the desktop panel). Reset

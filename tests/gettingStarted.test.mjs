@@ -21,6 +21,7 @@ function baseState(overrides = {}) {
     exported: false,
     rendering: false,
     resultOk: null,
+    hasAttention: false,
     ...overrides,
   };
 }
@@ -129,6 +130,47 @@ test("deriveChecklistItems: 'Preview' reads 'failed' when the latest render fail
     deriveChecklistItems(baseState({ rendering: false, resultOk: false })).find((i) => i.id === "preview")
       .previewStatus,
     "failed"
+  );
+});
+
+// PR13: a render can succeed while it's not necessarily production-ready
+// (src/lib/readiness.ts) — a font fallback in use, or a flagged notice
+// pending. "attention" demotes what would otherwise read "ready" without
+// claiming the render itself failed.
+test("deriveChecklistItems: 'Preview' reads 'attention' when the render succeeded but readiness found unresolved items", () => {
+  assert.equal(
+    deriveChecklistItems(baseState({ rendering: false, resultOk: true, hasAttention: true })).find(
+      (i) => i.id === "preview"
+    ).previewStatus,
+    "attention"
+  );
+});
+
+test("deriveChecklistItems: 'Preview' still reads 'ready' when the render succeeded and nothing needs attention", () => {
+  assert.equal(
+    deriveChecklistItems(baseState({ rendering: false, resultOk: true, hasAttention: false })).find(
+      (i) => i.id === "preview"
+    ).previewStatus,
+    "ready"
+  );
+});
+
+test("deriveChecklistItems: 'Preview' reads 'failed', not 'attention', when the render failed even with hasAttention set", () => {
+  // Precedence mirrors readiness.ts's readinessState: failed > attention.
+  assert.equal(
+    deriveChecklistItems(baseState({ rendering: false, resultOk: false, hasAttention: true })).find(
+      (i) => i.id === "preview"
+    ).previewStatus,
+    "failed"
+  );
+});
+
+test("deriveChecklistItems: 'Preview' reads 'building' while rendering, even with hasAttention set", () => {
+  assert.equal(
+    deriveChecklistItems(baseState({ rendering: true, resultOk: true, hasAttention: true })).find(
+      (i) => i.id === "preview"
+    ).previewStatus,
+    "building"
   );
 });
 

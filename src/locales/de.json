@@ -56,9 +56,15 @@
   "checklist.exportModel": "Modell exportieren",
   "checklist.ready": "fertig",
   "checklist.building": "wird erstellt",
+  "checklist.attention": "bitte prüfen",
   "checklist.failed": "fehlgeschlagen",
   "checklist.done": "erledigt",
   "checklist.dismiss": "Verwerfen",
+
+  "attention.fontFallback": "Schrift fehlt: {family} — die Vorschau verwendet einen Ersatz",
+  "attention.notice": "{count} {label}",
+  "attention.goToSetting": "Zur Einstellung",
+  "attention.openMessages": "Nachrichten öffnen",
 
   "hint.rotateZoomMouse": "Ziehen zum Drehen · Scrollen zum Zoomen",
   "hint.rotateZoomTouch": "Ziehen zum Drehen · Zwei-Finger-Zoom",
@@ -83,6 +89,7 @@
   "export.readyToShare": "Modell bereit zum Teilen",
   "export.printingGuide": "Druckanleitung",
   "export.nextSteps": "Öffnen Sie es als Nächstes in einem Slicer oder senden Sie es an einen Druckdienst.",
+  "export.attentionHint": "Es gibt ungelöste Hinweise — das Modell kann von den gewählten Einstellungen abweichen",
 
   "quickstart.stepsAriaLabel": "Geführte Schritte",
   "quickstart.export": "Export",

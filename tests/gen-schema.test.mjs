@@ -937,6 +937,27 @@ test("notices: validates shape, marker, label and colour", () => {
   );
 });
 
+// PR13: `attention` flags a notice category as a production-readiness
+// concern (src/lib/readiness.ts) rather than a routine, passive notice —
+// see docs/config.md's Notice badges section.
+test("notices: attention is off by default and sparse-emitted (omitted, not false, when not set)", () => {
+  assert.deepEqual(parseNotices([{ marker: "note" }]), [{ marker: "note", label: "note" }]);
+  assert.deepEqual(parseNotices([{ marker: "note", attention: false }]), [{ marker: "note", label: "note" }]);
+});
+
+test("notices: attention: true is preserved on the normalised entry", () => {
+  assert.deepEqual(parseNotices([{ marker: "alert", attention: true }]), [
+    { marker: "alert", label: "alert", attention: true },
+  ]);
+});
+
+test("notices: attention validates as a boolean", () => {
+  assert.throws(
+    () => parseNotices([{ marker: "n", attention: "yes" }]),
+    /'notices\[0\]\.attention' must be a boolean/
+  );
+});
+
 test("renderHash folds in the renderer source so flag changes invalidate it", () => {
   // With outPublicDir + rendererFiles, a change to the renderer's render
   // contract (e.g. an OpenSCAD flag in worker.ts) must change renderHash.

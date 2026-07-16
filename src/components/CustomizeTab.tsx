@@ -11,6 +11,7 @@ import type { Design } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import type { ExperienceMode, SettingsView } from "../lib/useExperience";
+import type { AttentionItem } from "../lib/readiness";
 import { defaultsFor } from "../lib/presets";
 import { hiddenAdvancedCount, hiddenAdvancedDiff, hiddenSearchMatches } from "../lib/paramFilter";
 import { quickStartAvailable } from "../lib/quickStart";
@@ -55,6 +56,18 @@ interface Props {
    *  itself. Mirrors DesignPicker's `openSignal` prop. Undefined/unchanged is
    *  a no-op. */
   focusHiddenDiffSignal?: number;
+  /**
+   * Unresolved production-readiness gaps for the CURRENT render (src/lib/
+   * readiness.ts) — a font param whose selected family isn't loaded, or a
+   * flagged notice category with a pending notice. Drives the attention chip
+   * at the top of this tab. Empty -> no chip (the common case).
+   */
+  attention: AttentionItem[];
+  /** Opens the Output console ("Messages") — a notice-kind attention item's
+   *  action. AppShell owns that console's open state (it's a sibling of this
+   *  component, not a descendant), so this is threaded down the same way
+   *  focusHiddenDiffSignal's counterpart action is threaded UP. */
+  onOpenMessages?: () => void;
 }
 
 const noteClass =
@@ -81,6 +94,8 @@ export function CustomizeTab({
   onSearchFocus,
   onSearchBlur,
   focusHiddenDiffSignal,
+  attention,
+  onOpenMessages,
 }: Props) {
   const { change, settingsViewChange } = useAppActions();
   const debouncedSearch = useDebounce(search, 150);
@@ -116,6 +131,34 @@ export function CustomizeTab({
     if (first) setFocusParam({ name: first.name, nonce: Date.now() });
   };
 
+  // The attention chip's "Go to setting" action (see the chip below):
+  // reveal + focus the owning param's control. Switches to All settings
+  // FIRST when the view is what's hiding it (mirrors reviewHiddenDiff above)
+  // — that switch also exits QuickStart (it only shows in essentials view),
+  // so the classic form's own focusParam handling takes it from there.
+  // Staying in essentials, QuickStart gets the same `focusParam` request
+  // (passed below) and composes its own step-jump on top of it — see its
+  // own doc for why that composition is buffered through local state there
+  // rather than built again here.
+  const focusOnParam = (name: string) => {
+    const target = design.params.find((p) => p.name === name);
+    if (!target) return;
+    if (settingsView === "essentials" && target.advanced) settingsViewChange("all");
+    setFocusParam({ name, nonce: Date.now() });
+  };
+
+  // Font-fallback attention items' param names, for QuickStart's per-chip
+  // amber dot (attentionParams prop) — notice-kind items aren't tied to one
+  // parameter, so they're excluded here.
+  const attentionParamNames = useMemo(
+    () =>
+      new Set(
+        attention.filter((a): a is Extract<AttentionItem, { kind: "font-fallback" }> => a.kind === "font-fallback")
+          .map((a) => a.param)
+      ),
+    [attention]
+  );
+
   // External trigger for the same action (the friendly-error card's "Review
   // hidden settings" button lives in OutputConsole, a sibling of this
   // component — see AppShell). Fires only on a genuine signal CHANGE (not on
@@ -135,6 +178,38 @@ export function CustomizeTab({
 
   return (
     <>
+      {/* Attention chip: real, verifiable production-readiness gaps for the
+          CURRENT render (src/lib/readiness.ts) — a rendered preview isn't
+          necessarily what the controls say. Sits above everything else in
+          this tab (even the settings-view toggle) so it's the first thing a
+          visitor sees, regardless of which view/step they're in — the exact
+          "hidden behind a bell badge" problem this milestone fixes. Same
+          visual family as the hidden-diff chip below (bg-muted, border-b,
+          a noteActionClass action), one row per item. */}
+      {attention.length > 0 && (
+        <div className="attention-chips flex shrink-0 flex-col border-b bg-muted">
+          {attention.map((item) => (
+            <div
+              key={item.kind === "font-fallback" ? `font:${item.param}` : `notice:${item.marker}`}
+              className="attention-chip flex items-center gap-[0.4rem] px-3 py-[0.4rem] text-left text-[0.8rem] font-medium text-foreground"
+            >
+              <span aria-hidden="true" className="attention-chip__dot size-[6px] shrink-0 rounded-full bg-warn" />
+              <span className="flex-1">
+                {item.kind === "font-fallback"
+                  ? t("attention.fontFallback", { family: item.family })
+                  : t("attention.notice", { label: item.label, count: item.count })}
+              </span>
+              <button
+                type="button"
+                className={noteActionClass}
+                onClick={() => (item.kind === "font-fallback" ? focusOnParam(item.param) : onOpenMessages?.())}
+              >
+                {item.kind === "font-fallback" ? t("attention.goToSetting") : t("attention.openMessages")}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {hasAdvanced && <SettingsViewToggle view={settingsView} />}
       {settingsView === "essentials" && hiddenDiff.length > 0 && (
         <button
@@ -185,6 +260,8 @@ export function CustomizeTab({
             baseline={baseline}
             changedParams={changedParams}
             presetName={presetName}
+            focusParam={focusParam}
+            attentionParams={attentionParamNames}
           />
         ) : (
           <ParamForm

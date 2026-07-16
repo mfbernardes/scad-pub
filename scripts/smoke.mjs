@@ -410,26 +410,16 @@ async function checkAxe({ page, check }) {
   // axe's color-contrast check reads *computed* colours. Several controls (the
   // tab chips especially) carry `transition-[color,box-shadow]`, and a theme
   // swap animates every colour token, so sampling an element mid-transition
-  // yields an intermediate colour and a spurious contrast violation. A fixed
-  // wait was flaky (the transition outlasts a short sleep on slower CI); wait
-  // for all running CSS transitions/animations to actually settle instead.
-  const settle = async () => {
-    await page.waitForTimeout(50); // let a just-started transition register first
-    await page
-      .waitForFunction(
-        () => document.getAnimations().every((a) => a.playState !== "running"),
-        null,
-        { timeout: 3000 }
-      )
-      .catch(() => {});
-  };
+  // yields an intermediate colour and a spurious contrast violation — settled
+  // by the shared settleAnimations() helper (see its own doc; also used by
+  // runAxe() for the same reason on every other pass in this suite).
   // Palettes are per-theme (and config-overridable per theme), so a contrast
   // regression can hide in whichever theme a single sweep doesn't visit: run
   // the AA sweep in the current theme, then toggle and sweep the other. The
   // second toggle also returns the app to the theme it started the section in.
   for (let pass = 0; pass < 2; pass++) {
     const theme = await page.getAttribute("html", "data-theme");
-    await settle();
+    await settleAnimations(page);
     const axeRes = await page.evaluate(async () =>
       // WCAG 2.1 AA tags; report only violations.
       window.axe.run(document, {
@@ -717,6 +707,28 @@ async function switchSettingsView(page, view) {
   if (await btn.count()) await btn.click();
 }
 
+// Waits for every in-flight CSS transition/animation on the page to actually
+// finish — a Radix dialog's fade/zoom entrance, a tab underline, a theme
+// swap, … — before an axe-core sweep reads *computed* colour. Sampling mid-
+// animation (e.g. a dialog still fading its content in from opacity 0) yields
+// an intermediate, non-deterministic colour and a spurious (flaky, timing-
+// dependent) color-contrast violation. A fixed sleep was flaky on its own —
+// the animation can outlast a short one on a slower/loaded CI runner — so
+// this polls the real Web Animations API state instead of guessing a
+// duration. Shared by every axe pass below (runAxe() and checkAxe()'s own
+// loop) so EVERY dialog-open (or other animated-transition) scan gets the
+// same determinism, not just the ones that happened to need it first.
+async function settleAnimations(page) {
+  await page.waitForTimeout(50); // let a just-started transition register first
+  await page
+    .waitForFunction(
+      () => document.getAnimations().every((a) => a.playState !== "running"),
+      null,
+      { timeout: 3000 }
+    )
+    .catch(() => {});
+}
+
 // A standalone axe-core sweep (WCAG 2.1 AA, serious/critical only), reusable
 // outside the dedicated checkAxe() pass below — used by checkSettingsView to
 // confirm both the essentials and All settings states of the Customize tab
@@ -725,6 +737,7 @@ async function runAxe(page, check, label) {
   await page.addScriptTag({
     path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
   });
+  await settleAnimations(page);
   const axeRes = await page.evaluate(async () =>
     window.axe.run(document, {
       resultTypes: ["violations"],
@@ -1063,6 +1076,143 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   );
 }
 
+// Production-readiness attention surfacing (PR13): a design can render
+// successfully while its selected font family isn't loaded — Fontconfig
+// silently substitutes a fallback, and dimensions/spacing can shift, yet
+// nothing about the render itself failed. "Rendered" and "ready to ship"
+// are different claims (src/lib/readiness.ts); this exercises the whole
+// path: the checklist's "needs attention" wording, the Customize tab's
+// attention chip, the export button's indicator (Export stays enabled
+// throughout — it's a caution, never a block), and the chip's "Go to
+// setting" action — which must also jump QuickStart off its default first
+// step, since tag's font control lives on the "Text" step, not "Size".
+async function checkReadiness({ page, check, ids, base, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== production readiness: font-fallback attention ===");
+
+  // A URL hash directly encodes the missing-font override — see
+  // src/lib/urlState.ts's "d=/v=/p=" encoding (`v` is a JSON diff-from-
+  // defaults object). Navigating to a URL differing only by its hash is a
+  // same-document navigation (App.tsx's own `hashchange` listener applies
+  // it via applyExternalState) rather than a fresh module load, which would
+  // leave session-only state (paramInteracted etc., carried over from
+  // earlier checks in this suite) stale — so `goto` then an explicit
+  // `reload` to force a genuine fresh mount that re-derives EVERYTHING
+  // (including those session flags) from this hash, same as a visitor
+  // opening the link fresh. Every first-visit once-flag it could trip
+  // (welcome popup dismissal, getting-started dismissal) was already
+  // persisted by earlier checks in this suite, so nothing blocks driving
+  // the UI here.
+  const hash = `d=tag&v=${encodeURIComponent(JSON.stringify({ font: "No Such Font" }))}`;
+  await page.goto(`${base}#${hash}`, { waitUntil: "load" });
+  await page.reload({ waitUntil: "load" });
+  await settleFirstVisit(page).catch(() => {});
+  await waitRendered(page, "tag with a missing font family");
+
+  // The getting-started checklist was dismissed (and that dismissal
+  // persisted) by an earlier check — bring it back via the Help modal's
+  // replay row (same action checkGettingStarted itself exercises) so its
+  // live "Preview" status is visible here too.
+  await page.getByRole("button", { name: "Help", exact: true }).click();
+  const helpDialog = page.getByRole("dialog");
+  await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await helpDialog.getByRole("button", { name: /show the getting-started checklist again/i }).click();
+  await page.keyboard.press("Escape");
+  await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+
+  const previewRow = page.locator(".getting-started li", { hasText: "Preview" });
+  await previewRow.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(
+    /needs attention/.test((await previewRow.textContent()) ?? ""),
+    "checklist 'Preview' row reads 'needs attention' when the selected font isn't loaded"
+  );
+
+  // The attention chip: top of the Customize tab, names the missing family.
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  const chip = page.locator(".attention-chip");
+  await chip.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await chip.count()) === 1, "exactly one attention chip shown for the one missing font");
+  check(
+    ((await chip.textContent()) ?? "").includes("No Such Font"),
+    "the attention chip names the missing family"
+  );
+
+  // Export button: an amber indicator, but never disabled — a rendered-but-
+  // uncertain model is still a real file worth having.
+  const exportBtn = page.locator(".action-export");
+  check(
+    (await page.locator(".action-export__attention-dot").count()) === 1,
+    "export button shows the attention indicator"
+  );
+  check(await exportBtn.isEnabled(), "export stays enabled despite the attention indicator");
+  check(
+    (await exportBtn.getAttribute("aria-describedby")) === "export-attention-hint",
+    "export button is described by the attention hint for assistive tech"
+  );
+
+  await runAxe(page, check, "Customize tab with the attention chip visible");
+
+  // "Go to setting": tag mounts QuickStart on its first ("Size") step by
+  // default on a fresh design view — the font control lives on "Text", a
+  // DIFFERENT step — so this also exercises QuickStart's own step-jump
+  // composition, not just a scroll on an already-visible control.
+  check(
+    ((await page.locator(".quick-start__step--current").textContent()) ?? "").includes("Size"),
+    "QuickStart starts on its first step (Size), not the Text step the font control lives on"
+  );
+  await chip.first().getByRole("button", { name: "Go to setting" }).click();
+  await page
+    .waitForFunction(() => document.activeElement?.classList.contains("font-select"), { timeout: 3000 })
+    .catch(() => {});
+  check(
+    await page.evaluate(() => document.activeElement?.classList.contains("font-select")),
+    "\"Go to setting\" switches to the Text step and focuses the font control"
+  );
+  check(
+    ((await page.locator(".quick-start__step--current").textContent()) ?? "").includes("Text"),
+    "QuickStart's current step actually switched to Text"
+  );
+
+  // Restore a bundled family: attention clears everywhere.
+  await page.locator(".font-select").click();
+  await page.getByRole("option", { name: "Liberation Sans", exact: true }).click();
+  await waitRendered(page, "tag with a bundled font restored");
+  check((await page.locator(".attention-chip").count()) === 0, "attention chip clears once a loaded family is selected");
+  check(
+    (await page.locator(".action-export__attention-dot").count()) === 0,
+    "export indicator clears too"
+  );
+
+  // Confirm the checklist itself returns to "ready" too. Selecting the
+  // restored font above was itself a real param edit, which already
+  // completed "Review the essential settings" — combined with "Choose a
+  // design"/"Export the model" already done (persisted flags from earlier
+  // checks), the card may now be fully collapsed (see GettingStarted.tsx —
+  // checklistAllDone doesn't depend on the Preview row at all, so that
+  // collapse is a red herring here, not evidence either way). Reload fresh
+  // (defaults -> a loaded font) and replay the checklist the same way as
+  // above for an unambiguous read on the Preview row alone.
+  await page.goto(`${base}#d=tag`, { waitUntil: "load" });
+  await page.reload({ waitUntil: "load" });
+  await settleFirstVisit(page).catch(() => {});
+  await waitRendered(page, "tag reloaded with defaults (readiness cleanup)");
+  await page.getByRole("button", { name: "Help", exact: true }).click();
+  await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await helpDialog.getByRole("button", { name: /show the getting-started checklist again/i }).click();
+  await page.keyboard.press("Escape");
+  await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  const previewRow2 = page.locator(".getting-started li", { hasText: "Preview" });
+  await previewRow2.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  const previewText2 = (await previewRow2.textContent()) ?? "";
+  check(
+    /ready/i.test(previewText2) && !/needs attention/.test(previewText2),
+    "checklist 'Preview' row returns to 'ready' once a loaded font is selected"
+  );
+
+  // Leave the suite in a clean state for whatever runs after this.
+  await page.locator(".getting-started__dismiss").click().catch(() => {});
+}
+
 // @showIf arrow_style — exercised on a "signage" design when present. (No
 // notice expectation here: a well-tuned config renders its defaults
 // advisory-free; the notice/assert badge machinery is covered by "tag".)
@@ -1330,6 +1480,7 @@ async function main() {
     await checkPreviewControls(ctx);
     await checkServiceWorker(ctx);
     await checkTagDesign(ctx);
+    await checkReadiness(ctx);
     await checkSignageDesign(ctx);
     await checkResponsiveLayout(ctx);
 

@@ -335,6 +335,16 @@ export interface NoticeCategory {
   label: string;
   /** Optional badge fill colour (a plain CSS colour); falls back to the accent. */
   color?: string;
+  /**
+   * Marks this category as a production-readiness concern (src/lib/
+   * readiness.ts's `deriveAttention`): any pending notice in this category
+   * surfaces the Customize tab's attention chip and the export button's
+   * amber indicator, not just the passive Output-bell badge. Omitted (not
+   * just `false`) when not flagged, matching `ParamBase.advanced`'s sparse-
+   * emission convention. Default off — a demo design's routine alerts
+   * shouldn't read as "not production-ready" unless a deployment opts in.
+   */
+  attention?: boolean;
 }
 
 /** How often the configurable `popup` notice is shown. */

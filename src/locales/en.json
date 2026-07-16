@@ -56,9 +56,15 @@
   "checklist.exportModel": "Export the model",
   "checklist.ready": "ready",
   "checklist.building": "building",
+  "checklist.attention": "needs attention",
   "checklist.failed": "failed",
   "checklist.done": "done",
   "checklist.dismiss": "Dismiss",
+
+  "attention.fontFallback": "Font needed: {family} — the preview uses a substitute",
+  "attention.notice": "{count} {label}",
+  "attention.goToSetting": "Go to setting",
+  "attention.openMessages": "Open Messages",
 
   "hint.rotateZoomMouse": "Drag to rotate · scroll to zoom",
   "hint.rotateZoomTouch": "Drag to rotate · pinch to zoom",
@@ -83,6 +89,7 @@
   "export.readyToShare": "Model ready to share",
   "export.printingGuide": "Printing guide",
   "export.nextSteps": "Next, open it in a slicer or send it to a print service.",
+  "export.attentionHint": "There are unresolved warnings — the model may differ from the selected settings",
 
   "quickstart.stepsAriaLabel": "Guided steps",
   "quickstart.export": "Export",
