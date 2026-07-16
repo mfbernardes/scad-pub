@@ -108,6 +108,40 @@ export function resolveCurrentStep(
 }
 
 /**
+ * Desktop scroll mode (QuickStart.tsx's `variant="scroll"`) mounts every
+ * visible step's group in one scrollable flow instead of showing one step at
+ * a time, so "current" (the chip carrying `aria-current="step"`) has to be
+ * derived from scroll position instead of navigation state. QuickStart wires
+ * an IntersectionObserver over each step-group heading (plus the trailing
+ * Export heading), tuned with a `rootMargin` that only counts a thin band
+ * near the scroll container's top as "visible" (see its own comment for the
+ * exact margin) — so as a visitor scrolls down, group headings cross that
+ * band and flip in and out of `intersecting` one at a time in step order.
+ *
+ * This is the pure mapping from that observer state to a step id: `order` is
+ * every candidate id in declared order (steps, then `EXPORT_STEP_ID` last —
+ * the same shape as QuickStart's own `stepOrder`), and `intersecting` is the
+ * set of ids CURRENTLY inside the band. Multiple ids can be intersecting at
+ * once (a short step's group can fully fit inside the band while a neighbour
+ * is still entering/leaving it), so this resolves the ambiguity by picking
+ * the LAST one in `order` — the step whose heading has scrolled furthest
+ * down past the band, matching what a visitor reading near the top of the
+ * panel is actually looking at. Returns null when nothing intersects (e.g.
+ * between two groups mid-scroll, or before the observer's first callback),
+ * letting the caller keep whatever was current rather than snapping to a
+ * wrong fallback.
+ */
+export function currentStepFromIntersections(
+  order: readonly string[],
+  intersecting: ReadonlySet<string>
+): string | null {
+  for (let i = order.length - 1; i >= 0; i--) {
+    if (intersecting.has(order[i])) return order[i];
+  }
+  return null;
+}
+
+/**
  * Whether QuickStart should render at all in place of the classic form: ALL
  * of guided experience, the essentials settings view, a design that
  * declares at least one `@step`, and the build's `ui.quickStart` opt-out

@@ -184,6 +184,11 @@ export function SheetTabs({
               focusHiddenDiffSignal={focusHiddenDiffSignal}
               attention={attention}
               onOpenMessages={onOpenMessages}
+              // Mobile's bottom sheet is short on vertical room — QuickStart
+              // keeps its one-step-at-a-time Back/Next navigation (PR15's
+              // desktop-only scroll mode doesn't apply here). See
+              // CustomizeTab's own `variant` doc.
+              variant="steps"
             />
             {/* Auto-render is parameter-scoped, so it pins to the bottom of this
                 tab only — not on Presets/Files (mirrors the desktop panel). Reset

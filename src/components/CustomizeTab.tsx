@@ -68,6 +68,11 @@ interface Props {
    *  component, not a descendant), so this is threaded down the same way
    *  focusHiddenDiffSignal's counterpart action is threaded UP. */
   onOpenMessages?: () => void;
+  /** Forwarded to QuickStart — see its own `variant` doc. The layout-specific
+   *  mount point decides: ParamPanel (desktop) passes "scroll", SheetTabs
+   *  (mobile) passes "steps" (PR15). Defaults to "steps" so an omitted value
+   *  degrades to today's behavior rather than silently switching modes. */
+  variant?: "scroll" | "steps";
 }
 
 const noteClass =
@@ -96,6 +101,7 @@ export function CustomizeTab({
   focusHiddenDiffSignal,
   attention,
   onOpenMessages,
+  variant = "steps",
 }: Props) {
   const { change, settingsViewChange } = useAppActions();
   const debouncedSearch = useDebounce(search, 150);
@@ -246,7 +252,14 @@ export function CustomizeTab({
           </button>
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      {/* customize-tab__scroll: the stable hook QuickStart's scroll variant
+          locates (via closest()) as the IntersectionObserver root and the
+          scrollIntoView target for its chip navigation — see QuickStart.tsx's
+          own SCROLL_CONTAINER_SELECTOR doc. Present regardless of variant
+          (harmless when unused, e.g. mobile's "steps" variant or the classic
+          ParamForm) so the class name doesn't have to track which branch is
+          active here. */}
+      <div className="customize-tab__scroll min-h-0 flex-1 overflow-y-auto p-3">
         {showQuickStart ? (
           <QuickStart
             design={design}
@@ -262,6 +275,7 @@ export function CustomizeTab({
             presetName={presetName}
             focusParam={focusParam}
             attentionParams={attentionParamNames}
+            variant={variant}
           />
         ) : (
           <ParamForm

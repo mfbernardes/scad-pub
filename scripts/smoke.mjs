@@ -936,7 +936,7 @@ async function checkSettingsView({ page, check, ids, paramsTabName }) {
   await switchSettingsView(page, "all");
 }
 
-// QuickStart step navigation (this milestone, PR11): shown instead of the
+// QuickStart step navigation (PR11; scroll mode PR15): shown instead of the
 // classic scrolling form when guided + essentials + a stepped design (tag,
 // via examples/tag.scad's `@step` annotations) + `ui.quickStart` (default
 // true). Runs right after checkSettingsView, which conveniently leaves the
@@ -945,9 +945,16 @@ async function checkSettingsView({ page, check, ids, paramsTabName }) {
 // checkSettingsView's own comment, later checks — bundled presets' Import/
 // Export row, checkTagDesign's @showIf/@collapsed checks — expect the full,
 // ungated panel).
+//
+// This desktop-context pass exercises "scroll" mode (ParamPanel's own docked
+// panel + its scroll container): every step renders at once, chips are
+// scroll anchors, and there's no Back/Next — see QuickStart.tsx's own
+// variant doc. Mobile's unchanged "steps" mode (one step at a time,
+// Back/Next) has its own pass, checkQuickStartMobile, in its own mobile
+// context alongside checkResponsiveLayout.
 async function checkQuickStart({ page, check, ids, paramsTabName }) {
   if (!ids.includes("tag")) return;
-  console.log("=== QuickStart step navigation ===");
+  console.log("=== QuickStart step navigation (desktop scroll mode) ===");
   await selectDesign(page, "tag");
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
   await switchSettingsView(page, "essentials");
@@ -960,16 +967,24 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
   check((await chips.count()) === 5, "5 chips shown (4 @step sections + Export)");
   check((await chips.nth(0).getAttribute("aria-current")) === "step", "the first step chip starts current");
 
-  await runAxe(page, check, "QuickStart visible (essentials view, tag)");
+  // Scroll mode: every step's group renders simultaneously — a scrollable
+  // form, not a one-step-at-a-time wizard — and there's no Back/Next.
+  const groupHeadings = page.locator(".quick-start__group h3");
+  check((await groupHeadings.count()) === 4, "all 4 step groups render at once (scroll mode, not a wizard)");
+  const headingTexts = await groupHeadings.allTextContents();
+  check(
+    ["Size", "Text", "Emblem", "Hanging hole"].every((label) => headingTexts.includes(label)),
+    "every step's own heading is present in the scrolled form"
+  );
+  check((await page.locator(".quick-start__back").count()) === 0, "no Back button in desktop scroll mode");
+  check((await page.locator(".quick-start__next").count()) === 0, "no Next button in desktop scroll mode");
 
-  // Next walks steps: size -> text -> emblem -> hole -> Export.
-  const nextBtn = page.locator(".quick-start__next");
-  await nextBtn.click();
-  check((await chips.nth(1).getAttribute("aria-current")) === "step", "Next advances to the second step");
+  await runAxe(page, check, "QuickStart visible (essentials view, tag, scroll mode)");
 
-  // A param edit inside the current step re-renders the preview — the same
-  // pipeline as the classic form, just mounted through ParamRows' flat
-  // chrome here (the "text" step is current after the Next click above).
+  // A param edit inside a step re-renders the preview — the same pipeline as
+  // the classic form, just mounted through ParamRows' flat chrome. Every
+  // step's own params are already in the DOM (scroll mode), so no navigation
+  // is needed first — unlike steps mode, which has to walk there.
   const labelInput = paramRow(page, "label").locator('input[type="text"]');
   if (await labelInput.count()) {
     await labelInput.fill("QuickStart");
@@ -977,23 +992,58 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
     await waitRendered(page, "quickstart param edit");
   }
 
-  await nextBtn.click(); // -> emblem
-  await nextBtn.click(); // -> hole (the last real step)
+  // Chip click smooth-scrolls its group into view and moves focus to the
+  // step heading (this suite doesn't force prefers-reduced-motion, so the
+  // real scroll animation plays — see QuickStart.tsx's own reduced-motion
+  // handling, covered structurally by its pure helper's unit tests instead).
+  await chips.nth(2).click(); // "Emblem"
+  await page
+    .waitForFunction(() => document.activeElement?.tagName === "H3", { timeout: 3000 })
+    .catch(() => {});
   check(
-    ((await nextBtn.textContent()) ?? "").trim() === "Next: Export",
-    "Next reads \"Next: Export\" on the last step"
+    await page.evaluate(() => document.activeElement?.textContent?.includes("Emblem") ?? false),
+    "clicking a chip moves focus to that step's heading"
   );
-  await nextBtn.click(); // -> Export chip
-  check((await chips.last().getAttribute("aria-current")) === "step", "Next from the last step lands on the Export chip");
-  check((await page.locator(".quick-start__next").count()) === 0, "no Next button on the Export chip");
+  check((await chips.nth(2).getAttribute("aria-current")) === "step", "clicking a chip sets it current immediately");
+  // The click above triggers a native smooth-scroll animation (this suite
+  // doesn't force prefers-reduced-motion), which takes a few hundred ms to
+  // settle — poll the heading's position instead of reading it the instant
+  // focus lands (focus({preventScroll: true}) is effectively synchronous
+  // with the scrollIntoView call, well before the animation finishes).
+  const scrolledNearTop = await page
+    .waitForFunction(
+      () => {
+        const el = Array.from(document.querySelectorAll(".quick-start__group h3")).find((h) =>
+          (h.textContent ?? "").includes("Emblem")
+        );
+        const container = el?.closest(".customize-tab__scroll");
+        if (!el || !container) return false;
+        const r = el.getBoundingClientRect();
+        const c = container.getBoundingClientRect();
+        // "Near the top" (not necessarily pixel-0 — the sticky chip strip
+        // and its scroll-margin sit above it): generous enough to avoid
+        // flaking on exact scroll-animation easing while still catching a
+        // chip click that scrolled nowhere.
+        return r.top >= c.top - 40 && r.top <= c.top + 250;
+      },
+      { timeout: 3000, polling: 50 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(scrolledNearTop, "the clicked step's heading actually scrolled near the top of the panel");
+
+  // Export chip: scrolls to the end of the form and shows the export hint
+  // (never a duplicate of the floating Export action itself).
+  await chips.last().click();
+  check((await chips.last().getAttribute("aria-current")) === "step", "clicking the Export chip sets it current");
+  check(
+    await page.locator(".quick-start__export").isVisible(),
+    "the Export chip's own section actually scrolled into view"
+  );
   check(
     /Export 3D model/.test((await page.locator(".quick-start__export").textContent()) ?? ""),
-    "the Export chip's content points at the Export action rather than duplicating it"
+    "the Export section's content points at the Export action rather than duplicating it"
   );
-
-  // Jump via chip: clicking a chip directly jumps there (free navigation).
-  await chips.nth(0).click();
-  check((await chips.nth(0).getAttribute("aria-current")) === "step", "clicking a chip jumps directly to it");
 
   // All settings escape: switching to All settings shows the classic form
   // (and facet_angle — the @advanced Quality section, per PR3's toggle
@@ -1019,6 +1069,69 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
 
   // Leave the suite in All settings for the checks that follow.
   await switchSettingsView(page, "all");
+}
+
+// QuickStart step navigation, mobile (PR15): the bottom sheet keeps today's
+// one-step-at-a-time "steps" variant unchanged (Back/Next, one step's
+// ParamRows mounted at a time) — desktop's own scroll-mode assertions live in
+// checkQuickStart above. Needs its own real mobile viewport/context, same
+// reasoning as checkResponsiveLayout's own doc (the shared `page` above is
+// desktop-sized) — a fresh context so this doesn't inherit any state the
+// desktop pass above left behind.
+async function checkQuickStartMobile({ browser, base, check, ids, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== QuickStart step navigation (mobile steps mode) ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await settleFirstVisit(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // The dogfood config's default landing (tag, guided, essentials) already
+    // makes QuickStart the active guide, and guided+half policy starts the
+    // sheet at Half (see checkResponsiveLayout) — Parameters is reachable
+    // without raising the sheet first.
+    await page.getByRole("tab", { name: paramsTabName }).first().click();
+    await page.waitForSelector(".quick-start", { timeout: 5000 }).catch(() => {});
+
+    const quickStart = page.locator(".quick-start");
+    check((await quickStart.count()) === 1, "QuickStart shown on mobile too (guided + essentials + stepped design)");
+
+    const chips = page.locator(".quick-start__step");
+    check((await chips.count()) === 5, "5 chips shown on mobile (4 @step sections + Export)");
+
+    // Mobile stays one-step-at-a-time: scroll mode's simultaneous-group
+    // markup never mounts here, and Back/Next still drive navigation.
+    check((await page.locator(".quick-start__group").count()) === 0, "mobile never renders scroll mode's step-group markup");
+    check((await page.locator(".quick-start__content").count()) === 1, "mobile renders exactly one step's content at a time");
+    check((await page.locator(".quick-start__back").count()) === 1, "Back button present on mobile");
+    const nextBtn = page.locator(".quick-start__next");
+    check((await nextBtn.count()) === 1, "Next button present on mobile");
+
+    check((await chips.nth(0).getAttribute("aria-current")) === "step", "the first step chip starts current on mobile");
+    check((await paramRow(page, "width").count()) > 0, "the current (first, \"Size\") step's own params are shown");
+    check((await paramRow(page, "label").count()) === 0, "a later step's (\"Text\") params are NOT shown until navigated to");
+
+    await nextBtn.click(); // Size -> Text
+    check((await chips.nth(1).getAttribute("aria-current")) === "step", "Next advances to the second step on mobile");
+    check((await paramRow(page, "label").count()) > 0, "the Text step's own param appears once current");
+    check((await paramRow(page, "width").count()) === 0, "the previous step's param is no longer shown (one step at a time)");
+
+    // Chip jump still works directly too (free navigation, not a wizard).
+    await chips.nth(0).click();
+    check((await chips.nth(0).getAttribute("aria-current")) === "step", "clicking a chip jumps directly to it on mobile");
+    check((await paramRow(page, "width").count()) > 0, "jumping back via chip shows that step's params again");
+
+    await runAxe(page, check, "QuickStart visible on mobile (steps mode)");
+  } finally {
+    await context.close();
+  }
 }
 
 // @showIf + @collapsed — exercised on the example "tag" design when present.
@@ -1114,8 +1227,11 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   // case, not the trivially-empty "all settings" case (hiddenAdvancedDiff is
   // always [] in "all" — see paramFilter.ts). This (re-)mounts QuickStart
   // fresh (tag is a stepped design), starting on its first step ("Size",
-  // which holds `thickness`) — jump to the "Text" step's chip before editing
-  // `text_depth`, which QuickStart only mounts for the CURRENT step.
+  // which holds `thickness`). Desktop scroll mode (PR15) already mounts
+  // every step's params at once, so `text_depth` (the "Text" step) exists
+  // regardless — click its chip anyway, both to exercise chip navigation
+  // here too and to keep this check meaningful if a future variant reverts
+  // to mounting only the current step's ParamRows.
   await switchSettingsView(page, "essentials");
   await setNum("thickness", 1);
   if (await page.locator(".quick-start").count())
@@ -1192,8 +1308,13 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
 // path: the checklist's "needs attention" wording, the Customize tab's
 // attention chip, the export button's indicator (Export stays enabled
 // throughout — it's a caution, never a block), and the chip's "Go to
-// setting" action — which must also jump QuickStart off its default first
-// step, since tag's font control lives on the "Text" step, not "Size".
+// setting" action — which must also switch QuickStart's current step off its
+// default first step, since tag's font control lives on the "Text" step, not
+// "Size". Runs against the desktop `page` (scroll mode, PR15): every step's
+// ParamRows is already mounted, so "the jump" is really a scroll+focus of
+// the font control itself rather than a step swap — QuickStart still moves
+// `aria-current` to "Text" alongside it (see QuickStart.tsx's focusParam
+// effect), which the assertions below still check for.
 async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   if (!ids.includes("tag")) return;
   console.log("=== production readiness: font-fallback attention ===");
@@ -1669,6 +1790,7 @@ async function main() {
     await checkReadiness(ctx);
     await checkSignageDesign(ctx);
     await checkResponsiveLayout(ctx);
+    await checkQuickStartMobile(ctx);
     await checkMobileChecklistPeek(ctx);
 
     if (errors.length) {

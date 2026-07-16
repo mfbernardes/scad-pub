@@ -4,13 +4,28 @@
 // `ui.quickStart !== false` (see docs/annotations.md#guided-steps--step and
 // docs/config.md's `ui.quickStart`). CustomizeTab owns that gate and the
 // search-bypass (see its own comment); this component only renders the
-// step strip + current step's content once mounted.
+// step strip + step content once mounted.
 //
 // NAVIGATION, NEVER A WIZARD: every param's value lives in the same App
 // state regardless of which step is showing (ParamRows just renders a
 // SUBSET of sections) — nothing here unmounts destructively, every step
 // stays one click away via its chip, and the full form is always one click
 // away via the settings-view toggle CustomizeTab renders above this.
+//
+// TWO VARIANTS, ONE DERIVATION (PR15): desktop's docked panel has room to
+// spare and its own scroll container, so `variant="scroll"` renders every
+// visible step's group in one scrollable flow — chips become anchors (click
+// one, it scrolls its group into view) rather than a one-at-a-time swap, and
+// there's no Back/Next; a step's current/visited state instead tracks scroll
+// position via IntersectionObserver. Mobile's bottom sheet is short on
+// vertical room, so `variant="steps"` (the default) keeps today's
+// one-step-at-a-time Back/Next navigation exactly as before — still
+// non-destructive per the paragraph above, just narrower per screen. Both
+// variants derive from the exact same visibleSteps()/resolveCurrentStep()
+// logic (src/lib/quickStart.ts), so step-skip reactivity (a step's params
+// all hidden -> its chip disappears) behaves identically in either mode. Set
+// by the layout-specific mount point — ParamPanel (desktop) passes "scroll",
+// SheetTabs (mobile) passes "steps" — via CustomizeTab's own `variant` prop.
 //
 // Visited/current state is SESSION-ONLY (component state, not a persisted
 // pref) and resets to the first visible step on a design switch (compared
@@ -23,6 +38,7 @@ import type { SettingsView } from "../lib/useExperience";
 import type { InstalledFont } from "../lib/fonts";
 import {
   EXPORT_STEP_ID,
+  currentStepFromIntersections,
   hasVisibleUnstepped,
   resolveCurrentStep,
   unsteppedSectionNames,
@@ -71,6 +87,36 @@ interface Props {
    * with nothing to flag.
    */
   attentionParams?: Set<string>;
+  /**
+   * Desktop ("scroll", PR15): every visible step's group renders at once in
+   * one scrollable flow — the panel's existing scroll container — with the
+   * chip strip as sticky anchors and no Back/Next; a step's "current"/
+   * "visited" state tracks scroll position via IntersectionObserver instead
+   * of navigation. Mobile ("steps", the default — matches every behavior
+   * documented above and throughout this file): today's one-step-at-a-time
+   * navigation with Back/Next, unchanged. Set by the layout-specific mount
+   * point — ParamPanel (desktop) passes "scroll", SheetTabs (mobile) passes
+   * "steps" — via CustomizeTab's own `variant` prop, never derived here.
+   */
+  variant?: "scroll" | "steps";
+}
+
+// A thin band across the top of the scroll container: only a group heading
+// inside it counts as "intersecting" for currentStepFromIntersections, so
+// `current` flips once a step's heading scrolls near the top rather than as
+// soon as any sliver of the group appears at the bottom of the panel. The
+// large negative bottom margin shrinks the effective observed area to
+// (100% - 80%) = the top 20% of the container.
+const SCROLL_SPY_ROOT_MARGIN = "0px 0px -80% 0px";
+
+// The scroll-mode container to observe against and to scroll within — see
+// CustomizeTab.tsx's own comment on this class. Falls back to the browser
+// viewport (root: null) if it's ever mounted outside that wrapper (e.g. a
+// future standalone use), which still degrades reasonably.
+const SCROLL_CONTAINER_SELECTOR = ".customize-tab__scroll";
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 }
 
 const chipClass =
@@ -96,6 +142,7 @@ export function QuickStart({
   presetName,
   focusParam,
   attentionParams,
+  variant = "steps",
 }: Props) {
   const steps = visibleSteps(design, values, view);
   const stepOrder = [...steps.map((s) => s.id), EXPORT_STEP_ID];
@@ -106,15 +153,27 @@ export function QuickStart({
   // param's value is whatever the control last committed — there's no
   // notion of an invalid or unfilled OpenSCAD parameter), so "this step has
   // been shown at least once" is the only honest claim a chip can make.
-  // Never treat this as "done" or gate anything on it.
+  // Never treat this as "done" or gate anything on it. Steps mode marks a
+  // step visited the moment it's selected (click or Back/Next); scroll mode
+  // marks it visited once its group has actually scrolled into view (the
+  // IntersectionObserver effect below) — see this component's own `variant`
+  // doc for why the two modes differ here.
   const [visited, setVisited] = useState<Set<string>>(() => new Set([currentId]));
-  // Set true only by goBack/goNext, so the focus-move effect below fires for
-  // deliberate navigation but never for a chip click (the browser already
-  // moves focus to the clicked chip) or a reactive step-list change from a
-  // value edit (which shouldn't steal focus from whatever the visitor is
-  // still doing).
+  // Set true only by goBack/goNext (steps mode only), so the focus-move
+  // effect below fires for deliberate navigation but never for a chip click
+  // (the browser already moves focus to the clicked chip) or a reactive
+  // step-list change from a value edit (which shouldn't steal focus from
+  // whatever the visitor is still doing).
   const pendingFocusRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  // Scroll mode only: every step-group heading (+ the trailing Export
+  // heading), keyed by step id — the IntersectionObserver's targets and
+  // scrollToGroup's jump targets. A plain mutable ref (not state): membership
+  // changes on every mount/unmount of a group, and nothing needs to re-render
+  // off it directly.
+  const groupRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const intersectingRef = useRef<Set<string>>(new Set());
 
   // Reconcile `currentId` against the CURRENT render's steps, synchronously
   // during render (react.dev's "adjust state when a prop changes" pattern —
@@ -137,16 +196,80 @@ export function QuickStart({
   const effectiveCurrentId = resolved;
 
   useEffect(() => {
+    if (variant !== "steps") return;
     if (!pendingFocusRef.current) return;
     pendingFocusRef.current = false;
     headingRef.current?.focus();
-  }, [effectiveCurrentId]);
+  }, [effectiveCurrentId, variant]);
 
+  // Steps mode's chip/Back/Next navigation: swaps which step's ParamRows is
+  // mounted (see `currentStep` below), immediately marking it current+visited.
   const select = (id: string, opts: { focus?: boolean } = {}) => {
     pendingFocusRef.current = opts.focus === true;
     setCurrentId(id);
     setVisited((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   };
+
+  // Scroll mode's own jump: every group is already mounted, so there's
+  // nothing to swap — just scroll the target group into view (respecting
+  // prefers-reduced-motion) and move focus to its heading, the same
+  // heading-focus contract steps mode gives goBack/goNext.
+  const scrollToGroup = (id: string, opts: { focusHeading?: boolean } = {}) => {
+    const el = groupRefs.current.get(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+    if (opts.focusHeading !== false) el.focus({ preventScroll: true });
+  };
+
+  // Scroll mode's chip click: deliberate navigation, so — mirroring steps
+  // mode's `select` — set current+visited immediately rather than waiting
+  // for the IntersectionObserver below (built for organic scrolling, see its
+  // own doc) to catch up once the scroll settles.
+  const selectScroll = (id: string) => {
+    setCurrentId(id);
+    setVisited((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+    scrollToGroup(id);
+  };
+
+  // Scroll mode's IntersectionObserver: recreated whenever the visible step
+  // set changes (a step appearing/disappearing changes which headings exist
+  // to observe) or the variant flips. Recreating rather than patching an
+  // existing observer keeps this simple and correct — stale observations
+  // from a removed group can't linger — at the cost of one extra observer
+  // setup per step-list change, which is cheap (a handful of elements).
+  const orderKey = stepOrder.join("|");
+  useEffect(() => {
+    if (variant !== "scroll") return;
+    if (typeof IntersectionObserver === "undefined") return;
+    const order = orderKey.split("|");
+    const root = wrapperRef.current?.closest<HTMLElement>(SCROLL_CONTAINER_SELECTOR) ?? null;
+    intersectingRef.current = new Set();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let changed = false;
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.stepGroup;
+          if (!id) continue;
+          const was = intersectingRef.current.has(id);
+          if (entry.isIntersecting && !was) {
+            intersectingRef.current.add(id);
+            changed = true;
+          } else if (!entry.isIntersecting && was) {
+            intersectingRef.current.delete(id);
+            changed = true;
+          }
+        }
+        if (!changed) return;
+        const next = currentStepFromIntersections(order, intersectingRef.current);
+        if (!next) return;
+        setCurrentId((prev) => (prev === next ? prev : next));
+        setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
+      },
+      { root, rootMargin: SCROLL_SPY_ROOT_MARGIN, threshold: 0 }
+    );
+    for (const el of groupRefs.current.values()) observer.observe(el);
+    return () => observer.disconnect();
+  }, [variant, orderKey]);
 
   // The `focusParam` request, handed to ParamRows only once the right step is
   // actually showing (see the prop's own doc). Buffered through local state
@@ -159,6 +282,13 @@ export function QuickStart({
   // already reflects the target step) and `rowFocus` first receives this
   // nonce together, so by the time ParamRows' own effect runs, the row it's
   // looking for actually exists.
+  //
+  // Scroll mode needs no such buffering trick — every step's ParamRows is
+  // already mounted, so the target row already exists in the DOM the moment
+  // `rowFocus` is set; ParamRows' own scroll/focus effect (see ParamRows.tsx)
+  // does the rest. `currentId` is still updated (mirroring `select`, not
+  // waiting on the IntersectionObserver) purely so `aria-current` and the
+  // chip strip agree with what's now on screen.
   const [rowFocus, setRowFocus] = useState<FocusParamRequest | null>(null);
   const lastFocusNonce = useRef<number | null>(null);
   useEffect(() => {
@@ -166,12 +296,19 @@ export function QuickStart({
     lastFocusNonce.current = focusParam.nonce;
     const target = design.params.find((p) => p.name === focusParam.name);
     const step = target ? steps.find((s) => s.sections.includes(target.section)) : undefined;
-    if (step && step.id !== effectiveCurrentId) select(step.id);
+    if (step && step.id !== effectiveCurrentId) {
+      if (variant === "scroll") {
+        setCurrentId(step.id);
+        setVisited((prev) => (prev.has(step.id) ? prev : new Set(prev).add(step.id)));
+      } else {
+        select(step.id);
+      }
+    }
     setRowFocus(focusParam);
-    // select/steps/effectiveCurrentId are recreated every render (steps
-    // closes over design/values/view); depending on the nonce alone is
-    // intentional — the effect always reads the latest closure when it fires,
-    // matching CustomizeTab's own focusHiddenDiffSignal effect.
+    // select/steps/effectiveCurrentId/variant are recreated every render
+    // (steps closes over design/values/view); depending on the nonce alone
+    // is intentional — the effect always reads the latest closure when it
+    // fires, matching CustomizeTab's own focusHiddenDiffSignal effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusParam]);
 
@@ -179,7 +316,12 @@ export function QuickStart({
   const isExportCurrent = effectiveCurrentId === EXPORT_STEP_ID;
   const currentStep = steps.find((s) => s.id === effectiveCurrentId) ?? null;
 
-  const showAlsoAvailable = !isExportCurrent && hasVisibleUnstepped(design, values, view);
+  // Steps mode: the tail sits below whichever single step is showing, so it's
+  // suppressed while the Export "step" is current (nothing else belongs on
+  // that screen). Scroll mode has no such exclusivity — every group renders
+  // at once, the tail included — so it's gated on content alone.
+  const showAlsoAvailableSteps = !isExportCurrent && hasVisibleUnstepped(design, values, view);
+  const showAlsoAvailable = variant === "scroll" ? hasVisibleUnstepped(design, values, view) : showAlsoAvailableSteps;
 
   const goBack = () => {
     if (currentIndex > 0) select(stepOrder[currentIndex - 1], { focus: true });
@@ -210,9 +352,31 @@ export function QuickStart({
     !!attentionParams?.size &&
     design.params.some((p) => step.sections.includes(p.section) && attentionParams.has(p.name));
 
+  // Scroll mode's chip/Export click and heading ref-callback factory —
+  // extracted so the strip (shared markup below) doesn't repeat this per
+  // button, and so a group's ref registration/cleanup stays in one place.
+  const onChipActivate = (id: string) => (variant === "scroll" ? selectScroll(id) : select(id));
+  const groupHeadingRef = (id: string) => (el: HTMLHeadingElement | null) => {
+    if (el) groupRefs.current.set(id, el);
+    else groupRefs.current.delete(id);
+  };
+  // scroll-mt matches the sticky strip's own height so a scrolled/focused
+  // heading lands fully below it, not partly hidden underneath.
+  const groupHeadingClass =
+    "font-display mb-1 scroll-mt-14 text-[0.95rem] font-semibold text-foreground outline-none";
+
   return (
-    <div className="quick-start flex flex-col gap-3">
-      <nav className="quick-start__strip flex flex-wrap gap-[0.4rem]" aria-label={t("quickstart.stepsAriaLabel")}>
+    <div className="quick-start flex flex-col gap-3" ref={wrapperRef}>
+      <nav
+        className={cn(
+          "quick-start__strip flex flex-wrap gap-[0.4rem]",
+          // Sticky only in scroll mode — steps mode has no internal scroll of
+          // its own to stick above (Back/Next replaces one step's content
+          // wholesale, so the strip never scrolls out of view to begin with).
+          variant === "scroll" && "sticky top-0 z-10 bg-background py-1"
+        )}
+        aria-label={t("quickstart.stepsAriaLabel")}
+      >
         {steps.map((step, i) => {
           const isCurrent = step.id === effectiveCurrentId;
           const needsAttention = stepNeedsAttention(step);
@@ -222,7 +386,7 @@ export function QuickStart({
               type="button"
               className={cn(chipClass, isCurrent ? chipCurrent : chipInactive)}
               aria-current={isCurrent ? "step" : undefined}
-              onClick={() => select(step.id)}
+              onClick={() => onChipActivate(step.id)}
             >
               <span
                 aria-hidden="true"
@@ -246,7 +410,7 @@ export function QuickStart({
           type="button"
           className={cn(chipClass, "quick-start__step--export", isExportCurrent ? chipCurrent : chipInactive)}
           aria-current={isExportCurrent ? "step" : undefined}
-          onClick={() => select(EXPORT_STEP_ID)}
+          onClick={() => onChipActivate(EXPORT_STEP_ID)}
         >
           <ExportIcon size={13} aria-hidden="true" />
           {t("quickstart.export")}
@@ -254,13 +418,61 @@ export function QuickStart({
         </button>
       </nav>
 
-      <div className="quick-start__content min-w-0">
-        {isExportCurrent ? (
-          <div className="quick-start__export flex flex-col gap-1">
+      {variant === "scroll" ? (
+        // Desktop: every visible step's group renders at once — a scrollable
+        // form, not a wizard — followed by the "Also available" tail and a
+        // final section pointing at the Export action (which floats over the
+        // viewer, not part of this panel, so there's nothing to render here
+        // but a pointer to it — see this component's file-level doc).
+        <div className="quick-start__scroll-content flex min-w-0 flex-col gap-6">
+          {steps.map((step) => (
+            <section
+              key={step.id}
+              className="quick-start__group"
+              aria-labelledby={`quick-start-heading-${step.id}`}
+            >
+              <h3
+                id={`quick-start-heading-${step.id}`}
+                data-step-group={step.id}
+                ref={groupHeadingRef(step.id)}
+                tabIndex={-1}
+                className={groupHeadingClass}
+              >
+                {step.label}
+              </h3>
+              <ParamRows
+                {...rowProps}
+                sections={sectionsOf(design, step.sections)}
+                sectionChrome="flat"
+                // The step heading above already names a single-section step;
+                // only a step sharing several sections (see docs/
+                // annotations.md's "Sharing a step across sections") needs
+                // their own names repeated to tell the sub-groups apart.
+                showSectionHeadings={step.sections.length > 1}
+              />
+            </section>
+          ))}
+
+          {showAlsoAvailable && (
+            <div className="quick-start__also border-t pt-3">
+              <div className="mb-1 text-[0.72rem] font-semibold tracking-wide text-muted-foreground uppercase">
+                {t("quickstart.alsoAvailable")}
+              </div>
+              <ParamRows
+                {...rowProps}
+                sections={sectionsOf(design, unsteppedSectionNames(design))}
+                sectionChrome="details"
+              />
+            </div>
+          )}
+
+          <div className="quick-start__export flex flex-col gap-1 border-t pt-3">
             <h3
-              ref={headingRef}
+              id={`quick-start-heading-${EXPORT_STEP_ID}`}
+              data-step-group={EXPORT_STEP_ID}
+              ref={groupHeadingRef(EXPORT_STEP_ID)}
               tabIndex={-1}
-              className="font-display text-[0.95rem] font-semibold text-foreground outline-none"
+              className={groupHeadingClass}
             >
               {t("quickstart.exportHeading")}
             </h3>
@@ -268,59 +480,78 @@ export function QuickStart({
               {t("quickstart.exportHint", { export: t("action.export") })}
             </p>
           </div>
-        ) : currentStep ? (
-          <>
-            <h3
-              ref={headingRef}
-              tabIndex={-1}
-              className="font-display mb-1 text-[0.95rem] font-semibold text-foreground outline-none"
-            >
-              {currentStep.label}
-            </h3>
-            <ParamRows
-              {...rowProps}
-              sections={sectionsOf(design, currentStep.sections)}
-              sectionChrome="flat"
-              // The step heading above already names a single-section step;
-              // only a step sharing several sections (see docs/
-              // annotations.md's "Sharing a step across sections") needs
-              // their own names repeated to tell the sub-groups apart.
-              showSectionHeadings={currentStep.sections.length > 1}
-            />
-          </>
-        ) : null}
-      </div>
-
-      {showAlsoAvailable && (
-        <div className="quick-start__also border-t pt-3">
-          <div className="mb-1 text-[0.72rem] font-semibold tracking-wide text-muted-foreground uppercase">
-            {t("quickstart.alsoAvailable")}
-          </div>
-          <ParamRows
-            {...rowProps}
-            sections={sectionsOf(design, unsteppedSectionNames(design))}
-            sectionChrome="details"
-          />
         </div>
-      )}
+      ) : (
+        <>
+          <div className="quick-start__content min-w-0">
+            {isExportCurrent ? (
+              <div className="quick-start__export flex flex-col gap-1">
+                <h3
+                  ref={headingRef}
+                  tabIndex={-1}
+                  className="font-display text-[0.95rem] font-semibold text-foreground outline-none"
+                >
+                  {t("quickstart.exportHeading")}
+                </h3>
+                <p className="text-[0.85rem] text-muted-foreground">
+                  {t("quickstart.exportHint", { export: t("action.export") })}
+                </p>
+              </div>
+            ) : currentStep ? (
+              <>
+                <h3
+                  ref={headingRef}
+                  tabIndex={-1}
+                  className="font-display mb-1 text-[0.95rem] font-semibold text-foreground outline-none"
+                >
+                  {currentStep.label}
+                </h3>
+                <ParamRows
+                  {...rowProps}
+                  sections={sectionsOf(design, currentStep.sections)}
+                  sectionChrome="flat"
+                  // The step heading above already names a single-section
+                  // step; only a step sharing several sections (see docs/
+                  // annotations.md's "Sharing a step across sections") needs
+                  // their own names repeated to tell the sub-groups apart.
+                  showSectionHeadings={currentStep.sections.length > 1}
+                />
+              </>
+            ) : null}
+          </div>
 
-      <div className="quick-start__nav mt-1 flex items-center justify-between gap-2 border-t pt-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="quick-start__back"
-          onClick={goBack}
-          disabled={currentIndex <= 0}
-        >
-          {t("quickstart.back")}
-        </Button>
-        {!isExportCurrent && (
-          <Button type="button" variant="default" size="sm" className="quick-start__next" onClick={goNext}>
-            {currentIndex === stepOrder.length - 2 ? t("quickstart.nextExport") : t("quickstart.next")}
-          </Button>
-        )}
-      </div>
+          {showAlsoAvailableSteps && (
+            <div className="quick-start__also border-t pt-3">
+              <div className="mb-1 text-[0.72rem] font-semibold tracking-wide text-muted-foreground uppercase">
+                {t("quickstart.alsoAvailable")}
+              </div>
+              <ParamRows
+                {...rowProps}
+                sections={sectionsOf(design, unsteppedSectionNames(design))}
+                sectionChrome="details"
+              />
+            </div>
+          )}
+
+          <div className="quick-start__nav mt-1 flex items-center justify-between gap-2 border-t pt-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="quick-start__back"
+              onClick={goBack}
+              disabled={currentIndex <= 0}
+            >
+              {t("quickstart.back")}
+            </Button>
+            {!isExportCurrent && (
+              <Button type="button" variant="default" size="sm" className="quick-start__next" onClick={goNext}>
+                {currentIndex === stepOrder.length - 2 ? t("quickstart.nextExport") : t("quickstart.next")}
+              </Button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

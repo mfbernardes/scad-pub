@@ -117,6 +117,11 @@ Precedence, resolved per parameter:
 
 Mark a section `// @step <id>` (or `// @step <id> | <label>`) to fold it into a named step of QuickStart, a guided, curated-subset-at-a-time navigation over the same form — never a destructive wizard: nothing unmounts, earlier steps stay reachable via their chip, and every value lives in the same app state regardless of which step is showing. QuickStart replaces the classic scrolling form only in guided experience's essentials settings view, for a design that declares at least one `// @step` (and `ui.quickStart` — see [`ui.quickStart`](config.md#ui-behaviour-and-pwa) — hasn't opted out); standard experience, the All settings view, and an active search query always show the classic form instead, one action (the settings-view toggle, or just clearing the search box) away. See `src/components/QuickStart.tsx`.
 
+QuickStart itself renders differently by layout, deriving from the same step list either way (so a step that disappears — every one of its params hidden by `@showIf` or the settings view — drops its chip identically in both):
+
+- **Desktop** (the docked parameter panel has room to spare): every visible step's group renders at once in a single scrollable form, with the chip strip as sticky anchors — click a chip and its group smooth-scrolls into view (instant if the visitor prefers reduced motion) rather than swapping content. There's no Back/Next; `aria-current` on the chip strip tracks scroll position instead.
+- **Mobile** (the bottom sheet is short on vertical room): one step's content shows at a time, with Back/Next alongside the chips — the original behavior, unchanged.
+
 `// @step` is **section-level only** — directly above a `/* [Section] */` header, exactly like `// @collapsed` and section-level `// @advanced`:
 
 ```scad
@@ -157,7 +162,7 @@ Both `[Text]` and `[Mounting]` belong to the `tag` step here; its label is "Tag 
 
 ### Sections without a step
 
-A section without `// @step` is perfectly legal in a stepped design. When it's *essential* (see below) it still isn't lost: QuickStart lists it under an "Also available" heading below the current step's content, alongside whichever step is active. An all-`@advanced` un-stepped section instead stays behind the All settings view, exactly like an advanced param anywhere else. This is deliberate for a section that doesn't belong in the guided flow — a `[Hidden]`-adjacent power-user section, for instance.
+A section without `// @step` is perfectly legal in a stepped design. When it's *essential* (see below) it still isn't lost: QuickStart lists it under an "Also available" heading below the step content — the current step's, on mobile; every visible step's, on desktop's scrolled form. An all-`@advanced` un-stepped section instead stays behind the All settings view, exactly like an advanced param anywhere else. This is deliberate for a section that doesn't belong in the guided flow — a `[Hidden]`-adjacent power-user section, for instance.
 
 What's *not* deliberate, most of the time, is simply forgetting to tag a section that should be part of the flow. gen-schema flags that case: once a design declares at least one `// @step`, every remaining **essential** section (one with at least one parameter that isn't `// @advanced` — see above) that carries no step gets a build-time warning listing it by name. An all-`@advanced` section left un-stepped never triggers this in either mode, since it was already going to be hidden from the default "essentials" view regardless.
 

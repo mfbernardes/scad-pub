@@ -10,6 +10,7 @@ import {
   hasVisibleUnstepped,
   resolveCurrentStep,
   quickStartAvailable,
+  currentStepFromIntersections,
   EXPORT_STEP_ID,
 } from "../src/lib/quickStart.ts";
 
@@ -206,6 +207,25 @@ test("resolveCurrentStep: a null/stale currentId (e.g. first mount) lands on the
   const visible = visibleSteps(d, {}, "essentials");
   assert.equal(resolveCurrentStep(d, visible, null), "a");
   assert.equal(resolveCurrentStep(d, visible, "not-a-real-id"), "a");
+});
+
+test("currentStepFromIntersections: returns the last-in-order id that's intersecting", () => {
+  const order = ["a", "b", "c", EXPORT_STEP_ID];
+  assert.equal(currentStepFromIntersections(order, new Set(["a"])), "a");
+  // "b" and "c" both intersecting the band at once (a short group can fit
+  // entirely inside it) — the LATER one in declared order wins, matching the
+  // step whose heading has scrolled furthest past the top.
+  assert.equal(currentStepFromIntersections(order, new Set(["b", "c"])), "c");
+  assert.equal(currentStepFromIntersections(order, new Set([EXPORT_STEP_ID, "a"])), EXPORT_STEP_ID);
+});
+
+test("currentStepFromIntersections: null when nothing intersects (caller keeps the previous current)", () => {
+  assert.equal(currentStepFromIntersections(["a", "b"], new Set()), null);
+  assert.equal(currentStepFromIntersections(["a", "b"], new Set(["not-in-order"])), null);
+});
+
+test("currentStepFromIntersections: an empty order always yields null", () => {
+  assert.equal(currentStepFromIntersections([], new Set(["a"])), null);
 });
 
 test("quickStartAvailable: requires guided experience, essentials view, a stepped design, and ui.quickStart", () => {

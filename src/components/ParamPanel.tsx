@@ -335,6 +335,10 @@ export function ParamPanel({
             focusHiddenDiffSignal={focusHiddenDiffSignal}
             attention={attention}
             onOpenMessages={onOpenMessages}
+            // Desktop's docked panel has room to spare and its own scroll
+            // container — QuickStart renders every step at once instead of a
+            // one-at-a-time wizard (PR15). See CustomizeTab's own `variant` doc.
+            variant="scroll"
           />
         </TabsContent>
 
