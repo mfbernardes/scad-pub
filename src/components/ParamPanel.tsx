@@ -3,18 +3,20 @@
 // files), parameter search + ParamForm, and a Reset footer. Collapsible and
 // resizable; state persisted to localStorage. Presets live here (a tab,
 // mirroring the mobile sheet) rather than in the top bar.
+//
+// Only genuinely layout-specific props remain here (tab/search wiring, panel
+// sizing/side, and the presets/file-import props PresetPicker/FileBar consume
+// directly) — the ~25 props CustomizeTab/GettingStarted read identically in
+// both this and SheetTabs.tsx now flow through PanelDataContext
+// (src/lib/panelData.ts), mounted once by AppShell above both layouts. See
+// that module's own doc for why it's a plain (non-stable-ref) context, unlike
+// AppActions.
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { Design, FileImport } from "../openscad/types";
-import type { ParsedSet, Values } from "../lib/presets";
-import type { InstalledFont } from "../lib/fonts";
-import type { ExperienceMode, SettingsView } from "../lib/useExperience";
-import type { ChecklistState } from "../lib/checklist";
-import type { AttentionItem, ReadinessState } from "../lib/readiness";
-import type { Dimensions } from "./Viewer";
-import type { ComputedInfo } from "../lib/computedInfo";
-import type { ViewName } from "./views";
+import type { FileImport } from "../openscad/types";
+import type { ParsedSet } from "../lib/presets";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
+import { usePanelData } from "../lib/panelData";
 import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
@@ -43,31 +45,13 @@ const MAX_WIDTH = 600;
 const DEFAULT_WIDTH = 360;
 
 interface Props {
-  design: Design;
-  values: Values;
   bundled: ParsedSet[];
   userPresets: string[];
   selectedPreset: string;
-  /** The selected preset's values, or null when no preset is selected (baseline is defaults). */
-  presetBaseline: Values | null;
-  /** The selected preset's display name, or null when no preset is selected. */
-  presetName: string | null;
-  /** Values the current params are diffed against — presetBaseline, or design defaults. */
-  baseline: Values;
-  /** Names of params whose value differs from `baseline`. */
-  changedParams: Set<string>;
   fileImport: FileImport | null;
   loadedFiles: LoadedFile[];
-  /** Font families the renderer can use (normalised), for the missing-font hint. */
-  availableFontFamilies?: Set<string>;
-  /** A bundled family to offer as a one-click fallback for a missing font. */
-  fontSuggestion?: string | null;
-  /** Faces the renderer can use (bundled ∪ imported), for the font selector. */
-  installedFonts?: InstalledFont[];
   panelSide: "left" | "right";
   panelDefaultOpen: boolean;
-  /** Show the underlying OpenSCAD variable name beside each label. */
-  showVarName: boolean;
   autoRender: boolean;
   /** Configurable tab labels (default "Presets" / "Parameters"). */
   presetsLabel?: string;
@@ -80,63 +64,16 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
-  /** Essentials/all settings-view (see src/lib/useExperience.ts). */
-  settingsView: SettingsView;
-  /** Guided/standard experience mode — forwarded to CustomizeTab, which gates
-   *  QuickStart on it (see quickStartAvailable). */
-  experienceMode: ExperienceMode;
-  /** Build-time `ui.quickStart` opt-out — forwarded to CustomizeTab. */
-  quickStartEnabled: boolean;
-  /** Forwarded to CustomizeTab — see its own doc. */
-  focusHiddenDiffSignal?: number;
-  /** The getting-started checklist's derived state (src/lib/checklist.ts) —
-   *  see GettingStarted.tsx. Mounted above the tab strip, not inside
-   *  CustomizeTab, so it's visible regardless of which tab is active. */
-  checklist: ChecklistState;
-  /** Forwarded to GettingStarted — see its own doc. */
-  checklistReplaySignal?: number;
-  /** Whether QuickStart is the active guide for the current design+view
-   *  (src/lib/quickStart.ts's quickStartAvailable) — forwarded to
-   *  GettingStarted, which uses it to pick the compact vs. full form. Same
-   *  value CustomizeTab derives its own showQuickStart from; computed once
-   *  in AppShell and threaded to both so they can never disagree. */
-  quickStartActive?: boolean;
-  /** Forwarded to CustomizeTab — see its own doc. */
-  attention: AttentionItem[];
-  /** Forwarded to CustomizeTab — see its own doc. */
-  onOpenMessages?: () => void;
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  readiness?: ReadinessState;
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  measured?: Dimensions | null;
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  renderedValues?: Values;
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  computedInfo?: ComputedInfo[];
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  reviewStale?: boolean;
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  onSelectView?: (view: ViewName) => void;
 }
 
 export function ParamPanel({
-  design,
-  values,
   bundled,
   userPresets,
   selectedPreset,
-  presetBaseline,
-  presetName,
-  baseline,
-  changedParams,
   fileImport,
   loadedFiles,
-  availableFontFamilies,
-  fontSuggestion,
-  installedFonts,
   panelSide,
   panelDefaultOpen,
-  showVarName,
   autoRender,
   presetsLabel = "Presets",
   parametersLabel = "Customize",
@@ -146,21 +83,6 @@ export function ParamPanel({
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
-  settingsView,
-  experienceMode,
-  quickStartEnabled,
-  focusHiddenDiffSignal,
-  checklist,
-  checklistReplaySignal,
-  quickStartActive = false,
-  attention,
-  onOpenMessages,
-  readiness,
-  measured,
-  renderedValues,
-  computedInfo,
-  reviewStale,
-  onSelectView,
 }: Props) {
   const {
     applyPreset,
@@ -170,6 +92,11 @@ export function ParamPanel({
     removeFile,
     clearFiles,
   } = useAppActions();
+  // design/values/attention/settingsView: read from context for THIS
+  // component's own direct consumers (PresetPicker, FileBar) — CustomizeTab/
+  // GettingStarted below read the very same context themselves, so none of
+  // this needs to be threaded through as a prop.
+  const { design, values, attention, settingsView } = usePanelData();
   const [open, setOpen] = useState(() => {
     const v = readLocal(PANEL_OPEN_KEY);
     return v !== null ? v === "true" : panelDefaultOpen;
@@ -293,9 +220,11 @@ export function ParamPanel({
         }}
       />
 
-      {/* Above the tab strip — see the checklist prop's own doc for why it
-          isn't nested inside CustomizeTab's params tab. */}
-      <GettingStarted state={checklist} replaySignal={checklistReplaySignal} quickStartActive={quickStartActive} />
+      {/* Above the tab strip — see PanelData's checklist field's own doc for
+          why it isn't nested inside CustomizeTab's params tab. Reads its own
+          state (checklist/checklistReplaySignal/quickStartActive) via
+          usePanelData(). */}
+      <GettingStarted />
 
       <Tabs
         value={panelTab}
@@ -337,32 +266,10 @@ export function ParamPanel({
 
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <CustomizeTab
-            design={design}
-            values={values}
-            presetBaseline={presetBaseline}
-            presetName={presetName}
-            baseline={baseline}
-            changedParams={changedParams}
-            showVarName={showVarName}
-            availableFontFamilies={availableFontFamilies}
-            fontSuggestion={fontSuggestion}
-            installedFonts={installedFonts}
-            settingsView={settingsView}
-            experienceMode={experienceMode}
-            quickStartEnabled={quickStartEnabled}
             search={search}
             onSearchChange={onSearchChange}
             onSearchFocus={onSearchFocus}
             onSearchBlur={onSearchBlur}
-            focusHiddenDiffSignal={focusHiddenDiffSignal}
-            attention={attention}
-            onOpenMessages={onOpenMessages}
-            readiness={readiness}
-            measured={measured}
-            renderedValues={renderedValues}
-            computedInfo={computedInfo}
-            reviewStale={reviewStale}
-            onSelectView={onSelectView}
             // Desktop's docked panel has room to spare and its own scroll
             // container — QuickStart renders every step at once instead of a
             // one-at-a-time wizard (PR15). See CustomizeTab's own `variant` doc.

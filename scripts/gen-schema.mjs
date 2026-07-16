@@ -104,6 +104,20 @@ export const KNOWN_TOP_LEVEL_KEYS = new Set([
 // validated against its key set (see parseStrings): a config key that isn't a
 // real catalogue key would otherwise be silently ignored by every `t()` call.
 const EN_CATALOG_PATH = fileURLToPath(new URL("../src/locales/en.json", import.meta.url));
+// Directory holding every bundled locale catalogue (src/locales/*.json) —
+// the SOURCE of truth src/lib/i18n.ts's tests (tests/i18n.test.mjs) read
+// directly. Only the ones actually needed at runtime (English, plus the
+// resolved `lang`'s bundle when it isn't English) are copied into the
+// generated src/generated/locales.json below — see that comment for why.
+const LOCALES_DIR = fileURLToPath(new URL("../src/locales", import.meta.url));
+
+// BCP-47 -> bundled locale tag: use the primary subtag ("de-AT" -> "de"),
+// lowercased. Mirrors src/lib/i18n.ts's own `primarySubtag` exactly (kept as
+// a small separate copy rather than a shared import — this script runs under
+// plain Node, not the TS-source loader tests/register-ts.mjs installs).
+function primarySubtag(lang) {
+  return (lang.split("-")[0] || "en").toLowerCase();
+}
 
 // Fail early and clearly when a configured path doesn't exist — these are the
 // most common ways a config drifts from the designs it points at.
@@ -758,6 +772,30 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   const EN_CATALOG_KEYS = Object.keys(EN_CATALOG);
   const STRINGS = parseStrings(config.strings, EN_CATALOG_KEYS);
 
+  // src/generated/locales.json's content: ONLY the bundle(s) the app actually
+  // needs at runtime, keyed by locale tag exactly like src/lib/i18n.ts's own
+  // `BUNDLES` map — English (t()'s ultimate fallback, always present) plus,
+  // when `lang` resolves to some other bundled locale, that locale's own
+  // catalogue too. i18n.ts previously statically imported BOTH src/locales/
+  // en.json and de.json (~46KB raw) regardless of which one a build actually
+  // uses; this mirrors gen-schema's existing generated-artifact pattern
+  // (designs.json, precache-manifest.json, …) to ship only what's live. A
+  // `lang` that isn't one of the bundled locales (e.g. "pt-BR" — see
+  // widget-designmeta fixture) falls back to English alone, matching
+  // i18n.ts's own runtime fallback (BUNDLES[primarySubtag] ?? "en") exactly.
+  const ACTIVE_LOCALE_TAG = primarySubtag(LANG);
+  const BUNDLED_LOCALE_TAGS = new Set(
+    readdirSync(LOCALES_DIR)
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.slice(0, -".json".length))
+  );
+  const GENERATED_LOCALES = { en: EN_CATALOG };
+  if (ACTIVE_LOCALE_TAG !== "en" && BUNDLED_LOCALE_TAGS.has(ACTIVE_LOCALE_TAG)) {
+    GENERATED_LOCALES[ACTIVE_LOCALE_TAG] = JSON.parse(
+      readFileSync(join(LOCALES_DIR, `${ACTIVE_LOCALE_TAG}.json`), "utf-8")
+    );
+  }
+
   // outScadDir is entirely generated. H6/M8: build the complete new tree in a
   // staging directory first, and only replace the live outScadDir once every
   // fallible step below (design parsing, containment checks, PWA icon
@@ -976,6 +1014,12 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   writeFileSync(
     join(outSchemaDir, "designs.json"),
     JSON.stringify(schema, null, 2) + "\n"
+  );
+  // src/lib/i18n.ts imports this instead of src/locales/en.json + de.json
+  // directly — see GENERATED_LOCALES's own comment above.
+  writeFileSync(
+    join(outSchemaDir, "locales.json"),
+    JSON.stringify(GENERATED_LOCALES, null, 2) + "\n"
   );
   return schema;
 }

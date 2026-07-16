@@ -20,6 +20,7 @@ import type { SettingsView } from "../lib/useExperience";
 import { displayValue } from "../lib/paramDiff";
 import { isShown, paramMatchesQuery } from "../lib/paramFilter";
 import { familyOf, normalizeFamily, withFamily, type InstalledFont } from "../lib/fonts";
+import { makeRafThrottle, type RafThrottle } from "../lib/rafThrottle";
 import { useAppActions } from "../lib/appActions";
 import { t } from "../lib/i18n";
 import { FileInput } from "./FileInput";
@@ -254,10 +255,31 @@ function NumberControl({
     setDraft(String(committed));
   }, [committed]);
 
-  const commitRange = (n: number) => {
+  // Slider drag throttle: Radix's `onValueChange` fires continuously while
+  // dragging — often several times per animation frame — but every one of
+  // those forwarding straight to `onChange` (which drives the 400ms render
+  // debounce) is needless work for a value the user is still actively
+  // adjusting. `draft` (the visible thumb position AND the numeric field)
+  // still updates on EVERY tick below, so the drag itself never looks or
+  // feels throttled; only the forward to `onChange` is capped at one per
+  // frame, trailing-edge (the LAST value each frame always wins). Typing in
+  // the numeric input below bypasses this entirely — see its own onChange.
+  // A ref-stable throttle instance (not recreated per render) so an
+  // in-flight frame survives an unrelated re-render; it always calls the
+  // LATEST `onChange` closure via `onChangeRef`, mirroring the
+  // latest-callback idiom useRafBatchedWrite/useSignal already use elsewhere.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const throttleRef = useRef<RafThrottle<number> | null>(null);
+  if (!throttleRef.current) {
+    throttleRef.current = makeRafThrottle<number>((v) => onChangeRef.current(v));
+  }
+  useEffect(() => () => throttleRef.current?.cancel(), []);
+
+  const clampToDraft = (n: number) => {
     const v = clampNumber(param, n);
     setDraft(String(v));
-    onChange(v);
+    return v;
   };
 
   return (
@@ -269,7 +291,12 @@ function NumberControl({
           max={param.max}
           step={param.step ?? 1}
           value={[committed]}
-          onValueChange={([v]) => commitRange(v)}
+          onValueChange={([v]) => throttleRef.current!.call(clampToDraft(v))}
+          // Guarantees the final dragged/clicked value always lands, even if
+          // it was still buffered in an unfired frame the instant the
+          // pointer released (flush cancels that pending frame and forwards
+          // this value immediately instead).
+          onValueCommit={([v]) => throttleRef.current!.flush(clampToDraft(v))}
           aria-label={label}
         />
       )}

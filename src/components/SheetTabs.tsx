@@ -1,16 +1,16 @@
 // SheetTabs.tsx — segmented tabs (shadcn/ui Tabs) inside the mobile bottom sheet.
 // Parameters / Presets / Files. Prevents the stacked-sheet anti-pattern.
-import type { Design, FileImport } from "../openscad/types";
-import type { ParsedSet, Values } from "../lib/presets";
-import type { InstalledFont } from "../lib/fonts";
-import type { ExperienceMode, SettingsView } from "../lib/useExperience";
-import type { ChecklistState } from "../lib/checklist";
-import type { AttentionItem, ReadinessState } from "../lib/readiness";
+//
+// Only genuinely layout-specific props remain here (tab/search wiring,
+// sheetDetent, and the presets/file-import props PresetPicker/FileBar
+// consume directly) — see ParamPanel.tsx's matching doc: the ~25 props
+// CustomizeTab/GettingStarted read identically in both this and ParamPanel.tsx
+// now flow through PanelDataContext (src/lib/panelData.ts).
+import type { FileImport } from "../openscad/types";
+import type { ParsedSet } from "../lib/presets";
 import type { SheetDetent } from "./BottomSheet";
-import type { Dimensions } from "./Viewer";
-import type { ComputedInfo } from "../lib/computedInfo";
-import type { ViewName } from "./views";
 import { useAppActions } from "../lib/appActions";
+import { usePanelData } from "../lib/panelData";
 import type { PanelTab } from "../lib/usePanelState";
 import { CustomizeTab } from "./CustomizeTab";
 import { FileBar, type LoadedFile } from "./FileBar";
@@ -24,31 +24,13 @@ import { t } from "../lib/i18n";
 type Tab = PanelTab;
 
 interface Props {
-  design: Design;
-  values: Values;
   bundled: ParsedSet[];
   userPresets: string[];
   selected: string;
-  /** The selected preset's values, or null when no preset is selected (baseline is defaults). */
-  presetBaseline: Values | null;
-  /** The selected preset's display name, or null when no preset is selected. */
-  presetName: string | null;
-  /** Values the current params are diffed against — presetBaseline, or design defaults. */
-  baseline: Values;
-  /** Names of params whose value differs from `baseline`. */
-  changedParams: Set<string>;
   fileImport: FileImport | null;
   loadedFiles: LoadedFile[];
-  /** Font families the renderer can use (normalised), for the missing-font hint. */
-  availableFontFamilies?: Set<string>;
-  /** A bundled family to offer as a one-click fallback for a missing font. */
-  fontSuggestion?: string | null;
-  /** Faces the renderer can use (bundled ∪ imported), for the font selector. */
-  installedFonts?: InstalledFont[];
   /** Called when a tab is tapped — used to raise a collapsed (peek) sheet. */
   onActivate?: () => void;
-  /** Show the underlying OpenSCAD variable name beside each label (default true). */
-  showVarName?: boolean;
   autoRender: boolean;
   /** Configurable tab labels (default "Presets" / "Parameters"). */
   presetsLabel?: string;
@@ -61,64 +43,21 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
-  /** Essentials/all settings-view (see src/lib/useExperience.ts). */
-  settingsView: SettingsView;
-  /** Guided/standard experience mode — forwarded to CustomizeTab, which gates
-   *  QuickStart on it (see quickStartAvailable). */
-  experienceMode: ExperienceMode;
-  /** Build-time `ui.quickStart` opt-out — forwarded to CustomizeTab. */
-  quickStartEnabled: boolean;
-  /** Forwarded to CustomizeTab — see its own doc. */
-  focusHiddenDiffSignal?: number;
-  /** The getting-started checklist's derived state — see ParamPanel.tsx's
-   *  matching prop doc (this mirrors it for the mobile layout). */
-  checklist: ChecklistState;
-  /** Forwarded to GettingStarted — see its own doc. */
-  checklistReplaySignal?: number;
-  /** Forwarded to GettingStarted — see ParamPanel's matching prop doc (this
-   *  mirrors it for the mobile layout). */
-  quickStartActive?: boolean;
-  /** The bottom sheet's current detent (BottomSheet.tsx), forwarded to
+  /** The bottom sheet's current detent (BottomSheet.tsx) — forwarded to
    *  GettingStarted so it can render nothing but a slim progress line at
    *  Peek instead of the compact/full card — see GettingStarted.tsx's own
    *  doc for why Peek can't afford either. Desktop (ParamPanel) has no
    *  sheet, so it never passes this. */
   sheetDetent?: SheetDetent;
-  /** Forwarded to CustomizeTab — see its own doc. */
-  attention: AttentionItem[];
-  /** Forwarded to CustomizeTab — see its own doc. */
-  onOpenMessages?: () => void;
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  readiness?: ReadinessState;
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  measured?: Dimensions | null;
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  renderedValues?: Values;
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  computedInfo?: ComputedInfo[];
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  reviewStale?: boolean;
-  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
-  onSelectView?: (view: ViewName) => void;
 }
 
 export function SheetTabs({
-  design,
-  values,
   bundled,
   userPresets,
   selected,
-  presetBaseline,
-  presetName,
-  baseline,
-  changedParams,
   fileImport,
   loadedFiles,
-  availableFontFamilies,
-  fontSuggestion,
-  installedFonts,
   onActivate,
-  showVarName = false,
   autoRender,
   presetsLabel = "Presets",
   parametersLabel = "Customize",
@@ -128,22 +67,7 @@ export function SheetTabs({
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
-  settingsView,
-  experienceMode,
-  quickStartEnabled,
-  focusHiddenDiffSignal,
-  checklist,
-  checklistReplaySignal,
-  quickStartActive = false,
   sheetDetent,
-  attention,
-  onOpenMessages,
-  readiness,
-  measured,
-  renderedValues,
-  computedInfo,
-  reviewStale,
-  onSelectView,
 }: Props) {
   const {
     applyPreset,
@@ -153,6 +77,10 @@ export function SheetTabs({
     removeFile,
     clearFiles,
   } = useAppActions();
+  // design/values/attention/settingsView: read from context for THIS
+  // component's own direct consumers (PresetPicker, FileBar) — CustomizeTab/
+  // GettingStarted below read the very same context themselves.
+  const { design, values, attention, settingsView } = usePanelData();
   const hasFiles = fileImport != null;
   // Presets first on mobile, then Customize, then Files.
   const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
@@ -165,12 +93,7 @@ export function SheetTabs({
           the card is visible regardless of which tab is active. Peek (rule
           3) is threaded through so this renders a slim progress line instead
           of the compact/full card at that detent — see GettingStarted.tsx. */}
-      <GettingStarted
-        state={checklist}
-        replaySignal={checklistReplaySignal}
-        quickStartActive={quickStartActive}
-        peek={sheetDetent === "peek"}
-      />
+      <GettingStarted peek={sheetDetent === "peek"} />
       <Tabs
         value={tab}
         onValueChange={(v) => onTabChange(v as Tab)}
@@ -186,32 +109,10 @@ export function SheetTabs({
         <div className="flex min-h-0 flex-1 flex-col">
           <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
             <CustomizeTab
-              design={design}
-              values={values}
-              presetBaseline={presetBaseline}
-              presetName={presetName}
-              baseline={baseline}
-              changedParams={changedParams}
-              showVarName={showVarName}
-              availableFontFamilies={availableFontFamilies}
-              fontSuggestion={fontSuggestion}
-              installedFonts={installedFonts}
-              settingsView={settingsView}
-              experienceMode={experienceMode}
-              quickStartEnabled={quickStartEnabled}
               search={search}
               onSearchChange={onSearchChange}
               onSearchFocus={onSearchFocus}
               onSearchBlur={onSearchBlur}
-              focusHiddenDiffSignal={focusHiddenDiffSignal}
-              attention={attention}
-              onOpenMessages={onOpenMessages}
-              readiness={readiness}
-              measured={measured}
-              renderedValues={renderedValues}
-              computedInfo={computedInfo}
-              reviewStale={reviewStale}
-              onSelectView={onSelectView}
               // Mobile's bottom sheet is short on vertical room — QuickStart
               // keeps its one-step-at-a-time Back/Next navigation (PR15's
               // desktop-only scroll mode doesn't apply here). See

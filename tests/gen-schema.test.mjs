@@ -284,6 +284,40 @@ test("lang/dir default to en/ltr and pass through to the schema", () => {
   assert.equal(schema.dir, "rtl");
 });
 
+// src/generated/locales.json — the runtime-only subset of src/locales/*.json
+// src/lib/i18n.ts actually imports (see gen-schema.mjs's GENERATED_LOCALES
+// comment). src/locales/en.json and de.json stay the SOURCE of truth (see
+// tests/i18n.test.mjs's own key-parity check); these tests are the
+// regression net for the generated artifact staying in sync with them.
+const readLocales = (out) => JSON.parse(readFileSync(join(out, "schema", "locales.json"), "utf-8"));
+const rawBundle = (tag) => JSON.parse(readFileSync(join(HERE, "..", "src", "locales", `${tag}.json`), "utf-8"));
+
+test("generated locales: an English (default) build emits only the English bundle", () => {
+  const { out } = run("widget-autodeps.config.json");
+  const locales = readLocales(out);
+  assert.deepEqual(Object.keys(locales), ["en"]);
+  assert.deepEqual(locales.en, rawBundle("en"));
+});
+
+test("generated locales: a bundled non-English 'lang' also emits that locale's bundle", () => {
+  const { schema, out } = run("widget-lang-de.config.json");
+  assert.equal(schema.lang, "de-AT"); // primary-subtag resolution ("de-AT" -> "de") happens at read time, not here
+  const locales = readLocales(out);
+  assert.deepEqual(new Set(Object.keys(locales)), new Set(["en", "de"]));
+  assert.deepEqual(locales.en, rawBundle("en"));
+  assert.deepEqual(locales.de, rawBundle("de"));
+});
+
+test("generated locales: an unbundled 'lang' (no matching src/locales/*.json) falls back to English alone", () => {
+  // widget-designmeta.config.json's lang is "pt-BR" — a valid BCP-47 tag, but
+  // there is no src/locales/pt.json, matching i18n.ts's own runtime fallback
+  // (BUNDLES[primarySubtag] ?? "en" — see tests/i18n.test.mjs's "an unbundled
+  // locale falls back to English entirely").
+  const { out } = run("widget-designmeta.config.json");
+  const locales = readLocales(out);
+  assert.deepEqual(Object.keys(locales), ["en"]);
+});
+
 test("render tuning and defaultDesign pass through to the schema", () => {
   const { schema } = run("widget-designmeta.config.json");
   assert.deepEqual(schema.render, { heavyMs: 9000, cache: { maxEntries: 4, persistent: false } });

@@ -52,9 +52,9 @@ import {
   checklistAllDone,
   checklistTaskProgress,
   type ChecklistItem,
-  type ChecklistState,
 } from "../lib/checklist";
 import { useSignal } from "../lib/useSignal";
+import { usePanelData } from "../lib/panelData";
 import { cn } from "../lib/utils";
 
 const checklistFlag = makeOnceFlag("checklist.v1");
@@ -131,30 +131,26 @@ function ChecklistRow({ item }: { item: ChecklistItem }) {
 }
 
 export function GettingStarted({
-  state,
-  replaySignal,
-  quickStartActive = false,
   peek = false,
 }: {
-  state: ChecklistState;
-  /** Bumped by the Help modal's replay row (App.tsx) to clear the dismiss
-   *  flag and bring the card back — the same "only act on a genuine CHANGE,
-   *  not the initial value" nonce idiom as CustomizeTab's
-   *  focusHiddenDiffSignal. */
-  replaySignal?: number;
-  /** Whether QuickStart is the active guide for the CURRENT design+view —
-   *  the exact `quickStartAvailable` predicate CustomizeTab gates its own
-   *  step UI on (src/lib/quickStart.ts), threaded down from AppShell rather
-   *  than recomputed here so the two surfaces can never disagree about which
-   *  "mode" is showing. Selects the compact one-line form over the full
-   *  card — see this file's own module doc. */
-  quickStartActive?: boolean;
   /** Mobile only: true while the bottom sheet (BottomSheet.tsx) is at the
    *  Peek detent — see SheetTabs' `sheetDetent` prop. Renders nothing but a
    *  slim, non-dismissible progress line in place of the compact/full card —
-   *  see this file's own module doc for why Peek can't afford either. */
+   *  see this file's own module doc for why Peek can't afford either. Left as
+   *  an explicit prop (not PanelDataContext — see panelData.ts's own doc):
+   *  it's layout wiring ParamPanel/SheetTabs compute themselves (desktop has
+   *  no sheet, so it never passes this), not data the two layouts merely
+   *  happen to pass through identically. */
   peek?: boolean;
 }) {
+  // `state` (the checklist's derived input — see checklist.ts's
+  // ChecklistState), `replaySignal` (bumped by the Help modal's replay row —
+  // the same "only act on a genuine CHANGE, not the initial value" nonce
+  // idiom as CustomizeTab's focusHiddenDiffSignal) and `quickStartActive`
+  // (the exact `quickStartAvailable` predicate CustomizeTab gates its own
+  // step UI on, so the two surfaces can never disagree about which "mode" is
+  // showing) all come from PanelDataContext now — see panelData.ts.
+  const { checklist: state, checklistReplaySignal: replaySignal, quickStartActive } = usePanelData();
   const [dismissed, setDismissed] = useState(() => {
     if (checklistFlag.seen()) return true;
     // Retirement (PR14): see the module doc above. `state.exported` here is

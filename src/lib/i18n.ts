@@ -11,22 +11,27 @@
 // it synthetic bundles). The module-level `t`/`tn` exports below bind it to
 // the generated schema's `lang` and `strings`, which is what the app imports.
 //
-// Both locale bundles are loaded with an explicit `{ type: "json" }` import
-// attribute (unlike e.g. src/App.tsx's plain `import ... from
-// "./generated/designs.json"`): this module is imported directly by
-// tests/i18n.test.mjs through the TS-source node:test loader (see
-// tests/ts-resolve.mjs), which falls through to Node's own ESM loader for
-// `.json` specifiers — and Node requires the attribute there. Vite's bundler
-// accepts the same syntax, so one import works in both places.
-import enBundle from "../locales/en.json" with { type: "json" };
-import deBundle from "../locales/de.json" with { type: "json" };
+// The runtime bundle set comes from the GENERATED src/generated/locales.json
+// (scripts/gen-schema.mjs), not the two static src/locales/{en,de}.json files
+// directly — those remain the SOURCE of truth (tests/i18n.test.mjs still
+// reads them for the en/de key-parity check), but importing both of them
+// here unconditionally shipped ~46KB of catalogue text even though only one
+// locale (plus the English fallback) is ever active for a given build.
+// gen-schema resolves `lang` to a bundled locale tag at build time and emits
+// only the bundle(s) actually needed — see its own GENERATED_LOCALES
+// comment. The `{ type: "json" }` import attribute is required because this
+// module is also imported directly by tests/i18n.test.mjs through the
+// TS-source node:test loader (see tests/ts-resolve.mjs), which falls through
+// to Node's own ESM loader for `.json` specifiers; Vite's bundler accepts the
+// same syntax, so one import works in both places.
+import generatedLocales from "../generated/locales.json" with { type: "json" };
 import schemaJson from "../generated/designs.json" with { type: "json" };
 import type { Schema } from "../openscad/types";
 
 export type Bundle = Record<string, string>;
 export type Vars = Record<string, string | number>;
 
-const BUNDLES: Record<string, Bundle> = { en: enBundle, de: deBundle };
+const BUNDLES: Record<string, Bundle> = generatedLocales;
 
 // BCP-47 -> bundled locale: use the primary subtag ("de-AT" -> "de"),
 // falling back to "en" when the subtag has no bundle of its own.

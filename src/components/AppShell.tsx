@@ -3,7 +3,12 @@
 //   Mobile (< 860px):  full-bleed viewer + top bar + BottomSheet + floating ActionCluster
 // Both layouts float the same compact action cluster over the viewer bottom —
 // mobile no longer reserves a solid footer band. All state/logic stays in
-// App.tsx; this is a pure view extraction.
+// App.tsx; this is a pure view extraction (usePanelDerivedState.ts owns the
+// panel-facing business state derived FROM that App.tsx state — attention,
+// readiness, the checklist, … — see its own doc) plus one PanelDataProvider
+// mount (src/lib/panelData.ts) that hands the derived bundle to both layouts'
+// CustomizeTab/GettingStarted without threading it through ParamPanel/
+// SheetTabs by hand.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
@@ -12,18 +17,11 @@ import type { RenderMetrics } from "../lib/renderMetrics";
 import type { SettingsView, ExperienceMode } from "../lib/useExperience";
 import type { PauseReason } from "../lib/renderState";
 import type { ViewerHandle, Dimensions } from "./Viewer";
-import type { ChecklistState } from "../lib/checklist";
-import type { NoticeAttentionInput } from "../lib/readiness";
-import { deriveAttention, readinessState } from "../lib/readiness";
-import { quickStartAvailable } from "../lib/quickStart";
 import { initialSheetDetent } from "../lib/sheetDetent";
 import { makeOnceFlag } from "../lib/prefs";
 import { pauseReasonText } from "../lib/pauseReason";
 import { t } from "../lib/i18n";
-import { friendlyRenderError } from "../lib/friendlyErrors";
-import { hiddenAdvancedDiff } from "../lib/paramFilter";
-import { defaultsFor } from "../lib/presets";
-import { isMeasurementStale } from "../lib/renderState";
+import { usePanelDerivedState } from "../lib/usePanelDerivedState";
 
 // Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
 // ending at the tab underline — no sliver of the tab's content.
@@ -95,6 +93,7 @@ import { useIsMobile } from "../lib/useIsMobile";
 import { useSafeAreaBottom } from "../lib/useSafeAreaBottom";
 import { usePanelState, type PanelTab } from "../lib/usePanelState";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
+import { PanelDataProvider, type PanelData } from "../lib/panelData";
 
 interface Props {
   schema: Schema;
@@ -399,18 +398,6 @@ export const AppShell = memo(function AppShell({
   // opt-in. Threaded to CustomizeTab (via ParamPanel/SheetTabs), which also
   // gates on experienceMode/settingsView/design.steps — see quickStartAvailable.
   const quickStartEnabled = ui.quickStart !== false;
-  // Whether QuickStart is the active guide for the CURRENT design+view — the
-  // same predicate CustomizeTab gates its own step UI on (quickStart.ts),
-  // computed ONCE here and threaded to both GettingStarted mount points
-  // (ParamPanel/SheetTabs) so the checklist's compact-vs-full form (PR14)
-  // can never disagree with whether QuickStart is actually showing.
-  const quickStartActive = quickStartAvailable(design, experienceMode, settingsView, quickStartEnabled);
-  // The getting-started checklist's full input state (src/lib/checklist.ts):
-  // schema/render facts already available here, plus the session-scoped
-  // progress App.tsx tracks (checklistProgress, threaded down because the
-  // Help modal replay row — a sibling of AppShell — must reach the same
-  // dismiss flag; see GettingStarted.tsx). Assembled below, once `attention`
-  // (readiness.ts) is available — see that computation's own comment.
 
   const log = result?.log ?? EMPTY_LOG;
   // Memoized so a config without `notices` doesn't hand a fresh `[]` to the
@@ -458,62 +445,37 @@ export const AppShell = memo(function AppShell({
   const diagnostics = useMemo(() => parseDiagnostics(log, notices), [log, notices]);
   const badges = useMemo(() => countBadges(log, notices), [log, notices]);
 
-  // src/lib/readiness.ts's attention items: real, verifiable gaps between a
-  // successful render and genuine production-readiness (a font param whose
-  // selected family isn't loaded, or a flagged `notices` category with a
-  // pending notice this render — see NoticeCategory.attention). Pairs each
-  // configured category with its live pending count from `badges` (already
-  // computed above), so a category flagged `attention: true` in the config
-  // only surfaces here once it actually has something pending, not merely
-  // because it's configured.
-  const noticeAttentionInputs = useMemo<NoticeAttentionInput[]>(
-    () =>
-      notices.map((n) => ({
-        marker: n.marker,
-        label: n.label,
-        attention: n.attention === true,
-        count: badges.find((b) => b.key === `notice:${n.marker}`)?.count ?? 0,
-      })),
-    [notices, badges]
-  );
-  const attention = useMemo(
-    () =>
-      deriveAttention({
-        params: design.params,
-        values,
-        availableFontFamilies,
-        notices: noticeAttentionInputs,
-      }),
-    [design, values, availableFontFamilies, noticeAttentionInputs]
-  );
-
-  // PR18's Review stage: overall production-readiness for the current render
-  // (failed > attention > ready > building — see readiness.ts's own
-  // precedence doc), mirroring checklistState's `resultOk` below exactly so
-  // the Review stage's readiness line and the checklist's "Preview" row can
-  // never disagree.
-  const readiness = useMemo(
-    () => readinessState(result ? result.ok : null, attention),
-    [result, attention]
-  );
-  // Whether the Review stage's summary figures are stale — shared with
-  // ViewerStage's DimensionInfo panel via renderState.ts's isMeasurementStale
-  // so the two "what will actually be produced" surfaces can never disagree.
-  const reviewStale = useMemo(
-    () => isMeasurementStale(stalePreview, result, retainedResult),
-    [stalePreview, result, retainedResult]
-  );
-
-  const checklistState: ChecklistState = {
-    enabled: showChecklist,
-    designCount: designs.length,
-    designChanged: checklistProgress.designChanged,
-    paramInteracted: checklistProgress.paramInteracted,
-    exported: checklistProgress.exported,
+  // The panel-facing business state derived from the above (attention,
+  // readiness, the getting-started checklist, the hidden-advanced-diff, the
+  // friendly render-failure summary, and whether QuickStart is the active
+  // guide) — see usePanelDerivedState.ts for the derivation itself and each
+  // field's own doc. Threaded to ParamPanel/SheetTabs (and, through them,
+  // CustomizeTab/GettingStarted) and to OutputConsole below.
+  const {
+    attention,
+    readiness,
+    reviewStale,
+    checklistState,
+    hasHiddenDiff,
+    friendlyError,
+    quickStartActive,
+  } = usePanelDerivedState({
+    design,
+    values,
+    availableFontFamilies,
+    notices,
+    badges,
+    result,
+    retainedResult,
+    stalePreview,
     rendering,
-    resultOk: result ? result.ok : null,
-    hasAttention: attention.length > 0,
-  };
+    designCount: designs.length,
+    checklistProgress,
+    showChecklist,
+    settingsView,
+    experienceMode,
+    quickStartEnabled,
+  });
 
   // What OutputConsole's Notices tab actually renders: the model's own
   // diagnostics, plus — least-invasively, as an extra notice row rather than
@@ -529,19 +491,6 @@ export const AppShell = memo(function AppShell({
   // values the design surfaced at render time (see lib/computedInfo.ts).
   const computedInfo = useMemo(() => parseComputedInfo(log), [log]);
 
-  // Friendly render-failure summary (see src/lib/friendlyErrors.ts) — null
-  // whenever the latest render didn't fail. Recomputed only when `result`
-  // itself changes (title/body/technical are a pure function of it).
-  const friendlyError = useMemo(() => friendlyRenderError(result), [result]);
-  // hiddenAdvancedDiff's inputs, mirroring CustomizeTab's own computation
-  // exactly — the friendly-error card's "Review hidden settings" action must
-  // use the SAME deterministic rule as the Customize tab's "Review" chip, not
-  // a re-derived approximation.
-  const defaults = useMemo(() => defaultsFor(design), [design]);
-  const hasHiddenDiff = useMemo(
-    () => hiddenAdvancedDiff(design.params, values, defaults, settingsView).length > 0,
-    [design, values, defaults, settingsView]
-  );
   // Whether a previous successful render's geometry is genuinely still what
   // the viewer shows: exactly when the pipeline retained one (see
   // retainedResultAfterFailure — latest render failed, a same-design success
@@ -672,6 +621,72 @@ export const AppShell = memo(function AppShell({
 
   const closeOutput = useCallback(() => setOutputOpen(false), []);
 
+  // The PanelDataContext bundle (src/lib/panelData.ts): everything
+  // CustomizeTab/GettingStarted read identically in both layouts, assembled
+  // once here instead of being threaded through ParamPanel/SheetTabs by
+  // hand. Memoized so a render that doesn't touch any of these fields hands
+  // out the SAME object (an unchanged reference), matching how individual
+  // props behaved before this lift — a consumer re-renders exactly when a
+  // field it reads actually changed, same as plain props, NOT the AppActions
+  // stable-ref pattern (see panelData.ts's own doc for why that contrast is
+  // deliberate).
+  const panelData = useMemo<PanelData>(
+    () => ({
+      design,
+      values,
+      presetBaseline,
+      presetName,
+      baseline,
+      changedParams,
+      showVarName,
+      availableFontFamilies,
+      fontSuggestion,
+      installedFonts,
+      settingsView,
+      experienceMode,
+      quickStartEnabled,
+      focusHiddenDiffSignal: reviewHiddenSignal,
+      attention,
+      onOpenMessages: openOutput,
+      readiness,
+      measured,
+      renderedValues,
+      computedInfo,
+      reviewStale,
+      onSelectView: handleSelectView,
+      checklist: checklistState,
+      checklistReplaySignal,
+      quickStartActive,
+    }),
+    [
+      design,
+      values,
+      presetBaseline,
+      presetName,
+      baseline,
+      changedParams,
+      showVarName,
+      availableFontFamilies,
+      fontSuggestion,
+      installedFonts,
+      settingsView,
+      experienceMode,
+      quickStartEnabled,
+      reviewHiddenSignal,
+      attention,
+      openOutput,
+      readiness,
+      measured,
+      renderedValues,
+      computedInfo,
+      reviewStale,
+      handleSelectView,
+      checklistState,
+      checklistReplaySignal,
+      quickStartActive,
+    ]
+  );
+
   // Prop bundles shared verbatim by the two layout trees — each invocation
   // below adds only its layout-specific bits (viewer ref, active flag, …).
   const stageProps = {
@@ -730,323 +745,275 @@ export const AppShell = memo(function AppShell({
     hasAttention: attention.length > 0,
   };
   return (
-    <div className="app-shell">
-      {/* Skip link: off-screen until focused. Only the active layout is
-          mounted below (see M7 — a breakpoint change swaps the whole tree),
-          so the href always matches the one #params(-mobile) target that
-          actually exists. */}
-      <a
-        className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
-        href={isMobile ? "#params-mobile" : "#params"}
-      >
-        Skip to parameters
-      </a>
+    <PanelDataProvider value={panelData}>
+      <div className="app-shell">
+        {/* Skip link: off-screen until focused. Only the active layout is
+            mounted below (see M7 — a breakpoint change swaps the whole tree),
+            so the href always matches the one #params(-mobile) target that
+            actually exists. */}
+        <a
+          className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
+          href={isMobile ? "#params-mobile" : "#params"}
+        >
+          Skip to parameters
+        </a>
 
-      {/* Only the active layout mounts (M7): desktop and mobile used to both
-          render at once with CSS hiding one, doubling ParamForm/tab/search
-          work and leaving stray focus targets in the hidden tree. Tab, search
-          and viewer state are all hoisted above this split (panelState,
-          sheetDetent, view, showDimensions, …) so switching trees here loses
-          nothing. */}
-      {isMobile ? (
-        // ── Mobile layout ──
-        // --sheet-follow-h (set live by handleSheetFollow) sizes the viewer so
-        // its bottom edge tracks the sheet; data-sheet-dragging toggles the
-        // easing. See .app-shell__mobile-viewer in CSS.
-        <div className="app-shell__mobile" ref={mobileRootRef}>
-          {/* Background content: viewer, top bar, floating controls. Marked
-              `inert` while the sheet is at the Full detent (M16) — Full
-              visually covers this content, so it's removed from the tab
-              order and the accessibility tree rather than left as a hidden
-              focus trap. See the mobileBackgroundRef effect above. */}
-          <div className="app-shell__mobile-background" ref={mobileBackgroundRef}>
-            {/* Full-bleed viewer */}
-            <div className="app-shell__mobile-viewer">
-              <ViewerStage
-                {...stageProps}
-                viewerRef={mobileViewerRef}
-                active
-                reframeOnPreset={false}
-              />
-
-              {/* Mobile top bar — logo left, design centered, actions right
-                  (mirrors desktop). z-10, below the bottom sheet (z-30), so
-                  the full-detent sheet covers it and its drag handle stays
-                  grabbable. PR16: Messages used to be an overlay riding above
-                  this bar, which needed a z-lift to stay tappable underneath
-                  it — now it's a full-height dialog (z-50, see the mobile
-                  JSX below) that covers this bar entirely while open, so no
-                  such lift is needed any more. */}
-              <div className="mobile-top-bar absolute inset-x-0 top-0 z-10 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]">
-                <span className="inline-flex min-w-0 items-center gap-[0.4rem] justify-self-start overflow-hidden whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.92rem] font-bold">
-                  <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
-                </span>
-                <div className="mobile-top-bar__center inline-flex min-w-0 items-center justify-self-center">
-                  {designs.length > 1 && schema.ui?.gallery ? (
-                    <DesignPickerButton design={design} />
-                  ) : designs.length > 1 ? (
-                    <DesignPicker
-                      designs={designs}
-                      value={design.id}
-                      onChange={actions.designChange}
-                      openSignal={openPickerSignal}
-                      active={isMobile}
-                    />
-                  ) : (
-                    <span className="whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.85rem] font-semibold">
-                      {design.label}
-                    </span>
-                  )}
-                  {design.doc && (
-                    <IconButton
-                      label={t("bar.designGuide")}
-                      title={t("bar.aboutDesign")}
-                      onClick={actions.showDesignDoc}
-                      className="mobile-top-bar__design-doc size-7 shrink-0 p-[0.3rem]"
-                    >
-                      <GuideIcon size={15} />
-                    </IconButton>
-                  )}
-                </div>
-                {/* The Output bell doubles as the render-status indicator (a
-                    status dot rides its corner), so the narrow bar needs no
-                    separate pill; theme/help/licenses collapse into a ⋮ overflow. */}
-                <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
-                  <OutputToggle
-                    outputOpen={outputOpen}
-                    noticeCount={diagnostics.length}
-                    onToggleOutput={toggleOutput}
-                    status={{ rendering, ready, result, stale: stalePreview }}
-                    className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
-                  />
-                  <BarActions themeMode={themeMode} collapse />
-                </div>
-              </div>
-            </div>
-
-            {/* Floating action cluster — the same compact card the desktop
-                floats over its viewer, riding just above the sheet's top edge
-                (it follows the sheet up to the half detent via
-                --sheet-follow-h) instead of a solid docked footer band that
-                would reserve a strip of the viewport. Identical markup +
-                buttons to the desktop cluster. The after-export panel (when
-                shown) rides directly above it in the same dock, never
-                covering it — see ACTION_DOCK_CLASS's doc. */}
-            <div className={ACTION_DOCK_CLASS}>
-              {exportSuccess && (
-                <ExportSuccess
-                  state={exportSuccess}
-                  title={afterExport?.title}
-                  body={afterExport?.body}
-                  helpTab={afterExport?.helpTab}
-                  onDismiss={onDismissExportSuccess}
+        {/* Only the active layout mounts (M7): desktop and mobile used to both
+            render at once with CSS hiding one, doubling ParamForm/tab/search
+            work and leaving stray focus targets in the hidden tree. Tab, search
+            and viewer state are all hoisted above this split (panelState,
+            sheetDetent, view, showDimensions, …) so switching trees here loses
+            nothing. */}
+        {isMobile ? (
+          // ── Mobile layout ──
+          // --sheet-follow-h (set live by handleSheetFollow) sizes the viewer so
+          // its bottom edge tracks the sheet; data-sheet-dragging toggles the
+          // easing. See .app-shell__mobile-viewer in CSS.
+          <div className="app-shell__mobile" ref={mobileRootRef}>
+            {/* Background content: viewer, top bar, floating controls. Marked
+                `inert` while the sheet is at the Full detent (M16) — Full
+                visually covers this content, so it's removed from the tab
+                order and the accessibility tree rather than left as a hidden
+                focus trap. See the mobileBackgroundRef effect above. */}
+            <div className="app-shell__mobile-background" ref={mobileBackgroundRef}>
+              {/* Full-bleed viewer */}
+              <div className="app-shell__mobile-viewer">
+                <ViewerStage
+                  {...stageProps}
+                  viewerRef={mobileViewerRef}
+                  active
+                  reframeOnPreset={false}
                 />
-              )}
-              <div className={ACTION_CLUSTER_CLASS}>
-                <ActionButtons {...actionButtonsProps} />
-              </div>
-            </div>
 
-            <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
-          </div>
-
-          {/* Output console (mobile): PR16 — a full-height MODAL DIALOG rather
-              than a second surface stacked over the sheet. Two review-
-              sanctioned options existed: (a) replace the sheet's own content
-              area in place (raise it to Half, swap its tab content for the
-              console, restore the prior tab/detent on close), or (b) this —
-              a full-height dialog. (b) wins: it reuses the exact Dialog +
-              focus-trap + background-inert machinery every other overlay in
-              the app already relies on (Help, licenses, the design doc — see
-              Modal.tsx) instead of a bespoke save-then-restore dance for the
-              sheet, and "close the dialog" is already the right mental model
-              for skimming Messages — open it, read it, dismiss it, land back
-              exactly where the sheet already was, because the sheet's own
-              tab/scroll/detent were never touched (see openOutput's doc).
-              Radix's own hideOthers marks the rest of the page — including
-              the bottom sheet — aria-hidden while this is open, and its
-              overlay covers it visually and to the pointer, so the two
-              surfaces are never simultaneously reachable: never two stacked
-              bottom surfaces. The console's own Notices/Log/Metrics markup is
-              untouched — this mounts the SAME <OutputConsole> desktop docks
-              inline below its viewer; only the wrapper differs.
-              showCloseButton is off because OutputConsole supplies its own
-              `.output-console__close` (a stable hook scripts/smoke.mjs and
-              scripts/capture-screens.mjs both already depend on) — a second
-              Radix close button would be a confusing duplicate. */}
-          {outputOpen && (
-            <Dialog open onOpenChange={(o) => { if (!o) closeOutput(); }}>
-              <DialogContent
-                showCloseButton={false}
-                aria-label={t("console.regionAria")}
-                aria-describedby={undefined}
-                className="output-console-modal fixed inset-0 z-50 flex flex-col gap-0 rounded-none border-0 p-0 max-w-none translate-x-0 translate-y-0 sm:max-w-none"
-              >
-                <OutputConsole {...outputProps} className="h-full max-h-none border-t-0" />
-              </DialogContent>
-            </Dialog>
-          )}
-
-          {/* Persistent bottom sheet. Modal at the Full detent — see
-              BottomSheet's own focus-trap/restore effect, and the
-              mobileBackgroundRef inert wiring above for its background half. */}
-          <BottomSheet
-            detent={sheetDetent}
-            onDetentChange={handleDetentChange}
-            onFollow={handleSheetFollow}
-            onPeekHeightChange={handleSheetPeekHeight}
-            onHandleInteract={dismissSheetHint}
-            hint={sheetHintVisible ? t("hint.dragForSettings") : undefined}
-            peekHeight={PEEK_HEIGHT}
-            bottomInset={safeAreaBottom}
-          >
-            {(_detent, expand) => (
-              // The tab bar shows at every detent (including peek); tapping a tab
-              // raises a collapsed sheet. Auto-render + Reset are param-scoped, so
-              // they live inside the Parameters tab (SheetTabs), not here.
-              <div className="sheet-content" id="params-mobile">
-                <SheetTabs
-                  design={design}
-                  values={values}
-                  bundled={bundled}
-                  userPresets={userPresets}
-                  selected={selectedPreset}
-                  presetBaseline={presetBaseline}
-                  presetName={presetName}
-                  baseline={baseline}
-                  changedParams={changedParams}
-                  fileImport={fileImport}
-                  loadedFiles={loadedFiles}
-                  availableFontFamilies={availableFontFamilies}
-                  fontSuggestion={fontSuggestion}
-                  installedFonts={installedFonts}
-                  onActivate={expand}
-                  showVarName={showVarName}
-                  autoRender={autoRender}
-                  presetsLabel={presetsLabel}
-                  parametersLabel={parametersLabel}
-                  tab={panelState.tab}
-                  onTabChange={setPanelTab}
-                  search={panelState.search}
-                  onSearchChange={panelState.setSearch}
-                  onSearchBlur={onParamSearchHiddenBlur}
-                  settingsView={settingsView}
-                  experienceMode={experienceMode}
-                  quickStartEnabled={quickStartEnabled}
-                  focusHiddenDiffSignal={reviewHiddenSignal}
-                  checklist={checklistState}
-                  checklistReplaySignal={checklistReplaySignal}
-                  quickStartActive={quickStartActive}
-                  sheetDetent={sheetDetent}
-                  attention={attention}
-                  onOpenMessages={openOutput}
-                  readiness={readiness}
-                  measured={measured}
-                  renderedValues={renderedValues}
-                  computedInfo={computedInfo}
-                  reviewStale={reviewStale}
-                  onSelectView={handleSelectView}
-                />
-              </div>
-            )}
-          </BottomSheet>
-        </div>
-      ) : (
-        // ── Desktop layout ──
-        <div className="app-shell__desktop">
-          <CommandBar
-            schema={schema}
-            designs={designs}
-            designId={design.id}
-            theme={theme}
-            themeMode={themeMode}
-            rendering={rendering}
-            ready={ready}
-            result={result}
-            stalePreview={stalePreview}
-            outputOpen={outputOpen}
-            noticeCount={diagnostics.length}
-            onToggleOutput={toggleOutput}
-            openPickerSignal={openPickerSignal}
-            pickerActive={!isMobile}
-          />
-
-          <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
-            {/* Docked panel: Presets / Parameters / Files tabs (mirrors mobile). */}
-            <ParamPanel
-              design={design}
-              values={values}
-              bundled={bundled}
-              userPresets={userPresets}
-              selectedPreset={selectedPreset}
-              presetBaseline={presetBaseline}
-              presetName={presetName}
-              baseline={baseline}
-              changedParams={changedParams}
-              fileImport={fileImport}
-              loadedFiles={loadedFiles}
-              availableFontFamilies={availableFontFamilies}
-              fontSuggestion={fontSuggestion}
-              installedFonts={installedFonts}
-              panelSide={panelSide}
-              panelDefaultOpen={panelDefaultOpen}
-              showVarName={showVarName}
-              autoRender={autoRender}
-              presetsLabel={presetsLabel}
-              parametersLabel={parametersLabel}
-              panelTab={panelState.tab}
-              onPanelTabChange={setPanelTab}
-              search={panelState.search}
-              onSearchChange={panelState.setSearch}
-              onSearchBlur={onParamSearchHiddenBlur}
-              settingsView={settingsView}
-              experienceMode={experienceMode}
-              quickStartEnabled={quickStartEnabled}
-              focusHiddenDiffSignal={reviewHiddenSignal}
-              checklist={checklistState}
-              checklistReplaySignal={checklistReplaySignal}
-              quickStartActive={quickStartActive}
-              attention={attention}
-              onOpenMessages={openOutput}
-              readiness={readiness}
-              measured={measured}
-              renderedValues={renderedValues}
-              computedInfo={computedInfo}
-              reviewStale={reviewStale}
-              onSelectView={handleSelectView}
-            />
-
-            {/* Canvas */}
-            <div className="app-shell__viewer">
-              <ViewerStage {...stageProps} viewerRef={desktopViewerRef} active>
-                {/* Floating controls live inside viewer-wrap so they hover over the
-                    canvas — which shrinks when the output console docks below it —
-                    rather than overlapping the console's notices. The after-export
-                    panel (when shown) rides directly above the cluster in the same
-                    dock, never covering it — see ACTION_DOCK_CLASS's doc. */}
-                <div className={ACTION_DOCK_CLASS}>
-                  {exportSuccess && (
-                    <ExportSuccess
-                      state={exportSuccess}
-                      title={afterExport?.title}
-                      body={afterExport?.body}
-                      helpTab={afterExport?.helpTab}
-                      onDismiss={onDismissExportSuccess}
+                {/* Mobile top bar — logo left, design centered, actions right
+                    (mirrors desktop). z-10, below the bottom sheet (z-30), so
+                    the full-detent sheet covers it and its drag handle stays
+                    grabbable. PR16: Messages used to be an overlay riding above
+                    this bar, which needed a z-lift to stay tappable underneath
+                    it — now it's a full-height dialog (z-50, see the mobile
+                    JSX below) that covers this bar entirely while open, so no
+                    such lift is needed any more. */}
+                <div className="mobile-top-bar absolute inset-x-0 top-0 z-10 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]">
+                  <span className="inline-flex min-w-0 items-center gap-[0.4rem] justify-self-start overflow-hidden whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.92rem] font-bold">
+                    <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
+                  </span>
+                  <div className="mobile-top-bar__center inline-flex min-w-0 items-center justify-self-center">
+                    {designs.length > 1 && schema.ui?.gallery ? (
+                      <DesignPickerButton design={design} />
+                    ) : designs.length > 1 ? (
+                      <DesignPicker
+                        designs={designs}
+                        value={design.id}
+                        onChange={actions.designChange}
+                        openSignal={openPickerSignal}
+                        active={isMobile}
+                      />
+                    ) : (
+                      <span className="whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.85rem] font-semibold">
+                        {design.label}
+                      </span>
+                    )}
+                    {design.doc && (
+                      <IconButton
+                        label={t("bar.designGuide")}
+                        title={t("bar.aboutDesign")}
+                        onClick={actions.showDesignDoc}
+                        className="mobile-top-bar__design-doc size-7 shrink-0 p-[0.3rem]"
+                      >
+                        <GuideIcon size={15} />
+                      </IconButton>
+                    )}
+                  </div>
+                  {/* The Output bell doubles as the render-status indicator (a
+                      status dot rides its corner), so the narrow bar needs no
+                      separate pill; theme/help/licenses collapse into a ⋮ overflow. */}
+                  <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
+                    <OutputToggle
+                      outputOpen={outputOpen}
+                      noticeCount={diagnostics.length}
+                      onToggleOutput={toggleOutput}
+                      status={{ rendering, ready, result, stale: stalePreview }}
+                      className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
                     />
-                  )}
-                  <div className={ACTION_CLUSTER_CLASS}>
-                    <ActionButtons {...actionButtonsProps} />
+                    <BarActions themeMode={themeMode} collapse />
                   </div>
                 </div>
-                <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
-              </ViewerStage>
+              </div>
 
-              {/* Output console — inline below viewer */}
-              <OutputConsole {...outputProps} className="max-h-56" />
+              {/* Floating action cluster — the same compact card the desktop
+                  floats over its viewer, riding just above the sheet's top edge
+                  (it follows the sheet up to the half detent via
+                  --sheet-follow-h) instead of a solid docked footer band that
+                  would reserve a strip of the viewport. Identical markup +
+                  buttons to the desktop cluster. The after-export panel (when
+                  shown) rides directly above it in the same dock, never
+                  covering it — see ACTION_DOCK_CLASS's doc. */}
+              <div className={ACTION_DOCK_CLASS}>
+                {exportSuccess && (
+                  <ExportSuccess
+                    state={exportSuccess}
+                    title={afterExport?.title}
+                    body={afterExport?.body}
+                    helpTab={afterExport?.helpTab}
+                    onDismiss={onDismissExportSuccess}
+                  />
+                )}
+                <div className={ACTION_CLUSTER_CLASS}>
+                  <ActionButtons {...actionButtonsProps} />
+                </div>
+              </div>
+
+              <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
+            </div>
+
+            {/* Output console (mobile): PR16 — a full-height MODAL DIALOG rather
+                than a second surface stacked over the sheet. Two review-
+                sanctioned options existed: (a) replace the sheet's own content
+                area in place (raise it to Half, swap its tab content for the
+                console, restore the prior tab/detent on close), or (b) this —
+                a full-height dialog. (b) wins: it reuses the exact Dialog +
+                focus-trap + background-inert machinery every other overlay in
+                the app already relies on (Help, licenses, the design doc — see
+                Modal.tsx) instead of a bespoke save-then-restore dance for the
+                sheet, and "close the dialog" is already the right mental model
+                for skimming Messages — open it, read it, dismiss it, land back
+                exactly where the sheet already was, because the sheet's own
+                tab/scroll/detent were never touched (see openOutput's doc).
+                Radix's own hideOthers marks the rest of the page — including
+                the bottom sheet — aria-hidden while this is open, and its
+                overlay covers it visually and to the pointer, so the two
+                surfaces are never simultaneously reachable: never two stacked
+                bottom surfaces. The console's own Notices/Log/Metrics markup is
+                untouched — this mounts the SAME <OutputConsole> desktop docks
+                inline below its viewer; only the wrapper differs.
+                showCloseButton is off because OutputConsole supplies its own
+                `.output-console__close` (a stable hook scripts/smoke.mjs and
+                scripts/capture-screens.mjs both already depend on) — a second
+                Radix close button would be a confusing duplicate. */}
+            {outputOpen && (
+              <Dialog open onOpenChange={(o) => { if (!o) closeOutput(); }}>
+                <DialogContent
+                  showCloseButton={false}
+                  aria-label={t("console.regionAria")}
+                  aria-describedby={undefined}
+                  className="output-console-modal fixed inset-0 z-50 flex flex-col gap-0 rounded-none border-0 p-0 max-w-none translate-x-0 translate-y-0 sm:max-w-none"
+                >
+                  <OutputConsole {...outputProps} className="h-full max-h-none border-t-0" />
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {/* Persistent bottom sheet. Modal at the Full detent — see
+                BottomSheet's own focus-trap/restore effect, and the
+                mobileBackgroundRef inert wiring above for its background half. */}
+            <BottomSheet
+              detent={sheetDetent}
+              onDetentChange={handleDetentChange}
+              onFollow={handleSheetFollow}
+              onPeekHeightChange={handleSheetPeekHeight}
+              onHandleInteract={dismissSheetHint}
+              hint={sheetHintVisible ? t("hint.dragForSettings") : undefined}
+              peekHeight={PEEK_HEIGHT}
+              bottomInset={safeAreaBottom}
+            >
+              {(_detent, expand) => (
+                // The tab bar shows at every detent (including peek); tapping a tab
+                // raises a collapsed sheet. Auto-render + Reset are param-scoped, so
+                // they live inside the Parameters tab (SheetTabs), not here.
+                <div className="sheet-content" id="params-mobile">
+                  <SheetTabs
+                    bundled={bundled}
+                    userPresets={userPresets}
+                    selected={selectedPreset}
+                    fileImport={fileImport}
+                    loadedFiles={loadedFiles}
+                    onActivate={expand}
+                    autoRender={autoRender}
+                    presetsLabel={presetsLabel}
+                    parametersLabel={parametersLabel}
+                    tab={panelState.tab}
+                    onTabChange={setPanelTab}
+                    search={panelState.search}
+                    onSearchChange={panelState.setSearch}
+                    onSearchBlur={onParamSearchHiddenBlur}
+                    sheetDetent={sheetDetent}
+                  />
+                </div>
+              )}
+            </BottomSheet>
+          </div>
+        ) : (
+          // ── Desktop layout ──
+          <div className="app-shell__desktop">
+            <CommandBar
+              schema={schema}
+              designs={designs}
+              designId={design.id}
+              theme={theme}
+              themeMode={themeMode}
+              rendering={rendering}
+              ready={ready}
+              result={result}
+              stalePreview={stalePreview}
+              outputOpen={outputOpen}
+              noticeCount={diagnostics.length}
+              onToggleOutput={toggleOutput}
+              openPickerSignal={openPickerSignal}
+              pickerActive={!isMobile}
+            />
+
+            <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
+              {/* Docked panel: Presets / Parameters / Files tabs (mirrors mobile). */}
+              <ParamPanel
+                bundled={bundled}
+                userPresets={userPresets}
+                selectedPreset={selectedPreset}
+                fileImport={fileImport}
+                loadedFiles={loadedFiles}
+                panelSide={panelSide}
+                panelDefaultOpen={panelDefaultOpen}
+                autoRender={autoRender}
+                presetsLabel={presetsLabel}
+                parametersLabel={parametersLabel}
+                panelTab={panelState.tab}
+                onPanelTabChange={setPanelTab}
+                search={panelState.search}
+                onSearchChange={panelState.setSearch}
+                onSearchBlur={onParamSearchHiddenBlur}
+              />
+
+              {/* Canvas */}
+              <div className="app-shell__viewer">
+                <ViewerStage {...stageProps} viewerRef={desktopViewerRef} active>
+                  {/* Floating controls live inside viewer-wrap so they hover over the
+                      canvas — which shrinks when the output console docks below it —
+                      rather than overlapping the console's notices. The after-export
+                      panel (when shown) rides directly above the cluster in the same
+                      dock, never covering it — see ACTION_DOCK_CLASS's doc. */}
+                  <div className={ACTION_DOCK_CLASS}>
+                    {exportSuccess && (
+                      <ExportSuccess
+                        state={exportSuccess}
+                        title={afterExport?.title}
+                        body={afterExport?.body}
+                        helpTab={afterExport?.helpTab}
+                        onDismiss={onDismissExportSuccess}
+                      />
+                    )}
+                    <div className={ACTION_CLUSTER_CLASS}>
+                      <ActionButtons {...actionButtonsProps} />
+                    </div>
+                  </div>
+                  <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
+                </ViewerStage>
+
+                {/* Output console — inline below viewer */}
+                <OutputConsole {...outputProps} className="max-h-56" />
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </PanelDataProvider>
   );
 });
