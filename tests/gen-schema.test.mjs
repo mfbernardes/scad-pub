@@ -31,6 +31,7 @@ import {
   parseNotices,
   parseUi,
   parseParams,
+  unsteppedEssentialSections,
   parseFontFallback,
   parseLang,
   parseDir,
@@ -1425,6 +1426,19 @@ function paramsOf(scad) {
   }
 }
 
+// Like paramsOf, but returns parseParams' full result (params, sections,
+// steps, …) — the @step tests below need `sections`/`steps`, not just `params`.
+function parseOf(scad) {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-step-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(file, scad);
+  try {
+    return parseParams(file);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 test("only a string or enum param with an explicit @font is flagged isFont", () => {
   const params = paramsOf(
     `/* [Main] */\n` +
@@ -1774,6 +1788,200 @@ test("@advanced / @essential resolve end to end through generate()", () => {
   assert.equal(byName.edge_depth.advanced, undefined); // @essential override
   assert.equal(byName.note.advanced, undefined); // @essential no-op outside an advanced section
   assert.equal(byName.finish.advanced, undefined); // repeated "Extras" occurrence, unmarked
+});
+
+// ── @step ────────────────────────────────────────────────────────────────
+
+test("@step attaches to the section header it directly precedes, with an explicit label", () => {
+  const { steps } = parseOf(
+    `// @step basics | Basic settings\n` +
+      `/* [Main] */\n` +
+      `width = 10;\n`
+  );
+  assert.deepEqual(steps, [{ id: "basics", label: "Basic settings", sections: ["Main"] }]);
+});
+
+test("an omitted label defaults to the section name of the id's first occurrence", () => {
+  const { steps } = parseOf(`// @step mounting\n/* [Mounting] */\nmounting = "none";\n`);
+  assert.deepEqual(steps, [{ id: "mounting", label: "Mounting", sections: ["Mounting"] }]);
+});
+
+test("several section occurrences sharing one step id concatenate their sections in file order", () => {
+  const { steps, sections } = parseOf(
+    `// @step tag | Tag details\n` +
+      `/* [Text] */\n` +
+      `label = "hi";\n` +
+      `// @step tag\n` +
+      `/* [Size] */\n` +
+      `width = 10;\n`
+  );
+  assert.deepEqual(steps, [{ id: "tag", label: "Tag details", sections: ["Text", "Size"] }]);
+  assert.deepEqual(sections, ["Text", "Size"]);
+});
+
+test("a later occurrence's own label is ignored — only the first occurrence's label wins", () => {
+  const { steps } = parseOf(
+    `// @step tag | First label\n` +
+      `/* [Text] */\n` +
+      `label = "hi";\n` +
+      `// @step tag | Ignored label\n` +
+      `/* [Size] */\n` +
+      `width = 10;\n`
+  );
+  assert.equal(steps[0].label, "First label");
+});
+
+test("step ORDER is the order each id first appears, independent of section order", () => {
+  const { steps } = parseOf(
+    `// @step second\n` +
+      `/* [B] */\n` +
+      `b = 1;\n` +
+      `// @step first\n` +
+      `/* [A] */\n` +
+      `a = 1;\n`
+  );
+  assert.deepEqual(steps.map((s) => s.id), ["second", "first"]);
+});
+
+test("a section without @step is legal; sections/params are unaffected", () => {
+  const { steps, sections, params } = parseOf(
+    `// @step a\n` +
+      `/* [A] */\n` +
+      `x = 1;\n` +
+      `/* [B] */\n` +
+      `y = 2;\n`
+  );
+  assert.deepEqual(steps, [{ id: "a", label: "A", sections: ["A"] }]);
+  assert.deepEqual(sections, ["A", "B"]);
+  assert.equal(params.length, 2);
+});
+
+test("a design with no @step at all has an empty steps array", () => {
+  const { steps } = parseOf(`/* [Main] */\nwidth = 10;\n`);
+  assert.deepEqual(steps, []);
+});
+
+test("bare @step (no id) is malformed", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @step\nbar = 1;\n`),
+    /f\.scad:2: malformed @step annotation: '@step'/
+  );
+});
+
+test("@step with characters outside [A-Za-z0-9_-] in the id is malformed", () => {
+  assert.throws(
+    () => paramsOf(`// @step my.id\n/* [S] */\nbar = 1;\n`),
+    /f\.scad:1: malformed @step annotation/
+  );
+});
+
+test("@step with an explicit empty label after '|' is malformed", () => {
+  assert.throws(
+    () => paramsOf(`// @step foo |   \n/* [S] */\nbar = 1;\n`),
+    /f\.scad:1: malformed @step annotation/
+  );
+});
+
+test("@step directly above a parameter (not a section header) is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @step foo\nbar = 1;\n`),
+    /f\.scad:2: malformed @step annotation: '@step' is a section-level annotation, not valid directly above a parameter/
+  );
+});
+
+test("@step directly above the [Hidden] section header is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [Main] */\na = 1;\n// @step foo\n/* [Hidden] */\nsecret = 1;\n`),
+    /f\.scad:3: @step is not allowed on the \[Hidden\] section/
+  );
+});
+
+test("@step inside the [Hidden] section is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [Hidden] */\n// @step foo\nsecret = 1;\n`),
+    /f\.scad:2: @step is not allowed inside the \[Hidden\] section/
+  );
+});
+
+test("the unknown-annotation error message lists @step", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @shwoIf foo\nbar = 1;\n`),
+    /expected one of:.*@step/
+  );
+});
+
+test("unsteppedEssentialSections: [] when the design declares no steps", () => {
+  const { sections, params } = parseOf(`/* [Main] */\nwidth = 10;\n`);
+  assert.deepEqual(unsteppedEssentialSections(sections, [], []), []);
+  assert.deepEqual(unsteppedEssentialSections(sections, params, []), []);
+});
+
+test("unsteppedEssentialSections: an all-@advanced section left un-stepped is not flagged", () => {
+  const { sections, params, steps } = parseOf(
+    `// @step a\n` +
+      `/* [A] */\n` +
+      `x = 1;\n` +
+      `// @advanced\n` +
+      `/* [B] */\n` +
+      `y = 1;\n`
+  );
+  assert.deepEqual(unsteppedEssentialSections(sections, params, steps), []);
+});
+
+test("unsteppedEssentialSections: an essential section left un-stepped is flagged, in section order", () => {
+  const { sections, params, steps } = parseOf(
+    `// @step a\n` +
+      `/* [A] */\n` +
+      `x = 1;\n` +
+      `/* [B] */\n` +
+      `y = 1;\n` +
+      `/* [C] */\n` +
+      `z = 1;\n`
+  );
+  assert.deepEqual(unsteppedEssentialSections(sections, params, steps), ["B", "C"]);
+});
+
+test("@step resolves end to end through generate(): steps, ordering, shared sections", () => {
+  const { schema } = run("steps.config.json");
+  const d = schema.designs[0];
+  assert.deepEqual(d.steps, [
+    { id: "tag", label: "Tag details", sections: ["Text", "Size"] },
+    { id: "mounting", label: "Mounting", sections: ["Mounting"] },
+  ]);
+  assert.deepEqual(d.sections, ["Text", "Size", "Mounting", "Advanced tweaks", "Extra"]);
+});
+
+test("a design with no @step omits the `steps` field entirely (not [])", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].steps, undefined);
+});
+
+test("gen-schema warns (not fails) when an essential section is left un-stepped", () => {
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    run("steps.config.json");
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(
+    warnings.some((w) => /essential section\(s\) carry no step: Extra/.test(w)),
+    `expected a coverage warning mentioning 'Extra', got: ${JSON.stringify(warnings)}`
+  );
+});
+
+test("ui.strictSteps promotes the un-stepped-essential-section warning to a build error", () => {
+  assert.throws(
+    () => run("steps-strict.config.json"),
+    /gen-schema: design 'stepped' \(stepped\.scad\) declares @step but 1 essential section\(s\) carry no step: Extra/
+  );
+});
+
+test("parseUi: strictSteps defaults false and validates as a boolean", () => {
+  assert.equal(parseUi(undefined).strictSteps, false);
+  assert.equal(parseUi({ strictSteps: true }).strictSteps, true);
+  assert.throws(() => parseUi({ strictSteps: "yes" }), /'ui\.strictSteps' must be a boolean/);
 });
 
 test("parseFontFallback accepts a trimmed string or null; rejects empty", () => {

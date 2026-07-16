@@ -204,6 +204,19 @@ export interface Design {
   sections: string[];
   /** Section names that start collapsed (from a `// @collapsed` annotation). */
   collapsedSections?: string[];
+  /**
+   * Guided steps declared with `// @step <id> [| <label>]` (see
+   * docs/annotations.md#guided-steps--step), in step ORDER — the order each
+   * id first appears in the source file. `sections` lists the section names
+   * carrying that id, in file order (several section occurrences, even of
+   * different names, may share one id; their params concatenate in that
+   * order). Present only when the design declares at least one `@step`; an
+   * unstepped design omits this field entirely rather than emitting `[]`.
+   * Purely a UI grouping hint for the stepper the next milestone builds on
+   * top of this — it doesn't affect which sections/params exist, their
+   * `@showIf`/`@advanced` resolution, or geometry.
+   */
+  steps?: Array<{ id: string; label: string; sections: string[] }>;
   params: Param[];
 }
 
@@ -439,6 +452,16 @@ export interface UiConfig {
    * `export.downloaded` / `export.readyToShare`, and `export.nextSteps`).
    * None of these fields affect geometry (absent from renderHash).
    */
+  /**
+   * When true, a stepped design (one declaring at least one `// @step`)
+   * leaving an ESSENTIAL section without a step (see `Design.steps`) fails
+   * the build instead of only warning (`console.warn`) at gen-schema time.
+   * Default false. A section is essential when at least one of its
+   * parameters isn't `@advanced`; an all-`@advanced` section left un-stepped
+   * never triggers this, in either mode. Never affects geometry (absent from
+   * renderHash) — it's a gen-schema-time authoring lint, not a render input.
+   */
+  strictSteps?: boolean;
   afterExport?: {
     /** Overrides the outcome-led i18n title. */
     title?: string;

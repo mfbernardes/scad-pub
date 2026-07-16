@@ -1,0 +1,5 @@
+{
+  "source": "src",
+  "designs": [{ "id": "stepped", "label": "Stepped" }],
+  "ui": { "strictSteps": true }
+}

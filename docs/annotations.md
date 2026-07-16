@@ -113,6 +113,62 @@ Precedence, resolved per parameter:
 
 `// @showIf` composes with `// @advanced` as an AND: an advanced parameter that's also conditionally hidden needs both the "all settings" view active *and* its `@showIf` condition true to show its control. Like `@showIf` and `@collapsed`, this is UI-only: an advanced parameter's value is still retained and always sent to OpenSCAD, whether or not its control is currently shown.
 
+## Guided steps (`// @step`)
+
+Mark a section `// @step <id>` (or `// @step <id> | <label>`) to fold it into a named step of a guided, wizard-style flow — a curated subset of sections presented one at a time instead of the full scrolling form. This milestone only parses the annotation and emits `Design.steps`; the stepper UI that actually renders steps one-at-a-time is the next milestone. Declaring `// @step` today has no visible effect on the form.
+
+`// @step` is **section-level only** — directly above a `/* [Section] */` header, exactly like `// @collapsed` and section-level `// @advanced`:
+
+```scad
+// @step text | Text
+/* [Text] */
+label = "Room 1";
+
+// @step size | Size
+/* [Size] */
+width = 60; // [20:1:200]
+height = 25; // [10:1:100]
+
+// @step mounting
+/* [Mounting] */
+mounting = "none"; // [none, screw, countersunk]
+```
+
+- **`<id>`**: a bare token, `[A-Za-z0-9_-]+` — stable and never shown; it's what other tooling (and, in the next milestone, the stepper's own state) refers to the step by.
+- **`<label>`** (optional): free text, trimmed, shown as the step's own name in the UI. Omit it (bare `// @step mounting`) and the label defaults to the section name of that id's *first* occurrence in the file — here, "Mounting".
+
+### Sharing a step across sections
+
+Several section occurrences — even ones with different names — can carry the same step id. Their parameters concatenate, in file order, into one step:
+
+```scad
+// @step tag | Tag details
+/* [Text] */
+label = "Room 1";
+
+/* [Mounting] */
+// @step tag
+mounting = "none"; // [none, screw, countersunk]
+```
+
+Both `[Text]` and `[Mounting]` belong to the `tag` step here; its label is "Tag details", from the first occurrence. A later occurrence's own `| <label>` text (if it supplies one) is simply ignored — only the first appearance's label wins. This isn't an error; it's documented behavior, so renaming a label only ever means editing the first `// @step` line.
+
+**Step order** is the order each id first appears in the file — not necessarily the order of every section. Declare a step's *first* occurrence at the point in the file where you want it to appear in the step sequence.
+
+### Sections without a step
+
+A section without `// @step` is perfectly legal in a stepped design: the next milestone's stepper renders it in an always-visible tail below the step navigation, alongside the active step's own sections. This is deliberate for a section that doesn't belong in the guided flow — a `[Hidden]`-adjacent power-user section, for instance.
+
+What's *not* deliberate, most of the time, is simply forgetting to tag a section that should be part of the flow. gen-schema flags that case: once a design declares at least one `// @step`, every remaining **essential** section (one with at least one parameter that isn't `// @advanced` — see above) that carries no step gets a build-time warning listing it by name. An all-`@advanced` section left un-stepped never triggers this in either mode, since it was already going to be hidden from the default "essentials" view regardless.
+
+Set `"ui": { "strictSteps": true }` in the config (see [`ui.strictSteps`](config.md#ui-behaviour-and-pwa)) to promote that warning to a build **error** — useful once a stepped design is meant to route every essential setting through the guided flow and a forgotten section should block the build, not just print a warning.
+
+### Restrictions
+
+- `// @step` directly above a *parameter* (instead of a section header) is a malformed-annotation build error — the inverse of `// @essential`'s parameter-only restriction.
+- `// @step` is rejected on (or inside) the `[Hidden]` section, same as `// @advanced` and `// @essential` — a step over a section whose params are skipped entirely below is nonsensical.
+- A malformed shape — bare `@step` with no id, an id with characters outside `[A-Za-z0-9_-]`, or an explicit `| ` with nothing (or only whitespace) after it — fails the build with the file and line, exactly like every other annotation here.
+
 ## Font selectors (`// @font`)
 
 Mark a string parameter as a font selector. In the app, it renders as a **font dropdown** listing every face the renderer can use: bundled fonts plus imported fonts. Friendly names come from the font files themselves, such as "Liberation Sans Bold", never the raw Fontconfig `Family:style=Style` string. The list updates the moment you import a font, and the menu includes an **Import font…** action.

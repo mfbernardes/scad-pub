@@ -32,7 +32,7 @@ import { dirname, join, resolve } from "node:path";
 import { WASM_VERSION } from "./wasm-version.mjs";
 import { computeRenderHash, computeBinAssetVersions } from "./lib/hash.mjs";
 import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "./lib/fonts.mjs";
-import { humanize, parseParams } from "./lib/params.mjs";
+import { humanize, parseParams, unsteppedEssentialSections } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
 import { createDestinationRegistry, reconcileGenerated } from "./lib/destinations.mjs";
 import { sanitizeSvg } from "./lib/svg-sanitize.mjs";
@@ -72,7 +72,7 @@ export {
   parseUi,
 } from "./lib/config-parsers.mjs";
 export { parseFontFallback, renderFontsConf, fontFamilyNames } from "./lib/fonts.mjs";
-export { firstSentence, parseEnumHint, parseParams } from "./lib/params.mjs";
+export { firstSentence, parseEnumHint, parseParams, unsteppedEssentialSections } from "./lib/params.mjs";
 
 // Every top-level key gen-schema (or its helpers) reads from scadpub.config.json.
 // A key outside this set is almost always a typo (`popups`, `fontfallback`, …)
@@ -397,11 +397,25 @@ function resolveDesignList(config, SOURCE) {
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
-function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register }) {
+function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register, strictSteps }) {
   return resolveDesignList(config, SOURCE).map(({ iconSrc, imageSrc, docSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
-    const { params, sections, collapsedSections, meta } = parseParams(abs);
+    const { params, sections, collapsedSections, meta, steps } = parseParams(abs);
+    // A stepped design (>=1 `@step`) that leaves an essential section
+    // un-stepped is legal — it renders in the always-visible tail below the
+    // step navigation the next milestone adds — but is very likely a design
+    // simply forgetting to tag a section. Warn by default; `ui.strictSteps`
+    // promotes it to a build error. See docs/annotations.md's "Guided steps".
+    const unstepped = unsteppedEssentialSections(sections, params, steps);
+    if (unstepped.length > 0) {
+      const message =
+        `design '${d.id}' (${d.file}) declares @step but ${unstepped.length} essential ` +
+        `section(s) carry no step: ${unstepped.join(", ")} — they'll still render, ` +
+        `below the step navigation`;
+      if (strictSteps) throw new Error(`gen-schema: ${message}`);
+      console.warn(`gen-schema: ${message}`);
+    }
     copyAsset(d.file);
     // Auto-detect a sibling OpenSCAD parameterSets file: <name>.scad -> <name>.json
     // next to it. One file can hold many named sets; absent -> no bundled presets.
@@ -480,7 +494,21 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       copyFileSync(src, dest);
       doc = `scad/${name}`;
     }
-    return { ...d, description, icon, image, doc, presets, abs, sections, collapsedSections, params };
+    return {
+      ...d,
+      description,
+      icon,
+      image,
+      doc,
+      presets,
+      abs,
+      sections,
+      collapsedSections,
+      params,
+      // Only present when the design declares at least one @step — an
+      // unstepped design omits the field entirely rather than emitting [].
+      ...(steps.length ? { steps } : {}),
+    };
   });
 }
 
@@ -737,6 +765,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     relPosix,
     copyAsset,
     register: registry.register,
+    strictSteps: UI.strictSteps,
   });
   const defaultDesign = resolveDefaultDesign(config, designs);
 
