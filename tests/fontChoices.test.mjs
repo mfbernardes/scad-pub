@@ -24,7 +24,7 @@ const enumParam = (choices) => ({
 });
 
 test("fontValueLabel is the friendly face name, never the Fontconfig string", () => {
-  assert.equal(fontValueLabel("DIN 32986 Taktil Positiv:style=Regular"), "DIN 32986 Taktil Positiv");
+  assert.equal(fontValueLabel("Fictional Display Face:style=Regular"), "Fictional Display Face");
   assert.equal(fontValueLabel("Liberation Sans:style=Bold"), "Liberation Sans Bold");
   assert.equal(fontValueLabel("Liberation Sans"), "Liberation Sans");
 });
@@ -54,7 +54,7 @@ test("an installed face's entry reuses the stored value that already names it", 
 
 test("an installed face named by an enum choice reuses the choice's exact value", () => {
   const param = enumParam([
-    "DIN 32986 Taktil Positiv:style=Regular",
+    "Fictional Display Face:style=Regular",
     "Atkinson Hyperlegible:style=Regular",
     "Liberation Sans:style=Bold",
   ]);
@@ -71,7 +71,7 @@ test("an installed face named by an enum choice reuses the choice's exact value"
   // …while the not-installed suggestion stays visible, clearly not installed.
   assert.deepEqual(
     missing.map((c) => [c.value, c.label, c.installed]),
-    [["DIN 32986 Taktil Positiv:style=Regular", "DIN 32986 Taktil Positiv", false]]
+    [["Fictional Display Face:style=Regular", "Fictional Display Face", false]]
   );
 });
 
@@ -83,10 +83,10 @@ test("a selected value nothing lists stays visible as a missing entry", () => {
 });
 
 test("a selected missing enum choice is listed once, under the stored value", () => {
-  const param = enumParam(["DIN 32986 Taktil Positiv:style=Regular"]);
-  const { missing } = buildFontChoices(param, "DIN 32986 Taktil Positiv:style=Regular", FONTS);
+  const param = enumParam(["Fictional Display Face:style=Regular"]);
+  const { missing } = buildFontChoices(param, "Fictional Display Face:style=Regular", FONTS);
   assert.equal(missing.length, 1);
-  assert.equal(missing[0].value, "DIN 32986 Taktil Positiv:style=Regular");
+  assert.equal(missing[0].value, "Fictional Display Face:style=Regular");
 });
 
 test("an empty value yields no phantom entry", () => {
