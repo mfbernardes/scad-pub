@@ -30,14 +30,31 @@
 // Visited/current state is SESSION-ONLY (component state, not a persisted
 // pref) and resets to the first visible step on a design switch (compared
 // by object identity, mirroring ParamRows' own design-identity reset).
+//
+// THE TERMINAL "REVIEW" STAGE (PR18): the last chip used to be a bare
+// "Export" pointer — a heading plus one line of text nudging the visitor at
+// the floating Export button. It's now a real Review stage: a readiness line
+// (src/lib/readiness.ts's readinessState — ready/attention/failed/building),
+// the same "what will actually be produced" summary rows DimensionInfo shows
+// over the viewer (bounding box + `@info` params + runtime computed-info
+// rows — src/lib/reviewSummary.ts, a shared extraction so the two surfaces
+// can never disagree), a "Front view" button, and — unchanged — the pointer
+// at the Export action itself. Renders identically in both variants (see
+// ReviewContent below), mounted at the END of the scroll flow in scroll mode
+// and as the terminal step's content in steps mode, exactly where the old
+// Export section sat.
 import { useEffect, useRef, useState } from "react";
-import { Download as ExportIcon } from "lucide-react";
+import { ClipboardCheck as ReviewIcon } from "lucide-react";
 import type { Design, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import type { SettingsView } from "../lib/useExperience";
 import type { InstalledFont } from "../lib/fonts";
+import type { AttentionItem, ReadinessState } from "../lib/readiness";
+import type { Dimensions } from "./Viewer";
+import type { ComputedInfo } from "../lib/computedInfo";
+import type { ViewName } from "./views";
 import {
-  EXPORT_STEP_ID,
+  REVIEW_STEP_ID,
   currentStepFromIntersections,
   hasVisibleUnstepped,
   resolveCurrentStep,
@@ -45,9 +62,11 @@ import {
   visibleSteps,
   type QuickStartStep,
 } from "../lib/quickStart";
+import { buildReviewRows, readinessDotClass, readinessLabel, readinessPulse } from "../lib/reviewSummary";
 import { t } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { ParamRows, type FocusParamRequest, type ParamSectionGroup } from "./ParamRows";
+import { AttentionItems } from "./AttentionItems";
 import { Button } from "./ui/button";
 
 interface Props {
@@ -99,6 +118,138 @@ interface Props {
    * "steps" — via CustomizeTab's own `variant` prop, never derived here.
    */
   variant?: "scroll" | "steps";
+  /**
+   * PR18's Review stage inputs — the terminal "Review" chip's own content
+   * (ReviewContent below), all forwarded verbatim from CustomizeTab, which in
+   * turn gets them from AppShell. Overall production-readiness for the
+   * CURRENT render (src/lib/readiness.ts's readinessState).
+   */
+  readiness?: ReadinessState;
+  /** Unresolved production-readiness gaps for the current render — the exact
+   *  same list CustomizeTab's own attention chip strip shows, reused here via
+   *  AttentionItems so the Review stage's "Needs attention" detail can never
+   *  drift from it. */
+  attention?: AttentionItem[];
+  /** A font-fallback attention item's action (CustomizeTab's `focusOnParam`) —
+   *  reveal + focus the owning param's control. */
+  onGoToSetting?: (name: string) => void;
+  /** A notice attention item's action: open the Output console (Messages). */
+  onOpenMessages?: () => void;
+  /** The active viewer's measured bounding box (mm), or null before any
+   *  render has landed. */
+  measured?: Dimensions | null;
+  /** Values behind the CURRENT render (not the live controls in `values`) —
+   *  what the summary's `@info` rows read, mirroring DimensionInfo's own
+   *  `values` prop so both surfaces show the same figures. */
+  renderedValues?: Values;
+  /** Runtime `echo("@info", …)` rows for the current render (src/lib/
+   *  computedInfo.ts). */
+  computedInfo?: ComputedInfo[];
+  /** Whether the summary's figures are stale (src/lib/renderState.ts's
+   *  isMeasurementStale) — the same dim+italic treatment DimensionInfo gives
+   *  an out-of-date preview. */
+  reviewStale?: boolean;
+  /** Snap the active viewer to a standard camera view — the Review stage's
+   *  "Front view" button. `setView` is an instant camera jump (Viewer.tsx's
+   *  frameView), not an animation, so there's no prefers-reduced-motion
+   *  concern here (unlike the scroll-mode chip navigation above). */
+  onSelectView?: (view: ViewName) => void;
+}
+
+// The Review-stage badge/action row family — a compact, muted card matching
+// the attention chip strip's own visual language (bg-muted, small text) but
+// scoped to this card rather than CustomizeTab's stable `.attention-chip`
+// hooks, so the two can coexist on screen at once in scroll mode (every
+// step's group — including this trailing one — mounts simultaneously) without
+// colliding on the same class the smoke suite counts elsewhere.
+const reviewAttentionItemClass = "flex items-start gap-[0.4rem] text-[0.8rem] text-foreground";
+const reviewAttentionActionClass =
+  "inline-flex shrink-0 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent p-0 font-medium text-brand hover:underline focus-visible:outline-offset-2";
+
+/**
+ * The Review stage's own content — a readiness line, the "what will actually
+ * be produced" summary (src/lib/reviewSummary.ts, the same rows DimensionInfo
+ * shows), a "Front view" button, and the (unchanged) pointer at the Export
+ * action. Identical markup in both variants — only where it's mounted
+ * (scroll mode's trailing section vs. steps mode's terminal step) differs —
+ * so it's factored out rather than written twice.
+ */
+function ReviewContent({
+  readiness = "building",
+  attention = [],
+  onGoToSetting = () => {},
+  onOpenMessages,
+  rows,
+  stale = false,
+  onSelectView,
+}: {
+  readiness?: ReadinessState;
+  attention?: AttentionItem[];
+  onGoToSetting?: (name: string) => void;
+  onOpenMessages?: () => void;
+  rows: ReturnType<typeof buildReviewRows>;
+  stale?: boolean;
+  onSelectView?: (view: ViewName) => void;
+}) {
+  return (
+    <div className="quick-start__review flex flex-col gap-3">
+      <div className="quick-start__review-readiness flex items-center gap-2 text-[0.85rem] font-medium text-foreground">
+        <span
+          aria-hidden="true"
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            readinessDotClass(readiness),
+            readinessPulse(readiness) && "animate-pulse"
+          )}
+        />
+        <span>{readinessLabel(readiness)}</span>
+      </div>
+      {readiness === "attention" && (
+        <AttentionItems
+          attention={attention}
+          onGoToSetting={onGoToSetting}
+          onOpenMessages={onOpenMessages}
+          className="quick-start__review-attention flex flex-col gap-[0.35rem] rounded-(--radius-sm) border border-(color:--glass-border) bg-muted/60 p-2"
+          itemClassName={reviewAttentionItemClass}
+          actionClassName={reviewAttentionActionClass}
+        />
+      )}
+      {rows.length > 0 && (
+        <dl
+          className={cn(
+            "quick-start__review-summary m-0 flex flex-col gap-[0.3rem] text-[0.85rem]",
+            stale && "italic opacity-70"
+          )}
+          aria-label={t("dimensions.aria")}
+        >
+          {rows.map((r) => (
+            <div
+              key={r.key}
+              className={cn(
+                "flex items-baseline justify-between gap-3",
+                r.headline ? "font-semibold text-foreground" : "text-muted-foreground"
+              )}
+            >
+              <dt>{r.label}</dt>
+              <dd className="m-0 text-right text-foreground tabular-nums break-words">{r.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="quick-start__review-front-view self-start"
+        onClick={() => onSelectView?.("front")}
+      >
+        {t("quickstart.frontView")}
+      </Button>
+      <p className="quick-start__review-export-hint text-[0.85rem] text-muted-foreground">
+        {t("quickstart.exportHint", { export: t("action.export") })}
+      </p>
+    </div>
+  );
 }
 
 // A thin band across the top of the scroll container: only a group heading
@@ -143,11 +294,20 @@ export function QuickStart({
   focusParam,
   attentionParams,
   variant = "steps",
+  readiness = "building",
+  attention = [],
+  onGoToSetting,
+  onOpenMessages,
+  measured = null,
+  renderedValues,
+  computedInfo = [],
+  reviewStale = false,
+  onSelectView,
 }: Props) {
   const steps = visibleSteps(design, values, view);
-  const stepOrder = [...steps.map((s) => s.id), EXPORT_STEP_ID];
+  const stepOrder = [...steps.map((s) => s.id), REVIEW_STEP_ID];
 
-  const [currentId, setCurrentId] = useState<string>(() => steps[0]?.id ?? EXPORT_STEP_ID);
+  const [currentId, setCurrentId] = useState<string>(() => steps[0]?.id ?? REVIEW_STEP_ID);
   // "Visited" (sr-only text on the chip, see below), not "valid" or
   // "complete": there is no per-param validation system in this app (a
   // param's value is whatever the control last committed — there's no
@@ -166,7 +326,7 @@ export function QuickStart({
   // whatever the visitor is still doing).
   const pendingFocusRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
-  // Scroll mode only: every step-group heading (+ the trailing Export
+  // Scroll mode only: every step-group heading (+ the trailing Review
   // heading), keyed by step id — the IntersectionObserver's targets and
   // scrollToGroup's jump targets. A plain mutable ref (not state): membership
   // changes on every mount/unmount of a group, and nothing needs to re-render
@@ -180,11 +340,11 @@ export function QuickStart({
   // same idiom ParamRows uses for its own design-identity reset): a design
   // switch restarts at the first visible step with a fresh visited set; on
   // the same design, a value change that hid the current step falls back to
-  // the nearest remaining one (or Export) via resolveCurrentStep.
+  // the nearest remaining one (or Review) via resolveCurrentStep.
   const lastDesignRef = useRef(design);
   const designChanged = lastDesignRef.current !== design;
   if (designChanged) lastDesignRef.current = design;
-  const resolved = designChanged ? (steps[0]?.id ?? EXPORT_STEP_ID) : resolveCurrentStep(design, steps, currentId);
+  const resolved = designChanged ? (steps[0]?.id ?? REVIEW_STEP_ID) : resolveCurrentStep(design, steps, currentId);
   if (resolved !== currentId) {
     setCurrentId(resolved);
     setVisited((prev) => {
@@ -313,15 +473,21 @@ export function QuickStart({
   }, [focusParam]);
 
   const currentIndex = stepOrder.indexOf(effectiveCurrentId);
-  const isExportCurrent = effectiveCurrentId === EXPORT_STEP_ID;
+  const isReviewCurrent = effectiveCurrentId === REVIEW_STEP_ID;
   const currentStep = steps.find((s) => s.id === effectiveCurrentId) ?? null;
 
   // Steps mode: the tail sits below whichever single step is showing, so it's
-  // suppressed while the Export "step" is current (nothing else belongs on
+  // suppressed while the Review "step" is current (nothing else belongs on
   // that screen). Scroll mode has no such exclusivity — every group renders
   // at once, the tail included — so it's gated on content alone.
-  const showAlsoAvailableSteps = !isExportCurrent && hasVisibleUnstepped(design, values, view);
+  const showAlsoAvailableSteps = !isReviewCurrent && hasVisibleUnstepped(design, values, view);
   const showAlsoAvailable = variant === "scroll" ? hasVisibleUnstepped(design, values, view) : showAlsoAvailableSteps;
+
+  // PR18's Review stage: rows reflect the RENDERED model (renderedValues),
+  // falling back to the live controls only when the caller hasn't wired a
+  // distinct rendered snapshot (e.g. a test harness) — same fallback shape as
+  // `baseline`/`changedParams` elsewhere in this file.
+  const reviewRows = buildReviewRows(design, renderedValues ?? values, measured, computedInfo);
 
   const goBack = () => {
     if (currentIndex > 0) select(stepOrder[currentIndex - 1], { focus: true });
@@ -352,7 +518,7 @@ export function QuickStart({
     !!attentionParams?.size &&
     design.params.some((p) => step.sections.includes(p.section) && attentionParams.has(p.name));
 
-  // Scroll mode's chip/Export click and heading ref-callback factory —
+  // Scroll mode's chip/Review click and heading ref-callback factory —
   // extracted so the strip (shared markup below) doesn't repeat this per
   // button, and so a group's ref registration/cleanup stays in one place.
   const onChipActivate = (id: string) => (variant === "scroll" ? selectScroll(id) : select(id));
@@ -408,22 +574,26 @@ export function QuickStart({
         })}
         <button
           type="button"
-          className={cn(chipClass, "quick-start__step--export", isExportCurrent ? chipCurrent : chipInactive)}
-          aria-current={isExportCurrent ? "step" : undefined}
-          onClick={() => onChipActivate(EXPORT_STEP_ID)}
+          className={cn(chipClass, "quick-start__step--review", isReviewCurrent ? chipCurrent : chipInactive)}
+          aria-current={isReviewCurrent ? "step" : undefined}
+          onClick={() => onChipActivate(REVIEW_STEP_ID)}
         >
-          <ExportIcon size={13} aria-hidden="true" />
-          {t("quickstart.export")}
-          {visited.has(EXPORT_STEP_ID) && <span className="sr-only"> — {t("quickstart.visited")}</span>}
+          <ReviewIcon size={13} aria-hidden="true" />
+          {t("quickstart.review")}
+          {readiness === "attention" && (
+            <span aria-hidden="true" className="quick-start__step-attention size-[6px] shrink-0 rounded-full bg-warn" />
+          )}
+          {readiness === "attention" && <span className="sr-only"> — {t("checklist.attention")}</span>}
+          {visited.has(REVIEW_STEP_ID) && <span className="sr-only"> — {t("quickstart.visited")}</span>}
         </button>
       </nav>
 
       {variant === "scroll" ? (
         // Desktop: every visible step's group renders at once — a scrollable
         // form, not a wizard — followed by the "Also available" tail and a
-        // final section pointing at the Export action (which floats over the
-        // viewer, not part of this panel, so there's nothing to render here
-        // but a pointer to it — see this component's file-level doc).
+        // final Review section (readiness + summary + front view + the
+        // Export pointer — see ReviewContent above; the Export action itself
+        // floats over the viewer, not part of this panel).
         <div className="quick-start__scroll-content flex min-w-0 flex-col gap-6">
           {steps.map((step) => (
             <section
@@ -466,36 +636,48 @@ export function QuickStart({
             </div>
           )}
 
-          <div className="quick-start__export flex flex-col gap-1 border-t pt-3">
+          <div className="flex flex-col gap-1 border-t pt-3">
             <h3
-              id={`quick-start-heading-${EXPORT_STEP_ID}`}
-              data-step-group={EXPORT_STEP_ID}
-              ref={groupHeadingRef(EXPORT_STEP_ID)}
+              id={`quick-start-heading-${REVIEW_STEP_ID}`}
+              data-step-group={REVIEW_STEP_ID}
+              ref={groupHeadingRef(REVIEW_STEP_ID)}
               tabIndex={-1}
               className={groupHeadingClass}
             >
-              {t("quickstart.exportHeading")}
+              {t("quickstart.review")}
             </h3>
-            <p className="text-[0.85rem] text-muted-foreground">
-              {t("quickstart.exportHint", { export: t("action.export") })}
-            </p>
+            <ReviewContent
+              readiness={readiness}
+              attention={attention}
+              onGoToSetting={onGoToSetting}
+              onOpenMessages={onOpenMessages}
+              rows={reviewRows}
+              stale={reviewStale}
+              onSelectView={onSelectView}
+            />
           </div>
         </div>
       ) : (
         <>
           <div className="quick-start__content min-w-0">
-            {isExportCurrent ? (
-              <div className="quick-start__export flex flex-col gap-1">
+            {isReviewCurrent ? (
+              <div className="flex flex-col gap-1">
                 <h3
                   ref={headingRef}
                   tabIndex={-1}
                   className="font-display text-[0.95rem] font-semibold text-foreground outline-none"
                 >
-                  {t("quickstart.exportHeading")}
+                  {t("quickstart.review")}
                 </h3>
-                <p className="text-[0.85rem] text-muted-foreground">
-                  {t("quickstart.exportHint", { export: t("action.export") })}
-                </p>
+                <ReviewContent
+                  readiness={readiness}
+                  attention={attention}
+                  onGoToSetting={onGoToSetting}
+                  onOpenMessages={onOpenMessages}
+                  rows={reviewRows}
+                  stale={reviewStale}
+                  onSelectView={onSelectView}
+                />
               </div>
             ) : currentStep ? (
               <>
@@ -544,9 +726,9 @@ export function QuickStart({
             >
               {t("quickstart.back")}
             </Button>
-            {!isExportCurrent && (
+            {!isReviewCurrent && (
               <Button type="button" variant="default" size="sm" className="quick-start__next" onClick={goNext}>
-                {currentIndex === stepOrder.length - 2 ? t("quickstart.nextExport") : t("quickstart.next")}
+                {currentIndex === stepOrder.length - 2 ? t("quickstart.nextReview") : t("quickstart.next")}
               </Button>
             )}
           </div>

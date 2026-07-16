@@ -973,7 +973,7 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
   check((await quickStart.count()) === 1, "QuickStart shown in guided + essentials for a stepped design (tag)");
 
   const chips = page.locator(".quick-start__step");
-  check((await chips.count()) === 5, "5 chips shown (4 @step sections + Export)");
+  check((await chips.count()) === 5, "5 chips shown (4 @step sections + Review)");
   check((await chips.nth(0).getAttribute("aria-current")) === "step", "the first step chip starts current");
 
   // Scroll mode: every step's group renders simultaneously — a scrollable
@@ -1041,18 +1041,49 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
     .catch(() => false);
   check(scrolledNearTop, "the clicked step's heading actually scrolled near the top of the panel");
 
-  // Export chip: scrolls to the end of the form and shows the export hint
-  // (never a duplicate of the floating Export action itself).
+  // Review chip (PR18 — was a bare "Export" pointer): scrolls to the end of
+  // the form and shows a readiness line, the "what will actually be
+  // produced" summary (bounding box + @info rows), a "Front view" button,
+  // and — unchanged — the pointer at the Export action (never a duplicate of
+  // the floating Export button itself).
   await chips.last().click();
-  check((await chips.last().getAttribute("aria-current")) === "step", "clicking the Export chip sets it current");
+  check((await chips.last().getAttribute("aria-current")) === "step", "clicking the Review chip sets it current");
+  const review = page.locator(".quick-start__review");
+  check(await review.isVisible(), "the Review chip's own section actually scrolled into view");
   check(
-    await page.locator(".quick-start__export").isVisible(),
-    "the Export chip's own section actually scrolled into view"
+    /Ready to export/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
+    "Review's readiness line reads \"Ready to export\" for the default, fully-rendered, no-attention state"
   );
   check(
-    /Export 3D model/.test((await page.locator(".quick-start__export").textContent()) ?? ""),
-    "the Export section's content points at the Export action rather than duplicating it"
+    /Dimensions/.test((await page.locator(".quick-start__review-summary").textContent()) ?? ""),
+    "Review's summary includes the Dimensions row (reused from DimensionInfo's own derivation)"
   );
+  check(
+    (await page.locator(".quick-start__review-summary > div").count()) > 1,
+    "Review's summary includes at least one @info row beyond the Dimensions headline (tag has several)"
+  );
+  check(
+    /Export 3D model/.test((await review.textContent()) ?? ""),
+    "Review's content still points at the Export action rather than duplicating it"
+  );
+
+  // "Front view" actually drives the shared viewer: the HUD's view picker
+  // trigger reflects the newly-applied view (ViewPicker.tsx's own
+  // aria-label/title), proving the button is wired through AppShell's
+  // onSelectView the same way the HUD's own picker is.
+  await review.getByRole("button", { name: "Front view" }).click();
+  await page
+    .waitForFunction(
+      () => document.querySelector(".viewer-hud button[title^='View:']")?.getAttribute("title") === "View: Front",
+      { timeout: 3000 }
+    )
+    .catch(() => {});
+  check(
+    (await page.locator(".viewer-hud button[title='View: Front']").count()) === 1,
+    "Review's \"Front view\" button snaps the shared viewer to the front view"
+  );
+
+  await runAxe(page, check, "QuickStart Review stage visible (essentials view, tag, scroll mode)");
 
   // All settings escape: switching to All settings shows the classic form
   // (and facet_angle — the @advanced Quality section, per PR3's toggle
@@ -1113,7 +1144,7 @@ async function checkQuickStartMobile({ browser, base, check, ids, paramsTabName 
     check((await quickStart.count()) === 1, "QuickStart shown on mobile too (guided + essentials + stepped design)");
 
     const chips = page.locator(".quick-start__step");
-    check((await chips.count()) === 5, "5 chips shown on mobile (4 @step sections + Export)");
+    check((await chips.count()) === 5, "5 chips shown on mobile (4 @step sections + Review)");
 
     // Mobile stays one-step-at-a-time: scroll mode's simultaneous-group
     // markup never mounts here, and Back/Next still drive navigation.
@@ -1138,6 +1169,28 @@ async function checkQuickStartMobile({ browser, base, check, ids, paramsTabName 
     check((await paramRow(page, "width").count()) > 0, "jumping back via chip shows that step's params again");
 
     await runAxe(page, check, "QuickStart visible on mobile (steps mode)");
+
+    // Walk forward through every real step via Next to the terminal Review
+    // stage (PR18): the LAST real step's Next button reads "Next: Review"
+    // (was "Next: Export"), and clicking it actually lands on the Review
+    // stage's own content — the same stage scroll mode shows all at once,
+    // here reached one step at a time like every other mobile step.
+    await chips.nth(0).click(); // back to Size, a known starting point
+    for (let i = 0; i < 3; i++) await nextBtn.click(); // Size -> Text -> Emblem -> Hanging hole
+    check(
+      /Next: Review/.test((await nextBtn.textContent()) ?? ""),
+      "the last real step's Next button reads \"Next: Review\""
+    );
+    await nextBtn.click(); // Hanging hole -> Review
+    check((await page.locator(".quick-start__review").count()) === 1, "\"Next: Review\" walks to the Review step on mobile");
+    check((await page.locator(".quick-start__back").count()) === 1, "Back is still reachable from the Review step");
+    check((await page.locator(".quick-start__next").count()) === 0, "no Next button once the Review step is current");
+    check(
+      /Ready to export/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
+      "mobile Review stage shows the same readiness line as desktop"
+    );
+
+    await runAxe(page, check, "QuickStart Review stage visible on mobile (steps mode)");
   } finally {
     await context.close();
   }
@@ -1411,6 +1464,20 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
     "QuickStart's current step actually switched to Text"
   );
 
+  // The Review stage (PR18) surfaces the same gap a third time: its own
+  // readiness line and attention listing, not just the top strip and the
+  // checklist. Scroll mode mounts every step's group at once (including the
+  // trailing Review section), so these are already in the DOM regardless of
+  // which chip is "current" — no navigation needed to read them.
+  check(
+    /Needs attention/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
+    "Review's readiness line reads \"Needs attention\" while the font fallback is unresolved"
+  );
+  check(
+    ((await page.locator(".quick-start__review-attention").textContent()) ?? "").includes("No Such Font"),
+    "Review's own attention listing names the missing family too"
+  );
+
   // Restore a bundled family: attention clears everywhere.
   await page.locator(".font-select").click();
   await page.getByRole("option", { name: "Liberation Sans", exact: true }).click();
@@ -1419,6 +1486,10 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   check(
     (await page.locator(".action-export__attention-dot").count()) === 0,
     "export indicator clears too"
+  );
+  check(
+    /Ready to export/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
+    "Review's readiness line returns to \"Ready to export\" once the font is restored"
   );
 
   // Confirm the checklist itself returns to "ready" too. Selecting the

@@ -9,7 +9,10 @@ import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import type { ExperienceMode, SettingsView } from "../lib/useExperience";
 import type { ChecklistState } from "../lib/checklist";
-import type { AttentionItem } from "../lib/readiness";
+import type { AttentionItem, ReadinessState } from "../lib/readiness";
+import type { Dimensions } from "./Viewer";
+import type { ComputedInfo } from "../lib/computedInfo";
+import type { ViewName } from "./views";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import type { PanelTab } from "../lib/usePanelState";
@@ -102,6 +105,18 @@ interface Props {
   attention: AttentionItem[];
   /** Forwarded to CustomizeTab — see its own doc. */
   onOpenMessages?: () => void;
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  readiness?: ReadinessState;
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  measured?: Dimensions | null;
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  renderedValues?: Values;
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  computedInfo?: ComputedInfo[];
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  reviewStale?: boolean;
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  onSelectView?: (view: ViewName) => void;
 }
 
 export function ParamPanel({
@@ -140,6 +155,12 @@ export function ParamPanel({
   quickStartActive = false,
   attention,
   onOpenMessages,
+  readiness,
+  measured,
+  renderedValues,
+  computedInfo,
+  reviewStale,
+  onSelectView,
 }: Props) {
   const {
     applyPreset,
@@ -336,6 +357,12 @@ export function ParamPanel({
             focusHiddenDiffSignal={focusHiddenDiffSignal}
             attention={attention}
             onOpenMessages={onOpenMessages}
+            readiness={readiness}
+            measured={measured}
+            renderedValues={renderedValues}
+            computedInfo={computedInfo}
+            reviewStale={reviewStale}
+            onSelectView={onSelectView}
             // Desktop's docked panel has room to spare and its own scroll
             // container — QuickStart renders every step at once instead of a
             // one-at-a-time wizard (PR15). See CustomizeTab's own `variant` doc.

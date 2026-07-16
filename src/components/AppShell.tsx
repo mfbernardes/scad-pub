@@ -14,7 +14,7 @@ import type { PauseReason } from "../lib/renderState";
 import type { ViewerHandle, Dimensions } from "./Viewer";
 import type { ChecklistState } from "../lib/checklist";
 import type { NoticeAttentionInput } from "../lib/readiness";
-import { deriveAttention } from "../lib/readiness";
+import { deriveAttention, readinessState } from "../lib/readiness";
 import { quickStartAvailable } from "../lib/quickStart";
 import { initialSheetDetent } from "../lib/sheetDetent";
 import { makeOnceFlag } from "../lib/prefs";
@@ -23,6 +23,7 @@ import { t } from "../lib/i18n";
 import { friendlyRenderError } from "../lib/friendlyErrors";
 import { hiddenAdvancedDiff } from "../lib/paramFilter";
 import { defaultsFor } from "../lib/presets";
+import { isMeasurementStale } from "../lib/renderState";
 
 // Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
 // ending at the tab underline — no sliver of the tab's content.
@@ -467,6 +468,23 @@ export const AppShell = memo(function AppShell({
     [design, values, availableFontFamilies, noticeAttentionInputs]
   );
 
+  // PR18's Review stage: overall production-readiness for the current render
+  // (failed > attention > ready > building — see readiness.ts's own
+  // precedence doc), mirroring checklistState's `resultOk` below exactly so
+  // the Review stage's readiness line and the checklist's "Preview" row can
+  // never disagree.
+  const readiness = useMemo(
+    () => readinessState(result ? result.ok : null, attention),
+    [result, attention]
+  );
+  // Whether the Review stage's summary figures are stale — shared with
+  // ViewerStage's DimensionInfo panel via renderState.ts's isMeasurementStale
+  // so the two "what will actually be produced" surfaces can never disagree.
+  const reviewStale = useMemo(
+    () => isMeasurementStale(stalePreview, result, retainedResult),
+    [stalePreview, result, retainedResult]
+  );
+
   const checklistState: ChecklistState = {
     enabled: showChecklist,
     designCount: designs.length,
@@ -903,6 +921,12 @@ export const AppShell = memo(function AppShell({
                   sheetDetent={sheetDetent}
                   attention={attention}
                   onOpenMessages={openOutput}
+                  readiness={readiness}
+                  measured={measured}
+                  renderedValues={renderedValues}
+                  computedInfo={computedInfo}
+                  reviewStale={reviewStale}
+                  onSelectView={handleSelectView}
                 />
               </div>
             )}
@@ -965,6 +989,12 @@ export const AppShell = memo(function AppShell({
               quickStartActive={quickStartActive}
               attention={attention}
               onOpenMessages={openOutput}
+              readiness={readiness}
+              measured={measured}
+              renderedValues={renderedValues}
+              computedInfo={computedInfo}
+              reviewStale={reviewStale}
+              onSelectView={handleSelectView}
             />
 
             {/* Canvas */}

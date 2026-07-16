@@ -13,10 +13,12 @@ import { isShown } from "./paramFilter";
 
 export type QuickStartStep = NonNullable<Design["steps"]>[number];
 
-/** Sentinel id for the trailing "Export" chip — not a real `@step` id (those
- *  are validated at build time to be `[A-Za-z0-9_-]+`, so this deliberately
- *  isn't shaped like one and can never collide with an authored id). */
-export const EXPORT_STEP_ID = "__export__";
+/** Sentinel id for the trailing "Review" chip (PR18 — was "Export" before the
+ *  Review stage replaced the bare export pointer) — not a real `@step` id
+ *  (those are validated at build time to be `[A-Za-z0-9_-]+`, so this
+ *  deliberately isn't shaped like one and can never collide with an authored
+ *  id). */
+export const REVIEW_STEP_ID = "__review__";
 
 function sectionHasVisibleParam(
   design: Design,
@@ -66,10 +68,10 @@ export function hasVisibleUnstepped(design: Design, values: Values, view: Settin
 
 /**
  * Resolves which step/chip should be "current" given the previously-current
- * id (a real step id, `EXPORT_STEP_ID`, or null on first mount for the
+ * id (a real step id, `REVIEW_STEP_ID`, or null on first mount for the
  * design) and the step list currently visible (see `visibleSteps`):
  *
- *  - the Export chip is never hidden, so a previous `EXPORT_STEP_ID` always
+ *  - the Review chip is never hidden, so a previous `REVIEW_STEP_ID` always
  *    stays put;
  *  - a previous step id that's still visible stays put;
  *  - otherwise (the previous current step just disappeared), fall back to
@@ -77,7 +79,7 @@ export function hasVisibleUnstepped(design: Design, values: Values, view: Settin
  *    the filtered list) is closest to the previous step's — the "nearest
  *    remaining step", not always snapping back to the first one;
  *  - when no step is visible at all (every step's params got hidden), falls
- *    back to the Export chip — there's nothing else left to show.
+ *    back to the Review chip — there's nothing else left to show.
  *
  * `currentId` should be null only on a genuine first mount for this design;
  * callers reset to the first visible step on a design SWITCH themselves
@@ -88,9 +90,9 @@ export function resolveCurrentStep(
   visible: QuickStartStep[],
   currentId: string | null
 ): string {
-  if (currentId === EXPORT_STEP_ID) return EXPORT_STEP_ID;
+  if (currentId === REVIEW_STEP_ID) return REVIEW_STEP_ID;
   if (currentId && visible.some((s) => s.id === currentId)) return currentId;
-  if (visible.length === 0) return EXPORT_STEP_ID;
+  if (visible.length === 0) return REVIEW_STEP_ID;
   const allSteps = design.steps ?? [];
   const prevIndex = currentId ? allSteps.findIndex((s) => s.id === currentId) : -1;
   if (prevIndex === -1) return visible[0].id;
@@ -113,13 +115,13 @@ export function resolveCurrentStep(
  * a time, so "current" (the chip carrying `aria-current="step"`) has to be
  * derived from scroll position instead of navigation state. QuickStart wires
  * an IntersectionObserver over each step-group heading (plus the trailing
- * Export heading), tuned with a `rootMargin` that only counts a thin band
+ * Review heading), tuned with a `rootMargin` that only counts a thin band
  * near the scroll container's top as "visible" (see its own comment for the
  * exact margin) — so as a visitor scrolls down, group headings cross that
  * band and flip in and out of `intersecting` one at a time in step order.
  *
  * This is the pure mapping from that observer state to a step id: `order` is
- * every candidate id in declared order (steps, then `EXPORT_STEP_ID` last —
+ * every candidate id in declared order (steps, then `REVIEW_STEP_ID` last —
  * the same shape as QuickStart's own `stepOrder`), and `intersecting` is the
  * set of ids CURRENTLY inside the band. Multiple ids can be intersecting at
  * once (a short step's group can fully fit inside the band while a neighbour

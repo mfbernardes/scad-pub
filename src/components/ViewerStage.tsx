@@ -11,6 +11,7 @@ import type { PauseReason } from "../lib/renderState";
 import type { ViewerHandle, Dimensions } from "./Viewer";
 import type { ViewName } from "./views";
 import type { ComputedInfo } from "../lib/computedInfo";
+import { isMeasurementStale } from "../lib/renderState";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { StaleBanner } from "./StaleBanner";
 import { UpdatingChip } from "./UpdatingChip";
@@ -202,8 +203,11 @@ export function ViewerStage({
           // rendered from earlier values, not the failed controls), even
           // though stalePreview itself reads false once the failed attempt
           // completes for the current key — so its figures get the same
-          // dim+italic treatment as an out-of-date preview.
-          stale={stalePreview || showRetained}
+          // dim+italic treatment as an out-of-date preview. Shared with
+          // QuickStart's Review stage via renderState.ts's isMeasurementStale
+          // so the two "what will actually be produced" surfaces can never
+          // disagree about staleness.
+          stale={isMeasurementStale(stalePreview, result, retainedResult)}
           computed={computedInfo}
         />
       )}

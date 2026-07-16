@@ -11,7 +11,7 @@ import {
   resolveCurrentStep,
   quickStartAvailable,
   currentStepFromIntersections,
-  EXPORT_STEP_ID,
+  REVIEW_STEP_ID,
 } from "../src/lib/quickStart.ts";
 
 function numberParam(name, { section = "Main", advanced, showIf, description = name, help = "" } = {}) {
@@ -174,17 +174,17 @@ test("resolveCurrentStep: falls back to the nearest remaining step, favoring the
   assert.equal(resolveCurrentStep(d, visible, "c"), "b");
 });
 
-test("resolveCurrentStep: EXPORT_STEP_ID always stays current (the Export chip is never hidden)", () => {
+test("resolveCurrentStep: REVIEW_STEP_ID always stays current (the Review chip is never hidden)", () => {
   const d = design({
     sections: ["A"],
     steps: [{ id: "a", label: "A", sections: ["A"] }],
     params: [numberParam("a1", { section: "A" })],
   });
   const visible = visibleSteps(d, {}, "essentials");
-  assert.equal(resolveCurrentStep(d, visible, EXPORT_STEP_ID), EXPORT_STEP_ID);
+  assert.equal(resolveCurrentStep(d, visible, REVIEW_STEP_ID), REVIEW_STEP_ID);
 });
 
-test("resolveCurrentStep: falls back to the Export chip when no step is visible at all", () => {
+test("resolveCurrentStep: falls back to the Review chip when no step is visible at all", () => {
   const d = design({
     sections: ["A"],
     steps: [{ id: "a", label: "A", sections: ["A"] }],
@@ -192,7 +192,7 @@ test("resolveCurrentStep: falls back to the Export chip when no step is visible 
   });
   const visible = visibleSteps(d, { on: false }, "essentials");
   assert.deepEqual(visible, []);
-  assert.equal(resolveCurrentStep(d, visible, "a"), EXPORT_STEP_ID);
+  assert.equal(resolveCurrentStep(d, visible, "a"), REVIEW_STEP_ID);
 });
 
 test("resolveCurrentStep: a null/stale currentId (e.g. first mount) lands on the first visible step", () => {
@@ -210,13 +210,13 @@ test("resolveCurrentStep: a null/stale currentId (e.g. first mount) lands on the
 });
 
 test("currentStepFromIntersections: returns the last-in-order id that's intersecting", () => {
-  const order = ["a", "b", "c", EXPORT_STEP_ID];
+  const order = ["a", "b", "c", REVIEW_STEP_ID];
   assert.equal(currentStepFromIntersections(order, new Set(["a"])), "a");
   // "b" and "c" both intersecting the band at once (a short group can fit
   // entirely inside it) — the LATER one in declared order wins, matching the
   // step whose heading has scrolled furthest past the top.
   assert.equal(currentStepFromIntersections(order, new Set(["b", "c"])), "c");
-  assert.equal(currentStepFromIntersections(order, new Set([EXPORT_STEP_ID, "a"])), EXPORT_STEP_ID);
+  assert.equal(currentStepFromIntersections(order, new Set([REVIEW_STEP_ID, "a"])), REVIEW_STEP_ID);
 });
 
 test("currentStepFromIntersections: null when nothing intersects (caller keeps the previous current)", () => {

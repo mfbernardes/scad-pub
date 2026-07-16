@@ -5,8 +5,11 @@ import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import type { ExperienceMode, SettingsView } from "../lib/useExperience";
 import type { ChecklistState } from "../lib/checklist";
-import type { AttentionItem } from "../lib/readiness";
+import type { AttentionItem, ReadinessState } from "../lib/readiness";
 import type { SheetDetent } from "./BottomSheet";
+import type { Dimensions } from "./Viewer";
+import type { ComputedInfo } from "../lib/computedInfo";
+import type { ViewName } from "./views";
 import { useAppActions } from "../lib/appActions";
 import type { PanelTab } from "../lib/usePanelState";
 import { CustomizeTab } from "./CustomizeTab";
@@ -85,6 +88,18 @@ interface Props {
   attention: AttentionItem[];
   /** Forwarded to CustomizeTab — see its own doc. */
   onOpenMessages?: () => void;
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  readiness?: ReadinessState;
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  measured?: Dimensions | null;
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  renderedValues?: Values;
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  computedInfo?: ComputedInfo[];
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  reviewStale?: boolean;
+  /** Forwarded to CustomizeTab (PR18's Review stage) — see its own doc. */
+  onSelectView?: (view: ViewName) => void;
 }
 
 export function SheetTabs({
@@ -123,6 +138,12 @@ export function SheetTabs({
   sheetDetent,
   attention,
   onOpenMessages,
+  readiness,
+  measured,
+  renderedValues,
+  computedInfo,
+  reviewStale,
+  onSelectView,
 }: Props) {
   const {
     applyPreset,
@@ -185,6 +206,12 @@ export function SheetTabs({
               focusHiddenDiffSignal={focusHiddenDiffSignal}
               attention={attention}
               onOpenMessages={onOpenMessages}
+              readiness={readiness}
+              measured={measured}
+              renderedValues={renderedValues}
+              computedInfo={computedInfo}
+              reviewStale={reviewStale}
+              onSelectView={onSelectView}
               // Mobile's bottom sheet is short on vertical room — QuickStart
               // keeps its one-step-at-a-time Back/Next navigation (PR15's
               // desktop-only scroll mode doesn't apply here). See

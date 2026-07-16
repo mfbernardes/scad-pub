@@ -94,14 +94,18 @@
   "export.attentionHint": "There are unresolved warnings — the model may differ from the selected settings",
 
   "quickstart.stepsAriaLabel": "Guided steps",
-  "quickstart.export": "Export",
+  "quickstart.review": "Review",
   "quickstart.visited": "Visited",
   "quickstart.alsoAvailable": "Also available",
-  "quickstart.exportHeading": "Ready to export",
   "quickstart.exportHint": "Happy with the preview? Use {export} below.",
   "quickstart.back": "Back",
   "quickstart.next": "Next",
-  "quickstart.nextExport": "Next: Export",
+  "quickstart.nextReview": "Next: Review",
+  "quickstart.reviewReady": "Ready to export",
+  "quickstart.reviewAttention": "Needs attention",
+  "quickstart.reviewFailed": "Preview failed",
+  "quickstart.reviewBuilding": "Preview building…",
+  "quickstart.frontView": "Front view",
 
   "common.close": "Close",
 

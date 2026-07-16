@@ -94,14 +94,18 @@
   "export.attentionHint": "Es gibt ungelöste Hinweise — das Modell kann von den gewählten Einstellungen abweichen",
 
   "quickstart.stepsAriaLabel": "Geführte Schritte",
-  "quickstart.export": "Export",
+  "quickstart.review": "Überprüfung",
   "quickstart.visited": "Besucht",
   "quickstart.alsoAvailable": "Ebenfalls verfügbar",
-  "quickstart.exportHeading": "Bereit zum Export",
   "quickstart.exportHint": "Zufrieden mit der Vorschau? Nutzen Sie unten „{export}“.",
   "quickstart.back": "Zurück",
   "quickstart.next": "Weiter",
-  "quickstart.nextExport": "Weiter: Export",
+  "quickstart.nextReview": "Weiter: Überprüfung",
+  "quickstart.reviewReady": "Bereit zum Export",
+  "quickstart.reviewAttention": "Achtung erforderlich",
+  "quickstart.reviewFailed": "Vorschau fehlgeschlagen",
+  "quickstart.reviewBuilding": "Vorschau wird erstellt…",
+  "quickstart.frontView": "Vorderansicht",
 
   "common.close": "Schließen",
 

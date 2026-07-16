@@ -9,6 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  isMeasurementStale,
   isSnapshotCurrent,
   isSnapshotExportable,
   isStaleEpoch,
@@ -233,6 +234,32 @@ test("retainedResultAfterFailure: retention is display-only — the failed key s
   const liveFailedKey = "key-B";
   assert.equal(retainedResultAfterFailure(fail(), snap, "design-a"), snap.result);
   assert.equal(isSnapshotExportable(snap, liveFailedKey, "design-a"), false);
+});
+
+// ---- isMeasurementStale (PR18 — shared by DimensionInfo and QuickStart's
+// Review stage so they can never disagree about staleness) ----
+
+test("isMeasurementStale: stalePreview alone is enough", () => {
+  assert.equal(isMeasurementStale(true, ok(), null), true);
+  assert.equal(isMeasurementStale(false, ok(), null), false);
+});
+
+test("isMeasurementStale: a retained result after a failed latest render is stale, even with stalePreview false", () => {
+  assert.equal(isMeasurementStale(false, fail(), ok()), true);
+});
+
+test("isMeasurementStale: a successful latest render with no retained result is not stale", () => {
+  assert.equal(isMeasurementStale(false, ok(), null), false);
+});
+
+test("isMeasurementStale: a failed render with nothing retained is not stale (nothing to be stale about)", () => {
+  assert.equal(isMeasurementStale(false, fail(), null), false);
+});
+
+test("isMeasurementStale: a null result reads as stale too when a retained snapshot is present, mirroring the literal !result?.ok check ViewerStage always used (retainedResultAfterFailure itself never actually produces this combination — a null `result` never yields a retained snapshot in practice)", () => {
+  assert.equal(isMeasurementStale(false, null, ok()), true);
+  // With no retained snapshot at all, a null result is simply not stale.
+  assert.equal(isMeasurementStale(false, null, null), false);
 });
 
 // ---- shouldFireInitialRender (M15) ----

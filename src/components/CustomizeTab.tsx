@@ -11,7 +11,10 @@ import type { Design } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import type { ExperienceMode, SettingsView } from "../lib/useExperience";
-import type { AttentionItem } from "../lib/readiness";
+import type { AttentionItem, ReadinessState } from "../lib/readiness";
+import type { Dimensions } from "./Viewer";
+import type { ComputedInfo } from "../lib/computedInfo";
+import type { ViewName } from "./views";
 import { defaultsFor } from "../lib/presets";
 import { hiddenAdvancedCount, hiddenAdvancedDiff, hiddenSearchMatches } from "../lib/paramFilter";
 import { quickStartAvailable } from "../lib/quickStart";
@@ -23,6 +26,7 @@ import { ParamSearch } from "./ParamSearch";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { SettingsViewToggle } from "./SettingsViewToggle";
 import { QuickStart } from "./QuickStart";
+import { AttentionItems } from "./AttentionItems";
 
 interface Props {
   design: Design;
@@ -73,6 +77,32 @@ interface Props {
    *  (mobile) passes "steps" (PR15). Defaults to "steps" so an omitted value
    *  degrades to today's behavior rather than silently switching modes. */
   variant?: "scroll" | "steps";
+  /**
+   * PR18's Review stage inputs — forwarded verbatim to QuickStart's terminal
+   * "Review" step, unused otherwise. Overall production-readiness for the
+   * CURRENT render (src/lib/readiness.ts's readinessState — failed >
+   * attention > ready > building), computed once in AppShell from the same
+   * `result`/`attention` the rest of the app already reads.
+   */
+  readiness?: ReadinessState;
+  /** The active viewer's measured bounding box (mm), or null before any
+   *  render has landed — AppShell's own `measured` state (Viewer's onMeasure). */
+  measured?: Dimensions | null;
+  /** Values behind the CURRENT render (not the live controls) — what the
+   *  Review summary's `@info` rows read, mirroring DimensionInfo's own
+   *  `values` prop so both surfaces show the same figures. */
+  renderedValues?: Values;
+  /** Runtime `echo("@info", …)` rows for the current render — see
+   *  lib/computedInfo.ts. */
+  computedInfo?: ComputedInfo[];
+  /** Whether the Review summary's figures are stale (src/lib/renderState.ts's
+   *  isMeasurementStale) — reused by QuickStart for the same dim+italic
+   *  treatment DimensionInfo gives an out-of-date preview. */
+  reviewStale?: boolean;
+  /** Snap the active viewer to a standard camera view — QuickStart's "Front
+   *  view" button. AppShell's own `handleSelectView`, threaded down the same
+   *  path as every other Review input. */
+  onSelectView?: (view: ViewName) => void;
 }
 
 const noteClass =
@@ -102,6 +132,12 @@ export function CustomizeTab({
   attention,
   onOpenMessages,
   variant = "steps",
+  readiness,
+  measured,
+  renderedValues,
+  computedInfo,
+  reviewStale,
+  onSelectView,
 }: Props) {
   const { change, settingsViewChange } = useAppActions();
   const debouncedSearch = useDebounce(search, 150);
@@ -192,30 +228,14 @@ export function CustomizeTab({
           "hidden behind a bell badge" problem this milestone fixes. Same
           visual family as the hidden-diff chip below (bg-muted, border-b,
           a noteActionClass action), one row per item. */}
-      {attention.length > 0 && (
-        <div className="attention-chips flex shrink-0 flex-col border-b bg-muted">
-          {attention.map((item) => (
-            <div
-              key={item.kind === "font-fallback" ? `font:${item.param}` : `notice:${item.marker}`}
-              className="attention-chip flex items-center gap-[0.4rem] px-3 py-[0.4rem] text-left text-[0.8rem] font-medium text-foreground"
-            >
-              <span aria-hidden="true" className="attention-chip__dot size-[6px] shrink-0 rounded-full bg-warn" />
-              <span className="flex-1">
-                {item.kind === "font-fallback"
-                  ? t("attention.fontFallback", { family: item.family })
-                  : t("attention.notice", { label: item.label, count: item.count })}
-              </span>
-              <button
-                type="button"
-                className={noteActionClass}
-                onClick={() => (item.kind === "font-fallback" ? focusOnParam(item.param) : onOpenMessages?.())}
-              >
-                {item.kind === "font-fallback" ? t("attention.goToSetting") : t("attention.openMessages")}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      <AttentionItems
+        attention={attention}
+        onGoToSetting={focusOnParam}
+        onOpenMessages={onOpenMessages}
+        className="attention-chips flex shrink-0 flex-col border-b bg-muted"
+        itemClassName="attention-chip flex items-center gap-[0.4rem] px-3 py-[0.4rem] text-left text-[0.8rem] font-medium text-foreground"
+        actionClassName={noteActionClass}
+      />
       {hasAdvanced && <SettingsViewToggle view={settingsView} />}
       {settingsView === "essentials" && hiddenDiff.length > 0 && (
         <button
@@ -276,6 +296,15 @@ export function CustomizeTab({
             focusParam={focusParam}
             attentionParams={attentionParamNames}
             variant={variant}
+            attention={attention}
+            onGoToSetting={focusOnParam}
+            onOpenMessages={onOpenMessages}
+            readiness={readiness}
+            measured={measured}
+            renderedValues={renderedValues}
+            computedInfo={computedInfo}
+            reviewStale={reviewStale}
+            onSelectView={onSelectView}
           />
         ) : (
           <ParamForm

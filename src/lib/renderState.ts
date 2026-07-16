@@ -96,6 +96,25 @@ export function retainedResultAfterFailure(
   return snapshot.result;
 }
 
+/**
+ * Whether a "what will actually be produced" figure — the viewer's
+ * DimensionInfo measurements panel, or QuickStart's Review stage (PR18) — is
+ * stale: either live preview hasn't caught up with the controls yet
+ * (`stalePreview`), or the viewer is showing a RETAINED last-good render
+ * after the latest attempt failed (see retainedResultAfterFailure) — that
+ * geometry was measured from earlier values, not the failed controls, so
+ * it's stale by definition even though `stalePreview` itself reads false once
+ * the failed attempt completes for the current key. Shared by both surfaces
+ * so they can never disagree about staleness.
+ */
+export function isMeasurementStale(
+  stalePreview: boolean,
+  result: RenderResult | null,
+  retainedResult: RenderResult | null
+): boolean {
+  return stalePreview || (!result?.ok && !!retainedResult);
+}
+
 /** Everything doRender knows about a render call at the moment it started —
  * captured before the `await`, so the eventual commit decision is judged
  * against the inputs that were actually live when the runner was asked to

@@ -9,11 +9,11 @@
 // export — purely informative, never part of a print.
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import type { Design, Param } from "../openscad/types";
+import type { Design } from "../openscad/types";
 import type { Dimensions } from "./Viewer";
 import type { Values } from "../lib/presets";
 import type { ComputedInfo } from "../lib/computedInfo";
-import { isVisible } from "../lib/visibility";
+import { formatBoundingBox, paramInfoRows } from "../lib/reviewSummary";
 import { cn } from "../lib/utils";
 import { t } from "../lib/i18n";
 
@@ -33,47 +33,16 @@ interface Props {
   computed?: ComputedInfo[];
 }
 
-// One millimetre figure, always with at least one decimal (90 → "90.0").
-function mm(n: number): string {
-  return (Math.round(n * 10) / 10).toFixed(1);
-}
-
-// Format a parameter's value for display, appending the optional `@info` unit.
-// Returns null when there's nothing worth showing (e.g. an empty string).
-function formatValue(param: Param, values: Values): string | null {
-  const raw = values[param.name] ?? param.default;
-  const unit = param.info?.unit ? ` ${param.info.unit}` : "";
-  switch (param.type) {
-    case "boolean":
-      return raw ? t("dimensions.yes") : t("dimensions.no");
-    case "string": {
-      const s = String(raw).trim();
-      return s ? s + unit : null;
-    }
-    case "enum": {
-      const choice = param.choices.find((c) => c.value === String(raw));
-      return (choice?.label ?? String(raw)) + unit;
-    }
-    default:
-      return String(raw) + unit; // number
-  }
-}
-
 export function DimensionInfo({ design, size, values, stale = false, computed = [] }: Props) {
   // Folds down to the bounding-box headline alone, so the panel can get out of
   // the way of the model without hiding the overlay entirely.
   const [collapsed, setCollapsed] = useState(false);
 
-  // The headline bounding box, then any params flagged `// @info` that are still
-  // visible under their @showIf (if any) and have a non-empty formatted value.
-  const infoLines = design.params
-    .filter((p) => p.info && isVisible(p, values))
-    .map((p) => ({
-      name: p.name,
-      label: p.info!.label ?? p.description,
-      value: formatValue(p, values),
-    }))
-    .filter((l): l is { name: string; label: string; value: string } => l.value !== null);
+  // The params flagged `// @info` that are still visible under their @showIf
+  // (if any) and have a non-empty formatted value — the exact same row
+  // derivation QuickStart's Review stage reuses (src/lib/reviewSummary.ts),
+  // so the two surfaces can never disagree about what a row says.
+  const infoLines = paramInfoRows(design, values);
 
   const hasRows = infoLines.length > 0 || computed.length > 0;
   // Only the headline shows when collapsed; the toggle only appears when there's
@@ -121,11 +90,11 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
             t("dimensions.heading")
           )}
         </dt>
-        <dd className={dd}>{`${mm(size.x)} × ${mm(size.y)} × ${mm(size.z)} mm`}</dd>
+        <dd className={dd}>{formatBoundingBox(size)}</dd>
       </div>
       {showRows &&
         infoLines.map((l) => (
-          <div className={row} key={l.name}>
+          <div className={row} key={l.key}>
             <dt>{l.label}</dt>
             <dd className={dd}>{l.value}</dd>
           </div>
