@@ -60,6 +60,35 @@ async function selectDesign(page, id) {
   await waitRendered(page, id);
 }
 
+// Staged offline-readiness claim (this milestone): a one-time, informational
+// toast telling a visitor this configurator (or its render engine) now works
+// offline — see src/lib/useAppNotices.ts and src/lib/offlineClaim.ts. Every
+// smoke run is a fresh browser instance with an empty Cache Storage, so the
+// first load here is always a genuine cache-miss download, and the check
+// runs FIRST (before anything else touches storage/reloads the page) so it
+// races nothing else in this suite. main() blocks the service worker's own
+// script for the whole run (see its own comment) specifically so THIS check
+// is deterministic: with no service worker to independently win the binary-
+// cache race, the render worker's own bootstrap always sees the miss and
+// posts progress, and (with no controlling service worker) the claim is
+// always the weaker "engine offline" one — see selectOfflineClaim's doc for
+// why that's the honest choice when nothing controls the page yet. The
+// stronger "ready for offline use" claim (a controlling service worker AND a
+// verified precache) is exercised by the pure-logic unit tests instead
+// (tests/offlineClaim.test.mjs), since reproducing it here would mean
+// un-blocking the service worker and accepting back the very race this
+// check exists to avoid.
+async function checkOfflineClaimToast({ page, check }) {
+  console.log("=== offline-claim toast (staged offline readiness) ===");
+  const claimToast = page.getByText(/now available offline|ready for offline use/i);
+  const shown = await claimToast
+    .first()
+    .waitFor({ state: "visible", timeout: 10000 })
+    .then(() => true)
+    .catch(() => false);
+  check(shown, "a one-time offline-readiness toast appears after the first real engine download");
+}
+
 // Configurable popup (schema.popup): a welcome notice on load. It overlays
 // the app behind a modal backdrop that intercepts pointer events, so dismiss
 // it before driving the UI — ticking "Don't show this again" (when the mode
@@ -460,6 +489,34 @@ async function checkDesignPickerDialog({ page, check, ids, schema }) {
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
   check((await dialog.count()) === 0, "Escape closes the design picker dialog");
+
+  // Adaptive search box (this milestone): below SEARCH_THRESHOLD (6), the box
+  // is hidden until the card grid actually overflows the dialog's scroll area
+  // — only exercisable when the build itself is under that count (the dogfood
+  // config's 3 designs), since at/above it the fast path already forces the
+  // box on regardless of viewport, which the earlier assertions already cover
+  // implicitly via `searchVisible`'s count-rule branch.
+  if (ids.length <= 6) {
+    console.log("=== design picker: adaptive search (overflow, not just count) ===");
+    const search = page.locator(".design-picker-dialog__search");
+    await button.click();
+    await dialog.waitFor({ state: "visible", timeout: 3000 });
+    check(
+      (await search.count()) === 0,
+      `no search box for ${ids.length} designs at the default viewport (no overflow)`
+    );
+    const original = page.viewportSize();
+    // A short viewport (same width, so the layout stays desktop) leaves the
+    // dialog's max-height small enough that even a handful of cards overflow
+    // its scroll area — the adaptive ResizeObserver check should reveal the
+    // search box without any count-rule help.
+    await page.setViewportSize({ width: original?.width ?? 1280, height: 300 });
+    await search.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    check((await search.count()) === 1, "shrinking the viewport reveals the search box once the grid overflows");
+    if (original) await page.setViewportSize(original);
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  }
 }
 
 async function checkEveryDesignRenders({ page, ids }) {
@@ -1217,6 +1274,17 @@ async function main() {
   const base = `http://127.0.0.1:${port}${basePath}`;
   const browser = await launchChromium();
   const page = await browser.newPage();
+  // Block the service worker's own script (public/sw.js) for this whole run.
+  // Its `install` handler independently warms the render worker's binary
+  // cache (see sw.js's precacheBin) — on a fast loopback connection that
+  // background fetch usually wins the race against the render worker's own
+  // bootstrap download, leaving worker.ts with a Cache Storage HIT and no
+  // `loadProgress` events. checkOfflineClaimToast below needs a genuine,
+  // deterministic cache-miss download to exercise the offline-claim toast
+  // (useAppNotices.ts) reliably; nothing else in this suite depends on an
+  // actually-registered/controlling service worker (checkServiceWorker reads
+  // sw.js's raw source via an HTTP GET, not through a live registration).
+  await page.context().route("**/sw.js*", (route) => route.abort());
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   let failures = 0;
@@ -1242,6 +1310,9 @@ async function main() {
     await waitRendered(page, ids[0]);
 
     const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName };
+    // Runs first, before anything else reloads the page or otherwise disturbs
+    // Cache Storage — see the check's own doc comment for why ordering matters.
+    await checkOfflineClaimToast(ctx);
     await checkWelcomePopup(ctx);
     await checkGettingStarted(ctx);
     await checkViewerHint(ctx);

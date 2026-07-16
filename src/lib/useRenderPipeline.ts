@@ -121,6 +121,15 @@ export function useRenderPipeline({
   // progress messages after ready (see runner.ts's onProgress doc), so this
   // never gets set again for that instance.
   const [loadProgress, setLoadProgress] = useState<WorkerProgress | null>(null);
+  // Latches true the first time onProgress ever fires for this component's
+  // lifetime — unlike loadProgress (cleared back to null once ready), this
+  // never resets, so it distinguishes "a real engine download happened THIS
+  // session" (a genuine first-time/cache-miss load) from a warm reload that
+  // hit Cache Storage and posted no progress at all. Consumed by
+  // useAppNotices' one-time offline-claim toast (see offlineClaim.ts) — the
+  // only thing that must never overclaim offline readiness off a cache hit
+  // that didn't actually happen this session.
+  const [engineDownloaded, setEngineDownloaded] = useState(false);
   const [autoRender, setAutoRenderState] = useState(!design.heavy);
   // Mirrored on every render so async work (doRender) reads the latest value
   // without retriggering the effects that depend on it.
@@ -331,7 +340,10 @@ export function useRenderPipeline({
         setReady(true);
         setLoadProgress(null);
       },
-      onProgress: (p) => setLoadProgress(p),
+      onProgress: (p) => {
+        setLoadProgress(p);
+        setEngineDownloaded(true);
+      },
       ...runner,
     };
     runnerRef.current = createRunner ? createRunner(opts) : new OpenSCADRunner(opts);
@@ -420,6 +432,7 @@ export function useRenderPipeline({
     rendering,
     ready,
     loadProgress,
+    engineDownloaded,
     renderedValues,
     renderMetrics,
     autoRender,

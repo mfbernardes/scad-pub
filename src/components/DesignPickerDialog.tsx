@@ -4,7 +4,7 @@
 // HelpModal/DesignDocModal/LicensesModal): App owns `value`/`onSelect`/
 // `onClose`, and an optional `reason` for why it opened uninvited (a stale
 // deep link — see urlState.ts's hashDesignIdMissing).
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { Design } from "../openscad/types";
 import { Modal, MODAL_BODY, MODAL_INTRO } from "./Modal";
 import { groupDesigns } from "./DesignPicker";
@@ -23,9 +23,19 @@ interface Props {
 }
 
 // The search box only earns its place once there's enough to search: below
-// this count, scanning the grid is faster than typing. Documented here (not
-// just in docs/config.md) since it's a plain literal, not a config knob.
+// this count, scanning the grid is faster than typing. A fast path — no
+// measuring needed, so it can never flash in a beat late — for the common
+// case of a build with plenty of designs; a build at or below it can still
+// show the box adaptively (see the overflow effect below) once the grid
+// actually outgrows the dialog's scroll area at the current viewport size, a
+// short/landscape window overflowing well under this count. Documented here
+// (not just in docs/config.md) since it's a plain literal, not a config knob.
 const SEARCH_THRESHOLD = 6;
+
+// Slack (px) before the grid counts as "overflowing" — a hair of rounding
+// jitter in scrollHeight/clientHeight must never flip the search box on/off
+// spuriously.
+const OVERFLOW_EPSILON = 2;
 
 function matches(d: Design, query: string): boolean {
   const q = query.toLowerCase();
@@ -106,12 +116,60 @@ function DesignCard({
 
 export function DesignPickerDialog({ designs, value, onSelect, onClose, reason }: Props) {
   const [query, setQuery] = useState("");
-  const searchVisible = designs.length > SEARCH_THRESHOLD;
+  // Fast path: no measuring needed, no flash.
+  const countRule = designs.length > SEARCH_THRESHOLD;
+  // Adaptive path: whether the card grid actually overflows the scroll area
+  // at the current viewport size — only tracked/measured while the count rule
+  // doesn't already force it (see the effect below).
+  const [overflowing, setOverflowing] = useState(false);
+  const searchVisible = countRule || overflowing;
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Mirrors `query` for the overflow observer below, which is set up once per
+  // scroll-container mount (a callback ref, not an effect — see its own doc)
+  // and must read the LATEST query without re-subscribing on every keystroke.
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const roRef = useRef<ResizeObserver | null>(null);
   const filtered = useMemo(() => {
     if (!searchVisible || !query.trim()) return designs;
     return designs.filter((d) => matches(d, query.trim()));
   }, [designs, query, searchVisible]);
   const runs = useMemo(() => groupDesigns(filtered), [filtered]);
+
+  const measure = useCallback((el: HTMLDivElement) => {
+    const isOverflowing = el.scrollHeight > el.clientHeight + OVERFLOW_EPSILON;
+    setOverflowing((prev) => {
+      if (isOverflowing) return true;
+      // Never hide the box out from under someone mid-search: a resize that
+      // removes the overflow only clears it again when the search input
+      // isn't focused AND carries no query — losing focus or a typed query
+      // mid-search would be worse than leaving an unnecessary box up.
+      if (prev && (document.activeElement === inputRef.current || queryRef.current.trim())) return prev;
+      return isOverflowing;
+    });
+  }, []);
+
+  // Watch the scroll container for overflow via a CALLBACK ref rather than a
+  // plain ref + effect: Modal's Dialog (Radix) animates its content in, and a
+  // `useLayoutEffect` keyed on stable deps (nothing here changes across most
+  // renders) can run its one-and-only pass before that content — including
+  // this very div — has actually attached, permanently missing it. A callback
+  // ref instead fires exactly when React attaches/detaches the real DOM node,
+  // whatever Radix's own mount timing turns out to be, and again whenever its
+  // identity changes (countRule flipping — the fast path making this moot).
+  // Skipped entirely once the count rule already shows the box.
+  const scrollRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      roRef.current?.disconnect();
+      roRef.current = null;
+      if (countRule || !el) return;
+      measure(el);
+      const ro = new ResizeObserver(() => measure(el));
+      ro.observe(el);
+      roRef.current = ro;
+    },
+    [countRule, measure]
+  );
 
   return (
     <Modal title={t("picker.title")} label={t("picker.title")} onClose={onClose}>
@@ -123,17 +181,18 @@ export function DesignPickerDialog({ designs, value, onSelect, onClose, reason }
         {searchVisible && (
           <div className="px-4 pb-2">
             <input
+              ref={inputRef}
               autoFocus
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("picker.search")}
               aria-label={t("picker.search")}
-              className="w-full min-w-0 rounded-(--radius-sm) border bg-transparent px-3 py-[0.35rem] text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="design-picker-dialog__search w-full min-w-0 rounded-(--radius-sm) border bg-transparent px-3 py-[0.35rem] text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
         )}
-        <div className={cn(MODAL_BODY, "min-h-0 flex-1")}>
+        <div ref={scrollRef} className={cn(MODAL_BODY, "min-h-0 flex-1")}>
           {filtered.length === 0 ? (
             <p className="px-1 py-8 text-center text-[0.85rem] text-muted-foreground">
               {t("picker.empty")}

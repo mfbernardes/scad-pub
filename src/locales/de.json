@@ -1,5 +1,4 @@
 {
-  "viewer.loading": "Alles wird vorbereitet …",
   "viewer.building": "Vorschau wird erstellt …",
 
   "stale.banner": "Vorschau ist veraltet",
@@ -33,19 +32,14 @@
   "settings.review": "Überprüfen",
   "settings.showAll": "Alle anzeigen",
   "settings.showThem": "Anzeigen",
-  "settings.searchIncludesHidden": "Die Suche umfasst auch ausgeblendete Einstellungen.",
   "settings.resetIncludesHidden#one": "Das schließt {count} ausgeblendete Einstellung ein.",
   "settings.resetIncludesHidden#other": "Das schließt {count} ausgeblendete Einstellungen ein.",
 
   "loading.preparingEngine": "3D-Engine wird vorbereitet …",
-  "loading.startingEngine": "Engine wird gestartet",
-  "loading.engineDownloaded": "Engine heruntergeladen",
-  "loading.buildingPreview": "Vorschau wird erstellt",
   "loading.downloadSize": "Einmaliger Download — etwa {size}",
   "loading.engineOffline": "Die 3D-Engine ist jetzt offline verfügbar",
   "loading.readyOffline": "Dieser Konfigurator ist bereit für die Offline-Nutzung",
   "loading.updatingPreview": "Vorschau wird aktualisiert … bis das neue Modell bereit ist, bleibt die vorherige Version sichtbar",
-  "loading.switchingDesign": "Wechsel zu {design} …",
 
   "failure.title": "Vorschau konnte nicht aktualisiert werden",
   "failure.engineFailed": "Die 3D-Engine konnte nicht gestartet werden — überprüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
@@ -100,6 +94,5 @@
   "quickstart.next": "Weiter",
   "quickstart.nextExport": "Weiter: Export",
 
-  "common.close": "Schließen",
-  "common.reset": "Zurücksetzen"
+  "common.close": "Schließen"
 }

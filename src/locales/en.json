@@ -1,5 +1,4 @@
 {
-  "viewer.loading": "Getting things ready…",
   "viewer.building": "Building your preview…",
 
   "stale.banner": "Preview out of date",
@@ -33,19 +32,14 @@
   "settings.review": "Review",
   "settings.showAll": "Show all",
   "settings.showThem": "Show them",
-  "settings.searchIncludesHidden": "Search results also include hidden settings.",
   "settings.resetIncludesHidden#one": "This includes {count} hidden setting.",
   "settings.resetIncludesHidden#other": "This includes {count} hidden settings.",
 
   "loading.preparingEngine": "Preparing the 3D engine…",
-  "loading.startingEngine": "Starting the engine",
-  "loading.engineDownloaded": "Engine downloaded",
-  "loading.buildingPreview": "Building your preview",
   "loading.downloadSize": "One-time download — about {size}",
   "loading.engineOffline": "The 3D engine is now available offline",
   "loading.readyOffline": "This configurator is ready for offline use",
   "loading.updatingPreview": "Updating preview… the previous version is shown until the new model is ready",
-  "loading.switchingDesign": "Switching to {design}…",
 
   "failure.title": "Preview could not be updated",
   "failure.engineFailed": "The 3D engine couldn't start — check your connection and try again.",
@@ -100,6 +94,5 @@
   "quickstart.next": "Next",
   "quickstart.nextExport": "Next: Export",
 
-  "common.close": "Close",
-  "common.reset": "Reset"
+  "common.close": "Close"
 }

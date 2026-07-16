@@ -214,6 +214,7 @@ export default function App() {
     rendering,
     ready,
     loadProgress,
+    engineDownloaded,
     renderedValues,
     renderMetrics,
     autoRender,
@@ -552,6 +553,9 @@ export default function App() {
     applyUpdate,
     dismissUpdate,
     online,
+    engineReady: ready,
+    renderCompleted: result !== null,
+    engineDownloaded,
   });
 
   return (

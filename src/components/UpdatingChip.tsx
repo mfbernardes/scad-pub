@@ -5,23 +5,19 @@
 // ViewerStage's gating comment). The full explanatory sentence rides as the
 // title/aria-label; the visible label stays one short clause so it doesn't
 // crowd the canvas.
+//
+// Invariant: a design switch never shows this chip. useRenderPipeline's
+// resetForDesign clears `result` in the SAME state update that changes the
+// design, so ViewerStage's loading overlay takes over instead — there is
+// never "a previous design's result to keep showing" for this chip to
+// caption. The retention rule (see ViewerStage's retainedResult doc) is also
+// explicit that a design switch must never keep design A's geometry on
+// screen under design B.
 import { Spinner } from "./ui/spinner";
 import { t } from "../lib/i18n";
 
-interface Props {
-  /**
-   * Non-null -> the design-switch variant ("Switching to {design}…"). Note:
-   * under the current render pipeline (useRenderPipeline's resetForDesign)
-   * `result` is cleared in the SAME state update that changes the design, so
-   * ViewerStage never actually has "a previous result to keep showing" at
-   * the moment a design switch starts — this prop exists so the copy is
-   * ready the moment that changes, not because it fires today.
-   */
-  design?: string | null;
-}
-
-export function UpdatingChip({ design }: Props) {
-  const full = design ? t("loading.switchingDesign", { design }) : t("loading.updatingPreview");
+export function UpdatingChip() {
+  const full = t("loading.updatingPreview");
   // Visible label: the sentence's first clause only, so the chip stays one
   // line; the full sentence is still available to sighted users via the
   // native title tooltip and to AT via aria-label.

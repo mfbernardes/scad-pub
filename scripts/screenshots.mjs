@@ -52,7 +52,14 @@ const MASK_CSS = `
 `;
 
 async function shoot(page, base, theme) {
-  await gotoWithTheme(page, base, theme);
+  // Seed the offline-claim once-flag (src/lib/prefs.ts's makeOnceFlag) so the
+  // staged offline-readiness toast (useAppNotices.ts) never fires here: this
+  // script serves dist/ from a fresh in-process server to a fresh browser
+  // context, so — unlike a real deploy — the very first load IS a genuine
+  // cache-miss download, which would otherwise make the toast's appearance
+  // (and its ~150ms settle race against the mask/screenshot below) a source
+  // of nondeterministic diffs. See gotoWithTheme's own doc for the mechanism.
+  await gotoWithTheme(page, base, theme, { seedFlags: ["offline.claim.v1"] });
   // Dismiss any first-visit surface so it doesn't cover the panel (and would
   // block the tab click below).
   await settleFirstVisit(page);

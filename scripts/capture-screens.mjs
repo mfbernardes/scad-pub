@@ -101,7 +101,12 @@ async function captureViewport(context, base, kind, theme) {
   const page = await context.newPage();
 
   // Establish the origin, force the theme, then reload so it applies before paint.
-  await gotoWithTheme(page, base, theme);
+  // Seed the offline-claim once-flag (src/lib/prefs.ts's makeOnceFlag) so the
+  // staged offline-readiness toast (useAppNotices.ts) never appears in a
+  // capture: like screenshots.mjs, this serves dist/ fresh to a fresh browser
+  // context, so the first load here is a genuine cache-miss download that
+  // would otherwise show it at some nondeterministic point during the walk.
+  await gotoWithTheme(page, base, theme, { seedFlags: ["offline.claim.v1"] });
   // The Output bell's status live region always renders but is visually hidden,
   // so wait for it to be attached (not visible) before polling its render state.
   await page.waitForSelector(".render-status", { state: "attached", timeout: 30000 });
