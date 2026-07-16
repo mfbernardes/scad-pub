@@ -93,7 +93,7 @@ import { isFontFile } from "../openscad/renderArgs";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
 import { useSafeAreaBottom } from "../lib/useSafeAreaBottom";
-import { usePanelState } from "../lib/usePanelState";
+import { usePanelState, type PanelTab } from "../lib/usePanelState";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
 
 interface Props {
@@ -329,6 +329,25 @@ export const AppShell = memo(function AppShell({
     document.getElementById(PARAM_SEARCH_INPUT_ID)?.focus();
   }, [isMobile]);
 
+  // F2: a Radix tab switch (Presets/Parameters/Files) unmounts the OLD tab's
+  // content — including a focused search input, if the old tab happened to
+  // be Parameters — which fires a blur on that input whose target ends up
+  // with zero client rects, EXACTLY the signature onParamSearchHiddenBlur
+  // above treats as "hidden out from under the user by a breakpoint flip".
+  // Left alone, that tab-switch blur would set restoreSearchFocusRef just
+  // like a real breakpoint flip does, and the flag would sit there armed
+  // until the NEXT desktop<->mobile switch — stealing focus back to a search
+  // box the visitor deliberately navigated away from by switching tabs, not
+  // by a device rotation. Every tab change (both direct clicks in
+  // ParamPanel/SheetTabs and AppShell's own programmatic switches — see
+  // handleReviewSettings/handleReviewHiddenSettings below) is routed through
+  // this wrapper instead of panelState.setTab directly, so the flag can never
+  // survive a genuine tab switch.
+  const setPanelTab = useCallback((tab: PanelTab) => {
+    restoreSearchFocusRef.current = false;
+    panelState.setTab(tab);
+  }, [panelState]);
+
   // M16: at the Full sheet detent the sheet visually covers the mobile
   // background (top bar + viewer + floating controls), so treat that detent
   // as modal — mark the background `inert` (removes it from both the tab
@@ -542,10 +561,10 @@ export const AppShell = memo(function AppShell({
     });
   }, []);
   const handleReviewSettings = useCallback(() => {
-    panelState.setTab("params");
+    setPanelTab("params");
     if (isMobile) setSheetDetent("half");
     focusPanelSearch();
-  }, [panelState, isMobile, focusPanelSearch]);
+  }, [setPanelTab, isMobile, focusPanelSearch]);
 
   // "Review hidden settings": the exact same action as CustomizeTab's own
   // "Review" chip (settingsViewChange("all") + focus the first hidden-diff
@@ -557,10 +576,10 @@ export const AppShell = memo(function AppShell({
   // see CustomizeTab's focusHiddenDiffSignal prop/effect.
   const [reviewHiddenSignal, setReviewHiddenSignal] = useState(0);
   const handleReviewHiddenSettings = useCallback(() => {
-    panelState.setTab("params");
+    setPanelTab("params");
     if (isMobile) setSheetDetent("half");
     setReviewHiddenSignal((n) => n + 1);
-  }, [panelState, isMobile]);
+  }, [setPanelTab, isMobile]);
 
   const handleSavePng = useCallback(() => {
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
@@ -907,7 +926,7 @@ export const AppShell = memo(function AppShell({
                   presetsLabel={presetsLabel}
                   parametersLabel={parametersLabel}
                   tab={panelState.tab}
-                  onTabChange={panelState.setTab}
+                  onTabChange={setPanelTab}
                   search={panelState.search}
                   onSearchChange={panelState.setSearch}
                   onSearchBlur={onParamSearchHiddenBlur}
@@ -976,7 +995,7 @@ export const AppShell = memo(function AppShell({
               presetsLabel={presetsLabel}
               parametersLabel={parametersLabel}
               panelTab={panelState.tab}
-              onPanelTabChange={panelState.setTab}
+              onPanelTabChange={setPanelTab}
               search={panelState.search}
               onSearchChange={panelState.setSearch}
               onSearchBlur={onParamSearchHiddenBlur}

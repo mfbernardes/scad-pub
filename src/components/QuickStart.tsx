@@ -43,7 +43,7 @@
 // ReviewContent below), mounted at the END of the scroll flow in scroll mode
 // and as the terminal step's content in steps mode, exactly where the old
 // Export section sat.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardCheck as ReviewIcon } from "lucide-react";
 import type { Design, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
@@ -156,6 +156,16 @@ interface Props {
   onSelectView?: (view: ViewName) => void;
 }
 
+// F7: stable identities for QuickStart/ReviewContent's non-primitive default
+// props — mirrors AppShell's own EMPTY_LOG precedent. An inline `= []` /
+// `= () => {}` default literal is re-created fresh on every render a caller
+// omits the prop, which (a) is wasted allocation and (b) would defeat a
+// memo'd child's shallow-prop-equality check the moment one of these values
+// flows into its props (as `attention` does into AttentionItems below).
+const EMPTY_ATTENTION_ITEMS: AttentionItem[] = [];
+const EMPTY_COMPUTED_INFO: ComputedInfo[] = [];
+const NOOP = () => {};
+
 // The Review-stage badge/action row family — a compact, muted card matching
 // the attention chip strip's own visual language (bg-muted, small text) but
 // scoped to this card rather than CustomizeTab's stable `.attention-chip`
@@ -176,8 +186,8 @@ const reviewAttentionActionClass =
  */
 function ReviewContent({
   readiness = "building",
-  attention = [],
-  onGoToSetting = () => {},
+  attention = EMPTY_ATTENTION_ITEMS,
+  onGoToSetting = NOOP,
   onOpenMessages,
   rows,
   stale = false,
@@ -295,17 +305,26 @@ export function QuickStart({
   attentionParams,
   variant = "steps",
   readiness = "building",
-  attention = [],
+  attention = EMPTY_ATTENTION_ITEMS,
   onGoToSetting,
   onOpenMessages,
   measured = null,
   renderedValues,
-  computedInfo = [],
+  computedInfo = EMPTY_COMPUTED_INFO,
   reviewStale = false,
   onSelectView,
 }: Props) {
-  const steps = visibleSteps(design, values, view);
-  const stepOrder = [...steps.map((s) => s.id), REVIEW_STEP_ID];
+  // F6: memoized on their actual inputs — design/values/view — so a render
+  // that doesn't change any of them (e.g. a sibling attention/readiness
+  // update elsewhere in AppShell) reuses the SAME `steps`/`stepOrder` array
+  // references instead of recomputing (and reallocating) them from scratch.
+  // That matters beyond the direct cost of visibleSteps() itself: several
+  // values derived below (stepSectionGroups, orderKey) depend on `steps`, so
+  // keeping its identity stable across an unrelated re-render lets those stay
+  // stable too, which is what actually keeps ParamRows' own memo (below)
+  // effective — see its own comment.
+  const steps = useMemo(() => visibleSteps(design, values, view), [design, values, view]);
+  const stepOrder = useMemo(() => [...steps.map((s) => s.id), REVIEW_STEP_ID], [steps]);
 
   const [currentId, setCurrentId] = useState<string>(() => steps[0]?.id ?? REVIEW_STEP_ID);
   // "Visited" (sr-only text on the chip, see below), not "valid" or
@@ -476,12 +495,16 @@ export function QuickStart({
   const isReviewCurrent = effectiveCurrentId === REVIEW_STEP_ID;
   const currentStep = steps.find((s) => s.id === effectiveCurrentId) ?? null;
 
+  // F6: hasVisibleUnstepped(design, values, view) used to be called twice —
+  // once for each variant's own gate below — recomputing the exact same
+  // answer from the exact same inputs. One memoized call, reused by both.
+  const hasUnstepped = useMemo(() => hasVisibleUnstepped(design, values, view), [design, values, view]);
   // Steps mode: the tail sits below whichever single step is showing, so it's
   // suppressed while the Review "step" is current (nothing else belongs on
   // that screen). Scroll mode has no such exclusivity — every group renders
   // at once, the tail included — so it's gated on content alone.
-  const showAlsoAvailableSteps = !isReviewCurrent && hasVisibleUnstepped(design, values, view);
-  const showAlsoAvailable = variant === "scroll" ? hasVisibleUnstepped(design, values, view) : showAlsoAvailableSteps;
+  const showAlsoAvailableSteps = !isReviewCurrent && hasUnstepped;
+  const showAlsoAvailable = variant === "scroll" ? hasUnstepped : showAlsoAvailableSteps;
 
   // PR18's Review stage: rows reflect the RENDERED model (renderedValues),
   // falling back to the live controls only when the caller hasn't wired a
@@ -511,6 +534,30 @@ export function QuickStart({
     view,
     focusParam: rowFocus,
   };
+
+  // F6: sectionsOf(design, names) is a pure function of design + a section
+  // NAME list, so its result never actually needs to change unless design or
+  // that name list changes — never on a plain value edit. Called inline (as
+  // it used to be, right in the JSX below) it hands ParamRows — memo'd,
+  // see its own import — a BRAND NEW `sections` array reference every single
+  // render, which defeats that memo just as surely as never memoizing
+  // ParamRows at all. Precomputed once per step here (keyed by step id, so
+  // scroll mode's one-array-per-visible-step map stays a single object) and
+  // reused by both variants below, so a render that doesn't change `design`
+  // or `steps` hands ParamRows back the exact same array it got last time.
+  const stepSectionGroups = useMemo(() => {
+    const map = new Map<string, ParamSectionGroup[]>();
+    for (const step of steps) map.set(step.id, sectionsOf(design, step.sections));
+    return map;
+  }, [design, steps]);
+  // The "Also available" tail's groups (unstepped sections) — same
+  // reasoning, reused by both variants' own tail rendering below. Only
+  // depends on `design` (unsteppedSectionNames reads design.steps/sections,
+  // not values).
+  const unsteppedGroups = useMemo(
+    () => sectionsOf(design, unsteppedSectionNames(design)),
+    [design]
+  );
 
   // Whether a step contains a param with an unresolved attention item — see
   // `attentionParams`' own doc.
@@ -612,7 +659,7 @@ export function QuickStart({
               </h3>
               <ParamRows
                 {...rowProps}
-                sections={sectionsOf(design, step.sections)}
+                sections={stepSectionGroups.get(step.id) ?? []}
                 sectionChrome="flat"
                 // The step heading above already names a single-section step;
                 // only a step sharing several sections (see docs/
@@ -630,7 +677,7 @@ export function QuickStart({
               </div>
               <ParamRows
                 {...rowProps}
-                sections={sectionsOf(design, unsteppedSectionNames(design))}
+                sections={unsteppedGroups}
                 sectionChrome="details"
               />
             </div>
@@ -690,7 +737,7 @@ export function QuickStart({
                 </h3>
                 <ParamRows
                   {...rowProps}
-                  sections={sectionsOf(design, currentStep.sections)}
+                  sections={stepSectionGroups.get(currentStep.id) ?? []}
                   sectionChrome="flat"
                   // The step heading above already names a single-section
                   // step; only a step sharing several sections (see docs/
@@ -709,7 +756,7 @@ export function QuickStart({
               </div>
               <ParamRows
                 {...rowProps}
-                sections={sectionsOf(design, unsteppedSectionNames(design))}
+                sections={unsteppedGroups}
                 sectionChrome="details"
               />
             </div>

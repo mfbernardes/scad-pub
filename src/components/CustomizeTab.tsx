@@ -6,7 +6,7 @@
 // of being duplicated per layout — PanelFooter (the Live-preview switch) is
 // the one piece that stays outside, since the two layouts dock it
 // differently (see ParamPanel.tsx / SheetTabs.tsx).
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Design } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
@@ -20,6 +20,7 @@ import { hiddenAdvancedCount, hiddenAdvancedDiff, hiddenSearchMatches } from "..
 import { quickStartAvailable } from "../lib/quickStart";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
+import { useSignal } from "../lib/useSignal";
 import { t, tn } from "../lib/i18n";
 import { ParamForm, type FocusParamRequest } from "./ParamForm";
 import { ParamSearch } from "./ParamSearch";
@@ -27,6 +28,7 @@ import { PresetDiffBar } from "./PresetDiffBar";
 import { SettingsViewToggle } from "./SettingsViewToggle";
 import { QuickStart } from "./QuickStart";
 import { AttentionItems } from "./AttentionItems";
+import { NoteBar, noteActionClass } from "./NoteBar";
 
 interface Props {
   design: Design;
@@ -107,8 +109,6 @@ interface Props {
 
 const noteClass =
   "flex shrink-0 flex-wrap items-center gap-x-[0.4rem] gap-y-1 border-b bg-muted px-3 py-[0.4rem] text-[0.8rem] text-muted-foreground";
-const noteActionClass =
-  "inline-flex shrink-0 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent p-0 font-medium text-brand hover:underline focus-visible:outline-offset-2";
 
 export function CustomizeTab({
   design,
@@ -203,20 +203,15 @@ export function CustomizeTab({
 
   // External trigger for the same action (the friendly-error card's "Review
   // hidden settings" button lives in OutputConsole, a sibling of this
-  // component — see AppShell). Fires only on a genuine signal CHANGE (not on
-  // mount, where focusHiddenDiffSignal may already be a nonzero initial
-  // value from a previous card interaction this design view), same guard
-  // shape as ParamForm's own focusParam nonce.
-  const lastHiddenSignal = useRef(focusHiddenDiffSignal);
-  useEffect(() => {
-    if (focusHiddenDiffSignal === undefined || focusHiddenDiffSignal === lastHiddenSignal.current) return;
-    lastHiddenSignal.current = focusHiddenDiffSignal;
-    reviewHiddenDiff();
-    // reviewHiddenDiff is recreated every render (it closes over hiddenDiff);
-    // depending on the signal alone is intentional — it always reads the
-    // latest closure when it actually fires.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusHiddenDiffSignal]);
+  // component — see AppShell). F7/F8: useSignal fires only on a genuine
+  // signal CHANGE (not on mount, where focusHiddenDiffSignal may already be a
+  // nonzero initial value from a previous card interaction this design
+  // view — same guard shape as ParamForm's own focusParam nonce) and always
+  // calls the LATEST `reviewHiddenDiff` closure (it closes over `hiddenDiff`,
+  // recreated every render) via useSignal's own latest-callback ref — no
+  // `eslint-disable-next-line react-hooks/exhaustive-deps` needed here
+  // anymore to get that same "depend on the signal alone" behavior.
+  useSignal(focusHiddenDiffSignal, reviewHiddenDiff);
 
   return (
     <>
@@ -238,15 +233,14 @@ export function CustomizeTab({
       />
       {hasAdvanced && <SettingsViewToggle view={settingsView} />}
       {settingsView === "essentials" && hiddenDiff.length > 0 && (
-        <button
-          type="button"
+        <NoteBar
+          as="button"
           className="settings-hidden-diff flex shrink-0 items-center gap-[0.4rem] border-b bg-muted px-3 py-[0.4rem] text-left text-[0.8rem] font-medium text-foreground hover:bg-secondary"
-          onClick={reviewHiddenDiff}
+          onAction={reviewHiddenDiff}
+          actionLabel={t("settings.review")}
         >
-          <span className="flex-1">{tn("settings.hiddenDiffer", hiddenDiff.length)}</span>
-          <span aria-hidden="true">—</span>
-          <span className={noteActionClass}>{t("settings.review")}</span>
-        </button>
+          {tn("settings.hiddenDiffer", hiddenDiff.length)}
+        </NoteBar>
       )}
       <PresetDiffBar
         design={design}
@@ -264,13 +258,15 @@ export function CustomizeTab({
         onBlur={onSearchBlur}
       />
       {settingsView === "essentials" && searchHidden.length > 0 && (
-        <div className={`settings-search-note ${noteClass}`} role="status">
-          <span>{tn("settings.hiddenMatches", searchHidden.length)}</span>
-          <span aria-hidden="true">—</span>
-          <button type="button" className={noteActionClass} onClick={() => settingsViewChange("all")}>
-            {t("settings.showThem")}
-          </button>
-        </div>
+        <NoteBar
+          as="div"
+          role="status"
+          className={`settings-search-note ${noteClass}`}
+          onAction={() => settingsViewChange("all")}
+          actionLabel={t("settings.showThem")}
+        >
+          {tn("settings.hiddenMatches", searchHidden.length)}
+        </NoteBar>
       )}
       {/* customize-tab__scroll: the stable hook QuickStart's scroll variant
           locates (via closest()) as the IntersectionObserver root and the
@@ -325,13 +321,14 @@ export function CustomizeTab({
         )}
       </div>
       {settingsView === "essentials" && hiddenCount > 0 && (
-        <div className={`settings-hidden-note ${noteClass}`}>
-          <span>{tn("settings.hiddenCount", hiddenCount)}</span>
-          <span aria-hidden="true">—</span>
-          <button type="button" className={noteActionClass} onClick={() => settingsViewChange("all")}>
-            {t("settings.showAll")}
-          </button>
-        </div>
+        <NoteBar
+          as="div"
+          className={`settings-hidden-note ${noteClass}`}
+          onAction={() => settingsViewChange("all")}
+          actionLabel={t("settings.showAll")}
+        >
+          {tn("settings.hiddenCount", hiddenCount)}
+        </NoteBar>
       )}
     </>
   );

@@ -42,7 +42,7 @@
 // brief's own "pick the simpler deterministic option" instruction. Help
 // modal replay still resurrects a retired checklist exactly like a manually
 // dismissed one (both just clear the same `checklist.v1` flag).
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Check as CheckIcon, ChevronRight as ChevronIcon } from "lucide-react";
 import { makeOnceFlag } from "../lib/prefs";
 import { t } from "../lib/i18n";
@@ -54,6 +54,7 @@ import {
   type ChecklistItem,
   type ChecklistState,
 } from "../lib/checklist";
+import { useSignal } from "../lib/useSignal";
 import { cn } from "../lib/utils";
 
 const checklistFlag = makeOnceFlag("checklist.v1");
@@ -171,13 +172,13 @@ export function GettingStarted({
   // persisted — a fresh mount (reload, or a layout swap across the M7
   // breakpoint) always starts collapsed again.
   const [expanded, setExpanded] = useState(false);
-  const lastReplay = useRef(replaySignal);
-  useEffect(() => {
-    if (replaySignal === undefined || replaySignal === lastReplay.current) return;
-    lastReplay.current = replaySignal;
+  // F8: fires exactly once per genuine replaySignal change (the Help modal's
+  // replay row) — see useSignal's own doc for why this can't just be a plain
+  // effect on [replaySignal] (the initial mount value may already be nonzero).
+  useSignal(replaySignal, () => {
     checklistFlag.forget();
     setDismissed(false);
-  }, [replaySignal]);
+  });
 
   if (!state.enabled || dismissed) return null;
 

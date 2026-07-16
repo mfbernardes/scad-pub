@@ -2214,6 +2214,36 @@ async function checkHelpModalMobile({ browser, base, check }) {
   }
 }
 
+// F10: ORDERING — main()'s call sequence below isn't arbitrary; several
+// checks are load-bearing on state (once-flags, Cache Storage, settings-view,
+// the checklist's dismiss/retirement flag, …) a PRIOR check left behind, and
+// reordering them would break that chain silently rather than loudly. This
+// map collects the ordering rationale that's otherwise scattered across each
+// check's own doc comment (kept in place below — this is a single point of
+// reference, not a replacement for them) into one list, in main()'s actual
+// call order:
+//   1. checkOfflineClaimToast runs FIRST, before anything else reloads the
+//      page or otherwise disturbs Cache Storage — it needs a genuine,
+//      deterministic cache-MISS download to exercise the offline-claim toast
+//      (see the sw.js route-block above and the check's own doc).
+//   2. checkGettingStarted deliberately leaves the checklist alive (compact,
+//      undismissed) for checkChecklistRetirement, right after it, to drive a
+//      real export against.
+//   3. checkViewerHint runs BEFORE checkChecklistRetirement: the gesture hint
+//      auto-fades 8s after first render if untouched, and that fade PERSISTS
+//      (the same once-flag a real dismiss uses) — running it first keeps its
+//      own wall-clock budget short and deterministic instead of racing
+//      checkChecklistRetirement's heavier reload/dialog round-trips.
+//   4. checkChecklistRetirement leaves the checklist DISMISSED (persisted)
+//      at the end — checkReadiness (much later) relies on exactly that: it
+//      brings the checklist back itself via the Help modal's replay row to
+//      check the live "Preview" status, and leaves it dismissed again
+//      afterward for whatever runs after it.
+//   5. checkSettingsView leaves the panel in "All settings" for checkQuickStart
+//      right after it (which switches to essentials to exercise QuickStart,
+//      then switches back) — and, transitively, for every later check that
+//      also expects the full, ungated panel: bundled presets' Import/Export
+//      row and checkTagDesign's @showIf/@collapsed checks.
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;

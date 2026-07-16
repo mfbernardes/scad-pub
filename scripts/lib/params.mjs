@@ -64,6 +64,15 @@ const ESSENTIAL_BARE_RE = /^@essential$/i;
 // entirely (bare `@step <id>`) defers the label to the section name of this
 // id's first occurrence — resolved once the header itself is reached, since
 // that's the earliest point the section name is known.
+// F3: a doubled separator (`@step tag || Weird`) used to slip through — the
+// SECOND `|` (plus the space after it) landed inside the captured label
+// instead of being rejected, yielding a label of "| Weird". The label is now
+// additionally validated (right below, alongside the pre-existing
+// empty-label check) to reject one starting with `|` — the same
+// malformed-annotation error either way. An empty *id* side (`@step |
+// Weird`, no id at all) was already rejected before this fix: `<id>` requires
+// at least one `[A-Za-z0-9_-]` character, so that shape never matches
+// STEP_BARE_RE to begin with and falls straight into the `!m` branch below.
 const STEP_LINE_RE = /^\s*\/\/\s*(@step\b.*)$/i;
 const STEP_BARE_RE = /^@step\s+([A-Za-z0-9_-]+)\s*(?:\|\s*(.*))?$/i;
 // File-level design metadata, read anywhere in the file (typically a header
@@ -337,8 +346,10 @@ export function parseParams(absPath) {
   let pendingShowIf = null;
   let pendingShowIfLine = 0;
   let pendingFont = false;
+  let pendingFontLine = 0;
   // Set by an `// @info [Label | unit]` line; consumed by the next parameter.
   let pendingInfo = null;
+  let pendingInfoLine = 0;
   // Set by an `// @svg [layers=<param>]` line; consumed by the next parameter.
   let pendingSvg = null;
   let pendingSvgLine = 0;
@@ -347,6 +358,7 @@ export function parseParams(absPath) {
   let pendingFilledByLine = 0;
   // Set by a `// @collapsed` line; consumed by the next section header.
   let pendingSectionCollapsed = false;
+  let pendingSectionCollapsedLine = 0;
   // Set by a `// @advanced` line; consumed by whichever comes next — a
   // section header (section-level) or a parameter (param-level). See
   // ADVANCED_LINE_RE above.
@@ -388,11 +400,17 @@ export function parseParams(absPath) {
   const reset = () => {
     pendingDoc = [];
     pendingShowIf = null;
+    pendingShowIfLine = 0;
     pendingFont = false;
+    pendingFontLine = 0;
     pendingInfo = null;
+    pendingInfoLine = 0;
     pendingSvg = null;
+    pendingSvgLine = 0;
     pendingFilledBy = null;
+    pendingFilledByLine = 0;
     pendingSectionCollapsed = false;
+    pendingSectionCollapsedLine = 0;
     pendingAdvanced = false;
     pendingAdvancedLine = 0;
     pendingEssential = false;
@@ -407,6 +425,7 @@ export function parseParams(absPath) {
     // section, so handle it before the null-section guard below.
     if (COLLAPSE_RE.test(line)) {
       pendingSectionCollapsed = true;
+      pendingSectionCollapsedLine = lineNo;
       continue;
     }
     // `@advanced` / `@essential` are matched here — before the null-section
@@ -444,7 +463,10 @@ export function parseParams(absPath) {
       const m = content.match(STEP_BARE_RE);
       if (!m) fail(absPath, lineNo, `malformed @step annotation: '${content}'`);
       const label = m[2] !== undefined ? m[2].trim() : null;
-      if (m[2] !== undefined && !label)
+      // F3: empty (`@step tag |`) and pipe-led (`@step tag || Weird` — a
+      // doubled separator, whose second `|` used to end up AT THE START of
+      // the label instead of being rejected) are both malformed the same way.
+      if (m[2] !== undefined && (!label || label.startsWith("|")))
         fail(absPath, lineNo, `malformed @step annotation: '${content}'`);
       pendingStep = { id: m[1], label };
       pendingStepLine = lineNo;
@@ -616,13 +638,16 @@ export function parseParams(absPath) {
         validateShowIfGrammar(expr, absPath, lineNo);
         pendingShowIf = expr;
         pendingShowIfLine = lineNo;
-      } else if (FONT_ANNOT_RE.test(content)) pendingFont = true;
-      else if (info) {
+      } else if (FONT_ANNOT_RE.test(content)) {
+        pendingFont = true;
+        pendingFontLine = lineNo;
+      } else if (info) {
         // `@info`, `@info Label`, or `@info Label | unit` — split on a single
         // pipe; empty parts become null (label falls back to the param's own
         // description in the UI).
         const [label, unit] = info[1].split("|").map((s) => s.trim());
         pendingInfo = { label: label || null, unit: unit || null };
+        pendingInfoLine = lineNo;
       } else if (filledBy) {
         pendingFilledBy = filledBy[1];
         pendingFilledByLine = lineNo;
@@ -663,6 +688,32 @@ export function parseParams(absPath) {
     } else {
       reset();
     }
+  }
+  // M9/F1: EOF is not a valid attachment point for any annotation that's
+  // meant to attach to a parameter or a section header that comes AFTER it —
+  // the file simply ran out before that ever arrived. Without this check the
+  // annotation was silently dropped: a file ending in `// @step orphan`, say,
+  // used to parse cleanly with `steps: []`, hiding what's very likely a typo
+  // or a moved/deleted section. A plain trailing doc-comment run (pendingDoc)
+  // is NOT checked here — prose left dangling at the end of a file is
+  // harmless (there's no parameter for it to document, but that's not an
+  // error) — only the annotation-shaped pendings below are. Checked in
+  // declaration order above; only the FIRST dangling annotation found is
+  // reported, since a file with several still only needs one build error to
+  // start fixing.
+  const danglingAtEof = [
+    [pendingSectionCollapsed, pendingSectionCollapsedLine, "@collapsed", "section header"],
+    [pendingAdvanced, pendingAdvancedLine, "@advanced", "parameter or section header"],
+    [pendingEssential, pendingEssentialLine, "@essential", "parameter"],
+    [pendingStep, pendingStepLine, "@step", "section header"],
+    [pendingShowIf, pendingShowIfLine, "@showIf", "parameter"],
+    [pendingFont, pendingFontLine, "@font", "parameter"],
+    [pendingInfo, pendingInfoLine, "@info", "parameter"],
+    [pendingSvg, pendingSvgLine, "@svg", "parameter"],
+    [pendingFilledBy, pendingFilledByLine, "@filledBy", "parameter"],
+  ];
+  for (const [pending, line, name, expected] of danglingAtEof) {
+    if (pending) fail(absPath, line, `dangling ${name} annotation: no ${expected} follows it before end of file`);
   }
   validateAnnotations(params, lineInfo, absPath);
   return { params, sections, collapsedSections, meta, steps };

@@ -129,6 +129,12 @@ export function HelpModal({
   // existing help never drops the original content.
   const tabs: HelpTab[] | null = content.tabs?.length
     ? [
+        // This label is exactly what gen-schema's `ui.afterExport.helpTab`
+        // cross-check (scripts/gen-schema.mjs) treats as the synthesized
+        // "Overview" tab's name — it reads the same `help.overviewTab` key
+        // out of src/locales/en.json rather than a hardcoded literal, so the
+        // two can never drift apart. Change the en.json string and both
+        // sides move together.
         ...(content.sections?.length
           ? [{ label: t("help.overviewTab"), sections: content.sections }]
           : []),

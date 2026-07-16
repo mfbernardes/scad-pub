@@ -1,9 +1,10 @@
 // DesignPicker.tsx — the shadcn Select used to switch designs. Shared by the
 // desktop CommandBar and the mobile top bar (each wraps it differently and
 // handles the single-design fallback in its own markup).
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { Design } from "../openscad/types";
 import { t } from "../lib/i18n";
+import { useSignal } from "../lib/useSignal";
 import {
   Select,
   SelectContent,
@@ -55,20 +56,14 @@ export function DesignPicker({ designs, value, onChange, openSignal, active = tr
   const grouped = runs.some((r) => r.group !== null);
   const [open, setOpen] = useState(false);
 
-  // Open on a fresh signal (the CTA), but only for the visible layout's picker.
-  // A ref tracks the last-seen value so a later `active` flip alone can't re-open it.
-  const lastSignal = useRef(openSignal);
-  useEffect(() => {
-    if (openSignal !== undefined && openSignal !== lastSignal.current) {
-      lastSignal.current = openSignal;
-      // Deliberate: `openSignal` is an external one-shot broadcast (a CTA
-      // click elsewhere in the tree), not state derived from props, so it
-      // can't be computed during render — a ref already tracks "last seen"
-      // to make this idempotent against re-renders.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (active) setOpen(true);
-    }
-  }, [openSignal, active]);
+  // Open on a fresh signal (the CTA), but only for the visible layout's
+  // picker (both bars mount at once — see the prop's own doc). useSignal
+  // (F8) tracks "last seen" internally so a later `active` flip alone can't
+  // re-open it; `active` itself is read at fire time via useSignal's
+  // latest-callback ref, so this closure never goes stale.
+  useSignal(openSignal, () => {
+    if (active) setOpen(true);
+  });
 
   const item = (d: Design) => (
     <SelectItem key={d.id} value={d.id} icon={designIcon(d)} description={d.description ?? undefined}>

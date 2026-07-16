@@ -397,7 +397,7 @@ function resolveDesignList(config, SOURCE) {
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
-function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register, strictSteps }) {
+function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, checkContainedInConfigDir, relPosix, copyAsset, register, strictSteps }) {
   return resolveDesignList(config, SOURCE).map(({ iconSrc, imageSrc, docSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
@@ -444,7 +444,10 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       const base = iconSrc ? CONFIG_DIR : dirname(abs);
       const src = mustExist(resolve(base, iconRel), `design '${d.id}' icon '${iconRel}'`);
       // `// @icon` (unlike a config `icon`) resolves relative to the design's
-      // own file, i.e. within SOURCE — so it must stay within SOURCE too.
+      // own file, i.e. within SOURCE — so it must stay within SOURCE too. A
+      // config `icon` (like `doc` below) is NOT containment-checked against
+      // CONFIG_DIR — unlike `image` just below it — a pre-existing asymmetry
+      // (legacy) that's out of scope for this fix.
       if (!iconSrc) checkContained(src, `design '${d.id}' icon '${iconRel}'`, relPosix(abs));
       const dot = iconRel.lastIndexOf(".");
       const ext = dot > 0 ? iconRel.slice(dot) : "";
@@ -466,8 +469,12 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       const base = imageSrc ? CONFIG_DIR : dirname(abs);
       const src = mustExist(resolve(base, imageRel), `design '${d.id}' image '${imageRel}'`);
       // `// @image` (unlike a config `image`) resolves relative to the
-      // design's own file, i.e. within SOURCE — so it must stay within SOURCE too.
-      if (!imageSrc) checkContained(src, `design '${d.id}' image '${imageRel}'`, relPosix(abs));
+      // design's own file, i.e. within SOURCE — so it must stay within SOURCE
+      // too. F4: a config `image` is checked the same way, just against
+      // CONFIG_DIR instead of SOURCE — unlike icon/doc (see their own
+      // comments), which stay unchecked for config-relative paths.
+      if (imageSrc) checkContainedInConfigDir(src, `design '${d.id}' image '${imageRel}'`, `design '${d.id}' config entry`);
+      else checkContained(src, `design '${d.id}' image '${imageRel}'`, relPosix(abs));
       const dot = imageRel.lastIndexOf(".");
       const ext = dot > 0 ? imageRel.slice(dot) : "";
       const name = `${d.id}-image${ext}`;
@@ -653,6 +660,20 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     configPath,
     mustExist,
   });
+  // A second, CONFIG_DIR-rooted instance of the same containment machinery
+  // (F4): most config-owned paths (icon/doc/logo/extraCss/…) are a deliberately
+  // untrusted-boundary-free zone — see assets.mjs's module comment — but a
+  // config `designs[].image` path is validated against CONFIG_DIR the same way
+  // its `// @image` annotation counterpart is already validated against
+  // SOURCE, closing the one config-authored escape route among the four
+  // (icon/image/doc/logo) that a stray `../` could otherwise walk anywhere on
+  // disk. icon/doc keep their pre-existing unchecked behavior — that asymmetry
+  // is deliberate/legacy, out of scope here (see buildDesigns' image block).
+  const { checkContained: checkContainedInConfigDir } = createAssetTools({
+    SOURCE: CONFIG_DIR,
+    configPath,
+    mustExist,
+  });
   // Destination-ownership registry (H6): every file this run writes anywhere
   // in the served tree is registered here before it's written; a second
   // write aimed at the same path fails the build, naming both owners.
@@ -699,15 +720,23 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
+  // The bundled English UI-text catalogue (src/locales/en.json), read once
+  // here — both the helpTab cross-check right below and the STRINGS
+  // validation further down need it, so it's parsed a single time and shared.
+  const EN_CATALOG = JSON.parse(readFileSync(EN_CATALOG_PATH, "utf-8"));
   // ui.afterExport.helpTab (if set) must name an existing Help tab — checked
   // here rather than inside parseUi (config-parsers.mjs) because it's a
   // cross-field validation against HELP, only available now. Mirrors
   // HelpModal's own tab-list logic (top-level `help.sections` synthesize a
-  // leading "Overview" tab when `help.tabs` are also present) so a value that
-  // passes here is guaranteed to match a real tab the modal renders.
+  // leading tab labelled `t("help.overviewTab")` when `help.tabs` are also
+  // present) so a value that passes here is guaranteed to match a real tab
+  // the modal renders. Reads the SAME `help.overviewTab` string out of
+  // EN_CATALOG that HelpModal's `t()` resolves at runtime — not a hardcoded
+  // "Overview" literal — so the two can never drift apart (see HelpModal.tsx's
+  // own comment on this coupling).
   if (UI.afterExport?.helpTab) {
     const tabLabels = HELP?.tabs?.length
-      ? [...(HELP.sections?.length ? ["Overview"] : []), ...HELP.tabs.map((t) => t.label)]
+      ? [...(HELP.sections?.length ? [EN_CATALOG["help.overviewTab"]] : []), ...HELP.tabs.map((t) => t.label)]
       : [];
     if (!tabLabels.includes(UI.afterExport.helpTab)) {
       throw new Error(
@@ -725,10 +754,8 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // appended (never replacing the built-ins) by the in-app licenses modal.
   const LICENSES_EXTRA = parseLicenses(config.licenses);
   // Optional per-deployment UI text overrides. Validated against the bundled
-  // English catalogue's key set (see EN_CATALOG_PATH); absent -> {}.
-  const EN_CATALOG_KEYS = Object.keys(
-    JSON.parse(readFileSync(EN_CATALOG_PATH, "utf-8"))
-  );
+  // English catalogue's key set (EN_CATALOG, read once above); absent -> {}.
+  const EN_CATALOG_KEYS = Object.keys(EN_CATALOG);
   const STRINGS = parseStrings(config.strings, EN_CATALOG_KEYS);
 
   // outScadDir is entirely generated. H6/M8: build the complete new tree in a
@@ -762,6 +789,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     outScadDir: stageScadDir,
     mustExist,
     checkContained,
+    checkContainedInConfigDir,
     relPosix,
     copyAsset,
     register: registry.register,

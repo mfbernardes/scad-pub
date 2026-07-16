@@ -527,6 +527,13 @@ test("a design `file` that escapes the source root fails the build", () => {
   assert.throws(() => run("widget-escape-file.config.json"), /escapes the source root/);
 });
 
+test("F4: a config `designs[].image` that escapes the config directory fails the build", () => {
+  // Unlike icon/doc (deliberately unchecked for a config-relative path — see
+  // buildDesigns' own comment), `image` is now checked against CONFIG_DIR the
+  // same way its `// @image` annotation counterpart is checked against SOURCE.
+  assert.throws(() => run("widget-escape-image.config.json"), /escapes the source root/);
+});
+
 test("a missing use/include target names the missing path and the referencing file", () => {
   assert.throws(
     () => run("widget-missingdep.config.json"),
@@ -1903,6 +1910,13 @@ test("@step with an explicit empty label after '|' is malformed", () => {
   );
 });
 
+test("F3: a doubled '||' separator (label beginning with '|') is malformed, not a mangled label", () => {
+  assert.throws(
+    () => paramsOf(`// @step tag || Weird\n/* [S] */\nbar = 1;\n`),
+    /f\.scad:1: malformed @step annotation: '@step tag \|\| Weird'/
+  );
+});
+
 test("@step directly above a parameter (not a section header) is a build error", () => {
   assert.throws(
     () => paramsOf(`/* [S] */\n// @step foo\nbar = 1;\n`),
@@ -1929,6 +1943,70 @@ test("the unknown-annotation error message lists @step", () => {
     () => paramsOf(`/* [S] */\n// @shwoIf foo\nbar = 1;\n`),
     /expected one of:.*@step/
   );
+});
+
+// F1: a dangling annotation at end-of-file used to be silently dropped
+// instead of failing the build (e.g. a file ending in `// @step orphan`
+// parsed cleanly with `steps: []`) — see parseParams' EOF check.
+test("F1: a dangling @step at EOF (no section header follows it) fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @step orphan\n`),
+    /f\.scad:3: dangling @step annotation: no section header follows it before end of file/
+  );
+});
+
+test("F1: a dangling @advanced at EOF (no parameter or section header follows it) fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @advanced\n`),
+    /f\.scad:3: dangling @advanced annotation: no parameter or section header follows it before end of file/
+  );
+});
+
+test("F1: a dangling @showIf at EOF (no parameter follows it) fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @showIf bar\n`),
+    /f\.scad:3: dangling @showIf annotation: no parameter follows it before end of file/
+  );
+});
+
+test("F1: a dangling @essential at EOF fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @essential\n`),
+    /f\.scad:3: dangling @essential annotation: no parameter follows it before end of file/
+  );
+});
+
+test("F1: a dangling @collapsed at EOF (no section header follows it) fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @collapsed\n`),
+    /f\.scad:3: dangling @collapsed annotation: no section header follows it before end of file/
+  );
+});
+
+test("F1: a dangling @font/@info/@svg/@filledBy at EOF each fail the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @font\n`),
+    /f\.scad:3: dangling @font annotation: no parameter follows it before end of file/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @info Label\n`),
+    /f\.scad:3: dangling @info annotation: no parameter follows it before end of file/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\nname = "x"; // [str]\n// @svg\n`),
+    /f\.scad:3: dangling @svg annotation: no parameter follows it before end of file/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\nname = "x"; // [str]\n// @filledBy name\n`),
+    /f\.scad:3: dangling @filledBy annotation: no parameter follows it before end of file/
+  );
+});
+
+// A trailing plain doc-comment run (no annotation) at EOF is harmless — only
+// annotation-shaped pendings fail the build.
+test("F1: trailing plain doc-comment prose at EOF is NOT an error", () => {
+  const { params } = parseOf(`/* [S] */\nbar = 1;\n// just a trailing comment\n`);
+  assert.equal(params.length, 1);
 });
 
 test("unsteppedEssentialSections: [] when the design declares no steps", () => {
