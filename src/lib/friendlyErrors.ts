@@ -76,7 +76,7 @@ function technicalTail(log: string[], max: number): string[] {
     if (assertM) text = assertM[1].trim();
     else {
       const warnM = line.match(WARNING_RE);
-      if (warnM) text = `Warning: ${warnM[1].trim()}`;
+      if (warnM) text = t("failure.technicalWarningPrefix", { message: warnM[1].trim() });
       else {
         const bootM = line.match(BOOTSTRAP_LOG_RE);
         if (bootM) text = bootM[1].trim();

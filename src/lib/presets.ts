@@ -7,6 +7,7 @@ import { fromPresetString, toPresetString } from "./scad";
 import { assetUrl } from "./assetUrl";
 import { ns } from "./appId";
 import { readLocal, writeLocal } from "./safeStorage";
+import { t } from "./i18n";
 
 export interface ParameterSetsFile {
   parameterSets: Record<string, Record<string, string>>;
@@ -52,7 +53,7 @@ export function parseParameterSetsFile(
 ): ParsedSet[] {
   const data = JSON.parse(text) as Partial<ParameterSetsFile>;
   if (!data.parameterSets || typeof data.parameterSets !== "object")
-    throw new Error("Not an OpenSCAD parameterSets file (missing parameterSets).");
+    throw new Error(t("presets.notAParameterSetsFile"));
   const byName = new Map(design.params.map((p) => [p.name, p]));
   return Object.entries(data.parameterSets).map(([name, raw]) => {
     const values: Values = defaultsFor(design);

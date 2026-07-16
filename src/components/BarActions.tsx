@@ -12,6 +12,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 import {
   CircleHelp as HelpIcon,
   Info as InfoIcon,
@@ -29,8 +30,9 @@ const THEME_ICON: Record<ThemeMode, React.ReactNode> = {
   auto: <AutoThemeIcon size={16} />,
 };
 
-// One wording for the licenses control in both presentations.
-const LICENSES_LABEL = "Open-source licenses";
+// One wording for the licenses control in both presentations (shared with the
+// LicensesModal title — see src/locales/*.json's licenses.title).
+const LICENSES_LABEL_KEY = "licenses.title";
 
 const rowClass =
   "flex w-full items-center gap-2 rounded-(--radius-sm) px-2 py-[0.45rem] text-left text-[0.9rem] text-foreground cursor-pointer hover:bg-muted focus-visible:bg-muted";
@@ -54,20 +56,20 @@ export function BarActions({ themeMode, collapse = false }: Props) {
             it); styled to match the top bar's other icon buttons. */}
         <PopoverTrigger
           className={cn(ICON_BUTTON_CLASS, "inline-flex items-center justify-center rounded-md outline-none data-[state=open]:border-brand")}
-          aria-label="More actions"
-          title="More"
+          aria-label={t("bar.moreActionsAria")}
+          title={t("bar.more")}
         >
           <MoreIcon size={16} />
         </PopoverTrigger>
         <PopoverContent align="end" className="w-48 p-1">
-          <button type="button" className={rowClass} onClick={cycleTheme} aria-label="Toggle theme">
-            {THEME_ICON[themeMode]} Theme
+          <button type="button" className={rowClass} onClick={cycleTheme} aria-label={t("bar.toggleThemeAria")}>
+            {THEME_ICON[themeMode]} {t("bar.theme")}
           </button>
           <button type="button" className={rowClass} onClick={openModal(showHelp)}>
-            <HelpIcon size={16} /> Help
+            <HelpIcon size={16} /> {t("bar.help")}
           </button>
           <button type="button" className={rowClass} onClick={openModal(showLicenses)}>
-            <InfoIcon size={16} /> {LICENSES_LABEL}
+            <InfoIcon size={16} /> {t(LICENSES_LABEL_KEY)}
           </button>
         </PopoverContent>
       </Popover>
@@ -81,10 +83,10 @@ export function BarActions({ themeMode, collapse = false }: Props) {
           no args here for the default "first tab" behaviour, and wrapped
           rather than passed directly so IconButton's synthetic click event
           can never be forwarded into it as that argument. */}
-      <IconButton label="Help" title="Help & keyboard shortcuts" onClick={() => showHelp()}>
+      <IconButton label={t("bar.help")} title={t("bar.helpTitle")} onClick={() => showHelp()}>
         <HelpIcon size={16} />
       </IconButton>
-      <IconButton label={LICENSES_LABEL} title={LICENSES_LABEL} onClick={showLicenses}>
+      <IconButton label={t(LICENSES_LABEL_KEY)} title={t(LICENSES_LABEL_KEY)} onClick={showLicenses}>
         <InfoIcon size={16} />
       </IconButton>
     </>

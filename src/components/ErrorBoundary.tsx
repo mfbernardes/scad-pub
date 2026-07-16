@@ -6,6 +6,7 @@
 // lazily-loaded SVG wizard (a bumped attempt counter is the reset signal —
 // see SvgPrepareControl.tsx), and at the app root in main.tsx.
 import { Component, type ReactNode } from "react";
+import { t } from "../lib/i18n";
 
 interface Props {
   children: ReactNode;
@@ -42,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
             className="viewer-error flex flex-1 flex-col items-center justify-center gap-[0.4rem] bg-card p-4 text-center text-foreground"
             role="alert"
           >
-            <p>The 3D preview couldn't be shown.</p>
+            <p>{t("errorboundary.message")}</p>
             <p className="text-[0.82rem] text-muted-foreground">{this.state.error.message}</p>
           </div>
         )

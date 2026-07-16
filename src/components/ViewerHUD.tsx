@@ -10,6 +10,7 @@ import type { ViewName } from "./views";
 import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, Maximize as MaximizeIcon, Ruler as RulerIcon } from "lucide-react";
 import { useStandalone } from "../lib/useStandalone";
 import { fullscreenSupported } from "../lib/fullscreen";
+import { t } from "../lib/i18n";
 
 interface Props {
   viewerRef: React.RefObject<ViewerHandle | null>;
@@ -56,22 +57,22 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
       {viewPicker && <ViewPicker view={view} onSelect={onSelectView} />}
       {zoom && (
         <>
-          <IconButton label="Zoom in" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomIn()}>
+          <IconButton label={t("hud.zoomIn")} className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomIn()}>
             <ZoomInIcon size={18} />
           </IconButton>
-          <IconButton label="Zoom out" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomOut()}>
+          <IconButton label={t("hud.zoomOut")} className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomOut()}>
             <ZoomOutIcon size={18} />
           </IconButton>
         </>
       )}
       {reset && (
-        <IconButton label="Reset view" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.resetView()}>
+        <IconButton label={t("hud.resetView")} className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.resetView()}>
           <ResetIcon size={18} />
         </IconButton>
       )}
       {measure && (
         <IconButton
-          label={showDimensions ? "Hide dimensions" : "Show dimensions"}
+          label={showDimensions ? t("hud.hideDimensions") : t("hud.showDimensions")}
           onClick={onToggleDimensions}
           pressed={showDimensions}
           className={cn(HUD_GLASS_BTN, showDimensions && "border-brand text-brand")}
@@ -82,7 +83,7 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
       {/* Fullscreen only where it works: a browser tab (not an installed PWA)
           on a browser that supports the Fullscreen API. */}
       {canFullscreen && (
-        <IconButton label="Toggle fullscreen" className={HUD_GLASS_BTN} onClick={toggleFullscreen}>
+        <IconButton label={t("hud.toggleFullscreen")} className={HUD_GLASS_BTN} onClick={toggleFullscreen}>
           <MaximizeIcon size={18} />
         </IconButton>
       )}

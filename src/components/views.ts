@@ -15,18 +15,20 @@ export type ViewName =
 
 export interface ViewOption {
   id: ViewName;
-  label: string;
+  /** i18n catalogue key (src/locales/*.json) for the display label — resolved
+   *  with t() at render time in ViewPicker.tsx, not baked in here. */
+  labelKey: string;
 }
 
 // Order shown in the picker dropdown.
 export const VIEW_OPTIONS: ViewOption[] = [
-  { id: "isometric", label: "Isometric" },
-  { id: "top", label: "Top" },
-  { id: "bottom", label: "Bottom" },
-  { id: "front", label: "Front" },
-  { id: "back", label: "Back" },
-  { id: "left", label: "Left" },
-  { id: "right", label: "Right" },
+  { id: "isometric", labelKey: "view.isometric" },
+  { id: "top", labelKey: "view.top" },
+  { id: "bottom", labelKey: "view.bottom" },
+  { id: "front", labelKey: "view.front" },
+  { id: "back", labelKey: "view.back" },
+  { id: "left", labelKey: "view.left" },
+  { id: "right", labelKey: "view.right" },
 ];
 
 // Unit-ish direction from the model centre to the camera for each preset. The

@@ -57,15 +57,15 @@ function HelpTabs({ tabs, defaultTab }: { tabs: HelpTab[]; defaultTab: string })
     <Tabs defaultValue={defaultTab} className="min-h-0 flex-1 gap-0">
       <TabsList
         className="mx-4 mt-2 h-auto w-auto flex-wrap justify-start rounded-none border-0 border-b bg-transparent p-0"
-        aria-label="Help topics"
+        aria-label={t("help.topicsAria")}
       >
-        {tabs.map((t, i) => (
+        {tabs.map((tab, i) => (
           <TabsTrigger key={i} value={String(i)} className={cn(chipTabTrigger, "px-3")}>
-            {t.label}
+            {tab.label}
           </TabsTrigger>
         ))}
       </TabsList>
-      {tabs.map((t, i) => (
+      {tabs.map((tab, i) => (
         <TabsContent
           key={i}
           value={String(i)}
@@ -74,7 +74,7 @@ function HelpTabs({ tabs, defaultTab }: { tabs: HelpTab[]; defaultTab: string })
           className={cn(HELP_BODY, "mt-0")}
           tabIndex={0}
         >
-          <HelpSections intro={t.intro} sections={t.sections} />
+          <HelpSections intro={tab.intro} sections={tab.sections} />
         </TabsContent>
       ))}
     </Tabs>
@@ -118,7 +118,7 @@ export function HelpModal({
   const tabs: HelpTab[] | null = content.tabs?.length
     ? [
         ...(content.sections?.length
-          ? [{ label: "Overview", sections: content.sections }]
+          ? [{ label: t("help.overviewTab"), sections: content.sections }]
           : []),
         ...content.tabs,
       ]
@@ -130,7 +130,7 @@ export function HelpModal({
   const defaultTab = initialTabIndex >= 0 ? String(initialTabIndex) : "0";
 
   return (
-    <Modal title={content.title ?? "How to use this configurator"} label="Help" onClose={onClose}>
+    <Modal title={content.title ?? t("help.defaultTitle")} label={t("help.label")} onClose={onClose}>
       {content.intro && (
         <div className={MODAL_INTRO}>
           <Markdown body={content.intro} />
@@ -146,10 +146,10 @@ export function HelpModal({
       {canInstall && onInstall && (
         <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
           <span className="text-[0.85rem] text-muted-foreground">
-            Install this configurator for quick, offline access.
+            {t("help.installBlurb")}
           </span>
-          <Button size="sm" className="ml-auto" onClick={onInstall} title="Install as app">
-            <InstallIcon size={14} /> Install app
+          <Button size="sm" className="ml-auto" onClick={onInstall} title={t("help.installTitle")}>
+            <InstallIcon size={14} /> {t("help.installButton")}
           </Button>
         </div>
       )}

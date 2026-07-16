@@ -6,7 +6,7 @@ import type { Design } from "../openscad/types";
 import type { SettingsView } from "../lib/useExperience";
 import { defaultsFor, type Values } from "../lib/presets";
 import { hiddenAdvancedDiff } from "../lib/paramFilter";
-import { tn } from "../lib/i18n";
+import { t, tn } from "../lib/i18n";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,8 +50,8 @@ export function ResetButton({ design, values, onReset, className, children, view
       <button
         type="button"
         className={className}
-        aria-label="Reset to defaults"
-        title={dirty ? "Reset all parameters to this design's defaults" : "Parameters are already at their defaults"}
+        aria-label={t("diffbar.resetToDefaults")}
+        title={dirty ? t("resetbutton.titleDirty") : t("resetbutton.titleClean")}
         disabled={!dirty}
         onClick={() => setOpen(true)}
       >
@@ -60,15 +60,15 @@ export function ResetButton({ design, values, onReset, className, children, view
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Reset to defaults?</AlertDialogTitle>
+            <AlertDialogTitle>{t("resetbutton.confirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This discards your current parameter changes for “{design.label}”.
+              {t("resetbutton.confirmDescription", { label: design.label })}
               {hiddenDiffCount > 0 && " " + tn("settings.resetIncludesHidden", hiddenDiffCount)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={onReset}>Reset</AlertDialogAction>
+            <AlertDialogCancel>{t("dialog.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={onReset}>{t("resetbutton.reset")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

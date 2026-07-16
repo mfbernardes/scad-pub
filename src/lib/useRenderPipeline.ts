@@ -296,10 +296,10 @@ export function useRenderPipeline({
         // than silently stopping the spinner over a stale model.
         lastKeyRef.current = "";
         setRendering(false);
-        toast.error("The preview couldn't be built", {
+        toast.error(t("pipeline.buildFailed"), {
           id: "render-failed",
           description:
-            e instanceof Error ? e.message : "Unexpected renderer error.",
+            e instanceof Error ? e.message : t("pipeline.unexpectedError"),
         });
       }
     },

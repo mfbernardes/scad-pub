@@ -44,6 +44,7 @@ import { applyFixes } from "./fixes";
 import { groupByColor } from "./groupByColor";
 import { deriveRegions, formatLayers, parseLayersArg } from "./regions";
 import type { Finding, Region } from "./types";
+import { t } from "../i18n";
 
 /** Above this many colour regions a multi-colour export tends to import
  *  unreliably into slicers (small regions merge or drop). Surfaced as a caution,
@@ -85,9 +86,9 @@ export function analyze(root: Element, layersArg = ""): Analysis {
 export function parseSvg(text: string): Element {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const err = doc.querySelector("parsererror");
-  if (err) throw new Error(err.textContent || "Not a valid SVG/XML file");
+  if (err) throw new Error(err.textContent || t("svgprep.notValidSvgXml"));
   const root = doc.documentElement;
-  if (!root || root.localName !== "svg") throw new Error("Root element is not <svg>");
+  if (!root || root.localName !== "svg") throw new Error(t("svgprep.rootNotSvg"));
   return root;
 }
 
@@ -101,12 +102,15 @@ export function serializeSvg(root: Element): string {
  *  benign "single colour" outcomes are swallowed; other notes are returned. */
 export function autoGroupByColor(root: Element): string[] {
   if (deriveRegions(root).length > 0) return [];
-  const { changes, error } = groupByColor(root);
+  const { changes, error, errorCode } = groupByColor(root);
   if (error) {
-    if (error.includes("already in a named") || error.includes("only one colour")) {
+    // Idempotent "already grouped" and benign "single colour" outcomes are
+    // swallowed by outcome code, not by matching (locale-dependent) message
+    // text — see GroupByColorErrorCode.
+    if (errorCode === "already-grouped" || errorCode === "single-colour") {
       return [];
     }
-    return [`Group by colour: ${error}`];
+    return [t("svgprep.groupByColorErrorPrefix", { error })];
   }
   return changes;
 }

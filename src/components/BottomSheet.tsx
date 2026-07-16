@@ -33,6 +33,14 @@ const DETENT_ANNOUNCE_KEY: Record<SheetDetent, string> = {
   half: "sheet.detentHalf",
   full: "sheet.detentFull",
 };
+// i18n keys for the bare detent word, interpolated into the drag handle's
+// aria-label (see `sheet.handleAria`) — separate from DETENT_ANNOUNCE_KEY's
+// full sentences above.
+const DETENT_WORD_KEY: Record<SheetDetent, string> = {
+  peek: "sheet.wordPeek",
+  half: "sheet.wordHalf",
+  full: "sheet.wordFull",
+};
 // Slightly above 50% to clear browser chrome at the bottom.
 export const HALF_VH_RATIO = 0.52;
 // Movement (px) past which a pointer interaction counts as a drag, not a tap.
@@ -420,7 +428,7 @@ export function BottomSheet({
           type="button"
           className="sheet-scrim"
           style={bottomInset ? { bottom: bottomInset } : undefined}
-          aria-label="Collapse parameter panel"
+          aria-label={t("sheet.collapseAria")}
           onClick={() => setDetent("half")}
         />
       )}
@@ -434,7 +442,7 @@ export function BottomSheet({
           transform: `translateY(${Math.max(0, fullHeight - displayH)}px)`,
           transition: dragging ? "none" : "transform 0.28s cubic-bezier(0.32,0.72,0,1)",
         } as React.CSSProperties}
-        aria-label="Parameter panel"
+        aria-label={t("sheet.panelAria")}
         role="complementary"
       >
         <div className="sheet-frame">
@@ -443,7 +451,7 @@ export function BottomSheet({
             className="sheet-handle relative"
             role="button"
             tabIndex={0}
-            aria-label={`Parameter panel — ${detent}. Tap to cycle, Arrow Up/Down to resize`}
+            aria-label={t("sheet.handleAria", { state: t(DETENT_WORD_KEY[detent]) })}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}

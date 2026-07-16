@@ -15,6 +15,7 @@ import type { Values } from "../lib/presets";
 import type { ComputedInfo } from "../lib/computedInfo";
 import { isVisible } from "../lib/visibility";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 
 interface Props {
   design: Design;
@@ -44,7 +45,7 @@ function formatValue(param: Param, values: Values): string | null {
   const unit = param.info?.unit ? ` ${param.info.unit}` : "";
   switch (param.type) {
     case "boolean":
-      return raw ? "Yes" : "No";
+      return raw ? t("dimensions.yes") : t("dimensions.no");
     case "string": {
       const s = String(raw).trim();
       return s ? s + unit : null;
@@ -91,7 +92,7 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
         // Preview out of date: dim + italic so a stale figure never reads as current.
         stale && "italic opacity-55"
       )}
-      aria-label="Model measurements"
+      aria-label={t("dimensions.aria")}
     >
       <div
         className={cn(
@@ -106,7 +107,7 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
               type="button"
               onClick={() => setCollapsed((c) => !c)}
               aria-expanded={!collapsed}
-              title={collapsed ? "Show measurement details" : "Hide measurement details"}
+              title={collapsed ? t("dimensions.showDetails") : t("dimensions.hideDetails")}
               className="-m-1 inline-flex cursor-pointer items-center gap-[0.3rem] rounded-(--radius-sm) bg-transparent p-1 font-semibold text-foreground hover:text-brand"
             >
               <ChevronDown
@@ -114,10 +115,10 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
                 aria-hidden
                 className={cn("shrink-0 transition-transform", collapsed && "-rotate-90")}
               />
-              Dimensions
+              {t("dimensions.heading")}
             </button>
           ) : (
-            "Dimensions"
+            t("dimensions.heading")
           )}
         </dt>
         <dd className={dd}>{`${mm(size.x)} × ${mm(size.y)} × ${mm(size.z)} mm`}</dd>

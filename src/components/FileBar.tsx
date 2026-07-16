@@ -5,6 +5,7 @@
 // stored client-side and mounted by the renderer.
 import { toast } from "sonner";
 import type { FileImport } from "../openscad/types";
+import { t } from "../lib/i18n";
 import { FileInput } from "./FileInput";
 import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
@@ -39,7 +40,7 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
     // Reject an over-cap upload before reading it — a friendly toast, no store.
     if (fileImport.maxBytes !== undefined && file.size > fileImport.maxBytes) {
       toast.error(
-        `"${file.name}" is ${formatSize(file.size)} — over the ${formatSize(fileImport.maxBytes)} limit.`,
+        t("files.tooLarge", { name: file.name, size: formatSize(file.size), limit: formatSize(fileImport.maxBytes) }),
         { id: "file-too-large" }
       );
       return;
@@ -52,10 +53,7 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
     <div className="file-manager flex flex-col gap-2 px-3 pt-2 pb-3">
       <div className="text-[0.85rem] leading-[1.4] text-muted-foreground [&_:is(p,ul)]:m-0 [&_:is(p,ul)+:is(p,ul)]:mt-2 [&_ul]:pl-[1.1rem]">
         <Markdown
-          body={
-            fileImport.note ??
-            "Fonts, SVGs & data files referenced by this design. Stored on-device and re-applied next visit."
-          }
+          body={fileImport.note ?? t("files.defaultNote")}
         />
       </div>
 
@@ -76,8 +74,8 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
               <IconButton
                 className="shrink-0 border-transparent bg-transparent text-brand hover:border-border hover:bg-card"
                 onClick={() => onRemoveFile(f.name)}
-                label={`Remove ${f.name}`}
-                title={`Remove ${f.name}`}
+                label={t("files.removeAria", { name: f.name })}
+                title={t("files.removeAria", { name: f.name })}
               >
                 <XIcon size={14} />
               </IconButton>
@@ -92,10 +90,10 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
             type="button"
             variant="outline"
             className="w-full"
-            title="Import a file your design references (a font, an SVG, a data file…)"
+            title={t("files.importTitle")}
             onClick={open}
           >
-            <FolderIcon size={16} /> {fileImport.label ?? "Import file"}…
+            <FolderIcon size={16} /> {fileImport.label ?? t("files.importDefaultLabel")}…
           </Button>
         )}
       </FileInput>
@@ -103,11 +101,11 @@ export function FileBar({ fileImport, loadedFiles, onAddFile, onRemoveFile, onCl
         type="button"
         variant="outline"
         className="w-full"
-        title="Remove all imported files and clear the render cache"
+        title={t("files.clearAllTitle")}
         onClick={onClearFiles}
         disabled={loadedFiles.length === 0}
       >
-        <TrashIcon size={16} /> Clear all imported files
+        <TrashIcon size={16} /> {t("files.clearAll")}
       </Button>
     </div>
   );

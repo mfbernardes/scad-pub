@@ -10,6 +10,7 @@ import type { Values } from "../lib/presets";
 import type { SettingsView } from "../lib/useExperience";
 import { useAppActions } from "../lib/appActions";
 import { ResetButton } from "./ResetButton";
+import { t, tn } from "../lib/i18n";
 import { RotateCcw as ResetIcon } from "lucide-react";
 
 interface Props {
@@ -40,7 +41,7 @@ export function PresetDiffBar({
   const changedCount = changedParams.size;
   if (changedCount === 0) return null;
 
-  const count = `${changedCount} ${changedCount === 1 ? "change" : "changes"}`;
+  const countFrom = tn("diffbar.changeCount", changedCount);
   const barClass =
     "preset-diff flex items-center gap-2 border-b bg-muted px-3 py-[0.4rem] text-[0.8rem] text-muted-foreground";
   const actionBtnClass =
@@ -48,29 +49,29 @@ export function PresetDiffBar({
 
   if (presetBaseline) {
     return (
-      <div className={barClass} role="region" aria-label={`Changes from ${presetName}`}>
+      <div className={barClass} role="region" aria-label={t("diffbar.changesFromAria", { name: presetName ?? "" })}>
         <span>
-          {count} from <b className="font-semibold text-foreground">{presetName}</b>
+          {countFrom} <b className="font-semibold text-foreground">{presetName}</b>
         </span>
         <button
           type="button"
           className={actionBtnClass}
           onClick={() => applyPreset(presetBaseline)}
-          aria-label={`Revert to ${presetName}`}
+          aria-label={t("diffbar.revertTo", { name: presetName ?? "" })}
         >
-          <ResetIcon size={13} className="shrink-0" /> Revert to {presetName}
+          <ResetIcon size={13} className="shrink-0" /> {t("diffbar.revertTo", { name: presetName ?? "" })}
         </button>
       </div>
     );
   }
 
   return (
-    <div className={barClass} role="region" aria-label="Changes from defaults">
+    <div className={barClass} role="region" aria-label={t("diffbar.changesFromDefaultsAria")}>
       <span>
-        {count} from <b className="font-semibold text-foreground">defaults</b>
+        {countFrom} <b className="font-semibold text-foreground">{t("diffbar.defaultsLabel")}</b>
       </span>
       <ResetButton design={design} values={values} onReset={reset} view={settingsView} className={actionBtnClass}>
-        <ResetIcon size={13} className="shrink-0" /> Reset to defaults
+        <ResetIcon size={13} className="shrink-0" /> {t("diffbar.resetToDefaults")}
       </ResetButton>
     </div>
   );

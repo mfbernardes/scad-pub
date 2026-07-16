@@ -10,6 +10,7 @@ import { assetUrl } from "../lib/assetUrl";
 import { cn } from "../lib/utils";
 import { Modal, MODAL_BODY } from "./Modal";
 import { Markdown } from "./Markdown";
+import { t } from "../lib/i18n";
 
 // Typography for the doc body (the Markdown renderer emits bare h2/h3/h4/p/ul).
 // Mirrors HelpModal's HELP_BODY, extended to cover the heading levels a full doc
@@ -60,14 +61,14 @@ export function DesignDocModal({
   }, [design.doc]);
 
   return (
-    <Modal title={`About the ${design.label}`} label={`${design.label} guide`} onClose={onClose}>
+    <Modal title={t("docmodal.title", { label: design.label })} label={t("docmodal.label", { label: design.label })} onClose={onClose}>
       <div className={DOC_BODY} tabIndex={0}>
         {error ? (
           <p className="text-[0.88rem] text-muted-foreground">
-            Couldn't load this design's documentation. Check your connection and try again.
+            {t("docmodal.loadError")}
           </p>
         ) : text === null ? (
-          <p className="text-[0.88rem] text-muted-foreground">Loading…</p>
+          <p className="text-[0.88rem] text-muted-foreground">{t("docmodal.loading")}</p>
         ) : (
           <Markdown body={text} />
         )}

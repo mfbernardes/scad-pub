@@ -34,6 +34,7 @@ import { useAppNotices } from "./lib/useAppNotices";
 import { useExperience } from "./lib/useExperience";
 import { makeOnceFlag } from "./lib/prefs";
 import { shouldOfferInstallHint, type ExportOutcomeKind } from "./lib/exportOutcome";
+import { t } from "./lib/i18n";
 import type { ExportSuccessState } from "./components/ExportSuccess";
 import { toast } from "sonner";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
@@ -397,11 +398,11 @@ export default function App() {
     if (installHintFlag.seen()) return;
     // Storage unavailable — skip the hint rather than risk repeating it.
     if (!installHintFlag.remember()) return;
-    toast("Install this configurator for quick, offline access?", {
+    toast(t("app.installHintToast"), {
       id: "install-hint",
       duration: 12000,
-      action: { label: "Install", onClick: () => void promptInstall() },
-      cancel: { label: "Not now", onClick: () => {} },
+      action: { label: t("app.installAction"), onClick: () => void promptInstall() },
+      cancel: { label: t("app.notNow"), onClick: () => {} },
     });
   }, [canInstall, promptInstall]);
 
@@ -437,7 +438,7 @@ export default function App() {
       exportSuccessKeyRef.current += 1;
       setExportSuccess({ outcome: kind, key: exportSuccessKeyRef.current, isFirstShow });
     } else {
-      setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
+      setAnnouncement(outcome === "shared" ? t("app.sharedName", { name }) : t("app.exportedName", { name }));
     }
     // Precedence rule (src/lib/exportOutcome.ts): the install hint only ever
     // fires on a deployment that hasn't configured the after-export panel —
@@ -463,7 +464,7 @@ export default function App() {
       () => download(url, name)
     );
     if (outcome === "cancelled") return;
-    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Saved ${name}`);
+    setAnnouncement(outcome === "shared" ? t("app.sharedName", { name }) : t("app.savedName", { name }));
   }, [exportable, snapshot, setAnnouncement]);
 
   // Whether the CURRENT design/values/imports are fully described by a plain
@@ -493,9 +494,9 @@ export default function App() {
     }
     try {
       await navigator.clipboard.writeText(url);
-      setAnnouncement(warning ?? "Copied share link");
+      setAnnouncement(warning ?? t("app.copiedShareLink"));
     } catch {
-      setAnnouncement("Couldn't copy — copy the URL from the address bar");
+      setAnnouncement(t("app.copyFailed"));
     }
   }, [design, values, presetSel, shareability, setAnnouncement]);
 

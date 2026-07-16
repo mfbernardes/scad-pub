@@ -4,6 +4,7 @@
 // absent that, it doubles as the render-status indicator (a corner status dot).
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
+import { t, tn } from "../lib/i18n";
 import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";
 import { Bell as BellIcon, BellRing as BellRingIcon } from "lucide-react";
 
@@ -56,11 +57,11 @@ export function OutputToggle({
         className
       )}
       onClick={onToggleOutput}
-      aria-label={`${outputOpen ? "Close" : "Open"} messages${
-        hasNotices ? ` (${noticeCount} notice${noticeCount === 1 ? "" : "s"})` : ""
+      aria-label={`${outputOpen ? t("output.toggleAriaClose") : t("output.toggleAriaOpen")}${
+        hasNotices ? tn("output.noticesSuffix", noticeCount) : ""
       }`}
       aria-pressed={outputOpen}
-      title="Messages from the design — notices & log"
+      title={t("output.title")}
     >
       <BellGlyph size={16} />
       {hasNotices ? (

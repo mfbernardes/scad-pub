@@ -13,6 +13,7 @@ import {
   parseParameterSetsFile,
 } from "../lib/presets";
 import { downloadBlob } from "../lib/download";
+import { t } from "../lib/i18n";
 import { Button } from "./ui/button";
 import { IconButton } from "./IconButton";
 import { FileInput } from "./FileInput";
@@ -164,12 +165,15 @@ export function PresetPicker({
       parsed = parseParameterSetsFile(design, await file.text());
     } catch (err) {
       toast.error(
-        `Couldn't import "${file.name}": ${err instanceof Error ? err.message : "not a valid parameterSets file."}`
+        t("presets.importError", {
+          name: file.name,
+          message: err instanceof Error ? err.message : t("presets.importErrorNotValid"),
+        })
       );
       return;
     }
     if (parsed.length === 0) {
-      toast.error(`"${file.name}" has no parameter sets to import.`);
+      toast.error(t("presets.importErrorEmpty", { name: file.name }));
       return;
     }
     for (const set of parsed) savePreset(design.id, set.name, set.values);
@@ -188,9 +192,9 @@ export function PresetPicker({
         {bundled.length > 0 && (
           <section>
             <h3 className={sectionHeadingClass}>
-              Ready-made
+              {t("presets.readyMade")}
             </h3>
-            <ul aria-label="Ready-made presets">
+            <ul aria-label={t("presets.readyMadeAria")}>
               {bundled.map((p) => {
                 const id = `bundled:${design.id}:${p.name}`;
                 return (
@@ -211,9 +215,9 @@ export function PresetPicker({
         {userPresets.length > 0 && (
           <section>
             <h3 className={sectionHeadingClass}>
-              Saved by you
+              {t("presets.savedByYou")}
             </h3>
-            <ul aria-label="Your saved presets">
+            <ul aria-label={t("presets.savedByYouAria")}>
               {userPresets.map((name) => {
                 const id = `user:${design.id}:${name}`;
                 return (
@@ -228,10 +232,10 @@ export function PresetPicker({
                     <button
                       className="shrink-0 rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.2rem] text-[0.8rem] text-muted-foreground enabled:hover:bg-muted enabled:hover:text-warn"
                       onClick={() => setDeleteTarget(name)}
-                      aria-label={`Delete preset "${name}"`}
-                      title={`Delete "${name}"`}
+                      aria-label={t("presets.deleteAria", { name })}
+                      title={t("presets.deleteTitle", { name })}
                     >
-                      Delete
+                      {t("presets.delete")}
                     </button>
                   </li>
                 );
@@ -241,7 +245,7 @@ export function PresetPicker({
         )}
         {bundled.length === 0 && userPresets.length === 0 && (
           <p className="px-[0.6rem] py-2 text-[0.85rem] text-muted-foreground">
-            No presets yet — set things up the way you like, then save them below.
+            {t("presets.empty")}
           </p>
         )}
       </div>
@@ -253,16 +257,16 @@ export function PresetPicker({
             name="preset-name"
             autoComplete="off"
             className="h-8 flex-1"
-            placeholder="Save these settings as…"
+            placeholder={t("presets.savePlaceholder")}
             value={saveName}
-            aria-label="New preset name"
+            aria-label={t("presets.saveAria")}
             onChange={(e) => setSaveName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSave();
             }}
           />
           <Button size="sm" onClick={handleSave} disabled={!saveName.trim()}>
-            Save
+            {t("presets.save")}
           </Button>
         </div>
       )}
@@ -279,9 +283,9 @@ export function PresetPicker({
                 variant="ghost"
                 size="sm"
                 onClick={open}
-                title="Import presets from an OpenSCAD parameterSets file"
+                title={t("presets.importTitle")}
               >
-                <UploadIcon size={14} /> Import…
+                <UploadIcon size={14} /> {t("presets.import")}
               </Button>
             )}
           </FileInput>
@@ -293,11 +297,11 @@ export function PresetPicker({
             disabled={userPresets.length === 0}
             title={
               userPresets.length
-                ? "Export your saved presets as an OpenSCAD parameterSets file"
-                : "Save a preset first"
+                ? t("presets.exportTitleReady")
+                : t("presets.exportTitleEmpty")
             }
           >
-            <DownloadIcon size={14} /> Export
+            <DownloadIcon size={14} /> {t("presets.export")}
           </Button>
         </div>
       )}
@@ -308,20 +312,20 @@ export function PresetPicker({
     <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete preset?</AlertDialogTitle>
+          <AlertDialogTitle>{t("presets.deleteConfirmTitle")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This permanently deletes your saved preset “{deleteTarget}”.
+            {t("presets.deleteConfirmDescription", { name: deleteTarget ?? "" })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("dialog.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => {
               if (deleteTarget) handleDelete(deleteTarget);
               setDeleteTarget(null);
             }}
           >
-            Delete
+            {t("presets.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -341,7 +345,7 @@ export function PresetPicker({
       <div className="flex items-center border-b py-[0.4rem] pr-2 pl-3">
         <span className="flex-1 text-[0.88rem] font-semibold">{presetsLabel}</span>
         {onClose && (
-          <IconButton label="Close presets" onClick={onClose}>
+          <IconButton label={t("presets.closeAria")} onClick={onClose}>
             <XIcon size={16} />
           </IconButton>
         )}

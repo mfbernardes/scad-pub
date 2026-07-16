@@ -14,6 +14,7 @@ import { BarActions } from "./BarActions";
 import { OutputToggle } from "./OutputToggle";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 
 interface Props {
   schema: Schema;
@@ -82,8 +83,8 @@ export const CommandBar = memo(function CommandBar({
         )}
         {currentDesign?.doc && (
           <IconButton
-            label="Design guide"
-            title="About this design"
+            label={t("bar.designGuide")}
+            title={t("bar.aboutDesign")}
             onClick={showDesignDoc}
             className="command-bar__design-doc size-7 p-[0.3rem]"
           >

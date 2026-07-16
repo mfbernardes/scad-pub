@@ -349,8 +349,8 @@ export const AppShell = memo(function AppShell({
   // Variable names are developer detail — hidden unless a config opts in.
   const showVarName = ui.showVarName === true;
   // Configurable tab/section labels (default to the built-in names).
-  const presetsLabel = ui.presetsLabel ?? "Presets";
-  const parametersLabel = ui.parametersLabel ?? "Customize";
+  const presetsLabel = ui.presetsLabel ?? t("panel.defaultPresetsLabel");
+  const parametersLabel = ui.parametersLabel ?? t("panel.defaultParametersLabel");
   // Whether the viewer offers the measure (dimensions) toggle. Off hides the HUD
   // ruler button; the overlay + panel are only reachable through it, so they
   // stay hidden too.
@@ -762,8 +762,8 @@ export const AppShell = memo(function AppShell({
                   )}
                   {design.doc && (
                     <IconButton
-                      label="Design guide"
-                      title="About this design"
+                      label={t("bar.designGuide")}
+                      title={t("bar.aboutDesign")}
                       onClick={actions.showDesignDoc}
                       className="mobile-top-bar__design-doc size-7 shrink-0 p-[0.3rem]"
                     >
@@ -841,7 +841,7 @@ export const AppShell = memo(function AppShell({
             <Dialog open onOpenChange={(o) => { if (!o) closeOutput(); }}>
               <DialogContent
                 showCloseButton={false}
-                aria-label="Messages from the design"
+                aria-label={t("console.regionAria")}
                 aria-describedby={undefined}
                 className="output-console-modal fixed inset-0 z-50 flex flex-col gap-0 rounded-none border-0 p-0 max-w-none translate-x-0 translate-y-0 sm:max-w-none"
               >

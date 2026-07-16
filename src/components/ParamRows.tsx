@@ -21,6 +21,7 @@ import { displayValue } from "../lib/paramDiff";
 import { isShown, paramMatchesQuery } from "../lib/paramFilter";
 import { familyOf, normalizeFamily, withFamily, type InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
+import { t } from "../lib/i18n";
 import { FileInput } from "./FileInput";
 import { FontSelect } from "./FontSelect";
 import { SvgPrepareControl } from "./SvgPrepareControl";
@@ -149,7 +150,7 @@ function FontMissingHint({
       role="status"
     >
       <span className="text-[0.82rem] leading-[1.4] text-foreground">
-        “{family}” isn’t loaded — text may render in another font.
+        {t("params.fontMissing", { family })}
       </span>
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         <FileInput
@@ -158,13 +159,13 @@ function FontMissingHint({
         >
           {(open) => (
             <button type="button" className={actionBtn} onClick={open}>
-              <UploadIcon size={13} aria-hidden="true" /> Import font…
+              <UploadIcon size={13} aria-hidden="true" /> {t("params.importFont")}
             </button>
           )}
         </FileInput>
         {fallback && (
           <button type="button" className={actionBtn} onClick={() => onUse(fallback.value)}>
-            Use {fallback.label}
+            {t("params.useFallback", { label: fallback.label })}
           </button>
         )}
       </div>
@@ -401,7 +402,7 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
           // (the label line comes first), so an unqualified query would focus
           // this info popover instead of the control it's meant to reveal.
           className="param-help-trigger -m-[5px] inline-flex shrink-0 cursor-pointer items-center justify-center self-center rounded-[4px] border-none bg-transparent p-[5px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
-          aria-label={`Help for ${label}`}
+          aria-label={t("params.helpForAria", { label })}
         >
           <InfoIcon aria-hidden="true" focusable="false" />
         </button>
@@ -560,12 +561,12 @@ export const ParamRows = memo(function ParamRows({
         {!isToggle && control}
         {isDrifted && baseline && (
           <span className="param-drift flex items-center gap-[0.4rem] text-[0.78rem] text-muted-foreground">
-            <span className="line-through">was {displayValue(p, baseline[p.name])}</span>
+            <span className="line-through">{t("params.wasValue", { value: displayValue(p, baseline[p.name]) })}</span>
             <button
               type="button"
               className="param-drift-revert -m-[3px] inline-flex shrink-0 cursor-pointer items-center rounded-[4px] border-none bg-transparent p-[3px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1"
-              aria-label={`Revert ${label} to ${presetName ?? "default"}`}
-              title={`Revert to ${presetName ?? "default"}`}
+              aria-label={t("params.revertFieldAria", { label, target: presetName ?? t("params.defaultTarget") })}
+              title={t("params.revertFieldTitle", { target: presetName ?? t("params.defaultTarget") })}
               onClick={() => onChange(p.name, baseline[p.name])}
             >
               <RevertIcon size={12} aria-hidden="true" />
@@ -590,7 +591,7 @@ export const ParamRows = memo(function ParamRows({
         {p.filledBy ? (
           <details className="param-advanced">
             <summary className="flex cursor-pointer select-none list-none items-center gap-[0.3rem] text-[0.82rem] text-muted-foreground focus-visible:rounded-[4px]">
-              Advanced: {label}
+              {t("params.advancedPrefix", { label })}
             </summary>
             <div className="mt-2 flex flex-col gap-[0.35rem]">{body}</div>
           </details>
@@ -605,7 +606,7 @@ export const ParamRows = memo(function ParamRows({
     <div className="param-form">
       {groups.length === 0 && (
         <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
-          {q ? `Nothing matches “${search}”.` : "This design has nothing to customize."}
+          {q ? t("params.noMatch", { search }) : t("params.nothingToCustomize")}
         </p>
       )}
       {groups.map(({ section, params }) => {

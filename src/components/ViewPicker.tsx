@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Box as ViewIcon, Check as CheckIcon } from "lucide-react";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 import { VIEW_OPTIONS, type ViewName } from "./views";
 
 /** The HUD's glass icon-button decoration, shared by every button in the
@@ -24,7 +25,8 @@ interface Props {
 
 export function ViewPicker({ view, onSelect }: Props) {
   const [open, setOpen] = useState(false);
-  const current = VIEW_OPTIONS.find((o) => o.id === view)?.label ?? "View";
+  const currentOption = VIEW_OPTIONS.find((o) => o.id === view);
+  const current = currentOption ? t(currentOption.labelKey) : t("view.fallback");
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {/* Native button so PopoverTrigger's ref reaches the DOM (Radix anchors to
@@ -38,8 +40,8 @@ export function ViewPicker({ view, onSelect }: Props) {
             "border rounded-(--radius-sm) hover:border-brand data-[state=open]:border-brand data-[state=open]:text-brand",
             HUD_GLASS_BTN
           )}
-          aria-label={`View: ${current}`}
-          title={`View: ${current}`}
+          aria-label={t("view.currentAria", { view: current })}
+          title={t("view.currentAria", { view: current })}
         >
           <ViewIcon size={18} />
         </button>
@@ -66,7 +68,7 @@ export function ViewPicker({ view, onSelect }: Props) {
                   <span className="inline-flex w-4 shrink-0 text-brand" aria-hidden="true">
                     {active && <CheckIcon size={15} />}
                   </span>
-                  {o.label}
+                  {t(o.labelKey)}
                 </button>
               </li>
             );

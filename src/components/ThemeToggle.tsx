@@ -2,6 +2,7 @@
 // CommandBar and the mobile top bar so both layouts offer the same control.
 import { Sun as SunIcon, Moon as MoonIcon, SunMoon as AutoThemeIcon } from "lucide-react";
 import { IconButton } from "./IconButton";
+import { t } from "../lib/i18n";
 
 type ThemeMode = "light" | "dark" | "auto";
 
@@ -11,15 +12,15 @@ const ICON: Record<ThemeMode, React.ReactNode> = {
   auto: <AutoThemeIcon size={16} />,
 };
 // Label names the *next* theme in the cycle (what clicking switches to).
-const LABEL: Record<ThemeMode, string> = {
-  light: "Switch to dark theme",
-  dark: "Switch to auto theme",
-  auto: "Switch to light theme",
+const LABEL_KEY: Record<ThemeMode, string> = {
+  light: "theme.toDark",
+  dark: "theme.toAuto",
+  auto: "theme.toLight",
 };
 
 export function ThemeToggle({ mode, onCycle }: { mode: ThemeMode; onCycle: () => void }) {
   return (
-    <IconButton label={LABEL[mode]} title={LABEL[mode]} onClick={onCycle}>
+    <IconButton label={t(LABEL_KEY[mode])} title={t(LABEL_KEY[mode])} onClick={onCycle}>
       {ICON[mode]}
     </IconButton>
   );

@@ -91,20 +91,20 @@ export function useAppNotices({
 }: AppNoticesArgs): void {
   useEffect(() => {
     if (bundleStale)
-      toast.error("This page is running an outdated version. Reload to update.", {
+      toast.error(t("notices.bundleStale"), {
         id: "bundle-stale",
         duration: Infinity,
-        action: { label: "Reload", onClick: forceUpdate },
+        action: { label: t("svg.reload"), onClick: forceUpdate },
       });
   }, [bundleStale, forceUpdate]);
 
   useEffect(() => {
     if (updateReady && !bundleStale)
-      toast("A new version is available.", {
+      toast(t("notices.swUpdateAvailable"), {
         id: "sw-update",
         duration: Infinity,
-        action: { label: "Reload", onClick: applyUpdate },
-        cancel: { label: "Later", onClick: dismissUpdate },
+        action: { label: t("svg.reload"), onClick: applyUpdate },
+        cancel: { label: t("notices.later"), onClick: dismissUpdate },
       });
   }, [updateReady, bundleStale, applyUpdate, dismissUpdate]);
 
@@ -112,7 +112,7 @@ export function useAppNotices({
   // the cached WASM means rendering and export keep working. Clears on reconnect.
   useEffect(() => {
     if (!online)
-      toast("You're offline — rendering and export still work.", {
+      toast(t("notices.offline"), {
         id: "offline",
         duration: Infinity,
       });

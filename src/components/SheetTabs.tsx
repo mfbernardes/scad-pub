@@ -16,6 +16,7 @@ import { PanelFooter } from "./PanelFooter";
 import { GettingStarted } from "./GettingStarted";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 
 type Tab = PanelTab;
 
@@ -154,10 +155,10 @@ export function SheetTabs({
         onValueChange={(v) => onTabChange(v as Tab)}
         className="sheet-tabs min-h-0 flex-1 gap-0"
       >
-        <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
-          {tabs.map((t) => (
-            <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
-              {t === "params" ? parametersLabel : t === "presets" ? presetsLabel : "Files"}
+        <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label={t("panel.sectionsAria")}>
+          {tabs.map((tabKey) => (
+            <TabsTrigger key={tabKey} value={tabKey} className={triggerClass} onClick={() => onActivate?.()}>
+              {tabKey === "params" ? parametersLabel : tabKey === "presets" ? presetsLabel : t("tabs.files")}
             </TabsTrigger>
           ))}
         </TabsList>

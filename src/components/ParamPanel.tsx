@@ -15,6 +15,7 @@ import { useAppActions } from "../lib/appActions";
 import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
+import { t } from "../lib/i18n";
 import { CustomizeTab } from "./CustomizeTab";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
@@ -228,8 +229,8 @@ export function ParamPanel({
         <button
           className="param-panel-open-btn font-display"
           onClick={() => setOpen(true)}
-          aria-label={`Open the ${parametersLabel} panel`}
-          title={`Open the ${parametersLabel} panel`}
+          aria-label={t("panel.openAria", { label: parametersLabel })}
+          title={t("panel.openAria", { label: parametersLabel })}
         >
           <MenuIcon size={14} /> {parametersLabel}
         </button>
@@ -254,7 +255,7 @@ export function ParamPanel({
         onPointerCancel={onPointerUp}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize parameter panel"
+        aria-label={t("panel.resizeAria")}
         aria-valuenow={width}
         aria-valuemin={MIN_WIDTH}
         aria-valuemax={MAX_WIDTH}
@@ -286,12 +287,12 @@ export function ParamPanel({
           <TabsList className="flex-1 rounded-none border-0 bg-transparent p-0">
             <TabsTrigger value="presets" className={panelTabClass}>{presetsLabel}</TabsTrigger>
             <TabsTrigger value="params" className={panelTabClass}>{parametersLabel}</TabsTrigger>
-            {fileImport && <TabsTrigger value="files" className={panelTabClass}>Files</TabsTrigger>}
+            {fileImport && <TabsTrigger value="files" className={panelTabClass}>{t("tabs.files")}</TabsTrigger>}
           </TabsList>
           <IconButton
             className="mr-1 self-center"
-            label="Collapse panel"
-            title="Collapse to full-screen canvas"
+            label={t("panel.collapse")}
+            title={t("panel.collapseTitle")}
             onClick={() => setOpen(false)}
           >
             <CollapseChevron size={16} />

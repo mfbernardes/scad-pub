@@ -8,12 +8,24 @@
 import { SHAPE_TAGS, SVG_NS, hasStructuralChildren, iterElements, localName } from "./dom";
 import { colorKey, displayColor, parseColor, slugForColor } from "./colors";
 import { effectiveFill } from "./regions";
+import { t } from "../i18n";
 
 const ELEMENT_NODE = 1;
+
+/** Stable identifier for a `GroupByColorResult.error`, so callers (see
+ *  `autoGroupByColor` in index.ts) can branch on outcome without matching
+ *  substrings of the (translated, locale-dependent) message text. */
+export type GroupByColorErrorCode =
+  | "no-shapes"
+  | "already-grouped"
+  | "transform-blocked"
+  | "single-colour";
 
 export interface GroupByColorResult {
   changes: string[];
   error: string | null;
+  /** Set alongside `error` — null whenever `error` is null. */
+  errorCode?: GroupByColorErrorCode;
 }
 
 function pruneEmptyGroups(root: Element): void {
@@ -81,12 +93,14 @@ function deepestCommonAncestor(shapes: Element[], root: Element): Element {
 
 export function groupByColor(root: Element): GroupByColorResult {
   const allShapes = iterElements(root).filter((el) => SHAPE_TAGS.has(localName(el)));
-  if (allShapes.length === 0) return { changes: [], error: "no shapes to group" };
+  if (allShapes.length === 0)
+    return { changes: [], error: t("svgprep.noShapesToGroup"), errorCode: "no-shapes" };
   const shapes = allShapes.filter((sh) => !inNamedRegion(sh, root));
   if (shapes.length === 0) {
     return {
       changes: [],
-      error: "every shape is already in a named colour region — nothing to regroup",
+      error: t("svgprep.alreadyGrouped"),
+      errorCode: "already-grouped",
     };
   }
 
@@ -108,9 +122,8 @@ export function groupByColor(root: Element): GroupByColorResult {
       ) {
         return {
           changes: [],
-          error:
-            "some shapes are transformed or clipped, so regrouping could move " +
-            "them — group them by colour in your editor instead",
+          error: t("svgprep.transformBlocked"),
+          errorCode: "transform-blocked",
         };
       }
       node = el.parentNode;
@@ -132,7 +145,8 @@ export function groupByColor(root: Element): GroupByColorResult {
   if (order.length < 2 && shapes.length === allShapes.length) {
     return {
       changes: [],
-      error: "only one colour found — nothing to separate",
+      error: t("svgprep.singleColourOnly"),
+      errorCode: "single-colour",
     };
   }
 
@@ -156,9 +170,7 @@ export function groupByColor(root: Element): GroupByColorResult {
     group.setAttribute("fill", disp);
     for (const sh of bucket.shapes) group.appendChild(sh);
     container.appendChild(group);
-    changes.push(
-      `grouped ${bucket.shapes.length} shape(s) into the "${disp}" colour region`,
-    );
+    changes.push(t("svgprep.groupedRegion", { count: bucket.shapes.length, color: disp }));
   }
   pruneEmptyGroups(root);
   return { changes, error: null };

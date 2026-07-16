@@ -10,6 +10,7 @@ import type { Design } from "../openscad/types";
 import type { Values } from "./presets";
 import { familyOf, styleOf, faceKeyOf } from "./fonts";
 import { fontFaces } from "./fontNameTable.mjs";
+import { t } from "./i18n";
 
 const FONT_EXTENSION_RE = /\.(ttf|otf|ttc)$/i;
 
@@ -102,5 +103,5 @@ export function computeShareability(
 export function shareabilityWarning(shareability: Shareability): string | null {
   if (shareability.complete) return null;
   const names = [...new Set(shareability.localOnly.map((f) => f.name))].join(", ");
-  return `Link copied, but it won't include files only on this device: ${names}. Recipients need those too.`;
+  return t("shareability.warning", { names });
 }

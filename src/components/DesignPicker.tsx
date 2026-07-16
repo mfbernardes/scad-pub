@@ -3,6 +3,7 @@
 // handles the single-design fallback in its own markup).
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Design } from "../openscad/types";
+import { t } from "../lib/i18n";
 import {
   Select,
   SelectContent,
@@ -78,7 +79,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, active = tr
     <Select value={value} onValueChange={onChange} open={open} onOpenChange={setOpen}>
       <SelectTrigger
         size="sm"
-        aria-label="Choose a design"
+        aria-label={t("picker.button")}
         className="font-display h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-0"
       >
         <SelectValue />

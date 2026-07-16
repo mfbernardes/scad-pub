@@ -13,6 +13,7 @@ import {
   type Finding,
   type Region,
 } from "../lib/svgPrep";
+import { t } from "../lib/i18n";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
@@ -77,7 +78,13 @@ function FindingList({ findings, empty }: { findings: Finding[]; empty: string }
 // Steps: 1 = check, 2 = fix, 3 = colours (only when deriveColours).
 type Step = 1 | 2 | 3;
 
-const STEP_NAMES: Record<Step, string> = { 1: "Check", 2: "Fix", 3: "Colours" };
+// i18n catalogue keys (src/locales/*.json) for each step's name — resolved
+// with t() at render time, not baked in here.
+const STEP_NAME_KEYS: Record<Step, string> = {
+  1: "svgwizard.stepCheck",
+  2: "svgwizard.stepFix",
+  3: "svgwizard.stepColours",
+};
 
 export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComplete }: Props) {
   // Parse once. A parse failure is a terminal state with a retry via cancel.
@@ -132,11 +139,16 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
     <Dialog open onOpenChange={close}>
       <DialogContent className="max-w-[34rem]">
         <DialogHeader>
-          <DialogTitle>Prepare SVG</DialogTitle>
+          <DialogTitle>{t("svgwizard.title")}</DialogTitle>
           <DialogDescription>
             {parsed.error
-              ? "This file could not be read as an SVG."
-              : `Step ${step} of ${lastStep}: ${STEP_NAMES[step]} · ${fileName}`}
+              ? t("svgwizard.parseError")
+              : t("svgwizard.stepDescription", {
+                  step,
+                  last: lastStep,
+                  name: t(STEP_NAME_KEYS[step]),
+                  file: fileName,
+                })}
           </DialogDescription>
         </DialogHeader>
 
@@ -147,12 +159,11 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
             {step === 1 && (
               <section className="flex flex-col gap-3">
                 <p className="text-sm text-muted-foreground">
-                  Only shapes are raised into relief — text, colours and a few other
-                  things aren't. Here's what to expect from this drawing:
+                  {t("svgwizard.step1Intro")}
                 </p>
                 <FindingList
                   findings={parsed.before}
-                  empty="No problems found — this drawing is ready to use."
+                  empty={t("svgwizard.noProblemsCheck")}
                 />
               </section>
             )}
@@ -161,11 +172,11 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
               <section className="flex flex-col gap-3">
                 <div>
                   <h3 className="mb-1 font-display text-sm font-semibold text-foreground">
-                    Fixes applied
+                    {t("svgwizard.fixesApplied")}
                   </h3>
                   {fixed.changes.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      Nothing needed changing.
+                      {t("svgwizard.nothingChanged")}
                     </p>
                   ) : (
                     <ul className="list-disc pl-5 text-sm text-foreground">
@@ -177,11 +188,11 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                 </div>
                 <div>
                   <h3 className="mb-1 font-display text-sm font-semibold text-foreground">
-                    Remaining notes
+                    {t("svgwizard.remainingNotes")}
                   </h3>
                   <FindingList
                     findings={fixed.findings}
-                    empty="No problems remain — this drawing is ready to use."
+                    empty={t("svgwizard.noProblemsRemain")}
                   />
                 </div>
               </section>
@@ -192,8 +203,7 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                 {fixed.regions.length >= 2 ? (
                   <>
                     <p className="text-sm text-muted-foreground">
-                      Found {fixed.regions.length} colour regions. Each keeps its own
-                      colour on export:
+                      {t("svgwizard.regionsFound", { count: fixed.regions.length })}
                     </p>
                     <ul className="flex flex-col gap-1 text-sm">
                       {fixed.regions.map((r) => {
@@ -217,7 +227,7 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                             <code className="font-mono text-[0.8rem]">{r.id}</code>
                             <span className="text-muted-foreground">
                               {r.color}
-                              {r.count > 0 && ` · ${r.count} shape(s)`}
+                              {r.count > 0 && t("svgwizard.shapeCount", { count: r.count })}
                             </span>
                           </li>
                         );
@@ -225,32 +235,28 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                     </ul>
                     {fixed.regions.some((r) => !isRenderableColor(r.color)) && (
                       <p className="text-[0.78rem] text-muted-foreground">
-                        Colours marked <span aria-hidden="true">?</span> can't be
-                        previewed here, but are still applied — check them when you print.
+                        {t("svgwizard.unpreviewablePrefix")} <span aria-hidden="true">?</span> {t("svgwizard.unpreviewableSuffix")}
                       </p>
                     )}
                     {fixed.regions.length > MAX_RELIABLE_REGIONS && (
                       <p className="text-sm text-warn">
-                        {fixed.regions.length} regions is a lot: a few large colour
-                        regions print reliably, but many small ones can merge or print
-                        unpredictably. Consider fewer, larger regions.
+                        {t("svgwizard.tooManyRegions", { count: fixed.regions.length })}
                       </p>
                     )}
                     <label className="flex flex-col gap-1 text-sm">
                       <span className="text-muted-foreground">
-                        Region colours (editable):
+                        {t("svgwizard.regionColoursLabel")}
                       </span>
                       <Input
                         value={layers}
-                        aria-label="Region colours"
+                        aria-label={t("svgwizard.regionColoursAria")}
                         onChange={(e) => setLayers(e.target.value)}
                       />
                     </label>
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    This drawing has a single colour, so it comes out as one solid — no
-                    per-region colours to set.
+                    {t("svgwizard.singleColour")}
                   </p>
                 )}
               </section>
@@ -258,8 +264,7 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
 
             {blockedByError && (
               <p className="mt-3 text-sm font-medium text-destructive">
-                This drawing can't be used as-is — resolve the errors above (e.g. add some
-                filled shapes), then try again.
+                {t("svgwizard.blockedError")}
               </p>
             )}
           </div>
@@ -268,7 +273,7 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
         <DialogFooter>
           {parsed.error ? (
             <Button variant="outline" onClick={onCancel}>
-              Choose another file
+              {t("svgwizard.chooseAnotherFile")}
             </Button>
           ) : (
             <div className="flex w-full items-center justify-between gap-2">
@@ -276,18 +281,18 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                 variant="ghost"
                 onClick={() => (step === 1 ? onCancel() : setStep((step - 1) as Step))}
               >
-                {step === 1 ? "Cancel" : "Back"}
+                {step === 1 ? t("dialog.cancel") : t("svgwizard.back")}
               </Button>
               {step < lastStep ? (
                 <Button
                   onClick={step === 1 ? applyAndAdvance : () => setStep((step + 1) as Step)}
                   disabled={step !== 1 && blockedByError}
                 >
-                  {step === 1 ? "Fix & continue" : "Next"}
+                  {step === 1 ? t("svgwizard.fixAndContinue") : t("quickstart.next")}
                 </Button>
               ) : (
                 <Button onClick={finish} disabled={blockedByError}>
-                  Use this SVG
+                  {t("svgwizard.useThisSvg")}
                 </Button>
               )}
             </div>

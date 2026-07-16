@@ -4,6 +4,7 @@
 import { canvasBackgrounds } from "./background";
 import { SHAPE_TAGS, SVG_NS, inkAttr, iterElements, localName } from "./dom";
 import { gFormat, parseViewBox } from "./geometry";
+import { t } from "../i18n";
 
 /** Rename each Inkscape layer's id to its label so it is selectable. Only touches
  *  layer groups whose label differs from the id, and skips a rename that would
@@ -21,13 +22,13 @@ export function fixInkscapeIds(root: Element): string[] {
     const gid = el.getAttribute("id");
     if (!label || gid === label) continue;
     if (existing.has(label) && label !== gid) {
-      changes.push(`left layer "${label}" as-is (another region already uses that name)`);
+      changes.push(t("svgprep.leftLayerAsIs", { label }));
       continue;
     }
     el.setAttribute("id", label);
     if (gid) existing.delete(gid);
     existing.add(label);
-    changes.push(`made layer "${label}" usable as a colour region`);
+    changes.push(t("svgprep.layerUsable", { label }));
   }
   return changes;
 }
@@ -46,7 +47,7 @@ export function fixViewBoxOrigin(root: Element): string[] {
   while (root.firstChild) wrapper.appendChild(root.firstChild);
   root.appendChild(wrapper);
   root.setAttribute("viewBox", `0 0 ${gFormat(w)} ${gFormat(h)}`);
-  return ["re-centred the drawing so it sits on the plate"];
+  return [t("svgprep.recentred")];
 }
 
 // Whether the element sets its own fill (a `fill=` attribute or a `fill:` in its
@@ -127,7 +128,7 @@ export function resolveStyleFills(root: Element): string[] {
       count += 1;
     }
   }
-  return count ? [`applied ${count} stylesheet colour(s) directly to the shapes`] : [];
+  return count ? [t("svgprep.stylesheetColours", { count })] : [];
 }
 
 /** Drop any full-canvas background rectangle. OpenSCAD fills every shape, so a
@@ -144,12 +145,7 @@ export function removeCanvasBackground(root: Element): string[] {
       count += 1;
     }
   }
-  return count
-    ? [
-        `removed ${count} full-canvas background(s) that would bury the artwork in ` +
-          "one solid block",
-      ]
-    : [];
+  return count ? [t("svgprep.removedBackgrounds", { count })] : [];
 }
 
 export function applyFixes(root: Element): string[] {
