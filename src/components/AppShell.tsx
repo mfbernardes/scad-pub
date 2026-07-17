@@ -63,6 +63,7 @@ import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
 import { ExportSuccess, type ExportSuccessState } from "./ExportSuccess";
+import { ExportAttention } from "./ExportAttention";
 import { OutputToggle } from "./OutputToggle";
 import { BarActions } from "./BarActions";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
@@ -463,6 +464,7 @@ export const AppShell = memo(function AppShell({
     design,
     values,
     availableFontFamilies,
+    fontSuggestion,
     notices,
     badges,
     result,
@@ -529,6 +531,35 @@ export const AppShell = memo(function AppShell({
     if (isMobile) setSheetDetent("half");
     setReviewHiddenSignal((n) => n + 1);
   }, [setPanelTab, isMobile]);
+
+  // PR22: "Go to setting" from the Notices tab's own friendly attention cards
+  // (see OutputConsole's attention prop) — closes Messages (the setting lives
+  // on the Customize tab, not in the console) and mirrors CustomizeTab's own
+  // attention chip action, reveal + focus the owning param's control.
+  // Bumping this (name + nonce, mirroring QuickStart's own focusParam
+  // request) is how AppShell tells whichever CustomizeTab instance is
+  // mounted to run its internal focusOnParam(name) — see CustomizeTab's
+  // focusAttentionParamSignal prop/effect.
+  const [focusAttentionParam, setFocusAttentionParam] = useState<{ name: string; nonce: number } | null>(null);
+  const handleGoToAttentionSetting = useCallback((name: string) => {
+    setOutputOpen(false);
+    setPanelTab("params");
+    if (isMobile) setSheetDetent("half");
+    setFocusAttentionParam({ name, nonce: Date.now() });
+  }, [setPanelTab, isMobile]);
+
+  // PR22: "Review" from the export dock's attention line (see ExportAttention
+  // below) — jumps to wherever the visitor can actually resolve the gap:
+  // QuickStart's own Review stage when it's the active guide (bumping this
+  // nonce, mirroring reviewHiddenSignal above), or just the Customize tab
+  // otherwise — its attention chip already sits pinned above the scrollable
+  // form (see CustomizeTab.tsx), so simply switching tabs is enough there.
+  const [reviewStageSignal, setReviewStageSignal] = useState(0);
+  const handleReviewAttention = useCallback(() => {
+    setPanelTab("params");
+    if (isMobile) setSheetDetent("half");
+    if (quickStartActive) setReviewStageSignal((n) => n + 1);
+  }, [setPanelTab, isMobile, quickStartActive]);
 
   const handleSavePng = useCallback(() => {
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
@@ -646,6 +677,8 @@ export const AppShell = memo(function AppShell({
       experienceMode,
       quickStartEnabled,
       focusHiddenDiffSignal: reviewHiddenSignal,
+      focusAttentionParamSignal: focusAttentionParam,
+      focusReviewSignal: reviewStageSignal,
       attention,
       onOpenMessages: openOutput,
       readiness,
@@ -673,6 +706,8 @@ export const AppShell = memo(function AppShell({
       experienceMode,
       quickStartEnabled,
       reviewHiddenSignal,
+      focusAttentionParam,
+      reviewStageSignal,
       attention,
       openOutput,
       readiness,
@@ -737,12 +772,27 @@ export const AppShell = memo(function AppShell({
     onReviewSettings: handleReviewSettings,
     onReviewHiddenSettings: handleReviewHiddenSettings,
     onRetryRender: actions.render,
+    // PR22: the friendly attention cards leading the Notices tab (see
+    // OutputConsole's own doc) — the same production-readiness gaps the
+    // Customize tab's attention chip shows, plus the "Go to setting" action
+    // that closes Messages and jumps there.
+    attention,
+    onGoToAttentionSetting: handleGoToAttentionSetting,
   };
+  // PR22: the export dock's own readiness — gates BOTH the export-attention
+  // line below (item 2) and ActionButtons' aria-describedby wiring, in place
+  // of the old attention.length > 0 corner dot. Distinct from that raw count:
+  // a font fallback is known independent of any render (it just reads the
+  // live controls), so attention.length can be > 0 even while a render is
+  // still building or has failed — this only lights up once a render has
+  // actually SUCCEEDED with something still worth reviewing (readiness.ts's
+  // own failed > attention > ready precedence).
+  const hasExportAttention = readiness === "attention";
   const actionButtonsProps = {
     canExport: exportable,
     modelFormat: schema.format,
     onSavePng: handleSavePng,
-    hasAttention: attention.length > 0,
+    hasAttention: hasExportAttention,
   };
   return (
     <PanelDataProvider value={panelData}>
@@ -849,6 +899,9 @@ export const AppShell = memo(function AppShell({
                   shown) rides directly above it in the same dock, never
                   covering it — see ACTION_DOCK_CLASS's doc. */}
               <div className={ACTION_DOCK_CLASS}>
+                {hasExportAttention && (
+                  <ExportAttention attention={attention} onReview={handleReviewAttention} />
+                )}
                 {exportSuccess && (
                   <ExportSuccess
                     state={exportSuccess}
@@ -991,6 +1044,9 @@ export const AppShell = memo(function AppShell({
                       panel (when shown) rides directly above the cluster in the same
                       dock, never covering it — see ACTION_DOCK_CLASS's doc. */}
                   <div className={ACTION_DOCK_CLASS}>
+                    {hasExportAttention && (
+                      <ExportAttention attention={attention} onReview={handleReviewAttention} />
+                    )}
                     {exportSuccess && (
                       <ExportSuccess
                         state={exportSuccess}

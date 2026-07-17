@@ -61,11 +61,15 @@
   "checklist.done": "done",
   "checklist.progress": "{completed} of {total} complete",
   "checklist.hideGuide": "Hide guide",
-  "checklist.hide": "Hide",
+  "checklist.hide": "Hide guide",
 
+  "attention.summary#one": "{count} issue to review",
+  "attention.summary#other": "{count} issues to review",
   "attention.fontFallback": "Font needed: {family} — the preview uses a substitute",
+  "attention.fontFallbackShort": "Font needed: {family}",
   "attention.notice": "{count} {label}",
   "attention.goToSetting": "Go to setting",
+  "attention.useBundledFont": "Use a bundled font",
   "attention.openMessages": "Open Messages",
 
   "hint.rotateZoomMouse": "Drag to rotate · scroll to zoom",
@@ -91,7 +95,9 @@
   "export.readyToShare": "Model ready to share",
   "export.printingGuide": "Printing guide",
   "export.nextSteps": "Next, open it in a slicer or send it to a print service.",
-  "export.attentionHint": "There are unresolved warnings — the model may differ from the selected settings",
+  "export.attentionSummary#one": "{count} issue to review — {detail}",
+  "export.attentionSummary#other": "{count} issues to review — {detail}",
+  "export.attentionReview": "Review",
 
   "quickstart.stepsAriaLabel": "Guided steps",
   "quickstart.review": "Review",
@@ -106,6 +112,8 @@
   "quickstart.reviewFailed": "Preview failed",
   "quickstart.reviewBuilding": "Preview building…",
   "quickstart.frontView": "Front view",
+  "quickstart.fontStatusSubstitute": "Font status — substitute in use",
+  "quickstart.fontStatusOk": "Font status — {family}",
 
   "common.close": "Close",
 
@@ -157,7 +165,7 @@
   "files.importDefaultLabel": "Import file",
   "files.clearAllTitle": "Remove all imported files and clear the render cache",
   "files.clearAll": "Clear all imported files",
-  "files.privacyLine": "Files stay on your device — nothing is uploaded.",
+  "files.privacyLine": "Files stay on this device and are never uploaded.",
   "files.readError": "Couldn't read \"{name}\": {message}",
 
   "console.regionAria": "Messages from the design",

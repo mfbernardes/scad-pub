@@ -19,7 +19,8 @@ import type { Values } from "../lib/presets";
 import type { SettingsView } from "../lib/useExperience";
 import { displayValue } from "../lib/paramDiff";
 import { isShown, paramMatchesQuery } from "../lib/paramFilter";
-import { familyOf, normalizeFamily, withFamily, type InstalledFont } from "../lib/fonts";
+import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
+import { fontFallback } from "../lib/fontChoices";
 import { makeRafThrottle, type RafThrottle } from "../lib/rafThrottle";
 import { useAppActions } from "../lib/appActions";
 import { t } from "../lib/i18n";
@@ -189,26 +190,10 @@ function missingFont(
   return available.has(normalizeFamily(familyOf(v))) ? null : v;
 }
 
-// A one-click replacement whose family is loaded, or null when none fits. For an
-// enum the result must be a listed choice (the dropdown can't show an off-list
-// value), so pick the first choice whose family is available; for free text,
-// graft the suggested bundled family onto the current value.
-function fontFallback(
-  param: Param,
-  value: string,
-  available: Set<string> | undefined,
-  suggestion: string | null | undefined
-): { value: string; label: string } | null {
-  if (param.type === "enum") {
-    const choice = param.choices.find((c) =>
-      available?.has(normalizeFamily(familyOf(c.value)))
-    );
-    return choice ? { value: choice.value, label: familyOf(choice.value) } : null;
-  }
-  if (suggestion && normalizeFamily(suggestion) !== normalizeFamily(familyOf(value)))
-    return { value: withFamily(value, suggestion), label: suggestion };
-  return null;
-}
+// fontFallback (the one-click loaded-family replacement) now lives in
+// src/lib/fontChoices.ts — shared with src/lib/readiness.ts's deriveAttention
+// so the consolidated attention chip's "Use a bundled font" action can never
+// disagree with this inline hint about what counts as a valid fallback.
 
 function committedNumber(param: Extract<Param, { type: "number" }>, value: ParamValue): number {
   return typeof value === "number" && Number.isFinite(value) ? value : param.default;

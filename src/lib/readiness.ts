@@ -11,6 +11,8 @@
 import type { Param } from "../openscad/types";
 import type { Values } from "./presets";
 import { familyOf, normalizeFamily } from "./fonts";
+import { fontFallback } from "./fontChoices";
+import { noticeLabel } from "./diagnostics";
 import { isVisible } from "./visibility";
 
 /**
@@ -27,6 +29,15 @@ export interface FontFallbackItem {
   param: string;
   /** The missing family, as typed/selected (not normalised) — for display. */
   family: string;
+  /**
+   * A one-click loaded-family replacement for this param, or null when none
+   * fits (e.g. an enum with no loaded choice) — the exact target
+   * fontChoices.ts's `fontFallback` computes, the same function ParamRows'
+   * inline FontMissingHint uses. Powers the consolidated attention chip's and
+   * Review stage's "Use a bundled font" action; absent this, only "Go to
+   * setting" is offered.
+   */
+  fallback: { value: string; label: string } | null;
 }
 
 /** A pending notice in a config category flagged `attention: true` (see
@@ -51,6 +62,10 @@ export type AttentionItem = FontFallbackItem | NoticeAttentionItem;
 export interface NoticeAttentionInput {
   marker: string;
   label: string;
+  /** Optional singular form of `label` (see NoticeCategory.labelOne) —
+   *  resolved against `count` via diagnostics.ts's `noticeLabel` so the
+   *  produced item's own `label` is already display-ready. */
+  labelOne?: string;
   attention: boolean;
   count: number;
 }
@@ -68,6 +83,10 @@ export interface DeriveAttentionInputs {
    * warn — same rule ParamRows follows).
    */
   availableFontFamilies: Set<string>;
+  /** A bundled family to offer as a one-click fallback — the same value
+   *  ParamRows' FontMissingHint uses (AppShell's `fontSuggestion`). Feeds
+   *  each font-fallback item's own `fallback` target. */
+  fontSuggestion?: string | null;
   /** Notice categories with their live pending counts this render. */
   notices: NoticeAttentionInput[];
 }
@@ -97,13 +116,23 @@ export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] 
       const family = familyOf(value);
       if (!family) continue;
       if (!inputs.availableFontFamilies.has(normalizeFamily(family))) {
-        items.push({ kind: "font-fallback", param: p.name, family });
+        items.push({
+          kind: "font-fallback",
+          param: p.name,
+          family,
+          fallback: fontFallback(p, value, inputs.availableFontFamilies, inputs.fontSuggestion),
+        });
       }
     }
   }
   for (const n of inputs.notices) {
     if (n.attention && n.count > 0) {
-      items.push({ kind: "notice", marker: n.marker, label: n.label, count: n.count });
+      items.push({
+        kind: "notice",
+        marker: n.marker,
+        label: noticeLabel(n.label, n.count, n.labelOne),
+        count: n.count,
+      });
     }
   }
   return items;

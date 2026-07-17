@@ -4,7 +4,7 @@
 // warnings and assert failures are hardcoded.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseDiagnostics, countBadges, badgeTextColor } from "../src/lib/diagnostics.ts";
+import { parseDiagnostics, countBadges, badgeTextColor, noticeLabel } from "../src/lib/diagnostics.ts";
 
 // A sample notice config (what a consumer's `notices` key would produce).
 const NOTICES = [
@@ -140,6 +140,20 @@ test("countBadges omits categories with no matches", () => {
     countBadges(['[out] ECHO: "x: note: only one"'], NOTICES),
     [{ key: "notice:note", label: "notes", count: 1 }]
   );
+});
+
+test("countBadges carries labelOne through when configured", () => {
+  const notices = [{ marker: "alert", label: "alerts", labelOne: "alert", color: "#e0a458" }];
+  assert.deepEqual(countBadges(['[out] ECHO: "x: alert: one"'], notices), [
+    { key: "notice:alert", label: "alerts", count: 1, labelOne: "alert", color: "#e0a458" },
+  ]);
+});
+
+test("noticeLabel: uses labelOne only when count is exactly 1 and one was configured", () => {
+  assert.equal(noticeLabel("alerts", 1, "alert"), "alert");
+  assert.equal(noticeLabel("alerts", 2, "alert"), "alerts");
+  assert.equal(noticeLabel("alerts", 0, "alert"), "alerts");
+  assert.equal(noticeLabel("alerts", 1, undefined), "alerts");
 });
 
 test("badgeTextColor: white text on dark backgrounds", () => {

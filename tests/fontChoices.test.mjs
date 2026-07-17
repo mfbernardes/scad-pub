@@ -4,7 +4,7 @@
 // so listing never dirties a value or breaks preset matching.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildFontChoices, fontValueLabel } from "../src/lib/fontChoices.ts";
+import { buildFontChoices, fontValueLabel, fontFallback } from "../src/lib/fontChoices.ts";
 
 const FONTS = [
   { family: "Atkinson Hyperlegible", style: "Regular", imported: false },
@@ -93,6 +93,45 @@ test("an empty value yields no phantom entry", () => {
   const { installed, missing } = buildFontChoices(stringParam, "", FONTS);
   assert.equal(installed.length, FONTS.length);
   assert.deepEqual(missing, []);
+});
+
+// fontFallback (moved from ParamRows.tsx to be shared with readiness.ts's
+// deriveAttention — PR22's consolidated attention chip and Review stage both
+// offer a "Use a bundled font" action driven by this same target selection).
+test("fontFallback: a string param grafts the suggested family onto the current value, preserving :style=", () => {
+  const target = fontFallback(stringParam, "Comic Sans MS:style=Bold", new Set(["liberation sans"]), "Liberation Sans");
+  assert.deepEqual(target, { value: "Liberation Sans:style=Bold", label: "Liberation Sans" });
+});
+
+test("fontFallback: a string param with no suggestion (or already matching) yields null", () => {
+  assert.equal(fontFallback(stringParam, "Comic Sans MS", new Set(["liberation sans"]), null), null);
+  assert.equal(fontFallback(stringParam, "Comic Sans MS", new Set(["liberation sans"]), undefined), null);
+  // Suggestion already matches the current family — nothing to change.
+  assert.equal(fontFallback(stringParam, "Liberation Sans", new Set(["liberation sans"]), "Liberation Sans"), null);
+});
+
+test("fontFallback: an enum param picks the first listed choice whose family is loaded", () => {
+  const param = enumParam(["Nope One", "Liberation Sans:style=Bold", "Nope Two"]);
+  const target = fontFallback(param, "Nope One", new Set(["liberation sans"]), null);
+  assert.deepEqual(target, { value: "Liberation Sans:style=Bold", label: "Liberation Sans" });
+});
+
+test("fontFallback: an enum param with no loaded choice yields null, even with a string suggestion", () => {
+  const param = enumParam(["Nope One", "Nope Two"]);
+  assert.equal(fontFallback(param, "Nope One", new Set(["liberation sans"]), "Liberation Sans"), null);
+});
+
+test("fontFallback: an enum param never matches against an empty/undefined available set", () => {
+  const param = enumParam(["Nope One"]);
+  assert.equal(fontFallback(param, "Nope One", undefined, null), null);
+  assert.equal(fontFallback(param, "Nope One", new Set(), null), null);
+});
+
+test("fontFallback: a string param's suggestion doesn't depend on `available` at all (free text has no list to check against)", () => {
+  assert.deepEqual(fontFallback(stringParam, "Comic Sans MS", undefined, "Liberation Sans"), {
+    value: "Liberation Sans",
+    label: "Liberation Sans",
+  });
 });
 
 test("with nothing installed, the design's suggestions still show as missing", () => {

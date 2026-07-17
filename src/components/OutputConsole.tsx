@@ -2,16 +2,28 @@
 // Auto-opens when a render first surfaces a notice/assert; also toggled by the
 // Output button. Diagnostics/badges are computed once by the parent (AppShell)
 // and passed in.
-import { useState } from "react";
+//
+// PR22 item 4: the Notices tab leads with the same friendly attention cards
+// (AttentionItems.tsx) the Customize tab's consolidated chip and QuickStart's
+// Review stage show — a visitor who opens Messages directly (the bell badge)
+// gets the readable summary too, not just raw parsed lines. Mirrors how
+// FriendlyError already leads on a render FAILURE; both can appear together
+// (failure leads, attention cards next, then the raw list) — never suppressed
+// or pattern-matched against each other, since the raw rows are the generic
+// mechanism and stay authoritative.
+import { useRef, useState } from "react";
 import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
 import { type RenderMetrics, formatDuration } from "../lib/renderMetrics";
 import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
+import type { AttentionItem } from "../lib/readiness";
 import { t } from "../lib/i18n";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { CountBadges } from "./CountBadges";
 import { IconButton } from "./IconButton";
 import { FriendlyError } from "./FriendlyError";
+import { AttentionItems } from "./AttentionItems";
+import { noteActionClass } from "./NoteBar";
 import { X as XIcon } from "lucide-react";
 
 const ICON: Record<DiagnosticLevel, string> = { notice: "ⓘ", warning: "⚠", assert: "✗" };
@@ -23,6 +35,13 @@ const ICON_COLOR: Record<DiagnosticLevel, string> = {
   warning: "text-warn",
   assert: "text-destructive",
 };
+
+// Stable default identities (mirrors AppShell's own EMPTY_LOG / QuickStart's
+// EMPTY_ATTENTION_ITEMS precedent) so an omitted `attention`/
+// `onGoToAttentionSetting` never hands AttentionItems a freshly-allocated
+// value on every render.
+const EMPTY_ATTENTION: AttentionItem[] = [];
+const NOOP_GO_TO_SETTING = () => {};
 
 interface Props {
   log: string[];
@@ -49,6 +68,15 @@ interface Props {
   onReviewSettings?: () => void;
   onReviewHiddenSettings?: () => void;
   onRetryRender?: () => void;
+  /** PR22: unresolved production-readiness gaps for the current render —
+   *  the exact same list the Customize tab's attention chip shows, rendered
+   *  here as friendly cards leading the raw diagnostics list. Empty/omitted
+   *  renders nothing extra (AttentionItems itself no-ops on an empty list). */
+  attention?: AttentionItem[];
+  /** A font-fallback card's "Go to setting" action: closes Messages, switches
+   *  to the Customize tab, and focuses the named param's control (AppShell's
+   *  `handleGoToAttentionSetting`). */
+  onGoToAttentionSetting?: (name: string) => void;
 }
 
 export function OutputConsole({
@@ -65,8 +93,16 @@ export function OutputConsole({
   onReviewSettings,
   onReviewHiddenSettings,
   onRetryRender,
+  attention = EMPTY_ATTENTION,
+  onGoToAttentionSetting,
 }: Props) {
   const [tab, setTab] = useState("notices");
+  // A notice-kind attention card's "Open Messages" action, reused here for
+  // "already IN Messages — jump to the matching raw row below" instead
+  // (AttentionItems' own onOpenMessages prop is generic about what "opening"
+  // means to its caller).
+  const rawListRef = useRef<HTMLUListElement>(null);
+  const scrollToRawList = () => rawListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   if (!open) return null;
 
@@ -110,8 +146,18 @@ export function OutputConsole({
                 onRetry={() => onRetryRender?.()}
               />
             )}
+            <AttentionItems
+              attention={attention}
+              onGoToSetting={onGoToAttentionSetting ?? NOOP_GO_TO_SETTING}
+              onOpenMessages={scrollToRawList}
+              className="console-attention flex flex-col gap-1 border-b bg-muted px-3 py-2"
+              itemClassName="console-attention__item flex flex-wrap items-center gap-x-[0.4rem] gap-y-1 text-left text-[0.82rem] text-foreground"
+              actionClassName={noteActionClass}
+              showSummary
+              summaryClassName="text-[0.82rem] font-semibold text-foreground"
+            />
             {diagnostics.length ? (
-              <ul className="px-3 py-[0.4rem]" aria-live="polite">
+              <ul className="px-3 py-[0.4rem]" aria-live="polite" ref={rawListRef}>
                 {diagnostics.map((d, i) => (
                   <li key={i} className="flex items-baseline gap-2 py-[0.2rem] text-[0.82rem]">
                     <span

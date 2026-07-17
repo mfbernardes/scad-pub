@@ -193,6 +193,15 @@ async function checkGettingStarted({ page, check, ids, paramsTabName }) {
 
   await runAxe(page, check, "getting-started checklist visible (compact)");
 
+  // PR22 copy fix: "Hide" -> "Hide guide" on the COMPACT row too, so the
+  // dismiss control reads the same everywhere (the full card already said
+  // "Hide guide" — see the expanded-card check further below).
+  const compactDismissBtn = card.locator(".getting-started__dismiss");
+  check(
+    ((await compactDismissBtn.textContent()) ?? "").trim() === "Hide guide",
+    "the compact row's dismiss control also reads \"Hide guide\", not a bare \"Hide\""
+  );
+
   console.log("=== getting-started checklist: expand chevron reveals the full card ===");
   await card.locator(".getting-started__expand").click();
   const rows = card.locator("li");
@@ -1518,21 +1527,23 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   );
 }
 
-// Production-readiness attention surfacing (PR13): a design can render
-// successfully while its selected font family isn't loaded — Fontconfig
-// silently substitutes a fallback, and dimensions/spacing can shift, yet
-// nothing about the render itself failed. "Rendered" and "ready to ship"
-// are different claims (src/lib/readiness.ts); this exercises the whole
-// path: the checklist's "needs attention" wording, the Customize tab's
-// attention chip, the export button's indicator (Export stays enabled
-// throughout — it's a caution, never a block), and the chip's "Go to
-// setting" action — which must also switch QuickStart's current step off its
-// default first step, since tag's font control lives on the "Text" step, not
-// "Size". Runs against the desktop `page` (scroll mode, PR15): every step's
-// ParamRows is already mounted, so "the jump" is really a scroll+focus of
-// the font control itself rather than a step swap — QuickStart still moves
-// `aria-current` to "Text" alongside it (see QuickStart.tsx's focusParam
-// effect), which the assertions below still check for.
+// Production-readiness attention surfacing (PR13; consolidated PR22): a
+// design can render successfully while its selected font family isn't
+// loaded — Fontconfig silently substitutes a fallback, and dimensions/
+// spacing can shift, yet nothing about the render itself failed. "Rendered"
+// and "ready to ship" are different claims (src/lib/readiness.ts); this
+// exercises the whole path: the checklist's "needs attention" wording, the
+// Customize tab's CONSOLIDATED attention chip (a "1 issue to review" summary
+// plus "Go to setting" AND "Use a bundled font" actions — PR22 replaced the
+// old bare per-item row), the export dock's explicit `.export-attention`
+// line (replacing the old ambiguous corner dot), the Review stage's new
+// "Font status" row, and the Notices tab's friendly attention card leading
+// the raw rows. Runs against the desktop `page` (scroll mode, PR15): every
+// step's ParamRows is already mounted, so "the jump" is really a
+// scroll+focus of the font control itself rather than a step swap —
+// QuickStart still moves `aria-current` to "Text" alongside it (see
+// QuickStart.tsx's focusParam effect), which the assertions below still
+// check for.
 async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   if (!ids.includes("tag")) return;
   console.log("=== production readiness: font-fallback attention ===");
@@ -1549,7 +1560,10 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   // opening the link fresh. Every first-visit once-flag it could trip
   // (welcome popup dismissal, getting-started dismissal) was already
   // persisted by earlier checks in this suite, so nothing blocks driving
-  // the UI here.
+  // the UI here. Only `font` differs from the design's shipped defaults, so
+  // the "1 alert + 1 note" the tag design fires out of the box (see its own
+  // "Configurator notices" comment) is present here too — reused below for
+  // the singular-badge check (item 5).
   const hash = `d=tag&v=${encodeURIComponent(JSON.stringify({ font: "No Such Font" }))}`;
   await page.goto(`${base}#${hash}`, { waitUntil: "load" });
   await page.reload({ waitUntil: "load" });
@@ -1578,39 +1592,108 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
     "checklist 'Preview' row reads 'needs attention' when the selected font isn't loaded"
   );
 
-  // The attention chip: top of the Customize tab, names the missing family.
+  // The consolidated attention chip (PR22): top of the Customize tab, a
+  // pluralized summary line first, then the one row for the missing font.
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
   const chip = page.locator(".attention-chip");
   await chip.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-  check((await chip.count()) === 1, "exactly one attention chip shown for the one missing font");
+  check((await chip.count()) === 1, "exactly one attention row shown for the one missing font");
   check(
     ((await chip.textContent()) ?? "").includes("No Such Font"),
-    "the attention chip names the missing family"
+    "the attention row names the missing family"
+  );
+  const chipSummary = page.locator(".attention-chip__summary");
+  check(
+    ((await chipSummary.textContent()) ?? "").trim() === "1 issue to review",
+    "the consolidated chip leads with a pluralized \"1 issue to review\" summary"
+  );
+  check(
+    (await chip.first().getByRole("button", { name: "Go to setting" }).count()) === 1,
+    "the attention row offers \"Go to setting\""
+  );
+  check(
+    (await chip.first().getByRole("button", { name: "Use a bundled font" }).count()) === 1,
+    "the attention row ALSO offers \"Use a bundled font\" (item 1's second action) since a bundled family is available"
   );
 
-  // Export button: an amber indicator, but never disabled — a rendered-but-
-  // uncertain model is still a real file worth having.
+  // The export dock's explicit attention line (PR22) replaces the old
+  // ambiguous corner dot: real text plus a "Review" action. Export stays
+  // enabled and uninterrupted throughout — it's a caution, never a block.
   const exportBtn = page.locator(".action-export");
   check(
-    (await page.locator(".action-export__attention-dot").count()) === 1,
-    "export button shows the attention indicator"
+    (await page.locator(".action-export__attention-dot").count()) === 0,
+    "the export button's old corner dot is gone"
   );
-  check(await exportBtn.isEnabled(), "export stays enabled despite the attention indicator");
+  const exportAttention = page.locator(".export-attention");
+  await exportAttention.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await exportAttention.count()) === 1, "the export dock shows the attention line");
+  check(
+    ((await exportAttention.textContent()) ?? "").includes("1 issue to review") &&
+      ((await exportAttention.textContent()) ?? "").includes("Font needed: No Such Font"),
+    "the export dock's attention line reads \"N issue(s) to review — <first item>\""
+  );
+  check(await exportBtn.isEnabled(), "export stays enabled despite the attention line");
   check(
     (await exportBtn.getAttribute("aria-describedby")) === "export-attention-hint",
-    "export button is described by the attention hint for assistive tech"
+    "export button is described by the visible attention line for assistive tech"
   );
 
   await runAxe(page, check, "Customize tab with the attention chip visible");
 
+  // The export dock's "Review" action jumps to the Review stage: scroll mode
+  // scrolls the trailing Review section into view AND focuses its heading
+  // (scrollToGroup's own contract) — a deterministic signal that doesn't
+  // depend on the IntersectionObserver having caught up yet.
+  await page.locator(".export-attention__review").click();
+  await page
+    .waitForFunction(() => document.activeElement?.id === "quick-start-heading-__review__", { timeout: 3000 })
+    .catch(() => {});
+  check(
+    await page.evaluate(() => document.activeElement?.id === "quick-start-heading-__review__"),
+    "the export dock's \"Review\" action scrolls to and focuses the Review stage heading"
+  );
+
+  // Notices tab: the same gap leads as a friendly card, above the raw rows
+  // (PR22 item 4) — a visitor who opens Messages directly still gets the
+  // readable summary, not just parsed log lines. Also where the singular-
+  // labelOne badge (item 5) is reliably drivable: the shipped tag defaults
+  // fire exactly one alert and one note (see the hash comment above).
+  await openConsole(page);
+  const consoleAttention = page.locator(".console-attention");
+  await consoleAttention.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await consoleAttention.count()) === 1, "the Notices tab shows one friendly attention card block");
+  check(
+    ((await consoleAttention.textContent()) ?? "").includes("No Such Font"),
+    "the friendly attention card names the missing family, same as the Customize tab's chip"
+  );
+  check(
+    (await consoleAttention.getByRole("button", { name: "Use a bundled font" }).count()) === 1,
+    "the friendly attention card offers \"Use a bundled font\" too"
+  );
+  const attentionBox = await consoleAttention.boundingBox();
+  const rawRowsBox = await page.locator(".output-console ul, .output-console p").first().boundingBox();
+  check(
+    !!attentionBox && !!rawRowsBox && attentionBox.y <= rawRowsBox.y,
+    "the friendly attention card leads the raw notices rows, not the other way around"
+  );
+  check(
+    (await page.locator('.output-console [aria-label="1 alert"]').count()) === 1,
+    "the alert count badge's accessible name uses the singular labelOne (\"1 alert\", not \"1 alerts\")"
+  );
+  check(
+    (await page.locator('.output-console [aria-label="1 note"]').count()) === 1,
+    "the note count badge's accessible name uses the singular labelOne (\"1 note\", not \"1 notes\") too"
+  );
+  await runAxe(page, check, "Notices tab with the friendly attention card visible");
+  await page.click(".output-console__close").catch(() => {});
+
   // "Go to setting": tag mounts QuickStart on its first ("Size") step by
   // default on a fresh design view — the font control lives on "Text", a
   // DIFFERENT step — so this also exercises QuickStart's own step-jump
-  // composition, not just a scroll on an already-visible control.
-  check(
-    ((await page.locator(".quick-start__step--current").textContent()) ?? "").includes("Size"),
-    "QuickStart starts on its first step (Size), not the Text step the font control lives on"
-  );
+  // composition, not just a scroll on an already-visible control. Scrolled
+  // to the Review section above, so land back on the first step's chip
+  // first by re-reading it fresh (scroll position doesn't affect which chip
+  // this locator targets — `aria-current` state, not viewport position).
   await chip.first().getByRole("button", { name: "Go to setting" }).click();
   await page
     .waitForFunction(() => document.activeElement?.classList.contains("font-select"), { timeout: 3000 })
@@ -1625,31 +1708,46 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   );
 
   // The Review stage (PR18) surfaces the same gap a third time: its own
-  // readiness line and attention listing, not just the top strip and the
-  // checklist. Scroll mode mounts every step's group at once (including the
-  // trailing Review section), so these are already in the DOM regardless of
-  // which chip is "current" — no navigation needed to read them.
+  // readiness line, attention listing, AND (PR22 item 3) a dedicated "Font
+  // status" row above that listing. Scroll mode mounts every step's group at
+  // once (including the trailing Review section), so these are already in
+  // the DOM regardless of which chip is "current" — no navigation needed.
   check(
     /Needs attention/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
     "Review's readiness line reads \"Needs attention\" while the font fallback is unresolved"
+  );
+  const reviewFontRow = page.locator(".quick-start__review-font");
+  check(
+    ((await reviewFontRow.textContent()) ?? "").includes("Font status") &&
+      ((await reviewFontRow.textContent()) ?? "").includes("substitute in use"),
+    "Review's own \"Font status — substitute in use\" row is shown while the font fallback is unresolved"
+  );
+  check(
+    (await reviewFontRow.getByRole("button", { name: "Import font…" }).count()) === 1,
+    "the Font status row offers \"Import font…\""
+  );
+  check(
+    (await reviewFontRow.getByRole("button", { name: "Use a bundled font" }).count()) === 1,
+    "the Font status row ALSO offers \"Use a bundled font\""
   );
   check(
     ((await page.locator(".quick-start__review-attention").textContent()) ?? "").includes("No Such Font"),
     "Review's own attention listing names the missing family too"
   );
 
-  // Restore a bundled family: attention clears everywhere.
-  await page.locator(".font-select").click();
-  await page.getByRole("option", { name: "Liberation Sans", exact: true }).click();
-  await waitRendered(page, "tag with a bundled font restored");
-  check((await page.locator(".attention-chip").count()) === 0, "attention chip clears once a loaded family is selected");
-  check(
-    (await page.locator(".action-export__attention-dot").count()) === 0,
-    "export indicator clears too"
-  );
+  // "Use a bundled font" (item 1's second action): a one-click fix, not just
+  // a pointer — resolves the issue in place, no manual dropdown needed.
+  await chip.first().getByRole("button", { name: "Use a bundled font" }).click();
+  await waitRendered(page, "tag with a bundled font restored via \"Use a bundled font\"");
+  check((await page.locator(".attention-chip").count()) === 0, "the attention row clears once a loaded family is selected");
+  check((await page.locator(".export-attention").count()) === 0, "the export dock's attention line clears too");
   check(
     /Ready to export/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
     "Review's readiness line returns to \"Ready to export\" once the font is restored"
+  );
+  check(
+    ((await page.locator(".quick-start__review-font").textContent()) ?? "").includes("Font status — Liberation Sans"),
+    "Review's Font status row switches to the clean \"Font status — <family>\" form once resolved"
   );
 
   // Confirm the checklist itself returns to "ready" too. Selecting the

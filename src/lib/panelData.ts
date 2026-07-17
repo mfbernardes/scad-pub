@@ -83,6 +83,19 @@ export interface PanelData {
   /** Bumped externally to trigger CustomizeTab's "reveal hidden diff" action —
    *  see its own doc. */
   focusHiddenDiffSignal?: number;
+  /** PR22: set (fresh `nonce` per request) by OutputConsole's own friendly
+   *  attention cards' "Go to setting" action — AppShell already closed
+   *  Messages and switched to the Customize tab; this tells whichever
+   *  CustomizeTab instance is mounted to reveal + focus the named param's
+   *  control, via the same internal focusOnParam the chip's own action uses. */
+  focusAttentionParamSignal?: { name: string; nonce: number } | null;
+  /** PR22: bumped by the export dock's attention line's "Review" action to
+   *  jump QuickStart to its Review stage/chip — see CustomizeTab -> QuickStart's
+   *  own focusReviewSignal prop/effect. Only meaningful while QuickStart is
+   *  the active guide; otherwise switching to the Customize tab (which
+   *  AppShell already does) is enough, since the attention chip sits pinned
+   *  above the scrollable form there. */
+  focusReviewSignal?: number;
   /** Unresolved production-readiness gaps for the current render (src/lib/readiness.ts). */
   attention: AttentionItem[];
   /** Opens the Output console ("Messages"). */

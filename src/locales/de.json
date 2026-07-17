@@ -61,11 +61,15 @@
   "checklist.done": "erledigt",
   "checklist.progress": "{completed} von {total} erledigt",
   "checklist.hideGuide": "Anleitung ausblenden",
-  "checklist.hide": "Ausblenden",
+  "checklist.hide": "Anleitung ausblenden",
 
+  "attention.summary#one": "{count} Punkt zu prüfen",
+  "attention.summary#other": "{count} Punkte zu prüfen",
   "attention.fontFallback": "Schrift fehlt: {family} — die Vorschau verwendet einen Ersatz",
+  "attention.fontFallbackShort": "Schrift fehlt: {family}",
   "attention.notice": "{count} {label}",
   "attention.goToSetting": "Zur Einstellung",
+  "attention.useBundledFont": "Mitgelieferte Schrift verwenden",
   "attention.openMessages": "Nachrichten öffnen",
 
   "hint.rotateZoomMouse": "Ziehen zum Drehen · Scrollen zum Zoomen",
@@ -91,7 +95,9 @@
   "export.readyToShare": "Modell bereit zum Teilen",
   "export.printingGuide": "Druckanleitung",
   "export.nextSteps": "Öffnen Sie es als Nächstes in einem Slicer oder senden Sie es an einen Druckdienst.",
-  "export.attentionHint": "Es gibt ungelöste Hinweise — das Modell kann von den gewählten Einstellungen abweichen",
+  "export.attentionSummary#one": "{count} Punkt zu prüfen — {detail}",
+  "export.attentionSummary#other": "{count} Punkte zu prüfen — {detail}",
+  "export.attentionReview": "Prüfen",
 
   "quickstart.stepsAriaLabel": "Geführte Schritte",
   "quickstart.review": "Überprüfung",
@@ -106,6 +112,8 @@
   "quickstart.reviewFailed": "Vorschau fehlgeschlagen",
   "quickstart.reviewBuilding": "Vorschau wird erstellt…",
   "quickstart.frontView": "Vorderansicht",
+  "quickstart.fontStatusSubstitute": "Schriftstatus — Ersatz aktiv",
+  "quickstart.fontStatusOk": "Schriftstatus — {family}",
 
   "common.close": "Schließen",
 
@@ -157,7 +165,7 @@
   "files.importDefaultLabel": "Datei importieren",
   "files.clearAllTitle": "Alle importierten Dateien entfernen und den Render-Cache leeren",
   "files.clearAll": "Alle importierten Dateien entfernen",
-  "files.privacyLine": "Dateien bleiben auf Ihrem Gerät — nichts wird hochgeladen.",
+  "files.privacyLine": "Dateien bleiben auf diesem Gerät und werden nie hochgeladen.",
   "files.readError": "„{name}“ konnte nicht gelesen werden: {message}",
 
   "console.regionAria": "Nachrichten zum Design",

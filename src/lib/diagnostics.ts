@@ -29,8 +29,25 @@ export interface BadgeCount {
   /** Badge noun (e.g. "alerts", "notes", "asserts"). */
   label: string;
   count: number;
+  /** Optional singular form of `label` (see NoticeCategory.labelOne) — pass to
+   *  `noticeLabel` alongside `count` to pick the right form. */
+  labelOne?: string;
   /** Optional fill colour; falls back to the default badge styling. */
   color?: string;
+}
+
+/**
+ * The correct singular/plural form of a notice category's badge/notice noun:
+ * `labelOne` when the live count is exactly 1 and one was configured, else
+ * the plain `label` (e.g. "alerts"). A config label is a single noun with no
+ * built-in plural rule, so without this a single pending notice always reads
+ * as "1 alerts" — see NoticeCategory.labelOne's own doc. Used wherever a
+ * count renders alongside a notice category's label: CountBadges' accessible
+ * name and the consolidated attention chip's notice rows (src/lib/
+ * readiness.ts's deriveAttention).
+ */
+export function noticeLabel(label: string, count: number, labelOne?: string): string {
+  return count === 1 && labelOne ? labelOne : label;
 }
 
 // An OpenSCAD echo line, e.g. `[err] ECHO: "tag: alert: …"`. OpenSCAD-WASM
@@ -125,6 +142,7 @@ export function countBadges(
       key: `notice:${n.marker}`,
       label: n.label,
       count: 0,
+      ...(n.labelOne ? { labelOne: n.labelOne } : {}),
       ...(n.color ? { color: n.color } : {}),
     });
   byKey.set("assert", { key: "assert", label: "asserts", count: 0 });

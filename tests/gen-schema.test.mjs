@@ -978,6 +978,20 @@ test("notices: validates shape, marker, label and colour", () => {
   );
 });
 
+// PR22: `labelOne` is an optional singular override for `label`, used
+// wherever a live count renders alongside it (see src/lib/diagnostics.ts's
+// noticeLabel and docs/config.md's Notice badges section).
+test("notices: labelOne is optional, trimmed, and validated like label", () => {
+  assert.deepEqual(parseNotices([{ marker: "alert", label: "alerts", labelOne: " alert " }]), [
+    { marker: "alert", label: "alerts", labelOne: "alert" },
+  ]);
+  assert.deepEqual(parseNotices([{ marker: "note" }]), [{ marker: "note", label: "note" }]);
+  assert.throws(
+    () => parseNotices([{ marker: "n", labelOne: "  " }]),
+    /'notices\[0\]\.labelOne' must be a non-empty string/
+  );
+});
+
 // PR13: `attention` flags a notice category as a production-readiness
 // concern (src/lib/readiness.ts) rather than a routine, passive notice —
 // see docs/config.md's Notice badges section.

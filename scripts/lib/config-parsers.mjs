@@ -298,10 +298,13 @@ export function parsePopup(raw) {
 // notice categories surfaced on the "OpenSCAD output" panel. A design echoes
 // `ECHO: "<context>: <marker>: <message>"` and each configured category turns
 // matching echoes into a friendly notice and a coloured count badge. Each entry
-// is { marker (required), label?, color?, attention? }:
+// is { marker (required), label?, labelOne?, color?, attention? }:
 //   - marker: the design-defined string matched as `: <marker>:` in an echo
 //     (e.g. "alert", "note"); case-insensitive.
 //   - label: the badge / notice noun (e.g. "alerts"); defaults to marker.
+//   - labelOne: optional singular form of `label` (e.g. "alert"), used
+//     wherever a count renders alongside it whenever the live count is
+//     exactly 1. Omit to keep `label` regardless of count.
 //   - color: an optional badge fill colour, validated as a plain CSS colour
 //     (same strictness as `colors`) so it can't break out of the inline style
 //     it gets interpolated into.
@@ -335,6 +338,13 @@ export function parseNotices(raw) {
       );
     } else {
       out.label = entry.label.trim();
+    }
+    if (entry.labelOne !== undefined && entry.labelOne !== null) {
+      if (typeof entry.labelOne !== "string" || !entry.labelOne.trim())
+        throw new Error(
+          `gen-schema: 'notices[${i}].labelOne' must be a non-empty string`
+        );
+      out.labelOne = entry.labelOne.trim();
     }
     if (entry.color !== undefined && entry.color !== null) {
       if (typeof entry.color !== "string" || !COLOR_VALUE_RE.test(entry.color.trim()))

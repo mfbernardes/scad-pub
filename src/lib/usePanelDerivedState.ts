@@ -32,6 +32,7 @@ import type { BadgeCount } from "./diagnostics";
 interface NoticeCategoryInput {
   marker: string;
   label: string;
+  labelOne?: string;
   attention?: boolean;
 }
 
@@ -41,6 +42,9 @@ export interface PanelDerivedStateInputs {
   /** Normalised font families the renderer can use — see readiness.ts's
    *  DeriveAttentionInputs. */
   availableFontFamilies: Set<string>;
+  /** A bundled family to offer as a one-click fallback — see readiness.ts's
+   *  DeriveAttentionInputs.fontSuggestion. */
+  fontSuggestion?: string | null;
   /** Config-driven notice categories (schema.notices). */
   notices: NoticeCategoryInput[];
   /** Per-category live pending counts this render (diagnostics.ts's
@@ -82,6 +86,7 @@ export function usePanelDerivedState({
   design,
   values,
   availableFontFamilies,
+  fontSuggestion,
   notices,
   badges,
   result,
@@ -114,6 +119,7 @@ export function usePanelDerivedState({
       notices.map((n) => ({
         marker: n.marker,
         label: n.label,
+        labelOne: n.labelOne,
         attention: n.attention === true,
         count: badges.find((b) => b.key === `notice:${n.marker}`)?.count ?? 0,
       })),
@@ -125,9 +131,10 @@ export function usePanelDerivedState({
         params: design.params,
         values,
         availableFontFamilies,
+        fontSuggestion,
         notices: noticeAttentionInputs,
       }),
-    [design, values, availableFontFamilies, noticeAttentionInputs]
+    [design, values, availableFontFamilies, fontSuggestion, noticeAttentionInputs]
   );
 
   // PR18's Review stage: overall production-readiness for the current render

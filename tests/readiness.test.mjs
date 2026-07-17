@@ -41,7 +41,25 @@ test("deriveAttention: a missing font family produces a font-fallback item namin
     availableFontFamilies: LOADED,
     notices: [],
   });
-  assert.deepEqual(items, [{ kind: "font-fallback", param: "font", family: "No Such Font" }]);
+  assert.deepEqual(items, [{ kind: "font-fallback", param: "font", family: "No Such Font", fallback: null }]);
+});
+
+test("deriveAttention: a string font param's fallback grafts a provided fontSuggestion onto the current value", () => {
+  const items = deriveAttention({
+    params: [fontParam()],
+    values: { font: "No Such Font:style=Bold" },
+    availableFontFamilies: LOADED,
+    fontSuggestion: "Liberation Sans",
+    notices: [],
+  });
+  assert.deepEqual(items, [
+    {
+      kind: "font-fallback",
+      param: "font",
+      family: "No Such Font",
+      fallback: { value: "Liberation Sans:style=Bold", label: "Liberation Sans" },
+    },
+  ]);
 });
 
 test("deriveAttention: family matching is case/space-insensitive (normalizeFamily)", () => {
@@ -65,8 +83,8 @@ test("deriveAttention: multiple missing font params each produce their own item,
     notices: [],
   });
   assert.deepEqual(items, [
-    { kind: "font-fallback", param: "titleFont", family: "Nope One" },
-    { kind: "font-fallback", param: "bodyFont", family: "Nope Two" },
+    { kind: "font-fallback", param: "titleFont", family: "Nope One", fallback: null },
+    { kind: "font-fallback", param: "bodyFont", family: "Nope Two", fallback: null },
   ]);
 });
 
@@ -98,7 +116,17 @@ test("deriveAttention: an enum font param is checked the same as a string one", 
     availableFontFamilies: LOADED,
     notices: [],
   });
-  assert.deepEqual(items, [{ kind: "font-fallback", param: "font", family: "Nope" }]);
+  // The enum's other loaded choice ("Liberation Sans") becomes the one-click
+  // fallback target — fontChoices.ts's fontFallback picks the first listed
+  // choice whose family is in the available set.
+  assert.deepEqual(items, [
+    {
+      kind: "font-fallback",
+      param: "font",
+      family: "Nope",
+      fallback: { value: "Liberation Sans", label: "Liberation Sans" },
+    },
+  ]);
 });
 
 test("deriveAttention: an empty availableFontFamilies set skips font checking entirely (we can't be authoritative)", () => {
@@ -131,7 +159,7 @@ test("deriveAttention: a font param demoted to @advanced (essentials-hidden) is 
     availableFontFamilies: LOADED,
     notices: [],
   });
-  assert.deepEqual(items, [{ kind: "font-fallback", param: "font", family: "No Such Font" }]);
+  assert.deepEqual(items, [{ kind: "font-fallback", param: "font", family: "No Such Font", fallback: null }]);
 });
 
 test("deriveAttention: a flagged notice category with a pending notice produces a notice item", () => {
@@ -142,6 +170,26 @@ test("deriveAttention: a flagged notice category with a pending notice produces 
     notices: [{ marker: "alert", label: "alerts", attention: true, count: 2 }],
   });
   assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alerts", count: 2 }]);
+});
+
+test("deriveAttention: a notice item's label uses labelOne when the pending count is exactly 1", () => {
+  const items = deriveAttention({
+    params: [],
+    values: {},
+    availableFontFamilies: new Set(),
+    notices: [{ marker: "alert", label: "alerts", labelOne: "alert", attention: true, count: 1 }],
+  });
+  assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alert", count: 1 }]);
+});
+
+test("deriveAttention: a notice item's label stays plural when the pending count isn't 1, even with labelOne configured", () => {
+  const items = deriveAttention({
+    params: [],
+    values: {},
+    availableFontFamilies: new Set(),
+    notices: [{ marker: "alert", label: "alerts", labelOne: "alert", attention: true, count: 3 }],
+  });
+  assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alerts", count: 3 }]);
 });
 
 test("deriveAttention: an unflagged notice category is never surfaced, however many are pending", () => {

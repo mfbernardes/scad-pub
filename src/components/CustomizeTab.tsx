@@ -15,8 +15,7 @@
 // directly (different DOM ids/hooks per layout — see AppShell's
 // onParamSearchHiddenBlur doc), not data the two layouts merely happen to
 // pass through identically.
-import { useMemo, useState } from "react";
-import type { AttentionItem } from "../lib/readiness";
+import { useMemo, useRef, useState } from "react";
 import { defaultsFor } from "../lib/presets";
 import { hiddenAdvancedCount, hiddenAdvancedDiff, hiddenSearchMatches } from "../lib/paramFilter";
 import { quickStartAvailable } from "../lib/quickStart";
@@ -70,6 +69,8 @@ export function CustomizeTab({
     experienceMode,
     quickStartEnabled,
     focusHiddenDiffSignal,
+    focusAttentionParamSignal,
+    focusReviewSignal,
     attention,
     onOpenMessages,
     readiness,
@@ -129,18 +130,6 @@ export function CustomizeTab({
     setFocusParam({ name, nonce: Date.now() });
   };
 
-  // Font-fallback attention items' param names, for QuickStart's per-chip
-  // amber dot (attentionParams prop) — notice-kind items aren't tied to one
-  // parameter, so they're excluded here.
-  const attentionParamNames = useMemo(
-    () =>
-      new Set(
-        attention.filter((a): a is Extract<AttentionItem, { kind: "font-fallback" }> => a.kind === "font-fallback")
-          .map((a) => a.param)
-      ),
-    [attention]
-  );
-
   // External trigger for the same action (the friendly-error card's "Review
   // hidden settings" button lives in OutputConsole, a sibling of this
   // component — see AppShell). F7/F8: useSignal fires only on a genuine
@@ -153,23 +142,39 @@ export function CustomizeTab({
   // anymore to get that same "depend on the signal alone" behavior.
   useSignal(focusHiddenDiffSignal, reviewHiddenDiff);
 
+  // PR22: OutputConsole's own friendly attention cards (Notices tab) "Go to
+  // setting" action — AppShell already closed Messages and switched to this
+  // tab; this nonce (carrying the target param name) tells this instance to
+  // run the exact same focusOnParam it uses internally. Buffered through a
+  // ref (mirroring useSignal's own latest-callback idiom) since the payload
+  // — not just the nonce — must be read fresh at fire time.
+  const focusAttentionParamRef = useRef(focusAttentionParamSignal);
+  focusAttentionParamRef.current = focusAttentionParamSignal;
+  useSignal(focusAttentionParamSignal?.nonce, () => {
+    if (focusAttentionParamRef.current) focusOnParam(focusAttentionParamRef.current.name);
+  });
+
   return (
     <>
-      {/* Attention chip: real, verifiable production-readiness gaps for the
-          CURRENT render (src/lib/readiness.ts) — a rendered preview isn't
-          necessarily what the controls say. Sits above everything else in
-          this tab (even the settings-view toggle) so it's the first thing a
-          visitor sees, regardless of which view/step they're in — the exact
-          "hidden behind a bell badge" problem this milestone fixes. Same
+      {/* Consolidated attention chip (PR22): real, verifiable production-
+          readiness gaps for the CURRENT render (src/lib/readiness.ts) — a
+          rendered preview isn't necessarily what the controls say. Sits above
+          everything else in this tab (even the settings-view toggle) so it's
+          the first thing a visitor sees, regardless of which view/step
+          they're in — the exact "hidden behind a bell badge" problem this
+          milestone fixes. Leads with a "N issue(s) to review" summary
+          (showSummary), then one row per item with its own action(s) — same
           visual family as the hidden-diff chip below (bg-muted, border-b,
-          a noteActionClass action), one row per item. */}
+          a noteActionClass action). */}
       <AttentionItems
         attention={attention}
         onGoToSetting={focusOnParam}
         onOpenMessages={onOpenMessages}
-        className="attention-chips flex shrink-0 flex-col border-b bg-muted"
-        itemClassName="attention-chip flex items-center gap-[0.4rem] px-3 py-[0.4rem] text-left text-[0.8rem] font-medium text-foreground"
+        className="attention-chips flex shrink-0 flex-col gap-1 border-b bg-muted px-3 py-[0.4rem]"
+        itemClassName="attention-chip flex flex-wrap items-center gap-x-[0.4rem] gap-y-1 text-left text-[0.8rem] font-medium text-foreground"
         actionClassName={noteActionClass}
+        showSummary
+        summaryClassName="attention-chip__summary text-[0.8rem] font-semibold text-foreground"
       />
       {hasAdvanced && <SettingsViewToggle view={settingsView} />}
       {settingsView === "essentials" && hiddenDiff.length > 0 && (
@@ -230,7 +235,6 @@ export function CustomizeTab({
             changedParams={changedParams}
             presetName={presetName}
             focusParam={focusParam}
-            attentionParams={attentionParamNames}
             variant={variant}
             attention={attention}
             onGoToSetting={focusOnParam}
@@ -241,6 +245,7 @@ export function CustomizeTab({
             computedInfo={computedInfo}
             reviewStale={reviewStale}
             onSelectView={onSelectView}
+            focusReviewSignal={focusReviewSignal}
           />
         ) : (
           <ParamForm

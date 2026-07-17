@@ -44,12 +44,13 @@
 // and as the terminal step's content in steps mode, exactly where the old
 // Export section sat.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ClipboardCheck as ReviewIcon } from "lucide-react";
+import { ClipboardCheck as ReviewIcon, Upload as UploadIcon } from "lucide-react";
 import type { Design, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import type { SettingsView } from "../lib/useExperience";
 import type { InstalledFont } from "../lib/fonts";
-import type { AttentionItem, ReadinessState } from "../lib/readiness";
+import { familyOf } from "../lib/fonts";
+import type { AttentionItem, FontFallbackItem, ReadinessState } from "../lib/readiness";
 import type { Dimensions } from "./Viewer";
 import type { ComputedInfo } from "../lib/computedInfo";
 import type { ViewName } from "./views";
@@ -60,13 +61,15 @@ import {
   resolveCurrentStep,
   unsteppedSectionNames,
   visibleSteps,
-  type QuickStartStep,
 } from "../lib/quickStart";
 import { buildReviewRows, readinessDotClass, readinessLabel, readinessPulse } from "../lib/reviewSummary";
+import { useAppActions } from "../lib/appActions";
+import { useSignal } from "../lib/useSignal";
 import { t } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { ParamRows, type FocusParamRequest, type ParamSectionGroup } from "./ParamRows";
 import { AttentionItems } from "./AttentionItems";
+import { FileInput } from "./FileInput";
 import { Button } from "./ui/button";
 
 interface Props {
@@ -97,15 +100,13 @@ interface Props {
    */
   focusParam?: FocusParamRequest | null;
   /**
-   * Param names with an unresolved attention item (src/lib/readiness.ts) —
-   * currently only font-fallbacks, since a flagged notice isn't tied to one
-   * parameter. A step whose sections contain one of these gets a small
-   * amber dot on its chip, so the same signal that drives the attention
-   * chip also nudges a visitor toward the right step without them having to
-   * open it first. Skipped when empty/omitted — no extra cost for a design
-   * with nothing to flag.
+   * PR22: bumped (any new value) to jump straight to the Review chip/stage —
+   * the export dock's attention line's "Review" action (see CustomizeTab ->
+   * AppShell's `focusReviewSignal`). Scroll mode scrolls the trailing Review
+   * section into view; steps mode selects it (with focus, matching Back/
+   * Next's own contract).
    */
-  attentionParams?: Set<string>;
+  focusReviewSignal?: number;
   /**
    * Desktop ("scroll", PR15): every visible step's group renders at once in
    * one scrollable flow — the panel's existing scroll container — with the
@@ -176,13 +177,71 @@ const reviewAttentionItemClass = "flex items-start gap-[0.4rem] text-[0.8rem] te
 const reviewAttentionActionClass =
   "inline-flex shrink-0 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent p-0 font-medium text-brand hover:underline focus-visible:outline-offset-2";
 
+// PR22 item 3: a dedicated "Font status" row above the Review stage's own
+// warning list — always present when the design has at least one `@font`
+// param (skipped entirely otherwise, since there's nothing to report either
+// way). Two states: a substitute in use (mirrors the export dock/attention
+// chip's own two actions — Import font…, reusing the exact FileInput +
+// addFile affordance FontMissingHint/FileBar's font card already use, and
+// Use a bundled font, via the AppActions `change` these share), or — clean —
+// just the currently-selected family, informational only.
+function FontStatusRow({
+  hasFontParams,
+  family,
+  fallbackItem,
+}: {
+  hasFontParams: boolean;
+  family: string | null;
+  fallbackItem: FontFallbackItem | null;
+}) {
+  const { addFile, change } = useAppActions();
+  if (!hasFontParams) return null;
+  if (fallbackItem) {
+    return (
+      <div
+        className="quick-start__review-font flex flex-col gap-[0.4rem] rounded-(--radius-sm) border border-(color:--glass-border) bg-muted/60 p-2 text-[0.8rem] text-foreground"
+        role="status"
+      >
+        <span className="font-medium">{t("quickstart.fontStatusSubstitute")}</span>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <FileInput
+            accept=".ttf,.otf,.ttc"
+            onFile={async (file) => addFile(file.name, new Uint8Array(await file.arrayBuffer()))}
+          >
+            {(open) => (
+              <button type="button" className={reviewAttentionActionClass} onClick={open}>
+                <UploadIcon size={13} aria-hidden="true" /> {t("params.importFont")}
+              </button>
+            )}
+          </FileInput>
+          {fallbackItem.fallback && (
+            <button
+              type="button"
+              className={reviewAttentionActionClass}
+              onClick={() => change(fallbackItem.param, fallbackItem.fallback!.value)}
+            >
+              {t("attention.useBundledFont")}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <p className="quick-start__review-font m-0 text-[0.8rem] text-muted-foreground">
+      {t("quickstart.fontStatusOk", { family: family ?? "" })}
+    </p>
+  );
+}
+
 /**
- * The Review stage's own content — a readiness line, the "what will actually
- * be produced" summary (src/lib/reviewSummary.ts, the same rows DimensionInfo
- * shows), a "Front view" button, and the (unchanged) pointer at the Export
- * action. Identical markup in both variants — only where it's mounted
- * (scroll mode's trailing section vs. steps mode's terminal step) differs —
- * so it's factored out rather than written twice.
+ * The Review stage's own content — a readiness line, the font status row
+ * (PR22 item 3), the "what will actually be produced" summary (src/lib/
+ * reviewSummary.ts, the same rows DimensionInfo shows), a "Front view"
+ * button, and the (unchanged) pointer at the Export action. Identical markup
+ * in both variants — only where it's mounted (scroll mode's trailing section
+ * vs. steps mode's terminal step) differs — so it's factored out rather than
+ * written twice.
  */
 function ReviewContent({
   readiness = "building",
@@ -192,6 +251,9 @@ function ReviewContent({
   rows,
   stale = false,
   onSelectView,
+  hasFontParams = false,
+  fontFamily = null,
+  fontFallbackItem = null,
 }: {
   readiness?: ReadinessState;
   attention?: AttentionItem[];
@@ -200,6 +262,9 @@ function ReviewContent({
   rows: ReturnType<typeof buildReviewRows>;
   stale?: boolean;
   onSelectView?: (view: ViewName) => void;
+  hasFontParams?: boolean;
+  fontFamily?: string | null;
+  fontFallbackItem?: FontFallbackItem | null;
 }) {
   return (
     <div className="quick-start__review flex flex-col gap-3">
@@ -214,6 +279,7 @@ function ReviewContent({
         />
         <span>{readinessLabel(readiness)}</span>
       </div>
+      <FontStatusRow hasFontParams={hasFontParams} family={fontFamily} fallbackItem={fontFallbackItem} />
       {readiness === "attention" && (
         <AttentionItems
           attention={attention}
@@ -302,7 +368,7 @@ export function QuickStart({
   changedParams,
   presetName,
   focusParam,
-  attentionParams,
+  focusReviewSignal,
   variant = "steps",
   readiness = "building",
   attention = EMPTY_ATTENTION_ITEMS,
@@ -559,11 +625,35 @@ export function QuickStart({
     [design]
   );
 
-  // Whether a step contains a param with an unresolved attention item — see
-  // `attentionParams`' own doc.
-  const stepNeedsAttention = (step: QuickStartStep) =>
-    !!attentionParams?.size &&
-    design.params.some((p) => step.sections.includes(p.section) && attentionParams.has(p.name));
+  // PR22's Review-stage "Font status" row (item 3): the font-fallback
+  // attention item, if any (there's at most one per param, but a design with
+  // several font params could in principle have more — the row leads with
+  // the first, mirroring the export dock's own summary). `hasFontParams`
+  // gates the row's clean-state text entirely: a design with no `@font`
+  // params has nothing to report either way. `currentFontFamily` reads the
+  // FIRST font param's live value — the family shown when nothing's missing.
+  const fontFallbackItem = useMemo(
+    () =>
+      (attention.find(
+        (a): a is FontFallbackItem => a.kind === "font-fallback"
+      ) ?? null),
+    [attention]
+  );
+  const firstFontParam = useMemo(
+    () => design.params.find((p) => (p.type === "string" || p.type === "enum") && p.isFont) ?? null,
+    [design]
+  );
+  const currentFontFamily = firstFontParam ? familyOf(String(values[firstFontParam.name] ?? "")) : null;
+
+  // PR22: jump straight to the Review chip/stage — the export dock's
+  // attention line's "Review" action (see this component's own
+  // `focusReviewSignal` doc). Mirrors the focusParam effect below (a fresh
+  // nonce means "act now"), but always targets the Review sentinel rather
+  // than resolving a param's owning step.
+  useSignal(focusReviewSignal, () => {
+    if (variant === "scroll") scrollToGroup(REVIEW_STEP_ID);
+    else select(REVIEW_STEP_ID, { focus: true });
+  });
 
   // Scroll mode's chip/Review click and heading ref-callback factory —
   // extracted so the strip (shared markup below) doesn't repeat this per
@@ -592,7 +682,6 @@ export function QuickStart({
       >
         {steps.map((step, i) => {
           const isCurrent = step.id === effectiveCurrentId;
-          const needsAttention = stepNeedsAttention(step);
           return (
             <button
               key={step.id}
@@ -608,13 +697,6 @@ export function QuickStart({
                 {i + 1}
               </span>
               {step.label}
-              {needsAttention && (
-                <span
-                  aria-hidden="true"
-                  className="quick-start__step-attention size-[6px] shrink-0 rounded-full bg-warn"
-                />
-              )}
-              {needsAttention && <span className="sr-only"> — {t("checklist.attention")}</span>}
               {visited.has(step.id) && <span className="sr-only"> — {t("quickstart.visited")}</span>}
             </button>
           );
@@ -701,6 +783,9 @@ export function QuickStart({
               rows={reviewRows}
               stale={reviewStale}
               onSelectView={onSelectView}
+              hasFontParams={!!firstFontParam}
+              fontFamily={currentFontFamily}
+              fontFallbackItem={fontFallbackItem}
             />
           </div>
         </div>
@@ -724,6 +809,9 @@ export function QuickStart({
                   rows={reviewRows}
                   stale={reviewStale}
                   onSelectView={onSelectView}
+                  hasFontParams={!!firstFontParam}
+                  fontFamily={currentFontFamily}
+                  fontFallbackItem={fontFallbackItem}
                 />
               </div>
             ) : currentStep ? (

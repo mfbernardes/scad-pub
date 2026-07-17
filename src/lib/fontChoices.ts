@@ -14,7 +14,9 @@ import {
   familyOf,
   fontLabelOf,
   fontValueOf,
+  normalizeFamily,
   styleOf,
+  withFamily,
   type InstalledFont,
 } from "./fonts";
 
@@ -97,4 +99,34 @@ export function buildFontChoices(
     missing.push({ value, label: fontValueLabel(value), installed: false });
 
   return { installed, missing };
+}
+
+/**
+ * A one-click replacement whose family is loaded, or null when none fits.
+ * The exact logic ParamRows' inline FontMissingHint offers under a missing
+ * font control (see its own `fallback` prop) — shared here so the
+ * consolidated attention chip / Review stage's own "Use a bundled font"
+ * action (src/lib/readiness.ts's deriveAttention) can never disagree with
+ * the inline hint about what counts as a valid fallback.
+ *
+ * For an enum, the result must be a listed choice (the dropdown can't show
+ * an off-list value), so this picks the first choice whose family is
+ * available; for free text, it grafts the suggested bundled family onto the
+ * current value (preserving any `:style=…` properties already present).
+ */
+export function fontFallback(
+  param: Param,
+  value: string,
+  available: Set<string> | undefined,
+  suggestion: string | null | undefined
+): { value: string; label: string } | null {
+  if (param.type === "enum") {
+    const choice = param.choices.find((c) =>
+      available?.has(normalizeFamily(familyOf(c.value)))
+    );
+    return choice ? { value: choice.value, label: familyOf(choice.value) } : null;
+  }
+  if (suggestion && normalizeFamily(suggestion) !== normalizeFamily(familyOf(value)))
+    return { value: withFamily(value, suggestion), label: suggestion };
+  return null;
 }

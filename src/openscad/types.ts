@@ -341,6 +341,15 @@ export interface NoticeCategory {
   marker: string;
   /** Badge / notice noun (e.g. "alerts", "notes"). Defaults to the marker. */
   label: string;
+  /**
+   * Optional singular form of `label` (e.g. "alert" for `label: "alerts"`),
+   * used wherever a count renders alongside it (CountBadges, the Notices tab
+   * chips, the consolidated attention chip's notice rows) whenever the live
+   * count is exactly 1 — `label` alone can't pluralize itself ("1 alerts"
+   * reads wrong). Omit to keep today's behavior (`label` used regardless of
+   * count).
+   */
+  labelOne?: string;
   /** Optional badge fill colour (a plain CSS colour); falls back to the accent. */
   color?: string;
   /**

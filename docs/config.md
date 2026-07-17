@@ -444,14 +444,15 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 ```jsonc
 {
   "notices": [
-    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
-    { "marker": "note",  "label": "notes",  "color": "#86a9ff" }
+    { "marker": "alert", "label": "alerts", "labelOne": "alert", "color": "#e0a458" },
+    { "marker": "note",  "label": "notes",  "labelOne": "note",  "color": "#86a9ff" }
   ]
 }
 ```
 
 - **`marker`**: required. The design-defined word, matched as `: <marker>:` inside an echo, case-insensitive. The first configured category that matches a line claims it
 - **`label`**: optional badge noun, such as `"alerts"`. Defaults to the `marker`
+- **`labelOne`**: optional singular form of `label`, such as `"alert"`. Used wherever a live count renders alongside the label (the count badge's accessible name, the Notices tab, the consolidated attention chip's notice rows) whenever the count is exactly 1 — `label` alone can't pluralize itself, so without this a single pending notice reads as "1 alerts". Omit to keep `label` regardless of count
 - **`color`**: optional badge fill, as a plain CSS colour. For `#rgb`/`#rrggbb`, the badge text auto-switches between black and white to stay legible. Other colour forms keep the default badge text, so their contrast is your responsibility. Omit to use the default accent badge styling
 - **`attention`**: optional boolean, default `false`. Flags this category as a production-readiness concern rather than a routine, passive notice: a pending notice in a flagged category surfaces the Customize tab's attention chip and a small indicator on the Export button — not just the Output bell's badge. Reach for this on messages that mean the exported model may not match what the controls show (a warning worth acting on before printing), not on cosmetic/informational notes
 
