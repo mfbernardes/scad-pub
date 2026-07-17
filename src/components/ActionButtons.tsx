@@ -32,8 +32,18 @@
 // override either one via `strings` same as before.
 import { useAppActions } from "../lib/appActions";
 import { Button } from "./ui/button";
-import { Download as DownloadIcon, Image as ImageIcon, Link2 as LinkIcon } from "lucide-react";
+import { Download as DownloadIcon, Image as ImageIcon, Link2 as LinkIcon, Share2 as ShareIcon } from "lucide-react";
 import { t } from "../lib/i18n";
+import { canShareNatively } from "../lib/share";
+
+// Whether the Share button will actually hand off to the native OS share
+// sheet on this device, rather than falling back to a clipboard copy — the
+// same capability check copyLink()/shareUrl() apply when the button is
+// clicked (see share.ts's own doc). Computed once at module load: the
+// capability is a property of the device/browser, not of any render, so it
+// can't change over the session — re-deriving it on every render would just
+// repeat the same matchMedia() call for no benefit.
+const NATIVE_SHARE = canShareNatively();
 
 interface Props {
   /** A successful render that still matches the live controls (see
@@ -98,8 +108,18 @@ export function ActionButtons({ canExport, modelFormat, onSavePng, hasAttention 
       <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!canExport} aria-label={t("action.saveImage")}>
         <ImageIcon size={16} /> <span className="action-btn-label">{t("action.image")}</span>
       </Button>
-      <Button size="sm" variant="ghost" onClick={copyLink} aria-label={t("action.copyShareLink")}>
-        <LinkIcon size={16} /> <span className="action-btn-label">{t("action.share")}</span>
+      {/* Icon + aria-label track what this click will actually do (NATIVE_SHARE,
+          above): the native share sheet on a capable touch device (Share2,
+          "Share"), or a clipboard copy everywhere else (Link2, "Copy share
+          link") — copyLink() itself branches the same way at click time. */}
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={copyLink}
+        aria-label={NATIVE_SHARE ? t("action.share") : t("action.copyShareLink")}
+      >
+        {NATIVE_SHARE ? <ShareIcon size={16} /> : <LinkIcon size={16} />}{" "}
+        <span className="action-btn-label">{t("action.share")}</span>
       </Button>
     </>
   );

@@ -266,6 +266,12 @@ function ReviewContent({
   fontFamily?: string | null;
   fontFallbackItem?: FontFallbackItem | null;
 }) {
+  // Order (PR23 item 4): readiness line, then the "what will actually be
+  // produced" definition list (Dimensions row leading, then @info rows —
+  // buildReviewRows' own fixed order), then Font status, then the warnings
+  // block, then actions (Front view), then the Export pointer. Font status
+  // and the attention list both moved below the dl so the summary a visitor
+  // is actually reviewing reads first, before any status/warning chrome.
   return (
     <div className="quick-start__review flex flex-col gap-3">
       <div className="quick-start__review-readiness flex items-center gap-2 text-[0.85rem] font-medium text-foreground">
@@ -279,17 +285,6 @@ function ReviewContent({
         />
         <span>{readinessLabel(readiness)}</span>
       </div>
-      <FontStatusRow hasFontParams={hasFontParams} family={fontFamily} fallbackItem={fontFallbackItem} />
-      {readiness === "attention" && (
-        <AttentionItems
-          attention={attention}
-          onGoToSetting={onGoToSetting}
-          onOpenMessages={onOpenMessages}
-          className="quick-start__review-attention flex flex-col gap-[0.35rem] rounded-(--radius-sm) border border-(color:--glass-border) bg-muted/60 p-2"
-          itemClassName={reviewAttentionItemClass}
-          actionClassName={reviewAttentionActionClass}
-        />
-      )}
       {rows.length > 0 && (
         <dl
           className={cn(
@@ -302,15 +297,26 @@ function ReviewContent({
             <div
               key={r.key}
               className={cn(
-                "flex items-baseline justify-between gap-3",
+                "grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3",
                 r.headline ? "font-semibold text-foreground" : "text-muted-foreground"
               )}
             >
-              <dt>{r.label}</dt>
+              <dt className="truncate" title={r.label}>{r.label}</dt>
               <dd className="m-0 text-right text-foreground tabular-nums break-words">{r.value}</dd>
             </div>
           ))}
         </dl>
+      )}
+      <FontStatusRow hasFontParams={hasFontParams} family={fontFamily} fallbackItem={fontFallbackItem} />
+      {readiness === "attention" && (
+        <AttentionItems
+          attention={attention}
+          onGoToSetting={onGoToSetting}
+          onOpenMessages={onOpenMessages}
+          className="quick-start__review-attention flex flex-col gap-[0.35rem] rounded-(--radius-sm) border border-(color:--glass-border) bg-muted/60 p-2"
+          itemClassName={reviewAttentionItemClass}
+          actionClassName={reviewAttentionActionClass}
+        />
       )}
       <Button
         type="button"

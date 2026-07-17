@@ -3,6 +3,7 @@
 // config's `help`, so no design-specific copy is baked into the app. A config
 // may group its guide into many tabs (`help.tabs`); without tabs it renders as
 // a single pane exactly as before.
+import { useEffect, useRef, useState } from "react";
 import { Modal, MODAL_BODY, MODAL_INTRO } from "./Modal";
 import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
@@ -48,6 +49,38 @@ function HelpSections({
   );
 }
 
+/** Tracks whether a horizontally-scrollable element has more content hidden
+ *  off its left and/or right edge, re-checked on scroll and on resize (a
+ *  narrower viewport, e.g. 390px -> 320px, can flip a tab strip from
+ *  "everything fits" to "some chips are clipped" without the user scrolling
+ *  at all). Cheap: a passive scroll listener plus a ResizeObserver, both just
+ *  reading three already-computed layout properties — no rAF throttling
+ *  needed at this scale (a handful of scroll/resize events per interaction). */
+function useScrollEdges(active: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  useEffect(() => {
+    if (!active) return;
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = el;
+      // 1px slop absorbs sub-pixel rounding so a fully-scrolled edge doesn't
+      // flicker a hairline fade.
+      setEdges({ left: scrollLeft > 1, right: scrollLeft + clientWidth < scrollWidth - 1 });
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [active]);
+  return { ref, edges };
+}
+
 /** Tab strip + panels, built on the shared Radix Tabs primitive (which provides
  *  the full ARIA tabs pattern — roving tabindex, arrow/Home/End nav — for free). */
 function HelpTabs({ tabs, defaultTab }: { tabs: HelpTab[]; defaultTab: string }) {
@@ -59,14 +92,44 @@ function HelpTabs({ tabs, defaultTab }: { tabs: HelpTab[]; defaultTab: string })
   // `shrink-0` so it keeps its natural width rather than being squeezed).
   // Desktop keeps the original wrapping behaviour untouched.
   const isMobile = useIsMobile();
+  // PR23 item 3: mobile had no affordance that more topics sit off-screen.
+  // A plain CSS mask-image on TabsList itself (see index.css's
+  // `.help-tabs-scroll[data-fade=…]`), keyed off which edge(s) currently hide
+  // content — recomputed on scroll/resize by useScrollEdges above. `data-fade`
+  // also gives scripts/smoke.mjs a stable, human-readable hook instead of
+  // having to parse the computed mask value. The primitive in ui/tabs.tsx
+  // itself stays untouched: className/ref/data-fade all arrive as ordinary
+  // props TabsList already spreads onto the underlying Radix element.
+  const { ref: scrollRef, edges } = useScrollEdges(isMobile);
+  const fade = isMobile ? (edges.left && edges.right ? "both" : edges.left ? "left" : edges.right ? "right" : "none") : "none";
   // `min-h-0 flex-1` lets this tab block fill the dialog's remaining height and,
   // crucially, shrink below its content — otherwise the default `min-height:auto`
   // makes it grow past the dialog, which clips (rather than scrolls) long tabs.
   return (
     <Tabs defaultValue={defaultTab} className="min-h-0 flex-1 gap-0">
+      {/* Scroll + the fade mask live directly on TabsList (ref/data-fade pass
+          through via React 19's ref-as-prop — no forwardRef needed), not on
+          an extra wrapper div: a wrapper here measured its own "auto" height
+          incorrectly once overflow-x:auto was added to it — a genuine,
+          pre-existing browser layout bug uncovered while building this
+          feature (confirmed with the wrapper removed and even on git HEAD
+          before this feature existed: `overflow-x:auto` on an inline-flex
+          `align-items:center` row whose children are shrink-0 with their own
+          padding can collapse the auto cross-size to roughly the text's own
+          line height, well under the children's real rendered height — those
+          children then visually straddle above/below the collapsed box).
+          TabsList owning the scroll itself (its pre-existing job) sidesteps
+          the wrapper case, but the underlying collapse can still bite
+          TabsList's own auto height — `min-h-[2.9rem]` below is the actual
+          fix: a floor matching the chips' real rendered height (~46px
+          measured) so the auto-height calculation never has room to under-run
+          it, on every browser, regardless of which element does the
+          scrolling. */}
       <TabsList
+        ref={scrollRef}
+        data-fade={isMobile ? fade : undefined}
         className={cn(
-          "mx-4 mt-2 h-auto w-full min-w-0 justify-start rounded-none border-0 border-b bg-transparent p-0",
+          "help-tabs-scroll mx-4 mt-2 h-auto min-h-[2.9rem] w-full min-w-0 justify-start rounded-none border-0 border-b bg-transparent p-0",
           isMobile ? "flex-nowrap overflow-x-auto" : "flex-wrap"
         )}
         aria-label={t("help.topicsAria")}

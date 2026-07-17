@@ -92,12 +92,39 @@
   --danger: #f87171;
   --code-bg: #101218;
   --overlay: rgba(20, 22, 28, 0.72);
-  --viewer-bg: #0e1016; /* deep slate, darker than the chrome to frame the model */
-  --viewer-grid: #565f6e; /* centre axes: ~3:1 vs --viewer-bg for orientation */
-  --viewer-grid-2: #20242e; /* grid lines: deliberately subtle */
+  /* PR23 item 1: nudged lighter + a touch cooler (0e1016 -> 11141e — a ~37%
+     luminance lift, 0.0052 -> 0.0071) than the original near-black. The lift
+     is deliberately modest: --viewer-bg stays the darkest surface in the
+     palette (below --bg's own 0.0081 and well below --panel's 0.0137), so the
+     "deeper than the chrome" framing is unchanged (contrast vs --bg/--panel
+     barely moves, 1.05:1 -> 1.02:1 and 1.15:1 -> 1.12:1 — both were already
+     this subtle). What it buys: near-black tones (below ~0.01 luminance)
+     compress badly in sRGB's gamma curve — few code values exist down there,
+     and both displays and eyes lose gradation — so a dark model colour's
+     shadow-facing facets (lit only by the scene's 0.6-intensity ambient, see
+     Viewer.tsx's light rig) used to crush toward the same near-zero floor as
+     the background instead of reading as distinct-but-dark. Lifting the floor
+     a little gives that range room to exist. A flat swatch-vs-swatch contrast
+     ratio actually reports FLAT for this fix (e.g. vs a dark navy example
+     #1a3a8f: 1.85:1 -> 1.79:1 — bg was already darker than that navy, so
+     approaching it from below can only shrink the gap; the fix targets
+     perceptual banding, not that ratio) and is unaffected for the bundled
+     model tint (vs #8eaaff: 8.46:1 -> 8.18:1, still comfortably clear). Paired
+     with the --viewer-grid/-2 bump below for the second, directly measurable
+     half of the fix: the grid's occlusion by the model's footprint is the
+     more reliable "where does the model end" cue for a dark colour, so its
+     own contrast against the new bg was restored/increased rather than left
+     to fade with the lighter background. Not used by any UNMASKED chrome
+     (grep confirms: only Viewer.tsx's three.js scene reads these, behind
+     screenshots.mjs's `.viewer { visibility: hidden }` mask), so this is a
+     no-op for `npm run vis`. */
+  --viewer-bg: #11141e;
+  --viewer-grid: #5c6575; /* centre axes: ~3.1:1 vs the new --viewer-bg (was 2.95:1 vs the old) */
+  --viewer-grid-2: #2d3446; /* grid lines: still deliberately subtle, ~1.48:1 vs bg (was 1.23:1) */
   --viewer-model: #8eaaff; /* the rendered model's material — brand blue, the hero.
     Lightened (same hue/saturation, +6% lightness) from the original #6f93ff:
-    against --viewer-bg (#0e1016, near-black) the darker value read as ~6.6:1,
+    against --viewer-bg (#0e1016 at the time, near-black — since nudged
+    lighter itself by PR23 item 1) the darker value read as ~6.6:1,
     which is plenty for a plain contrast ratio but the model still looked
     under-separated from the background in review (a solid-colour, single-
     material mesh gets none of text's stroke/weight cues) — the lighter value
@@ -700,6 +727,40 @@ button:disabled { cursor: default; }
 [data-slot="select-group"] + [data-slot="select-group"] > [data-slot="select-label"] {
   margin-top: 0.25rem;
   border-top: 1px solid var(--line);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HELP MODAL — mobile tab-strip scroll edge fade (PR23 item 3)
+   HelpModal.tsx's useScrollEdges keeps `data-fade` (none/left/right/both) in
+   sync with the container's actual scroll position, so the fade only ever
+   appears on the side that genuinely still hides a tab chip — it disappears
+   once you've scrolled all the way to that edge instead of being a static
+   decoration. mask-image (not an overlay element) so it needs no knowledge
+   of the dialog's background colour to blend in.
+   ═══════════════════════════════════════════════════════════════ */
+.help-tabs-scroll[data-fade="left"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 1.25rem);
+  mask-image: linear-gradient(to right, transparent, #000 1.25rem);
+}
+.help-tabs-scroll[data-fade="right"] {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 1.25rem);
+  mask-image: linear-gradient(to left, transparent, #000 1.25rem);
+}
+.help-tabs-scroll[data-fade="both"] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 1.25rem,
+    #000 calc(100% - 1.25rem),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 1.25rem,
+    #000 calc(100% - 1.25rem),
+    transparent
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════

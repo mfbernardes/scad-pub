@@ -1236,6 +1236,41 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
     "Review's content still points at the Export action rather than duplicating it"
   );
 
+  // PR23 item 4: readiness line, then the summary dl (Dimensions leading,
+  // then @info rows), then Font status, then warnings (absent here — the
+  // default state is "Ready to export"), then actions, then the export
+  // pointer. Reads the block-level markers in actual DOM order rather than
+  // asserting on any one of them in isolation.
+  const reviewOrderReady = await review.evaluate((el) => {
+    const wanted = [
+      ".quick-start__review-readiness",
+      ".quick-start__review-summary",
+      ".quick-start__review-font",
+      ".quick-start__review-attention",
+      ".quick-start__review-front-view",
+      ".quick-start__review-export-hint",
+    ];
+    return Array.from(el.children)
+      .map((child) => wanted.find((sel) => child.matches(sel)))
+      .filter(Boolean);
+  });
+  check(
+    reviewOrderReady.join(" -> ") ===
+      [
+        ".quick-start__review-readiness",
+        ".quick-start__review-summary",
+        ".quick-start__review-font",
+        ".quick-start__review-front-view",
+        ".quick-start__review-export-hint",
+      ].join(" -> "),
+    `Review card blocks render readiness -> summary -> font status -> actions -> export hint (saw ${reviewOrderReady.join(" -> ")})`
+  );
+  const reviewDtOrder = await page.locator(".quick-start__review-summary dt").allTextContents();
+  check(
+    reviewDtOrder[0] === "Dimensions" && reviewDtOrder.length > 1,
+    `the summary's own dt sequence leads with Dimensions, then @info rows (saw: ${reviewDtOrder.join(", ")})`
+  );
+
   // "Front view" actually drives the shared viewer: the HUD's view picker
   // trigger reflects the newly-applied view (ViewPicker.tsx's own
   // aria-label/title), proving the button is wired through AppShell's
@@ -1733,6 +1768,35 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   check(
     ((await page.locator(".quick-start__review-attention").textContent()) ?? "").includes("No Such Font"),
     "Review's own attention listing names the missing family too"
+  );
+
+  // PR23 item 4, the attention-present variant: Font status now sits between
+  // the summary and the warnings block, not ahead of the summary — confirm
+  // the full 6-part order with every optional block actually present.
+  const reviewOrderAttention = await page.locator(".quick-start__review").first().evaluate((el) => {
+    const wanted = [
+      ".quick-start__review-readiness",
+      ".quick-start__review-summary",
+      ".quick-start__review-font",
+      ".quick-start__review-attention",
+      ".quick-start__review-front-view",
+      ".quick-start__review-export-hint",
+    ];
+    return Array.from(el.children)
+      .map((child) => wanted.find((sel) => child.matches(sel)))
+      .filter(Boolean);
+  });
+  check(
+    reviewOrderAttention.join(" -> ") ===
+      [
+        ".quick-start__review-readiness",
+        ".quick-start__review-summary",
+        ".quick-start__review-font",
+        ".quick-start__review-attention",
+        ".quick-start__review-front-view",
+        ".quick-start__review-export-hint",
+      ].join(" -> "),
+    `with every optional block present, Review still renders readiness -> summary -> font status -> warnings -> actions -> export hint (saw ${reviewOrderAttention.join(" -> ")})`
   );
 
   // "Use a bundled font" (item 1's second action): a one-click fix, not just
@@ -2233,6 +2297,28 @@ async function checkMobileActionBar({ browser, base, check }) {
       "Image's visible text label is hidden on mobile (icon-only) — the aria-label above is unaffected"
     );
 
+    // PR23 item 2: the Share button's icon/aria-label track whether it will
+    // actually hand off to the native OS share sheet (navigator.share) or
+    // fall back to a clipboard copy — headless Chromium (even with touch
+    // emulation) doesn't implement the Web Share API, so this build's
+    // deterministic branch is the copy-link one: Link2 + "Copy share link",
+    // asserted above. Confirm the icon actually matches — lucide-react's
+    // default per-icon class (`.lucide-link-2` / `.lucide-share-2`, see
+    // ActionButtons.tsx) is a stable enough hook for this.
+    const hasNativeShare = await page.evaluate(() => "share" in navigator);
+    check(
+      !hasNativeShare,
+      "sanity: this headless browser has no navigator.share, so the copy-link branch below is the one actually exercised"
+    );
+    check(
+      (await share.locator(".lucide-link-2").count()) === 1,
+      "Share shows the Link2 (copy) icon when navigator.share is unavailable"
+    );
+    check(
+      (await share.locator(".lucide-share-2").count()) === 0,
+      "Share does NOT show the Share2 (native share sheet) icon here"
+    );
+
     console.log("--- export + the after-export panel still work (minimal — see checkExports for the full desktop flow) ---");
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(100);
@@ -2304,6 +2390,43 @@ async function checkHelpModalMobile({ browser, base, check }) {
       );
       check(overflowX <= 0, `no horizontal page overflow at ${width}px (excess ${overflowX}px)`);
     }
+
+    console.log("--- edge-fade affordance (PR23 item 3): appears/disappears with actual scroll position ---");
+    // The loop above leaves the viewport at 320px, the narrowest case and the
+    // one most likely to clip tabs.
+    const scroller = page.locator(".help-tabs-scroll");
+    const fadeState = () => scroller.getAttribute("data-fade");
+    check(
+      (await fadeState()) === "right" || (await fadeState()) === "both",
+      `unscrolled tab strip fades the right edge only (saw "${await fadeState()}") — more topics are off-screen there, none to the left yet`
+    );
+    await scroller.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
+    await page.waitForTimeout(50); // the scroll listener is passive/async
+    check(
+      (await fadeState()) === "left",
+      `scrolling all the way right flips the fade to the left edge only (saw "${await fadeState()}")`
+    );
+    await scroller.evaluate((el) => { el.scrollLeft = 0; });
+    await page.waitForTimeout(50);
+
+    console.log("--- tab strip keyboard operability: roving tabindex reaches every chip and scrolls it into view ---");
+    const tabs = helpDialog.getByRole("tab");
+    await tabs.first().click(); // focus + set as the roving tab stop
+    await page.keyboard.press("End"); // Radix roving focus: jump to the last tab
+    const lastVisible = await page.evaluate(() => {
+      const scrollEl = document.querySelector(".help-tabs-scroll");
+      const focused = document.activeElement;
+      if (!scrollEl || !focused) return false;
+      const box = focused.getBoundingClientRect();
+      const scrollBox = scrollEl.getBoundingClientRect();
+      return box.left >= scrollBox.left - 1 && box.right <= scrollBox.right + 1;
+    });
+    check(
+      await tabs.last().evaluate((el) => el === document.activeElement),
+      "pressing End on the tab strip moves focus to the last tab (Radix roving tabindex)"
+    );
+    check(lastVisible, "the newly-focused last tab is scrolled fully into view, not left clipped off-screen");
+    await page.keyboard.press("Home"); // leave the strip focused at the first tab for anything after this
 
     await runAxe(page, check, "Help modal open on mobile (About collapsed, tabs scrollable)");
     await page.keyboard.press("Escape");
