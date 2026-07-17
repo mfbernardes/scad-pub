@@ -34,6 +34,16 @@ test("deriveAttention: a loaded font family produces no attention item", () => {
   assert.deepEqual(items, []);
 });
 
+test("deriveAttention: an empty font value produces no attention item (a cleared control, not a missing font)", () => {
+  const items = deriveAttention({
+    params: [fontParam()],
+    values: { font: "" },
+    availableFontFamilies: LOADED,
+    notices: [],
+  });
+  assert.deepEqual(items, []);
+});
+
 test("deriveAttention: a missing font family produces a font-fallback item naming the param and family", () => {
   const items = deriveAttention({
     params: [fontParam()],

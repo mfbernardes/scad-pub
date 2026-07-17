@@ -10,18 +10,19 @@
 // discipline: every item keys off real, checkable state, never an assumption.
 import type { Param } from "../openscad/types";
 import type { Values } from "./presets";
-import { familyOf, normalizeFamily } from "./fonts";
-import { fontFallback } from "./fontChoices";
+import { familyOf } from "./fonts";
+import { fontFallback, isFontMissing } from "./fontChoices";
 import { noticeLabel } from "./diagnostics";
 import { isVisible } from "./visibility";
 
 /**
- * A `font` parameter whose selected family isn't in the loaded set — the
- * exact predicate ParamRows' own inline FontMissingHint uses (see
- * `missingFont` there: `type is string|enum && isFont`, compared by
- * normalised family against the authoritative available set). Reused here
- * rather than reinvented, so the chip and the inline hint can never disagree
- * about what counts as "missing".
+ * A `font` parameter whose selected family isn't in the loaded set — `type is
+ * string|enum && isFont`, checked via fontChoices.ts's shared `isFontMissing`
+ * predicate (also used by ParamRows' own inline FontMissingHint, see its
+ * `missingFont`), so the chip and the inline hint can never disagree about
+ * what counts as "missing" — including both agreeing that an EMPTY font value
+ * (a cleared control) never counts, even if `availableFontFamilies` is
+ * non-empty.
  */
 export interface FontFallbackItem {
   kind: "font-fallback";
@@ -108,22 +109,17 @@ export interface DeriveAttentionInputs {
  */
 export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] {
   const items: AttentionItem[] = [];
-  if (inputs.availableFontFamilies.size) {
-    for (const p of inputs.params) {
-      if ((p.type !== "string" && p.type !== "enum") || !p.isFont) continue;
-      if (!isVisible(p, inputs.values)) continue;
-      const value = String(inputs.values[p.name] ?? "");
-      const family = familyOf(value);
-      if (!family) continue;
-      if (!inputs.availableFontFamilies.has(normalizeFamily(family))) {
-        items.push({
-          kind: "font-fallback",
-          param: p.name,
-          family,
-          fallback: fontFallback(p, value, inputs.availableFontFamilies, inputs.fontSuggestion),
-        });
-      }
-    }
+  for (const p of inputs.params) {
+    if ((p.type !== "string" && p.type !== "enum") || !p.isFont) continue;
+    if (!isVisible(p, inputs.values)) continue;
+    const value = String(inputs.values[p.name] ?? "");
+    if (!isFontMissing(value, inputs.availableFontFamilies)) continue;
+    items.push({
+      kind: "font-fallback",
+      param: p.name,
+      family: familyOf(value),
+      fallback: fontFallback(p, value, inputs.availableFontFamilies, inputs.fontSuggestion),
+    });
   }
   for (const n of inputs.notices) {
     if (n.attention && n.count > 0) {

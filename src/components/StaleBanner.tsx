@@ -40,7 +40,7 @@ export function StaleBanner({ autoRender, rendering, stalePreview, pauseReason, 
       type="button"
       className={cn(
         // Positioning comes from the .stale-banner CSS block (per-layout offsets).
-        "stale-banner group flex cursor-pointer flex-col items-start gap-[0.15rem] whitespace-nowrap rounded-lg border border-(color:--glass-border) bg-(--glass-bg) py-[0.35rem] pl-[0.7rem] pr-[0.4rem] text-[0.82rem] font-medium text-foreground shadow-(--elevation) enabled:hover:border-brand",
+        "stale-banner group flex cursor-pointer flex-col items-start gap-[0.15rem] whitespace-nowrap rounded-lg border glass-card py-[0.35rem] pl-[0.7rem] pr-[0.4rem] text-[0.82rem] font-medium text-foreground enabled:hover:border-brand",
         rendering && "cursor-default pr-[0.7rem] text-muted-foreground",
         className
       )}

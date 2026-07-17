@@ -51,7 +51,7 @@ export const CommandBar = memo(function CommandBar({
   openPickerSignal,
   pickerActive,
 }: Props) {
-  const { designChange, showDesignDoc } = useAppActions();
+  const { showDesignDoc } = useAppActions();
   const currentDesign = designs.find((d) => d.id === designId);
 
   return (
@@ -72,7 +72,6 @@ export const CommandBar = memo(function CommandBar({
           <DesignPicker
             designs={designs}
             value={designId}
-            onChange={designChange}
             openSignal={openPickerSignal}
             active={pickerActive}
           />

@@ -3,6 +3,7 @@
 // handles the single-design fallback in its own markup).
 import { useState, type ReactNode } from "react";
 import type { Design } from "../openscad/types";
+import { useAppActions } from "../lib/appActions";
 import { t } from "../lib/i18n";
 import { useSignal } from "../lib/useSignal";
 import {
@@ -18,7 +19,6 @@ import {
 interface Props {
   designs: Design[];
   value: string;
-  onChange: (id: string) => void;
   /**
    * Monotonically-increasing signal: each increment asks this picker to open
    * (used by the intro popup's "start designing" CTA). Ignored unless `active`,
@@ -51,7 +51,8 @@ function designIcon(d: Design): ReactNode {
   ) : undefined;
 }
 
-export function DesignPicker({ designs, value, onChange, openSignal, active = true }: Props) {
+export function DesignPicker({ designs, value, openSignal, active = true }: Props) {
+  const { designChange } = useAppActions();
   const runs = groupDesigns(designs);
   const grouped = runs.some((r) => r.group !== null);
   const [open, setOpen] = useState(false);
@@ -71,7 +72,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, active = tr
     </SelectItem>
   );
   return (
-    <Select value={value} onValueChange={onChange} open={open} onOpenChange={setOpen}>
+    <Select value={value} onValueChange={designChange} open={open} onOpenChange={setOpen}>
       <SelectTrigger
         size="sm"
         aria-label={t("picker.button")}

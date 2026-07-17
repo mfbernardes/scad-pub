@@ -4,7 +4,7 @@
 // so listing never dirties a value or breaks preset matching.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildFontChoices, fontValueLabel, fontFallback } from "../src/lib/fontChoices.ts";
+import { buildFontChoices, fontValueLabel, fontFallback, isFontMissing } from "../src/lib/fontChoices.ts";
 
 const FONTS = [
   { family: "Atkinson Hyperlegible", style: "Regular", imported: false },
@@ -132,6 +132,26 @@ test("fontFallback: a string param's suggestion doesn't depend on `available` at
     value: "Liberation Sans",
     label: "Liberation Sans",
   });
+});
+
+// isFontMissing — the "font not loaded" predicate shared by ParamRows'
+// FontMissingHint and readiness.ts's deriveAttention (see A2's fix: the two
+// used to diverge on an EMPTY font value, ParamRows showing a bogus "'' isn't
+// loaded" hint that readiness.ts's own loop already correctly skipped).
+test("isFontMissing: an empty value is never missing, regardless of the available set", () => {
+  assert.equal(isFontMissing("", new Set(["liberation sans"])), false);
+  assert.equal(isFontMissing("", new Set()), false);
+  assert.equal(isFontMissing("", undefined), false);
+});
+
+test("isFontMissing: no checking without an authoritative (non-empty) available set", () => {
+  assert.equal(isFontMissing("Comic Sans MS", undefined), false);
+  assert.equal(isFontMissing("Comic Sans MS", new Set()), false);
+});
+
+test("isFontMissing: true for a family absent from the available set, false when present", () => {
+  assert.equal(isFontMissing("Comic Sans MS", new Set(["liberation sans"])), true);
+  assert.equal(isFontMissing("Liberation Sans:style=Bold", new Set(["liberation sans"])), false);
 });
 
 test("with nothing installed, the design's suggestions still show as missing", () => {

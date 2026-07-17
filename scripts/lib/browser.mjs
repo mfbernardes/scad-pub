@@ -33,6 +33,36 @@ export function launchChromium(options = {}) {
   });
 }
 
+// The mobile emulation profile every mobile-viewport smoke check needs: a
+// real 390x844 context (not just a resized desktop one — several checks rely
+// on `isMobile`/`hasTouch` actually being set, e.g. touch-driven sheet drags)
+// at a realistic device pixel ratio.
+const MOBILE_CONTEXT_OPTIONS = {
+  viewport: { width: 390, height: 844 },
+  deviceScaleFactor: 2,
+  isMobile: true,
+  hasTouch: true,
+};
+
+/** Run `fn(page)` inside a fresh mobile-emulation context (390x844, DSF 2,
+ *  touch), closing the context afterwards whether `fn` throws or not, and
+ *  returning `fn`'s result. Each mobile smoke check used to hand-roll its own
+ *  `browser.newContext({...}) / newPage() / try { ... } finally { close() }`
+ *  around this exact options object — sharing it here means the emulated
+ *  device only needs a one-file edit, and no call site can forget the
+ *  `finally`. A fresh context per check (rather than reusing one) is
+ *  deliberate: each check should start from a clean slate, not inherit
+ *  whatever state an earlier mobile check left behind. */
+export async function withMobileContext(browser, fn) {
+  const context = await browser.newContext(MOBILE_CONTEXT_OPTIONS);
+  const page = await context.newPage();
+  try {
+    return await fn(page);
+  } finally {
+    await context.close();
+  }
+}
+
 /** The render-status live region ("Render status: 123 ms" / "… (cached)" /
  *  "… Failed (exit N)") rides on the Output bell via the sr-only
  *  `.render-status` hook. Both layouts render the bell (the inactive one is

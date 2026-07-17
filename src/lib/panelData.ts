@@ -31,7 +31,7 @@
 //     re-renders exactly when the value it reads actually changed, same as
 //     if these were still individual props.
 import { createContext, createElement, useContext, type ReactNode } from "react";
-import type { Design } from "../openscad/types";
+import type { Design, Param } from "../openscad/types";
 import type { Values } from "./presets";
 import type { InstalledFont } from "./fonts";
 import type { ExperienceMode, SettingsView } from "./useExperience";
@@ -47,7 +47,7 @@ import type { ViewName } from "../components/views";
  *  showVarName/availableFontFamilies/fontSuggestion/installedFonts/
  *  settingsView/experienceMode/quickStartEnabled/focusHiddenDiffSignal/
  *  attention/onOpenMessages/readiness/measured/renderedValues/computedInfo/
- *  reviewStale/onSelectView flow straight into CustomizeTab; checklist/
+ *  reviewStale/onSelectView/hiddenDiff flow straight into CustomizeTab; checklist/
  *  checklistReplaySignal/quickStartActive flow into GettingStarted (which
  *  also takes quickStartActive, shared with CustomizeTab's own copy so the
  *  two can never disagree — see quickStart.ts). Search (value + onChange/
@@ -112,6 +112,12 @@ export interface PanelData {
   reviewStale?: boolean;
   /** Snap the active viewer to a standard camera view. */
   onSelectView?: (view: ViewName) => void;
+  /** The essentials-view-hidden params whose value differs from defaults
+   *  (src/lib/paramFilter.ts's hiddenAdvancedDiff) — CustomizeTab's own
+   *  "Review" chip computation, lifted here so OutputConsole's
+   *  showReviewHidden (derived from this array's length by AppShell) and
+   *  CustomizeTab's chip can never disagree. */
+  hiddenDiff: Param[];
   /** The getting-started checklist's derived state (src/lib/checklist.ts). */
   checklist: ChecklistState;
   /** Bumped by the Help modal's replay row to bring the checklist back. */

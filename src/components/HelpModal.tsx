@@ -133,6 +133,16 @@ function HelpTabs({ tabs, defaultTab }: { tabs: HelpTab[]; defaultTab: string })
           isMobile ? "flex-nowrap overflow-x-auto" : "flex-wrap"
         )}
         aria-label={t("help.topicsAria")}
+        // Keyboard focus must land the chip fully in view. Native focus-scroll
+        // alone isn't enough: Radix's automatic activation selects on focus,
+        // and the selected-state styling can widen the chip AFTER the browser
+        // already did its minimal reveal — leaving the grown edge clipped.
+        // Re-assert visibility one frame later, once the selection re-render
+        // has settled ("nearest" keeps it a no-op when nothing is clipped).
+        onFocus={(e) => {
+          const chip = (e.target as HTMLElement).closest('[role="tab"]');
+          if (chip) requestAnimationFrame(() => chip.scrollIntoView({ block: "nearest", inline: "nearest" }));
+        }}
       >
         {tabs.map((tab, i) => (
           <TabsTrigger key={i} value={String(i)} className={cn(chipTabTrigger, "shrink-0 px-3")}>

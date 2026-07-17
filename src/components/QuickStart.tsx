@@ -69,8 +69,9 @@ import { t } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { ParamRows, type FocusParamRequest, type ParamSectionGroup } from "./ParamRows";
 import { AttentionItems } from "./AttentionItems";
-import { FileInput } from "./FileInput";
+import { FontImportActions } from "./FontImportActions";
 import { Button } from "./ui/button";
+import { noteActionClass } from "./NoteBar";
 
 interface Props {
   design: Design;
@@ -172,19 +173,21 @@ const NOOP = () => {};
 // scoped to this card rather than CustomizeTab's stable `.attention-chip`
 // hooks, so the two can coexist on screen at once in scroll mode (every
 // step's group — including this trailing one — mounts simultaneously) without
-// colliding on the same class the smoke suite counts elsewhere.
+// colliding on the same class the smoke suite counts elsewhere. The action
+// class itself is byte-identical to NoteBar's own `noteActionClass` — shared
+// from there rather than kept as a second copy.
 const reviewAttentionItemClass = "flex items-start gap-[0.4rem] text-[0.8rem] text-foreground";
-const reviewAttentionActionClass =
-  "inline-flex shrink-0 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent p-0 font-medium text-brand hover:underline focus-visible:outline-offset-2";
+const reviewAttentionActionClass = noteActionClass;
 
 // PR22 item 3: a dedicated "Font status" row above the Review stage's own
 // warning list — always present when the design has at least one `@font`
 // param (skipped entirely otherwise, since there's nothing to report either
 // way). Two states: a substitute in use (mirrors the export dock/attention
-// chip's own two actions — Import font…, reusing the exact FileInput +
-// addFile affordance FontMissingHint/FileBar's font card already use, and
-// Use a bundled font, via the AppActions `change` these share), or — clean —
-// just the currently-selected family, informational only.
+// chip's own two actions — Import font…, via the shared FontImportActions
+// (src/components/FontImportActions.tsx) FontMissingHint/FileBar's font card
+// also use, and Use a bundled font, via the AppActions `change` these
+// share), or — clean — just the currently-selected family, informational
+// only.
 function FontStatusRow({
   hasFontParams,
   family,
@@ -194,7 +197,7 @@ function FontStatusRow({
   family: string | null;
   fallbackItem: FontFallbackItem | null;
 }) {
-  const { addFile, change } = useAppActions();
+  const { change } = useAppActions();
   if (!hasFontParams) return null;
   if (fallbackItem) {
     return (
@@ -203,27 +206,26 @@ function FontStatusRow({
         role="status"
       >
         <span className="font-medium">{t("quickstart.fontStatusSubstitute")}</span>
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          <FileInput
-            accept=".ttf,.otf,.ttc"
-            onFile={async (file) => addFile(file.name, new Uint8Array(await file.arrayBuffer()))}
-          >
-            {(open) => (
-              <button type="button" className={reviewAttentionActionClass} onClick={open}>
-                <UploadIcon size={13} aria-hidden="true" /> {t("params.importFont")}
-              </button>
-            )}
-          </FileInput>
-          {fallbackItem.fallback && (
-            <button
-              type="button"
-              className={reviewAttentionActionClass}
-              onClick={() => change(fallbackItem.param, fallbackItem.fallback!.value)}
-            >
-              {t("attention.useBundledFont")}
+        <FontImportActions
+          renderImport={(open) => (
+            <button type="button" className={reviewAttentionActionClass} onClick={open}>
+              <UploadIcon size={13} aria-hidden="true" /> {t("params.importFont")}
             </button>
           )}
-        </div>
+          renderFallback={
+            fallbackItem.fallback
+              ? () => (
+                  <button
+                    type="button"
+                    className={reviewAttentionActionClass}
+                    onClick={() => change(fallbackItem.param, fallbackItem.fallback!.value)}
+                  >
+                    {t("attention.useBundledFont")}
+                  </button>
+                )
+              : undefined
+          }
+        />
       </div>
     );
   }

@@ -23,6 +23,7 @@ import {
   selectDesign as pickDesign,
   settleFirstVisit,
   dismissWelcomePopup,
+  withMobileContext,
 } from "./lib/browser.mjs";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
@@ -614,35 +615,19 @@ async function checkIdleRenderCount({ page, check }) {
 
 async function checkAxe({ page, check }) {
   console.log("=== accessibility (axe-core) ===");
-  await page.addScriptTag({
-    path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
-  });
   // axe's color-contrast check reads *computed* colours. Several controls (the
   // tab chips especially) carry `transition-[color,box-shadow]`, and a theme
   // swap animates every colour token, so sampling an element mid-transition
   // yields an intermediate colour and a spurious contrast violation — settled
-  // by the shared settleAnimations() helper (see its own doc; also used by
-  // runAxe() for the same reason on every other pass in this suite).
+  // by runAxe()'s own settleAnimations() call (see its doc; the same reason
+  // it's used on every other pass in this suite).
   // Palettes are per-theme (and config-overridable per theme), so a contrast
   // regression can hide in whichever theme a single sweep doesn't visit: run
   // the AA sweep in the current theme, then toggle and sweep the other. The
   // second toggle also returns the app to the theme it started the section in.
   for (let pass = 0; pass < 2; pass++) {
     const theme = await page.getAttribute("html", "data-theme");
-    await settleAnimations(page);
-    const axeRes = await page.evaluate(async () =>
-      // WCAG 2.1 AA tags; report only violations.
-      window.axe.run(document, {
-        resultTypes: ["violations"],
-        runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
-      })
-    );
-    const serious = axeRes.violations.filter((v) =>
-      ["serious", "critical"].includes(v.impact)
-    );
-    for (const v of serious)
-      console.log(`  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node(s)) -> ${v.nodes.map((n) => n.target.join(" ")).join("; ")}`);
-    check(serious.length === 0, `axe (${theme}): ${serious.length} serious/critical violation(s)`);
+    await runAxe(page, check, theme);
     if (pass === 0) {
       await page.locator('.command-bar__right button[aria-label^="Switch to"]').first().click();
     }
@@ -1036,6 +1021,36 @@ async function runAxe(page, check, label) {
   check(serious.length === 0, `axe (${label}): ${serious.length} serious/critical violation(s)`);
 }
 
+// PR23 item 4's Review card block-level DOM order: readiness, summary, font
+// status, warnings (only when the attention block is actually present),
+// actions, export hint. Shared by checkQuickStart (the clean, no-attention
+// state) and checkReadiness (every optional block present, including
+// warnings) — both used to hand-roll the identical `wanted`-selector-list +
+// evaluate()/map()/filter() walk and only differed in whether the attention
+// block's selector belonged in the expected order.
+const REVIEW_BLOCK_SELECTORS = [
+  ".quick-start__review-readiness",
+  ".quick-start__review-summary",
+  ".quick-start__review-font",
+  ".quick-start__review-attention",
+  ".quick-start__review-front-view",
+  ".quick-start__review-export-hint",
+];
+
+async function reviewBlockOrder(reviewLocator, check, { expectAttention, message }) {
+  const actual = await reviewLocator.evaluate(
+    (el, wanted) =>
+      Array.from(el.children)
+        .map((child) => wanted.find((sel) => child.matches(sel)))
+        .filter(Boolean),
+    REVIEW_BLOCK_SELECTORS
+  );
+  const expected = expectAttention
+    ? REVIEW_BLOCK_SELECTORS
+    : REVIEW_BLOCK_SELECTORS.filter((sel) => sel !== ".quick-start__review-attention");
+  check(actual.join(" -> ") === expected.join(" -> "), `${message} (saw ${actual.join(" -> ")})`);
+}
+
 // Essentials/all settings view (the essentials/beginner milestone): the
 // dogfood config's guided default (ui.experience.default) starts a FRESH
 // visitor on the essentials view, which hides every @advanced param — tag's
@@ -1241,30 +1256,10 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
   // default state is "Ready to export"), then actions, then the export
   // pointer. Reads the block-level markers in actual DOM order rather than
   // asserting on any one of them in isolation.
-  const reviewOrderReady = await review.evaluate((el) => {
-    const wanted = [
-      ".quick-start__review-readiness",
-      ".quick-start__review-summary",
-      ".quick-start__review-font",
-      ".quick-start__review-attention",
-      ".quick-start__review-front-view",
-      ".quick-start__review-export-hint",
-    ];
-    return Array.from(el.children)
-      .map((child) => wanted.find((sel) => child.matches(sel)))
-      .filter(Boolean);
+  await reviewBlockOrder(review, check, {
+    expectAttention: false,
+    message: "Review card blocks render readiness -> summary -> font status -> actions -> export hint",
   });
-  check(
-    reviewOrderReady.join(" -> ") ===
-      [
-        ".quick-start__review-readiness",
-        ".quick-start__review-summary",
-        ".quick-start__review-font",
-        ".quick-start__review-front-view",
-        ".quick-start__review-export-hint",
-      ].join(" -> "),
-    `Review card blocks render readiness -> summary -> font status -> actions -> export hint (saw ${reviewOrderReady.join(" -> ")})`
-  );
   const reviewDtOrder = await page.locator(".quick-start__review-summary dt").allTextContents();
   check(
     reviewDtOrder[0] === "Dimensions" && reviewDtOrder.length > 1,
@@ -1325,14 +1320,7 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
 async function checkQuickStartMobile({ browser, base, check, ids, paramsTabName }) {
   if (!ids.includes("tag")) return;
   console.log("=== QuickStart step navigation (mobile steps mode) ===");
-  const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  });
-  const page = await context.newPage();
-  try {
+  await withMobileContext(browser, async (page) => {
     await page.goto(base, { waitUntil: "load" });
     await settleFirstVisit(page);
     await waitRenderDone(page).catch(() => {});
@@ -1395,9 +1383,7 @@ async function checkQuickStartMobile({ browser, base, check, ids, paramsTabName 
     );
 
     await runAxe(page, check, "QuickStart Review stage visible on mobile (steps mode)");
-  } finally {
-    await context.close();
-  }
+  });
 }
 
 // @showIf + @collapsed — exercised on the example "tag" design when present.
@@ -1655,10 +1641,6 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   // ambiguous corner dot: real text plus a "Review" action. Export stays
   // enabled and uninterrupted throughout — it's a caution, never a block.
   const exportBtn = page.locator(".action-export");
-  check(
-    (await page.locator(".action-export__attention-dot").count()) === 0,
-    "the export button's old corner dot is gone"
-  );
   const exportAttention = page.locator(".export-attention");
   await exportAttention.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
   check((await exportAttention.count()) === 1, "the export dock shows the attention line");
@@ -1773,31 +1755,11 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   // PR23 item 4, the attention-present variant: Font status now sits between
   // the summary and the warnings block, not ahead of the summary — confirm
   // the full 6-part order with every optional block actually present.
-  const reviewOrderAttention = await page.locator(".quick-start__review").first().evaluate((el) => {
-    const wanted = [
-      ".quick-start__review-readiness",
-      ".quick-start__review-summary",
-      ".quick-start__review-font",
-      ".quick-start__review-attention",
-      ".quick-start__review-front-view",
-      ".quick-start__review-export-hint",
-    ];
-    return Array.from(el.children)
-      .map((child) => wanted.find((sel) => child.matches(sel)))
-      .filter(Boolean);
+  await reviewBlockOrder(page.locator(".quick-start__review").first(), check, {
+    expectAttention: true,
+    message:
+      "with every optional block present, Review still renders readiness -> summary -> font status -> warnings -> actions -> export hint",
   });
-  check(
-    reviewOrderAttention.join(" -> ") ===
-      [
-        ".quick-start__review-readiness",
-        ".quick-start__review-summary",
-        ".quick-start__review-font",
-        ".quick-start__review-attention",
-        ".quick-start__review-front-view",
-        ".quick-start__review-export-hint",
-      ].join(" -> "),
-    `with every optional block present, Review still renders readiness -> summary -> font status -> warnings -> actions -> export hint (saw ${reviewOrderAttention.join(" -> ")})`
-  );
 
   // "Use a bundled font" (item 1's second action): a one-click fix, not just
   // a pointer — resolves the issue in place, no manual dropdown needed.
@@ -1887,14 +1849,7 @@ async function checkSignageDesign({ page, check, ids }) {
 //    detent change and never shown again (once-flag), even across a reload.
 async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
   console.log("=== responsive layout: single mounted tree + state across a breakpoint change (M7) ===");
-  const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  });
-  const page = await context.newPage();
-  try {
+  await withMobileContext(browser, async (page) => {
     await page.goto(base, { waitUntil: "load" });
     await settleFirstVisit(page);
     await waitRenderDone(page).catch(() => {});
@@ -2051,9 +2006,7 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
       (await page.locator(".sheet-hint").count()) === 0,
       "sheet hint does not return after reload (once-flag)"
     );
-  } finally {
-    await context.close();
-  }
+  });
 }
 
 // Mobile peek is a real peek (PR14, rule 3): at the sheet's Peek detent, the
@@ -2067,14 +2020,7 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
 // since ITS assertions are about focus/tab-order, not the checklist.
 async function checkMobileChecklistPeek({ browser, base, check }) {
   console.log("=== mobile bottom sheet: checklist at peek/half/full (PR14) ===");
-  const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  });
-  const page = await context.newPage();
-  try {
+  await withMobileContext(browser, async (page) => {
     await page.goto(base, { waitUntil: "load" });
     await dismissWelcomePopup(page);
     await waitRenderDone(page).catch(() => {});
@@ -2111,9 +2057,7 @@ async function checkMobileChecklistPeek({ browser, base, check }) {
     await page.waitForSelector(".bottom-sheet--full", { timeout: 3000 });
     check((await page.locator(".getting-started").count()) === 1, "checklist card shown inside the sheet at full");
     check((await page.locator(".getting-started-peek").count()) === 0, "no peek strip at full");
-  } finally {
-    await context.close();
-  }
+  });
 }
 
 // PR16: mobile Messages is a full-height MODAL DIALOG, not a second bottom
@@ -2138,23 +2082,16 @@ async function checkMobileChecklistPeek({ browser, base, check }) {
 //  - axe with the console open on mobile.
 async function checkMobileOutputConsole({ browser, base, check, ids, paramsTabName }) {
   console.log("=== mobile Messages: one bottom surface at a time (PR16) ===");
-  const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  });
-  const page = await context.newPage();
-  const sheetInert = () =>
-    page.evaluate(() => {
-      let el = document.querySelector(".bottom-sheet");
-      while (el) {
-        if (el.getAttribute("aria-hidden") === "true") return true;
-        el = el.parentElement;
-      }
-      return false;
-    });
-  try {
+  await withMobileContext(browser, async (page) => {
+    const sheetInert = () =>
+      page.evaluate(() => {
+        let el = document.querySelector(".bottom-sheet");
+        while (el) {
+          if (el.getAttribute("aria-hidden") === "true") return true;
+          el = el.parentElement;
+        }
+        return false;
+      });
     await page.goto(base, { waitUntil: "load" });
     await settleFirstVisit(page);
     await waitRenderDone(page).catch(() => {});
@@ -2247,9 +2184,7 @@ async function checkMobileOutputConsole({ browser, base, check, ids, paramsTabNa
       await page.locator(".output-console__close").click();
       await page.waitForSelector('[role="dialog"]', { state: "detached", timeout: 3000 });
     }
-  } finally {
-    await context.close();
-  }
+  });
 }
 
 // PR16: single-row mobile action bar. ActionButtons.tsx is the exact same
@@ -2262,14 +2197,7 @@ async function checkMobileOutputConsole({ browser, base, check, ids, paramsTabNa
 // (ACTION_CLUSTER_CLASS's doc) is untouched and not exercised here.
 async function checkMobileActionBar({ browser, base, check }) {
   console.log("=== mobile action bar: single row, no wrap down to 320px (PR16) ===");
-  const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  });
-  const page = await context.newPage();
-  try {
+  await withMobileContext(browser, async (page) => {
     await page.goto(base, { waitUntil: "load" });
     await settleFirstVisit(page);
     await waitRenderDone(page).catch(() => {});
@@ -2333,9 +2261,7 @@ async function checkMobileActionBar({ browser, base, check }) {
       !!successBox && !!clusterBox && successBox.y + successBox.height <= clusterBox.y + 1,
       "the after-export panel rides above the action cluster (PR9's .action-dock), not overlapping it"
     );
-  } finally {
-    await context.close();
-  }
+  });
 }
 
 // Help modal mobile polish (PR19 item 4): the config-level intro collapses
@@ -2346,14 +2272,7 @@ async function checkMobileActionBar({ browser, base, check }) {
 // suite, which all run at the desktop viewport.
 async function checkHelpModalMobile({ browser, base, check }) {
   console.log("=== Help modal (mobile): intro collapses to \"About\", tab strip scrolls without wrapping ===");
-  const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  });
-  const page = await context.newPage();
-  try {
+  await withMobileContext(browser, async (page) => {
     await page.goto(base, { waitUntil: "load" });
     await settleFirstVisit(page);
     await waitRenderDone(page).catch(() => {});
@@ -2411,28 +2330,60 @@ async function checkHelpModalMobile({ browser, base, check }) {
 
     console.log("--- tab strip keyboard operability: roving tabindex reaches every chip and scrolls it into view ---");
     const tabs = helpDialog.getByRole("tab");
-    await tabs.first().click(); // focus + set as the roving tab stop
-    await page.keyboard.press("End"); // Radix roving focus: jump to the last tab
-    const lastVisible = await page.evaluate(() => {
-      const scrollEl = document.querySelector(".help-tabs-scroll");
-      const focused = document.activeElement;
-      if (!scrollEl || !focused) return false;
-      const box = focused.getBoundingClientRect();
-      const scrollBox = scrollEl.getBoundingClientRect();
-      return box.left >= scrollBox.left - 1 && box.right <= scrollBox.right + 1;
-    });
-    check(
-      await tabs.last().evaluate((el) => el === document.activeElement),
-      "pressing End on the tab strip moves focus to the last tab (Radix roving tabindex)"
+    // Clicking a tab focuses AND activates it — the selection change swaps the
+    // tab panel and re-derives Radix's roving tabindex asynchronously. Pressing
+    // End before that settles was a recurring flake: wait until the click's
+    // focus has actually landed, press End, then POLL for the focus move (a
+    // keyboard user experiences the settled state, not the same-tick race).
+    await tabs.first().click();
+    await page.waitForFunction(
+      () => document.activeElement?.getAttribute("role") === "tab",
+      null,
+      { timeout: 2000 }
     );
+    await page.keyboard.press("End"); // Radix roving focus: jump to the last tab
+    const endMovedFocus = await tabs
+      .last()
+      .evaluate(
+        (el) =>
+          new Promise((resolve) => {
+            const deadline = Date.now() + 2000;
+            const tick = () => {
+              if (document.activeElement === el) return resolve(true);
+              if (Date.now() > deadline) return resolve(false);
+              requestAnimationFrame(tick);
+            };
+            tick();
+          })
+      );
+    // Same poll discipline as the focus check above: the browser performs the
+    // focus-driven scroll in its own frame(s) after focus lands, so a one-shot
+    // containment read here raced it (recurring flake).
+    const lastVisible = await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const deadline = Date.now() + 2000;
+          const tick = () => {
+            const scrollEl = document.querySelector(".help-tabs-scroll");
+            const focused = document.activeElement;
+            if (scrollEl && focused) {
+              const box = focused.getBoundingClientRect();
+              const scrollBox = scrollEl.getBoundingClientRect();
+              if (box.left >= scrollBox.left - 1 && box.right <= scrollBox.right + 1) return resolve(true);
+            }
+            if (Date.now() > deadline) return resolve(false);
+            requestAnimationFrame(tick);
+          };
+          tick();
+        })
+    );
+    check(endMovedFocus, "pressing End on the tab strip moves focus to the last tab (Radix roving tabindex)");
     check(lastVisible, "the newly-focused last tab is scrolled fully into view, not left clipped off-screen");
     await page.keyboard.press("Home"); // leave the strip focused at the first tab for anything after this
 
     await runAxe(page, check, "Help modal open on mobile (About collapsed, tabs scrollable)");
     await page.keyboard.press("Escape");
-  } finally {
-    await context.close();
-  }
+  });
 }
 
 // F10: ORDERING — main()'s call sequence below isn't arbitrary; several

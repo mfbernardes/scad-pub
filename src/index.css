@@ -69,6 +69,24 @@
   font-family: var(--font-display);
 }
 
+/* `glass-card` — the translucent "floating over the viewer" look shared by
+   every HUD-adjacent overlay (the export dock's attention/success cards, the
+   stale/updating chips, viewer hints, the dimension panel, the sheet-drag
+   hint, the view picker, the mobile action cluster): themed border colour +
+   background + elevation shadow, all three swapping per-theme (see :root's
+   own --glass-border/--glass-bg/--elevation below). Deliberately does NOT set
+   border-WIDTH — callers that want a border still add the plain `border`
+   utility themselves (see ViewPicker's HUD_GLASS_BTN, which composes this
+   with a `border` supplied by its own caller instead of always drawing one).
+   A real utility (like font-display above) so it composes with
+   tailwind-merge instead of every call site hand-rolling the same three
+   tokens. */
+@utility glass-card {
+  border-color: var(--glass-border);
+  background-color: var(--glass-bg);
+  box-shadow: var(--elevation);
+}
+
 /* Dark is the default; <html data-theme="light"> swaps the palette. The active
    theme is resolved in JS (lib/theme.ts) and set before paint (index.html). */
 @layer components {

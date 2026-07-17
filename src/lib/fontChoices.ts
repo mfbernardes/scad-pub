@@ -102,6 +102,27 @@ export function buildFontChoices(
 }
 
 /**
+ * Whether a `font` parameter's value names a family that isn't in the loaded
+ * set — the "font not loaded" predicate shared by ParamRows' inline
+ * FontMissingHint and readiness.ts's deriveAttention (the consolidated
+ * attention chip / Review stage), so the two can never disagree about what
+ * counts as missing.
+ *
+ * Two guards, both required: an authoritative, non-empty `available` set (we
+ * can't warn about availability without one — the same "empty/undefined ->
+ * no checking" rule every caller already followed), AND a non-empty family in
+ * `value` — an EMPTY font field is a cleared control, not a font that failed
+ * to load, so it never counts as missing regardless of what `available`
+ * contains.
+ */
+export function isFontMissing(value: string, available: Set<string> | undefined): boolean {
+  if (!available?.size) return false;
+  const family = familyOf(value);
+  if (!family) return false;
+  return !available.has(normalizeFamily(family));
+}
+
+/**
  * A one-click replacement whose family is loaded, or null when none fits.
  * The exact logic ParamRows' inline FontMissingHint offers under a missing
  * font control (see its own `fallback` prop) — shared here so the

@@ -465,7 +465,7 @@ export function BottomSheet({
                 never steal a tap/drag meant for the handle beneath it. */}
             {hint && (
               <span
-                className="sheet-hint pointer-events-none absolute -top-1 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-(--radius-sm) border border-(color:--glass-border) bg-(--glass-bg) px-2 py-1 text-[0.72rem] text-muted-foreground shadow-(--elevation) transition-opacity duration-300 motion-reduce:transition-none"
+                className="sheet-hint pointer-events-none absolute -top-1 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-(--radius-sm) border glass-card px-2 py-1 text-[0.72rem] text-muted-foreground transition-opacity duration-300 motion-reduce:transition-none"
                 aria-hidden="true"
               >
                 {hint}

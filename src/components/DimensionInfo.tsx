@@ -57,7 +57,7 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
       // (per-layout offsets); pointer-events-auto so the list can scroll while
       // the rest of the canvas stays orbit-able.
       className={cn(
-        "dimension-info pointer-events-auto m-0 flex flex-col gap-[0.15rem] overflow-y-auto overscroll-contain rounded-(--radius-sm) border border-(color:--glass-border) bg-(--glass-bg) px-[0.55rem] py-[0.35rem] text-[0.8rem] text-muted-foreground shadow-(--elevation) [scrollbar-width:thin]",
+        "dimension-info pointer-events-auto m-0 flex flex-col gap-[0.15rem] overflow-y-auto overscroll-contain rounded-(--radius-sm) border glass-card px-[0.55rem] py-[0.35rem] text-[0.8rem] text-muted-foreground [scrollbar-width:thin]",
         // Preview out of date: dim + italic so a stale figure never reads as current.
         stale && "italic opacity-55"
       )}

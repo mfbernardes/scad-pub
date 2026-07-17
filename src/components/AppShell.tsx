@@ -42,7 +42,7 @@ const ACTION_CLUSTER_CLASS =
   // main label deliberately stays on one line), the row wraps Image/Share
   // onto a second line below Export rather than spilling past the screen
   // edge. Verified at a 320px viewport (the narrowest realistic target).
-  "action-cluster flex w-[min(calc(100vw-1.5rem),24rem)] flex-wrap items-center justify-center gap-[0.3rem] rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation)";
+  "action-cluster flex w-[min(calc(100vw-1.5rem),24rem)] flex-wrap items-center justify-center gap-[0.3rem] rounded-lg border glass-card px-[0.45rem] py-[0.35rem]";
 // Wraps the action cluster (and, when present, the after-export panel riding
 // above it) — see .action-dock in index.css for the shared bottom-anchored
 // positioning both layouts used to put directly on .action-cluster. Anchoring
@@ -457,7 +457,7 @@ export const AppShell = memo(function AppShell({
     readiness,
     reviewStale,
     checklistState,
-    hasHiddenDiff,
+    hiddenDiff,
     friendlyError,
     quickStartActive,
   } = usePanelDerivedState({
@@ -511,11 +511,20 @@ export const AppShell = memo(function AppShell({
       document.getElementById(PARAM_SEARCH_INPUT_ID)?.focus();
     });
   }, []);
-  const handleReviewSettings = useCallback(() => {
+
+  // Shared by every handler below that needs to land on the Customize tab:
+  // switch to it, and (mobile only) raise the sheet to Half so the panel is
+  // actually visible — the same two-step "get the panel on screen" pattern
+  // each of these otherwise repeated inline.
+  const openParamsTab = useCallback(() => {
     setPanelTab("params");
     if (isMobile) setSheetDetent("half");
+  }, [setPanelTab, isMobile]);
+
+  const handleReviewSettings = useCallback(() => {
+    openParamsTab();
     focusPanelSearch();
-  }, [setPanelTab, isMobile, focusPanelSearch]);
+  }, [openParamsTab, focusPanelSearch]);
 
   // "Review hidden settings": the exact same action as CustomizeTab's own
   // "Review" chip (settingsViewChange("all") + focus the first hidden-diff
@@ -527,10 +536,9 @@ export const AppShell = memo(function AppShell({
   // see CustomizeTab's focusHiddenDiffSignal prop/effect.
   const [reviewHiddenSignal, setReviewHiddenSignal] = useState(0);
   const handleReviewHiddenSettings = useCallback(() => {
-    setPanelTab("params");
-    if (isMobile) setSheetDetent("half");
+    openParamsTab();
     setReviewHiddenSignal((n) => n + 1);
-  }, [setPanelTab, isMobile]);
+  }, [openParamsTab]);
 
   // PR22: "Go to setting" from the Notices tab's own friendly attention cards
   // (see OutputConsole's attention prop) — closes Messages (the setting lives
@@ -543,10 +551,9 @@ export const AppShell = memo(function AppShell({
   const [focusAttentionParam, setFocusAttentionParam] = useState<{ name: string; nonce: number } | null>(null);
   const handleGoToAttentionSetting = useCallback((name: string) => {
     setOutputOpen(false);
-    setPanelTab("params");
-    if (isMobile) setSheetDetent("half");
+    openParamsTab();
     setFocusAttentionParam({ name, nonce: Date.now() });
-  }, [setPanelTab, isMobile]);
+  }, [openParamsTab]);
 
   // PR22: "Review" from the export dock's attention line (see ExportAttention
   // below) — jumps to wherever the visitor can actually resolve the gap:
@@ -556,10 +563,9 @@ export const AppShell = memo(function AppShell({
   // form (see CustomizeTab.tsx), so simply switching tabs is enough there.
   const [reviewStageSignal, setReviewStageSignal] = useState(0);
   const handleReviewAttention = useCallback(() => {
-    setPanelTab("params");
-    if (isMobile) setSheetDetent("half");
+    openParamsTab();
     if (quickStartActive) setReviewStageSignal((n) => n + 1);
-  }, [setPanelTab, isMobile, quickStartActive]);
+  }, [openParamsTab, quickStartActive]);
 
   const handleSavePng = useCallback(() => {
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
@@ -687,6 +693,7 @@ export const AppShell = memo(function AppShell({
       computedInfo,
       reviewStale,
       onSelectView: handleSelectView,
+      hiddenDiff,
       checklist: checklistState,
       checklistReplaySignal,
       quickStartActive,
@@ -716,6 +723,7 @@ export const AppShell = memo(function AppShell({
       computedInfo,
       reviewStale,
       handleSelectView,
+      hiddenDiff,
       checklistState,
       checklistReplaySignal,
       quickStartActive,
@@ -768,7 +776,7 @@ export const AppShell = memo(function AppShell({
     onClose: closeOutput,
     friendlyError,
     lastPreviewKept,
-    showReviewHidden: hasHiddenDiff,
+    showReviewHidden: hiddenDiff.length > 0,
     onReviewSettings: handleReviewSettings,
     onReviewHiddenSettings: handleReviewHiddenSettings,
     onRetryRender: actions.render,
@@ -794,6 +802,27 @@ export const AppShell = memo(function AppShell({
     onSavePng: handleSavePng,
     hasAttention: hasExportAttention,
   };
+  // The action dock: byte-identical markup on both layouts (only its
+  // *position* in the tree differs — floating over the mobile sheet's top
+  // edge vs. floating over the desktop viewer canvas), so it's built once
+  // here and referenced from both JSX branches below instead of duplicated.
+  const actionDock = (
+    <div className={ACTION_DOCK_CLASS}>
+      {hasExportAttention && <ExportAttention attention={attention} onReview={handleReviewAttention} />}
+      {exportSuccess && (
+        <ExportSuccess
+          state={exportSuccess}
+          title={afterExport?.title}
+          body={afterExport?.body}
+          helpTab={afterExport?.helpTab}
+          onDismiss={onDismissExportSuccess}
+        />
+      )}
+      <div className={ACTION_CLUSTER_CLASS}>
+        <ActionButtons {...actionButtonsProps} />
+      </div>
+    </div>
+  );
   return (
     <PanelDataProvider value={panelData}>
       <div className="app-shell">
@@ -854,7 +883,6 @@ export const AppShell = memo(function AppShell({
                       <DesignPicker
                         designs={designs}
                         value={design.id}
-                        onChange={actions.designChange}
                         openSignal={openPickerSignal}
                         active={isMobile}
                       />
@@ -898,23 +926,7 @@ export const AppShell = memo(function AppShell({
                   buttons to the desktop cluster. The after-export panel (when
                   shown) rides directly above it in the same dock, never
                   covering it — see ACTION_DOCK_CLASS's doc. */}
-              <div className={ACTION_DOCK_CLASS}>
-                {hasExportAttention && (
-                  <ExportAttention attention={attention} onReview={handleReviewAttention} />
-                )}
-                {exportSuccess && (
-                  <ExportSuccess
-                    state={exportSuccess}
-                    title={afterExport?.title}
-                    body={afterExport?.body}
-                    helpTab={afterExport?.helpTab}
-                    onDismiss={onDismissExportSuccess}
-                  />
-                )}
-                <div className={ACTION_CLUSTER_CLASS}>
-                  <ActionButtons {...actionButtonsProps} />
-                </div>
-              </div>
+              {actionDock}
 
               <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
             </div>
@@ -1043,23 +1055,7 @@ export const AppShell = memo(function AppShell({
                       rather than overlapping the console's notices. The after-export
                       panel (when shown) rides directly above the cluster in the same
                       dock, never covering it — see ACTION_DOCK_CLASS's doc. */}
-                  <div className={ACTION_DOCK_CLASS}>
-                    {hasExportAttention && (
-                      <ExportAttention attention={attention} onReview={handleReviewAttention} />
-                    )}
-                    {exportSuccess && (
-                      <ExportSuccess
-                        state={exportSuccess}
-                        title={afterExport?.title}
-                        body={afterExport?.body}
-                        helpTab={afterExport?.helpTab}
-                        onDismiss={onDismissExportSuccess}
-                      />
-                    )}
-                    <div className={ACTION_CLUSTER_CLASS}>
-                      <ActionButtons {...actionButtonsProps} />
-                    </div>
-                  </div>
+                  {actionDock}
                   <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
                 </ViewerStage>
 

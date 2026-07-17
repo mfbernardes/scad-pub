@@ -19,12 +19,11 @@ import type { Values } from "../lib/presets";
 import type { SettingsView } from "../lib/useExperience";
 import { displayValue } from "../lib/paramDiff";
 import { isShown, paramMatchesQuery } from "../lib/paramFilter";
-import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
-import { fontFallback } from "../lib/fontChoices";
+import { familyOf, type InstalledFont } from "../lib/fonts";
+import { fontFallback, isFontMissing } from "../lib/fontChoices";
 import { makeRafThrottle, type RafThrottle } from "../lib/rafThrottle";
-import { useAppActions } from "../lib/appActions";
 import { t } from "../lib/i18n";
-import { FileInput } from "./FileInput";
+import { FontImportActions } from "./FontImportActions";
 import { FontSelect } from "./FontSelect";
 import { SvgPrepareControl } from "./SvgPrepareControl";
 import { Slider } from "./ui/slider";
@@ -141,7 +140,6 @@ function FontMissingHint({
   fallback: { value: string; label: string } | null;
   onUse: (next: string) => void;
 }) {
-  const { addFile } = useAppActions();
   // The action links that actually fix a missing font (import it, or switch
   // to a loaded family).
   const actionBtn =
@@ -154,40 +152,43 @@ function FontMissingHint({
       <span className="text-[0.82rem] leading-[1.4] text-foreground">
         {t("params.fontMissing", { family })}
       </span>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        <FileInput
-          accept=".ttf,.otf,.ttc"
-          onFile={async (file) => addFile(file.name, new Uint8Array(await file.arrayBuffer()))}
-        >
-          {(open) => (
-            <button type="button" className={actionBtn} onClick={open}>
-              <UploadIcon size={13} aria-hidden="true" /> {t("params.importFont")}
-            </button>
-          )}
-        </FileInput>
-        {fallback && (
-          <button type="button" className={actionBtn} onClick={() => onUse(fallback.value)}>
-            {t("params.useFallback", { label: fallback.label })}
+      <FontImportActions
+        renderImport={(open) => (
+          <button type="button" className={actionBtn} onClick={open}>
+            <UploadIcon size={13} aria-hidden="true" /> {t("params.importFont")}
           </button>
         )}
-      </div>
+        renderFallback={
+          fallback
+            ? () => (
+                <button type="button" className={actionBtn} onClick={() => onUse(fallback.value)}>
+                  {t("params.useFallback", { label: fallback.label })}
+                </button>
+              )
+            : undefined
+        }
+      />
     </div>
   );
 }
 
 // The value of a font selector whose family isn't loaded, else null. A font
-// selector is a string or enum (dropdown) param flagged `isFont`. Only checked
-// when an authoritative available set is provided and non-empty, so an unknown
-// set never produces a false "not loaded" warning.
+// selector is a string or enum (dropdown) param flagged `isFont`. The actual
+// "not loaded" predicate is fontChoices.ts's shared isFontMissing (also used
+// by readiness.ts's deriveAttention), which already guards both an
+// unauthoritative (empty/undefined) available set and an empty family value
+// (a cleared field is not a missing font) — this just adapts it to a
+// `Param`/`ParamValue` pair and returns the value for display rather than a
+// bare boolean.
 function missingFont(
   param: Param,
   value: ParamValue,
   available: Set<string> | undefined
 ): string | null {
   const isFontParam = (param.type === "string" || param.type === "enum") && param.isFont;
-  if (!isFontParam || !available?.size) return null;
+  if (!isFontParam) return null;
   const v = String(value ?? "");
-  return available.has(normalizeFamily(familyOf(v))) ? null : v;
+  return isFontMissing(v, available) ? v : null;
 }
 
 // fontFallback (the one-click loaded-family replacement) now lives in

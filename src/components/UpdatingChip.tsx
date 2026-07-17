@@ -24,7 +24,7 @@ export function UpdatingChip() {
   const label = full.split(/[…,]/)[0].trim();
   return (
     <div
-      className="updating-chip pointer-events-none flex items-center gap-2 whitespace-nowrap rounded-lg border border-(color:--glass-border) bg-(--glass-bg) px-[0.7rem] py-[0.35rem] text-[0.82rem] font-medium text-muted-foreground shadow-(--elevation)"
+      className="updating-chip pointer-events-none flex items-center gap-2 whitespace-nowrap rounded-lg border glass-card px-[0.7rem] py-[0.35rem] text-[0.82rem] font-medium text-muted-foreground"
       role="status"
       aria-live="polite"
       title={full}

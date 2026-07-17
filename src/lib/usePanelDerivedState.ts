@@ -14,7 +14,7 @@
 // AppShell (see git history around AppShell.tsx's former lines ~461-544) —
 // only the "where" moved.
 import { useMemo } from "react";
-import type { Design, RenderResult } from "../openscad/types";
+import type { Design, Param, RenderResult } from "../openscad/types";
 import type { Values } from "./presets";
 import type { SettingsView, ExperienceMode } from "./useExperience";
 import type { ChecklistState } from "./checklist";
@@ -77,7 +77,13 @@ export interface PanelDerivedState {
   reviewStale: boolean;
   checklistState: ChecklistState;
   defaults: Values;
-  hasHiddenDiff: boolean;
+  /** The hidden-advanced-diff array itself (src/lib/paramFilter.ts's
+   *  hiddenAdvancedDiff) — CustomizeTab's "Review" chip and GettingStarted's
+   *  friendly-error card both need the actual params (CustomizeTab jumps to
+   *  the first one), not just whether any exist. Callers that only need the
+   *  boolean (e.g. OutputConsole's showReviewHidden) derive it with
+   *  `.length > 0` at the call site instead of this hook computing both. */
+  hiddenDiff: Param[];
   friendlyError: FriendlyErrorInfo | null;
   quickStartActive: boolean;
 }
@@ -154,16 +160,35 @@ export function usePanelDerivedState({
     [stalePreview, result, retainedResult]
   );
 
-  const checklistState: ChecklistState = {
-    enabled: showChecklist,
-    designCount,
-    designChanged: checklistProgress.designChanged,
-    paramInteracted: checklistProgress.paramInteracted,
-    exported: checklistProgress.exported,
-    rendering,
-    resultOk: result ? result.ok : null,
-    hasAttention: attention.length > 0,
-  };
+  // Memoized like every other field this hook returns (see the module doc) —
+  // this was previously the one exception, a fresh object literal every
+  // render. Since it flows into AppShell's `panelData` useMemo (whose dep
+  // array includes checklistState), an unmemoized literal here defeated that
+  // memo on every render, churning the whole PanelDataContext value and
+  // re-rendering every consumer (CustomizeTab, GettingStarted, …) regardless
+  // of whether anything they read actually changed.
+  const checklistState: ChecklistState = useMemo(
+    () => ({
+      enabled: showChecklist,
+      designCount,
+      designChanged: checklistProgress.designChanged,
+      paramInteracted: checklistProgress.paramInteracted,
+      exported: checklistProgress.exported,
+      rendering,
+      resultOk: result ? result.ok : null,
+      hasAttention: attention.length > 0,
+    }),
+    [
+      showChecklist,
+      designCount,
+      checklistProgress.designChanged,
+      checklistProgress.paramInteracted,
+      checklistProgress.exported,
+      rendering,
+      result,
+      attention,
+    ]
+  );
 
   // Friendly render-failure summary (see src/lib/friendlyErrors.ts) — null
   // whenever the latest render didn't fail. Recomputed only when `result`
@@ -174,8 +199,8 @@ export function usePanelDerivedState({
   // use the SAME deterministic rule as the Customize tab's "Review" chip, not
   // a re-derived approximation.
   const defaults = useMemo(() => defaultsFor(design), [design]);
-  const hasHiddenDiff = useMemo(
-    () => hiddenAdvancedDiff(design.params, values, defaults, settingsView).length > 0,
+  const hiddenDiff = useMemo(
+    () => hiddenAdvancedDiff(design.params, values, defaults, settingsView),
     [design, values, defaults, settingsView]
   );
 
@@ -186,7 +211,7 @@ export function usePanelDerivedState({
     reviewStale,
     checklistState,
     defaults,
-    hasHiddenDiff,
+    hiddenDiff,
     friendlyError,
     quickStartActive,
   };

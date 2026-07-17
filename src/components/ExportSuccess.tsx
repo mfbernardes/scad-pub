@@ -67,7 +67,7 @@ export function ExportSuccess({
 
   return (
     <div
-      className="export-success flex max-w-[min(22rem,calc(100vw-1.5rem))] items-start gap-2 rounded-lg border border-(color:--glass-border) bg-(--glass-bg) px-3 py-[0.55rem] text-[0.82rem] shadow-(--elevation)"
+      className="export-success flex max-w-[min(22rem,calc(100vw-1.5rem))] items-start gap-2 rounded-lg border glass-card px-3 py-[0.55rem] text-[0.82rem]"
       role="status"
       // Polite: announces the title without stealing focus from wherever the
       // visitor's attention already is (they just clicked Export).

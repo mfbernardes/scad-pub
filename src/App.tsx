@@ -534,14 +534,19 @@ export default function App() {
     showPicker: openPicker,
   };
 
-  // Bundled once per render for AppShell (see its checklistProgress prop
-  // doc) — a plain object literal is fine here, same as `actions` above;
-  // AppShell doesn't memo on prop identity for this.
-  const checklistProgress = {
-    designChanged: designChangedOnce,
-    paramInteracted,
-    exported: exportedOnce,
-  };
+  // Memoized on its primitive inputs — unlike `actions` above, this one DOES
+  // need a stable identity: it flows into usePanelDerivedState's
+  // checklistState (see usePanelDerivedState.ts), which AppShell's `panelData`
+  // useMemo depends on, so a fresh object literal here would defeat that memo
+  // every render and churn every PanelDataContext consumer.
+  const checklistProgress = useMemo(
+    () => ({
+      designChanged: designChangedOnce,
+      paramInteracted,
+      exported: exportedOnce,
+    }),
+    [designChangedOnce, paramInteracted, exportedOnce]
+  );
   // The Help modal's replay row only makes sense where the checklist could
   // ever show at all — same gate AppShell derives its own `showChecklist`
   // from, computed here too since HelpModal is AppShell's sibling.

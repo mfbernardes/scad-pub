@@ -16,9 +16,7 @@
 // onParamSearchHiddenBlur doc), not data the two layouts merely happen to
 // pass through identically.
 import { useMemo, useRef, useState } from "react";
-import { defaultsFor } from "../lib/presets";
-import { hiddenAdvancedCount, hiddenAdvancedDiff, hiddenSearchMatches } from "../lib/paramFilter";
-import { quickStartAvailable } from "../lib/quickStart";
+import { hiddenAdvancedCount, hiddenSearchMatches } from "../lib/paramFilter";
 import { useAppActions } from "../lib/appActions";
 import { usePanelData } from "../lib/panelData";
 import { useDebounce } from "../lib/useDebounce";
@@ -66,8 +64,6 @@ export function CustomizeTab({
     fontSuggestion,
     installedFonts,
     settingsView,
-    experienceMode,
-    quickStartEnabled,
     focusHiddenDiffSignal,
     focusAttentionParamSignal,
     focusReviewSignal,
@@ -79,18 +75,15 @@ export function CustomizeTab({
     computedInfo,
     reviewStale,
     onSelectView,
+    hiddenDiff,
+    quickStartActive,
   } = usePanelData();
   const { change, settingsViewChange } = useAppActions();
   const debouncedSearch = useDebounce(search, 150);
   const hasAdvanced = useMemo(() => design.params.some((p) => p.advanced), [design]);
-  const defaults = useMemo(() => defaultsFor(design), [design]);
   const hiddenCount = useMemo(
     () => hiddenAdvancedCount(design.params, values, settingsView),
     [design, values, settingsView]
-  );
-  const hiddenDiff = useMemo(
-    () => hiddenAdvancedDiff(design.params, values, defaults, settingsView),
-    [design, values, defaults, settingsView]
   );
   const q = debouncedSearch.trim().toLowerCase();
   const searchHidden = useMemo(
@@ -105,8 +98,10 @@ export function CustomizeTab({
   // it lives in), so it falls back to the classic filtered form for the
   // query's duration and restores QuickStart the moment the query is
   // cleared (this is purely a function of `q`, so it "restores" for free —
-  // no extra state to reset).
-  const showQuickStart = quickStartAvailable(design, experienceMode, settingsView, quickStartEnabled) && !q;
+  // no extra state to reset). `quickStartActive` comes from PanelDataContext
+  // (usePanelDerivedState's own quickStartAvailable call, shared verbatim
+  // with GettingStarted) rather than being re-derived here.
+  const showQuickStart = quickStartActive && !q;
 
   const reviewHiddenDiff = () => {
     settingsViewChange("all");

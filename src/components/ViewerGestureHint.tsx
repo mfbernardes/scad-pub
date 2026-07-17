@@ -67,7 +67,7 @@ export function ViewerGestureHint({ enabled, resultOk }: { enabled: boolean; res
   return (
     <div
       aria-hidden="true"
-      className="viewer-hint pointer-events-none whitespace-nowrap rounded-(--radius-sm) border border-(color:--glass-border) bg-(--glass-bg) px-3 py-[0.4rem] text-[0.78rem] text-muted-foreground shadow-(--elevation) transition-opacity duration-300 motion-reduce:transition-none"
+      className="viewer-hint pointer-events-none whitespace-nowrap rounded-(--radius-sm) border glass-card px-3 py-[0.4rem] text-[0.78rem] text-muted-foreground transition-opacity duration-300 motion-reduce:transition-none"
     >
       {text}
     </div>

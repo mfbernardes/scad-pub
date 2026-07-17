@@ -46,7 +46,7 @@ import { useState } from "react";
 import { Check as CheckIcon, ChevronRight as ChevronIcon } from "lucide-react";
 import { makeOnceFlag } from "../lib/prefs";
 import { t } from "../lib/i18n";
-import { STATE_STYLES, type RenderState } from "../lib/renderStatus";
+import { readinessDotClass, readinessPulse } from "../lib/reviewSummary";
 import {
   deriveChecklistItems,
   checklistAllDone,
@@ -74,39 +74,22 @@ const TASK_LABEL_KEY: Record<"design" | "review" | "export", string> = {
 const dismissClass =
   "getting-started__dismiss inline-flex shrink-0 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent p-0 font-medium text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-offset-2";
 
-// Reuses renderStatus.ts's own state->dot-colour mapping (read-only import;
-// that file is not touched) so the preview row's dot matches the same green/
-// amber-pulse/red vocabulary the Output bell already wears elsewhere. "attention"
-// has no renderStatus.ts counterpart (it isn't a render outcome — see
-// readiness.ts), so it's handled as its own branch below with the same
-// `bg-warn` token FontMissingHint/the attention chip already wear, rather
-// than stretching renderStatus.ts's RenderState to cover a concept it was
-// never meant to model.
-function previewRenderState(status: "building" | "ready" | "failed"): RenderState {
-  if (status === "ready") return "ok";
-  if (status === "failed") return "error";
-  return "rendering";
-}
-
 function ChecklistRow({ item }: { item: ChecklistItem }) {
   if (item.kind === "status") {
-    if (item.previewStatus === "attention") {
-      return (
-        <li className="flex items-center gap-2 text-muted-foreground">
-          <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-warn" />
-          <span>
-            {t("checklist.preview")} — {t("checklist.attention")}
-          </span>
-        </li>
-      );
-    }
-    const renderState = previewRenderState(item.previewStatus);
-    const style = STATE_STYLES[renderState];
+    // checklist.ts's PreviewStatus ("building" | "ready" | "attention" |
+    // "failed") is the same 4-value union as readiness.ts's ReadinessState —
+    // reviewSummary.ts's readinessDotClass/readinessPulse are the single
+    // source for the state->dot-colour/pulse mapping (shared with QuickStart's
+    // Review stage), so this row draws from there instead of a local copy.
     return (
       <li className="flex items-center gap-2 text-muted-foreground">
         <span
           aria-hidden="true"
-          className={cn("size-2 shrink-0 rounded-full", style.dot, style.pulse && "animate-pulse")}
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            readinessDotClass(item.previewStatus),
+            readinessPulse(item.previewStatus) && "animate-pulse"
+          )}
         />
         <span>
           {t("checklist.preview")} — {t(`checklist.${item.previewStatus}`)}

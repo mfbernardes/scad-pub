@@ -18,9 +18,11 @@ import { toast } from "sonner";
 import type { Design, FileImport } from "../openscad/types";
 import type { AttentionItem } from "../lib/readiness";
 import { deriveFilesCards, missingFontFamilies } from "../lib/filesCards";
+import { formatBytes } from "../lib/loadPhase";
 import { t } from "../lib/i18n";
 import { cn } from "../lib/utils";
 import { FileInput } from "./FileInput";
+import { FontImportActions } from "./FontImportActions";
 import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
 import { Button } from "./ui/button";
@@ -53,12 +55,6 @@ interface Props {
   onRemoveFile: (name: string) => void;
   /** Remove every imported file (and drop the render cache). */
   onClearFiles: () => void;
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /** Shared task-card chrome: an icon, freeform body content, and (usually) an
@@ -105,7 +101,7 @@ export function FileBar({ design, fileImport, loadedFiles, attention, onAddFile,
     // Reject an over-cap upload before reading it — a friendly toast, no store.
     if (fileImport.maxBytes !== undefined && file.size > fileImport.maxBytes) {
       toast.error(
-        t("files.tooLarge", { name: file.name, size: formatSize(file.size), limit: formatSize(fileImport.maxBytes) }),
+        t("files.tooLarge", { name: file.name, size: formatBytes(file.size), limit: formatBytes(fileImport.maxBytes) }),
         { id: "file-too-large" }
       );
       return;
@@ -123,8 +119,10 @@ export function FileBar({ design, fileImport, loadedFiles, attention, onAddFile,
               ? t("files.fontCardMissing", { family: missingFamily })
               : t("files.fontCardBody")}
           </p>
-          <FileInput accept=".ttf,.otf,.ttc" onFile={importFile}>
-            {(open) => (
+          <FontImportActions
+            onImportFile={importFile}
+            className=""
+            renderImport={(open) => (
               <Button
                 type="button"
                 variant="outline"
@@ -136,7 +134,7 @@ export function FileBar({ design, fileImport, loadedFiles, attention, onAddFile,
                 <FolderIcon size={14} /> {t("files.fontCardImport")}
               </Button>
             )}
-          </FileInput>
+          />
         </TaskCard>
       )}
 
@@ -197,7 +195,7 @@ export function FileBar({ design, fileImport, loadedFiles, attention, onAddFile,
                 {f.name}
               </span>
               <span className="shrink-0 text-[0.82rem] text-muted-foreground tabular-nums">
-                {formatSize(f.size)}
+                {formatBytes(f.size)}
               </span>
               <IconButton
                 className="shrink-0 border-transparent bg-transparent text-brand hover:border-border hover:bg-card"

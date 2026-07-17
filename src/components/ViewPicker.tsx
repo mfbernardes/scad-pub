@@ -13,8 +13,7 @@ import { VIEW_OPTIONS, type ViewName } from "./views";
 /** The HUD's glass icon-button decoration, shared by every button in the
  *  viewer HUD (IconButtons get it via className; the picker trigger below
  *  carries it directly). */
-export const HUD_GLASS_BTN =
-  "p-[0.45rem] bg-(--glass-bg) border-(color:--glass-border) shadow-(--elevation)";
+export const HUD_GLASS_BTN = "p-[0.45rem] glass-card";
 
 interface Props {
   /** The currently-applied view (checkmarked in the menu). */

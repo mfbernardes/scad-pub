@@ -30,7 +30,7 @@ export function ExportAttention({
   return (
     <div
       id="export-attention-hint"
-      className="export-attention flex max-w-[min(22rem,calc(100vw-1.5rem))] items-center gap-2 rounded-lg border border-(color:--glass-border) bg-(--glass-bg) px-3 py-[0.55rem] text-[0.82rem] shadow-(--elevation)"
+      className="export-attention flex max-w-[min(22rem,calc(100vw-1.5rem))] items-center gap-2 rounded-lg border glass-card px-3 py-[0.55rem] text-[0.82rem]"
       role="status"
     >
       <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-warn" />
