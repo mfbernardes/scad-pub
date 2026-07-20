@@ -16,6 +16,7 @@ import { canvasBackgrounds } from "./background";
 import { contentBbox, parseViewBox } from "./geometry";
 import { effectiveFill, groupIndex } from "./regions";
 import type { Finding } from "./types";
+import { t } from "../i18n";
 
 /**
  * Run every compatibility check.
@@ -31,8 +32,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "WARN",
       code: "no-viewbox",
-      message: "the drawing has no canvas frame, so its size on the plate can't be judged reliably",
-      hint: "export with a viewBox (most editors do this automatically) so it always scales the same way",
+      message: t("svgprep.noViewboxMessage"),
+      hint: t("svgprep.noViewboxHint"),
     });
   } else {
     const [minx, miny] = vb;
@@ -40,10 +41,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
       findings.push({
         level: "WARN",
         code: "viewbox-origin",
-        message:
-          "the drawing's canvas doesn't start at the top-left corner, so parts of it " +
-          "can land off the plate (especially with colour regions)",
-        hint: "the Fix step re-centres the drawing for you",
+        message: t("svgprep.viewboxOriginMessage"),
+        hint: t("svgprep.viewboxOriginHint"),
       });
     }
   }
@@ -54,8 +53,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "ERROR",
       code: "no-geometry",
-      message: "nothing to raise — the drawing has no shapes that can become relief",
-      hint: "draw filled shapes (rectangles, circles, paths); only shapes can be raised, not text or images",
+      message: t("svgprep.noGeometryMessage"),
+      hint: t("svgprep.noGeometryHint"),
     });
   }
 
@@ -64,10 +63,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "WARN",
       code: "text",
-      message: `${texts.length} piece(s) of live text — text can't be raised into relief and will disappear`,
-      hint:
-        "convert the text to outlines in your editor (Inkscape: Object to Path; " +
-        "Illustrator: Create Outlines), or add wording through the design's own label field instead",
+      message: t("svgprep.textMessage", { count: texts.length }),
+      hint: t("svgprep.textHint"),
     });
   }
 
@@ -90,20 +87,16 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "WARN",
       code: "stroke-only",
-      message:
-        `${strokeOnly.length} outline-only shape(s) (a stroke with no fill) — ` +
-        "every shape is raised as a filled shape, so these come out solid instead of as thin outlines",
-      hint:
-        "give the shape a fill, or convert its outline to a filled shape " +
-        "(Inkscape: Stroke to Path; Illustrator: Outline Stroke) to keep a thin wall or outline",
+      message: t("svgprep.strokeOnlyMessage", { count: strokeOnly.length }),
+      hint: t("svgprep.strokeOnlyHint"),
     });
   }
   if (openPaths > 0) {
     findings.push({
       level: "WARN",
       code: "open-paths",
-      message: `${openPaths} unclosed path(s) — an open path may come out as a thin sliver or not at all`,
-      hint: "close every path in your editor",
+      message: t("svgprep.openPathsMessage", { count: openPaths }),
+      hint: t("svgprep.openPathsHint"),
     });
   }
 
@@ -116,12 +109,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "WARN",
       code: "covers-canvas",
-      message:
-        `${backgrounds.length} shape(s) cover the whole canvas — a full-canvas background ` +
-        "is raised as one solid block that buries everything on top of it",
-      hint:
-        "remove the background/artboard rectangle (the Fix step drops it); a tactile " +
-        "relief needs open space around the raised shapes",
+      message: t("svgprep.coversCanvasMessage", { count: backgrounds.length }),
+      hint: t("svgprep.coversCanvasHint"),
     });
   }
 
@@ -134,8 +123,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "WARN",
       code: `ignored:${name}`,
-      message: `${ignored.get(name)} <${name}> element(s) — these aren't supported and won't be raised`,
-      hint: "flatten or expand them into plain filled shapes if they carry artwork you need",
+      message: t("svgprep.ignoredMessage", { count: ignored.get(name) ?? 0, tag: name }),
+      hint: t("svgprep.ignoredHint"),
     });
   }
 
@@ -151,12 +140,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
       findings.push({
         level: "WARN",
         code: "styled-fill",
-        message:
-          `${styled.length} shape(s) get their colour from a stylesheet, which isn't ` +
-          "read here — those regions are treated as black",
-        hint:
-          "give each shape a direct fill colour, or a simple class / id / tag colour " +
-          "rule the Fix step can resolve",
+        message: t("svgprep.styledFillMessage", { count: styled.length }),
+        hint: t("svgprep.styledFillHint"),
       });
     }
   }
@@ -177,10 +162,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "WARN",
       code: "inkscape-trap",
-      message: `Inkscape layer name(s) won't be matched as colour regions yet: ${names}`,
-      hint:
-        "the Fix step renames each layer so its name is used as the region, " +
-        "or set an explicit name on the group",
+      message: t("svgprep.inkscapeTrapMessage", { names }),
+      hint: t("svgprep.inkscapeTrapHint"),
     });
   }
 
@@ -189,7 +172,7 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     findings.push({
       level: "INFO",
       code: "regions-available",
-      message: `colourable regions found: ${regionIds.join(", ")}`,
+      message: t("svgprep.regionsAvailableMessage", { regions: regionIds.join(", ") }),
     });
   }
 
@@ -200,19 +183,16 @@ export function check(root: Element, layers: string[] = []): Finding[] {
       findings.push({
         level: "ERROR",
         code: "region-is-label",
-        message:
-          `the colour region "${name}" is an Inkscape layer name that won't be matched as-is`,
-        hint: "the Fix step makes the layer name usable as a region",
+        message: t("svgprep.regionIsLabelMessage", { name }),
+        hint: t("svgprep.regionIsLabelHint"),
       });
     } else {
-      const avail = regionIds.join(", ") || "(none)";
+      const avail = regionIds.join(", ") || t("svgprep.regionMissingNone");
       findings.push({
         level: "ERROR",
         code: "region-missing",
-        message: `no region named "${name}" in the drawing; available: ${avail}`,
-        hint:
-          `group the shapes for this colour and name the group "${name}" ` +
-          "(Inkscape: Object Properties; Illustrator: the layer name)",
+        message: t("svgprep.regionMissingMessage", { name, available: avail }),
+        hint: t("svgprep.regionMissingHint", { name }),
       });
     }
   }
@@ -231,8 +211,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
       findings.push({
         level: "WARN",
         code: "content-outside-viewbox",
-        message: "some artwork sits outside the canvas — it may be cut off",
-        hint: "move everything inside the canvas frame",
+        message: t("svgprep.contentOutsideMessage"),
+        hint: t("svgprep.contentOutsideHint"),
       });
     } else if (w > 0 && h > 0) {
       const fillFrac = ((bx1 - bx0) * (by1 - by0)) / (w * h);
@@ -240,10 +220,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
         findings.push({
           level: "INFO",
           code: "undersized",
-          message:
-            "the drawing fills less than half its canvas — it may come out " +
-            "small and, with colour regions, off-centre",
-          hint: "draw the artwork out to the edges of the canvas",
+          message: t("svgprep.undersizedMessage"),
+          hint: t("svgprep.undersizedHint"),
         });
       }
     }

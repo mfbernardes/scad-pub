@@ -2,6 +2,7 @@
 // `children` receives an `open()` callback to wire onto any button.
 import { useRef, type ReactNode } from "react";
 import { toast } from "sonner";
+import { t } from "../lib/i18n";
 
 interface Props {
   /** `accept` filter for the picker; omit to allow any file type. */
@@ -28,7 +29,12 @@ export function FileInput({ accept, onFile, children }: Props) {
           e.target.value = "";
           if (!file) return;
           Promise.resolve(onFile(file)).catch((err) => {
-            toast.error(`Couldn't read "${file.name}": ${err instanceof Error ? err.message : String(err)}`);
+            toast.error(
+              t("files.readError", {
+                name: file.name,
+                message: err instanceof Error ? err.message : String(err),
+              })
+            );
           });
         }}
       />

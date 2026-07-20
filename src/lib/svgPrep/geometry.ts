@@ -8,6 +8,10 @@ export type Bbox = [number, number, number, number];
 
 const NUMBER_RE = /[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g;
 const PATH_TOKEN_RE = /[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g;
+// Tests each token's first char inside pathPoints' per-token while loop
+// (potentially thousands of iterations for a complex path) — hoisted rather
+// than re-literalized every iteration.
+const COMMAND_CHAR_RE = /[a-zA-Z]/;
 
 export function numbers(text: string | null | undefined): number[] {
   if (!text) return [];
@@ -31,7 +35,7 @@ export function pathPoints(d: string): Point[] {
   };
 
   while (i < toks.length) {
-    if (/[a-zA-Z]/.test(toks[i][0])) {
+    if (COMMAND_CHAR_RE.test(toks[i][0])) {
       cmd = toks[i];
       i += 1;
       if (cmd === "Z" || cmd === "z") {

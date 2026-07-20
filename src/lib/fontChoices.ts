@@ -14,7 +14,9 @@ import {
   familyOf,
   fontLabelOf,
   fontValueOf,
+  normalizeFamily,
   styleOf,
+  withFamily,
   type InstalledFont,
 } from "./fonts";
 
@@ -97,4 +99,55 @@ export function buildFontChoices(
     missing.push({ value, label: fontValueLabel(value), installed: false });
 
   return { installed, missing };
+}
+
+/**
+ * Whether a `font` parameter's value names a family that isn't in the loaded
+ * set — the "font not loaded" predicate shared by ParamRows' inline
+ * FontMissingHint and readiness.ts's deriveAttention (the consolidated
+ * attention chip / Review stage), so the two can never disagree about what
+ * counts as missing.
+ *
+ * Two guards, both required: an authoritative, non-empty `available` set (we
+ * can't warn about availability without one — the same "empty/undefined ->
+ * no checking" rule every caller already followed), AND a non-empty family in
+ * `value` — an EMPTY font field is a cleared control, not a font that failed
+ * to load, so it never counts as missing regardless of what `available`
+ * contains.
+ */
+export function isFontMissing(value: string, available: Set<string> | undefined): boolean {
+  if (!available?.size) return false;
+  const family = familyOf(value);
+  if (!family) return false;
+  return !available.has(normalizeFamily(family));
+}
+
+/**
+ * A one-click replacement whose family is loaded, or null when none fits.
+ * The exact logic ParamRows' contextual warning card offers under a missing
+ * font control (see its own `fallback` prop) — shared here so the
+ * warning card's own "Use a bundled font"
+ * action (src/lib/readiness.ts's deriveAttention) can never disagree with
+ * the inline hint about what counts as a valid fallback.
+ *
+ * For an enum, the result must be a listed choice (the dropdown can't show
+ * an off-list value), so this picks the first choice whose family is
+ * available; for free text, it grafts the suggested bundled family onto the
+ * current value (preserving any `:style=…` properties already present).
+ */
+export function fontFallback(
+  param: Param,
+  value: string,
+  available: Set<string> | undefined,
+  suggestion: string | null | undefined
+): { value: string; label: string } | null {
+  if (param.type === "enum") {
+    const choice = param.choices.find((c) =>
+      available?.has(normalizeFamily(familyOf(c.value)))
+    );
+    return choice ? { value: choice.value, label: familyOf(choice.value) } : null;
+  }
+  if (suggestion && normalizeFamily(suggestion) !== normalizeFamily(familyOf(value)))
+    return { value: withFamily(value, suggestion), label: suggestion };
+  return null;
 }

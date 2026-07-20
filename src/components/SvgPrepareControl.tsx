@@ -8,6 +8,7 @@ import { lazy, Suspense, useState } from "react";
 import { Upload as UploadIcon, FileCode as FileCodeIcon } from "lucide-react";
 import type { SvgFieldMeta } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
+import { t } from "../lib/i18n";
 import { FileInput } from "./FileInput";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { Spinner } from "./ui/spinner";
@@ -56,9 +57,9 @@ const MAX_SVG_BYTES = 2 * 1024 * 1024; // 2 MB
 function svgRejectionReason(file: File): string | null {
   const isSvg =
     file.type === "image/svg+xml" || /\.svg$/i.test(file.name);
-  if (!isSvg) return "That's not an SVG — choose a .svg file.";
+  if (!isSvg) return t("svg.notSvg");
   if (file.size > MAX_SVG_BYTES)
-    return `That SVG is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). The limit is 2 MB — simplify the drawing and try again.`;
+    return t("svg.tooLarge", { size: (file.size / 1024 / 1024).toFixed(1) });
   return null;
 }
 
@@ -114,7 +115,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
               {value ? (
                 <span className="min-w-0 [overflow-wrap:anywhere]">{value}</span>
               ) : (
-                "No SVG chosen"
+                t("svg.noneChosen")
               )}
             </span>
             <button
@@ -123,12 +124,12 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
               onPointerEnter={preloadSvgWizard}
               onFocus={preloadSvgWizard}
               className="inline-flex cursor-pointer items-center gap-[0.4rem] rounded-(--radius-sm) border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground focus-visible:outline-offset-2"
-              aria-label={`Prepare SVG for ${label}`}
+              aria-label={t("svg.prepareAria", { label })}
             >
-              <UploadIcon size={14} aria-hidden="true" /> Prepare SVG…
+              <UploadIcon size={14} aria-hidden="true" /> {t("svg.prepareButton")}
             </button>
             <span className="text-[0.78rem] text-muted-foreground">
-              Drop an SVG here or choose a file to check &amp; fix it for printing.
+              {t("svg.dropHint")}
             </span>
           </div>
         )}
@@ -148,10 +149,10 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
               className="svg-prepare__wizard-error flex flex-col items-center gap-2 rounded-(--radius-sm) border border-dashed border-destructive/60 bg-destructive/5 px-3 py-4 text-center"
             >
               <p className="text-sm text-foreground">
-                The SVG editor couldn't be loaded.
+                {t("svg.loadErrorTitle")}
               </p>
               <p className="text-[0.78rem] text-muted-foreground">
-                Check your connection, then reload to try again.
+                {t("svg.loadErrorBody")}
               </p>
               <div className="flex gap-2">
                 <Button
@@ -162,7 +163,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
                   // reload re-requests every chunk from the network.
                   onClick={() => window.location.reload()}
                 >
-                  Reload
+                  {t("svg.reload")}
                 </Button>
                 <Button
                   type="button"
@@ -170,7 +171,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
                   variant="outline"
                   onClick={() => setPending(null)}
                 >
-                  Cancel
+                  {t("dialog.cancel")}
                 </Button>
               </div>
             </div>
@@ -185,7 +186,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
                 className="svg-prepare__wizard-loading flex items-center justify-center gap-2 rounded-(--radius-sm) border border-dashed border-border bg-muted/40 px-3 py-4 text-sm text-muted-foreground"
               >
                 <Spinner className="size-4" aria-hidden="true" />
-                Loading SVG editor…
+                {t("svg.loadingEditor")}
               </div>
             }
           >
