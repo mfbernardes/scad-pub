@@ -20,7 +20,9 @@ export function GuidedFlowNav({ hasPresets, hasFiles, stages, onActivate, classN
   const startNumber = hasPresets ? number++ : null;
   const numberedStages = stages.map((stage) => ({ ...stage, number: number++ }));
   const reviewNumber = number;
-  const trigger = cn(chipTabTrigger, "min-w-fit flex-1 px-2");
+  // Five items (Start + two common design stages + Review + Files) should fit
+  // the default 360 px desktop panel without clipping its edge labels.
+  const trigger = cn(chipTabTrigger, "mx-0.5 min-w-fit flex-1 px-1.5 text-[0.82rem]");
 
   return (
     <TabsList
