@@ -86,6 +86,10 @@ function compare(theme, actual) {
   if (!ok) {
     mkdirSync(DIFF_DIR, { recursive: true });
     writeFileSync(`${DIFF_DIR}/${theme}-diff.png`, PNG.sync.write(diff));
+    // CI runs on Linux, while maintainers may update screenshots on macOS.
+    // Upload the actual frame beside the pixel diff so an environment-pinned
+    // baseline can be reviewed and adopted without guessing from the diff.
+    writeFileSync(`${DIFF_DIR}/${theme}-actual.png`, PNG.sync.write(actual));
   }
   console.log(
     `  ${ok ? "✅" : "❌"} ${theme}: ${changed} px differ (${(ratio * 100).toFixed(2)}%${
