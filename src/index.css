@@ -42,6 +42,9 @@
   --color-input: var(--line);
   --color-ring: var(--focus);
   --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
   --color-brand: var(--accent);
   --color-link: var(--link);
   --color-code: var(--code-bg);
@@ -69,6 +72,24 @@
   font-family: var(--font-display);
 }
 
+/* `glass-card` — the translucent "floating over the viewer" look shared by
+   every HUD-adjacent overlay (the export dock's attention/success cards, the
+   stale/updating chips, viewer hints, the dimension panel, the sheet-drag
+   hint, the view picker, the mobile action cluster): themed border colour +
+   background + elevation shadow, all three swapping per-theme (see :root's
+   own --glass-border/--glass-bg/--elevation below). Deliberately does NOT set
+   border-WIDTH — callers that want a border still add the plain `border`
+   utility themselves (see ViewPicker's HUD_GLASS_BTN, which composes this
+   with a `border` supplied by its own caller instead of always drawing one).
+   A real utility (like font-display above) so it composes with
+   tailwind-merge instead of every call site hand-rolling the same three
+   tokens. */
+@utility glass-card {
+  border-color: var(--glass-border);
+  background-color: var(--glass-bg);
+  box-shadow: var(--elevation);
+}
+
 /* Dark is the default; <html data-theme="light"> swaps the palette. The active
    theme is resolved in JS (lib/theme.ts) and set before paint (index.html). */
 @layer components {
@@ -78,8 +99,26 @@
      pair below is WCAG 2.1 AA-verified (most exceed AAA); re-verify with
      npm run smoke after any change. */
   --bg: #14161c;
-  --panel: #1c1f27;
-  --panel-2: #252935;
+  /* Round-2 review fix (dark elevation): --panel/--panel-2 nudged lighter
+     (#1c1f27 -> #21242e, #252935 -> #2c3140) so the three form surfaces read
+     as more clearly stacked — the prior trio measured a flat 1.10:1 (bg vs
+     panel), 1.14:1 (panel vs panel-2), 1.25:1 (bg vs panel-2), close enough
+     to indistinguishable that a docked panel-on-app-background or a
+     param-group-on-panel boundary relied almost entirely on the 1px --line
+     hairline to read as a surface change at all. Now 1.17:1 / 1.19:1 /
+     1.40:1 — still a quiet, non-neon dark theme (this is a "touch" more
+     separation, not a redesign) but each step is unambiguously lighter than
+     the one below it. Every text/icon pairing against the new --panel-2 (the
+     tightest surface) re-verified AA: --text 10.66:1, --muted 5.93:1,
+     --accent 5.64:1, --link 6.15:1, --warn 5.94:1, --success 7.44:1,
+     --danger 4.68:1 (closest margin, still clears 4.5:1), --focus 5.74:1 —
+     all comfortably at/above the 4.5:1 AA floor; re-verify with npm run
+     smoke after any further neutral change. --bg and --line are unchanged
+     (--bg stays the base app colour several other tokens' own docs measure
+     against; --line's hairline-vs-surface ratio was already this quiet
+     before this pass and isn't a text pairing). */
+  --panel: #21242e;
+  --panel-2: #2c3140;
   --line: #343a48;
   --text: #e6e9ef;
   --muted: #a7b0c0; /* AA on every panel (>= 6.5:1); BITV 2.0 / WCAG 2.1 */
@@ -89,27 +128,126 @@
   --focus: #6db0ff; /* focus-ring colour, >7:1 vs panels (WCAG 1.4.11) */
   --link: #8ab4f8;
   --warn: #e0a458;
+  --warn-bg: #332812; /* warm amber tint behind a warning card, dark surface.
+    Round-2 review re-check: unaffected by the --panel/--panel-2 elevation
+    lift above (this pair is its own dedicated tint, not derived from
+    --panel-2) — still 6.62:1 (a prior audit measured 6.63:1; the 0.01
+    difference is pure rounding), comfortably clear of the 4.5:1 AA floor. */
+  --success: #4ade80; /* AA on every panel (dark, ~10:1) */
+  --success-bg: #142615; /* muted green tint behind a success card, dark surface */
   --danger: #f87171;
   --code-bg: #101218;
+  /* Round-2 review re-check: already a layered charcoal, not pure black —
+     rgba(20, 22, 28, …) is --bg's own colour (not #000) under a 0.72 alpha,
+     so a dialog overlay reads as "the app background deepened," never a flat
+     black scrim. No change needed. */
   --overlay: rgba(20, 22, 28, 0.72);
-  --viewer-bg: #0e1016; /* deep slate, darker than the chrome to frame the model */
-  --viewer-grid: #565f6e; /* centre axes: ~3:1 vs --viewer-bg for orientation */
-  --viewer-grid-2: #20242e; /* grid lines: deliberately subtle */
-  --viewer-model: #6f93ff; /* the rendered model's material — brand blue, the hero */
+  /* PR23 item 1: nudged lighter + a touch cooler (0e1016 -> 11141e — a ~37%
+     luminance lift, 0.0052 -> 0.0071) than the original near-black. The lift
+     is deliberately modest: --viewer-bg stays the darkest surface in the
+     palette (below --bg's own 0.0081 and well below --panel's 0.0178 — the
+     round-2 dark-elevation pass above lifted --panel itself, so this ratio
+     moved with it: viewer-bg-vs-panel now measures 1.19:1, was 1.12:1 before
+     that pass, 1.15:1 originally), so the "deeper than the chrome" framing is
+     unchanged (contrast vs --bg barely moves, 1.05:1 -> 1.02:1 — was already
+     this subtle). What it buys: near-black tones (below ~0.01 luminance)
+     compress badly in sRGB's gamma curve — few code values exist down there,
+     and both displays and eyes lose gradation — so a dark model colour's
+     shadow-facing facets (lit only by the scene's 0.6-intensity ambient, see
+     Viewer.tsx's light rig) used to crush toward the same near-zero floor as
+     the background instead of reading as distinct-but-dark. Lifting the floor
+     a little gives that range room to exist. A flat swatch-vs-swatch contrast
+     ratio actually reports FLAT for this fix (e.g. vs a dark navy example
+     #1a3a8f: 1.85:1 -> 1.79:1 — bg was already darker than that navy, so
+     approaching it from below can only shrink the gap; the fix targets
+     perceptual banding, not that ratio) and is unaffected for the bundled
+     model tint (vs #8eaaff: 8.46:1 -> 8.18:1, still comfortably clear). Paired
+     with the --viewer-grid/-2 bump below for the second, directly measurable
+     half of the fix: the grid's occlusion by the model's footprint is the
+     more reliable "where does the model end" cue for a dark colour, so its
+     own contrast against the new bg was restored/increased rather than left
+     to fade with the lighter background. Not used by any UNMASKED chrome
+     (grep confirms: only Viewer.tsx's three.js scene reads these, behind
+     screenshots.mjs's `.viewer { visibility: hidden }` mask), so this is a
+     no-op for `npm run vis`. */
+  --viewer-bg: #11141e;
+  --viewer-grid: #5c6575; /* centre axes: ~3.1:1 vs the new --viewer-bg (was 2.95:1 vs the old) */
+  --viewer-grid-2: #2d3446; /* grid lines: still deliberately subtle, ~1.48:1 vs bg (was 1.23:1) */
+  --viewer-model: #8eaaff; /* the rendered model's material — brand blue, the hero.
+    Lightened (same hue/saturation, +6% lightness) from the original #6f93ff:
+    against --viewer-bg (#0e1016 at the time, near-black — since nudged
+    lighter itself by PR23 item 1) the darker value read as ~6.6:1,
+    which is plenty for a plain contrast ratio but the model still looked
+    under-separated from the background in review (a solid-colour, single-
+    material mesh gets none of text's stroke/weight cues) — the lighter value
+    measures ~8.5:1 and reads noticeably more separated while staying clearly
+    "brand blue", not a different colour. PR19 item 5. */
   --viewer-dim: #ffd7a1; /* dimension callouts — warm amber, contrasts the blue model */
+  /* Visual-alignment round-3 item 3: a NEUTRAL stand-in for a small stray
+     patch of OpenSCAD's own auto-colour (e.g. a through-hole's wall, cut by
+     an uncoloured cutter from an otherwise explicitly color()'d design) on a
+     model that is predominantly explicitly coloured. See Viewer.tsx's
+     AUTO_COLOR_MAJORITY_THRESHOLD: painting that stray patch the vivid
+     --viewer-model accent read as a bright, out-of-place highlight (a "blue
+     dot") on a coloured sign; a muted mid-tone that sits between --viewer-bg
+     and --viewer-grid reads as a shaded recess instead, without competing
+     with the design's own explicit colours or with --viewer-model's own
+     "this whole part follows the theme" role on a plain uncoloured design. */
+  --viewer-recess: #6b7280;
   /* Typography — --font-sans is the workhorse; --font-display carries the
      brand voice (wordmark, headings, tabs, buttons). Both are configurable
      via the config's `colors` map (unquoted family names). */
   --font-sans: system-ui, "Segoe UI", Roboto, sans-serif;
   --font-display: "Atkinson Hyperlegible", var(--font-sans);
+  /* Spacing scale — the structural layer's one source of truth for gaps/
+     padding/margins (4/8/12/16/24/32px). Not themed (identical dark/light),
+     not in COLOR_TOKENS (layout, not a colour/shape design token a deployment
+     would plausibly want to override) — deliberately internal. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
   /* Shape + surface tokens — configurable via colors.dark in the config.
      Moderate (not pill) radii; the floating surfaces (--surface-*) are solid,
-     not translucent glass — they read as raised panels, not frosted overlays. */
+     not translucent glass — they read as raised panels, not frosted overlays.
+     --radius/--radius-sm are the legacy pair (still used verbatim by most
+     controls via rounded-(--radius-sm)); --radius-control aliases --radius so
+     a deployment overriding the legacy token still reaches every control that
+     adopts the new role. --radius-card/--radius-panel are new, independent
+     roles for the larger surfaces this pass introduces (param-group sections,
+     the docked panel) — the mockup's generous, clearly-separated cards. */
   --radius: 10px;
   --radius-sm: 6px;
+  --radius-control: var(--radius);
+  --radius-card: 14px;
+  --radius-panel: 18px;
   --glass-bg: #252935;
   --glass-border: #343a48;
-  --elevation: 0 6px 18px rgba(0, 0, 0, 0.5);
+  /* Dropdown-menu item hover/focus fill (dropdown-menu.tsx's DropdownMenuItem
+     etc. — the export dock's split "▾" and More menus). Dark-mode audit fix:
+     these menus sit on --glass-bg, but the generic shadcn hover token
+     (--color-accent, bg-accent) resolves to --panel-2 — which in dark mode
+     happens to be the exact same hex as --glass-bg (#252935 == #252935), so
+     a hovered/focused item showed literally NO visible highlight at all. A
+     dedicated token, distinct from both, restores the SAME subtle-hover
+     family every other menu in this app already uses in dark mode (e.g.
+     SelectContent/PopoverContent's own panel-vs-accent hover sits at a
+     similarly quiet ~1.14:1 — see contrast note below), rather than
+     inventing a louder new style. ~1.17:1 vs --glass-bg (compare light
+     mode's own --glass-bg-vs---panel-2 hover, ~1.25:1) — deliberately subtle
+     like the rest of the app's hover states (this app leans on the
+     `:focus-visible` ring, not hover fill alone, for the real accessibility
+     signal), but no longer literally zero. */
+  --glass-hover: #2f3444;
+  /* Shadow scale — one ladder from subtle (inline controls/cards) to modal.
+     --elevation is now an alias for --shadow-2 (its old value, unchanged) so
+     every existing shadow-(--elevation) consumer keeps working verbatim. */
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 20px 50px rgba(0, 0, 0, 0.65);
+  --elevation: var(--shadow-2);
   /* Fallback only: BottomSheet measures its real header (drag handle + tab
      row) — which can exceed this under font scaling — and AppShell writes it
      onto the mobile root as an inline override (see handleSheetPeekHeight /
@@ -127,10 +265,19 @@
 }
 
 :root[data-theme="light"] {
-  --bg: #eef1f6; /* cool light grey, not clinical white */
+  /* PR: retuned from a cool blue-grey family (#eef1f6/#e5e9f0/#cfd6e1/#dde2ea)
+     toward a warm off-white family, matching the approved desktop mockup's
+     "white elevated panel on a warm neutral app background" — the panel
+     itself (--panel) stays pure white so it reads as the lifted surface;
+     only the neutrals it sits on/against shift hue. Lightness is kept close
+     to the originals (--bg ~0.90 -> ~0.91 luminance) so every AA pairing
+     below is re-verified, not just carried over by assumption — re-check
+     with npm run smoke after any further neutral change. Still brand-neutral
+     (no accent hue bleed): a deployment overrides via `colors.light`. */
+  --bg: #f3efe6; /* warm off-white, not clinical/cool */
   --panel: #ffffff;
-  --panel-2: #e5e9f0;
-  --line: #cfd6e1;
+  --panel-2: #ece5d7;
+  --line: #ded4c1;
   --text: #1a1d24;
   --muted: #545d6c; /* AA on every panel (>= 5.4:1) */
   --accent: #1d4ed8; /* deep blue: AA as text on white (~6.7:1 on panel) */
@@ -139,20 +286,45 @@
   --focus: #2563eb;
   --link: #1558c0;
   --warn: #9a5512;
+  --warn-bg: #fff8e9; /* warm amber tint behind a warning card */
+  --success: #1f7a3d; /* AA as text on white (~5.1:1) */
+  --success-bg: #eaf6ee; /* muted green tint behind a success card */
   --danger: #c0341d;
   --code-bg: #e8ecf3;
   --overlay: rgba(245, 247, 250, 0.72);
-  --viewer-bg: #dde2ea; /* soft cool grey, not a glaring white */
-  --viewer-grid: #8b94a0; /* centre axes */
-  --viewer-grid-2: #c4cad1; /* grid lines: subtle */
+  /* Pale warm studio backdrop (product-stage redesign) — lighter and warmer
+     than the old #e6ddce so the model reads as sitting in front of a seamless
+     studio sweep rather than on a CAD canvas; still comfortably short of a
+     glaring white. The grid (off by default — see the HUD's grid toggle and
+     ui.grid) keeps enough contrast against it to stay legible when shown. */
+  --viewer-bg: #f0ebe1;
+  --viewer-grid: #a89b89; /* centre axes */
+  --viewer-grid-2: #ddd4c3; /* grid lines: subtle */
   --viewer-model: #3a5fd0; /* the rendered model's material — brand blue */
   --viewer-dim: #9c380b; /* dimension callouts — deep amber against the blue model */
+  /* See the dark theme's own --viewer-recess doc above — same neutral-recess
+     role, warmed to sit with this theme's studio backdrop. */
+  --viewer-recess: #9a8f7d;
   /* Shape + surface tokens — lighter values for light mode; solid, not glass. */
   --radius: 10px;
   --radius-sm: 6px;
+  --radius-control: var(--radius);
+  --radius-card: 14px;
+  --radius-panel: 18px;
   --glass-bg: #ffffff;
-  --glass-border: #cfd6e1;
-  --elevation: 0 6px 18px rgba(20, 30, 60, 0.12);
+  /* Matches --line's new warm value (they were the same cool #cfd6e1 before
+     this retune too) — the floating glass cards (action cluster, viewer HUD,
+     stale banner) and the docked panel keep the same hairline hue. */
+  --glass-border: #ded4c1;
+  /* See the dark theme's own --glass-hover doc above — light mode's
+     --panel-2 (#ece5d7) already reads distinctly against --glass-bg
+     (#ffffff, ~1.25:1), so this just names that existing, already-correct
+     pairing rather than changing it. */
+  --glass-hover: var(--panel-2);
+  --shadow-1: 0 1px 3px rgba(20, 30, 60, 0.08);
+  --shadow-2: 0 6px 18px rgba(20, 30, 60, 0.12);
+  --shadow-3: 0 20px 50px rgba(20, 30, 60, 0.22);
+  --elevation: var(--shadow-2);
   color-scheme: light;
 }
 
@@ -229,15 +401,22 @@ button:disabled { cursor: default; }
     overflow: hidden;
     /* The bottom sheet's live top edge, in px from the viewport bottom: the
        sheet's current height (--sheet-follow-h, set each drag frame by AppShell)
-       above its safe-area inset, capped at the half detent so dragging on to
-       full doesn't drag dependents off-screen. The viewer's bottom sits here;
-       the floating action cluster rides just above it. The 0.52 cap mirrors
-       BottomSheet's HALF_VH_RATIO — keep them in sync. */
+       above its safe-area inset, capped so dragging on to full doesn't drag
+       dependents off-screen. The viewer's bottom sits here; the floating
+       action cluster rides just above it. --sheet-cap-ratio (round-5 Wave 2,
+       item 4) is written per-detent by AppShell from sheetDetent.ts's
+       sheetTopCapRatio — 0.52 (Half's own ratio, the long-standing default,
+       see the fallback below) for peek/half/full, but the taller guided-
+       workflow "review" detent's OWN ratio while that detent is active, so
+       the export dock/viewer reserve exactly as much space as the sheet
+       ACTUALLY occupies there instead of being capped at Half's shorter
+       height — which used to let the sheet's real (taller) top edge rise
+       over the dock, covering Download/Share. */
     --sheet-top: calc(
       var(--safe-area-bottom) +
       min(
         var(--sheet-follow-h, var(--mobile-peek-height)),
-        (100dvh - var(--safe-area-bottom)) * 0.52
+        (100dvh - var(--safe-area-bottom)) * var(--sheet-cap-ratio, 0.52)
       )
     );
   }
@@ -288,6 +467,27 @@ button:disabled { cursor: default; }
   transition: none;
 }
 
+/* Wave 2 (guided shell): the persistent GuidedMobileHeader reserves its own
+   live-measured height (--guided-header-h, set by AppShell's
+   handleGuidedHeaderHeight) at the top of the viewer's box — "tabs" workflow
+   never sets this var, so the fallback (0px) leaves .app-shell__mobile-viewer
+   exactly as it was there. */
+.app-shell__mobile--guided .app-shell__mobile-viewer {
+  top: var(--guided-header-h, 0px);
+}
+
+/* The guided persistent header itself: fixed to the top of the mobile shell,
+   ABOVE the bottom sheet (z-index 30) and its scrim (29) — see
+   GuidedMobileHeader.tsx's own doc for why it must outrank both (stay visible
+   AND operable, including at the Full detent, unlike "tabs" workflow's
+   .mobile-top-bar, which the sheet covers/inerts there). */
+.guided-mobile-header {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  z-index: 35;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    PARAM PANEL — docked collapsible/resizable panel (desktop)
    ═══════════════════════════════════════════════════════════════ */
@@ -297,7 +497,13 @@ button:disabled { cursor: default; }
   display: flex;
   flex-direction: column;
   background: var(--panel);
+  /* One border treatment (1px var(--line)) plus a subtle cast shadow —
+     together they read as an elevated card sitting on the app's warm
+     background rather than a flush utility sidebar (mockup target). --shadow-1
+     ("subtle, controls/cards") not --shadow-2/-3: this is a docked, not a
+     floating, surface. */
   border-right: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
   flex-shrink: 0;
   overflow: hidden;
   min-width: 0;
@@ -399,14 +605,23 @@ button:disabled { cursor: default; }
   display: flex;
   flex-direction: column;
   align-items: flex-end; /* keep fixed-width icon buttons hugging the right edge */
-  gap: 0.35rem;
+  /* Tighter than the old 0.35rem: reads as one grouped pill stack (mockup
+     target) rather than scattered individual controls. */
+  gap: 0.3rem;
   z-index: 5;
 }
 
-/* Mobile: anchor the HUD to the upper-right, clear of the top bar + sheet. */
+/* Mobile: anchor the HUD to the upper-right, clear of the top bar + sheet.
+   Round-2 review item 2: a bit MORE offset from the model area than desktop's
+   shared 0.75rem/0.3rem — the smaller size-9 buttons (see ViewPicker.tsx's
+   HUD_GLASS_BTN) read a little lost hugging the very edge, and the extra
+   margin keeps the strip from crowding the model's own clear space (the
+   corresponding reserved width lives in framing.ts's computeViewerInsets). */
 @media (max-width: 860px) {
   .app-shell__mobile .viewer-hud {
-    top: calc(env(safe-area-inset-top, 0px) + 4rem);
+    top: calc(env(safe-area-inset-top, 0px) + 4.5rem);
+    right: calc(0.9rem + env(safe-area-inset-right, 0px));
+    gap: 0.4rem;
     transform: none;
   }
 }
@@ -438,35 +653,316 @@ button:disabled { cursor: default; }
   }
 }
 
-/* Floating bottom-center action cluster (Export / PNG / Share). Desktop hovers
-   it over the viewer bottom; mobile rides it on the sheet's top edge — see the
-   mobile override below. */
-.action-cluster {
+/* Floating dock (Download/Share/More card, plus the after-export panel and
+   the export-attention line riding above it when shown). Desktop docks it at
+   the viewer's LOWER RIGHT (mockup target — a compact card, not a
+   bottom-center pill); mobile rides it centered on the sheet's top edge — see
+   the mobile override below, which resets the horizontal anchor back to
+   center. Anchoring the DOCK's bottom edge (not the cluster's own) means the
+   cluster's screen position never moves when a panel appears/disappears above
+   it — the box's height is auto, so it only ever grows upward. `align-items`
+   is set here rather than as a Tailwind utility on ACTION_DOCK_CLASS for the
+   same cross-layer-override reason documented there. See AppShell's
+   ACTION_DOCK_CLASS doc.
+   Round-2 review item 4: `stretch` (was `flex-end`, right-aligned-but-
+   independently-sized riders) — flex-end already right-ALIGNED the export-
+   attention banner and the ExportSuccess panel above the card since a column
+   flex container's cross-axis alignment is per-item regardless of each
+   item's own width, but the review also wants them the exact same WIDTH as
+   the card, not just a shared right edge. `stretch` makes every child fill
+   the dock's own auto width — which itself sizes (shrink-to-fit, see the
+   `max-width` note below) to the widest child's natural content, in
+   practice `.action-cluster` — so the banner/success panel (now `w-full` in
+   their own components, not their old fixed `max-w-[22rem]`) stretch to
+   match the card exactly, on BOTH edges. */
+.action-dock {
   position: absolute;
   bottom: calc(0.75rem + var(--safe-area-bottom));
-  left: 50%;
-  transform: translateX(-50%);
+  right: calc(0.75rem + env(safe-area-inset-right, 0px));
+  align-items: stretch;
   z-index: 10;
+  /* An absolutely-positioned box with only `right` set sizes to its content's
+     preferred (max-content) width, uncapped by the viewport — without this, a
+     narrow viewport could push the dock past the screen's left edge instead
+     of its rows adapting. Both the cluster and the after-export panel below
+     cap their own widths against this same budget. */
+  max-width: calc(100vw - 1.5rem);
 }
 
-/* Mobile: ride the cluster 0.6rem above the sheet's live top edge (--sheet-top,
-   shared with the viewer bottom), so it tracks the sheet up from peek to the
+/* Mobile: centered (a full-width single-row bar, not a right-docked card —
+   mockup target), riding 0.6rem above the sheet's live top edge (--sheet-top,
+   shared with the viewer bottom) so it tracks the sheet up from peek to the
    half detent and stays visible there. Past half it stays pinned at the half
-   line while the sheet (z-30) rises over it, so the cluster is covered only once
+   line while the sheet (z-30) rises over it, so the dock is covered only once
    the sheet is (near) full. Easing mirrors the viewer's; data-sheet-dragging
    disables it so the pill tracks the finger 1:1. */
 @media (max-width: 860px) {
-  .app-shell__mobile .action-cluster {
+  .app-shell__mobile .action-dock {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    /* `stretch`, not `center`: the dock's horizontal CENTERING is already
+       done above (left/transform) — this instead makes .action-cluster (and
+       any rider above it) fill the dock's own width, so the single-row
+       card's flex-shrink math has an actual target to shrink into. `center`
+       here left .action-cluster sized to its own unconstrained content width
+       (a flex item under `align-items: center` doesn't stretch to the line's
+       cross size), which is what caused it to overflow the 390px viewport
+       outright instead of compressing Download/Share/More to fit. */
+    align-items: stretch;
+    /* Fixes the 460-859px truncation bug (mobile-layout tablets): an
+       absolutely-positioned box with `left` set but not `right` sizes by
+       CSS shrink-to-fit — its CONTENT's own preferred width — not the
+       viewport; `max-width` below only ever clamps that shrink-to-fit
+       result DOWN, it never hands the box the full available width. That
+       starved `.action-cluster`'s `align-items: stretch` cross-sizing (and
+       so Download's flex-grow: 2.3 budget) of any real room to grow into:
+       the dock quietly sized itself to its own natural (unwrapped) content
+       width instead of the "full-width single-row bar" the mockup calls
+       for, and the primary label truncated even though the viewport had
+       comfortable room to spare. An explicit `width` makes the dock claim
+       that full mobile budget outright — same figure `max-width` already
+       used as its cap — so `.action-cluster`'s own children genuinely have
+       the whole row to divide between them. */
+    width: calc(100vw - 1.5rem);
     bottom: calc(var(--sheet-top) + 0.6rem);
     transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    /* Round-2 review item 4: a bit tighter than desktop's own gap-2 (0.5rem,
+       ACTION_DOCK_CLASS) between this card and any ExportAttention/
+       ExportSuccess rider above it — mobile screen height is the scarcer
+       resource, and every rem saved here is a rem the sheet gets back.
+       `!important`: ACTION_DOCK_CLASS's `gap-2` is a Tailwind utility (see
+       this file's cascade-layer note at the top) and always wins over a
+       plain components-layer rule regardless of media query or specificity. */
+    gap: 0.4rem !important;
   }
-  .app-shell__mobile[data-sheet-dragging="true"] .action-cluster {
+  .app-shell__mobile[data-sheet-dragging="true"] .action-dock {
     transition: none;
   }
 }
 
-/* "Preview out of date" — top-centre over the viewer. */
-.stale-banner {
+/* Export dock card (visual-alignment pass, replacing PR16's single-row
+   pill): two stacked rows on desktop (row 1 — Download + the split "▾"
+   trigger; row 2 — Share/More, equal width) inside one compact card; a
+   single row on mobile. `flex-direction`/`display` live here (not as
+   Tailwind utilities on the elements — see ACTION_CLUSTER_CLASS's own doc)
+   specifically because they're the properties this breakpoint override
+   changes: a `@layer utilities` class for the same property would always
+   beat a `@layer components` override regardless of the media query, so the
+   swap has to happen entirely within this one layer. */
+.action-cluster {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* Without this, the card's "automatic minimum size" as a flex item of
+     .action-dock (stretch clamps a cross size to the item's min, and an
+     `auto` min-width resolves to the content's own min-content width) wins
+     over the stretched width the moment its row(s) genuinely need to shrink
+     — exactly the mobile single-row case below, where Download/Share/More
+     together would rather overflow than compress. Confirmed by measurement:
+     without this the card rendered ~55px WIDER than its own dock at 390px. */
+  min-width: 0;
+}
+.action-row--secondary {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+/* Mobile: the card becomes ONE row — the primary group (Download + split
+   trigger) grows more than Share/More (flex: 2.8 vs. their own flex-1 —
+   ActionButtons.tsx applies flex-1 directly to the Share/More buttons since
+   that value doesn't change per breakpoint); the secondary row's own
+   wrapper becomes `display: contents` so Share/More escape it and become
+   direct flex items of the single mobile row alongside the primary group,
+   rather than staying nested in a second row. 2.8 (up from an earlier 2.3):
+   measured directly against real layout at 390/430px — with Share/More's
+   own text kept (design review: real words down to ~370px, not the old
+   icon-only-by-default assumption), 2.3 left the primary only ~178px of a
+   366px row (390px viewport) — short of "Download for 3D printing" even
+   with its own tier-below font/padding/icon squeeze (index.css's ≤460px
+   rules) by a double-digit pixel margin. Share/More's own short one-word
+   labels have plenty of slack to give up a slightly smaller proportional
+   share without truncating themselves. Verified against a 320px viewport
+   too (the narrowest realistic target). */
+@media (max-width: 860px) {
+  .app-shell__mobile .action-cluster {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    /* Round-2 review item 4: tighter than desktop's px-[0.5rem]/py-[0.5rem]
+       (ACTION_CLUSTER_CLASS) — the single mobile row doesn't need as much
+       breathing room as the two-row desktop card, and the saved height adds
+       up with the dock's own tighter gap above. `!important` for the same
+       utilities-vs-components-layer reason as the dock's `gap` override
+       above. */
+    padding-block: 0.4rem !important;
+    padding-inline: 0.45rem !important;
+  }
+  /* The desktop-only format sublabel (ActionButtons.tsx, "3MF · for slicers
+     and print services" under the primary row) would otherwise become a
+     THIRD flex item once .action-cluster flips to a single row here,
+     squeezing Download/Share/More for a line the split "▾" trigger already
+     carries at this width. display:none (not just hiding its text) drops it
+     out of the row's flex layout — and its share of .action-cluster's own
+     gap — entirely. */
+  .app-shell__mobile .action-export-format-note {
+    display: none;
+  }
+  .app-shell__mobile .action-row--primary {
+    /* 2.8 (measured against 390/430px real layout — see this rule's own
+       history) left the primary's own label 2px short of its natural
+       content width at exactly 390px (scrollWidth 134 vs. clientWidth 132),
+       triggering the truncation the design review's #3 finding exists to
+       forbid — Share/More's own short one-word labels give up a slightly
+       smaller share instead, still comfortably legible at every width this
+       suite checks (320-820px). */
+    flex: 3 1 0%;
+    min-width: 0;
+  }
+  .app-shell__mobile .action-row--secondary {
+    display: contents;
+  }
+}
+
+/* Narrower phones (~460px and below — every current portrait phone width,
+   390/360/320px included): even with the 2.3:1:1 split above, "Download for
+   3D printing" alongside Share/More's full labels doesn't fit one row and
+   truncates ("Download …" — the design review's #3 finding). The primary
+   label's TEXT is the one thing that must never truncate, so it shrinks
+   (font-size/padding, still one line) first. Design review directive: real
+   words, not unexplained icons — "Download for 3D printing" / "Share" /
+   "More" all stay TEXT-labelled down to ~370px (typical phone widths:
+   320/360/390/430px all keep three readable labels); only below ~360px
+   (tier two, further down) does Share/More fall back to icon-only as a last
+   resort, with their aria-label/title still carrying the name for assistive
+   tech (see ActionButtons.tsx) — losing nothing there, just screen space.
+   `!important`: these buttons get their font-size/padding/icon size from
+   shadcn Button's own Tailwind utility classes (cva's size="sm") and
+   lucide's `size` prop (an inline SVG width/height), which — like every
+   Tailwind utility — live in the `utilities` layer (or as an inline style,
+   above every layer) and beat a plain `components`-layer rule regardless of
+   selector specificity or media query (see the cascade-layer order at the
+   top of this file); mirrors the reduced-motion `!important` overrides
+   elsewhere in this file for the same reason. Verified against
+   320/360/390/430/600/820px viewports — see framing/action-bar review. */
+@media (max-width: 460px) {
+  .app-shell__mobile .action-export {
+    font-size: 0.72rem !important;
+    padding-inline: 0.5rem !important;
+    gap: 0.25rem !important;
+  }
+  /* The leading Download arrow icon drops here too (not just at tier two's
+     ≤360px) — measured against real layout (390/430px, the two widths that
+     still truncated with the icon kept): the primary group's own flex-grow
+     share of a single-row bar leaves it only ~135-155px at this tier, and
+     the icon+its gap (~18px) was consistently the difference between the
+     label text fitting and clipping. The label TEXT must never truncate —
+     an icon is the part that can go. */
+  .app-shell__mobile .action-export svg {
+    display: none !important;
+  }
+  .app-shell__mobile .action-export-options {
+    padding-inline: 0.3rem !important;
+  }
+  /* Share/More still carry their full text at this tier — only their own
+     font-size/padding shrink, mirroring Download's own squeeze, so all
+     three keep real words down to ~370px. */
+  .app-shell__mobile .action-share,
+  .app-shell__mobile .action-more {
+    font-size: 0.76rem !important;
+    padding-inline: 0.45rem !important;
+    gap: 0.3rem !important;
+  }
+  .app-shell__mobile .action-share svg,
+  .app-shell__mobile .action-more svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+}
+
+/* Tier two (~360px and below — narrower than any current mainstream phone
+   in portrait, but a real WCAG 1.4.10 reflow floor this suite still has to
+   hold): tier one's shrunk text no longer fits three real words on one row.
+   Shrink Download further still (its leading icon is already gone from tier
+   one, above) before falling back to hiding Share/More's visible words as
+   the very last resort. */
+@media (max-width: 360px) {
+  .app-shell__mobile .action-export {
+    font-size: 0.68rem !important;
+    padding-inline: 0.4rem !important;
+  }
+  .app-shell__mobile .action-export-options {
+    padding-inline: 0.25rem !important;
+  }
+  .app-shell__mobile .action-share,
+  .app-shell__mobile .action-more {
+    flex: 0 0 auto !important;
+    padding-inline: 0.5rem !important;
+  }
+  /* Visually hidden, not removed: keeps the accessible name/focus order
+     unchanged, same technique as Tailwind's sr-only. */
+  .app-shell__mobile .action-btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* One-time viewer gesture hint (ViewerGestureHint) — bottom-centre, riding
+   above the action dock so it never overlaps the Export/PNG/Share row OR
+   whatever taller card (ExportAttention, ExportSuccess) is riding above that
+   row at the time. Non-interactive (pointer-events:none on the component
+   itself), so no z-index fight with anything below it matters.
+   Unlike .action-dock, this lives INSIDE .viewer-wrap on BOTH layouts (it's
+   rendered by ViewerStage itself, not passed in as layout-specific children —
+   see ViewerStage.tsx) — on mobile, .viewer-wrap's own bottom edge already
+   tracks the sheet (its ancestor .app-shell__mobile-viewer's `bottom` is
+   var(--sheet-top), transitioned), so a plain rem offset here rides along for
+   free with no extra --sheet-top arithmetic or transition needed.
+
+   --action-dock-h is the dock's OWN live-measured height (AppShell's dockRef
+   ResizeObserver, set on document.documentElement since only one of the two
+   layouts' docks is ever mounted at a time) — a flat rem guess here can't
+   track the dock's real content height (it grows upward when
+   ExportAttention/ExportSuccess ride above the cluster, and the export CTA
+   itself can wrap to two lines on a narrow width), so this instead adds the
+   dock's OWN bottom-anchor offset (mirroring .action-dock's own `bottom`,
+   see below) to its measured height plus a fixed gap — guaranteeing the hint
+   clears the dock regardless of what's currently inside it. The px fallback
+   only covers the brief instant before the first ResizeObserver callback
+   fires (the hint itself can't appear before a first successful render
+   anyway, so in practice it's rarely if ever visible). */
+.viewer-hint {
+  position: absolute;
+  /* 0.75rem + safe-area mirrors .action-dock's own `bottom` on desktop. */
+  bottom: calc(0.75rem + var(--safe-area-bottom) + var(--action-dock-h, 92px) + 0.6rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+}
+
+/* Mobile: .viewer-wrap's bottom already sits at the sheet's live top edge, so
+   this only needs the dock's own 0.6rem offset above THAT (mirroring
+   .action-dock's mobile `bottom: calc(var(--sheet-top) + 0.6rem)`) plus the
+   measured height and gap — no safe-area or --sheet-top term (both already
+   folded into the ancestor). */
+@media (max-width: 860px) {
+  .app-shell__mobile .viewer-hint {
+    bottom: calc(0.6rem + var(--action-dock-h, 42px) + 0.6rem);
+  }
+}
+
+/* "Preview out of date" (manual mode) / "Updating preview…" (auto mode) —
+   top-centre over the viewer. Share one slot: the two are mutually exclusive
+   (ViewerStage/StaleBanner gate on autoRender so only one of them can be
+   mounted at a time), so one position rule covers both. */
+.stale-banner, .updating-chip {
   position: absolute;
   top: calc(0.75rem + env(safe-area-inset-top, 0px));
   left: 50%;
@@ -476,7 +972,7 @@ button:disabled { cursor: default; }
 
 /* Mobile: drop below the floating top bar (and any notch). */
 @media (max-width: 860px) {
-  .app-shell__mobile .stale-banner {
+  .app-shell__mobile .stale-banner, .app-shell__mobile .updating-chip {
     top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
   }
 }
@@ -488,6 +984,15 @@ button:disabled { cursor: default; }
 @keyframes pill-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
+}
+
+/* Indeterminate download progress (ui/progress.tsx): a fixed-width bar
+   sweeping left-to-right, for the engine loading phase when the WASM
+   fetch's Content-Length isn't known. motion-reduce disables the animation
+   (see the component's motion-reduce:data-[state=indeterminate]:animate-none). */
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -583,6 +1088,302 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   GUIDED STAGE NAVIGATION — reconciled grammar (m2)
+   The guided step chips (QuickStart.tsx's `stripNav`) render byte-identical
+   markup on desktop and mobile — a numbered circle, a label, and a connector
+   tick between chips — but only mobile's own density pass (below) had ever
+   gone on to hide the number/connector and add an underline instead, per the
+   R9 directive: at a 320px viewport, a number badge competing with the label
+   for column width risked truncating "Appearance"/"Content"/"Review", so
+   mobile dropped the badge entirely and marked the current stage with an
+   underline (the shared `chipCurrent` class's own bold/accent text) instead.
+   That left desktop showing a numbered wizard with connector lines while
+   mobile showed plain underlined tabs for the SAME stage sequence — two
+   different navigation idioms for one shared component. Reconciled onto
+   mobile's plainer grammar in BOTH places: `.stage-navigation` only ever
+   renders while guided workflow is active to begin with (quickStartAvailable
+   requires `experienceMode === "guided"` — see quickStart.ts), so no
+   `.app-shell__mobile--guided`/`@media` scoping is needed here to keep tabs
+   mode untouched; these three rules simply always apply once guided step
+   chips exist, at any viewport width. Desktop's own equal-width grid/48px
+   touch-floor concerns don't apply here — this only removes the badge/
+   connector and adds the underline, it doesn't touch layout/sizing (the
+   `@media (max-width: 860px) .app-shell__mobile--guided` block right below
+   still owns every genuinely mobile-viewport-specific rule: the equal-column
+   grid, item centring, 48px floors, and the label line-wrap safety net). */
+.stage-navigation .quick-start__step-connector {
+  display: none;
+}
+.stage-navigation .quick-start__step-number {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.stage-navigation .stage-item.quick-start__step--current {
+  box-shadow: inset 0 -2px 0 0 var(--color-brand);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GUIDED MOBILE DENSITY (Wave 3) — form controls ≥48px inside the guided
+   sheet's stage content, scoped by the existing .app-shell__mobile--guided
+   ancestor hook (AppShell.tsx) + the mobile breakpoint so tabs mode, desktop
+   guided, and every shared ui/input|select|button consumer elsewhere in the
+   app stay byte-identical. CSS-only (not a shared-component default change)
+   because Input/Select/Button are used verbatim by both workflows/layouts —
+   see CLAUDE.md's "Decoration lives on components as Tailwind utilities".
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 860px) {
+  .app-shell__mobile--guided .customize-tab__scroll [data-slot="input"],
+  .app-shell__mobile--guided .customize-tab__scroll [data-slot="select-trigger"] {
+    min-height: 48px;
+  }
+  /* Back/Next (QuickStart's own `size="sm"` Button, 32px) — the guided
+     mobile stage-nav's own forward/back actions get the same 48px floor as
+     every other guided mobile control. */
+  .app-shell__mobile--guided .quick-start__nav [data-slot="button"] {
+    min-height: 48px;
+  }
+  /* Stage chips (QuickStart's own `.quick-start__step`, including the
+     trailing Review chip) — same 48px floor as the rest of this block.
+     Formerly a JS-side `min-h-12` class QuickStart applied to every guided
+     chip regardless of layout (see git history); moved here so it's mobile-
+     scoped like every other rule in this block instead of also enlarging
+     desktop guided chips, which never needed it (desktop's `variant="scroll"`
+     chips stay at the tabs-mode 44px floor). */
+  .app-shell__mobile--guided .quick-start__step {
+    min-height: 48px;
+  }
+
+  /* Sheet-header compaction (guided mobile only): the sheet used to reserve
+     a tall blank band between the drag handle and the stage nav — the
+     handle's own top padding (0.6rem/9.6px, `.sheet-handle`'s base rule
+     above `@layer components`) sat just under the 10-12px target, and
+     `.quick-start-strip-slot` (CustomizeTab.tsx's portal target for
+     QuickStart's hoisted stage-chip strip — see BottomSheet.tsx's own doc)
+     carried `mt-(--space-5)`, the shared "panel section" rhythm token
+     (24px) — appropriate for spacing panel sections apart, but nearly
+     double the 12-16px gap this compact header can afford. Both scoped to
+     `.app-shell__mobile--guided` so tabs mode's identical
+     `.quick-start-strip-slot` (its own QuickStart onboarding strip, when
+     active) and desktop guided stay untouched. The handle override needs no
+     `!important` — it's simply more specific than `.sheet-handle`'s own
+     rule, same layer. The strip-slot override does need `!important`:
+     `mt-(--space-5)` is a Tailwind utility (utilities layer always beats a
+     `components`-layer rule regardless of specificity — see CLAUDE.md's
+     cascade-layer note, same reasoning as `.action-cluster`'s own
+     `padding-block` override below). */
+  .app-shell__mobile--guided .sheet-handle {
+    padding-top: 11px;
+  }
+  .app-shell__mobile--guided .quick-start-strip-slot {
+    margin-top: 14px !important;
+  }
+
+  /* Stage-content vertical rhythm compaction (guided mobile only, second
+     targeted pass): at the sheet's half detent, the Appearance stage's
+     font-not-available recovery card (ParamRows.tsx's `.font-missing`
+     AttentionItems card, rendered right under a `@font` field) was only
+     peeking below the fold — its "Import font…" button not fully visible or
+     tappable. None of this touches a control's own size (every button/input/
+     select here keeps the ≥48px floor set earlier in this block); every
+     pixel comes out of surrounding padding/margin.
+       - `.customize-tab__scroll`'s own top inset (CustomizeTab.tsx,
+         `py-(--space-4)`, 16px both sides) is the gap between the
+         (already-compacted) stage-nav strip and the stage heading — only
+         the TOP drops, to 4px; the bottom is untouched so the scrollable
+         list still ends with its original breathing room.
+       - the stage heading's own bottom margin (QuickStart.tsx,
+         `.quick-start__content > h3`, `mb-(--space-3)`, 12px) drops to 6px.
+       - each field row's own rhythm (ParamRows.tsx's `.param`: `my-(--space-2)`
+         (8px) between consecutive rows, `gap-(--space-1)` (4px) between a
+         row's own label line and whatever follows it — the control, then
+         optionally the "Import font…" button/drift note/`.font-missing`
+         card) tightens to 3px/2px. This is what actually recovers "the gap
+         above the attention/font card": that card sits inside the SAME
+         row as its `@font` field and inherits the row's own top margin like
+         every other field, so tightening every row's rhythm uniformly (not
+         just the font row specifically, which carries no hook of its own)
+         is what pulls it — and the field(s) above it — up into view.
+     `!important` throughout: `py-*`/`mb-*`/`my-*`/`gap-*` are Tailwind
+     utilities (utilities layer always beats a `components`-layer rule
+     regardless of specificity — see CLAUDE.md's cascade-layer note, same
+     reasoning as `.action-cluster`'s own overrides elsewhere in this file);
+     `padding-top` alone (not the full `padding-block`) still needs it for
+     the same reason, even though it's only overriding one physical side of
+     the shorthand. Every selector requires the `.app-shell__mobile--guided`
+     ancestor, so tabs mode's identical `.customize-tab__scroll`/
+     `.param-form`/`.quick-start__content` (its own desktop "scroll" variant
+     and its own mobile tab, both of which reuse these exact classes) and
+     desktop guided keep today's spacing byte-identical. */
+  .app-shell__mobile--guided .customize-tab__scroll {
+    padding-top: 4px !important;
+  }
+  .app-shell__mobile--guided .quick-start__content > h3 {
+    margin-bottom: 6px !important;
+  }
+  .app-shell__mobile--guided .param-form .param {
+    margin-block: 3px !important;
+    gap: 2px !important;
+  }
+
+  /* R9 directive (reverses R8's UX-plan 1.1 progressive-collapse flexbox):
+     the earlier flex approach let the active chip's label always show in
+     full, but inactive labels degraded — ellipsis, then a number-chip-only
+     collapse — under space pressure. New requirement: EVERY stage label
+     ("Content"/"Appearance"/"Review" for a typical 2-step+Review guided
+     design) must stay fully visible and un-truncated at 320px, always,
+     with no collapse tier at all. Equal-N-column CSS Grid (`--stage-count`,
+     QuickStart.tsx's `steps.length + 1`, set inline on the nav — matches
+     whichever design is actually showing, not hardcoded to 3) guarantees
+     every chip the SAME share of the row up front — the number badge no
+     longer competes with the label for a column's width because it's now
+     hidden everywhere, not just here (m2, see the unscoped
+     "GUIDED STAGE NAVIGATION — reconciled grammar" block above this media
+     query) — the requirement explicitly allows this ("numbers are optional;
+     labels are mandatory"). The active chip is marked by that same
+     always-on underline plus the existing bold/accent-coloured text
+     (shared, non-guided-scoped — see `chipCurrent` in QuickStart.tsx), so
+     "which stage am I on" stays legible without a number circle, on any
+     viewport. This block itself stays mobile-only: it's the equal-column
+     grid/centring/label-wrap tier of the fix, which desktop guided
+     (`variant="scroll"`'s own `stripNav` mount, ParamPanel) genuinely
+     doesn't need — it was never viewport-cramped to begin with. */
+  .app-shell__mobile--guided .stage-navigation {
+    display: grid !important;
+    grid-template-columns: repeat(var(--stage-count, 3), minmax(0, 1fr));
+    /* `!important`: the nav's own className still carries Tailwind's
+       `overflow-x-auto` (QuickStart.tsx's `stripNav`, unchanged there —
+       tabs mode and desktop guided still rely on it) — a utility, so it
+       otherwise wins over this plain components-layer rule regardless of
+       source order (CLAUDE.md's cascade-layer note). Equal grid columns
+       guarantee every chip fits without ever needing to scroll, so the
+       scroll affordance is switched off rather than left dangling as
+       unreachable dead chrome. */
+    overflow: visible !important;
+    align-items: stretch;
+    min-height: 48px;
+    padding-inline: 12px;
+    gap: 0 !important;
+  }
+  /* The connector-line/number-badge hiding and the current-stage underline
+     used to live here, scoped to guided MOBILE only — see the unscoped
+     "GUIDED STAGE NAVIGATION — reconciled grammar (m2)" block below this
+     media query for why they moved: desktop guided kept the numbered-wizard
+     +connector look while mobile guided (below) had already dropped it, so
+     the two viewports read as two different navigation idioms for the
+     identical shared markup. Reconciled onto mobile's plainer grammar
+     everywhere (unscoped by viewport — `.stage-navigation` only ever
+     renders in guided workflow to begin with, see QuickStart's own doc, so
+     no `.app-shell__mobile--guided`/`@media` scoping was ever needed to
+     keep tabs mode untouched). This block still owns everything else that
+     genuinely IS mobile-viewport-specific: the equal-column grid, item
+     centring, and the label-wrapping safety net below. */
+  .app-shell__mobile--guided .stage-navigation .stage-item {
+    min-width: 0;
+    justify-content: center;
+    text-align: center;
+    padding-inline: 0.15rem;
+    gap: 0.22rem !important;
+  }
+  /* NEVER truncated/ellipsized/collapsed, at any width — the directive's
+     core requirement. `white-space: normal !important` overrides the label
+     span's own `whitespace-nowrap` Tailwind utility (QuickStart.tsx) —
+     `!important` needed because that utility sets this SAME longhand, so
+     utilities layer would otherwise always win regardless of source order
+     (CLAUDE.md's cascade-layer note) — letting an unusually long label wrap
+     to a second line rather than clip, as an absolute last-resort safety
+     net. In practice "Appearance" (the longest of a typical 2-step+Review
+     guided design's own labels) fits on one line at 320px/N-columns once
+     the number badge (now hidden everywhere, see below) stops competing
+     with it for the column's width. */
+  .app-shell__mobile--guided .stage-navigation .quick-start__step-label {
+    white-space: normal !important;
+    font-size: 0.72rem;
+    line-height: 1.15;
+  }
+
+  /* Round-6 Wave 2, item 10: viewer HUD buttons (guided mobile's compact
+     Reset + View-menu pair — see ViewerHUD.tsx's own `compact` doc) grow
+     from HUD_GLASS_BTN's shared `max-[860px]:size-9` (36px, still exactly
+     what tabs-mode mobile keeps) to the 44-48px compaction target — sized
+     here rather than by editing HUD_GLASS_BTN itself, since that constant is
+     shared with the NON-compact HUD (desktop, and tabs-mode mobile), which
+     this pass leaves untouched. `!important`: HUD_GLASS_BTN's own
+     `max-[860px]:size-9` is a Tailwind utility (utilities layer always beats
+     a plain components-layer rule, regardless of specificity/media query —
+     see CLAUDE.md's cascade-layer note, same reasoning as `.action-dock`'s
+     own mobile override above). */
+  .app-shell__mobile--guided .viewer-hud--compact button {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  /* Round-6 Wave 2, item 10: the export dock's Download/Share row — guided
+     mobile only (tabs-mode mobile's own single-row cluster is unchanged) —
+     grows from its plain `size="sm"` (32px) buttons + 0.4rem block padding
+     (~47px measured total) to the 64-72px compaction target: a 48px button
+     floor plus a touch more block padding gets there without needing a
+     restructure. `[data-slot="button"]` (shadcn's own primitive attribute,
+     not a bespoke hook class) reaches both `GuidedActionButtons`' direct
+     Download/Share buttons uniformly. `!important` on the padding for the
+     same utilities-vs-components-layer reason as the HUD rule just above —
+     `.action-cluster`'s own mobile `padding-block` override further up this
+     file is itself a `!important` Tailwind-layer-beating rule this has to
+     out-rank. */
+  .app-shell__mobile--guided .action-cluster [data-slot="button"] {
+    min-height: 48px;
+  }
+  .app-shell__mobile--guided .action-cluster {
+    padding-block: 0.5rem !important;
+  }
+
+  /* UX-plan 2.1: the guided dock's two direct buttons (GuidedActionButtons —
+     no split trigger, no More menu, unlike tabs mode's three-item row) used
+     to size themselves to their own content under the shared
+     `.app-shell__mobile .action-cluster { flex-direction: row }` rule above,
+     leaving empty space to the right of Share once Download's own content
+     was narrower than the row — visibly "about a third of the card" per the
+     UX review. Download now fills that space (`flex: 1 1 auto`, shrinking
+     via `min-width: 0` + its own `.action-export__label` truncate rather
+     than ever overflowing); Share stays sized to its own content
+     (`flex: none`) rather than either growing into the freed space or
+     shrinking away — its ≥44px target and full label both stay intact. */
+  /* `!important` on flex-shrink/flex-grow: shadcn Button's own base classes
+     (buttonVariants, `shrink-0`) are a Tailwind utility — utilities layer
+     always beats a plain components-layer rule regardless of specificity
+     (CLAUDE.md's cascade-layer note, same reasoning as every other
+     `!important` in this block) — so without it Download couldn't actually
+     shrink/grow and this fix would be a no-op. */
+  .app-shell__mobile--guided .action-export {
+    flex-grow: 1 !important;
+    flex-shrink: 1 !important;
+    flex-basis: auto;
+    min-width: 0;
+  }
+  .app-shell__mobile--guided .action-share {
+    flex: none;
+  }
+  /* Defensive hardening: `.action-cluster` already inherits `flex-wrap:
+     nowrap` from the shared `.app-shell__mobile .action-cluster` rule
+     above (this row is never meant to wrap to a second line — the dock is
+     a fixed-height bar pinned above the sheet), but restated here
+     `!important` and guided-scoped so the two-button guided row can never
+     wrap regardless of label length: Download's own `min-width: 0` +
+     `.action-export__label`'s `truncate` (ActionButtons.tsx) let its text
+     ellipsize instead, and Share (`flex: none` above) never gives up its
+     own space to force a wrap. */
+  .app-shell__mobile--guided .action-cluster {
+    flex-wrap: nowrap !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    PARAM FORM — the collapsible-group disclosure marker
    (The rest of the form is utility-styled in ParamForm.tsx; the ▸ marker's
    ::before/rotate pair stays here — the utility-variant spelling is
@@ -615,6 +1416,57 @@ button:disabled { cursor: default; }
 [data-slot="select-group"] + [data-slot="select-group"] > [data-slot="select-label"] {
   margin-top: 0.25rem;
   border-top: 1px solid var(--line);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HELP MODAL — mobile tab-strip scroll edge fade (PR23 item 3)
+   HelpModal.tsx's useScrollEdges keeps `data-fade` (none/left/right/both) in
+   sync with the container's actual scroll position, so the fade only ever
+   appears on the side that genuinely still hides a tab chip — it disappears
+   once you've scrolled all the way to that edge instead of being a static
+   decoration. mask-image (not an overlay element) so it needs no knowledge
+   of the dialog's background colour to blend in.
+   Round-2 review fix: the fade zone was 1.25rem (20px) — against a ~46px-tall
+   row of short chip labels that reads as barely-there, easy to miss as an
+   intentional "more content" cue rather than just a slightly thin last chip.
+   Widened to 2.5rem (40px, doubled) so a genuinely partial chip is clearly
+   fading rather than merely looking clipped — still the same mask-image
+   technique (no background-colour dependency), just a longer taper. */
+.help-tabs-scroll[data-fade="left"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 2.5rem);
+  mask-image: linear-gradient(to right, transparent, #000 2.5rem);
+}
+.help-tabs-scroll[data-fade="right"] {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 2.5rem);
+  mask-image: linear-gradient(to left, transparent, #000 2.5rem);
+}
+.help-tabs-scroll[data-fade="both"] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 2.5rem,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 2.5rem,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN PICKER DIALOG — card-grid bottom scroll-edge fade
+   Same mask-image pattern as the Help modal's mobile tab-strip fade above,
+   just a single bottom edge instead of left/right: DesignPickerDialog's
+   `data-fade-bottom` attribute (its own scroll-position tracking) toggles it
+   on only while more cards are actually scrolled out of view below.
+   ═══════════════════════════════════════════════════════════════ */
+.design-picker-dialog__grid-scroll[data-fade-bottom] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
 }
 
 /* ═══════════════════════════════════════════════════════════════
