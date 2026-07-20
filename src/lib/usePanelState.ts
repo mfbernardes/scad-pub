@@ -9,7 +9,7 @@
 // (or a real device rotation) preserves all three.
 import { useRef, useState, type MutableRefObject } from "react";
 
-export type PanelTab = "presets" | "params" | "files";
+export type PanelTab = "presets" | "params" | "review" | "files";
 
 export interface PanelState {
   /** Active tab. Presets only when the design ships ready-made presets — a

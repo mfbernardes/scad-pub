@@ -183,6 +183,8 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.outputDefault' must be \"closed\" or \"open\"");
     if (ui.install !== undefined && !["auto", "off"].includes(ui.install as string))
       fail("'ui.install' must be \"auto\" or \"off\"");
+    if (ui.flow !== undefined && !["standard", "guided"].includes(ui.flow as string))
+      fail("'ui.flow' must be \"standard\" or \"guided\"");
     if (ui.showVarName !== undefined && typeof ui.showVarName !== "boolean")
       fail("'ui.showVarName' must be a boolean");
     for (const key of ["gallery", "essentials"] as const)

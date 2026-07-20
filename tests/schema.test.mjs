@@ -128,6 +128,15 @@ test("validates the optional colours and extraCss", () => {
   assert.throws(() => validateSchema({ ...validBase(), extraCss: 42 }), /'extraCss' must be/);
 });
 
+test("validates the optional guided UI flow", () => {
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { flow: "standard" } }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { flow: "guided" } }));
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { flow: "wizard" } }),
+    /'ui\.flow' must be/
+  );
+});
+
 test("validates the optional help (single-pane and tabbed) shape", () => {
   // null/absent is fine.
   assert.doesNotThrow(() => validateSchema({ ...validBase(), help: null }));

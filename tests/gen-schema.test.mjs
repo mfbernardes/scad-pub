@@ -819,6 +819,14 @@ test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-stri
   assert.throws(() => parseUi({ parametersLabel: 5 }), /'ui\.parametersLabel' must be a non-empty string/);
 });
 
+test("ui.flow defaults to standard and accepts the guided flow", () => {
+  assert.equal(parseUi(undefined).flow, "standard");
+  assert.equal(parseUi({}).flow, "standard");
+  assert.equal(parseUi({ flow: "guided" }).flow, "guided");
+  assert.throws(() => parseUi({ flow: "wizard" }), /'ui\.flow' must be one of/);
+  assert.throws(() => parseUi({ flow: true }), /'ui\.flow' must be one of/);
+});
+
 test("notices are off by default (omitted -> [])", () => {
   assert.deepEqual(parseNotices(undefined), []);
   assert.deepEqual(parseNotices(null), []);

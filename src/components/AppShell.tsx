@@ -121,6 +121,7 @@ export const AppShell = memo(function AppShell({
 }: Props) {
   const actions = useAppActions();
   const essentialsEnabled = schema.ui?.essentials === true;
+  const guided = schema.ui?.flow === "guided";
   const [showAdvanced, setShowAdvanced] = useState(() =>
     essentialsEnabled ? readLocal(ADVANCED_SETTINGS_KEY) === "true" : true
   );
@@ -564,6 +565,12 @@ export const AppShell = memo(function AppShell({
                   autoRender={autoRender}
                   presetsLabel={presetsLabel}
                   parametersLabel={parametersLabel}
+                  guided={guided}
+                  measured={measured}
+                  attentionIssues={attentionIssues}
+                  rendering={rendering}
+                  stalePreview={stalePreview}
+                  exportable={exportable}
                   showAdvanced={showAdvanced}
                   onShowAdvancedChange={handleShowAdvancedChange}
                   tab={panelState.tab}
@@ -620,6 +627,12 @@ export const AppShell = memo(function AppShell({
               autoRender={autoRender}
               presetsLabel={presetsLabel}
               parametersLabel={parametersLabel}
+              guided={guided}
+              measured={measured}
+              attentionIssues={attentionIssues}
+              rendering={rendering}
+              stalePreview={stalePreview}
+              exportable={exportable}
               showAdvanced={showAdvanced}
               onShowAdvancedChange={handleShowAdvancedChange}
               panelTab={panelState.tab}

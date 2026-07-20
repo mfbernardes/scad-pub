@@ -349,6 +349,11 @@ export interface UiConfig {
   gallery?: boolean;
   /** Start with `@advanced` parameters hidden behind a Show all settings action. */
   essentials?: boolean;
+  /**
+   * Present Presets, Customize, and an automatic Review as a lightweight,
+   * non-blocking sequence. Defaults to the standard panel tabs.
+   */
+  flow?: "standard" | "guided";
 }
 
 export interface Schema {

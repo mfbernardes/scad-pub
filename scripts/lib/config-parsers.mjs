@@ -352,7 +352,7 @@ export function parseNotices(raw) {
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, gallery: false, essentials: false, presetsLabel: "Presets", parametersLabel: "Customize" };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, gallery: false, essentials: false, flow: "standard", presetsLabel: "Presets", parametersLabel: "Customize" };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -361,6 +361,7 @@ export function parseUi(raw) {
   const PANEL_DEFAULTS = ["open", "collapsed"];
   const OUTPUT_DEFAULTS = ["closed", "open"];
   const INSTALL_MODES = ["auto", "off"];
+  const FLOW_MODES = ["standard", "guided"];
   if (raw.panelSide !== undefined) {
     if (!PANEL_SIDES.includes(raw.panelSide))
       throw new Error(`gen-schema: 'ui.panelSide' must be one of ${PANEL_SIDES.map((s) => `"${s}"`).join(", ")}`);
@@ -380,6 +381,11 @@ export function parseUi(raw) {
     if (!INSTALL_MODES.includes(raw.install))
       throw new Error(`gen-schema: 'ui.install' must be one of ${INSTALL_MODES.map((s) => `"${s}"`).join(", ")}`);
     out.install = raw.install;
+  }
+  if (raw.flow !== undefined) {
+    if (!FLOW_MODES.includes(raw.flow))
+      throw new Error(`gen-schema: 'ui.flow' must be one of ${FLOW_MODES.map((s) => `"${s}"`).join(", ")}`);
+    out.flow = raw.flow;
   }
   if (raw.showVarName !== undefined) {
     if (typeof raw.showVarName !== "boolean")

@@ -3,6 +3,7 @@
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
+import type { Dimensions } from "./Viewer";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
 import type { PanelTab } from "../lib/usePanelState";
@@ -14,6 +15,8 @@ import { ParamSearch } from "./ParamSearch";
 import { PanelFooter } from "./PanelFooter";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
+import { GuidedContinue, GuidedFlowNav } from "./GuidedFlowNav";
+import { GuidedReview } from "./GuidedReview";
 
 type Tab = PanelTab;
 
@@ -47,6 +50,12 @@ interface Props {
   /** Configurable tab labels (default "Presets" / "Parameters"). */
   presetsLabel?: string;
   parametersLabel?: string;
+  guided?: boolean;
+  measured?: Dimensions | null;
+  attentionIssues?: string[];
+  rendering?: boolean;
+  stalePreview?: boolean;
+  exportable?: boolean;
   showAdvanced: boolean;
   onShowAdvancedChange: (show: boolean) => void;
   /** Active tab + search query, hoisted to AppShell (usePanelState) so they
@@ -79,6 +88,12 @@ export function SheetTabs({
   autoRender,
   presetsLabel = "Presets",
   parametersLabel = "Customize",
+  guided = false,
+  measured = null,
+  attentionIssues = [],
+  rendering = false,
+  stalePreview = false,
+  exportable = false,
   showAdvanced,
   onShowAdvancedChange,
   tab,
@@ -99,7 +114,7 @@ export function SheetTabs({
   } = useAppActions();
   const hasFiles = fileImport != null;
   // Presets first on mobile, then Customize, then Files.
-  const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
+  const tabs: Tab[] = ["presets", "params", ...(guided ? (["review"] as Tab[]) : []), ...(hasFiles ? (["files"] as Tab[]) : [])];
   const debouncedSearch = useDebounce(search, 150);
 
   const triggerClass = cn(chipTabTrigger, "flex-1");
@@ -110,13 +125,17 @@ export function SheetTabs({
       onValueChange={(v) => onTabChange(v as Tab)}
       className="sheet-tabs min-h-0 flex-1 gap-0"
     >
-      <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
-        {tabs.map((t) => (
-          <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
-            {t === "params" ? parametersLabel : t === "presets" ? presetsLabel : "Files"}
-          </TabsTrigger>
-        ))}
-      </TabsList>
+      {guided ? (
+        <GuidedFlowNav hasPresets={bundled.length > 0} hasFiles={hasFiles} onActivate={onActivate} />
+      ) : (
+        <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
+          {tabs.map((t) => (
+            <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
+              {t === "params" ? parametersLabel : t === "presets" ? presetsLabel : "Files"}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      )}
       <div className="flex min-h-0 flex-1 flex-col">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetDiffBar
@@ -149,6 +168,7 @@ export function SheetTabs({
               tab only — not on Presets/Files (mirrors the desktop panel). Reset
               lives in PresetDiffBar above now (the unified restore control). */}
           <PanelFooter autoRender={autoRender} className="sheet-footer" />
+          {guided && <GuidedContinue to="review" onContinue={onTabChange} />}
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetPicker
@@ -162,7 +182,22 @@ export function SheetTabs({
             onPresetsChange={presetsChange}
             inline
           />
+          {guided && <GuidedContinue to="params" onContinue={onTabChange} />}
         </TabsContent>
+        {guided && (
+          <TabsContent value="review" className="mt-0 flex min-h-0 flex-1 flex-col">
+            <GuidedReview
+              design={design}
+              values={values}
+              presetName={presetName}
+              measured={measured}
+              attentionIssues={attentionIssues}
+              rendering={rendering}
+              stalePreview={stalePreview}
+              exportable={exportable}
+            />
+          </TabsContent>
+        )}
         {hasFiles && (
           <TabsContent value="files" className="mt-0 min-h-0 flex-1 overflow-y-auto">
             <FileBar
