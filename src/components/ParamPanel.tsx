@@ -260,8 +260,12 @@ export function ParamPanel({
             title={t("panel.collapseTitle")}
             onClick={() => setOpen(false)}
             className={cn(
+              // Sit fully inside the panel's docked edge — `.param-panel` is
+              // `overflow: hidden`, so a negative offset (overhanging the edge)
+              // gets its outer half clipped. `top-3` keeps it clear of the app
+              // header; the stage nav to its left never reaches this corner.
               "param-panel__collapse-btn absolute top-3 z-10 size-6 rounded-full p-1 shadow-(--shadow-1)",
-              panelSide === "right" ? "left-[-12px]" : "right-[-12px]"
+              panelSide === "right" ? "left-1" : "right-1"
             )}
           >
             <CollapseChevron size={14} />

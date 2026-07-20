@@ -1165,8 +1165,17 @@ button:disabled { cursor: default; }
   white-space: nowrap;
   border: 0;
 }
-.stage-navigation .stage-item.quick-start__step--current {
-  box-shadow: inset 0 -2px 0 0 var(--color-brand);
+/* The active stage's underline rides directly under its LABEL text (a clean
+   tab indicator), not as an inset box-shadow on the whole chip: the chips are a
+   44/48px touch target with the label vertically centred and `--radius-sm`
+   corners, so a chip-level bottom border rendered low (detached from the text)
+   and rounded at its ends. Underlining the label keeps the indicator tight to
+   the word at every viewport. */
+.stage-navigation .quick-start__step--current .quick-start__step-label {
+  text-decoration: underline;
+  text-decoration-color: var(--color-brand);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 
 /* ═══════════════════════════════════════════════════════════════
