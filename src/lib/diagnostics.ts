@@ -38,10 +38,13 @@ export interface BadgeCount {
 // An OpenSCAD echo line, e.g. `[err] ECHO: "tag: alert: …"`. OpenSCAD-WASM
 // routes ECHO to stderr, so accept both streams (like WARNING/ERROR below).
 const ECHO_RE = /^\[(?:out|err)\]\s*ECHO:\s*"(.*)"\s*$/;
-// Hardcoded OpenSCAD diagnostics (not configurable):
-const WARNING_RE = /^\[(?:out|err)\]\s*WARNING:\s*(.*)$/;
+// Hardcoded OpenSCAD diagnostics (not configurable). Exported so
+// friendlyErrors.ts's failed-render mapping can recognise the same lines —
+// the Notices list and the friendly failure card can never disagree about
+// what counts as a warning/assert line.
+export const WARNING_RE = /^\[(?:out|err)\]\s*WARNING:\s*(.*)$/;
 // An `assert()` failure: OpenSCAD prints `ERROR: Assertion '…' failed …`.
-const ASSERT_RE = /^\[(?:out|err)\]\s*ERROR:\s*(Assertion\b.*)$/;
+export const ASSERT_RE = /^\[(?:out|err)\]\s*ERROR:\s*(Assertion\b.*)$/;
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

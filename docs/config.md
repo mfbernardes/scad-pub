@@ -56,6 +56,24 @@ Each `designs[]` entry also accepts optional `description`, `icon`, `image`, and
 
 All four fall back to the design's own `// @description` / `// @icon` / `// @image` / `// @doc` annotations when omitted here. A config value still wins.
 
+Each `designs[]` entry also accepts optional **`reviewLabels`** and **`reviewNote`** fields, feeding a curated review summary (`src/lib/reviewSummary.ts`):
+
+```jsonc
+{
+  "designs": [
+    {
+      "id": "tag",
+      "label": "Tag",
+      "reviewLabels": { "label": "Text", "font": "Typeface" },
+      "reviewNote": "Text prints in capitals even though you typed it in lowercase."
+    }
+  ]
+}
+```
+
+- **`reviewLabels`**: an object mapping a **declared parameter's exact name** to the label its value is shown under in a review summary. Every key must match one of that design's own params — a stale or misspelled name fails the build. Several params sharing the same label merge into one summary row, their formatted values joined by `" / "`. A design with no `reviewLabels` still shows the summary's overall bounding-box "Dimensions" row, just no curated section above it. A row's value can be overridden by an `echo("@review", param, value)` from the design itself — see [`echo("@review", …)`](annotations.md#curated-review-override-echoreview-) — when the printed model doesn't literally match the stored parameter value (e.g. an uppercasing transform)
+- **`reviewNote`**: an optional short string, a generic hook for a design whose printed output transforms a parameter's raw value in a way worth calling out (e.g. "Text prints in capitals even though you typed it in lowercase"). Plain text, not Markdown. Omit for no note
+
 ### Rendering
 
 These keys affect render arguments, bundled fonts, and cache behavior:
@@ -188,8 +206,9 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
   --accent-solid: #2f55ff;
   --on-accent: #ffffff;
   /* --bg, --panel, --panel-2, --line, --text, --muted, --focus, --link, --warn,
-     --code-bg, --overlay, --glass-bg, --glass-border, --elevation,
-     --radius, --radius-sm, --viewer-bg/-grid/-grid-2, --viewer-model */
+     --warn-bg, --success, --success-bg, --code-bg, --overlay, --glass-bg,
+     --glass-border, --elevation, --radius, --radius-sm,
+     --viewer-bg/-grid/-grid-2, --viewer-model */
 }
 :root[data-theme="light"] {
   --accent: #1d4ed8;
@@ -209,6 +228,9 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--focus` | keyboard focus ring |
 | `--link` | hyperlinks |
 | `--warn` | warning text/icons |
+| `--warn-bg` | tint behind a warning card |
+| `--success` | success text/icons |
+| `--success-bg` | tint behind a success card |
 | `--code-bg` | code and log backgrounds (output console, inline code) |
 | `--overlay` | modal/dialog scrim backdrop |
 | `--glass-bg` / `--glass-border` | translucent "glass" surfaces: command bar, sheets, viewer HUD |
@@ -393,14 +415,15 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 ```jsonc
 {
   "notices": [
-    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
-    { "marker": "note",  "label": "notes",  "color": "#86a9ff" }
+    { "marker": "alert", "label": "alerts", "labelOne": "alert", "color": "#e0a458" },
+    { "marker": "note",  "label": "notes",  "labelOne": "note",  "color": "#86a9ff" }
   ]
 }
 ```
 
 - **`marker`**: required. The design-defined word, matched as `: <marker>:` inside an echo, case-insensitive. The first configured category that matches a line claims it
 - **`label`**: optional badge noun, such as `"alerts"`. Defaults to the `marker`
+- **`labelOne`**: optional singular form of `label`, such as `"alert"`. Used wherever a live count renders alongside the label whenever the count is exactly 1 — `label` alone can't pluralize itself, so without this a single pending notice reads as "1 alerts". Omit to keep `label` regardless of count
 - **`color`**: optional badge fill, as a plain CSS colour. For `#rgb`/`#rrggbb`, the badge text auto-switches between black and white to stay legible. Other colour forms keep the default badge text, so their contrast is your responsibility. Omit to use the default accent badge styling
 - **`attention`**: optional boolean, default `false`. Attention notices join OpenSCAD warnings, assertions, and missing fonts in the pre-download review dialog; **Download anyway** remains available
 

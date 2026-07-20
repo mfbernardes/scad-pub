@@ -42,6 +42,9 @@
   --color-input: var(--line);
   --color-ring: var(--focus);
   --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
   --color-brand: var(--accent);
   --color-link: var(--link);
   --color-code: var(--code-bg);
@@ -89,6 +92,9 @@
   --focus: #6db0ff; /* focus-ring colour, >7:1 vs panels (WCAG 1.4.11) */
   --link: #8ab4f8;
   --warn: #e0a458;
+  --warn-bg: #332812; /* warm amber tint behind a warning card, dark surface (~6.6:1) */
+  --success: #4ade80; /* AA on every panel (dark, ~10:1) */
+  --success-bg: #142615; /* muted green tint behind a success card, dark surface */
   --danger: #f87171;
   --code-bg: #101218;
   --overlay: rgba(20, 22, 28, 0.72);
@@ -139,6 +145,9 @@
   --focus: #2563eb;
   --link: #1558c0;
   --warn: #9a5512;
+  --warn-bg: #fff8e9; /* warm amber tint behind a warning card */
+  --success: #1f7a3d; /* AA as text on white (~5.1:1) */
+  --success-bg: #eaf6ee; /* muted green tint behind a success card */
   --danger: #c0341d;
   --code-bg: #e8ecf3;
   --overlay: rgba(245, 247, 250, 0.72);

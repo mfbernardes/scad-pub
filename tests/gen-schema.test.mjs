@@ -298,6 +298,33 @@ test("duplicate design ids fail the build", () => {
   assert.throws(() => run("widget-dup-id.config.json"), /duplicate design id "widget"/);
 });
 
+test("reviewLabels: keys matching declared params are resolved, plus a reviewNote string", () => {
+  const { schema } = run("widget-reviewlabels.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  assert.deepEqual(widget.reviewLabels, { label: "Text", FontSize: "Text", thickness: "Thickness" });
+  assert.equal(widget.reviewNote, "Text prints in capitals even though you typed it in lowercase.");
+});
+
+test("a design with no configured reviewLabels/reviewNote omits/nulls them", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].reviewLabels, undefined);
+  assert.equal(schema.designs[0].reviewNote ?? null, null);
+});
+
+test("reviewLabels: a key not matching any declared parameter fails the build", () => {
+  assert.throws(
+    () => run("widget-reviewlabels-badname.config.json"),
+    /'reviewLabels\["nope"\]' does not match any declared parameter/
+  );
+});
+
+test("reviewLabels: a blank value fails the build like the other design string fields", () => {
+  assert.throws(
+    () => run("widget-reviewlabels-badtype.config.json"),
+    /'reviewLabels\["label"\]' must be a non-empty string/
+  );
+});
+
 test("per-design description + icon are parsed, copied and served", () => {
   const { schema, out } = run("widget-designmeta.config.json");
   const widget = schema.designs.find((d) => d.id === "widget");
@@ -858,6 +885,17 @@ test("notices: validates shape, marker, label and colour", () => {
   );
 });
 
+test("notices: labelOne is optional, trimmed, and validated like label", () => {
+  assert.deepEqual(parseNotices([{ marker: "alert", label: "alerts", labelOne: " alert " }]), [
+    { marker: "alert", label: "alerts", labelOne: "alert" },
+  ]);
+  assert.deepEqual(parseNotices([{ marker: "note" }]), [{ marker: "note", label: "note" }]);
+  assert.throws(
+    () => parseNotices([{ marker: "n", labelOne: "  " }]),
+    /'notices\[0\]\.labelOne' must be a non-empty string/
+  );
+});
+
 test("renderHash folds in the renderer source so flag changes invalidate it", () => {
   // With outPublicDir + rendererFiles, a change to the renderer's render
   // contract (e.g. an OpenSCAD flag in worker.ts) must change renderHash.
@@ -1035,6 +1073,13 @@ test("parseColors validates tokens and values", () => {
   // wrong shapes -> errors
   assert.throws(() => parseColors([]), /'colors' must be an object/);
   assert.throws(() => parseColors({ dark: "#fff" }), /'colors\.dark' must be an object/);
+});
+
+test("colors: success/success-bg/warn-bg are accepted colour tokens", () => {
+  assert.deepEqual(
+    parseColors({ dark: { success: "#4ade80", "success-bg": "#142615", "warn-bg": "#332812" } }),
+    { dark: { success: "#4ade80", "success-bg": "#142615", "warn-bg": "#332812" } }
+  );
 });
 
 test("help: tabs pass through to the schema verbatim", () => {

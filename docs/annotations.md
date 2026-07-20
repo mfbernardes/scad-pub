@@ -191,3 +191,32 @@ Two checks help avoid confusing output:
 
 - Rows are **not** de-duplicated. If two branches both echo the same label unconditionally, you see two rows. Make sure only one branch echoes a given label per render.
 - A malformed call is silently ignored. If a row does not appear, double-check the argument count and the exact `"@info"` tag.
+
+## Curated review override (`echo("@review", …)`)
+
+A curated review row (`designs[].reviewLabels`, see [config.md](config.md#design-sources)) normally shows a parameter's raw stored value, formatted the same way as any other row. Some designs **transform** a value before it reaches the printed model — a lettering profile that uppercases free text, for instance: typed `"Raum 101"`, printed `"RAUM 101"`. Showing the raw typed value in the review row would misrepresent what's actually on the model.
+
+Echo the rendered value with a fixed 2-argument convention, naming the parameter it overrides:
+
+```scad
+/* [Text] */
+label = "Raum 101";
+
+rendered_label = uppercase_umlaut(label);
+echo("@review", "label", rendered_label);
+```
+
+This is a runtime mechanism, like the calculated-value `@info` echo above — no build-time component, nothing in `gen-schema.mjs` changes. The app scans the design's OpenSCAD output for `echo("@review", param, value)` calls after each render and, for any curated review row whose parameter has a matching override, shows that value in place of the parameter's own raw stored value. A parameter with no override behaves exactly as before. Pair this with `designs[].reviewNote` to explain the transform in words (e.g. "Text prints in capitals even though you typed it in lowercase").
+
+Arguments:
+
+| Position | Meaning |
+|---|---|
+| `"@review"` | Fixed literal tag. Required, must match exactly. |
+| Param name (string) | The **declared parameter's exact name** this override applies to — the same name used as a `reviewLabels` key. A name that doesn't match a param, or a param with no `reviewLabels` entry, is simply never looked up. |
+| Value | Typically a string — the whole point is showing the rendered TEXT. A quoted string has its quotes stripped; anything else is shown exactly as OpenSCAD printed it. There is no unit argument. |
+
+Two checks help avoid confusing output:
+
+- Overrides are keyed by param name and **last write wins**: a later echo for the same param overwrites an earlier one within the same render, matching `@info`'s own "current value" intent (unlike `@info`'s rows, which are never de-duplicated, since a param name is unique but a label is not).
+- A malformed call is silently ignored. If a row still shows the raw value, double-check the argument count and the exact `"@review"` tag, and that the param name matches a `reviewLabels` key exactly.

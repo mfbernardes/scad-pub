@@ -54,6 +54,16 @@ function checkDesign(d: unknown): void {
       !design.collapsedSections.every((s) => typeof s === "string"))
   )
     fail(`design '${id}' 'collapsedSections' must be an array of strings`);
+  if (design.reviewLabels != null) {
+    if (typeof design.reviewLabels !== "object" || Array.isArray(design.reviewLabels))
+      fail(`design '${id}' 'reviewLabels' must be an object`);
+    for (const [name, label] of Object.entries(design.reviewLabels as Record<string, unknown>)) {
+      if (typeof label !== "string" || !label)
+        fail(`design '${id}' 'reviewLabels["${name}"]' must be a non-empty string`);
+    }
+  }
+  if (design.reviewNote != null && typeof design.reviewNote !== "string")
+    fail(`design '${id}' 'reviewNote' must be a string`);
   for (const p of design.params as unknown[]) checkParam(p, id);
 }
 
@@ -122,6 +132,8 @@ export function validateSchema(raw: unknown): Schema {
         fail("a notice category is missing required string 'marker'");
       if (typeof e.label !== "string" || !e.label)
         fail("a notice category is missing required string 'label'");
+      if (e.labelOne !== undefined && typeof e.labelOne !== "string")
+        fail("a notice 'labelOne' must be a string");
       if (e.color !== undefined && typeof e.color !== "string")
         fail("a notice 'color' must be a string");
       if (e.attention !== undefined && typeof e.attention !== "boolean")
