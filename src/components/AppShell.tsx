@@ -1004,13 +1004,14 @@ export const AppShell = memo(function AppShell({
   // into this count is what produced the round-5 bug this revision fixes:
   // the bell lit up for a font problem the Review dot already represented,
   // and (in the aria-label / an eventual numeric surface) announced a count
-  // that didn't match a genuine "notice". "tabs" workflow keeps counting
-  // every raw diagnostic (diagnostics.length, unchanged/byte-identical) — it
-  // has no readiness/notice distinction to begin with. Derived ONCE here
-  // instead of separately at GuidedMobileHeader's call site (mobile) and
-  // CommandBar's (desktop) so the two layouts can never disagree about which
-  // count a given workflow mode should show.
-  const noticeBadgeCount = workflowGuided ? noticeAttentionCount(attention) : diagnostics.length;
+  // that didn't match a genuine "notice". Harmonized (H8): BOTH workflows now
+  // use this readiness-aware count and the quiet dot indicator below — tabs
+  // no longer shows a raw diagnostics.length numeric pill, matching guided's
+  // leaner treatment (the console still surfaces every raw diagnostic; the
+  // bell is just an indicator). Derived ONCE here instead of separately at
+  // GuidedMobileHeader's call site (mobile) and CommandBar's (desktop) so the
+  // two layouts can never disagree about the count.
+  const noticeBadgeCount = noticeAttentionCount(attention);
 
   // Round-5 Wave 2 (item 7): guided workflow's Review stage fits the model
   // to a slightly smaller target than Content/Appearance (framing.ts's
@@ -1268,10 +1269,13 @@ export const AppShell = memo(function AppShell({
                     <div className="inline-flex items-center gap-[0.4rem] justify-self-end">
                       <OutputToggle
                         outputOpen={outputOpen}
-                        noticeCount={diagnostics.length}
+                        noticeCount={noticeBadgeCount}
                         onToggleOutput={toggleOutput}
                         status={{ rendering, ready, result, stale: stalePreview }}
                         className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
+                        // H8: the quiet dot, matching guided's mobile header
+                        // and the desktop CommandBar bell (harmonized).
+                        variant="dot"
                       />
                       <BarActions themeMode={themeMode} collapse />
                     </div>
@@ -1289,12 +1293,13 @@ export const AppShell = memo(function AppShell({
                   covering it — see ACTION_DOCK_CLASS's doc. */}
               {actionDock}
 
-              {/* Wave 3 (mobile density): guided workflow's mobile HUD folds
-                  the view picker/measure/grid/zoom into one "View" menu and
-                  shows only Reset + Fullscreen directly — see ViewerHUD's own
-                  `compact` doc. Desktop (below) and tabs-mode mobile never
-                  pass this, so both keep today's full HUD unchanged. */}
-              <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} compact={workflowGuided} />
+              {/* Wave 3 (mobile density) + H8/H9 harmonization: the mobile HUD
+                  folds the view picker/measure/grid/zoom into one "View" menu
+                  and shows only Reset + Fullscreen directly — see ViewerHUD's
+                  own `compact` doc. Now applied in BOTH workflows on mobile
+                  (matching guided's leaner HUD); desktop (below) still keeps
+                  the full HUD. */}
+              <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} compact />
             </div>
 
             {/* Output console (mobile): PR16 — a full-height MODAL DIALOG rather

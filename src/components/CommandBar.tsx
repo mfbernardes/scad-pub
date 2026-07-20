@@ -123,11 +123,11 @@ export const CommandBar = memo(function CommandBar({
           onToggleOutput={onToggleOutput}
           status={{ rendering, ready, result, stale: stalePreview }}
           className={cn(ICON_BUTTON_CLASS, "command-bar__output")}
-          // Wave 1 (round-5): guided mode's own quiet dot indicator, never
-          // the numeric pill — see OutputToggle's own `variant` doc. `guided`
-          // false (every "tabs" workflow call, including every existing
-          // caller that omits it) keeps today's "count" badge unchanged.
-          variant={guided ? "dot" : "count"}
+          // H8 harmonization: the quiet dot indicator in BOTH workflows now,
+          // never the numeric pill — see OutputToggle's own `variant` doc.
+          // (The console still lists every raw diagnostic; the bell is only
+          // an at-a-glance indicator, so tabs matches guided's leaner dot.)
+          variant="dot"
         />
         {guided && hasFileImport && onOpenImportedFiles && (
           <IconButton
