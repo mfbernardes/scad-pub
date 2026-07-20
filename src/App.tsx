@@ -69,18 +69,10 @@ const installHintFlag = makeOnceFlag("install.hint.seen");
 // (see shouldOfferInstallHint's doc for the precedence rule this implies).
 const afterExportConfig = schema.ui?.afterExport ?? null;
 // First-vs-later show for the panel's auto-hide duration (see
-// src/lib/exportOutcome.ts's afterExportAutoHideMs) — a separate flag from
-// checklistExportedFlag below: that one tracks "has this browser ever
-// exported", this one tracks "has this browser ever SEEN THE PANEL",
-// independent of whether afterExport was configured at the time.
+// src/lib/exportOutcome.ts's afterExportAutoHideMs) — tracks "has this
+// browser ever SEEN THE PANEL", independent of whether afterExport was
+// configured at the time.
 const afterExportFlag = makeOnceFlag("afterexport.v1");
-// The getting-started checklist's "Export the model" item persists across
-// visits — once a browser has exported successfully, that's real, durable
-// progress, so it stays checked on a later reload rather than resetting
-// every session (see src/lib/checklist.ts's doc for why the OTHER items
-// stay session-only: a design switch / param edit isn't meaningfully "still
-// true" days later the way "you've exported before" is).
-const checklistExportedFlag = makeOnceFlag("checklist.exported.v1");
 // PR7: the card-grid DesignPickerDialog replaces the dropdown Select when
 // `ui.gallery` is on — meaningless with zero/one design, so also require more
 // than one. Computed once at module scope (like `popup`/`installMode` above)
@@ -140,19 +132,6 @@ export default function App() {
   const [values, setValues] = useState<Values>(initialState.values);
   const [presetSel, setPresetSel] = useState(initialState.preset);
   const [bundledPresets, setBundledPresets] = useState<ParsedSet[]>([]);
-  // Getting-started checklist progress (src/lib/checklist.ts): real,
-  // verifiable facts about this session, owned here (not AppShell) because
-  // the Help modal's replay row — a sibling of AppShell — must reach the
-  // same "exported" persistence and bump the same replay signal. See
-  // GettingStarted.tsx / AppShell.tsx for how these combine with schema and
-  // render-pipeline state into the full ChecklistState.
-  const [designChangedOnce, setDesignChangedOnce] = useState(false);
-  const [paramInteracted, setParamInteracted] = useState(false);
-  const [exportedOnce, setExportedOnce] = useState(() => checklistExportedFlag.seen());
-  // Bumped by the Help modal's "show the checklist again" row to clear the
-  // dismiss flag and bring GettingStarted back (mirrors openPickerSignal).
-  const [checklistReplaySignal, setChecklistReplaySignal] = useState(0);
-  const replayChecklist = useCallback(() => setChecklistReplaySignal((n) => n + 1), []);
   const [userPresets, setUserPresets] = useState<string[]>(() => listPresets(design.id));
   const refreshUserPresets = useCallback(() => setUserPresets(listPresets(design.id)), [design.id]);
   // Transient user-facing confirmations (export done, link copied, …) go through
@@ -312,26 +291,18 @@ export default function App() {
       resetForDesign(next);
       setPresetSel("");
       setUserPresets(listPresets(id));
-      // A real, deliberate design switch — the getting-started checklist's
-      // "Choose a design" item (see src/lib/checklist.ts). Deliberately NOT
-      // set by applyExternalState below: an incoming deep link landing on a
-      // design isn't the user having chosen it themselves this session.
-      setDesignChangedOnce(true);
     },
     [designId, resetForDesign]
   );
 
   // A deliberate choice made through either DesignPickerDialog instance (the
-  // welcome variant AND the regular ⌘K/top-bar one) — layered over
-  // handleDesignChange so the getting-started checklist's "Choose a design"
-  // item registers even when the picker's choice happens to already match the
-  // live design (handleDesignChange itself no-ops then, since nothing about
-  // render state needs resetting, but the user did just deliberately confirm
-  // a choice in the dialog).
+  // welcome variant AND the regular ⌘K/top-bar one) — a thin wrapper over
+  // handleDesignChange kept as its own name/identity so the picker call
+  // sites read as "the user deliberately confirmed a choice in the dialog"
+  // rather than the design-change plumbing itself.
   const pickDesign = useCallback(
     (id: string) => {
       handleDesignChange(id);
-      setDesignChangedOnce(true);
     },
     [handleDesignChange]
   );
@@ -459,12 +430,7 @@ export default function App() {
     return () => { active = false; };
   }, [design]);
 
-  // The params form's per-field edit — the checklist's "Review the essential
-  // settings" item (see src/lib/checklist.ts) fires from exactly this call,
-  // not from applyPreset below: a preset apply is a bulk value replacement,
-  // not the user having actually looked at and changed a control by hand.
   const setValue = useCallback((name: string, value: ParamValue) => {
-    setParamInteracted(true);
     setValues((v) => ({ ...v, [name]: value }));
   }, []);
 
@@ -543,13 +509,6 @@ export default function App() {
     // fires on a deployment that hasn't configured the after-export panel —
     // the simplest rule that can never stack the two on the same export.
     if (shouldOfferInstallHint(!!afterExportConfig)) offerInstallHint();
-    // The checklist's "Export the model" item: a real export just completed
-    // (share OR download — either is a genuine export, not a dismissed
-    // sheet, which returned above). It happened regardless of whether the
-    // best-effort persistence below sticks — a storage failure shouldn't
-    // make an export that just succeeded read as "not done" this session.
-    setExportedOnce(true);
-    checklistExportedFlag.remember();
   }, [exportable, snapshot, offerInstallHint, setAnnouncement]);
 
   const savePng = useCallback(async (url: string) => {
@@ -656,24 +615,6 @@ export default function App() {
     showPicker: openPicker,
   };
 
-  // Memoized on its primitive inputs — unlike `actions` above, this one DOES
-  // need a stable identity: it flows into usePanelDerivedState's
-  // checklistState (see usePanelDerivedState.ts), which AppShell's `panelData`
-  // useMemo depends on, so a fresh object literal here would defeat that memo
-  // every render and churn every PanelDataContext consumer.
-  const checklistProgress = useMemo(
-    () => ({
-      designChanged: designChangedOnce,
-      paramInteracted,
-      exported: exportedOnce,
-    }),
-    [designChangedOnce, paramInteracted, exportedOnce]
-  );
-  // The Help modal's replay row only makes sense where the checklist could
-  // ever show at all — same gate AppShell derives its own `showChecklist`
-  // from, computed here too since HelpModal is AppShell's sibling.
-  const canReplayChecklist = experienceMode === "guided" && schema.ui?.checklist !== false;
-
   useAppNotices({
     bundleStale,
     forceUpdate,
@@ -762,8 +703,6 @@ export default function App() {
           }}
           canInstall={canInstall && installMode !== "off"}
           onInstall={promptInstall}
-          canReplayChecklist={canReplayChecklist}
-          onReplayChecklist={replayChecklist}
           initialTab={helpInitialTab}
         />
       )}
@@ -842,8 +781,6 @@ export default function App() {
           openExamplesSignal={openExamplesSignal}
           settingsView={settingsView}
           experienceMode={experienceMode}
-          checklistProgress={checklistProgress}
-          checklistReplaySignal={checklistReplaySignal}
           exportSuccess={exportSuccess}
           onDismissExportSuccess={dismissExportSuccess}
         />

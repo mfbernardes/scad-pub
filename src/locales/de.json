@@ -48,19 +48,7 @@
   "failure.retry": "Vorschau erneut versuchen",
   "failure.showDetails": "Rohausgabe anzeigen",
 
-  "checklist.createModel": "Modell erstellen",
-  "checklist.chooseDesign": "Design auswählen",
-  "checklist.reviewEssential": "Wichtigste Einstellungen anpassen",
-  "checklist.preview": "Vorschau",
-  "checklist.exportModel": "Modell herunterladen",
-  "checklist.ready": "fertig",
-  "checklist.building": "wird erstellt",
   "checklist.attention": "bitte prüfen",
-  "checklist.failed": "fehlgeschlagen",
-  "checklist.done": "erledigt",
-  "checklist.progress": "{completed} von {total} erledigt",
-  "checklist.hideGuide": "Anleitung ausblenden",
-  "checklist.hide": "Anleitung ausblenden",
 
   "attention.fontFallbackLead": "Schrift nicht geladen",
   "attention.fontFallbackDetail": "{family} ist nicht installiert. Die Vorschau verwendet einen Ersatzfont, das Ergebnis kann daher abweichen.",
@@ -73,8 +61,6 @@
   "hint.rotateZoomMouse": "Ziehen zum Drehen · Scrollen zum Zoomen",
   "hint.rotateZoomTouch": "Ziehen zum Drehen · Zwei-Finger-Zoom",
   "hint.dragForSettings": "Nach oben ziehen für alle Einstellungen",
-
-  "help.replayChecklist": "Checkliste für den Einstieg erneut anzeigen",
 
   "sheet.detentPeek": "Einstellungsleiste eingeklappt",
   "sheet.detentHalf": "Einstellungsleiste halb geöffnet",
@@ -129,7 +115,6 @@
   "quickstart.reviewBuilding": "Vorschau wird erstellt…",
   "quickstart.reviewSubtitle": "Bitte prüfen Sie die Zusammenfassung und beheben Sie etwaige Probleme vor dem Download.",
   "quickstart.reviewReadyTitle": "Bereit zum Download",
-  "quickstart.frontView": "Vorderansicht",
   "quickstart.displayAuto": "Automatisch erzeugt",
   "quickstart.exportAnyway": "Trotzdem herunterladen",
   "quickstart.openFontSettings": "Schrifteinstellungen öffnen",

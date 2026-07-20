@@ -1,7 +1,7 @@
 // useSignal.ts — F8: the "fire once per genuine value change" idiom used by
 // several one-shot external triggers throughout the app (DesignPicker's
-// `openSignal`, GettingStarted's `replaySignal`, CustomizeTab's
-// `focusHiddenDiffSignal`, …): a parent bumps a monotonically-increasing
+// `openSignal`, CustomizeTab's `focusHiddenDiffSignal`, …): a parent bumps a
+// monotonically-increasing
 // number ("nonce") to ask a descendant to run some action exactly once, and
 // the descendant must tell a genuine CHANGE (a fresh signal) apart from the
 // value it already had at mount — which may already be a nonzero value left

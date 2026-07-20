@@ -5,10 +5,9 @@
 // mobile no longer reserves a solid footer band. All state/logic stays in
 // App.tsx; this is a pure view extraction (usePanelDerivedState.ts owns the
 // panel-facing business state derived FROM that App.tsx state — attention,
-// readiness, the checklist, … — see its own doc) plus one PanelDataProvider
-// mount (src/lib/panelData.ts) that hands the derived bundle to both layouts'
-// CustomizeTab/GettingStarted without threading it through ParamPanel/
-// SheetTabs by hand.
+// readiness, … — see its own doc) plus one PanelDataProvider mount
+// (src/lib/panelData.ts) that hands the derived bundle to both layouts'
+// CustomizeTab without threading it through ParamPanel/SheetTabs by hand.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Design, Schema } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
@@ -158,26 +157,13 @@ interface Props {
    *  to the Customize tab in both layouts; the setter joins AppActions. */
   settingsView: SettingsView;
   /** Guided/standard experience mode (see src/lib/useExperience.ts). Also
-   *  gates the getting-started checklist and the viewer gesture hint below,
-   *  in addition to the mobile sheet's initial-detent policy (sheetDetent.ts). */
+   *  gates the viewer gesture hint below, in addition to the mobile sheet's
+   *  initial-detent policy (sheetDetent.ts). */
   experienceMode: ExperienceMode;
-  /** Real, session-scoped progress facts the getting-started checklist reads
-   *  (src/lib/checklist.ts) — owned by App.tsx since they must also be
-   *  readable from the Help modal's replay row, a sibling of AppShell. See
-   *  the checklistState computation below for how they combine with
-   *  schema/render state already available here. */
-  checklistProgress: {
-    designChanged: boolean;
-    paramInteracted: boolean;
-    exported: boolean;
-  };
-  /** Bumped by the Help modal's "show the checklist again" row to clear the
-   *  dismiss flag and bring GettingStarted back — see its own doc. */
-  checklistReplaySignal: number;
   /** The after-export panel's current state (null -> not shown: no export
    *  yet, `ui.afterExport` isn't configured, or it was dismissed/auto-hid).
-   *  Owned by App.tsx (like checklistProgress) since exportModel is what
-   *  actually knows the real export outcome. See ExportSuccess.tsx. */
+   *  Owned by App.tsx since exportModel is what actually knows the real
+   *  export outcome. See ExportSuccess.tsx. */
   exportSuccess: ExportSuccessState | null;
   onDismissExportSuccess: () => void;
 }
@@ -212,8 +198,6 @@ export const AppShell = memo(function AppShell({
   openExamplesSignal,
   settingsView,
   experienceMode,
-  checklistProgress,
-  checklistReplaySignal,
   exportSuccess,
   onDismissExportSuccess,
 }: Props) {
@@ -421,11 +405,11 @@ export const AppShell = memo(function AppShell({
   //    QuickStart's one-step slice, so Half's ~52vh reads as cramped the
   //    moment it appears. Only on a genuine essentials -> all TRANSITION
   //    (not e.g. already being in "all" when the sheet happens to open at
-  //    Half) — mirrors GettingStarted's own "adjust state during render,
-  //    guard against re-firing on an unrelated render" idiom, just as an
-  //    effect since this reads two independent pieces of state (settingsView
-  //    from PanelDataContext's bundle above, sheetDetent local to this
-  //    component).
+  //    Half) — the same "guard against re-firing on an unrelated render"
+  //    idiom as the hasNotices/hasProblem transitions further down, just as
+  //    an effect since this reads two independent pieces of state
+  //    (settingsView from PanelDataContext's bundle above, sheetDetent local
+  //    to this component).
   const prevSettingsViewRef = useRef(settingsView);
   useEffect(() => {
     const was = prevSettingsViewRef.current;
@@ -484,12 +468,10 @@ export const AppShell = memo(function AppShell({
   // see ExportSuccess.tsx. Absent -> the panel is off, so `exportSuccess`
   // (App.tsx's state) is always null in that case too.
   const afterExport = ui.afterExport ?? null;
-  // Guided-only surfaces: the getting-started checklist (config can opt out
-  // even in guided mode via `ui.checklist: false`) and the viewer gesture
-  // hint (no config switch — it's a single short-lived chip, not standing
-  // chrome). Both stay off entirely in standard experience.
+  // Guided-only surface: the viewer gesture hint (no config switch — it's a
+  // single short-lived chip, not standing chrome). Stays off entirely in
+  // standard experience.
   const guided = experienceMode === "guided";
-  const showChecklist = guided && ui.checklist !== false;
   const showGestureHint = guided;
   // QuickStart's build-time opt-out (see docs/config.md's `ui.quickStart`) —
   // default true, since declaring `@step` sections on a design is itself the
@@ -589,17 +571,16 @@ export const AppShell = memo(function AppShell({
   const badges = useMemo(() => countBadges(log, notices), [log, notices]);
 
   // The panel-facing business state derived from the above (attention,
-  // readiness, the getting-started checklist, the hidden-advanced-diff, the
-  // friendly render-failure summary, and whether QuickStart is the active
-  // guide) — see usePanelDerivedState.ts for the derivation itself and each
-  // field's own doc. Threaded to ParamPanel/SheetTabs (and, through them,
-  // CustomizeTab/GettingStarted) and to OutputConsole below.
+  // readiness, the hidden-advanced-diff, the friendly render-failure
+  // summary, and whether QuickStart is the active guide) — see
+  // usePanelDerivedState.ts for the derivation itself and each field's own
+  // doc. Threaded to ParamPanel/SheetTabs (and, through them, CustomizeTab)
+  // and to OutputConsole below.
   const {
     attention,
     readiness,
     reviewStale,
     nonBlockingNoticeCount,
-    checklistState,
     hiddenDiff,
     friendlyError,
     quickStartActive,
@@ -613,10 +594,6 @@ export const AppShell = memo(function AppShell({
     result,
     retainedResult,
     stalePreview,
-    rendering,
-    designCount: designs.length,
-    checklistProgress,
-    showChecklist,
     settingsView,
     experienceMode,
     quickStartEnabled,
@@ -893,7 +870,7 @@ export const AppShell = memo(function AppShell({
   const closeOutput = useCallback(() => setOutputOpen(false), []);
 
   // The PanelDataContext bundle (src/lib/panelData.ts): everything
-  // CustomizeTab/GettingStarted read identically in both layouts, assembled
+  // CustomizeTab reads identically in both layouts, assembled
   // once here instead of being threaded through ParamPanel/SheetTabs by
   // hand. Memoized so a render that doesn't touch any of these fields hands
   // out the SAME object (an unchanged reference), matching how individual
@@ -927,10 +904,7 @@ export const AppShell = memo(function AppShell({
       reviewOverrides,
       reviewStale,
       nonBlockingNoticeCount,
-      onSelectView: handleSelectView,
       hiddenDiff,
-      checklist: checklistState,
-      checklistReplaySignal,
       quickStartActive,
       canExport: exportable,
       workflowMode,
@@ -966,10 +940,7 @@ export const AppShell = memo(function AppShell({
       reviewOverrides,
       reviewStale,
       nonBlockingNoticeCount,
-      handleSelectView,
       hiddenDiff,
-      checklistState,
-      checklistReplaySignal,
       quickStartActive,
       exportable,
       workflowMode,
@@ -1413,7 +1384,6 @@ export const AppShell = memo(function AppShell({
                     search={panelState.search}
                     onSearchChange={panelState.setSearch}
                     onSearchBlur={onParamSearchHiddenBlur}
-                    sheetDetent={sheetDetent}
                   />
                 </div>
               )}

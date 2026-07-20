@@ -1,13 +1,13 @@
 // usePanelDerivedState.ts — the panel-facing business state AppShell derives
 // from render/design state: real production-readiness gaps (attention),
-// overall readiness, whether the Review summary is stale, the getting-started
-// checklist's derived state, the hidden-advanced-diff used by both the
-// Customize tab's "Review" chip and the friendly-error card's "Review hidden
-// settings" action, the friendly render-failure summary, and whether
-// QuickStart is the active guide. These are exactly the inputs ParamPanel/
-// SheetTabs (and, further down, CustomizeTab/GettingStarted/OutputConsole)
-// read — so lifting them into one hook here mirrors that real seam instead of
-// leaving them as inline computation AppShell happens to also own.
+// overall readiness, whether the Review summary is stale, the hidden-
+// advanced-diff used by both the Customize tab's "Review" chip and the
+// friendly-error card's "Review hidden settings" action, the friendly
+// render-failure summary, and whether QuickStart is the active guide. These
+// are exactly the inputs ParamPanel/SheetTabs (and, further down,
+// CustomizeTab/OutputConsole) read — so lifting them into one hook here
+// mirrors that real seam instead of leaving them as inline computation
+// AppShell happens to also own.
 //
 // A behavior-preserving LIFT, not a redesign: every memoization key and the
 // computation itself is unchanged from what previously lived inline in
@@ -17,7 +17,6 @@ import { useMemo } from "react";
 import type { Design, Param, RenderResult } from "../openscad/types";
 import type { Values } from "./presets";
 import type { SettingsView, ExperienceMode } from "./useExperience";
-import type { ChecklistState } from "./checklist";
 import type { NoticeAttentionInput, AttentionItem, ReadinessState } from "./readiness";
 import { deriveAttention, readinessState } from "./readiness";
 import { quickStartAvailable } from "./quickStart";
@@ -54,17 +53,6 @@ export interface PanelDerivedStateInputs {
   result: RenderResult | null;
   retainedResult: RenderResult | null;
   stalePreview: boolean;
-  rendering: boolean;
-  /** How many designs this build ships — checklist.ts's designCount. */
-  designCount: number;
-  checklistProgress: {
-    designChanged: boolean;
-    paramInteracted: boolean;
-    exported: boolean;
-  };
-  /** Guided experience AND the config allows the checklist at all
-   *  (`ui.checklist !== false`) — see checklist.ts's ChecklistState.enabled. */
-  showChecklist: boolean;
   settingsView: SettingsView;
   experienceMode: ExperienceMode;
   /** Build-time `ui.quickStart` opt-out. */
@@ -98,13 +86,12 @@ export interface PanelDerivedState {
    * without turning that strip amber or touching readiness gating.
    */
   nonBlockingNoticeCount: number;
-  checklistState: ChecklistState;
   /** The hidden-advanced-diff array itself (src/lib/paramFilter.ts's
-   *  hiddenAdvancedDiff) — CustomizeTab's "Review" chip and GettingStarted's
-   *  friendly-error card both need the actual params (CustomizeTab jumps to
-   *  the first one), not just whether any exist. Callers that only need the
-   *  boolean (e.g. OutputConsole's showReviewHidden) derive it with
-   *  `.length > 0` at the call site instead of this hook computing both. */
+   *  hiddenAdvancedDiff) — CustomizeTab's "Review" chip and the friendly-
+   *  error card both need the actual params (CustomizeTab jumps to the first
+   *  one), not just whether any exist. Callers that only need the boolean
+   *  (e.g. OutputConsole's showReviewHidden) derive it with `.length > 0` at
+   *  the call site instead of this hook computing both. */
   hiddenDiff: Param[];
   friendlyError: FriendlyErrorInfo | null;
   quickStartActive: boolean;
@@ -120,10 +107,6 @@ export function usePanelDerivedState({
   result,
   retainedResult,
   stalePreview,
-  rendering,
-  designCount,
-  checklistProgress,
-  showChecklist,
   settingsView,
   experienceMode,
   quickStartEnabled,
@@ -168,9 +151,7 @@ export function usePanelDerivedState({
 
   // PR18's Review stage: overall production-readiness for the current render
   // (failed > attention > ready > building — see readiness.ts's own
-  // precedence doc), mirroring checklistState's `resultOk` below exactly so
-  // the Review stage's readiness line and the checklist's "Preview" row can
-  // never disagree.
+  // precedence doc).
   const readiness = useMemo(
     () => readinessState(result ? result.ok : null, attention),
     [result, attention]
@@ -193,36 +174,6 @@ export function usePanelDerivedState({
     [badges]
   );
 
-  // Memoized like every other field this hook returns (see the module doc) —
-  // this was previously the one exception, a fresh object literal every
-  // render. Since it flows into AppShell's `panelData` useMemo (whose dep
-  // array includes checklistState), an unmemoized literal here defeated that
-  // memo on every render, churning the whole PanelDataContext value and
-  // re-rendering every consumer (CustomizeTab, GettingStarted, …) regardless
-  // of whether anything they read actually changed.
-  const checklistState: ChecklistState = useMemo(
-    () => ({
-      enabled: showChecklist,
-      designCount,
-      designChanged: checklistProgress.designChanged,
-      paramInteracted: checklistProgress.paramInteracted,
-      exported: checklistProgress.exported,
-      rendering,
-      resultOk: result ? result.ok : null,
-      hasAttention: attention.length > 0,
-    }),
-    [
-      showChecklist,
-      designCount,
-      checklistProgress.designChanged,
-      checklistProgress.paramInteracted,
-      checklistProgress.exported,
-      rendering,
-      result,
-      attention,
-    ]
-  );
-
   // Friendly render-failure summary (see src/lib/friendlyErrors.ts) — null
   // whenever the latest render didn't fail. Recomputed only when `result`
   // itself changes (title/body/technical are a pure function of it).
@@ -242,7 +193,6 @@ export function usePanelDerivedState({
     readiness,
     reviewStale,
     nonBlockingNoticeCount,
-    checklistState,
     hiddenDiff,
     friendlyError,
     quickStartActive,

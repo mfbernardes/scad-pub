@@ -193,15 +193,12 @@ export async function dismissWelcomePopup(page) {
 }
 
 /** Dismiss every first-visit surface, not just the welcome popup: the popup
- *  itself, then (future-proofing — these are no-ops until later milestones
- *  add them) a getting-started dismiss button if present, then a stray
- *  Escape to close anything left open. Scripts should call this instead of
- *  dismissWelcomePopup directly so a new first-visit surface only needs
- *  wiring up here, not at every call site. */
+ *  itself, then (future-proofing — a no-op until a later milestone adds one)
+ *  a stray Escape to close anything left open. Scripts should call this
+ *  instead of dismissWelcomePopup directly so a new first-visit surface only
+ *  needs wiring up here, not at every call site. */
 export async function settleFirstVisit(page) {
   await dismissWelcomePopup(page);
-  const dismiss = page.locator(".getting-started__dismiss");
-  if (await dismiss.count()) await dismiss.first().click().catch(() => {});
   await page.keyboard.press("Escape").catch(() => {});
 }
 

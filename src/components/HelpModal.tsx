@@ -9,7 +9,7 @@ import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
-import { HardDriveDownload as InstallIcon, ListChecks as ChecklistIcon } from "lucide-react";
+import { HardDriveDownload as InstallIcon } from "lucide-react";
 import { DEFAULT_HELP } from "../lib/defaultHelp";
 import { t } from "../lib/i18n";
 import { useIsMobile } from "../lib/useIsMobile";
@@ -180,8 +180,6 @@ export function HelpModal({
   onClose,
   canInstall = false,
   onInstall,
-  canReplayChecklist = false,
-  onReplayChecklist,
   initialTab,
 }: {
   help?: HelpContent | null;
@@ -190,13 +188,6 @@ export function HelpModal({
    *  the config allows it). Demoted here from a standing top-bar button. */
   canInstall?: boolean;
   onInstall?: () => void;
-  /** Show the "show the getting-started checklist again" row (only where the
-   *  checklist could ever show at all — guided experience + `ui.checklist
-   *  !== false`; see App.tsx's canReplayChecklist). */
-  canReplayChecklist?: boolean;
-  /** Clears the checklist's dismiss flag and brings GettingStarted back —
-   *  see src/components/GettingStarted.tsx. */
-  onReplayChecklist?: () => void;
   /** Open straight to the tab whose label matches this (e.g. from the
    *  after-export panel's "Printing guide" action — see App.tsx's showHelp
    *  and gen-schema's `ui.afterExport.helpTab` validation, which guarantees
@@ -272,19 +263,6 @@ export function HelpModal({
           </span>
           <Button size="sm" className="ml-auto" onClick={onInstall} title={t("help.installTitle")}>
             <InstallIcon size={14} /> {t("help.installButton")}
-          </Button>
-        </div>
-      )}
-      {canReplayChecklist && onReplayChecklist && (
-        <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
-          <Button
-            size="sm"
-            variant="outline"
-            className="ml-auto"
-            onClick={onReplayChecklist}
-            title={t("help.replayChecklist")}
-          >
-            <ChecklistIcon size={14} /> {t("help.replayChecklist")}
           </Button>
         </div>
       )}

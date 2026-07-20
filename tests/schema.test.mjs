@@ -103,15 +103,6 @@ test("validates the optional ui.gallery flag", () => {
   );
 });
 
-test("validates the optional ui.checklist flag", () => {
-  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { checklist: true } }));
-  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { checklist: false } }));
-  assert.throws(
-    () => validateSchema({ ...validBase(), ui: { checklist: "yes" } }),
-    /'ui\.checklist' must be a boolean/
-  );
-});
-
 test("validates the optional per-design image (distinct from icon)", () => {
   const ok = validBase();
   ok.designs[0].image = "scad/x-image.png";

@@ -48,19 +48,7 @@
   "failure.retry": "Retry preview",
   "failure.showDetails": "Show raw output",
 
-  "checklist.createModel": "Create your model",
-  "checklist.chooseDesign": "Choose a design",
-  "checklist.reviewEssential": "Adjust the essential settings",
-  "checklist.preview": "Preview",
-  "checklist.exportModel": "Download the model",
-  "checklist.ready": "ready",
-  "checklist.building": "building",
   "checklist.attention": "needs attention",
-  "checklist.failed": "failed",
-  "checklist.done": "done",
-  "checklist.progress": "{completed} of {total} complete",
-  "checklist.hideGuide": "Hide guide",
-  "checklist.hide": "Hide guide",
 
   "attention.fontFallbackLead": "Font not loaded",
   "attention.fontFallbackDetail": "{family} is not installed. The preview uses a substitute font, so the result may differ.",
@@ -73,8 +61,6 @@
   "hint.rotateZoomMouse": "Drag to rotate · scroll to zoom",
   "hint.rotateZoomTouch": "Drag to rotate · pinch to zoom",
   "hint.dragForSettings": "Drag up for all settings",
-
-  "help.replayChecklist": "Show the getting-started checklist again",
 
   "sheet.detentPeek": "Parameter panel collapsed",
   "sheet.detentHalf": "Parameter panel half open",
@@ -129,7 +115,6 @@
   "quickstart.reviewBuilding": "Preview building…",
   "quickstart.reviewSubtitle": "Please check the summary and resolve any issues before downloading.",
   "quickstart.reviewReadyTitle": "Ready for download",
-  "quickstart.frontView": "Front view",
   "quickstart.displayAuto": "Generated automatically",
   "quickstart.exportAnyway": "Download anyway",
   "quickstart.openFontSettings": "Open font settings",

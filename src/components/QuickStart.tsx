@@ -38,8 +38,8 @@
 // the same "what will actually be produced" summary rows DimensionInfo shows
 // over the viewer (bounding box + `@info` params + runtime computed-info
 // rows — src/lib/reviewSummary.ts, a shared extraction so the two surfaces
-// can never disagree), a "Front view" button, and — unchanged — the pointer
-// at the Export action itself. Renders identically in both variants (see
+// can never disagree), and — unchanged — the pointer at the Export action
+// itself. Renders identically in both variants (see
 // ReviewContent below), mounted at the END of the scroll flow in scroll mode
 // and as the terminal step's content in steps mode, exactly where the old
 // Export section sat.
@@ -56,7 +56,6 @@ import type { ComputedInfo } from "../lib/computedInfo";
 import type { DisplayRow } from "../lib/displayRows";
 import { displayRowsForStep } from "../lib/displayRows";
 import { PanelFooter } from "./PanelFooter";
-import type { ViewName } from "./views";
 import {
   REVIEW_STEP_ID,
   currentStepFromIntersections,
@@ -85,28 +84,6 @@ import { Button } from "./ui/button";
 // Shared plain-link style for the Review stage's "Edit <stage>" buttons.
 const REVIEW_LINK_CLASS =
   "cursor-pointer border-none bg-transparent p-0 text-[0.85rem] font-medium text-brand hover:underline focus-visible:outline-offset-2";
-
-// The Review stage's "Front view" button — an instant camera jump (see
-// ViewName's own doc). Only tabs-mode `ReviewContent` renders it now; the
-// guided Review has no camera shortcut (the viewer's own controls own that).
-// `quick-start__review-front-view` is a smoke/vis hook — keep it.
-function FrontViewButton({
-  onSelectView,
-}: {
-  onSelectView?: (view: ViewName) => void;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className="quick-start__review-front-view self-start"
-      onClick={() => onSelectView?.("front")}
-    >
-      {t("quickstart.frontView")}
-    </Button>
-  );
-}
 
 interface Props {
   design: Design;
@@ -204,11 +181,6 @@ interface Props {
    * changes the strip's success styling, never affects `readiness` itself.
    */
   nonBlockingNoticeCount?: number;
-  /** Snap the active viewer to a standard camera view — the Review stage's
-   *  "Front view" button. `setView` is an instant camera jump (Viewer.tsx's
-   *  frameView), not an animation, so there's no prefers-reduced-motion
-   *  concern here (unlike the scroll-mode chip navigation above). */
-  onSelectView?: (view: ViewName) => void;
   /** A successful render that still matches the live controls (AppShell's
    *  `exportable`) — the Review stage's own primary Export action is
    *  disabled exactly when the export dock's Export button is. */
@@ -339,8 +311,8 @@ const EMPTY_STAGE_ADVANCED: Set<string> = new Set();
  * essential parameter's current value, then the design's own `@display`
  * rows, then the dimension/`@info`/computed rows — reviewSummary.ts's
  * `buildReviewSummaryRows`, the SAME derivation feeding this card whichever
- * variant renders it), a quiet "Front view" button, then EITHER the one
- * warning card (AttentionItems.tsx, when there's something to review) OR a
+ * variant renders it), then EITHER the one warning card (AttentionItems.tsx,
+ * when there's something to review) OR a
  * success strip (when there isn't), and finally the actions row: the primary
  * Export button (reusing the AppActions `exportModel` callback directly —
  * "Export anyway" when attention items exist, the plain export label
@@ -361,7 +333,6 @@ function ReviewContent({
   onOpenMessages,
   rows,
   stale = false,
-  onSelectView,
   canExport = false,
 }: {
   readiness?: ReadinessState;
@@ -370,7 +341,6 @@ function ReviewContent({
   onOpenMessages?: () => void;
   rows: ReturnType<typeof buildReviewSummaryRows>;
   stale?: boolean;
-  onSelectView?: (view: ViewName) => void;
   canExport?: boolean;
 }) {
   const { exportModel } = useAppActions();
@@ -435,7 +405,6 @@ function ReviewContent({
           ))}
         </dl>
       )}
-      <FrontViewButton onSelectView={onSelectView} />
       {hasAttention ? (
         <AttentionItems
           attention={attention}
@@ -503,9 +472,9 @@ function ReviewContent({
  * plus ONE overall Dimensions row — see `buildGuidedReviewRows`' own doc),
  * the design's own `reviewNote` when configured, EITHER the attention list
  * (led by a distinct-issue COUNT, each item listed explicitly via
- * `AttentionItems`) or a "Ready for download" success strip, and finally a
- * quiet "Front view" button plus "Edit <stage>" links back to every declared
- * step (`allSteps`, not just the currently-visible subset — a stage hidden
+ * `AttentionItems`) or a "Ready for download" success strip, and finally
+ * "Edit <stage>" links back to every declared step (`allSteps`, not just the
+ * currently-visible subset — a stage hidden
  * by the CURRENT values might become relevant again after editing another
  * stage).
  *
@@ -753,9 +722,9 @@ function GuidedReviewContent({
         </div>
       )}
       {/* The "Edit <stage>" navigation row — the only actions on Review;
-          each jumps the visitor back to a declared stage. (The guided Review
-          carries no "Front view" camera shortcut — the viewer's own controls
-          own that; tabs-mode Review still offers one.) */}
+          each jumps the visitor back to a declared stage. (Neither Review
+          variant offers a camera shortcut — the viewer's own controls own
+          that.) */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {allSteps.map((step) => (
           <button
@@ -872,7 +841,6 @@ export function QuickStart({
   displayRows = EMPTY_DISPLAY_ROWS,
   reviewStale = false,
   nonBlockingNoticeCount = 0,
-  onSelectView,
   canExport = false,
   stripSlot = null,
   workflow = "tabs",
@@ -1382,8 +1350,8 @@ export function QuickStart({
       {variant === "scroll" ? (
         // Desktop: every visible step's group renders at once — a scrollable
         // form, not a wizard — followed by the "Also available" tail and a
-        // final Review section (readiness + summary + front view + the
-        // Export pointer — see ReviewContent above; the Export action itself
+        // final Review section (readiness + summary + the Export pointer —
+        // see ReviewContent above; the Export action itself
         // floats over the viewer, not part of this panel). Round-2 review fix:
         // gap-6 (32px) -> --space-5 (24px), matching the "panel sections
         // spaced ~24px" rhythm target.
@@ -1452,7 +1420,6 @@ export function QuickStart({
               onOpenMessages={onOpenMessages}
               rows={reviewRows}
               stale={reviewStale}
-              onSelectView={onSelectView}
               canExport={canExport}
             />
           </div>
@@ -1502,7 +1469,6 @@ export function QuickStart({
                     onOpenMessages={onOpenMessages}
                     rows={reviewRows}
                     stale={reviewStale}
-                    onSelectView={onSelectView}
                     canExport={canExport}
                   />
                 </div>

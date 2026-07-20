@@ -228,8 +228,6 @@ export function validateSchema(raw: unknown): Schema {
         fail(`'ui.${key}' must be a string`);
     if (ui.gallery !== undefined && typeof ui.gallery !== "boolean")
       fail("'ui.gallery' must be a boolean");
-    if (ui.checklist !== undefined && typeof ui.checklist !== "boolean")
-      fail("'ui.checklist' must be a boolean");
     if (ui.workflow !== undefined && !["tabs", "guided"].includes(ui.workflow as string))
       fail("'ui.workflow' must be \"tabs\" or \"guided\"");
   }

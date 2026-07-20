@@ -54,10 +54,9 @@ function collectSourceText(dir) {
 const sourceText = collectSourceText(SRC);
 
 // A handful of call sites build the key at runtime from a static namespace
-// prefix plus a dynamic tail — e.g. GettingStarted.tsx's
-// `` t(`checklist.${item.previewStatus}`) `` for the per-status preview row
-// (item.previewStatus is "building"/"ready"/"failed"). Those keys never
-// appear as a whole quoted literal anywhere, so the plain literal-string scan
+// prefix plus a dynamic tail — e.g. `` t(`some.prefix.${value}`) ``. Those
+// keys never appear as a whole quoted literal anywhere, so the plain
+// literal-string scan
 // above would flag them as dead. Collect every such dynamic prefix (the
 // static text immediately before `${` inside a template literal) once, so a
 // key covered by one of them is treated as referenced too.

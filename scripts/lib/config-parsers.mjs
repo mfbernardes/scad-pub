@@ -490,7 +490,7 @@ function parseAfterExport(raw) {
 export const WORKFLOW_MODES = ["tabs", "guided"];
 
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, grid: "off", presetsLabel: "Presets", parametersLabel: "Customize", gallery: false, checklist: true, strictSteps: false, quickStart: true, workflow: "tabs" };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, grid: "off", presetsLabel: "Presets", parametersLabel: "Customize", gallery: false, strictSteps: false, quickStart: true, workflow: "tabs" };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -566,11 +566,6 @@ export function parseUi(raw) {
     if (typeof raw.gallery !== "boolean")
       throw new Error("gen-schema: 'ui.gallery' must be a boolean");
     out.gallery = raw.gallery;
-  }
-  if (raw.checklist !== undefined) {
-    if (typeof raw.checklist !== "boolean")
-      throw new Error("gen-schema: 'ui.checklist' must be a boolean");
-    out.checklist = raw.checklist;
   }
   if (raw.strictSteps !== undefined) {
     if (typeof raw.strictSteps !== "boolean")

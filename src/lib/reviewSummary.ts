@@ -353,14 +353,11 @@ export function readinessLabel(readiness: ReadinessState): string {
 
 /** The readiness dot's colour class — reuses renderStatus.ts's own green/red/
  *  grey tokens so the Review line's dot matches the same vocabulary the
- *  Output bell and the checklist's Preview row already wear elsewhere.
- *  "attention" has no renderStatus.ts counterpart (it isn't a render outcome
- *  — see readiness.ts), so it's handled as its own case with the same
- *  `bg-warn` token the attention chip/checklist already use. This IS the
- *  single source for that state->dot-colour mapping — GettingStarted.tsx's
- *  checklist Preview row calls this directly (checklist.ts's PreviewStatus is
- *  the same 4-value union as ReadinessState) rather than keeping its own
- *  copy. */
+ *  Output bell already wears elsewhere. "attention" has no renderStatus.ts
+ *  counterpart (it isn't a render outcome — see readiness.ts), so it's
+ *  handled as its own case with the same `bg-warn` token the attention chip
+ *  already uses. This IS the single source for that state->dot-colour
+ *  mapping. */
 export function readinessDotClass(readiness: ReadinessState): string {
   if (readiness === "attention") return "bg-warn";
   const state = readiness === "ready" ? "ok" : readiness === "failed" ? "error" : "loading";

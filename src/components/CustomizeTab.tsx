@@ -98,7 +98,6 @@ export function CustomizeTab({
     reviewOverrides,
     reviewStale,
     nonBlockingNoticeCount,
-    onSelectView,
     hiddenDiff,
     quickStartActive,
     canExport,
@@ -131,8 +130,8 @@ export function CustomizeTab({
   // query's duration and restores QuickStart the moment the query is
   // cleared (this is purely a function of `q`, so it "restores" for free —
   // no extra state to reset). `quickStartActive` comes from PanelDataContext
-  // (usePanelDerivedState's own quickStartAvailable call, shared verbatim
-  // with GettingStarted) rather than being re-derived here.
+  // (usePanelDerivedState's own quickStartAvailable call) rather than being
+  // re-derived here.
   const showQuickStart = quickStartActive && !q;
 
   // Round-2 review fix: "the workflow stage should be established before the
@@ -358,7 +357,6 @@ export function CustomizeTab({
             computedInfo={computedInfo}
             displayRows={displayRows}
             reviewStale={reviewStale}
-            onSelectView={onSelectView}
             focusReviewSignal={focusReviewSignal}
             canExport={canExport}
             stripSlot={hoistStrip ? stripSlot : null}

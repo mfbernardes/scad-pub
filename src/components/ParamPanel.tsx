@@ -6,7 +6,7 @@
 //
 // Only genuinely layout-specific props remain here (tab/search wiring, panel
 // sizing/side, and the presets/file-import props PresetPicker/FileBar consume
-// directly) — the ~25 props CustomizeTab/GettingStarted read identically in
+// directly) — the ~25 props CustomizeTab reads identically in
 // both this and SheetTabs.tsx now flow through PanelDataContext
 // (src/lib/panelData.ts), mounted once by AppShell above both layouts. See
 // that module's own doc for why it's a plain (non-stable-ref) context, unlike
@@ -26,7 +26,6 @@ import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
 import { IconButton } from "./IconButton";
 import { PanelFooter } from "./PanelFooter";
-import { GettingStarted } from "./GettingStarted";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
@@ -106,9 +105,9 @@ export function ParamPanel({
     clearFiles,
   } = useAppActions();
   // design/values/attention/settingsView: read from context for THIS
-  // component's own direct consumers (PresetPicker, FileBar) — CustomizeTab/
-  // GettingStarted below read the very same context themselves, so none of
-  // this needs to be threaded through as a prop.
+  // component's own direct consumers (PresetPicker, FileBar) — CustomizeTab
+  // below reads the very same context itself, so none of this needs to be
+  // threaded through as a prop.
   const { design, values, attention, settingsView, workflowGuided } = usePanelData();
   const [open, setOpen] = useState(() => {
     const v = readLocal(PANEL_OPEN_KEY);
@@ -237,8 +236,8 @@ export function ParamPanel({
         // Wave 2 (guided shell): the primary panel surface collapses to the
         // stage nav (QuickStart's own chip strip, hoisted by CustomizeTab)
         // -> the active stage's content -> the "Show advanced settings"
-        // secondary action (Wave 1) — no Examples/Customize/Files tab strip,
-        // no GettingStarted guide row. The Presets/Files tabs' own jobs moved
+        // secondary action (Wave 1) — no Examples/Customize/Files tab strip.
+        // The Presets/Files tabs' own jobs moved
         // out: Examples/Saved live in the unified selector (opened from the
         // header's design-name button — see UnifiedSelectorDialog.tsx), and
         // file import moved inline to each param's own control (FontSelect's
@@ -291,12 +290,6 @@ export function ParamPanel({
         </>
       ) : (
         <>
-          {/* Above the tab strip — see PanelData's checklist field's own doc
-              for why it isn't nested inside CustomizeTab's params tab. Reads
-              its own state (checklist/checklistReplaySignal/
-              quickStartActive) via usePanelData(). */}
-          <GettingStarted />
-
           <Tabs
             value={panelTab}
             onValueChange={(v) => onPanelTabChange(v as PanelTab)}

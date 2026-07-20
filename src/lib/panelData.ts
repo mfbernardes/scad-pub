@@ -1,16 +1,15 @@
 // panelData.ts — context for the read-mostly panel DATA that CustomizeTab
-// and GettingStarted consume identically regardless of which layout mounted
-// them: ParamPanel (desktop) and SheetTabs (mobile) used to each declare the
-// same ~25 pass-through props and spread them straight into CustomizeTab
-// (see AppShell.tsx's two JSX branches) — a twin list that had to be kept in
-// sync by hand on every new Review-stage/attention/checklist prop. AppShell
-// now builds this bundle once and mounts a SINGLE `PanelDataProvider` above
-// both layout trees; ParamPanel/SheetTabs shrink to their genuinely layout-
-// specific props (tab/search wiring, sheetDetent, panel sizing, and the
-// presets/file-import plumbing PresetPicker/FileBar consume directly — never
-// CustomizeTab/GettingStarted), and CustomizeTab/GettingStarted read this
-// bundle via `usePanelData()` instead of a prop drilled through two
-// intermediaries.
+// consumes identically regardless of which layout mounted it: ParamPanel
+// (desktop) and SheetTabs (mobile) used to each declare the same ~25
+// pass-through props and spread them straight into CustomizeTab (see
+// AppShell.tsx's two JSX branches) — a twin list that had to be kept in sync
+// by hand on every new Review-stage/attention prop. AppShell now builds this
+// bundle once and mounts a SINGLE `PanelDataProvider` above both layout
+// trees; ParamPanel/SheetTabs shrink to their genuinely layout-specific
+// props (tab/search wiring, panel sizing, and the presets/file-import
+// plumbing PresetPicker/FileBar consume directly — never CustomizeTab), and
+// CustomizeTab reads this bundle via `usePanelData()` instead of a prop
+// drilled through two intermediaries.
 //
 // Deliberately the OPPOSite identity contract from `appActions.ts`'s
 // AppActionsProvider, not an oversight:
@@ -20,7 +19,7 @@
 //     `useAppActions()` without ever re-rendering just because App.tsx
 //     re-created a callback. The callbacks' own staleness is a non-issue:
 //     they always forward to the current implementation.
-//   - PanelData carries STATE — values, attention, readiness, checklist, …
+//   - PanelData carries STATE — values, attention, readiness, …
 //     that must actually propagate the moment it changes; hiding those
 //     updates behind a stable-ref identity (like AppActions) would silently
 //     freeze every consumer's view of live render/param state. So this
@@ -35,28 +34,26 @@ import type { Design, Param } from "../openscad/types";
 import type { Values } from "./presets";
 import type { InstalledFont } from "./fonts";
 import type { SettingsView } from "./useExperience";
-import type { ChecklistState } from "./checklist";
 import type { AttentionItem, ReadinessState } from "./readiness";
 import type { Dimensions } from "../components/Viewer";
 import type { ComputedInfo } from "./computedInfo";
 import type { DisplayRow } from "./displayRows";
-import type { ViewName } from "../components/views";
 
-/** Everything CustomizeTab and GettingStarted read identically from both
- *  layouts. Field-by-field provenance (see AppShell.tsx's `panelData`):
+/** Everything CustomizeTab reads identically from both layouts. Field-by-
+ *  field provenance (see AppShell.tsx's `panelData`):
  *  design/values/presetBaseline/presetName/baseline/changedParams/
  *  showVarName/availableFontFamilies/fontSuggestion/installedFonts/
  *  settingsView/focusHiddenDiffSignal/
  *  attention/onOpenMessages/readiness/measured/renderedValues/computedInfo/
- *  reviewOverrides/reviewStale/nonBlockingNoticeCount/onSelectView/hiddenDiff/canExport flow straight into CustomizeTab; checklist/
- *  checklistReplaySignal/quickStartActive flow into GettingStarted (which
- *  also takes quickStartActive, shared with CustomizeTab's own copy so the
- *  two can never disagree — see quickStart.ts). Search (value + onChange/
- *  onFocus/onBlur) and the tab strip stay OUT of this bundle even though
- *  they too end up at CustomizeTab: they're the one piece of "layout wiring"
- *  each of ParamPanel/SheetTabs still owns as an explicit prop (different
- *  DOM ids/hooks per layout — see AppShell's onParamSearchHiddenBlur doc),
- *  so folding them in here would blur that seam rather than clarify it. */
+ *  reviewOverrides/reviewStale/nonBlockingNoticeCount/hiddenDiff/canExport
+ *  flow straight into CustomizeTab; quickStartActive is shared with
+ *  QuickStart's own copy so the two can never disagree — see quickStart.ts.
+ *  Search (value + onChange/onFocus/onBlur) and the tab strip stay OUT of
+ *  this bundle even though they too end up at CustomizeTab: they're the one
+ *  piece of "layout wiring" each of ParamPanel/SheetTabs still owns as an
+ *  explicit prop (different DOM ids/hooks per layout — see AppShell's
+ *  onParamSearchHiddenBlur doc), so folding them in here would blur that
+ *  seam rather than clarify it. */
 export interface PanelData {
   design: Design;
   values: Values;
@@ -124,8 +121,6 @@ export interface PanelData {
    *  it to acknowledge Messages still has something to see even while
    *  `readiness` is "ready". */
   nonBlockingNoticeCount?: number;
-  /** Snap the active viewer to a standard camera view. */
-  onSelectView?: (view: ViewName) => void;
   /** The essentials-view-hidden params whose value differs from defaults
    *  (src/lib/paramFilter.ts's hiddenAdvancedDiff) — CustomizeTab's own
    *  "Review" chip computation, lifted here so OutputConsole's
@@ -136,13 +131,9 @@ export interface PanelData {
    *  `exportable`) — the Review stage's own primary Export action is
    *  disabled exactly when the export dock's Export button is. */
   canExport: boolean;
-  /** The getting-started checklist's derived state (src/lib/checklist.ts). */
-  checklist: ChecklistState;
-  /** Bumped by the Help modal's replay row to bring the checklist back. */
-  checklistReplaySignal?: number;
   /** Whether QuickStart is the active guide for the current design+view
-   *  (src/lib/quickStart.ts) — shared verbatim by CustomizeTab and
-   *  GettingStarted so they can never disagree about which mode is showing. */
+   *  (src/lib/quickStart.ts) — shared verbatim with QuickStart's own copy so
+   *  the two can never disagree about which mode is showing. */
   quickStartActive: boolean;
   /** Build-time `ui.workflow` (default `"tabs"`) — see docs/config.md. Read
    *  by CustomizeTab (stage-scoped suppression) and ParamPanel/SheetTabs

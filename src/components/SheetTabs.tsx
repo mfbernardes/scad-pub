@@ -1,14 +1,13 @@
 // SheetTabs.tsx — segmented tabs (shadcn/ui Tabs) inside the mobile bottom sheet.
 // Parameters / Presets / Files. Prevents the stacked-sheet anti-pattern.
 //
-// Only genuinely layout-specific props remain here (tab/search wiring,
-// sheetDetent, and the presets/file-import props PresetPicker/FileBar
-// consume directly) — see ParamPanel.tsx's matching doc: the ~25 props
-// CustomizeTab/GettingStarted read identically in both this and ParamPanel.tsx
-// now flow through PanelDataContext (src/lib/panelData.ts).
+// Only genuinely layout-specific props remain here (tab/search wiring, and
+// the presets/file-import props PresetPicker/FileBar consume directly) — see
+// ParamPanel.tsx's matching doc: the ~25 props CustomizeTab reads identically
+// in both this and ParamPanel.tsx now flow through PanelDataContext
+// (src/lib/panelData.ts).
 import type { FileImport } from "../openscad/types";
 import type { ParsedSet } from "../lib/presets";
-import type { SheetDetent } from "./BottomSheet";
 import { useAppActions } from "../lib/appActions";
 import { usePanelData } from "../lib/panelData";
 import type { PanelTab } from "../lib/usePanelState";
@@ -16,7 +15,6 @@ import { CustomizeTab } from "./CustomizeTab";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
 import { PanelFooter } from "./PanelFooter";
-import { GettingStarted } from "./GettingStarted";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { t } from "../lib/i18n";
@@ -42,12 +40,6 @@ interface Props {
   search: string;
   onSearchChange: (search: string) => void;
   onSearchBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
-  /** The bottom sheet's current detent (BottomSheet.tsx) — forwarded to
-   *  GettingStarted so it can render nothing but a slim progress line at
-   *  Peek instead of the compact/full card — see GettingStarted.tsx's own
-   *  doc for why Peek can't afford either. Desktop (ParamPanel) has no
-   *  sheet, so it never passes this. */
-  sheetDetent?: SheetDetent;
 }
 
 export function SheetTabs({
@@ -65,7 +57,6 @@ export function SheetTabs({
   search,
   onSearchChange,
   onSearchBlur,
-  sheetDetent,
 }: Props) {
   const {
     applyPreset,
@@ -76,8 +67,8 @@ export function SheetTabs({
     clearFiles,
   } = useAppActions();
   // design/values/attention/settingsView: read from context for THIS
-  // component's own direct consumers (PresetPicker, FileBar) — CustomizeTab/
-  // GettingStarted below read the very same context themselves.
+  // component's own direct consumers (PresetPicker, FileBar) — CustomizeTab
+  // below reads the very same context itself.
   const { design, values, attention, settingsView, workflowGuided } = usePanelData();
   const hasFiles = fileImport != null;
   // Presets first on mobile, then Customize, then Files.
@@ -88,9 +79,9 @@ export function SheetTabs({
   if (workflowGuided) {
     // Wave 2 (guided shell): the mobile sheet's primary surface collapses to
     // the stage nav (QuickStart's own hoisted chip strip) -> the active
-    // stage's content — no Examples/Customize/Files tab strip, no
-    // GettingStarted guide row (see ParamPanel.tsx's matching doc for where
-    // each of those jobs moved instead). Mobile keeps Back/Next
+    // stage's content — no Examples/Customize/Files tab strip (see
+    // ParamPanel.tsx's matching doc for where that job moved instead).
+    // Mobile keeps Back/Next
     // (`stepNav` left at its default `true`) — only desktop drops it.
     //
     // Wave 3 (mobile density): no permanent Live-preview footer either — the
@@ -123,11 +114,6 @@ export function SheetTabs({
 
   return (
     <>
-      {/* Above the tab strip — mirrors ParamPanel's desktop mount point, so
-          the card is visible regardless of which tab is active. Peek (rule
-          3) is threaded through so this renders a slim progress line instead
-          of the compact/full card at that detent — see GettingStarted.tsx. */}
-      <GettingStarted peek={sheetDetent === "peek"} />
       <Tabs
         value={tab}
         onValueChange={(v) => onTabChange(v as Tab)}

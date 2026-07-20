@@ -518,13 +518,6 @@ export interface UiConfig {
    */
   gallery?: boolean;
   /**
-   * Whether the getting-started checklist (src/components/GettingStarted.tsx)
-   * may show at all (default true). Only ever shown in guided experience
-   * regardless of this flag — set false to suppress it there too, e.g. for a
-   * config whose designs need no walkthrough.
-   */
-  checklist?: boolean;
-  /**
    * Optional seeds for the client-side guided/standard experience (see
    * src/lib/useExperience.ts). Every field here only decides the FIRST-EVER
    * client state: once the user changes either state, a persisted preference

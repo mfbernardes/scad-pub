@@ -17,7 +17,6 @@ import { startServer } from "./serve-dist.mjs";
 import {
   launchChromium,
   gotoWithTheme,
-  dismissWelcomePopup,
   settleFirstVisit,
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
@@ -115,16 +114,6 @@ async function captureViewport(context, base, kind, theme) {
   // 1. Welcome popup (config-driven schema.popup, shown on first visit).
   if (await page.locator('[role="dialog"]').count()) {
     await shot(page, dir, "01-welcome-popup");
-    // 1b. Getting-started checklist (guided experience, PR8): dismiss just
-    // the popup so the card is visible for its own shot, then settle the
-    // remaining first-visit surfaces (which dismisses the card) so every
-    // later shot stays checklist-free as before. Skipped silently when the
-    // build/experience doesn't show a checklist.
-    await dismissWelcomePopup(page);
-    await sleep(250);
-    if (await page.locator(".getting-started").count()) {
-      await shot(page, dir, "01b-getting-started");
-    }
     await settleFirstVisit(page);
     await sleep(250);
   }

@@ -1,8 +1,8 @@
 // exportOutcome.ts — pure logic behind the after-export success panel
 // (src/components/ExportSuccess.tsx): mapping App.tsx's real export outcome to
 // wording, how long the panel stays up, and whether the one-time install hint
-// still gets to fire. Kept framework/schema-free (like src/lib/checklist.ts)
-// so tests/exportOutcome.test.mjs can exercise every branch directly.
+// still gets to fire. Kept framework/schema-free so tests/exportOutcome.test.mjs
+// can exercise every branch directly.
 //
 // THE HONESTY CALL: src/lib/share.ts's shareFileOrFallback resolves "shared"
 // once navigator.share()'s own promise resolves — which the Web Share API

@@ -4,11 +4,9 @@
 // isn't loaded — Fontconfig silently substitutes a fallback, dimensions/
 // spacing can shift, yet nothing about the render itself failed. "Rendered"
 // and "ready to ship" are NOT the same claim; this module is what tells them
-// apart, feeding both the checklist's "Preview" row (checklist.ts) and the
-// warning-card surfaces (AttentionItems.tsx) / export-button indicator
-// (ActionButtons.tsx). Mirrors checklist.ts's own
-// "STATUS, NOT THEATER" discipline: every item keys off real, checkable
-// state, never an assumption.
+// apart, feeding the warning-card surfaces (AttentionItems.tsx) / export-
+// button indicator (ActionButtons.tsx). STATUS, NOT THEATER: every item keys
+// off real, checkable state, never an assumption.
 import type { Param } from "../openscad/types";
 import type { Values } from "./presets";
 import { familyOf } from "./fonts";
@@ -197,8 +195,7 @@ export type ReadinessState = "building" | "failed" | "attention" | "ready";
  * `renderOk` mirrors the render pipeline's own tri-state: `true` (succeeded),
  * `false` (failed), or `null` (nothing has landed yet — still bootstrapping
  * or mid-render; callers combine this with their own "currently rendering"
- * flag the same way, e.g. checklist.ts's preview row already special-cases
- * `rendering` before falling back to `resultOk`).
+ * flag the same way).
  *
  * Precedence — failed > attention > ready: a failed render always wins
  * (there is nothing to be "ready" about); otherwise any attention item
