@@ -689,6 +689,19 @@ button:disabled { cursor: default; }
   max-width: calc(100vw - 1.5rem);
 }
 
+/* Guided workflow: centre the dock horizontally in the viewer (bottom-centre)
+   instead of the tabs-mode bottom-right anchor above — a single, symmetric
+   call-to-action under the model. The box stays shrink-to-fit (only `left`
+   set, not `right`/`width`), so `translateX(-50%)` centres its own content
+   width. Same specificity as `.action-dock` above, so this must come after it
+   to win; on mobile the higher-specificity `.app-shell__mobile .action-dock`
+   rule below still wins, keeping the full-width bar tracking the sheet. */
+.action-dock--guided {
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
 /* Mobile: centered (a full-width single-row bar, not a right-docked card —
    mockup target), riding 0.6rem above the sheet's live top edge (--sheet-top,
    shared with the viewer bottom) so it tracks the sheet up from peek to the

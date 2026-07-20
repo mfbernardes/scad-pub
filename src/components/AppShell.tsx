@@ -1165,7 +1165,7 @@ export const AppShell = memo(function AppShell({
   // one of the two layouts' copies is ever mounted at a time, so sharing the
   // one ref callback across both is safe.
   const actionDock = (
-    <div className={ACTION_DOCK_CLASS} ref={dockRef}>
+    <div className={cn(ACTION_DOCK_CLASS, workflowGuided && "action-dock--guided")} ref={dockRef}>
       {showExportAttentionBanner && <ExportAttention attention={attention} onReview={handleReviewAttention} />}
       {exportSuccess && (
         <ExportSuccess
