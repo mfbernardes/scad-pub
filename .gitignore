@@ -1,6 +1,21 @@
 # Node deps & build output
 node_modules/
 dist/
+# Wave 3's guided-mode smoke build (scripts/smoke-guided.mjs), a throwaway
+# second build output alongside dist/ — never committed, same as dist/.
+dist-guided/
+# Round-5 final wave's isolated heavy-design check (checkHeavyDesignLivePreview)
+# — a THIRD, equally throwaway build so marking `tag` heavy never leaks into
+# the main guided suite's own dist-guided/ above.
+dist-guided-heavy/
+# Generated at runtime by scripts/smoke-guided.mjs's buildGuidedConfig() —
+# a small explicit override on top of scadpub.config.json, never hand-edited
+# or committed (was previously a hand-maintained static file tracked in git;
+# now generated fresh on every smoke run so it can't drift from the config
+# it forks).
+scadpub.guided.generated.json
+# Same story as scadpub.guided.generated.json, for buildGuidedHeavyConfig().
+scadpub.guided-heavy.generated.json
 
 # Large vendored WASM binary + glue — fetched via scripts/fetch-wasm.mjs
 public/wasm/

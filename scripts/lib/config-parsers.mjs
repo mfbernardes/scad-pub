@@ -21,6 +21,9 @@ export const COLOR_TOKENS = [
   "focus",
   "link",
   "warn",
+  "warn-bg",
+  "success",
+  "success-bg",
   "code-bg",
   "overlay",
   "viewer-bg",
@@ -28,12 +31,19 @@ export const COLOR_TOKENS = [
   "viewer-grid-2",
   "viewer-model",
   "viewer-dim",
+  "viewer-recess",
   // Shape / glass design tokens (non-colour values allowed)
   "radius",
   "radius-sm",
+  "radius-control",
+  "radius-card",
+  "radius-panel",
   "glass-bg",
   "glass-border",
   "elevation",
+  "shadow-1",
+  "shadow-2",
+  "shadow-3",
   // Font stacks — unquoted family names only (the value filter forbids quotes),
   // e.g. "Georgia, serif". Set them under `dark` (the `:root` block) to apply
   // to both themes; the light theme doesn't redeclare them.
@@ -254,9 +264,12 @@ export function parseRender(raw) {
 }
 
 // The display policies a `popup` may choose: shown on every visit ("always"),
-// only the first visit ("once"), or every visit until the user opts out with a
-// "Don't show this again" checkbox ("dismissible").
-export const POPUP_MODES = ["always", "once", "dismissible"];
+// only the first visit ("once"), every visit until the user opts out with a
+// "Don't show this again" checkbox ("dismissible"), or a goal-oriented
+// design-picker dialog in place of the text modal ("picker" — see
+// src/lib/popup.ts's resolvePopupSurface for its designs>=2 / ui.gallery
+// fallback to "dismissible").
+export const POPUP_MODES = ["always", "once", "dismissible", "picker"];
 
 // Validate and normalise the optional `popup` config block: a notice dialog
 // shown over the app on load. `header` (dialog title) and `body` (a
@@ -289,8 +302,17 @@ export function parsePopup(raw) {
     throw new Error(
       "gen-schema: 'popup.button', when set, must be a non-empty string"
     );
+  // Optional short privacy/trust note for the welcome design picker's footer
+  // (mode: "picker" only, but validated/passed through regardless of mode —
+  // harmless if unused). Plain text, not Markdown; blank would render an
+  // empty note, so require non-empty when present.
+  if (raw.footnote !== undefined && raw.footnote !== null && (typeof raw.footnote !== "string" || !raw.footnote.trim()))
+    throw new Error(
+      "gen-schema: 'popup.footnote', when set, must be a non-empty string"
+    );
   const out = { header: raw.header, body: raw.body, mode };
   if (raw.button !== undefined) out.button = raw.button;
+  if (raw.footnote !== undefined && raw.footnote !== null) out.footnote = raw.footnote;
   return out;
 }
 
@@ -298,13 +320,27 @@ export function parsePopup(raw) {
 // notice categories surfaced on the "OpenSCAD output" panel. A design echoes
 // `ECHO: "<context>: <marker>: <message>"` and each configured category turns
 // matching echoes into a friendly notice and a coloured count badge. Each entry
-// is { marker (required), label?, color? }:
+// is { marker (required), label?, labelOne?, color?, attention? }:
 //   - marker: the design-defined string matched as `: <marker>:` in an echo
 //     (e.g. "alert", "note"); case-insensitive.
 //   - label: the badge / notice noun (e.g. "alerts"); defaults to marker.
+//   - labelOne: optional singular form of `label` (e.g. "alert"), used
+//     wherever a count renders alongside it whenever the live count is
+//     exactly 1. Omit to keep `label` regardless of count.
 //   - color: an optional badge fill colour, validated as a plain CSS colour
 //     (same strictness as `colors`) so it can't break out of the inline style
 //     it gets interpolated into.
+//   - attention: optional boolean (default false). Flags this category as a
+//     production-readiness concern (src/lib/readiness.ts) — a pending notice
+//     surfaces the Customize tab's attention chip and the export button's
+//     indicator, not just the passive Output-bell badge. Sparse: only emitted
+//     when true.
+//   - subsumedByFont: optional boolean (default false). Marks an
+//     `attention`-flagged category as a SYMPTOM of a missing font rather
+//     than its own distinct issue (src/lib/readiness.ts's deriveAttention) —
+//     excluded from the attention list/count while a font is missing this
+//     render, still visible in Messages/Technical details. Sparse: only
+//     emitted when true.
 // Notices don't affect geometry, so they're absent from renderHash. Off by
 // default: omitted (or []) -> no notice categories. OpenSCAD's own WARNING/ERROR
 // lines and assert failures stay hardcoded (see lib/diagnostics).
@@ -331,6 +367,13 @@ export function parseNotices(raw) {
     } else {
       out.label = entry.label.trim();
     }
+    if (entry.labelOne !== undefined && entry.labelOne !== null) {
+      if (typeof entry.labelOne !== "string" || !entry.labelOne.trim())
+        throw new Error(
+          `gen-schema: 'notices[${i}].labelOne' must be a non-empty string`
+        );
+      out.labelOne = entry.labelOne.trim();
+    }
     if (entry.color !== undefined && entry.color !== null) {
       if (typeof entry.color !== "string" || !COLOR_VALUE_RE.test(entry.color.trim()))
         throw new Error(
@@ -339,15 +382,115 @@ export function parseNotices(raw) {
         );
       out.color = entry.color.trim();
     }
+    if (entry.attention !== undefined && entry.attention !== null) {
+      if (typeof entry.attention !== "boolean")
+        throw new Error(`gen-schema: 'notices[${i}].attention' must be a boolean`);
+      if (entry.attention) out.attention = true;
+    }
+    if (entry.subsumedByFont !== undefined && entry.subsumedByFont !== null) {
+      if (typeof entry.subsumedByFont !== "boolean")
+        throw new Error(`gen-schema: 'notices[${i}].subsumedByFont' must be a boolean`);
+      if (entry.subsumedByFont) out.subsumedByFont = true;
+    }
     return out;
   });
+}
+
+// The client-side experience-mode seeds a config may set under `ui.experience`.
+// Every field only seeds the FIRST-EVER client state — src/lib/useExperience.ts
+// reads a persisted user preference ahead of these, and once the user changes
+// either state client-side, the persisted choice wins on every later visit.
+export const EXPERIENCE_DEFAULTS = ["guided", "standard"];
+export const EXPERIENCE_SETTINGS_VIEWS = ["essentials", "all"];
+export const EXPERIENCE_MOBILE_SHEETS = ["peek", "half"];
+const EXPERIENCE_KEYS = ["default", "settingsView", "mobileInitialSheet"];
+
+// Validate and normalise the optional `ui.experience` config block. Unlike
+// `ui`'s other keys (flat booleans/enums with built-in defaults merged in by
+// parseUi below), every field here is left absent when unset — the hook
+// itself decides the final fallback — so this returns only the keys the
+// config actually set. Unknown nested keys fail the build, matching this
+// file's convention for nested objects (see `colors`' token check above)
+// rather than being silently ignored.
+function parseExperience(raw) {
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'ui.experience' must be an object");
+  for (const key of Object.keys(raw)) {
+    if (!EXPERIENCE_KEYS.includes(key))
+      throw new Error(
+        `gen-schema: unknown 'ui.experience' key '${key}'.\n` +
+          `  Valid keys: ${EXPERIENCE_KEYS.join(", ")}`
+      );
+  }
+  const out = {};
+  if (raw.default !== undefined) {
+    if (!EXPERIENCE_DEFAULTS.includes(raw.default))
+      throw new Error(
+        `gen-schema: 'ui.experience.default' must be one of ${EXPERIENCE_DEFAULTS.map((s) => `"${s}"`).join(", ")} ` +
+          `(got ${JSON.stringify(raw.default)})`
+      );
+    out.default = raw.default;
+  }
+  if (raw.settingsView !== undefined) {
+    if (!EXPERIENCE_SETTINGS_VIEWS.includes(raw.settingsView))
+      throw new Error(
+        `gen-schema: 'ui.experience.settingsView' must be one of ${EXPERIENCE_SETTINGS_VIEWS.map((s) => `"${s}"`).join(", ")} ` +
+          `(got ${JSON.stringify(raw.settingsView)})`
+      );
+    out.settingsView = raw.settingsView;
+  }
+  if (raw.mobileInitialSheet !== undefined) {
+    if (!EXPERIENCE_MOBILE_SHEETS.includes(raw.mobileInitialSheet))
+      throw new Error(
+        `gen-schema: 'ui.experience.mobileInitialSheet' must be one of ${EXPERIENCE_MOBILE_SHEETS.map((s) => `"${s}"`).join(", ")} ` +
+          `(got ${JSON.stringify(raw.mobileInitialSheet)})`
+      );
+    out.mobileInitialSheet = raw.mobileInitialSheet;
+  }
+  return out;
+}
+
+// The optional after-export success-panel config a config may set under
+// `ui.afterExport` (see src/components/ExportSuccess.tsx). Every field is a
+// plain non-empty string override; the app's own i18n defaults apply to any
+// field left unset. Unlike `ui.experience`, `helpTab` can't be validated here
+// — it names a tab in this same config's `help` block, parsed separately in
+// gen-schema's generate() — so that cross-field check happens there, once
+// both are available (search generate() for 'ui.afterExport.helpTab').
+const AFTER_EXPORT_KEYS = ["title", "body", "helpTab"];
+function parseAfterExport(raw) {
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'ui.afterExport' must be an object");
+  for (const key of Object.keys(raw)) {
+    if (!AFTER_EXPORT_KEYS.includes(key))
+      throw new Error(
+        `gen-schema: unknown 'ui.afterExport' key '${key}'.\n` +
+          `  Valid keys: ${AFTER_EXPORT_KEYS.join(", ")}`
+      );
+  }
+  const out = {};
+  for (const key of AFTER_EXPORT_KEYS) {
+    if (raw[key] !== undefined) {
+      if (typeof raw[key] !== "string" || !raw[key].trim())
+        throw new Error(`gen-schema: 'ui.afterExport.${key}' must be a non-empty string`);
+      out[key] = raw[key].trim();
+    }
+  }
+  return out;
 }
 
 // Validate and normalise the optional `ui` config block: build-time UI behaviour
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
+// The product workflow shapes `ui.workflow` may choose. "tabs" (default) is
+// today's Presets/Customize/Files tab strip and QuickStart behavior,
+// unchanged; "guided" activates the guided-workflow Customize-panel
+// internals wherever QuickStart is already showing — see UiConfig.workflow's
+// own doc in src/openscad/types.ts and docs/config.md.
+export const WORKFLOW_MODES = ["tabs", "guided"];
+
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, presetsLabel: "Presets", parametersLabel: "Customize" };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, grid: "off", presetsLabel: "Presets", parametersLabel: "Customize", gallery: false, checklist: true, strictSteps: false, quickStart: true, workflow: "tabs" };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -356,6 +499,7 @@ export function parseUi(raw) {
   const PANEL_DEFAULTS = ["open", "collapsed"];
   const OUTPUT_DEFAULTS = ["closed", "open"];
   const INSTALL_MODES = ["auto", "off"];
+  const GRID_MODES = ["off", "on"];
   if (raw.panelSide !== undefined) {
     if (!PANEL_SIDES.includes(raw.panelSide))
       throw new Error(`gen-schema: 'ui.panelSide' must be one of ${PANEL_SIDES.map((s) => `"${s}"`).join(", ")}`);
@@ -406,12 +550,119 @@ export function parseUi(raw) {
       throw new Error("gen-schema: 'ui.fullscreen' must be a boolean");
     out.fullscreen = raw.fullscreen;
   }
+  if (raw.grid !== undefined) {
+    if (!GRID_MODES.includes(raw.grid))
+      throw new Error(`gen-schema: 'ui.grid' must be one of ${GRID_MODES.map((s) => `"${s}"`).join(", ")}`);
+    out.grid = raw.grid;
+  }
   for (const key of ["presetsLabel", "parametersLabel"]) {
     if (raw[key] !== undefined) {
       if (typeof raw[key] !== "string" || !raw[key].trim())
         throw new Error(`gen-schema: 'ui.${key}' must be a non-empty string`);
       out[key] = raw[key].trim();
     }
+  }
+  if (raw.gallery !== undefined) {
+    if (typeof raw.gallery !== "boolean")
+      throw new Error("gen-schema: 'ui.gallery' must be a boolean");
+    out.gallery = raw.gallery;
+  }
+  if (raw.checklist !== undefined) {
+    if (typeof raw.checklist !== "boolean")
+      throw new Error("gen-schema: 'ui.checklist' must be a boolean");
+    out.checklist = raw.checklist;
+  }
+  if (raw.strictSteps !== undefined) {
+    if (typeof raw.strictSteps !== "boolean")
+      throw new Error("gen-schema: 'ui.strictSteps' must be a boolean");
+    out.strictSteps = raw.strictSteps;
+  }
+  if (raw.quickStart !== undefined) {
+    if (typeof raw.quickStart !== "boolean")
+      throw new Error("gen-schema: 'ui.quickStart' must be a boolean");
+    out.quickStart = raw.quickStart;
+  }
+  if (raw.workflow !== undefined) {
+    if (!WORKFLOW_MODES.includes(raw.workflow))
+      throw new Error(`gen-schema: 'ui.workflow' must be one of ${WORKFLOW_MODES.map((s) => `"${s}"`).join(", ")}`);
+    out.workflow = raw.workflow;
+  }
+  if (raw.experience !== undefined && raw.experience !== null) {
+    out.experience = parseExperience(raw.experience);
+  }
+  if (raw.afterExport !== undefined && raw.afterExport !== null) {
+    out.afterExport = parseAfterExport(raw.afterExport);
+  }
+  return out;
+}
+
+// Levenshtein edit distance, used only to offer a "did you mean" suggestion
+// for a typo'd `strings` key. Deliberately simple (no memoized matrix beyond a
+// single rolling row) — catalogue keys are short and this only runs on a
+// build-time validation error path.
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) {
+      row[j] =
+        a[i - 1] === b[j - 1]
+          ? prev[j - 1]
+          : 1 + Math.min(prev[j - 1], prev[j], row[j - 1]);
+    }
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+// The closest known key to an unrecognised `strings` key, when the edit
+// distance is small enough that it's plausibly a typo rather than an
+// unrelated string. Returns null when nothing is close.
+function suggestKey(badKey, validKeys) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const key of validKeys) {
+    const dist = editDistance(badKey, key);
+    if (dist < bestDist) {
+      best = key;
+      bestDist = dist;
+    }
+  }
+  // Trivial-near-miss threshold: allow a couple of edits, but scale with the
+  // key's length so a short key doesn't match everything.
+  const threshold = Math.max(2, Math.floor(badKey.length / 3));
+  return best !== null && bestDist <= threshold ? best : null;
+}
+
+// Validate and normalise the optional `strings` config block: per-deployment
+// overrides of the built-in UI text catalogue (src/locales/en.json), keyed by
+// the same dot-namespaced keys (including plural `#category` variants, e.g.
+// "foo.count#other") that src/lib/i18n.ts's `t`/`tn` resolve. Consulted first,
+// ahead of the active/English bundles — see i18n.ts's resolution order. Every
+// key must already exist in the English catalogue; `validKeys` is the caller's
+// (gen-schema's) already-loaded key set so this module stays free of file I/O.
+// Fails the build with a clear message (a "did you mean" suggestion when the
+// bad key is a plausible typo of a real one) rather than silently accepting a
+// key `t()` will never resolve. Returns {} when unset.
+export function parseStrings(raw, validKeys) {
+  if (raw == null) return {};
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'strings' must be an object of key: string pairs");
+  const known = new Set(validKeys);
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!known.has(key)) {
+      const suggestion = suggestKey(key, known);
+      throw new Error(
+        `gen-schema: unknown 'strings' key '${key}'.\n` +
+          (suggestion
+            ? `  Did you mean '${suggestion}'?`
+            : `  See src/locales/en.json for the full list of valid keys.`)
+      );
+    }
+    if (typeof value !== "string")
+      throw new Error(`gen-schema: 'strings.${key}' must be a string (got ${JSON.stringify(value)})`);
+    out[key] = value;
   }
   return out;
 }

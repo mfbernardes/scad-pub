@@ -7,13 +7,14 @@ content plan: define each supported OpenSCAD comment annotation, show its syntax
 
 ScadPub adds a handful of comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
 
-## Design metadata (`// @description`, `// @icon`, `// @doc`)
+## Design metadata (`// @description`, `// @icon`, `// @image`, `// @doc`)
 
 A design can describe itself from its own `.scad` file instead of the config. Put these anywhere in the file. A header comment above the first section is the natural home:
 
 ```openscad
 // @description Auto-sized flat name plate for a door, shelf, or desk.
 // @icon icons/nameplate.svg
+// @image icons/nameplate-photo.jpg
 // @doc nameplate.md
 
 /* [Text] */
@@ -21,10 +22,11 @@ label = "Room 1";
 ```
 
 - **`@description`**: the design's picker sub-label. It sets the same value as `description` on a config `designs[]` entry.
-- **`@icon`**: a path to the design's thumbnail. The path resolves **relative to the design's own `.scad` file**, unlike a config `icon`, which is relative to the config. It may be a Scalable Vector Graphics (SVG), PNG, or WebP file. ScadPub serves it as-is and reuses it as the design's manifest shortcut icon.
+- **`@icon`**: a path to the design's small thumbnail. The path resolves **relative to the design's own `.scad` file**, unlike a config `icon`, which is relative to the config. It may be a Scalable Vector Graphics (SVG), PNG, or WebP file. ScadPub serves it as-is and reuses it as the design's manifest shortcut icon.
+- **`@image`**: a path to a larger picker-card photo or render — a real picture of the printed/rendered model, distinct from the small `@icon` glyph. Same path-resolution rule as `@icon`, and the same accepted formats. Shown by [`DesignPickerDialog`](config.md#ui-behaviour-and-pwa) (the card-grid design switcher enabled by `ui.gallery`); the classic dropdown Select never shows it. Not reused for the manifest shortcut icon — that stays `@icon`.
 - **`@doc`**: a path to the design's own user-documentation Markdown file, same path-resolution rule as `@icon`. It sets the same value as `doc` on a config `designs[]` entry. When present, the app shows a documentation button that opens the file's contents in a modal.
 
-All three are **fallbacks**: a value on the design's config `designs[]` entry wins. First occurrence in the file wins; blank values are ignored. This keeps a design self-describing (and works even with auto-discovery, when the config lists no `designs[]` at all), while still letting a deployment override any of them from the config.
+All four are **fallbacks**: a value on the design's config `designs[]` entry wins. First occurrence in the file wins; blank values are ignored. This keeps a design self-describing (and works even with auto-discovery, when the config lists no `designs[]` at all), while still letting a deployment override any of them from the config.
 
 ## Conditional parameters (`// @showIf`)
 
@@ -63,6 +65,114 @@ mounting = "none"; // [none, screw, countersunk]
 ```
 
 Collapsed parameters remain in the DOM and are still sent to OpenSCAD.
+
+## Essential and advanced settings (`// @advanced`, `// @essential`)
+
+Mark a parameter, or a whole section, `// @advanced` to demote it into an "all settings" view, leaving only the "essentials" visible by default. This is unrelated to `// @collapsed`: a collapsed section is still fully shown, just folded; an advanced parameter can be hidden from the default view entirely, in a client-side settings mode the next milestone builds on top of these annotations.
+
+`// @advanced` works in two positions:
+
+- **Parameter-level** — a bare marker in a parameter's doc-comment block, exactly like `// @font`:
+
+  ```scad
+  // Facet count override. Leave at 0 to use the render's global $fn.
+  // @advanced
+  facet_override = 0; // [0:1:64]
+  ```
+
+- **Section-level** — directly above a `/* [Section] */` header, exactly like `// @collapsed`. It marks every parameter in that section occurrence advanced:
+
+  ```scad
+  // @advanced
+  /* [Coin edge] */
+  edge_style = "plain"; // [plain, reeded, milled]
+  edge_depth = 0.6; // [0.1:0.1:2]
+  ```
+
+  "That section *occurrence*" matters when a section name repeats in the file: `// @advanced` applies only to the header it directly precedes, not to every section sharing that name.
+
+`// @essential` is parameter-level only — a bare marker that overrides a section-level `// @advanced` back to non-advanced for that one parameter:
+
+```scad
+// @advanced
+/* [Coin edge] */
+edge_style = "plain"; // [plain, reeded, milled]
+
+// Always shown, even though the rest of this section is advanced.
+// @essential
+edge_depth = 0.6; // [0.1:0.1:2]
+```
+
+Precedence, resolved per parameter:
+
+1. A parameter-level `// @advanced` always wins — the parameter is advanced.
+2. Otherwise, a parameter-level `// @essential` always wins — the parameter is **not** advanced, even inside an advanced section.
+3. Otherwise, the parameter is advanced exactly when its section occurrence is `// @advanced`.
+
+`// @essential` on a parameter whose section is not advanced is legal and a no-op — it simply has nothing to override. A single parameter carrying **both** `// @advanced` and `// @essential` is a contradiction and fails the build. `// @advanced` and `// @essential` are also rejected inside the `[Hidden]` section, same as any other annotation on a parameter that never reaches the schema.
+
+`// @showIf` composes with `// @advanced` as an AND: an advanced parameter that's also conditionally hidden needs both the "all settings" view active *and* its `@showIf` condition true to show its control. Like `@showIf` and `@collapsed`, this is UI-only: an advanced parameter's value is still retained and always sent to OpenSCAD, whether or not its control is currently shown.
+
+## Guided steps (`// @step`)
+
+Mark a section `// @step <id>` (or `// @step <id> | <label>`) to fold it into a named step of QuickStart, a guided, curated-subset-at-a-time navigation over the same form — never a destructive wizard: nothing unmounts, earlier steps stay reachable via their chip, and every value lives in the same app state regardless of which step is showing. QuickStart replaces the classic scrolling form only in guided experience's essentials settings view, for a design that declares at least one `// @step` (and `ui.quickStart` — see [`ui.quickStart`](config.md#ui-behaviour-and-pwa) — hasn't opted out); standard experience, the All settings view, and an active search query always show the classic form instead, one action (the settings-view toggle, or just clearing the search box) away. See `src/components/QuickStart.tsx`.
+
+QuickStart itself renders differently by layout, deriving from the same step list either way (so a step that disappears — every one of its params hidden by `@showIf` or the settings view — drops its chip identically in both):
+
+- **Desktop** (the docked parameter panel has room to spare): every visible step's group renders at once in a single scrollable form, with the chip strip as sticky anchors — click a chip and its group smooth-scrolls into view (instant if the visitor prefers reduced motion) rather than swapping content. There's no Back/Next; `aria-current` on the chip strip tracks scroll position instead.
+- **Mobile** (the bottom sheet is short on vertical room): one step's content shows at a time, with Back/Next alongside the chips — the original behavior, unchanged.
+
+`// @step` is **section-level only** — directly above a `/* [Section] */` header, exactly like `// @collapsed` and section-level `// @advanced`:
+
+```scad
+// @step text | Text
+/* [Text] */
+label = "Room 1";
+
+// @step size | Size
+/* [Size] */
+width = 60; // [20:1:200]
+height = 25; // [10:1:100]
+
+// @step mounting
+/* [Mounting] */
+mounting = "none"; // [none, screw, countersunk]
+```
+
+- **`<id>`**: a bare token, `[A-Za-z0-9_-]+` — stable and never shown; it's what other tooling (and QuickStart's own current-step state) refers to the step by.
+- **`<label>`** (optional): free text, trimmed, shown as the step's own name in the UI. Omit it (bare `// @step mounting`) and the label defaults to the section name of that id's *first* occurrence in the file — here, "Mounting".
+
+### Sharing a step across sections
+
+Several section occurrences — even ones with different names — can carry the same step id. Their parameters concatenate, in file order, into one step:
+
+```scad
+// @step tag | Tag details
+/* [Text] */
+label = "Room 1";
+
+/* [Mounting] */
+// @step tag
+mounting = "none"; // [none, screw, countersunk]
+```
+
+Both `[Text]` and `[Mounting]` belong to the `tag` step here; its label is "Tag details", from the first occurrence. A later occurrence's own `| <label>` text (if it supplies one) is simply ignored — only the first appearance's label wins. This isn't an error; it's documented behavior, so renaming a label only ever means editing the first `// @step` line.
+
+**Step order** is the order each id first appears in the file — not necessarily the order of every section. Declare a step's *first* occurrence at the point in the file where you want it to appear in the step sequence.
+
+### Sections without a step
+
+A section without `// @step` is perfectly legal in a stepped design. When it's *essential* (see below) it still isn't lost: QuickStart lists it under an "Also available" heading below the step content — the current step's, on mobile; every visible step's, on desktop's scrolled form. An all-`@advanced` un-stepped section instead stays behind the All settings view, exactly like an advanced param anywhere else. This is deliberate for a section that doesn't belong in the guided flow — a `[Hidden]`-adjacent power-user section, for instance.
+
+What's *not* deliberate, most of the time, is simply forgetting to tag a section that should be part of the flow. gen-schema flags that case: once a design declares at least one `// @step`, every remaining **essential** section (one with at least one parameter that isn't `// @advanced` — see above) that carries no step gets a build-time warning listing it by name. An all-`@advanced` section left un-stepped never triggers this in either mode, since it was already going to be hidden from the default "essentials" view regardless.
+
+Set `"ui": { "strictSteps": true }` in the config (see [`ui.strictSteps`](config.md#ui-behaviour-and-pwa)) to promote that warning to a build **error** — useful once a stepped design is meant to route every essential setting through the guided flow and a forgotten section should block the build, not just print a warning.
+
+### Restrictions
+
+- `// @step` directly above a *parameter* (instead of a section header) is a malformed-annotation build error — the inverse of `// @essential`'s parameter-only restriction.
+- `// @step` is rejected on (or inside) the `[Hidden]` section, same as `// @advanced` and `// @essential` — a step over a section whose params are skipped entirely below is nonsensical.
+- A malformed shape — bare `@step` with no id, an id with characters outside `[A-Za-z0-9_-]`, or an explicit `| ` with nothing (or only whitespace) after it — fails the build with the file and line, exactly like every other annotation here.
 
 ## Font selectors (`// @font`)
 
@@ -183,3 +293,64 @@ Two checks help avoid confusing output:
 
 - Rows are **not** de-duplicated. If two branches both echo the same label unconditionally, you see two rows. Make sure only one branch echoes a given label per render.
 - A malformed call is silently ignored. If a row does not appear, double-check the argument count and the exact `"@info"` tag.
+
+## Automatic preview (`echo("@display", …)`)
+
+A stepped design (see [`@step`](#guided-steps--step) above) can generate content from a visitor's other inputs — a code pattern derived from plain text, a computed layout, anything downstream of a few parameters — and show that generated content right where the visitor is working on the input that produces it, instead of only after export. Echo it with a fixed 3-argument convention, naming the `@step` id it belongs to:
+
+```scad
+// @step content | Content
+/* [Text] */
+label = "Room 101";
+
+pattern = my_encoder(label);
+echo("@display", "content", "Generated pattern", pattern);
+```
+
+This is a runtime mechanism, like the calculated-value `@info` echo above — no build-time component, nothing in `gen-schema.mjs` changes. The app scans the design's OpenSCAD output for `echo("@display", step, label, value)` calls after each render and, for every stepped `@step` group, shows the matching rows as a read-only preview surface directly beneath that step's own parameter controls: a muted label, then the value on its own inset surface. The exact same rows also appear in the guided flow's terminal Review stage, alongside the export summary.
+
+Arguments:
+
+| Position | Meaning |
+|---|---|
+| `"@display"` | Fixed literal tag. Required, must match exactly. |
+| Step id (string) | The `@step` id (see above) this row belongs to. A row naming an id the design doesn't currently declare a step for is simply never shown. |
+| Label (string) | Row label, e.g. `"Generated pattern"`. |
+| Value | Typically a string — the whole point is showing generated TEXT, including non-Latin scripts. A quoted string has its quotes stripped; anything else is shown exactly as OpenSCAD printed it. There is no unit argument (unlike `@info`). |
+
+A value made up mostly of Unicode Braille Patterns characters (U+2800–U+28FF) — any 6/8-dot Braille cell, including the blank cell — renders in a larger type size so the dot pattern stays legible; this is a generic typographic accommodation (it checks the character range, not the design or its language), not something special-cased to a particular design.
+
+Two checks help avoid confusing output:
+
+- Rows are keyed by `(step, label)` and **last write wins**: a later echo for the same pair overwrites an earlier one within the same render, unlike `@info`'s rows (which are never de-duplicated). Re-echoing your own generated preview from a later branch means "this is the current value", not "show it twice".
+- A malformed call is silently ignored. If a row does not appear, double-check the argument count, the exact `"@display"` tag, and that the step id matches a currently-declared `@step`.
+
+## Curated Review override (`echo("@review", …)`)
+
+The guided-workflow (`ui.workflow: "guided"`, see [Product workflow](config.md#product-workflow-uiworkflow)) Review stage's curated summary (`designs[].reviewLabels`, see [config.md](config.md#design-sources)) normally shows a parameter's raw stored value, formatted the same way as any other essential-parameter row. Some designs **transform** a value before it reaches the printed model — a lettering profile that uppercases free text, for instance: typed `"Raum 101"`, printed `"RAUM 101"`. Showing the raw typed value in Review would misrepresent what's actually on the model.
+
+Echo the rendered value with a fixed 2-argument convention, naming the parameter it overrides:
+
+```scad
+// @step content | Content
+/* [Text] */
+label = "Raum 101";
+
+rendered_label = uppercase_umlaut(label);
+echo("@review", "label", rendered_label);
+```
+
+This is a runtime mechanism, like the calculated-value `@info`/`@display` echoes above — no build-time component, nothing in `gen-schema.mjs` changes. The app scans the design's OpenSCAD output for `echo("@review", param, value)` calls after each render and, for any curated Review row whose parameter has a matching override, shows that value in place of the parameter's own raw stored value. A parameter with no override behaves exactly as before. Pair this with `designs[].reviewNote` to explain the transform in words (e.g. "Text prints in capitals even though you typed it in lowercase").
+
+Arguments:
+
+| Position | Meaning |
+|---|---|
+| `"@review"` | Fixed literal tag. Required, must match exactly. |
+| Param name (string) | The **declared parameter's exact name** this override applies to — the same name used as a `reviewLabels` key. A name that doesn't match a param, or a param with no `reviewLabels` entry, is simply never looked up. |
+| Value | Typically a string — the whole point is showing the rendered TEXT. A quoted string has its quotes stripped; anything else is shown exactly as OpenSCAD printed it. There is no unit argument. |
+
+Two checks help avoid confusing output:
+
+- Overrides are keyed by param name and **last write wins**: a later echo for the same param overwrites an earlier one within the same render, matching `@display`'s own "this is the current value" rule (unlike `@info`'s rows, which are never de-duplicated).
+- A malformed call is silently ignored. If a row still shows the raw value, double-check the argument count and the exact `"@review"` tag, and that the param name matches a `reviewLabels` key exactly.

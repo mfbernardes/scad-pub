@@ -40,16 +40,38 @@ function checkDesign(d: unknown): void {
     fail(`design '${id}' 'heavy' must be a boolean`);
   if (design.description != null && typeof design.description !== "string")
     fail(`design '${id}' 'description' must be a string`);
+  if (design.badge != null && typeof design.badge !== "string")
+    fail(`design '${id}' 'badge' must be a string`);
   if (design.icon != null && typeof design.icon !== "string")
     fail(`design '${id}' 'icon' must be a string URL`);
+  if (design.image != null && typeof design.image !== "string")
+    fail(`design '${id}' 'image' must be a string URL`);
   if (design.doc != null && typeof design.doc !== "string")
     fail(`design '${id}' 'doc' must be a string URL`);
+  if (design.presetImages != null) {
+    if (typeof design.presetImages !== "object" || Array.isArray(design.presetImages))
+      fail(`design '${id}' 'presetImages' must be an object`);
+    for (const [name, url] of Object.entries(design.presetImages as Record<string, unknown>)) {
+      if (typeof url !== "string" || !url)
+        fail(`design '${id}' 'presetImages.${name}' must be a non-empty string URL`);
+    }
+  }
   if (
     design.collapsedSections !== undefined &&
     (!Array.isArray(design.collapsedSections) ||
       !design.collapsedSections.every((s) => typeof s === "string"))
   )
     fail(`design '${id}' 'collapsedSections' must be an array of strings`);
+  if (design.reviewLabels != null) {
+    if (typeof design.reviewLabels !== "object" || Array.isArray(design.reviewLabels))
+      fail(`design '${id}' 'reviewLabels' must be an object`);
+    for (const [name, label] of Object.entries(design.reviewLabels as Record<string, unknown>)) {
+      if (typeof label !== "string" || !label)
+        fail(`design '${id}' 'reviewLabels["${name}"]' must be a non-empty string`);
+    }
+  }
+  if (design.reviewNote != null && typeof design.reviewNote !== "string")
+    fail(`design '${id}' 'reviewNote' must be a string`);
   for (const p of design.params as unknown[]) checkParam(p, id);
 }
 
@@ -104,10 +126,12 @@ export function validateSchema(raw: unknown): Schema {
       if (typeof p[key] !== "string" || !p[key])
         fail(`'popup.${key}' must be a non-empty string`);
     }
-    if (!["always", "once", "dismissible"].includes(p.mode as string))
-      fail("'popup.mode' must be \"always\", \"once\" or \"dismissible\"");
+    if (!["always", "once", "dismissible", "picker"].includes(p.mode as string))
+      fail("'popup.mode' must be \"always\", \"once\", \"dismissible\" or \"picker\"");
     if (p.button !== undefined && (typeof p.button !== "string" || !p.button))
       fail("'popup.button', when set, must be a non-empty string");
+    if (p.footnote != null && typeof p.footnote !== "string")
+      fail("'popup.footnote', when set, must be a string");
   }
   if (s.notices !== undefined) {
     if (!Array.isArray(s.notices)) fail("'notices' must be an array");
@@ -120,12 +144,22 @@ export function validateSchema(raw: unknown): Schema {
         fail("a notice category is missing required string 'label'");
       if (e.color !== undefined && typeof e.color !== "string")
         fail("a notice 'color' must be a string");
+      if (e.subsumedByFont !== undefined && typeof e.subsumedByFont !== "boolean")
+        fail("a notice 'subsumedByFont' must be a boolean");
     }
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
   if (s.lang !== undefined && typeof s.lang !== "string") fail("'lang' must be a string");
   if (s.dir !== undefined && !["ltr", "rtl", "auto"].includes(s.dir as string))
     fail("'dir' must be \"ltr\", \"rtl\" or \"auto\"");
+  if (
+    s.strings !== undefined &&
+    (typeof s.strings !== "object" ||
+      s.strings === null ||
+      Array.isArray(s.strings) ||
+      !Object.values(s.strings as Record<string, unknown>).every((v) => typeof v === "string"))
+  )
+    fail("'strings' must be an object of key: string pairs");
   if (s.defaultDesign != null) {
     if (typeof s.defaultDesign !== "string") fail("'defaultDesign' must be a string");
     if (!(s.designs as { id: string }[]).some((d) => d.id === s.defaultDesign))
@@ -192,6 +226,12 @@ export function validateSchema(raw: unknown): Schema {
     for (const key of ["presetsLabel", "parametersLabel"] as const)
       if (ui[key] !== undefined && typeof ui[key] !== "string")
         fail(`'ui.${key}' must be a string`);
+    if (ui.gallery !== undefined && typeof ui.gallery !== "boolean")
+      fail("'ui.gallery' must be a boolean");
+    if (ui.checklist !== undefined && typeof ui.checklist !== "boolean")
+      fail("'ui.checklist' must be a boolean");
+    if (ui.workflow !== undefined && !["tabs", "guided"].includes(ui.workflow as string))
+      fail("'ui.workflow' must be \"tabs\" or \"guided\"");
   }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;

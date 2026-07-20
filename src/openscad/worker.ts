@@ -10,7 +10,7 @@
 
 /// <reference lib="webworker" />
 import schema from "../generated/designs.json";
-import type { ModelFormat, RenderRequest, RenderResult } from "./types";
+import type { ModelFormat, RenderRequest, RenderResult, WorkerProgress } from "./types";
 import { assetUrl as asset, versionedAssetUrl } from "../lib/assetUrl";
 import { orphanedDefines } from "../lib/scad";
 import {
@@ -23,6 +23,7 @@ import {
 } from "./renderArgs";
 import { binCacheName, staleBinaryCaches } from "./binCache";
 import { retryableOnce } from "./retryableOnce";
+import { makeProgressThrottle } from "./progressThrottle";
 
 // Persistent Cache Storage entry for the big, version-pinned binaries (the
 // ~10 MB WASM and the fonts), so reloads are instant and the app works offline.
@@ -66,6 +67,84 @@ async function cachedBuffer(url: string): Promise<ArrayBuffer> {
     /* degrade to uncached: the bytes below are still returned and used */
   }
   return res.arrayBuffer();
+}
+
+// Post an "engine" progress update, throttled to ~5/sec and only on ≥1%
+// change (see progressThrottle.ts) — the caller's `report` closure is built
+// fresh per download so each cachedBufferWithProgress call gets its own
+// throttle state.
+function postProgress(loaded: number, total: number | null) {
+  (self as DedicatedWorkerGlobalScope).postMessage({
+    type: "progress",
+    stage: "engine",
+    loaded,
+    total,
+  } satisfies WorkerProgress);
+}
+
+// Drain a Response's body via its stream reader, invoking `onProgress` after
+// every chunk (throttling, if any, is the caller's concern — see
+// makeProgressThrottle). Falls back to a plain buffered read (no progress) for
+// an environment/response with no readable stream, e.g. an opaque response or
+// a test double — additive, never a hard requirement.
+async function readWithProgress(
+  res: Response,
+  onProgress: (loaded: number, total: number | null) => void
+): Promise<Uint8Array> {
+  const reader = res.body?.getReader();
+  if (!reader) return new Uint8Array(await res.arrayBuffer());
+
+  // A compressing intermediary (gzip/br) reports the WIRE size in
+  // Content-Length, not the decoded byte count the reader actually yields —
+  // trust the header only when the response declares no content-encoding.
+  const totalHeader = res.headers.get("content-length");
+  const total =
+    totalHeader && !res.headers.get("content-encoding") ? Number(totalHeader) : null;
+
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress(loaded, Number.isFinite(total) ? total : null);
+  }
+  const bytes = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+// Cache-first fetch of an immutable binary into an ArrayBuffer, additionally
+// streaming download progress on a cache MISS — used ONLY for the wasm
+// binary (~10 MB and dominates a cold first render; the other cachedBuffer()
+// callers below are small enough that instrumenting them isn't worth it). A
+// cache HIT posts nothing, same as cachedBuffer — there's no download
+// happening for the UI to report on.
+async function cachedBufferWithProgress(url: string): Promise<ArrayBuffer> {
+  if (typeof caches === "undefined") return (await checkedFetch(url)).arrayBuffer();
+  const cache = await caches.open(BIN_CACHE);
+  const hit = await cache.match(url);
+  if (hit) return hit.arrayBuffer();
+  const res = await checkedFetch(url);
+  const report = makeProgressThrottle(postProgress);
+  const bytes = await readWithProgress(res, report);
+  // M1: same degrade-on-failure contract as cachedBuffer above — a Cache
+  // Storage write failure must not fail bootstrap, just cost the next
+  // worker/session a re-download. The Response is rebuilt from the
+  // accumulated bytes (the original's body has already been drained by the
+  // streaming read, so it can't be cloned/reused directly).
+  try {
+    await cache.put(url, new Response(bytes.buffer as ArrayBuffer, { headers: res.headers }));
+  } catch {
+    /* degrade to uncached: the bytes below are still returned and used */
+  }
+  return bytes.buffer as ArrayBuffer;
 }
 
 // OpenSCAD WASM factory: default export of the snapshot's openscad.js.
@@ -165,8 +244,11 @@ const ensureAssets = retryableOnce(async () => {
         // H4: versioned by schema.binAssets.wasm so a rebuild that changes the
         // pinned wasm bytes without a wasmVersion bump (or a same-name font
         // swap, below) can never be served from a stale Cache Storage entry —
-        // see versionedAssetUrl's comment.
-        wasmBinary = await cachedBuffer(
+        // see versionedAssetUrl's comment. cachedBufferWithProgress (not the
+        // plain cachedBuffer other assets use below) streams "engine" progress
+        // messages to the main thread while this ~10 MB binary downloads on a
+        // cache miss; a cache hit posts nothing, same as before.
+        wasmBinary = await cachedBufferWithProgress(
           versionedAssetUrl("wasm/openscad.wasm", (schema as { binAssets?: { wasm?: string } }).binAssets?.wasm)
         );
         wasmModulePromise = WebAssembly.compile(wasmBinary).catch(() => null);

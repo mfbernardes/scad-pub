@@ -21,13 +21,19 @@ function truthy(v: unknown): boolean {
   return v != null;
 }
 
+// Static shapes coerce() tests/strips on every clause evaluation — hoisted
+// out of the function body (evalClause runs per clause per isVisible call,
+// i.e. per param per render) rather than re-literalized each time.
+const NUMERIC_TOKEN_RE = /^-?\d+(\.\d+)?$/;
+const QUOTE_STRIP_RE = /^["']|["']$/g;
+
 // "direction" | 'direction' | direction -> direction ; true/false/number kept.
 function coerce(token: string): string | number | boolean {
   const t = token.trim();
   if (t === "true") return true;
   if (t === "false") return false;
-  if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
-  return t.replace(/^["']|["']$/g, "");
+  if (NUMERIC_TOKEN_RE.test(t)) return Number(t);
+  return t.replace(QUOTE_STRIP_RE, "");
 }
 
 // Supported clause shapes — same grammar scripts/lib/params.mjs validates at

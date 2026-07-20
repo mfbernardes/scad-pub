@@ -5,8 +5,8 @@
 
   "source": "examples",
   "designs": [
-    { "id": "tag", "label": "Tag", "description": "Personalised name tag with text.", "icon": "examples/tag-icon.svg" },
-    { "id": "coin", "label": "Coin", "description": "Round coin with an embossed emblem.", "icon": "examples/coin-icon.svg" },
+    { "id": "tag", "label": "Tag", "description": "Personalised name tag with text.", "badge": "Popular", "icon": "examples/tag-icon.svg", "image": "examples/tag-image.png" },
+    { "id": "coin", "label": "Coin", "description": "Round coin with an embossed emblem.", "icon": "examples/coin-icon.svg", "image": "examples/coin-image.png" },
     { "id": "panel", "label": "Panel", "description": "An SVG extruded as a coloured relief panel." }
   ],
   "assets": ["emblem.svg", "panel.svg"],
@@ -17,13 +17,19 @@
     "LiberationSans-Regular.ttf"
   ],
 
-  "ui": { "install": "off" },
+  "ui": {
+    "install": "off",
+    "gallery": true,
+    "experience": { "default": "guided", "mobileInitialSheet": "half" },
+    "afterExport": { "helpTab": "Printing" }
+  },
   "fileImport": true,
 
   "popup": {
-    "header": "Welcome to ScadPub",
-    "body": "Configure an OpenSCAD design in your browser and export a ready-to-print model — everything runs locally.\n\nScadPub is open source: see the [project on GitHub](https://github.com/mfbernardes/scad-pub).",
-    "mode": "dismissible"
+    "header": "Choose a design to create",
+    "body": "Configure it in your browser and export a ready-to-print model — everything runs locally.",
+    "mode": "picker",
+    "footnote": "Everything runs in your browser. No file uploads."
   },
   "help": {
     "intro": "Customize an OpenSCAD design in your browser and download a ready-to-print model — everything runs on your device.",
@@ -92,7 +98,7 @@
     ]
   },
   "notices": [
-    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
-    { "marker": "note", "label": "notes", "color": "#86a9ff" }
+    { "marker": "alert", "label": "alerts", "labelOne": "alert", "color": "#e0a458" },
+    { "marker": "note", "label": "notes", "labelOne": "note", "color": "#86a9ff" }
   ]
 }

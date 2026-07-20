@@ -7,6 +7,7 @@
 //   • import() extrudes an SVG (a default emblem.svg is bundled; upload your own
 //     SVG and set `svg_file` to its filename to swap it).
 
+// @step size | Size
 /* [Tag] */
 // Width of the tag (mm).
 width = 90; // [10:1:160]
@@ -19,6 +20,7 @@ thickness = 3; // [1:0.5:10]
 // @info Corner radius | mm
 corner_radius = 4; // [0:0.5:20]
 
+// @step text | Text
 /* [Text] */
 // Text to emboss on the tag. Leave empty for none.
 // @info Engraved text
@@ -39,6 +41,7 @@ text_color = "#e23b3b";
 // Carve the text into the plate instead of raising it.
 engrave_text = false;
 
+// @step emblem | Emblem
 /* [Emblem (SVG)] */
 // Extrude an SVG emblem onto the tag.
 show_emblem = true;
@@ -54,6 +57,7 @@ emblem_size = 18; // [4:1:80]
 // @showIf show_emblem
 emblem_height = 1.5; // [0.4:0.1:5]
 
+// @step hole | Hanging hole
 /* [Hanging hole] */
 // Add a hole to hang or thread the tag.
 hole = true;
@@ -63,6 +67,7 @@ hole = true;
 hole_diameter = 5; // [2:0.5:15]
 
 // @collapsed
+// @advanced
 /* [Quality] */
 // Maximum facet angle; lower is smoother but slower.
 facet_angle = 4; // [1:1:12]
@@ -89,6 +94,22 @@ module emblem_2d() {
 both = show_emblem && label != "";
 text_x = both ? emblem_size / 2 + 3 : 0;
 emblem_x = both ? -(width / 2) + emblem_size / 2 + 6 : 0;
+
+// --- Curated Review override (echo("@review", ...)) ------------------------
+// The label always PRINTS in capitals, regardless of how it's typed — a small,
+// self-contained transform (portable ASCII-only case-fold; no locale rules)
+// that demonstrates the guided-workflow Review stage's `echo("@review", …)`
+// convention (see docs/annotations.md#curated-review-override-echoreview-):
+// its curated "Text" row shows this RENDERED value, not the raw typed one, so
+// Review never misrepresents what actually ends up on the plate.
+function _upper_char(c) =
+  let (i = search(c, "abcdefghijklmnopqrstuvwxyz"))
+  (len(i) > 0) ? "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i[0]] : c;
+function _uppercase(s, i = 0, acc = "") =
+  i >= len(s) ? acc : _uppercase(s, i + 1, str(acc, _upper_char(s[i])));
+
+rendered_label = _uppercase(label);
+echo("@review", "label", rendered_label);
 
 // --- Configurator notices --------------------------------------------------
 // Non-fatal hints surfaced in the app's "OpenSCAD output" panel as count
@@ -139,7 +160,7 @@ difference() {
       color(text_color)
         translate([text_x, 0, thickness])
           linear_extrude(text_depth)
-            text(label, size = text_size, font = font,
+            text(rendered_label, size = text_size, font = font,
                  halign = "center", valign = "center");
 
     if (show_emblem)
@@ -151,7 +172,7 @@ difference() {
   if (engrave_text && label != "")
     translate([text_x, 0, thickness - text_depth])
       linear_extrude(text_depth + 0.01)
-        text(label, size = text_size, font = font,
+        text(rendered_label, size = text_size, font = font,
              halign = "center", valign = "center");
 
   // The hanging hole sits in the top-left corner, clear of the centred

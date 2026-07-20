@@ -11,7 +11,7 @@ export type ModelFormat = "3mf" | "stl";
 
 export interface RenderRequest {
   id: number;
-  design: string; // a design id, e.g. "nameplate"
+  design: string; // a design id, e.g. "tag"
   /** Parameter overrides as { name: scadValue }. Strings already quoted. */
   defines: Record<string, string>;
   /**
@@ -53,6 +53,36 @@ export interface RenderResult {
   fatal?: boolean;
 }
 
+/**
+ * Progress update posted by the worker during its one-time asset bootstrap
+ * (worker.ts's `ensureAssets`), before the one-shot "ready" message. Only the
+ * ~10 MB OpenSCAD WASM binary download is instrumented — it dominates a cold
+ * first load; the small `.scad`/fonts.conf/font-binary fetches alongside it
+ * aren't worth a progress channel. Nothing is posted at all on a Cache
+ * Storage HIT (there's no download to report on that path) — a consumer that
+ * never sees a `progress` message before `ready` should treat the engine as
+ * having loaded instantly from cache.
+ */
+export interface WorkerProgress {
+  type: "progress";
+  /**
+   * The only stage currently emitted: downloading the WASM binary. Typed as a
+   * literal (not a wider union) so a future stage can be added additively
+   * without every existing switch/consumer needing an `default` arm today.
+   */
+  stage: "engine";
+  /** Bytes downloaded so far. */
+  loaded: number;
+  /**
+   * Total bytes from the response's `Content-Length`, when present and the
+   * response isn't compressed in a way that makes that header unreliable
+   * (see worker.ts's `readWithProgress`); null when unknown, in which case a
+   * consumer should render an indeterminate progress indicator rather than a
+   * percentage.
+   */
+  total: number | null;
+}
+
 // ---- Parameter schema (produced by scripts/gen-schema.mjs) ----
 
 export interface EnumChoice {
@@ -82,6 +112,20 @@ export interface ParamBase {
    * value is the name of the `@svg` field that fills it. It stays editable.
    */
   filledBy?: string;
+  /**
+   * Resolved `@advanced` state (gen-schema's `scripts/lib/params.mjs`): true
+   * when this parameter should be demoted behind the "all settings" view
+   * rather than shown in the default "essentials" view. Set by a param-level
+   * `// @advanced` on this parameter, or by a section-level `// @advanced`
+   * directly above this parameter's section-header occurrence — unless this
+   * parameter also carries `// @essential`, which overrides the
+   * section back to non-advanced for it alone. Omitted (not just `false`)
+   * when not advanced, matching how the other optional fields here are
+   * emitted sparsely. Like `@showIf`, this is UI-only filtering: an advanced
+   * parameter's value is still retained and always sent to OpenSCAD, whether
+   * or not its control is currently shown.
+   */
+  advanced?: boolean;
 }
 
 /**
@@ -133,7 +177,7 @@ export type Param = ParamBase &
 export interface Design {
   id: string;
   label: string;
-  /** Source-relative path of the design's root .scad (e.g. "nameplate.scad"). */
+  /** Source-relative path of the design's root .scad (e.g. "tag.scad"). */
   file: string;
   /** Source-relative paths of bundled parameterSets JSON files for this design. */
   presets: string[];
@@ -144,17 +188,72 @@ export interface Design {
   group?: string | null;
   /** Optional short description, shown under the label in the design picker. */
   description?: string | null;
+  /** Optional short badge label (e.g. "Popular"), shown as a small accent
+   *  pill on the design's picker card. Null/absent shows no badge. */
+  badge?: string | null;
   /** Optional served URL of the design's icon (shown in the picker and used as
    *  the design's manifest-shortcut icon). Null/absent for none. */
   icon?: string | null;
+  /** Optional served URL of the design's picker-card artwork — a real model
+   *  photo/render, distinct from the small `icon` glyph. Shown at a fixed 4:3
+   *  aspect in DesignPickerDialog's card grid; falls back to `icon` (centred),
+   *  then a letter glyph, when absent. Never used for the manifest shortcut
+   *  icon (that stays `icon`). Null/absent for none. */
+  image?: string | null;
   /** Optional served URL of the design's own user-documentation Markdown
    *  (scad/<id>-doc.md), fetched on demand and rendered in the doc modal.
    *  Null/absent hides the "Design guide" affordance. */
   doc?: string | null;
+  /**
+   * Optional map of bundled-preset name -> served URL of a small thumbnail
+   * image for that preset (PresetPicker's "Ready-made" cards), from the
+   * config's `designs[].presetImages`. Each key must be the EXACT name of a
+   * preset in this design's bundled parameterSets file — gen-schema fails the
+   * build on a name that doesn't match one, the same typo-protection stance
+   * as the rest of the config. Each value is copied into the served tree at
+   * build time like `icon`/`image`. Present only when the design configures
+   * at least one entry; a bundled preset with no entry here just renders as a
+   * text-only card (no thumbnail — see DesignArt's sibling in PresetPicker).
+   */
+  presetImages?: Record<string, string>;
   sections: string[];
   /** Section names that start collapsed (from a `// @collapsed` annotation). */
   collapsedSections?: string[];
+  /**
+   * Guided steps declared with `// @step <id> [| <label>]` (see
+   * docs/annotations.md#guided-steps--step), in step ORDER — the order each
+   * id first appears in the source file. `sections` lists the section names
+   * carrying that id, in file order (several section occurrences, even of
+   * different names, may share one id; their params concatenate in that
+   * order). Present only when the design declares at least one `@step`; an
+   * unstepped design omits this field entirely rather than emitting `[]`.
+   * Purely a UI grouping hint for the stepper the next milestone builds on
+   * top of this — it doesn't affect which sections/params exist, their
+   * `@showIf`/`@advanced` resolution, or geometry.
+   */
+  steps?: Array<{ id: string; label: string; sections: string[] }>;
   params: Param[];
+  /**
+   * Optional curated label overrides for the guided-workflow (`ui.workflow:
+   * "guided"`) Review stage's summary (config's `designs[].reviewLabels`; see
+   * docs/config.md). Maps a declared parameter's name to the label its value
+   * is shown under in Review's curated summary — gen-schema fails the build
+   * if a key doesn't match one of this design's own params (the same typo-
+   * protection stance as `presetImages`). Several params sharing the same
+   * label merge into ONE summary row, their formatted values joined by
+   * `" / "`. Absent -> the curated summary is empty (Review still shows the
+   * plain dimension/`@info` rows). Never affects geometry.
+   */
+  reviewLabels?: Record<string, string>;
+  /**
+   * Optional short explanatory note shown under the guided-workflow Review
+   * stage's summary (config's `designs[].reviewNote`) — e.g. "Text prints in
+   * capitals even though you typed it in lowercase." A generic hook for a
+   * design whose output transforms a parameter's raw value in a way worth
+   * calling out; a deployment supplies the wording, ScadPub never infers it.
+   * Null/absent renders nothing. Never affects geometry.
+   */
+  reviewNote?: string | null;
 }
 
 /** One titled section of the in-app help, with a Markdown-subset body. */
@@ -209,26 +308,39 @@ export interface SoftwareLicense {
 }
 
 /**
- * Config for the generic "Import file" button. A single control that accepts
- * any file (or font); whether an upload is treated as a font is decided by its
- * extension, not by config — so one button covers both cases.
+ * Config for the Files tab (`fileImport: true` or an options object; `null`/
+ * absent hides the tab entirely). The tab itself renders as exactly two
+ * schema-driven task cards (src/components/FileBar.tsx): a font card,
+ * appearing automatically when the active design has any `@font` param, and
+ * a graphic card, appearing when the design has an `@svg` param or this
+ * config's `accept` still admits SVGs (src/lib/filesCards.ts's
+ * `deriveFilesCards`/`graphicAccept`). The font card's copy is fixed,
+ * project-agnostic i18n text. This config block's fields (`accept`/`label`/
+ * `note`) scope to the graphic card: `note` (rendered inside the card)
+ * replaces its default one-liner, `label` replaces its default button text,
+ * and `accept` — narrowed to SVG-relevant tokens — becomes its picker
+ * filter.
  */
 export interface FileImport {
   /**
-   * `accept` attribute for the file picker (e.g. ".svg" or ".ttf,.otf"). Omit to
-   * accept any file type.
+   * `accept` attribute for the graphic card's file picker, narrowed to its
+   * SVG-relevant comma-separated tokens (e.g. ".svg,image/svg+xml"); falls
+   * back to the plain SVG default when unset or when nothing configured
+   * survives that filter.
    */
   accept?: string;
-  /** Button label (default "Import file"). */
+  /** Graphic card's import button label (default "Import SVG…"). */
   label?: string;
   /**
-   * Optional help text shown above the file list. Rendered as a Markdown
-   * subset (paragraphs, bullet lists, **bold**, `code`, links).
+   * Optional help text for the graphic card, replacing its default one-liner
+   * ("Import an SVG graphic for designs that support it."). Rendered as a
+   * Markdown subset (paragraphs, bullet lists, **bold**, `code`, links).
    */
   note?: string;
   /**
-   * Optional max upload size in bytes. A larger file is rejected with a friendly
-   * message instead of being stored. Omit for no cap.
+   * Optional max upload size in bytes, enforced on every card's upload (font
+   * and graphic alike). A larger file is rejected with a friendly message
+   * instead of being stored. Omit for no cap.
    */
   maxBytes?: number;
 }
@@ -270,12 +382,48 @@ export interface NoticeCategory {
   marker: string;
   /** Badge / notice noun (e.g. "alerts", "notes"). Defaults to the marker. */
   label: string;
+  /**
+   * Optional singular form of `label` (e.g. "alert" for `label: "alerts"`),
+   * used wherever a count renders alongside it (CountBadges, the Notices tab
+   * chips, the consolidated attention chip's notice rows) whenever the live
+   * count is exactly 1 — `label` alone can't pluralize itself ("1 alerts"
+   * reads wrong). Omit to keep today's behavior (`label` used regardless of
+   * count).
+   */
+  labelOne?: string;
   /** Optional badge fill colour (a plain CSS colour); falls back to the accent. */
   color?: string;
+  /**
+   * Marks this category as a production-readiness concern (src/lib/
+   * readiness.ts's `deriveAttention`): any pending notice in this category
+   * surfaces the Customize tab's attention chip and the export button's
+   * amber indicator, not just the passive Output-bell badge. Omitted (not
+   * just `false`) when not flagged, matching `ParamBase.advanced`'s sparse-
+   * emission convention. Default off — a demo design's routine alerts
+   * shouldn't read as "not production-ready" unless a deployment opts in.
+   */
+  attention?: boolean;
+  /**
+   * Marks this `attention`-flagged category as a SYMPTOM of a missing font
+   * rather than its own distinct, independently-actionable problem — e.g. a
+   * "text is tall and may overflow" advisory that only fires because a
+   * substitute font's metrics differ from the intended one (src/lib/
+   * readiness.ts's `deriveAttention`). While at least one font param's
+   * selected family isn't loaded THIS render, a pending notice in a
+   * `subsumedByFont` category is excluded from the attention list/count (so
+   * "the font isn't loaded" doesn't also double-count as a second, separate
+   * issue) — it's still visible in Messages/Technical details, just not
+   * counted as its own issue. The moment no font is missing, it counts
+   * normally again: a genuine problem with a LOADED font still surfaces.
+   * Omitted (not just `false`) when not flagged, matching `attention`'s own
+   * sparse-emission convention. Meaningless (ignored) on a category not also
+   * flagged `attention: true`. Default off.
+   */
+  subsumedByFont?: boolean;
 }
 
 /** How often the configurable `popup` notice is shown. */
-export type PopupMode = "always" | "once" | "dismissible";
+export type PopupMode = "always" | "once" | "dismissible" | "picker";
 
 /**
  * Config for the optional notice dialog shown over the app on load. All copy is
@@ -283,13 +431,20 @@ export type PopupMode = "always" | "once" | "dismissible";
  * subset as `help` (bold, code, links, bullet lists).
  */
 export interface PopupNotice {
-  /** Dialog header / title. */
+  /** Dialog header / title. Doubles as the welcome design picker's heading
+   *  in `mode: "picker"`. */
   header: string;
-  /** Dialog body — a Markdown-subset string (supports links). */
+  /** Dialog body — a Markdown-subset string (supports links). Doubles as the
+   *  welcome design picker's one-line subtitle in `mode: "picker"`. */
   body: string;
   /**
-   * Display policy: "always" (every visit), "once" (first visit only), or
-   * "dismissible" (every visit until the user ticks "Don't show this again").
+   * Display policy: "always" (every visit), "once" (first visit only),
+   * "dismissible" (every visit until the user ticks "Don't show this
+   * again"), or "picker" (a goal-oriented design-picker dialog — `header`/
+   * `body` become its heading/subtitle — instead of the classic text modal;
+   * see src/lib/popup.ts's `resolvePopupSurface`). "picker" falls back to
+   * "dismissible" behaviour when there's fewer than two designs or the
+   * card-grid picker isn't available (`ui.gallery`), so it never dead-ends.
    */
   mode: PopupMode;
   /**
@@ -297,8 +452,15 @@ export interface PopupNotice {
    * set an action-oriented call to action ("Start designing", "Let's go") —
    * clicking it closes the popup and, when there's more than one design, opens
    * the design picker so the user's obvious next step is to choose what to make.
+   * Ignored in `mode: "picker"` (its own dialog has its own CTA wording).
    */
   button?: string;
+  /**
+   * Optional short, muted privacy/trust note shown in the welcome design
+   * picker's footer (`mode: "picker"` only) — e.g. "Everything runs in your
+   * browser. No file uploads." Plain text, not Markdown. Omit for no note.
+   */
+  footnote?: string | null;
 }
 
 /** Build-time UI behaviour overrides. None affect geometry (absent from renderHash). */
@@ -335,10 +497,122 @@ export interface UiConfig {
    * suppress it there too.
    */
   fullscreen?: boolean;
+  /**
+   * Whether the viewer's reference grid is visible on a visitor's FIRST-EVER
+   * load (default "off" — the product-stage look has no visible CAD grid).
+   * The HUD's grid toggle button is always offered regardless of this value;
+   * once a visitor changes it, a persisted preference (namespaced local
+   * storage, see src/lib/viewerPrefs.ts) wins ahead of this config default on
+   * every later visit. Never affects geometry.
+   */
+  grid?: "off" | "on";
   /** Label for the "Presets" tab/section (default "Presets"). */
   presetsLabel?: string;
   /** Label for the "Customize" (parameters) tab/section (default "Customize"). */
   parametersLabel?: string;
+  /**
+   * Whether the top-bar design switcher is the card-grid DesignPickerDialog
+   * (true) instead of the classic dropdown Select (default false). Only takes
+   * effect with more than one design; a single-design config is unaffected
+   * either way. See src/components/DesignPickerDialog.tsx.
+   */
+  gallery?: boolean;
+  /**
+   * Whether the getting-started checklist (src/components/GettingStarted.tsx)
+   * may show at all (default true). Only ever shown in guided experience
+   * regardless of this flag — set false to suppress it there too, e.g. for a
+   * config whose designs need no walkthrough.
+   */
+  checklist?: boolean;
+  /**
+   * Optional seeds for the client-side guided/standard experience (see
+   * src/lib/useExperience.ts). Every field here only decides the FIRST-EVER
+   * client state: once the user changes either state, a persisted preference
+   * (namespaced local storage) wins on every later visit, ahead of these.
+   * None affect geometry (absent from renderHash).
+   */
+  experience?: {
+    /**
+     * Initial experience mode when no persisted preference exists yet:
+     * "guided" surfaces a curated, reduced control set; "standard" shows the
+     * classic full panel. Default "standard".
+     */
+    default?: "guided" | "standard";
+    /**
+     * Initial settings view when no persisted preference exists yet:
+     * "essentials" shows only non-`@advanced` parameters; "all" shows every
+     * parameter. Defaults to whichever the initial mode implies (guided ->
+     * "essentials", standard -> "all") when omitted.
+     */
+    settingsView?: "essentials" | "all";
+    /**
+     * Initial mobile bottom-sheet snap position on first load: "peek" (mostly
+     * closed, a thin handle showing) or "half" (half-open). Default "peek".
+     */
+    mobileInitialSheet?: "peek" | "half";
+  };
+  /**
+   * When true, a stepped design (one declaring at least one `// @step`)
+   * leaving an ESSENTIAL section without a step (see `Design.steps`) fails
+   * the build instead of only warning (`console.warn`) at gen-schema time.
+   * Default false. A section is essential when at least one of its
+   * parameters isn't `@advanced`; an all-`@advanced` section left un-stepped
+   * never triggers this, in either mode. Never affects geometry (absent from
+   * renderHash) — it's a gen-schema-time authoring lint, not a render input.
+   */
+  strictSteps?: boolean;
+  /**
+   * Whether a stepped design (one declaring at least one `// @step`) shows
+   * the QuickStart step navigation (src/components/QuickStart.tsx) in place
+   * of the classic scrolling form. Default true — declaring `@step` sections
+   * at all is the opt-in; set false to keep the classic form even for a
+   * stepped design (e.g. while a design's steps are still being authored).
+   * Only takes effect in guided experience's essentials settings view; the
+   * classic form always renders otherwise (standard experience, All
+   * settings, or an active search query). Never affects geometry (absent
+   * from renderHash).
+   */
+  quickStart?: boolean;
+  /**
+   * Optional inline success panel shown above the action cluster after a
+   * successful export (see src/components/ExportSuccess.tsx). Absent ->
+   * the feature is off entirely — no panel is ever shown, on any export.
+   * All fields are optional even when the object is present; omitted
+   * `title`/`body` fall back to i18n defaults (the outcome-led
+   * `export.downloaded` / `export.readyToShare`, and `export.nextSteps`).
+   * None of these fields affect geometry (absent from renderHash).
+   */
+  afterExport?: {
+    /** Overrides the outcome-led i18n title. */
+    title?: string;
+    /** Overrides the i18n default body (`export.nextSteps`). */
+    body?: string;
+    /**
+     * Help-modal tab label to deep-link the panel's "Printing guide" action
+     * to (see HelpModal's `initialTab`). Validated at build time against
+     * this config's `help` tabs — gen-schema fails the build if no tab
+     * carries this exact label. Omit to hide the action entirely.
+     */
+    helpTab?: string;
+  };
+  /**
+   * Product workflow shape (build-time, default `"tabs"`). `"tabs"` is
+   * today's Presets/Customize/Files tab strip and QuickStart behavior,
+   * completely unchanged. `"guided"` activates the guided-workflow Customize-
+   * panel internals wherever QuickStart is already showing (guided
+   * experience + essentials settings view + a stepped design, see
+   * `quickStartAvailable`): a stage shows only its own section(s) on both
+   * desktop and mobile (no desktop scroll-stack-all, no Back/Next on
+   * desktop), Advanced settings become a quiet per-stage secondary toggle in
+   * place of the standing Essential/All switch, the terminal step becomes a
+   * dedicated verification-only Review screen (`designs[].reviewLabels` /
+   * `reviewNote`), the export dock renders exactly two direct buttons
+   * (Download, Share) with a "download with unresolved issues" flow that
+   * routes through Review's own just-in-time confirmation, and the mobile
+   * sheet rises to a taller detent while Review is active. Never affects
+   * geometry (absent from renderHash). See docs/config.md.
+   */
+  workflow?: "tabs" | "guided";
 }
 
 export interface Schema {
@@ -374,6 +648,16 @@ export interface Schema {
     fontsConf?: string;
     fonts?: Record<string, string>;
   };
+  /**
+   * Byte size of the pinned OpenSCAD WASM binary (public/wasm/openscad.wasm)
+   * at build time, derived (not config) — used only to show a "~N MB
+   * one-time download" line while the engine phase's progress channel has no
+   * `Content-Length` to report a live total from, or as the label for a
+   * determinate one. Absent when the file didn't exist at gen time (e.g. a
+   * dev run before `fetch-wasm.mjs` populated public/wasm/), in which case
+   * the UI simply omits the size line.
+   */
+  engineBytes?: number;
   /** Page/header title (used as the document title and the header text). */
   title: string;
   /** Optional stable id; namespaces this configurator's browser storage so two
@@ -383,6 +667,15 @@ export interface Schema {
   lang?: string;
   /** Document / manifest text direction. Default "ltr". */
   dir?: "ltr" | "rtl" | "auto";
+  /**
+   * Optional per-deployment UI text overrides (config's `strings` key), keyed
+   * by the same dot-namespaced catalogue keys as src/locales/en.json (e.g.
+   * "action.image", plural variants like "foo.count#other"). Validated at
+   * build time (scripts/lib/config-parsers.mjs's parseStrings) so every key
+   * must exist in the English bundle. Consulted first by src/lib/i18n.ts's
+   * `t`/`tn`, ahead of the active/English bundles. Empty object when unset.
+   */
+  strings?: Record<string, string>;
   /** Optional help content shown in the Help modal. When null, a generic,
    *  project-agnostic default is used. */
   help: HelpContent | null;

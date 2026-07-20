@@ -1,8 +1,9 @@
 // params.mjs — parse OpenSCAD's Customizer syntax (the `// [Section]` headers,
 // `name = default; // [hint]` parameter lines, and the doc comments above them,
-// plus ScadPub's `@showIf` / `@font` / `@info` / `@collapsed` annotations) into
-// the typed parameter schema the UI is generated from. Skips the [Hidden]
-// section, exactly as OpenSCAD's own Customizer does.
+// plus ScadPub's `@showIf` / `@font` / `@info` / `@collapsed` / `@advanced` /
+// `@essential` / `@step` annotations) into the typed parameter schema the UI is
+// generated from. Skips the [Hidden] section, exactly as OpenSCAD's own
+// Customizer does.
 import { readFileSync } from "node:fs";
 
 // A section header must be the WHOLE line (leading/trailing whitespace only) —
@@ -34,14 +35,56 @@ const FONT_ANNOT_RE = /^@font\s*$/i;
 const INFO_RE = /^@info\b\s*(.*)$/i;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
+// `@advanced` on its own line: valid in TWO positions, disambiguated by
+// whatever it directly precedes — a parameter (marks that one parameter
+// advanced, exactly like `@font`'s pending-flag/consume mechanics) or a
+// `/* [Section] */` header (marks every parameter in that section *occurrence*
+// advanced, exactly like `@collapsed`'s). Matched here, before the
+// null-section guard below, so — like `@collapsed` — it also works directly
+// above the very first section in the file. `ADVANCED_LINE_RE` captures the
+// trailing text so a same-line typo ("@advanced x") is caught immediately as
+// malformed, regardless of which position it turns out to precede.
+const ADVANCED_LINE_RE = /^\s*\/\/\s*(@advanced\b.*)$/i;
+const ADVANCED_BARE_RE = /^@advanced$/i;
+// `@essential` on its own line: parameter-level ONLY (bare marker in a param's
+// doc-comment block, exactly like `@font`). It overrides a section-level
+// `@advanced` for that one parameter. Directly above a section header is a
+// build error (malformed) — matched early for the same reason as `@advanced`
+// above, so that misuse is caught even above the very first section.
+const ESSENTIAL_LINE_RE = /^\s*\/\/\s*(@essential\b.*)$/i;
+const ESSENTIAL_BARE_RE = /^@essential$/i;
+// `@step <id> [| <label>]` on its own line, section-level ONLY: marks the
+// NEXT `/* [Section] */` header as belonging to a guided step. Matched here —
+// before the null-section guard below, for the same reason as `@advanced` /
+// `@essential` above — so it also works directly above the very first section
+// in the file, and so a same-line malformed shape is caught immediately
+// regardless of what it turns out to precede. `<id>` is a bare token
+// (`[A-Za-z0-9_-]+`); the optional `| <label>` is free text, trimmed and
+// required non-empty when the `|` is present at all. Omitting the label
+// entirely (bare `@step <id>`) defers the label to the section name of this
+// id's first occurrence — resolved once the header itself is reached, since
+// that's the earliest point the section name is known.
+// F3: a doubled separator (`@step tag || Weird`) used to slip through — the
+// SECOND `|` (plus the space after it) landed inside the captured label
+// instead of being rejected, yielding a label of "| Weird". The label is now
+// additionally validated (right below, alongside the pre-existing
+// empty-label check) to reject one starting with `|` — the same
+// malformed-annotation error either way. An empty *id* side (`@step |
+// Weird`, no id at all) was already rejected before this fix: `<id>` requires
+// at least one `[A-Za-z0-9_-]` character, so that shape never matches
+// STEP_BARE_RE to begin with and falls straight into the `!m` branch below.
+const STEP_LINE_RE = /^\s*\/\/\s*(@step\b.*)$/i;
+const STEP_BARE_RE = /^@step\s+([A-Za-z0-9_-]+)\s*(?:\|\s*(.*))?$/i;
 // File-level design metadata, read anywhere in the file (typically a header
 // comment, so it works even before the first section). `@description` is the
-// design's picker sub-label; `@icon` is a path to its thumbnail; `@doc` is a
-// path to the design's own user-documentation Markdown file. All three resolve
-// relative to the design's own .scad file, are ScadPub-only fallbacks — a
-// config `designs[]` entry still overrides them — and invisible to OpenSCAD.
+// design's picker sub-label; `@icon` is a path to its thumbnail; `@image` is a
+// path to a larger picker-card photo/render; `@doc` is a path to the design's
+// own user-documentation Markdown file. All four resolve relative to the
+// design's own .scad file, are ScadPub-only fallbacks — a config `designs[]`
+// entry still overrides them — and invisible to OpenSCAD.
 const DESCRIPTION_RE = /^\s*\/\/\s*@description\b\s*(.*)$/i;
 const ICON_RE = /^\s*\/\/\s*@icon\b\s*(.*)$/i;
+const IMAGE_RE = /^\s*\/\/\s*@image\b\s*(.*)$/i;
 const FILEDOC_RE = /^\s*\/\/\s*@doc\b\s*(.*)$/i;
 // `@svg [layers=<param>]` directive: marks a string parameter as an SVG file the
 // in-app wizard prepares (check / fix / import). The optional `layers=<param>`
@@ -60,7 +103,17 @@ const FILLEDBY_RE = /^@filledBy\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i;
 // that grammar — or starts with an unrecognised `@word` at all — fails the
 // build with the file and line, instead of silently degrading to plain doc
 // prose (a typo'd `@shwoIf` used to just become part of the help text).
-const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "info", "svg", "filledby"]);
+const KNOWN_ANNOTATIONS = new Set([
+  "showif",
+  "show-if",
+  "font",
+  "info",
+  "svg",
+  "filledby",
+  "advanced",
+  "essential",
+  "step",
+]);
 const ANNOTATION_WORD_RE = /^@([A-Za-z-]+)\b/;
 
 // `@showIf` clause shapes accepted at both generate time (here) and runtime
@@ -293,8 +346,10 @@ export function parseParams(absPath) {
   let pendingShowIf = null;
   let pendingShowIfLine = 0;
   let pendingFont = false;
+  let pendingFontLine = 0;
   // Set by an `// @info [Label | unit]` line; consumed by the next parameter.
   let pendingInfo = null;
+  let pendingInfoLine = 0;
   // Set by an `// @svg [layers=<param>]` line; consumed by the next parameter.
   let pendingSvg = null;
   let pendingSvgLine = 0;
@@ -303,24 +358,65 @@ export function parseParams(absPath) {
   let pendingFilledByLine = 0;
   // Set by a `// @collapsed` line; consumed by the next section header.
   let pendingSectionCollapsed = false;
+  let pendingSectionCollapsedLine = 0;
+  // Set by a `// @advanced` line; consumed by whichever comes next — a
+  // section header (section-level) or a parameter (param-level). See
+  // ADVANCED_LINE_RE above.
+  let pendingAdvanced = false;
+  let pendingAdvancedLine = 0;
+  // Set by a `// @essential` line; consumed only by the next parameter (a
+  // section header instead is a malformed-annotation build error).
+  let pendingEssential = false;
+  let pendingEssentialLine = 0;
+  // Set by a `// @step <id> [| <label>]` line; consumed only by the next
+  // section header (a parameter instead is a malformed-annotation build
+  // error, like `@essential`'s inverse restriction).
+  let pendingStep = null;
+  let pendingStepLine = 0;
+  // Whether the CURRENT section occurrence was marked `@advanced` — set when
+  // its `/* [Section] */` header is entered, unlike the per-param pending
+  // flags above, this persists across every parameter in the section (not
+  // cleared by `reset()`) until the next section header re-derives it. Repeat
+  // occurrences of the same section name are independent, matching
+  // `@collapsed`'s "applies to the occurrence it precedes" semantics.
+  let currentSectionAdvanced = false;
   const params = [];
   const sections = [];
   const collapsedSections = [];
-  // File-level design metadata (`// @description` / `// @icon`); first non-empty
-  // wins. Populated regardless of section, so a header comment above the first
-  // `/* [Section] */` is honoured.
-  const meta = { description: null, icon: null, doc: null };
+  // `@step` declarations, in step ORDER (order of first appearance of each
+  // id) — see parseParams's return value. `stepIndexById` maps a step id to
+  // its index in `steps`, so a later section occurrence sharing an id
+  // concatenates its section name onto the existing entry instead of
+  // creating a duplicate.
+  const steps = [];
+  const stepIndexById = new Map();
+  // File-level design metadata (`// @description` / `// @icon` / `// @image` /
+  // `// @doc`); first non-empty wins. Populated regardless of section, so a
+  // header comment above the first `/* [Section] */` is honoured.
+  const meta = { description: null, icon: null, image: null, doc: null };
   // The line each param's @showIf/@svg/@filledBy annotation was declared on,
   // keyed by param name — fed into validateAnnotations below for diagnostics.
   const lineInfo = { showIf: new Map(), svg: new Map(), filledBy: new Map() };
   const reset = () => {
     pendingDoc = [];
     pendingShowIf = null;
+    pendingShowIfLine = 0;
     pendingFont = false;
+    pendingFontLine = 0;
     pendingInfo = null;
+    pendingInfoLine = 0;
     pendingSvg = null;
+    pendingSvgLine = 0;
     pendingFilledBy = null;
+    pendingFilledByLine = 0;
     pendingSectionCollapsed = false;
+    pendingSectionCollapsedLine = 0;
+    pendingAdvanced = false;
+    pendingAdvancedLine = 0;
+    pendingEssential = false;
+    pendingEssentialLine = 0;
+    pendingStep = null;
+    pendingStepLine = 0;
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -329,6 +425,51 @@ export function parseParams(absPath) {
     // section, so handle it before the null-section guard below.
     if (COLLAPSE_RE.test(line)) {
       pendingSectionCollapsed = true;
+      pendingSectionCollapsedLine = lineNo;
+      continue;
+    }
+    // `@advanced` / `@essential` are matched here — before the null-section
+    // guard, like @collapsed above — rather than through the generic per-line
+    // `@word` dispatch further down, so (a) a same-line typo ("@advanced x")
+    // fails immediately as malformed regardless of which position it turns
+    // out to precede, and (b) both work directly above the very first section
+    // in the file, exactly like `@collapsed`. Note `section` here still holds
+    // whatever section was current *before* this line, which is ambiguous for
+    // the `[Hidden]` restriction (a marker directly above the `[Hidden]`
+    // header itself reads `section` as the *previous*, non-Hidden section) —
+    // that restriction is instead checked at each consumption point below,
+    // once it's known what the marker actually attached to.
+    const advLine = line.match(ADVANCED_LINE_RE);
+    if (advLine) {
+      const content = advLine[1].trim();
+      if (!ADVANCED_BARE_RE.test(content))
+        fail(absPath, lineNo, `malformed @advanced annotation: '${content}'`);
+      pendingAdvanced = true;
+      pendingAdvancedLine = lineNo;
+      continue;
+    }
+    const essLine = line.match(ESSENTIAL_LINE_RE);
+    if (essLine) {
+      const content = essLine[1].trim();
+      if (!ESSENTIAL_BARE_RE.test(content))
+        fail(absPath, lineNo, `malformed @essential annotation: '${content}'`);
+      pendingEssential = true;
+      pendingEssentialLine = lineNo;
+      continue;
+    }
+    const stepLine = line.match(STEP_LINE_RE);
+    if (stepLine) {
+      const content = stepLine[1].trim();
+      const m = content.match(STEP_BARE_RE);
+      if (!m) fail(absPath, lineNo, `malformed @step annotation: '${content}'`);
+      const label = m[2] !== undefined ? m[2].trim() : null;
+      // F3: empty (`@step tag |`) and pipe-led (`@step tag || Weird` — a
+      // doubled separator, whose second `|` used to end up AT THE START of
+      // the label instead of being rejected) are both malformed the same way.
+      if (m[2] !== undefined && (!label || label.startsWith("|")))
+        fail(absPath, lineNo, `malformed @step annotation: '${content}'`);
+      pendingStep = { id: m[1], label };
+      pendingStepLine = lineNo;
       continue;
     }
     // File-level metadata is section-independent, so capture it before the
@@ -343,6 +484,11 @@ export function parseParams(absPath) {
       if (meta.icon === null && imeta[1].trim()) meta.icon = imeta[1].trim();
       continue;
     }
+    const immeta = line.match(IMAGE_RE);
+    if (immeta) {
+      if (meta.image === null && immeta[1].trim()) meta.image = immeta[1].trim();
+      continue;
+    }
     const docmeta = line.match(FILEDOC_RE);
     if (docmeta) {
       if (meta.doc === null && docmeta[1].trim()) meta.doc = docmeta[1].trim();
@@ -355,15 +501,73 @@ export function parseParams(absPath) {
         sections.push(section);
       if (pendingSectionCollapsed && section !== "Hidden" && !collapsedSections.includes(section))
         collapsedSections.push(section);
+      // `@essential` is parameter-level only — directly above a section
+      // header is malformed. `@advanced` on the [Hidden] section itself is
+      // equally nonsensical (its params are skipped entirely below), so it's
+      // rejected the same way as `@advanced` on a param inside [Hidden].
+      if (pendingEssential)
+        fail(
+          absPath,
+          pendingEssentialLine,
+          `malformed @essential annotation: '@essential' is a parameter-level annotation, not valid directly above a section header`
+        );
+      if (pendingAdvanced && section === "Hidden")
+        fail(absPath, pendingAdvancedLine, `@advanced is not allowed on the [Hidden] section`);
+      // `@step` is section-level only, same restriction as `@advanced` on
+      // [Hidden] — a guided step over a section that's never rendered (its
+      // params are skipped entirely below) is nonsensical.
+      if (pendingStep && section === "Hidden")
+        fail(absPath, pendingStepLine, `@step is not allowed on the [Hidden] section`);
+      // This section OCCURRENCE is advanced only when this header was
+      // directly preceded by `@advanced` — a later occurrence of the same
+      // section name without the marker is not advanced, and vice versa.
+      currentSectionAdvanced = pendingAdvanced && section !== "Hidden";
+      // Attach this section OCCURRENCE to the pending step, if any. Several
+      // occurrences (even of different section names) may share one step id
+      // — their sections concatenate, in file order, onto the same entry.
+      // The label is resolved only from the id's FIRST appearance: an
+      // explicit label there wins; an omitted one there defaults to that
+      // first section's own name. A later occurrence's explicit label (if
+      // any) is intentionally ignored — "duplicate label conflict is fine".
+      if (pendingStep && section !== "Hidden") {
+        const { id, label } = pendingStep;
+        const idx = stepIndexById.get(id);
+        if (idx === undefined) {
+          steps.push({ id, label: label ?? section, sections: [section] });
+          stepIndexById.set(id, steps.length - 1);
+        } else {
+          steps[idx].sections.push(section);
+        }
+      }
       reset();
       continue;
     }
     if (section === null || section === "Hidden") {
+      // A marker that fell through to here (rather than being consumed by the
+      // SECTION_RE branch above) was directly attached to something inside
+      // the [Hidden] section — a parameter, or another doc/blank line before
+      // one — which is the build error the annotations document.
+      if (section === "Hidden" && pendingAdvanced)
+        fail(absPath, pendingAdvancedLine, `@advanced is not allowed inside the [Hidden] section`);
+      if (section === "Hidden" && pendingEssential)
+        fail(absPath, pendingEssentialLine, `@essential is not allowed inside the [Hidden] section`);
+      if (section === "Hidden" && pendingStep)
+        fail(absPath, pendingStepLine, `@step is not allowed inside the [Hidden] section`);
       reset();
       continue;
     }
     const pm = line.match(PARAM_RE);
     if (pm) {
+      // `@step` is section-level only — directly above a parameter (rather
+      // than the section header it was meant to precede) is a malformed
+      // annotation, the inverse restriction of `@essential`'s
+      // param-only-not-section-header check above.
+      if (pendingStep)
+        fail(
+          absPath,
+          pendingStepLine,
+          `malformed @step annotation: '@step' is a section-level annotation, not valid directly above a parameter`
+        );
       const [, name, def, hint] = pm;
       // OpenSCAD's Customizer documents a parameter with the comment block
       // directly above it. The first sentence is the label, the full block is help.
@@ -378,6 +582,20 @@ export function parseParams(absPath) {
       // renders) and still get the in-app import / fallback affordance.
       if ((p.type === "string" || p.type === "enum") && pendingFont)
         p.isFont = true;
+      // Resolve the "advanced" (settings-view demotion) flag: a param-level
+      // `@advanced` always wins; a param-level `@essential` overrides a
+      // section-level `@advanced` for this one param (and is a documented
+      // no-op when the section isn't advanced); having BOTH markers on the
+      // same param is a contradiction. The field is emitted only when true,
+      // matching how the other optional fields here are emitted sparsely.
+      if (pendingAdvanced && pendingEssential)
+        fail(
+          absPath,
+          pendingAdvancedLine,
+          `parameter '${name}' has both '@advanced' and '@essential' annotations — remove one`
+        );
+      if (pendingAdvanced || (currentSectionAdvanced && !pendingEssential))
+        p.advanced = true;
       // Surface this param's value in the viewer info panel (see `// @info`).
       if (pendingInfo) p.info = pendingInfo;
       // Mark a string SVG field for the in-app wizard (see `// @svg`), and a
@@ -420,13 +638,16 @@ export function parseParams(absPath) {
         validateShowIfGrammar(expr, absPath, lineNo);
         pendingShowIf = expr;
         pendingShowIfLine = lineNo;
-      } else if (FONT_ANNOT_RE.test(content)) pendingFont = true;
-      else if (info) {
+      } else if (FONT_ANNOT_RE.test(content)) {
+        pendingFont = true;
+        pendingFontLine = lineNo;
+      } else if (info) {
         // `@info`, `@info Label`, or `@info Label | unit` — split on a single
         // pipe; empty parts become null (label falls back to the param's own
         // description in the UI).
         const [label, unit] = info[1].split("|").map((s) => s.trim());
         pendingInfo = { label: label || null, unit: unit || null };
+        pendingInfoLine = lineNo;
       } else if (filledBy) {
         pendingFilledBy = filledBy[1];
         pendingFilledByLine = lineNo;
@@ -459,7 +680,7 @@ export function parseParams(absPath) {
         fail(
           absPath,
           lineNo,
-          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @info, @svg, @filledBy, @collapsed, @description, @icon, @doc)`
+          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @info, @svg, @filledBy, @collapsed, @description, @icon, @image, @doc, @advanced, @essential, @step)`
         );
       } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {
@@ -468,6 +689,49 @@ export function parseParams(absPath) {
       reset();
     }
   }
+  // M9/F1: EOF is not a valid attachment point for any annotation that's
+  // meant to attach to a parameter or a section header that comes AFTER it —
+  // the file simply ran out before that ever arrived. Without this check the
+  // annotation was silently dropped: a file ending in `// @step orphan`, say,
+  // used to parse cleanly with `steps: []`, hiding what's very likely a typo
+  // or a moved/deleted section. A plain trailing doc-comment run (pendingDoc)
+  // is NOT checked here — prose left dangling at the end of a file is
+  // harmless (there's no parameter for it to document, but that's not an
+  // error) — only the annotation-shaped pendings below are. Checked in
+  // declaration order above; only the FIRST dangling annotation found is
+  // reported, since a file with several still only needs one build error to
+  // start fixing.
+  const danglingAtEof = [
+    [pendingSectionCollapsed, pendingSectionCollapsedLine, "@collapsed", "section header"],
+    [pendingAdvanced, pendingAdvancedLine, "@advanced", "parameter or section header"],
+    [pendingEssential, pendingEssentialLine, "@essential", "parameter"],
+    [pendingStep, pendingStepLine, "@step", "section header"],
+    [pendingShowIf, pendingShowIfLine, "@showIf", "parameter"],
+    [pendingFont, pendingFontLine, "@font", "parameter"],
+    [pendingInfo, pendingInfoLine, "@info", "parameter"],
+    [pendingSvg, pendingSvgLine, "@svg", "parameter"],
+    [pendingFilledBy, pendingFilledByLine, "@filledBy", "parameter"],
+  ];
+  for (const [pending, line, name, expected] of danglingAtEof) {
+    if (pending) fail(absPath, line, `dangling ${name} annotation: no ${expected} follows it before end of file`);
+  }
   validateAnnotations(params, lineInfo, absPath);
-  return { params, sections, collapsedSections, meta };
+  return { params, sections, collapsedSections, meta, steps };
+}
+
+// The ESSENTIAL sections (at least one param that isn't `@advanced`) a
+// stepped design leaves without a `@step` — they're still legal (they render
+// below the step navigation, in the always-visible tail), but a design that
+// bothers to declare steps at all has very likely just forgotten one of its
+// sections. Pure and order-preserving (follows `sections`' own order) so
+// gen-schema can turn it into a warning (or, under `ui.strictSteps`, a build
+// error) with a stable, testable message. Returns `[]` whenever the design
+// declares no steps at all — an unstepped design has nothing to warn about.
+export function unsteppedEssentialSections(sections, params, steps) {
+  if (!steps || steps.length === 0) return [];
+  const steppedSections = new Set(steps.flatMap((s) => s.sections));
+  const essentialSections = new Set(
+    params.filter((p) => !p.advanced).map((p) => p.section)
+  );
+  return sections.filter((s) => essentialSections.has(s) && !steppedSections.has(s));
 }

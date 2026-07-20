@@ -32,7 +32,7 @@ import { dirname, join, resolve } from "node:path";
 import { WASM_VERSION } from "./wasm-version.mjs";
 import { computeRenderHash, computeBinAssetVersions } from "./lib/hash.mjs";
 import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "./lib/fonts.mjs";
-import { humanize, parseParams } from "./lib/params.mjs";
+import { humanize, parseParams, unsteppedEssentialSections } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
 import { createDestinationRegistry, reconcileGenerated } from "./lib/destinations.mjs";
 import { sanitizeSvg } from "./lib/svg-sanitize.mjs";
@@ -50,6 +50,7 @@ import {
   parseNotices,
   parsePopup,
   parseRender,
+  parseStrings,
   parseUi,
 } from "./lib/config-parsers.mjs";
 
@@ -67,10 +68,11 @@ export {
   parseNotices,
   parsePopup,
   parseRender,
+  parseStrings,
   parseUi,
 } from "./lib/config-parsers.mjs";
 export { parseFontFallback, renderFontsConf, fontFamilyNames } from "./lib/fonts.mjs";
-export { firstSentence, parseEnumHint, parseParams } from "./lib/params.mjs";
+export { firstSentence, parseEnumHint, parseParams, unsteppedEssentialSections } from "./lib/params.mjs";
 
 // Every top-level key gen-schema (or its helpers) reads from scadpub.config.json.
 // A key outside this set is almost always a typo (`popups`, `fontfallback`, …)
@@ -92,7 +94,30 @@ export const KNOWN_TOP_LEVEL_KEYS = new Set([
   "logo", "colors", "extraCss", "ui", "fileImport",
   // In-app content
   "popup", "help", "notices", "licenses",
+  // Localization
+  "strings",
 ]);
+
+// Path to the bundled English UI-text catalogue (src/locales/en.json),
+// resolved relative to this file rather than the config being built — it's
+// part of the app, not the consumer's project. `strings` overrides are
+// validated against its key set (see parseStrings): a config key that isn't a
+// real catalogue key would otherwise be silently ignored by every `t()` call.
+const EN_CATALOG_PATH = fileURLToPath(new URL("../src/locales/en.json", import.meta.url));
+// Directory holding every bundled locale catalogue (src/locales/*.json) —
+// the SOURCE of truth src/lib/i18n.ts's tests (tests/i18n.test.mjs) read
+// directly. Only the ones actually needed at runtime (English, plus the
+// resolved `lang`'s bundle when it isn't English) are copied into the
+// generated src/generated/locales.json below — see that comment for why.
+const LOCALES_DIR = fileURLToPath(new URL("../src/locales", import.meta.url));
+
+// BCP-47 -> bundled locale tag: use the primary subtag ("de-AT" -> "de"),
+// lowercased. Mirrors src/lib/i18n.ts's own `primarySubtag` exactly (kept as
+// a small separate copy rather than a shared import — this script runs under
+// plain Node, not the TS-source loader tests/register-ts.mjs installs).
+function primarySubtag(lang) {
+  return (lang.split("-")[0] || "en").toLowerCase();
+}
 
 // Fail early and clearly when a configured path doesn't exist — these are the
 // most common ways a config drifts from the designs it points at.
@@ -349,6 +374,43 @@ function resolveDesignList(config, SOURCE) {
       throw new Error(`gen-schema: design '${id}' '${field}' must be a non-empty string`);
     return raw.trim();
   };
+  // `designs[].presetImages`: an object mapping a bundled preset's EXACT name
+  // to a config-relative image path (validated as non-empty strings here;
+  // cross-checked against the design's actual bundled preset NAMES, and its
+  // values resolved/copied, in buildDesigns below once the parameterSets file
+  // is available to read).
+  const checkPresetImages = (raw, id) => {
+    if (raw === undefined || raw === null) return null;
+    if (typeof raw !== "object" || Array.isArray(raw))
+      throw new Error(`gen-schema: design '${id}' 'presetImages' must be an object`);
+    for (const [name, path] of Object.entries(raw)) {
+      if (typeof path !== "string" || !path.trim())
+        throw new Error(
+          `gen-schema: design '${id}' 'presetImages["${name}"]' must be a non-empty string`
+        );
+    }
+    return raw;
+  };
+  // `designs[].reviewLabels`: an object mapping a declared parameter's exact
+  // name to the label its value is shown under in the guided-workflow Review
+  // stage's curated summary (see docs/config.md and UiConfig.workflow's own
+  // doc). Validated as an object of non-empty strings here; cross-checked
+  // against the design's actual parsed PARAM NAMES in buildDesigns below,
+  // once `parseParams` has run — the same two-stage shape/cross-reference
+  // split as `presetImages` above (which cross-checks against preset names
+  // instead).
+  const checkReviewLabels = (raw, id) => {
+    if (raw === undefined || raw === null) return null;
+    if (typeof raw !== "object" || Array.isArray(raw))
+      throw new Error(`gen-schema: design '${id}' 'reviewLabels' must be an object`);
+    for (const [name, label] of Object.entries(raw)) {
+      if (typeof label !== "string" || !label.trim())
+        throw new Error(
+          `gen-schema: design '${id}' 'reviewLabels["${name}"]' must be a non-empty string`
+        );
+    }
+    return raw;
+  };
   if (Array.isArray(config.designs) && config.designs.length) {
     // Two designs sharing an id would clobber each other's generated
     // <id>-icon/<id>-doc output and collide in storage/URLs (#d=<id>).
@@ -370,8 +432,20 @@ function resolveDesignList(config, SOURCE) {
       // Optional picker description + icon + user-doc (icon/doc are config-
       // relative paths, resolved/copied to served URLs once outScadDir exists).
       description: checkDesignString(d.description, d.id, "description"),
+      // Optional short badge label (e.g. "Popular") shown on the design's
+      // picker card — plain deployment-authored text, not an annotation
+      // fallback (unlike description/icon/image/doc, nothing in the .scad
+      // source could sensibly supply this).
+      badge: checkDesignString(d.badge, d.id, "badge"),
       iconSrc: checkDesignString(d.icon, d.id, "icon"),
+      imageSrc: checkDesignString(d.image, d.id, "image"),
       docSrc: checkDesignString(d.doc, d.id, "doc"),
+      presetImagesSrc: checkPresetImages(d.presetImages, d.id),
+      reviewLabelsSrc: checkReviewLabels(d.reviewLabels, d.id),
+      // Plain deployment-authored text, like `badge` — no annotation
+      // fallback, and no cross-reference against the design's own params
+      // (unlike `reviewLabels`), so it resolves fully here.
+      reviewNote: checkDesignString(d.reviewNote, d.id, "reviewNote"),
     }));
   }
   return readdirSync(SOURCE)
@@ -379,17 +453,31 @@ function resolveDesignList(config, SOURCE) {
     .sort()
     .map((f) => {
       const id = f.replace(/\.scad$/, "");
-      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null, docSrc: null };
+      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, badge: null, iconSrc: null, imageSrc: null, docSrc: null, presetImagesSrc: null, reviewLabelsSrc: null, reviewNote: null };
     });
 }
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
-function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register }) {
-  return resolveDesignList(config, SOURCE).map(({ iconSrc, docSrc, ...d }) => {
+function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, checkContainedInConfigDir, relPosix, copyAsset, register, strictSteps }) {
+  return resolveDesignList(config, SOURCE).map(({ iconSrc, imageSrc, docSrc, presetImagesSrc, reviewLabelsSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
-    const { params, sections, collapsedSections, meta } = parseParams(abs);
+    const { params, sections, collapsedSections, meta, steps } = parseParams(abs);
+    // A stepped design (>=1 `@step`) that leaves an essential section
+    // un-stepped is legal — it renders in the always-visible tail below the
+    // step navigation the next milestone adds — but is very likely a design
+    // simply forgetting to tag a section. Warn by default; `ui.strictSteps`
+    // promotes it to a build error. See docs/annotations.md's "Guided steps".
+    const unstepped = unsteppedEssentialSections(sections, params, steps);
+    if (unstepped.length > 0) {
+      const message =
+        `design '${d.id}' (${d.file}) declares @step but ${unstepped.length} essential ` +
+        `section(s) carry no step: ${unstepped.join(", ")} — they'll still render, ` +
+        `below the step navigation`;
+      if (strictSteps) throw new Error(`gen-schema: ${message}`);
+      console.warn(`gen-schema: ${message}`);
+    }
     copyAsset(d.file);
     // Auto-detect a sibling OpenSCAD parameterSets file: <name>.scad -> <name>.json
     // next to it. One file can hold many named sets; absent -> no bundled presets.
@@ -418,7 +506,10 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       const base = iconSrc ? CONFIG_DIR : dirname(abs);
       const src = mustExist(resolve(base, iconRel), `design '${d.id}' icon '${iconRel}'`);
       // `// @icon` (unlike a config `icon`) resolves relative to the design's
-      // own file, i.e. within SOURCE — so it must stay within SOURCE too.
+      // own file, i.e. within SOURCE — so it must stay within SOURCE too. A
+      // config `icon` (like `doc` below) is NOT containment-checked against
+      // CONFIG_DIR — unlike `image` just below it — a pre-existing asymmetry
+      // (legacy) that's out of scope for this fix.
       if (!iconSrc) checkContained(src, `design '${d.id}' icon '${iconRel}'`, relPosix(abs));
       const dot = iconRel.lastIndexOf(".");
       const ext = dot > 0 ? iconRel.slice(dot) : "";
@@ -427,6 +518,32 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       register(dest, `design '${d.id}' icon`);
       copyBrowserFacing(src, dest);
       icon = `scad/${name}`;
+    }
+    // Picker-card artwork: same fallback/copy/validation rules as `icon` above
+    // (config `image` wins over `// @image`; first occurrence in the file
+    // wins), just a distinct served name so a design can carry both a small
+    // icon glyph and a larger photo/render. Any raster/vector format `icon`
+    // accepts works here too (SVG is sanitized; everything else copies as-is
+    // — see copyBrowserFacing).
+    let image = null;
+    const imageRel = imageSrc ?? meta.image;
+    if (imageRel) {
+      const base = imageSrc ? CONFIG_DIR : dirname(abs);
+      const src = mustExist(resolve(base, imageRel), `design '${d.id}' image '${imageRel}'`);
+      // `// @image` (unlike a config `image`) resolves relative to the
+      // design's own file, i.e. within SOURCE — so it must stay within SOURCE
+      // too. F4: a config `image` is checked the same way, just against
+      // CONFIG_DIR instead of SOURCE — unlike icon/doc (see their own
+      // comments), which stay unchecked for config-relative paths.
+      if (imageSrc) checkContainedInConfigDir(src, `design '${d.id}' image '${imageRel}'`, `design '${d.id}' config entry`);
+      else checkContained(src, `design '${d.id}' image '${imageRel}'`, relPosix(abs));
+      const dot = imageRel.lastIndexOf(".");
+      const ext = dot > 0 ? imageRel.slice(dot) : "";
+      const name = `${d.id}-image${ext}`;
+      const dest = join(outScadDir, name);
+      register(dest, `design '${d.id}' image`);
+      copyBrowserFacing(src, dest);
+      image = `scad/${name}`;
     }
     // User documentation, same fallback + base rules as icon: config `doc` wins
     // (config-relative) over a `// @doc` annotation (relative to the .scad). The
@@ -446,7 +563,82 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       copyFileSync(src, dest);
       doc = `scad/${name}`;
     }
-    return { ...d, description, icon, doc, presets, abs, sections, collapsedSections, params };
+    // Bundled-preset thumbnails (`designs[].presetImages`): each key must
+    // name an actual preset in the sibling parameterSets file — the same
+    // typo-protection stance as the rest of the config, so a stale/misspelled
+    // preset name fails the build instead of silently rendering a text-only
+    // card forever. Each value is a config-relative image path, resolved and
+    // copied into the served tree exactly like `icon`/`image`, under a
+    // deterministic `<id>-preset-<n>.<ext>` name (n = insertion order — the
+    // preset NAME itself, not the filename, is what the UI keys off of, so a
+    // stable index is enough for a reproducible build).
+    let presetImages;
+    if (presetImagesSrc && Object.keys(presetImagesSrc).length) {
+      const presetNames = presets.length
+        ? new Set(Object.keys(JSON.parse(readFileSync(presetAbs, "utf-8")).parameterSets ?? {}))
+        : new Set();
+      presetImages = {};
+      Object.entries(presetImagesSrc).forEach(([presetName, rel], i) => {
+        if (!presetNames.has(presetName))
+          throw new Error(
+            `gen-schema: design '${d.id}' 'presetImages["${presetName}"]' does not match any bundled ` +
+              (presets.length
+                ? `preset name in '${presetRel}'`
+                : `preset — design '${d.id}' has no bundled presets`)
+          );
+        const src = mustExist(
+          resolve(CONFIG_DIR, rel),
+          `design '${d.id}' presetImages["${presetName}"] '${rel}'`
+        );
+        checkContainedInConfigDir(
+          src,
+          `design '${d.id}' presetImages["${presetName}"] '${rel}'`,
+          `design '${d.id}' config entry`
+        );
+        const dot = rel.lastIndexOf(".");
+        const ext = dot > 0 ? rel.slice(dot) : "";
+        const outName = `${d.id}-preset-${i}${ext}`;
+        const dest = join(outScadDir, outName);
+        register(dest, `design '${d.id}' presetImages["${presetName}"]`);
+        copyBrowserFacing(src, dest);
+        presetImages[presetName] = `scad/${outName}`;
+      });
+    }
+    // `reviewLabels`: each key must name an actual DECLARED PARAM of this
+    // design — the same typo-protection stance as `presetImages`, just
+    // cross-referenced against `params` (only known now that parseParams has
+    // run) instead of bundled preset names.
+    let reviewLabels;
+    if (reviewLabelsSrc && Object.keys(reviewLabelsSrc).length) {
+      const paramNames = new Set(params.map((p) => p.name));
+      reviewLabels = {};
+      for (const [name, label] of Object.entries(reviewLabelsSrc)) {
+        if (!paramNames.has(name))
+          throw new Error(
+            `gen-schema: design '${d.id}' 'reviewLabels["${name}"]' does not match any declared parameter`
+          );
+        reviewLabels[name] = label;
+      }
+    }
+    return {
+      ...d,
+      description,
+      icon,
+      image,
+      doc,
+      presets,
+      abs,
+      sections,
+      collapsedSections,
+      params,
+      // Only present when the design declares at least one @step — an
+      // unstepped design omits the field entirely rather than emitting [].
+      ...(steps.length ? { steps } : {}),
+      // Only present when the design configures at least one preset image.
+      ...(presetImages ? { presetImages } : {}),
+      // Only present when the design configures at least one review label.
+      ...(reviewLabels ? { reviewLabels } : {}),
+    };
   });
 }
 
@@ -526,6 +718,7 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
     shell.add(`scad/${d.file}`);
     for (const preset of d.presets) shell.add(`scad/${preset}`);
     if (d.icon) shell.add(d.icon);
+    if (d.image) shell.add(d.image);
     if (d.doc) shell.add(d.doc);
   }
   if (logo) {
@@ -590,6 +783,20 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     configPath,
     mustExist,
   });
+  // A second, CONFIG_DIR-rooted instance of the same containment machinery
+  // (F4): most config-owned paths (icon/doc/logo/extraCss/…) are a deliberately
+  // untrusted-boundary-free zone — see assets.mjs's module comment — but a
+  // config `designs[].image` path is validated against CONFIG_DIR the same way
+  // its `// @image` annotation counterpart is already validated against
+  // SOURCE, closing the one config-authored escape route among the four
+  // (icon/image/doc/logo) that a stray `../` could otherwise walk anywhere on
+  // disk. icon/doc keep their pre-existing unchecked behavior — that asymmetry
+  // is deliberate/legacy, out of scope here (see buildDesigns' image block).
+  const { checkContained: checkContainedInConfigDir } = createAssetTools({
+    SOURCE: CONFIG_DIR,
+    configPath,
+    mustExist,
+  });
   // Destination-ownership registry (H6): every file this run writes anywhere
   // in the served tree is registered here before it's written; a second
   // write aimed at the same path fails the build, naming both owners.
@@ -636,12 +843,67 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
+  // The bundled English UI-text catalogue (src/locales/en.json), read once
+  // here — both the helpTab cross-check right below and the STRINGS
+  // validation further down need it, so it's parsed a single time and shared.
+  const EN_CATALOG = JSON.parse(readFileSync(EN_CATALOG_PATH, "utf-8"));
+  // ui.afterExport.helpTab (if set) must name an existing Help tab — checked
+  // here rather than inside parseUi (config-parsers.mjs) because it's a
+  // cross-field validation against HELP, only available now. Mirrors
+  // HelpModal's own tab-list logic (top-level `help.sections` synthesize a
+  // leading tab labelled `t("help.overviewTab")` when `help.tabs` are also
+  // present) so a value that passes here is guaranteed to match a real tab
+  // the modal renders. Reads the SAME `help.overviewTab` string out of
+  // EN_CATALOG that HelpModal's `t()` resolves at runtime — not a hardcoded
+  // "Overview" literal — so the two can never drift apart (see HelpModal.tsx's
+  // own comment on this coupling).
+  if (UI.afterExport?.helpTab) {
+    const tabLabels = HELP?.tabs?.length
+      ? [...(HELP.sections?.length ? [EN_CATALOG["help.overviewTab"]] : []), ...HELP.tabs.map((t) => t.label)]
+      : [];
+    if (!tabLabels.includes(UI.afterExport.helpTab)) {
+      throw new Error(
+        `gen-schema: 'ui.afterExport.helpTab' is ${JSON.stringify(UI.afterExport.helpTab)}, but no 'help' tab has that label.\n` +
+          (tabLabels.length
+            ? `  Available tabs: ${tabLabels.map((l) => JSON.stringify(l)).join(", ")}`
+            : `  This config's 'help' has no tabs defined.`)
+      );
+    }
+  }
   // Config-driven notice categories surfaced on the OpenSCAD output panel.
   // Validated; off by default (omitted -> none).
   const NOTICES = parseNotices(config.notices);
   // Optional extra third-party software / license notices. Validated and
   // appended (never replacing the built-ins) by the in-app licenses modal.
   const LICENSES_EXTRA = parseLicenses(config.licenses);
+  // Optional per-deployment UI text overrides. Validated against the bundled
+  // English catalogue's key set (EN_CATALOG, read once above); absent -> {}.
+  const EN_CATALOG_KEYS = Object.keys(EN_CATALOG);
+  const STRINGS = parseStrings(config.strings, EN_CATALOG_KEYS);
+
+  // src/generated/locales.json's content: ONLY the bundle(s) the app actually
+  // needs at runtime, keyed by locale tag exactly like src/lib/i18n.ts's own
+  // `BUNDLES` map — English (t()'s ultimate fallback, always present) plus,
+  // when `lang` resolves to some other bundled locale, that locale's own
+  // catalogue too. i18n.ts previously statically imported BOTH src/locales/
+  // en.json and de.json (~46KB raw) regardless of which one a build actually
+  // uses; this mirrors gen-schema's existing generated-artifact pattern
+  // (designs.json, precache-manifest.json, …) to ship only what's live. A
+  // `lang` that isn't one of the bundled locales (e.g. "pt-BR" — see
+  // widget-designmeta fixture) falls back to English alone, matching
+  // i18n.ts's own runtime fallback (BUNDLES[primarySubtag] ?? "en") exactly.
+  const ACTIVE_LOCALE_TAG = primarySubtag(LANG);
+  const BUNDLED_LOCALE_TAGS = new Set(
+    readdirSync(LOCALES_DIR)
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.slice(0, -".json".length))
+  );
+  const GENERATED_LOCALES = { en: EN_CATALOG };
+  if (ACTIVE_LOCALE_TAG !== "en" && BUNDLED_LOCALE_TAGS.has(ACTIVE_LOCALE_TAG)) {
+    GENERATED_LOCALES[ACTIVE_LOCALE_TAG] = JSON.parse(
+      readFileSync(join(LOCALES_DIR, `${ACTIVE_LOCALE_TAG}.json`), "utf-8")
+    );
+  }
 
   // outScadDir is entirely generated. H6/M8: build the complete new tree in a
   // staging directory first, and only replace the live outScadDir once every
@@ -674,9 +936,11 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     outScadDir: stageScadDir,
     mustExist,
     checkContained,
+    checkContainedInConfigDir,
     relPosix,
     copyAsset,
     register: registry.register,
+    strictSteps: UI.strictSteps,
   });
   const defaultDesign = resolveDefaultDesign(config, designs);
 
@@ -757,6 +1021,16 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     ? computeBinAssetVersions({ fontPaths, fontsConf, outPublicDir })
     : {};
 
+  // Byte size of the pinned WASM binary — same file computeBinAssetVersions
+  // above just digested (public/wasm/openscad.wasm, populated by
+  // fetch-wasm.mjs before this script runs). Display-only (the render
+  // worker's "engine" loading phase uses it for a "one-time download — about
+  // N MB" line before a real Content-Length is known); guarded exactly like
+  // BIN_ASSETS for the same dev-edge case — a `npm test`/fixture run with no
+  // outPublicDir, or one before fetch-wasm.mjs has populated public/wasm/.
+  const wasmPath = outPublicDir ? join(outPublicDir, "wasm", "openscad.wasm") : null;
+  const engineBytes = wasmPath && existsSync(wasmPath) ? statSync(wasmPath).size : undefined;
+
   const schema = {
     generatedFrom: relPosix(SOURCE) || ".",
     renderHash,
@@ -765,12 +1039,14 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     wasmVersion: WASM_VERSION,
     // H4: per-file digests for wasm/glue/fonts/fonts.conf — see BIN_ASSETS above.
     binAssets: BIN_ASSETS,
+    ...(engineBytes !== undefined ? { engineBytes } : {}),
     title: TITLE,
     shortName: SHORT_NAME,
     id: ID,
     description: DESCRIPTION,
     lang: LANG,
     dir: DIR,
+    strings: STRINGS,
     themeColor: THEME_COLOR,
     themeColorLight: THEME_COLOR_LIGHT,
     appleSplash,
@@ -847,6 +1123,12 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   writeFileSync(
     join(outSchemaDir, "designs.json"),
     JSON.stringify(schema, null, 2) + "\n"
+  );
+  // src/lib/i18n.ts imports this instead of src/locales/en.json + de.json
+  // directly — see GENERATED_LOCALES's own comment above.
+  writeFileSync(
+    join(outSchemaDir, "locales.json"),
+    JSON.stringify(GENERATED_LOCALES, null, 2) + "\n"
   );
   return schema;
 }
