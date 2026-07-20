@@ -3,23 +3,30 @@
 // files), parameter search + ParamForm, and a Reset footer. Collapsible and
 // resizable; state persisted to localStorage. Presets live here (a tab,
 // mirroring the mobile sheet) rather than in the top bar.
+//
+// Only genuinely layout-specific props remain here (tab/search wiring, panel
+// sizing/side, and the presets/file-import props PresetPicker/FileBar consume
+// directly) — the ~25 props CustomizeTab/GettingStarted read identically in
+// both this and SheetTabs.tsx now flow through PanelDataContext
+// (src/lib/panelData.ts), mounted once by AppShell above both layouts. See
+// that module's own doc for why it's a plain (non-stable-ref) context, unlike
+// AppActions.
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { Design, FileImport } from "../openscad/types";
-import type { ParsedSet, Values } from "../lib/presets";
-import type { InstalledFont } from "../lib/fonts";
+import type { FileImport } from "../openscad/types";
+import type { ParsedSet } from "../lib/presets";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
-import { useDebounce } from "../lib/useDebounce";
+import { usePanelData } from "../lib/panelData";
 import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
-import { ParamForm } from "./ParamForm";
+import { t } from "../lib/i18n";
+import { CustomizeTab } from "./CustomizeTab";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
-import { PresetDiffBar } from "./PresetDiffBar";
-import { ParamSearch } from "./ParamSearch";
 import { IconButton } from "./IconButton";
 import { PanelFooter } from "./PanelFooter";
+import { GettingStarted } from "./GettingStarted";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
@@ -30,39 +37,36 @@ import {
 
 const panelTabClass = cn(chipTabTrigger, "flex-1");
 
-const PANEL_WIDTH_KEY = ns("panel.width");
+// v2: the desktop shell pass raised MIN_WIDTH (280 -> 360) and switched the
+// default from a flat 360px to a viewport-relative clamp (see
+// defaultPanelWidth below) so the panel reads as a generously proportioned
+// surface (mockup target), not a cramped utility sidebar — a fresh key so
+// existing users' persisted (now-narrower-than-min) width doesn't linger as
+// a stale value below the new floor.
+const PANEL_WIDTH_KEY = ns("panel.width.v2");
 const PANEL_OPEN_KEY = ns("panel.open");
 
-const MIN_WIDTH = 280;
+const MIN_WIDTH = 360;
 const MAX_WIDTH = 600;
-const DEFAULT_WIDTH = 360;
+
+// First-run default (no persisted width yet): clamp(400px, 34vw, 500px) of
+// the current viewport, evaluated once at mount — a wide desktop gets a
+// roomier panel, a narrow one (just above the 860px mobile breakpoint)
+// still gets at least 400px. Guarded for non-browser test environments
+// (jsdom-style `window` with no real viewport) with a sane fallback.
+const defaultPanelWidth = (): number => {
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+  return Math.round(Math.min(500, Math.max(400, vw * 0.34)));
+};
 
 interface Props {
-  design: Design;
-  values: Values;
   bundled: ParsedSet[];
   userPresets: string[];
   selectedPreset: string;
-  /** The selected preset's values, or null when no preset is selected (baseline is defaults). */
-  presetBaseline: Values | null;
-  /** The selected preset's display name, or null when no preset is selected. */
-  presetName: string | null;
-  /** Values the current params are diffed against — presetBaseline, or design defaults. */
-  baseline: Values;
-  /** Names of params whose value differs from `baseline`. */
-  changedParams: Set<string>;
   fileImport: FileImport | null;
   loadedFiles: LoadedFile[];
-  /** Font families the renderer can use (normalised), for the missing-font hint. */
-  availableFontFamilies?: Set<string>;
-  /** A bundled family to offer as a one-click fallback for a missing font. */
-  fontSuggestion?: string | null;
-  /** Faces the renderer can use (bundled ∪ imported), for the font selector. */
-  installedFonts?: InstalledFont[];
   panelSide: "left" | "right";
   panelDefaultOpen: boolean;
-  /** Show the underlying OpenSCAD variable name beside each label. */
-  showVarName: boolean;
   autoRender: boolean;
   /** Configurable tab labels (default "Presets" / "Parameters"). */
   presetsLabel?: string;
@@ -73,28 +77,17 @@ interface Props {
   onPanelTabChange: (tab: PanelTab) => void;
   search: string;
   onSearchChange: (search: string) => void;
-  onSearchFocus?: () => void;
-  onSearchBlur?: () => void;
+  onSearchBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
 }
 
 export function ParamPanel({
-  design,
-  values,
   bundled,
   userPresets,
   selectedPreset,
-  presetBaseline,
-  presetName,
-  baseline,
-  changedParams,
   fileImport,
   loadedFiles,
-  availableFontFamilies,
-  fontSuggestion,
-  installedFonts,
   panelSide,
   panelDefaultOpen,
-  showVarName,
   autoRender,
   presetsLabel = "Presets",
   parametersLabel = "Customize",
@@ -102,11 +95,9 @@ export function ParamPanel({
   onPanelTabChange,
   search,
   onSearchChange,
-  onSearchFocus,
   onSearchBlur,
 }: Props) {
   const {
-    change,
     applyPreset,
     selectedPresetChange,
     presetsChange,
@@ -114,15 +105,19 @@ export function ParamPanel({
     removeFile,
     clearFiles,
   } = useAppActions();
+  // design/values/attention/settingsView: read from context for THIS
+  // component's own direct consumers (PresetPicker, FileBar) — CustomizeTab/
+  // GettingStarted below read the very same context themselves, so none of
+  // this needs to be threaded through as a prop.
+  const { design, values, attention, settingsView, workflowGuided } = usePanelData();
   const [open, setOpen] = useState(() => {
     const v = readLocal(PANEL_OPEN_KEY);
     return v !== null ? v === "true" : panelDefaultOpen;
   });
   const [width, setWidth] = useState(() => {
     const w = parseInt(readLocal(PANEL_WIDTH_KEY) || "0");
-    return w >= MIN_WIDTH && w <= MAX_WIDTH ? w : DEFAULT_WIDTH;
+    return w >= MIN_WIDTH && w <= MAX_WIDTH ? w : defaultPanelWidth();
   });
-  const debouncedSearch = useDebounce(search, 150);
 
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -195,8 +190,8 @@ export function ParamPanel({
         <button
           className="param-panel-open-btn font-display"
           onClick={() => setOpen(true)}
-          aria-label={`Open the ${parametersLabel} panel`}
-          title={`Open the ${parametersLabel} panel`}
+          aria-label={t("panel.openAria", { label: parametersLabel })}
+          title={t("panel.openAria", { label: parametersLabel })}
         >
           <MenuIcon size={14} /> {parametersLabel}
         </button>
@@ -221,7 +216,7 @@ export function ParamPanel({
         onPointerCancel={onPointerUp}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize parameter panel"
+        aria-label={t("panel.resizeAria")}
         aria-valuenow={width}
         aria-valuemin={MIN_WIDTH}
         aria-valuemax={MAX_WIDTH}
@@ -238,80 +233,149 @@ export function ParamPanel({
         }}
       />
 
-      <Tabs
-        value={panelTab}
-        onValueChange={(v) => onPanelTabChange(v as PanelTab)}
-        className="flex min-h-0 flex-1 flex-col gap-0"
-      >
-        {/* Tab row (Presets / Parameters / Files) with the collapse control on
-            the end. Files appears only when the design imports files. */}
-        <div className="flex shrink-0 items-stretch border-b">
-          <TabsList className="flex-1 rounded-none border-0 bg-transparent p-0">
-            <TabsTrigger value="presets" className={panelTabClass}>{presetsLabel}</TabsTrigger>
-            <TabsTrigger value="params" className={panelTabClass}>{parametersLabel}</TabsTrigger>
-            {fileImport && <TabsTrigger value="files" className={panelTabClass}>Files</TabsTrigger>}
-          </TabsList>
+      {workflowGuided ? (
+        // Wave 2 (guided shell): the primary panel surface collapses to the
+        // stage nav (QuickStart's own chip strip, hoisted by CustomizeTab)
+        // -> the active stage's content -> the "Show advanced settings"
+        // secondary action (Wave 1) — no Examples/Customize/Files tab strip,
+        // no GettingStarted guide row. The Presets/Files tabs' own jobs moved
+        // out: Examples/Saved live in the unified selector (opened from the
+        // header's design-name button — see UnifiedSelectorDialog.tsx), and
+        // file import moved inline to each param's own control (FontSelect's
+        // in-dropdown import row, SvgPrepareControl's own drop zone) plus the
+        // "Imported files" management screen off the command bar.
+        //
+        // Round-6 Wave 2, item 11: the collapse control used to sit alone in
+        // its own otherwise-empty header strip above the stage nav (there's
+        // no tab row left to carry it, unlike tabs mode below) — a full-width
+        // row whose only content was one small chevron wasted a whole line
+        // of vertical room right where the stage nav should start. It now
+        // rides directly on the panel's own resize-handle edge instead (see
+        // `.param-panel__collapse-btn` below) — CustomizeTab's stage nav
+        // (hoisted via `stripSlot`, Wave 1's own territory) begins
+        // immediately under the app header, with nothing empty above it.
+        <>
           <IconButton
-            className="mr-1 self-center"
-            label="Collapse panel"
-            title="Collapse to full-screen canvas"
+            label={t("panel.collapse")}
+            title={t("panel.collapseTitle")}
             onClick={() => setOpen(false)}
+            className={cn(
+              "param-panel__collapse-btn absolute top-3 z-10 size-6 rounded-full p-1 shadow-(--shadow-1)",
+              panelSide === "right" ? "left-[-12px]" : "right-[-12px]"
+            )}
           >
-            <CollapseChevron size={16} />
+            <CollapseChevron size={14} />
           </IconButton>
-        </div>
-
-        <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <PresetPicker
-            design={design}
-            bundled={bundled}
-            userPresets={userPresets}
-            selected={selectedPreset}
-            values={values}
-            onApply={applyPreset}
-            onSelectedChange={selectedPresetChange}
-            onPresetsChange={presetsChange}
-            inline
-          />
-        </TabsContent>
-
-        <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <PresetDiffBar
-            design={design}
-            values={values}
-            presetBaseline={presetBaseline}
-            presetName={presetName}
-            changedParams={changedParams}
-          />
-          <ParamSearch
-            value={search}
-            onChange={onSearchChange}
-            onClear={() => onSearchChange("")}
-            onFocus={onSearchFocus}
-            onBlur={onSearchBlur}
-          />
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} />
-          </div>
-        </TabsContent>
-
-        {fileImport && (
-          <TabsContent value="files" className="mt-0 min-h-0 flex-1 overflow-y-auto p-3">
-            <FileBar
-              fileImport={fileImport}
-              loadedFiles={loadedFiles}
-              onAddFile={addFile}
-              onRemoveFile={removeFile}
-              onClearFiles={clearFiles}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <CustomizeTab
+              search={search}
+              onSearchChange={onSearchChange}
+              onSearchBlur={onSearchBlur}
+              // Stage selection with no leak means desktop no longer stacks
+              // every step — "steps" (one stage at a time, same as mobile)
+              // with no Back/Next (stepNav={false} — the chips are the only
+              // navigation on desktop; see QuickStart's own `stepNav` doc).
+              variant="steps"
+              stepNav={false}
+              // Wave 1 (round-5): guided mode has no standing PanelFooter
+              // (see below) — QuickStart hosts its own stage-scoped
+              // Live-preview toggle instead, reading `autoRender` from
+              // PanelDataContext (round-5 review, quality item 2) rather
+              // than a hand-drilled prop.
             />
-          </TabsContent>
-        )}
-      </Tabs>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Above the tab strip — see PanelData's checklist field's own doc
+              for why it isn't nested inside CustomizeTab's params tab. Reads
+              its own state (checklist/checklistReplaySignal/
+              quickStartActive) via usePanelData(). */}
+          <GettingStarted />
 
-      <PanelFooter
-        autoRender={autoRender}
-        className="flex shrink-0 items-center gap-2 border-t px-3 py-[0.4rem]"
-      />
+          <Tabs
+            value={panelTab}
+            onValueChange={(v) => onPanelTabChange(v as PanelTab)}
+            className="flex min-h-0 flex-1 flex-col gap-0"
+          >
+            {/* Tab row (Presets / Parameters / Files) with the collapse
+                control on the end. Files appears only when the design
+                imports files. */}
+            <div className="flex shrink-0 items-stretch border-b">
+              <TabsList className="flex-1 rounded-none border-0 bg-transparent p-0">
+                <TabsTrigger value="presets" className={panelTabClass}>{presetsLabel}</TabsTrigger>
+                <TabsTrigger value="params" className={panelTabClass}>{parametersLabel}</TabsTrigger>
+                {fileImport && <TabsTrigger value="files" className={panelTabClass}>{t("tabs.files")}</TabsTrigger>}
+              </TabsList>
+              <IconButton
+                className="mr-1 self-center"
+                label={t("panel.collapse")}
+                title={t("panel.collapseTitle")}
+                onClick={() => setOpen(false)}
+              >
+                <CollapseChevron size={16} />
+              </IconButton>
+            </div>
+
+            <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
+              <PresetPicker
+                design={design}
+                bundled={bundled}
+                userPresets={userPresets}
+                selected={selectedPreset}
+                values={values}
+                onApply={applyPreset}
+                onSelectedChange={selectedPresetChange}
+                onPresetsChange={presetsChange}
+                showPowerTools={settingsView === "all"}
+                inline
+              />
+            </TabsContent>
+
+            <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
+              <CustomizeTab
+                search={search}
+                onSearchChange={onSearchChange}
+                onSearchBlur={onSearchBlur}
+                // Desktop's docked panel has room to spare and its own scroll
+                // container — QuickStart renders every step at once instead
+                // of a one-at-a-time wizard (PR15). See CustomizeTab's own
+                // `variant` doc. Tabs mode always keeps "scroll".
+                variant="scroll"
+                stepNav
+              />
+            </TabsContent>
+
+            {fileImport && (
+              <TabsContent value="files" className="mt-0 min-h-0 flex-1 overflow-y-auto px-(--space-5) py-(--space-4)">
+                <FileBar
+                  design={design}
+                  fileImport={fileImport}
+                  loadedFiles={loadedFiles}
+                  attention={attention}
+                  onAddFile={addFile}
+                  onRemoveFile={removeFile}
+                  onClearFiles={clearFiles}
+                />
+              </TabsContent>
+            )}
+          </Tabs>
+        </>
+      )}
+
+      {/* Wave 1 (round-5): the standing Live-preview footer is gone from
+          guided workflow ENTIRELY now, not just while Review is active —
+          live preview just stays on by default there; QuickStart hosts its
+          own stage-scoped toggle instead (see its own `autoRender` doc),
+          appearing only once a stage's Advanced settings are shown, never
+          in Review. Tabs mode (workflowGuided false) is completely
+          unaffected — it always renders this footer, unchanged. */}
+      {!workflowGuided && (
+        <PanelFooter
+          autoRender={autoRender}
+          className="flex shrink-0 items-center gap-2 border-t px-3 py-[0.4rem]"
+        />
+      )}
     </aside>
   );
 }

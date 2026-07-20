@@ -15,15 +15,56 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { tapFeedback } from "../lib/haptics";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
+import { HALF_VH_RATIO, REVIEW_VH_RATIO, type SheetDetent } from "../lib/sheetDetent";
+import { t } from "../lib/i18n";
 
-export type SheetDetent = "peek" | "half" | "full";
+export type { SheetDetent };
 
+// "review" (the guided-workflow Review stage's own taller detent — see
+// SheetDetent's own doc in sheetDetent.ts) is deliberately NOT in this
+// order: drag-snap (onPointerUp's nearest-detent search) and tap-cycle
+// (cycleDetent) only ever choose among these three, so a visitor can never
+// drag or tap their way into "review" by accident — it's reached only
+// programmatically (AppShell's own activeStepId effect, via
+// reviewDetentOnEnter). cycleDetent/onHandleKeyDown special-case a CURRENT
+// detent of "review" explicitly (see below) so tapping/arrow-keying the
+// handle FROM "review" still does something sensible.
 const DETENT_ORDER: SheetDetent[] = ["peek", "half", "full"];
-// Slightly above 50% to clear browser chrome at the bottom.
-export const HALF_VH_RATIO = 0.52;
+// Where each way of leaving the "review" detent (not part of DETENT_ORDER's
+// cycle — see above) lands: a tap (cycleDetent) or Arrow Down both step back
+// to Half; Arrow Up goes all the way to Full — the same pair of neighbours
+// cycleDetent's tap already treats "review" as sitting between. Single source
+// for the three call sites (cycleDetent, onHandleKeyDown's ArrowUp/ArrowDown)
+// that used to hard-code this transition separately.
+const REVIEW_EXIT: Record<"tap" | "up" | "down", SheetDetent> = {
+  tap: "half",
+  up: "full",
+  down: "half",
+};
+// i18n keys for the polite live-region announcement fired on every detent
+// change (drag-snap, tap-cycle, or Arrow Up/Down) — see the announcement
+// effect below. Not fired on mount (only on a subsequent change), so a
+// visitor who lands directly on Half (guided policy — see sheetDetent.ts)
+// doesn't hear an announcement before they've done anything.
+const DETENT_ANNOUNCE_KEY: Record<SheetDetent, string> = {
+  peek: "sheet.detentPeek",
+  half: "sheet.detentHalf",
+  full: "sheet.detentFull",
+  review: "sheet.detentReview",
+};
+// i18n keys for the bare detent word, interpolated into the drag handle's
+// aria-label (see `sheet.handleAria`) — separate from DETENT_ANNOUNCE_KEY's
+// full sentences above.
+const DETENT_WORD_KEY: Record<SheetDetent, string> = {
+  peek: "sheet.wordPeek",
+  half: "sheet.wordHalf",
+  full: "sheet.wordFull",
+  review: "sheet.wordReview",
+};
 // Movement (px) past which a pointer interaction counts as a drag, not a tap.
 const DRAG_THRESHOLD = 6;
 // Elements a focus trap should consider reachable — the standard "visible,
@@ -32,6 +73,7 @@ const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function halfH(inset: number) { return Math.round((window.innerHeight - inset) * HALF_VH_RATIO); }
+function reviewH(inset: number) { return Math.round((window.innerHeight - inset) * REVIEW_VH_RATIO); }
 function fullH(inset: number) { return window.innerHeight - inset; }
 
 interface Props {
@@ -45,6 +87,13 @@ interface Props {
   peekHeight?: number;
   /** Height in px of any fixed content below the sheet (e.g. mobile footer). */
   bottomInset?: number;
+  /** Height in px of any fixed content ABOVE the sheet that must stay visible
+   *  regardless of detent — the guided-workflow persistent mobile header (see
+   *  AppShell's `GuidedMobileHeader`; 0/omitted everywhere else, including
+   *  every "tabs"-workflow mount, which never reserves this). Subtracted from
+   *  every detent height exactly like `bottomInset` is, so "full" stops just
+   *  below the header instead of sliding under it. */
+  topInset?: number;
   /** Reports the sheet's live displayed height (px) and whether it's mid-drag,
    *  so the parent can size the viewer to follow the sheet in real time. Fires
    *  every drag frame and on each settle. */
@@ -56,6 +105,28 @@ interface Props {
    *  parent can anchor other fixed content (e.g. the output console overlay)
    *  exactly above the real peek row instead of a static guess. */
   onPeekHeightChange?: (heightPx: number) => void;
+  /** Fires at the start of any handle interaction — pointer-down (drag start;
+   *  a plain tap also passes through pointer-down before its click) — so a
+   *  caller showing a one-time hint (see `hint` below) can dismiss it on the
+   *  visitor's first touch of the handle, not just on a settled detent
+   *  change. Keyboard resizing (Arrow Up/Down) doesn't call this separately —
+   *  it already changes the detent, which the parent's onDetentChange
+   *  handles dismissing from. */
+  onHandleInteract?: () => void;
+  /** A one-time hint rendered next to the handle (see AppShell's
+   *  `sheetHintVisible` — the guided+half onboarding hint), or undefined to
+   *  render nothing. Purely decorative: `aria-hidden` and non-interactive
+   *  (`pointer-events-none`) so it can never intercept a tap/drag meant for
+   *  the handle underneath it. */
+  hint?: ReactNode;
+  /** Elements inside this container are treated as part of the Full-detent
+   *  focus trap (see the M16 effect below) — reachable by Tab, and a focus
+   *  landing there is never redirected back into the sheet. Used for the
+   *  guided-workflow persistent header, which sits ABOVE the sheet in
+   *  stacking order and must stay keyboard-operable even while the sheet is
+   *  Full. Omitted everywhere else (including "tabs" workflow), so the trap
+   *  behaves exactly as before there. */
+  extraTrapContainerRef?: RefObject<HTMLElement | null>;
 }
 
 export function BottomSheet({
@@ -64,8 +135,12 @@ export function BottomSheet({
   onDetentChange,
   peekHeight = 72,
   bottomInset = 0,
+  topInset = 0,
   onFollow,
   onPeekHeightChange,
+  onHandleInteract,
+  hint,
+  extraTrapContainerRef,
 }: Props) {
   // Detent is controlled by the parent; setDetent forwards to it.
   const setDetent = onDetentChange;
@@ -87,11 +162,22 @@ export function BottomSheet({
   onFollowRef.current = onFollow;
 
   // A short haptic tick whenever the sheet settles on a new detent (drag-snap,
-  // tap-cycle or keyboard) — Android only; silent on iOS / reduced-motion.
+  // tap-cycle or keyboard) — Android only; silent on iOS / reduced-motion —
+  // plus a polite SR announcement of the new state (WCAG: a detent change
+  // moves a large amount of on-screen content without a focus change, which a
+  // screen-reader user gets no other signal of). Both skip the very first
+  // render — a visitor who lands directly on Half via the guided policy
+  // shouldn't hear an announcement, or feel a tick, before they've touched
+  // anything.
   const didMount = useRef(false);
+  const [detentAnnouncement, setDetentAnnouncement] = useState("");
   useEffect(() => {
-    if (didMount.current) tapFeedback();
-    else didMount.current = true;
+    if (didMount.current) {
+      tapFeedback();
+      setDetentAnnouncement(t(DETENT_ANNOUNCE_KEY[detent]));
+    } else {
+      didMount.current = true;
+    }
   }, [detent]);
   // Effective peek height: the measured header height, or the fallback prop
   // until the first measurement lands.
@@ -100,6 +186,14 @@ export function BottomSheet({
   peekHeightRef.current = effectivePeek;
   const bottomInsetRef = useRef(bottomInset);
   bottomInsetRef.current = bottomInset;
+  const topInsetRef = useRef(topInset);
+  topInsetRef.current = topInset;
+  // The combined top+bottom reservation heightFor/fullH/etc. read via the
+  // refs above — a single helper so every call site below stays in sync
+  // rather than adding topInsetRef.current at each one separately.
+  function totalInset() {
+    return bottomInsetRef.current + topInsetRef.current;
+  }
 
   // Report the effective peek height whenever it changes (first measurement,
   // font-scaling/resize-driven remeasure, …) so the parent can anchor fixed
@@ -109,26 +203,39 @@ export function BottomSheet({
     onPeekHeightChange?.(effectivePeek);
   }, [effectivePeek, onPeekHeightChange]);
 
-  // Measure the header (drag handle + tab row) and use that as the peek height,
-  // so the collapsed sheet always shows the whole tab row regardless of device
-  // safe-area insets or font scaling. getBoundingClientRect reports the full
-  // layout box even while the body is clipped by the peek height.
+  // Measure the header (drag handle + tab row, OR — guided workflow, which
+  // has no tab row at all, see SheetTabs' own guided branch — the hoisted
+  // stage-chip strip that plays the same "what's reachable at Peek" role,
+  // see QuickStart's `stripSlot`/CustomizeTab's `quick-start-strip-slot`) and
+  // use that as the peek height, so the collapsed sheet always shows the
+  // whole row regardless of device safe-area insets or font scaling.
+  // getBoundingClientRect reports the full layout box even while the body is
+  // clipped by the peek height. Wave 3 fix: without the chip-strip fallback,
+  // guided mode's Peek measured nothing (no `[role="tablist"]` exists there)
+  // and silently fell back to the `peekHeight` prop — tall enough for the
+  // drag handle alone, but too short to also show the stage chips, so a
+  // visitor landing on Peek had no visible way to select a stage at all.
   useLayoutEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet) return;
+    // Resolved once per effect setup (mount), not once per measure() call —
+    // measure() is also the ResizeObserver callback, so it used to re-query
+    // both selectors on every resize frame for a row that, once found, never
+    // changes identity within this effect's lifetime.
+    const row =
+      (sheet.querySelector('[role="tablist"]') as HTMLElement | null) ??
+      (sheet.querySelector('.quick-start-strip-slot') as HTMLElement | null);
     const measure = () => {
-      const tabs = sheet.querySelector('[role="tablist"]') as HTMLElement | null;
-      if (!tabs) return;
+      if (!row) return;
       const px = Math.ceil(
-        tabs.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top
+        row.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top
       );
       if (px > 0) setAutoPeek(px);
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(sheet);
-    const tabs = sheet.querySelector('[role="tablist"]');
-    if (tabs) ro.observe(tabs);
+    if (row) ro.observe(row);
     return () => ro.disconnect();
   }, []);
 
@@ -154,8 +261,9 @@ export function BottomSheet({
   const heightFor = useCallback((d: SheetDetent): number => {
     switch (d) {
       case "peek": return peekHeightRef.current;
-      case "half": return halfH(bottomInsetRef.current);
-      case "full": return fullH(bottomInsetRef.current);
+      case "half": return halfH(totalInset());
+      case "review": return reviewH(totalInset());
+      case "full": return fullH(totalInset());
     }
   }, []);
 
@@ -165,6 +273,12 @@ export function BottomSheet({
   // dep array (see AppShell's `handleDetentChange`), so listing it below
   // doesn't change these handlers' identity.
   const cycleDetent = useCallback(() => {
+    // A tap while sitting at the guided-workflow Review detent (not itself
+    // part of the cycle — see DETENT_ORDER's own doc) collapses to Half,
+    // mirroring what Escape already does from Full's own modal trap below —
+    // "tap/Escape steps back down" reads the same regardless of which taller
+    // detent the visitor started from.
+    if (detentRef.current === "review") { setDetent(REVIEW_EXIT.tap); return; }
     const idx = DETENT_ORDER.indexOf(detentRef.current);
     setDetent(DETENT_ORDER[(idx + 1) % DETENT_ORDER.length]);
   }, [setDetent]);
@@ -189,7 +303,8 @@ export function BottomSheet({
     setDragging(true);
     // Capture on the handle itself so move/up keep arriving even off-element.
     e.currentTarget.setPointerCapture(e.pointerId);
-  }, [heightFor]);
+    onHandleInteract?.();
+  }, [heightFor, onHandleInteract]);
 
   // Apply the live drag height imperatively (rAF-batched direct DOM write),
   // bypassing React render for pointer-move frequency updates. Only called
@@ -198,7 +313,7 @@ export function BottomSheet({
     (height) => {
       const sheet = sheetRef.current;
       if (!sheet) return;
-      const full = fullH(bottomInsetRef.current);
+      const full = fullH(totalInset());
       sheet.style.setProperty("--sheet-visible-h", `${height}px`);
       sheet.style.transform = `translateY(${Math.max(0, full - height)}px)`;
       sheet.style.transition = "none";
@@ -213,7 +328,7 @@ export function BottomSheet({
     if (Math.abs(offset) > DRAG_THRESHOLD) draggedRef.current = true;
     const nextH = Math.max(
       peekHeightRef.current,
-      Math.min(fullH(bottomInsetRef.current), dragStart.current.height + offset)
+      Math.min(fullH(totalInset()), dragStart.current.height + offset)
     );
     scheduleHeight(nextH);
   }, [scheduleHeight]);
@@ -230,7 +345,7 @@ export function BottomSheet({
     setDragging(false);
 
     const minH = peekHeightRef.current;
-    const maxH = fullH(bottomInsetRef.current);
+    const maxH = fullH(totalInset());
     const targetH = Math.max(minH, Math.min(maxH, currentH + delta));
     let best = detentRef.current;
     let bestDist = Infinity;
@@ -251,7 +366,7 @@ export function BottomSheet({
     const sheet = sheetRef.current;
     if (sheet) {
       const settledH = heightFor(best);
-      const full = fullH(bottomInsetRef.current);
+      const full = fullH(totalInset());
       sheet.style.setProperty("--sheet-visible-h", `${settledH}px`);
       sheet.style.transform = `translateY(${Math.max(0, full - settledH)}px)`;
       sheet.style.transition = "transform 0.28s cubic-bezier(0.32,0.72,0,1)";
@@ -262,9 +377,15 @@ export function BottomSheet({
 
   const onHandleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "ArrowUp") {
+      // From the guided-workflow Review detent (not part of DETENT_ORDER —
+      // see its own doc), Up goes all the way to Full; Down (below) steps
+      // back to Half, the same pair of neighbours cycleDetent's tap already
+      // treats "review" as sitting between.
+      if (detentRef.current === "review") { setDetent(REVIEW_EXIT.up); return; }
       const idx = DETENT_ORDER.indexOf(detentRef.current);
       if (idx < DETENT_ORDER.length - 1) setDetent(DETENT_ORDER[idx + 1]);
     } else if (e.key === "ArrowDown") {
+      if (detentRef.current === "review") { setDetent(REVIEW_EXIT.down); return; }
       const idx = DETENT_ORDER.indexOf(detentRef.current);
       if (idx > 0) setDetent(DETENT_ORDER[idx - 1]);
     } else if (e.key === "Enter" || e.key === " ") {
@@ -278,7 +399,7 @@ export function BottomSheet({
   // Committed height for the current detent. Drag frames update the DOM
   // directly via applyLiveHeight and don't flow through this render path.
   const displayH = heightFor(detent);
-  const fullHeight = fullH(bottomInset);
+  const fullHeight = fullH(bottomInset + topInset);
 
   // Report the committed height + drag state up so the viewer follows detent
   // changes; in-progress drag frames report via applyLiveHeight instead.
@@ -313,9 +434,16 @@ export function BottomSheet({
     if (!sheet) return;
     returnFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // extraTrapContainerRef (guided workflow's persistent header, which sits
+    // ABOVE the sheet in stacking order): folded into the trap so it stays
+    // reachable by Tab and never gets its focus bounced back into the sheet —
+    // undefined everywhere else (including "tabs" workflow), where this is
+    // exactly the pre-existing sheet-only trap.
+    const extraContainer = extraTrapContainerRef?.current ?? null;
     const inTrap = (node: Node | null) =>
-      !!node && (sheet.contains(node) || node === scrimRef.current);
-    // DOM/tab order: the scrim (when present) precedes the sheet.
+      !!node && (sheet.contains(node) || node === scrimRef.current || (!!extraContainer && extraContainer.contains(node)));
+    // DOM/tab order: the extra container (when present) precedes the scrim,
+    // which precedes the sheet.
     // FOCUSABLE_SELECTOR alone isn't enough: Radix's inactive TabsContent
     // panels carry tabindex="0" (for programmatic/AT focus management) while
     // `hidden`, which the browser's real Tab key already skips — filter
@@ -326,7 +454,10 @@ export function BottomSheet({
       const list = Array.from(sheet.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
         isReachable
       );
-      return scrimRef.current ? [scrimRef.current, ...list] : list;
+      const extraList = extraContainer
+        ? Array.from(extraContainer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(isReachable)
+        : [];
+      return [...extraList, ...(scrimRef.current ? [scrimRef.current] : []), ...list];
     };
     const focusFirst = () => {
       const focusables = trapFocusables();
@@ -381,7 +512,7 @@ export function BottomSheet({
           type="button"
           className="sheet-scrim"
           style={bottomInset ? { bottom: bottomInset } : undefined}
-          aria-label="Collapse parameter panel"
+          aria-label={t("sheet.collapseAria")}
           onClick={() => setDetent("half")}
         />
       )}
@@ -395,16 +526,16 @@ export function BottomSheet({
           transform: `translateY(${Math.max(0, fullHeight - displayH)}px)`,
           transition: dragging ? "none" : "transform 0.28s cubic-bezier(0.32,0.72,0,1)",
         } as React.CSSProperties}
-        aria-label="Parameter panel"
+        aria-label={t("sheet.panelAria")}
         role="complementary"
       >
         <div className="sheet-frame">
           {/* Drag handle — single visible control; tap cycles, arrow keys resize. */}
           <div
-            className="sheet-handle"
+            className="sheet-handle relative"
             role="button"
             tabIndex={0}
-            aria-label={`Parameter panel — ${detent}. Tap to cycle, Arrow Up/Down to resize`}
+            aria-label={t("sheet.handleAria", { state: t(DETENT_WORD_KEY[detent]) })}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -413,12 +544,32 @@ export function BottomSheet({
             onKeyDown={onHandleKeyDown}
           >
             <div className="sheet-handle__bar" aria-hidden />
+            {/* One-time onboarding hint (AppShell's guided+half policy) —
+                aria-hidden + pointer-events-none: purely decorative, and must
+                never steal a tap/drag meant for the handle beneath it. */}
+            {hint && (
+              <span
+                className="sheet-hint pointer-events-none absolute -top-1 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-(--radius-sm) border glass-card px-2 py-1 text-[0.72rem] text-muted-foreground transition-opacity duration-300 motion-reduce:transition-none"
+                aria-hidden="true"
+              >
+                {hint}
+              </span>
+            )}
           </div>
 
           <div className="sheet-body">
             {children(detent, expand)}
           </div>
         </div>
+      </div>
+
+      {/* Polite live region: announces the settled detent on every change
+          (drag-snap, tap-cycle, Arrow Up/Down) — a WCAG signal for screen-
+          reader users, who get no other cue that a large amount of on-screen
+          content just moved. Silent on mount (see the announcement effect
+          above) and visually hidden (sr-only). */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {detentAnnouncement}
       </div>
     </>
   );

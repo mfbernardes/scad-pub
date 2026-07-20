@@ -4,15 +4,17 @@
 // via the auto-opening output console; PWA install is demoted to the Help
 // modal — so the bar stays lean.
 import { memo } from "react";
-import { BookOpen as GuideIcon } from "lucide-react";
+import { BookOpen as GuideIcon, FolderOpen as FilesIcon } from "lucide-react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
 import { DesignPicker } from "./DesignPicker";
+import { DesignPickerButton } from "./DesignPickerButton";
 import { BarBrand } from "./BarBrand";
 import { BarActions } from "./BarActions";
 import { OutputToggle } from "./OutputToggle";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 
 interface Props {
   schema: Schema;
@@ -31,6 +33,19 @@ interface Props {
   openPickerSignal: number;
   /** Whether the desktop bar is the visible layout (so only its picker opens). */
   pickerActive: boolean;
+  /** Wave 2 (guided shell, `ui.workflow: "guided"`): the design-name button
+   *  always opens the unified selector (UnifiedSelectorDialog.tsx) regardless
+   *  of `ui.gallery`/design count, and an "Imported files" icon appears when
+   *  the design imports files (Files tab equivalent moved off primary nav —
+   *  see FileBar.tsx / ImportedFilesModal.tsx). Default false: "tabs"
+   *  workflow's bar is completely unaffected. */
+  guided?: boolean;
+  /** Whether the active design has file import configured at all — gates the
+   *  guided-only "Imported files" icon (mirrors FileBar's own `fileImport`
+   *  gate). Ignored outside guided mode. */
+  hasFileImport?: boolean;
+  /** Opens ImportedFilesModal (AppShell owns the open state). */
+  onOpenImportedFiles?: () => void;
 }
 
 export const CommandBar = memo(function CommandBar({
@@ -48,8 +63,11 @@ export const CommandBar = memo(function CommandBar({
   onToggleOutput,
   openPickerSignal,
   pickerActive,
+  guided = false,
+  hasFileImport = false,
+  onOpenImportedFiles,
 }: Props) {
-  const { designChange, showDesignDoc } = useAppActions();
+  const { showDesignDoc } = useAppActions();
   const currentDesign = designs.find((d) => d.id === designId);
 
   return (
@@ -64,11 +82,17 @@ export const CommandBar = memo(function CommandBar({
 
       {/* Design picker, centered in the bar */}
       <div className="command-bar__design-picker inline-flex items-center gap-[0.4rem] justify-self-center whitespace-nowrap">
-        {designs.length > 1 ? (
+        {guided || (designs.length > 1 && schema.ui?.gallery) ? (
+          // Wave 2: the design name is always the unified-selector trigger in
+          // guided mode, regardless of `ui.gallery`/design count — it also
+          // surfaces Examples/Saved, not just other designs, so it's worth
+          // opening even for a single-design build. Outside guided mode, the
+          // same button is `ui.gallery`'s multi-design picker trigger.
+          <DesignPickerButton design={currentDesign ?? designs[0]} />
+        ) : designs.length > 1 ? (
           <DesignPicker
             designs={designs}
             value={designId}
-            onChange={designChange}
             openSignal={openPickerSignal}
             active={pickerActive}
           />
@@ -79,8 +103,8 @@ export const CommandBar = memo(function CommandBar({
         )}
         {currentDesign?.doc && (
           <IconButton
-            label="Design guide"
-            title="About this design"
+            label={t("bar.designGuide")}
+            title={t("bar.aboutDesign")}
             onClick={showDesignDoc}
             className="command-bar__design-doc size-7 p-[0.3rem]"
           >
@@ -99,7 +123,22 @@ export const CommandBar = memo(function CommandBar({
           onToggleOutput={onToggleOutput}
           status={{ rendering, ready, result, stale: stalePreview }}
           className={cn(ICON_BUTTON_CLASS, "command-bar__output")}
+          // Wave 1 (round-5): guided mode's own quiet dot indicator, never
+          // the numeric pill — see OutputToggle's own `variant` doc. `guided`
+          // false (every "tabs" workflow call, including every existing
+          // caller that omits it) keeps today's "count" badge unchanged.
+          variant={guided ? "dot" : "count"}
         />
+        {guided && hasFileImport && onOpenImportedFiles && (
+          <IconButton
+            label={t("files.importedTitle")}
+            title={t("files.importedTitle")}
+            onClick={onOpenImportedFiles}
+            className="command-bar__imported-files"
+          >
+            <FilesIcon size={16} />
+          </IconButton>
+        )}
         <BarActions themeMode={themeMode} />
       </div>
     </header>

@@ -7,6 +7,7 @@
 import { useAppActions } from "../lib/appActions";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
+import { t } from "../lib/i18n";
 
 export function PanelFooter({
   autoRender,
@@ -22,10 +23,10 @@ export function PanelFooter({
           rather than in the output toolbar: it's a mode that's rarely toggled. */}
       <Label
         className="auto-render inline-flex cursor-pointer select-none items-center gap-[0.35rem] text-[0.85rem] font-normal text-muted-foreground hover:text-foreground"
-        title="Update the preview automatically as you change settings"
+        title={t("panel.livePreviewTitle")}
       >
-        <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label="Live preview" />
-        Live preview
+        <Switch checked={autoRender} onCheckedChange={autoRenderChange} aria-label={t("panel.livePreview")} />
+        {t("panel.livePreview")}
       </Label>
     </div>
   );

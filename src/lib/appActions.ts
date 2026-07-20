@@ -14,6 +14,7 @@ import {
 } from "react";
 import type { ParamValue } from "../openscad/types";
 import type { Values } from "./presets";
+import type { SettingsView } from "./useExperience";
 
 export interface AppActions {
   install: () => void;
@@ -22,19 +23,30 @@ export interface AppActions {
   applyPreset: (v: Values) => void;
   selectedPresetChange: (id: string) => void;
   presetsChange: () => void;
+  settingsViewChange: (view: SettingsView) => void;
   render: () => void;
   exportModel: () => void;
   savePng: (url: string) => void;
   copyLink: () => void;
+  /** Force a clipboard-only copy of the share link, bypassing the native OS
+   *  share sheet even on a device where copyLink() would normally reach for
+   *  it (canShareNatively()) — the export dock's "More" menu offers this
+   *  ("Copy link") specifically so clipboard copy stays reachable when the
+   *  Share button itself goes native (see ActionButtons.tsx's own doc). */
+  copyLinkClipboard: () => void;
   reset: () => void;
   addFile: (name: string, bytes: Uint8Array) => void;
   removeFile: (name: string) => void;
   clearFiles: () => void;
   autoRenderChange: (v: boolean) => void;
   cycleTheme: () => void;
-  showHelp: () => void;
+  /** Opens the Help modal, optionally straight to the tab whose label matches
+   *  `tab` (see HelpModal's `initialTab`) — used by the after-export panel's
+   *  "Printing guide" action. Omit for the default "first tab" behaviour. */
+  showHelp: (tab?: string) => void;
   showDesignDoc: () => void;
   showLicenses: () => void;
+  showPicker: () => void;
 }
 
 const AppActionsContext = createContext<AppActions | null>(null);
@@ -61,19 +73,22 @@ export function AppActionsProvider({
       applyPreset: (v) => latest.current.applyPreset(v),
       selectedPresetChange: (id) => latest.current.selectedPresetChange(id),
       presetsChange: () => latest.current.presetsChange(),
+      settingsViewChange: (view) => latest.current.settingsViewChange(view),
       render: () => latest.current.render(),
       exportModel: () => latest.current.exportModel(),
       savePng: (url) => latest.current.savePng(url),
       copyLink: () => latest.current.copyLink(),
+      copyLinkClipboard: () => latest.current.copyLinkClipboard(),
       reset: () => latest.current.reset(),
       addFile: (name, bytes) => latest.current.addFile(name, bytes),
       removeFile: (name) => latest.current.removeFile(name),
       clearFiles: () => latest.current.clearFiles(),
       autoRenderChange: (v) => latest.current.autoRenderChange(v),
       cycleTheme: () => latest.current.cycleTheme(),
-      showHelp: () => latest.current.showHelp(),
+      showHelp: (tab) => latest.current.showHelp(tab),
       showDesignDoc: () => latest.current.showDesignDoc(),
       showLicenses: () => latest.current.showLicenses(),
+      showPicker: () => latest.current.showPicker(),
     };
   return createElement(AppActionsContext.Provider, { value: stable.current }, children);
 }

@@ -18,6 +18,8 @@ import {
   buildShareUrl,
   parseHashState,
   sessionStateEquals,
+  hashDesignIdMissing,
+  hashHasDesignId,
   type SessionState,
 } from "./lib/urlState";
 import { computeShareability, shareabilityWarning } from "./lib/shareability";
@@ -30,8 +32,11 @@ import { useOnline } from "./lib/useOnline";
 import { useRenderPipeline } from "./lib/useRenderPipeline";
 import { useFileImports } from "./lib/useFileImports";
 import { useAppNotices } from "./lib/useAppNotices";
-import { ns } from "./lib/appId";
-import { readLocal, writeLocal } from "./lib/safeStorage";
+import { useExperience } from "./lib/useExperience";
+import { makeOnceFlag } from "./lib/prefs";
+import { shouldOfferInstallHint, type ExportOutcomeKind } from "./lib/exportOutcome";
+import { t } from "./lib/i18n";
+import type { ExportSuccessState } from "./components/ExportSuccess";
 import { toast } from "sonner";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
@@ -40,7 +45,9 @@ import { LicensesModal } from "./components/LicensesModal";
 import { HelpModal } from "./components/HelpModal";
 import { DesignDocModal } from "./components/DesignDocModal";
 import { PopupModal } from "./components/PopupModal";
-import { shouldShowPopup, rememberPopup } from "./lib/popup";
+import { DesignPickerDialog } from "./components/DesignPickerDialog";
+import { UnifiedSelectorDialog } from "./components/UnifiedSelectorDialog";
+import { rememberPopup, resolvePopupSurface, type PopupSurface } from "./lib/popup";
 
 const schema = validateSchema(schemaJson);
 const initialState = readInitialState(schema);
@@ -55,10 +62,68 @@ const cacheConfig = schema.render?.cache;
 
 const popup = schema.popup ?? null;
 const installMode = schema.ui?.install ?? "auto";
-const INSTALL_HINT_KEY = ns("install.hint.seen");
+const installHintFlag = makeOnceFlag("install.hint.seen");
+// PR9: the optional inline after-export success panel (ExportSuccess.tsx).
+// Absent -> null -> the feature is off entirely, exportModel never sets any
+// export-success state, and the install hint keeps its old behaviour below
+// (see shouldOfferInstallHint's doc for the precedence rule this implies).
+const afterExportConfig = schema.ui?.afterExport ?? null;
+// First-vs-later show for the panel's auto-hide duration (see
+// src/lib/exportOutcome.ts's afterExportAutoHideMs) — a separate flag from
+// checklistExportedFlag below: that one tracks "has this browser ever
+// exported", this one tracks "has this browser ever SEEN THE PANEL",
+// independent of whether afterExport was configured at the time.
+const afterExportFlag = makeOnceFlag("afterexport.v1");
+// The getting-started checklist's "Export the model" item persists across
+// visits — once a browser has exported successfully, that's real, durable
+// progress, so it stays checked on a later reload rather than resetting
+// every session (see src/lib/checklist.ts's doc for why the OTHER items
+// stay session-only: a design switch / param edit isn't meaningfully "still
+// true" days later the way "you've exported before" is).
+const checklistExportedFlag = makeOnceFlag("checklist.exported.v1");
+// PR7: the card-grid DesignPickerDialog replaces the dropdown Select when
+// `ui.gallery` is on — meaningless with zero/one design, so also require more
+// than one. Computed once at module scope (like `popup`/`installMode` above)
+// since it never changes at runtime.
+const galleryEnabled = schema.ui?.gallery === true && schema.designs.length > 1;
+// A stale/broken deep link (a `#d=<id>` naming a design this build doesn't
+// have) — computed once from the hash the page loaded with, same source
+// `readInitialState` already read above. Only meaningful when the dialog
+// exists at all (`galleryEnabled`); the classic Select has no such recovery UI.
+const initialBrokenLink = galleryEnabled && hashDesignIdMissing(schema, location.hash);
+// Whether THIS load's hash already names a design at all (valid or not) — a
+// deep link or share link, as opposed to a bare visit. Used below to keep
+// the welcome design picker (`popup.mode: "picker"`) from showing to a
+// visitor who already chose via a link — see resolvePopupSurface's doc.
+const initialIsDeepLink = hashHasDesignId(location.hash);
+// Wave 2 (guided shell, `ui.workflow: "guided"`): the ONE selector
+// (UnifiedSelectorDialog) replaces DesignPickerDialog wherever a selector is
+// shown — the design-name header button (always DesignPickerButton in guided
+// mode — see CommandBar.tsx/GuidedMobileHeader.tsx), this build's own
+// first-run auto-open (below), AND (round-5 Wave 2, item 1) the configurable
+// popup's own `popup.mode: "picker"` first-run "welcome" surface (see the
+// `popupSurface === "welcome"` branch further down) — DesignPickerDialog's
+// separate two-step highlight-then-confirm welcome variant is now "tabs"
+// workflow only. Independent of `galleryEnabled`: the unified selector also
+// surfaces Examples/Saved, not just other designs, so it's worth opening
+// even for a single-design build. Never affects "tabs" workflow, which keeps
+// DesignPickerDialog/PresetPicker exactly as before.
+const workflowGuided = schema.ui?.workflow === "guided";
+// First run (no design chosen yet, no deep link, no popup already about to
+// cover the same "what am I making" job): auto-open the unified selector on
+// mount so a guided visitor lands on a deliberate choice instead of
+// whatever `designs[0]` happens to be. Computed once here (not read from the
+// `popupSurface` state below, which isn't resolved until inside the
+// component) via the same resolvePopupSurface call that state's own
+// initializer makes, so the two can never disagree about whether a popup is
+// already covering this first-run moment.
+const initialPopupSurface = resolvePopupSurface({ popup, galleryEnabled, isDeepLink: initialIsDeepLink });
+const guidedFirstRunAutoOpen =
+  workflowGuided && schema.designs.length > 1 && !initialIsDeepLink && initialPopupSurface === "none";
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
+  const { experienceMode, settingsView, setSettingsView } = useExperience();
   const { canInstall, promptInstall } = useInstallPrompt();
   const online = useOnline();
   const {
@@ -75,6 +140,19 @@ export default function App() {
   const [values, setValues] = useState<Values>(initialState.values);
   const [presetSel, setPresetSel] = useState(initialState.preset);
   const [bundledPresets, setBundledPresets] = useState<ParsedSet[]>([]);
+  // Getting-started checklist progress (src/lib/checklist.ts): real,
+  // verifiable facts about this session, owned here (not AppShell) because
+  // the Help modal's replay row — a sibling of AppShell — must reach the
+  // same "exported" persistence and bump the same replay signal. See
+  // GettingStarted.tsx / AppShell.tsx for how these combine with schema and
+  // render-pipeline state into the full ChecklistState.
+  const [designChangedOnce, setDesignChangedOnce] = useState(false);
+  const [paramInteracted, setParamInteracted] = useState(false);
+  const [exportedOnce, setExportedOnce] = useState(() => checklistExportedFlag.seen());
+  // Bumped by the Help modal's "show the checklist again" row to clear the
+  // dismiss flag and bring GettingStarted back (mirrors openPickerSignal).
+  const [checklistReplaySignal, setChecklistReplaySignal] = useState(0);
+  const replayChecklist = useCallback(() => setChecklistReplaySignal((n) => n + 1), []);
   const [userPresets, setUserPresets] = useState<string[]>(() => listPresets(design.id));
   const refreshUserPresets = useCallback(() => setUserPresets(listPresets(design.id)), [design.id]);
   // Transient user-facing confirmations (export done, link copied, …) go through
@@ -85,19 +163,96 @@ export default function App() {
   }, []);
   const [showLicenses, setShowLicenses] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // Which Help tab to open straight to, set only via a deep-linked showHelp()
+  // call (the after-export panel's "Printing guide" action) — see
+  // AppActions.showHelp's doc and HelpModal's initialTab.
+  const [helpInitialTab, setHelpInitialTab] = useState<string | undefined>(undefined);
+  // The after-export panel's current state (null -> not shown). `key`
+  // increments on every export so the panel's auto-hide timer restarts even
+  // when two exports in a row land on the same outcome — see
+  // ExportSuccess.tsx's own doc.
+  const [exportSuccess, setExportSuccess] = useState<ExportSuccessState | null>(null);
+  const exportSuccessKeyRef = useRef(0);
+  const dismissExportSuccess = useCallback(() => setExportSuccess(null), []);
   const [showDesignDoc, setShowDesignDoc] = useState(false);
-  const [showPopup, setShowPopup] = useState(() => shouldShowPopup(popup));
+  // Which of the configurable popup's surfaces (none/classic/welcome) this
+  // load should show — see resolvePopupSurface's own doc for the full
+  // precedence (mode, design count, ui.gallery, deep-link skip, remembered
+  // dismissal). Resolved once at mount; every path that dismisses either
+  // surface below sets it back to "none".
+  const [popupSurface, setPopupSurface] = useState<PopupSurface>(initialPopupSurface);
   const closePopup = (remember: boolean) => {
     if (remember && popup) rememberPopup(popup);
-    setShowPopup(false);
+    setPopupSurface("none");
   };
   // Bumped by the popup's primary CTA to open the design picker (the obvious
   // first step). AppShell routes it to whichever layout's picker is visible.
+  // Only meaningful for the classic Select (see DesignPicker.tsx); when
+  // `galleryEnabled`, the CTA opens the DesignPickerDialog below instead.
   const [openPickerSignal, setOpenPickerSignal] = useState(0);
+  // DesignPickerDialog / (guided workflow) UnifiedSelectorDialog: App owns
+  // the shared open state, same as showHelp/showDesignDoc/showLicenses
+  // above — see workflowGuided's own doc for why the two dialogs share this
+  // one `showPicker` trigger rather than each owning a separate flag.
+  // `pickerReason` carries why DesignPickerDialog opened uninvited (a stale
+  // deep link) so it can show a short explanation just that once; any
+  // deliberate open (button/CTA/⌘K) clears it. Wave 2's own uninvited-open
+  // reason, guidedFirstRunAutoOpen, needs no such explanation (it's the
+  // EXPECTED first-run state, not a recovery from a broken link), so it
+  // isn't threaded into `pickerReason`.
+  const [showPicker, setShowPicker] = useState(initialBrokenLink || guidedFirstRunAutoOpen);
+  const [pickerReason, setPickerReason] = useState<"brokenLink" | null>(
+    initialBrokenLink ? "brokenLink" : null
+  );
+  // Wave 2: which group UnifiedSelectorDialog lands on — "designs" for every
+  // deliberate open (the header button, ⌘K, first-run auto-open — see
+  // `openPicker` below, which always resets it), "examples" for the welcome
+  // popup's own "Browse examples" action (see `browseExamples` below,
+  // guided branch, which sets it explicitly right before opening).
+  // Narrower than UnifiedSelectorDialog's own SelectorGroup (which also has
+  // "saved"): App's setters only ever land on "designs" (openPicker) or
+  // "examples" (browseExamples) — "saved" is reachable only via the dialog's
+  // own internal segmented-row clicks, which live in its own `group` state,
+  // not this one.
+  const [selectorGroup, setSelectorGroup] = useState<"designs" | "examples">("designs");
+  const openPicker = useCallback(() => {
+    setPickerReason(null);
+    setSelectorGroup("designs");
+    setShowPicker(true);
+  }, []);
+  const closePicker = useCallback(() => setShowPicker(false), []);
   const popupPrimary = (remember: boolean) => {
     closePopup(remember);
-    if (schema.designs.length > 1) setOpenPickerSignal((n) => n + 1);
+    if (schema.designs.length > 1) {
+      if (galleryEnabled || workflowGuided) openPicker();
+      else setOpenPickerSignal((n) => n + 1);
+    }
   };
+
+  // ⌘K / Ctrl-K opens the design picker dialog from anywhere — a small power-
+  // user affordance, only wired up when a dialog actually exists to open
+  // (`galleryEnabled`, or `workflowGuided` — guided mode's UnifiedSelector is
+  // always reachable via `showPicker`, independent of `ui.gallery`). Ignored
+  // while typing in a field (so it doesn't interrupt entering a "k" into a
+  // text/number param or the picker's own search box) or while any dialog is
+  // already open (any Radix Dialog instance — help/licenses/doc/popup/the
+  // picker itself — carries role="dialog"), so it can't stack a second modal
+  // on top of one that's already up.
+  useEffect(() => {
+    if (!galleryEnabled && !workflowGuided) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "k" || !(e.metaKey || e.ctrlKey)) return;
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (typing || document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      openPicker();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [openPicker]);
 
   // File imports and the render pipeline are mutually coupled — imports feed
   // the render key, and an import must invalidate the render cache. The ref
@@ -111,13 +266,17 @@ export default function App() {
 
   const {
     result,
+    retainedResult,
     rendering,
     ready,
+    loadProgress,
+    engineDownloaded,
     renderedValues,
     renderMetrics,
     autoRender,
     setAutoRender,
     stalePreview,
+    pauseReason,
     exportable,
     snapshot,
     bundleStale,
@@ -153,9 +312,58 @@ export default function App() {
       resetForDesign(next);
       setPresetSel("");
       setUserPresets(listPresets(id));
+      // A real, deliberate design switch — the getting-started checklist's
+      // "Choose a design" item (see src/lib/checklist.ts). Deliberately NOT
+      // set by applyExternalState below: an incoming deep link landing on a
+      // design isn't the user having chosen it themselves this session.
+      setDesignChangedOnce(true);
     },
     [designId, resetForDesign]
   );
+
+  // A deliberate choice made through either DesignPickerDialog instance (the
+  // welcome variant AND the regular ⌘K/top-bar one) — layered over
+  // handleDesignChange so the getting-started checklist's "Choose a design"
+  // item registers even when the picker's choice happens to already match the
+  // live design (handleDesignChange itself no-ops then, since nothing about
+  // render state needs resetting, but the user did just deliberately confirm
+  // a choice in the dialog).
+  const pickDesign = useCallback(
+    (id: string) => {
+      handleDesignChange(id);
+      setDesignChangedOnce(true);
+    },
+    [handleDesignChange]
+  );
+
+  // UnifiedSelectorDialog's Examples/Saved groups applying a preset — lifted
+  // out of the JSX below (matching openPicker/pickDesign/closePicker's own
+  // useCallback pattern) so the dialog, wrapped in React.memo, doesn't
+  // reconcile every time App re-renders for something unrelated.
+  const applySelectorPreset = useCallback((v: Values, selectedId: string) => {
+    setValues(v);
+    setPresetSel(selectedId);
+  }, []);
+
+  // Bumped by the welcome design picker's "Browse examples" action to switch
+  // AppShell's docked/sheet panel to the Presets tab — see AppShell's own
+  // openExamplesSignal doc. Unused in guided workflow, which has no Presets
+  // tab to switch to — the same action instead opens the unified selector
+  // straight to its Examples group (see `browseExamples` below).
+  const [openExamplesSignal, setOpenExamplesSignal] = useState(0);
+  const browseExamples = useCallback(() => {
+    if (workflowGuided) {
+      // Opens UnifiedSelectorDialog straight to Examples — deliberately NOT
+      // `openPicker()`, which always resets the group to "designs" (see its
+      // own doc); this is the one caller that wants a different landing
+      // group.
+      setPickerReason(null);
+      setSelectorGroup("examples");
+      setShowPicker(true);
+    } else {
+      setOpenExamplesSignal((n) => n + 1);
+    }
+  }, []);
 
   // M4: the ONE place external URL state (a same-document hashchange, or an
   // installed-app launch target queued via the Web App Launch Handler) is
@@ -251,8 +459,14 @@ export default function App() {
     return () => { active = false; };
   }, [design]);
 
-  const setValue = useCallback((name: string, value: ParamValue) =>
-    setValues((v) => ({ ...v, [name]: value })), []);
+  // The params form's per-field edit — the checklist's "Review the essential
+  // settings" item (see src/lib/checklist.ts) fires from exactly this call,
+  // not from applyPreset below: a preset apply is a bulk value replacement,
+  // not the user having actually looked at and changed a control by hand.
+  const setValue = useCallback((name: string, value: ParamValue) => {
+    setParamInteracted(true);
+    setValues((v) => ({ ...v, [name]: value }));
+  }, []);
 
   // The unified preset-diff baseline: the selected preset's values when one is
   // selected, else null (meaning "compare against defaults" — see `baseline`
@@ -280,14 +494,14 @@ export default function App() {
   // the UX plan — never a standing prompt.
   const offerInstallHint = useCallback(() => {
     if (!canInstall || installMode === "off") return;
-    if (readLocal(INSTALL_HINT_KEY)) return;
+    if (installHintFlag.seen()) return;
     // Storage unavailable — skip the hint rather than risk repeating it.
-    if (!writeLocal(INSTALL_HINT_KEY, "1")) return;
-    toast("Install this configurator for quick, offline access?", {
+    if (!installHintFlag.remember()) return;
+    toast(t("app.installHintToast"), {
       id: "install-hint",
       duration: 12000,
-      action: { label: "Install", onClick: () => void promptInstall() },
-      cancel: { label: "Not now", onClick: () => {} },
+      action: { label: t("app.installAction"), onClick: () => void promptInstall() },
+      cancel: { label: t("app.notNow"), onClick: () => {} },
     });
   }, [canInstall, promptInstall]);
 
@@ -302,13 +516,40 @@ export default function App() {
     const blob = new Blob([snapshot.result.stl as BlobPart], { type: `model/${schema.format}` });
     // Prefer the native share sheet on capable devices (send straight to a
     // slicer / Files / AirDrop); fall back to a plain download otherwise.
+    // Only ever read/set post-export UI state (the panel or the toast) AFTER
+    // this settles, so neither can ever appear over, or race, the share sheet.
     const outcome = await shareFileOrFallback(
       new File([blob], name, { type: blob.type }),
       () => downloadBlob(blob, name)
     );
     if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
-    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
-    offerInstallHint();
+    // "fell-back" is a real browser download (shareFile was unsupported/
+    // failed, so the fallback ran); "shared" is navigator.share() resolving.
+    // See src/lib/exportOutcome.ts's file doc for why "shared" still maps to
+    // the modest readyToShare wording rather than an overclaiming "completed".
+    const kind: ExportOutcomeKind = outcome === "shared" ? "shared" : "downloaded";
+    if (afterExportConfig) {
+      // The panel is this deployment's one and only post-export surface (see
+      // shouldOfferInstallHint's precedence doc below) — it replaces the
+      // plain announcement toast entirely rather than stacking with it.
+      const isFirstShow = !afterExportFlag.seen();
+      afterExportFlag.remember();
+      exportSuccessKeyRef.current += 1;
+      setExportSuccess({ outcome: kind, key: exportSuccessKeyRef.current, isFirstShow });
+    } else {
+      setAnnouncement(outcome === "shared" ? t("app.sharedName", { name }) : t("app.exportedName", { name }));
+    }
+    // Precedence rule (src/lib/exportOutcome.ts): the install hint only ever
+    // fires on a deployment that hasn't configured the after-export panel —
+    // the simplest rule that can never stack the two on the same export.
+    if (shouldOfferInstallHint(!!afterExportConfig)) offerInstallHint();
+    // The checklist's "Export the model" item: a real export just completed
+    // (share OR download — either is a genuine export, not a dismissed
+    // sheet, which returned above). It happened regardless of whether the
+    // best-effort persistence below sticks — a storage failure shouldn't
+    // make an export that just succeeded read as "not done" this session.
+    setExportedOnce(true);
+    checklistExportedFlag.remember();
   }, [exportable, snapshot, offerInstallHint, setAnnouncement]);
 
   const savePng = useCallback(async (url: string) => {
@@ -322,7 +563,7 @@ export default function App() {
       () => download(url, name)
     );
     if (outcome === "cancelled") return;
-    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Saved ${name}`);
+    setAnnouncement(outcome === "shared" ? t("app.sharedName", { name }) : t("app.savedName", { name }));
   }, [exportable, snapshot, setAnnouncement]);
 
   // Whether the CURRENT design/values/imports are fully described by a plain
@@ -332,6 +573,21 @@ export default function App() {
   const shareability = useMemo(
     () => computeShareability(design, values, userFiles, schema.fontFaces ?? []),
     [design, values, userFiles]
+  );
+
+  // Shared by copyLink's clipboard fallback and copyLinkClipboard: write the
+  // share URL to the clipboard and announce success (the shareability
+  // warning, if any, takes priority) or failure.
+  const copyUrlToClipboard = useCallback(
+    async (url: string, warning: string | null) => {
+      try {
+        await navigator.clipboard.writeText(url);
+        setAnnouncement(warning ?? t("app.copiedShareLink"));
+      } catch {
+        setAnnouncement(t("app.copyFailed"));
+      }
+    },
+    [setAnnouncement]
   );
 
   const copyLink = useCallback(async () => {
@@ -350,16 +606,26 @@ export default function App() {
       if (warning) setAnnouncement(warning);
       return;
     }
-    try {
-      await navigator.clipboard.writeText(url);
-      setAnnouncement(warning ?? "Copied share link");
-    } catch {
-      setAnnouncement("Couldn't copy — copy the URL from the address bar");
-    }
-  }, [design, values, presetSel, shareability, setAnnouncement]);
+    await copyUrlToClipboard(url, warning);
+  }, [design, values, presetSel, shareability, setAnnouncement, copyUrlToClipboard]);
+
+  // Clipboard-only variant of copyLink, for the export dock's "More" menu
+  // (see ActionButtons.tsx): copyLink() reaches for the native OS share sheet
+  // first on a capable device, which means the Share button never leaves a
+  // plain clipboard copy reachable there — this action skips that branch
+  // entirely so "Copy link" always lands the URL on the clipboard, regardless
+  // of device.
+  const copyLinkClipboard = useCallback(async () => {
+    const url = buildShareUrl(design, values, presetSel);
+    const warning = shareabilityWarning(shareability);
+    await copyUrlToClipboard(url, warning);
+  }, [design, values, presetSel, shareability, copyUrlToClipboard]);
 
   const handleReset = useCallback(() => { setValues(defaultsFor(design)); setPresetSel(""); }, [design]);
-  const showHelpModal = useCallback(() => setShowHelp(true), []);
+  const showHelpModal = useCallback((tab?: string) => {
+    setHelpInitialTab(tab);
+    setShowHelp(true);
+  }, []);
   const showDesignDocModal = useCallback(() => setShowDesignDoc(true), []);
   const showLicensesModal = useCallback(() => setShowLicenses(true), []);
 
@@ -372,10 +638,12 @@ export default function App() {
     applyPreset: setValues,
     selectedPresetChange: setPresetSel,
     presetsChange: refreshUserPresets,
+    settingsViewChange: setSettingsView,
     render: doRender,
     exportModel,
     savePng,
     copyLink,
+    copyLinkClipboard,
     reset: handleReset,
     addFile,
     removeFile,
@@ -385,7 +653,26 @@ export default function App() {
     showHelp: showHelpModal,
     showDesignDoc: showDesignDocModal,
     showLicenses: showLicensesModal,
+    showPicker: openPicker,
   };
+
+  // Memoized on its primitive inputs — unlike `actions` above, this one DOES
+  // need a stable identity: it flows into usePanelDerivedState's
+  // checklistState (see usePanelDerivedState.ts), which AppShell's `panelData`
+  // useMemo depends on, so a fresh object literal here would defeat that memo
+  // every render and churn every PanelDataContext consumer.
+  const checklistProgress = useMemo(
+    () => ({
+      designChanged: designChangedOnce,
+      paramInteracted,
+      exported: exportedOnce,
+    }),
+    [designChangedOnce, paramInteracted, exportedOnce]
+  );
+  // The Help modal's replay row only makes sense where the checklist could
+  // ever show at all — same gate AppShell derives its own `showChecklist`
+  // from, computed here too since HelpModal is AppShell's sibling.
+  const canReplayChecklist = experienceMode === "guided" && schema.ui?.checklist !== false;
 
   useAppNotices({
     bundleStale,
@@ -394,19 +681,90 @@ export default function App() {
     applyUpdate,
     dismissUpdate,
     online,
+    engineReady: ready,
+    renderCompleted: result !== null,
+    engineDownloaded,
   });
 
   return (
     <>
-      {showPopup && popup && (
-        <PopupModal popup={popup} onClose={closePopup} onPrimary={popupPrimary} />
+      {popupSurface === "classic" && popup && (
+        <PopupModal
+          // "picker" mode falls back to this classic modal only when it can't
+          // show the picker itself (see resolvePopupSurface) — rendered here
+          // with "dismissible" behaviour (a checkbox opt-out) rather than
+          // "picker"'s own semantics, which PopupModal doesn't know how to
+          // render. closePopup/popupPrimary still hash-remember against the
+          // ORIGINAL configured popup (mode "picker"), not this display copy.
+          popup={popup.mode === "picker" ? { ...popup, mode: "dismissible" } : popup}
+          onClose={closePopup}
+          onPrimary={popupPrimary}
+        />
+      )}
+      {popupSurface === "welcome" && popup && (
+        workflowGuided ? (
+          // Wave 2 round-5 (item 1): guided workflow's first-run "welcome"
+          // surface is now the SAME UnifiedSelectorDialog every later
+          // selection uses (Designs/Examples/Saved in one dialog), not the
+          // separate DesignPickerDialog-welcome two-step highlight-then-
+          // confirm flow "tabs" workflow (below) still keeps. The popup's
+          // own header/body/footnote become the dialog's heading/subtitle/
+          // footer note (see UnifiedSelectorDialog's own `welcome` prop
+          // doc); no separate "Browse examples" action is needed here — the
+          // Examples group is just another tab in the same dialog. Picking a
+          // design (or an example/saved setup) both applies the choice AND
+          // remembers the popup dismissed, via the same `onClose`.
+          <UnifiedSelectorDialog
+            designs={schema.designs}
+            design={design}
+            bundled={bundledPresets}
+            userPresets={userPresets}
+            selectedPreset={presetSel}
+            values={values}
+            onSelectDesign={pickDesign}
+            onApplyPreset={applySelectorPreset}
+            onPresetsChange={refreshUserPresets}
+            onClose={() => closePopup(true)}
+            welcome={{
+              heading: popup.header,
+              subtitle: popup.body,
+              footnote: popup.footnote,
+            }}
+          />
+        ) : (
+          <DesignPickerDialog
+            designs={schema.designs}
+            value={design.id}
+            onSelect={(id) => {
+              pickDesign(id);
+              closePopup(true);
+            }}
+            onClose={() => closePopup(true)}
+            welcome={{
+              heading: popup.header,
+              subtitle: popup.body,
+              footnote: popup.footnote,
+              onBrowseExamples: (id) => {
+                pickDesign(id);
+                closePopup(true);
+                browseExamples();
+              },
+            }}
+          />
+        )
       )}
       {showHelp && (
         <HelpModal
           help={schema.help}
-          onClose={() => setShowHelp(false)}
+          onClose={() => {
+            setShowHelp(false);
+            setHelpInitialTab(undefined);
+          }}
           canInstall={canInstall && installMode !== "off"}
           onInstall={promptInstall}
+          canReplayChecklist={canReplayChecklist}
+          onReplayChecklist={replayChecklist}
+          initialTab={helpInitialTab}
         />
       )}
       {showDesignDoc && design.doc && (
@@ -417,6 +775,38 @@ export default function App() {
       )}
       {showLicenses && (
         <LicensesModal extra={schema.licenses} onClose={() => setShowLicenses(false)} />
+      )}
+      {showPicker && workflowGuided && (
+        // Wave 2 (guided shell): the ONE selector — Designs/Examples/Saved —
+        // in place of DesignPickerDialog. Opened by the header's design-name
+        // button (always DesignPickerButton in guided mode), the first-run
+        // auto-open (guidedFirstRunAutoOpen), and the welcome popup's own
+        // "Browse examples" action (browseExamples, guided branch).
+        <UnifiedSelectorDialog
+          designs={schema.designs}
+          design={design}
+          bundled={bundledPresets}
+          userPresets={userPresets}
+          selectedPreset={presetSel}
+          values={values}
+          onSelectDesign={pickDesign}
+          onApplyPreset={applySelectorPreset}
+          onPresetsChange={refreshUserPresets}
+          onClose={closePicker}
+          initialGroup={selectorGroup}
+        />
+      )}
+      {showPicker && !workflowGuided && (
+        <DesignPickerDialog
+          designs={schema.designs}
+          value={design.id}
+          onSelect={(id) => {
+            pickDesign(id);
+            closePicker();
+          }}
+          onClose={closePicker}
+          reason={pickerReason}
+        />
       )}
 
       <Toaster theme={theme} />
@@ -438,14 +828,24 @@ export default function App() {
           changedParams={changedNames}
           userFiles={userFiles}
           result={result}
+          retainedResult={retainedResult}
           rendering={rendering}
           ready={ready}
+          loadProgress={loadProgress}
           autoRender={autoRender}
           stalePreview={stalePreview}
+          pauseReason={pauseReason}
           exportable={exportable}
           theme={theme}
           themeMode={themeMode}
           openPickerSignal={openPickerSignal}
+          openExamplesSignal={openExamplesSignal}
+          settingsView={settingsView}
+          experienceMode={experienceMode}
+          checklistProgress={checklistProgress}
+          checklistReplaySignal={checklistReplaySignal}
+          exportSuccess={exportSuccess}
+          onDismissExportSuccess={dismissExportSuccess}
         />
       </AppActionsProvider>
     </>

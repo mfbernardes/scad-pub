@@ -4,12 +4,15 @@
 // absent that, it doubles as the render-status indicator (a corner status dot).
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
+import { t, tn } from "../lib/i18n";
 import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";
 import { Bell as BellIcon, BellRing as BellRingIcon } from "lucide-react";
 
 interface Props {
   outputOpen: boolean;
-  /** How many notices/warnings are pending — shown as a corner count badge when > 0. */
+  /** How many notices/warnings are pending — shown as a corner count badge
+   *  (`variant: "count"`) or drives a corner dot's presence (`variant:
+   *  "dot"`) when > 0. Always used for the accessible name either way. */
   noticeCount?: number;
   onToggleOutput: () => void;
   /**
@@ -20,6 +23,41 @@ interface Props {
    */
   status?: RenderStatusInput;
   className?: string;
+  /**
+   * Wave 1 (round-5): `"count"` (default) is today's numeric pill badge,
+   * unchanged — "tabs" workflow's every caller keeps this. `"dot"` is
+   * guided workflow's own cleaner indicator: a small amber dot (matching the
+   * render-status dot's own size/position, so it never overlaps/clips the
+   * bell glyph the way the wider numeric pill could) instead of a digit —
+   * redundant with the Review chip's own amber dot otherwise, so guided mode
+   * gets ONE quiet signal here, not a second one repeating the same count as
+   * text. The accessible name still announces the live count either way.
+   */
+  variant?: "count" | "dot";
+}
+
+/** The small corner status dot shared by the render-status indicator (below,
+ *  color/pulse driven by `deriveRenderStatus`) and guided workflow's own
+ *  quiet `variant: "dot"` notice indicator (round-5 review, quality item 7)
+ *  — same size/position/ring treatment either way, so it never overlaps or
+ *  clips the bell glyph the way the wider numeric pill can; only the color
+ *  and whether it pulses differ per caller. */
+function StatusDot({ colorClass, pulse }: { colorClass: string; pulse?: boolean }) {
+  return (
+    <span
+      // `output-toggle__dot` — a stable hook class (see CLAUDE.md's "Keep
+      // script hook classes") so the guided-mode smoke suite can assert the
+      // header bell's quiet notice dot is present/absent without depending
+      // on the underlying colour utility, which also serves the render-
+      // status dot (a different caller of this same shared shell).
+      className={cn(
+        "output-toggle__dot pointer-events-none absolute top-[3px] right-[3px] size-[8px] rounded-full shadow-[0_0_0_2px_var(--panel)]",
+        colorClass,
+        pulse && "animate-[pill-pulse_1s_ease-in-out_infinite] motion-reduce:animate-none"
+      )}
+      aria-hidden="true"
+    />
+  );
 }
 
 export function OutputToggle({
@@ -28,6 +66,7 @@ export function OutputToggle({
   onToggleOutput,
   status,
   className,
+  variant = "count",
 }: Props) {
   const hasNotices = noticeCount > 0;
   // A bell (ringing when notices are pending) reads far more clearly to a maker
@@ -56,14 +95,14 @@ export function OutputToggle({
         className
       )}
       onClick={onToggleOutput}
-      aria-label={`${outputOpen ? "Close" : "Open"} messages${
-        hasNotices ? ` (${noticeCount} notice${noticeCount === 1 ? "" : "s"})` : ""
+      aria-label={`${outputOpen ? t("output.toggleAriaClose") : t("output.toggleAriaOpen")}${
+        hasNotices ? tn("output.noticesSuffix", noticeCount) : ""
       }`}
       aria-pressed={outputOpen}
-      title="Messages from the design — notices & log"
+      title={t("output.title")}
     >
       <BellGlyph size={16} />
-      {hasNotices ? (
+      {hasNotices && variant === "count" ? (
         <span
           // --warn flips luminance between themes (light amber on dark, deep
           // amber-brown on light), so its legible text colour flips too —
@@ -76,17 +115,15 @@ export function OutputToggle({
         >
           {noticeCount}
         </span>
+      ) : hasNotices && variant === "dot" ? (
+        // Guided workflow's own quiet indicator (see this component's own
+        // `variant` doc) — StatusDot's shared shell, static (no pulse). No
+        // digit — the Review chip's own dot plus Review's "N issue(s) to
+        // review" line already carry the count; this is glance-only,
+        // matching that dot's own contract.
+        <StatusDot colorClass="bg-warn" />
       ) : (
-        dot && (
-          <span
-            className={cn(
-              "pointer-events-none absolute top-[3px] right-[3px] size-[8px] rounded-full shadow-[0_0_0_2px_var(--panel)]",
-              dot.dot,
-              dot.pulse && "animate-[pill-pulse_1s_ease-in-out_infinite] motion-reduce:animate-none"
-            )}
-            aria-hidden="true"
-          />
-        )
+        dot && <StatusDot colorClass={dot.dot} pulse={dot.pulse} />
       )}
       {/* Keep the render status available to assistive tech — and as the stable
           `render-status` hook the smoke/capture scripts read for completion. */}
