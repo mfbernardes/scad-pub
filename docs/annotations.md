@@ -72,6 +72,35 @@ to mark one parameter, or directly above a section header to mark the entire
 section. Unmarked parameters are essential by default. The annotation affects
 only the browser UI; every value is still sent to OpenSCAD.
 
+## Guided stages (`// @stage`)
+
+When `ui.flow` is `"guided"`, put `// @stage <id> | <Label>` directly above a
+section header to turn that section into a named customization step:
+
+```scad
+// @stage content | Content
+/* [Text] */
+label = "Room 1";
+
+// The label may be omitted when reusing a stage declared earlier.
+// @stage content
+/* [Language] */
+language = "English"; // [English, German]
+
+// @stage shape | Shape
+/* [Plate] */
+width = 80; // [40:1:160]
+```
+
+Stages appear in first-declaration order, between Start and the automatically
+generated Review step. Reusing an ID groups non-adjacent sections into the same
+step. A label is optional and defaults to a humanized ID; conflicting labels
+for one ID fail the build. Sections without `@stage` remain accessible in an
+automatic **Other settings** step, so adding annotations cannot hide controls.
+
+The annotation only changes guided navigation. Standard flow continues to show
+the normal Parameters tab, and OpenSCAD ignores the comments in both modes.
+
 ## Font selectors (`// @font`)
 
 Mark a string parameter as a font selector. In the app, it renders as a **font dropdown** listing every face the renderer can use: bundled fonts plus imported fonts. Friendly names come from the font files themselves, such as "Liberation Sans Bold", never the raw Fontconfig `Family:style=Style` string. The list updates the moment you import a font, and the menu includes an **Import font…** action.

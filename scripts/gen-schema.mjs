@@ -390,7 +390,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
   return resolveDesignList(config, SOURCE).map(({ iconSrc, imageSrc, docSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
-    const { params, sections, collapsedSections, meta } = parseParams(abs);
+    const { params, sections, collapsedSections, stages, meta } = parseParams(abs);
     copyAsset(d.file);
     // Auto-detect a sibling OpenSCAD parameterSets file: <name>.scad -> <name>.json
     // next to it. One file can hold many named sets; absent -> no bundled presets.
@@ -463,7 +463,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       copyFileSync(src, dest);
       doc = `scad/${name}`;
     }
-    return { ...d, description, icon, image, doc, presets, abs, sections, collapsedSections, params };
+    return { ...d, description, icon, image, doc, presets, abs, sections, collapsedSections, stages, params };
   });
 }
 

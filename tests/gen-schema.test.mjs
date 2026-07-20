@@ -131,6 +131,47 @@ test("collapsedSections is empty when nothing is annotated", () => {
   assert.deepEqual(schema.designs[0].collapsedSections, []);
 });
 
+test("// @stage groups sections into ordered guided steps", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-stage-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(
+    file,
+    `// @stage content | Content\n` +
+      `/* [Text] */\nlabel = "Room";\n` +
+      `// @stage shape | Shape\n` +
+      `/* [Plate] */\nwidth = 80;\n` +
+      `// @stage content\n` +
+      `/* [Language] */\nlanguage = "English";\n` +
+      `/* [Advanced] */\nquality = 12;\n`
+  );
+  const parsed = parseParams(file);
+  rmSync(dir, { recursive: true, force: true });
+  assert.deepEqual(parsed.stages, [
+    { id: "content", label: "Content" },
+    { id: "shape", label: "Shape" },
+  ]);
+  assert.equal(parsed.params.find((p) => p.name === "label").stage, "content");
+  assert.equal(parsed.params.find((p) => p.name === "language").stage, "content");
+  assert.equal(parsed.params.find((p) => p.name === "width").stage, "shape");
+  assert.equal(parsed.params.find((p) => p.name === "quality").stage, undefined);
+});
+
+test("// @stage rejects malformed declarations and conflicting labels", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-stage-invalid-"));
+  const malformed = join(dir, "malformed.scad");
+  writeFileSync(malformed, `// @stage\n/* [Main] */\na = 1;\n`);
+  assert.throws(() => parseParams(malformed), /malformed @stage/);
+
+  const conflict = join(dir, "conflict.scad");
+  writeFileSync(
+    conflict,
+    `// @stage content | Content\n/* [One] */\na = 1;\n` +
+      `// @stage content | Copy\n/* [Two] */\nb = 2;\n`
+  );
+  assert.throws(() => parseParams(conflict), /conflicts with earlier label/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("a section-shaped comment after a param on the same line doesn't create a section", () => {
   const dir = mkdtempSync(join(tmpdir(), "gen-schema-section-"));
   const file = join(dir, "f.scad");

@@ -364,7 +364,7 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
 - **`gallery`**: `false` by default. Replaces the compact design dropdown with a searchable card grid using each design's `image`, then `icon`, then a letter fallback
 - **`essentials`**: `false` by default. Starts with `// @advanced` parameters hidden behind **Show all settings**
-- **`flow`**: `"standard"` by default. Set `"guided"` to present the existing presets and controls as a non-blocking **Start → Customize → Review** sequence. Start is omitted when a design has no bundled presets; Files remains an unnumbered utility tab. Review is generated automatically from the design's visible essential parameters, preview dimensions, and current diagnostics. Guided flow never locks a step or disables direct navigation
+- **`flow`**: `"standard"` by default. Set `"guided"` to present the existing presets and controls as a non-blocking **Start → Customize → Review** sequence. Section-level [`// @stage`](annotations.md#guided-stages--stage) annotations can replace Customize with a few design-specific named steps. Start is omitted when a design has no bundled presets; Files remains an unnumbered utility tab. Review is generated automatically from the design's visible essential parameters, preview dimensions, and current diagnostics. Guided flow never locks a step or disables direct navigation
 
 ### PWA manifest
 

@@ -1,6 +1,7 @@
 // params.mjs — parse OpenSCAD's Customizer syntax (the `// [Section]` headers,
 // `name = default; // [hint]` parameter lines, and the doc comments above them,
-// plus ScadPub's `@showIf` / `@font` / `@info` / `@collapsed` annotations) into
+// plus ScadPub's `@showIf` / `@font` / `@info` / `@collapsed` / `@stage`
+// annotations) into
 // the typed parameter schema the UI is generated from. Skips the [Hidden]
 // section, exactly as OpenSCAD's own Customizer does.
 import { readFileSync } from "node:fs";
@@ -37,6 +38,11 @@ const ADVANCED_ANNOT_RE = /^@advanced\s*$/i;
 const INFO_RE = /^@info\b\s*(.*)$/i;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
+// `// @stage <id> [| Label]` directly above a section header groups that
+// section into a named guided-flow stage. Labels are optional after the first
+// occurrence (and default to a humanised id when omitted everywhere).
+const STAGE_RE = /^\s*\/\/\s*@stage\s+([A-Za-z][A-Za-z0-9_-]*)(?:\s*\|\s*(.+?))?\s*$/i;
+const STAGE_ATTEMPT_RE = /^\s*\/\/\s*@stage\b/i;
 // File-level design metadata, read anywhere in the file (typically a header
 // comment, so it works even before the first section). `@description` is the
 // design's picker sub-label; `@icon` is a path to its thumbnail; `@doc` is a
@@ -64,7 +70,7 @@ const FILLEDBY_RE = /^@filledBy\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i;
 // that grammar — or starts with an unrecognised `@word` at all — fails the
 // build with the file and line, instead of silently degrading to plain doc
 // prose (a typo'd `@shwoIf` used to just become part of the help text).
-const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "advanced", "info", "svg", "filledby"]);
+const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "advanced", "info", "svg", "filledby", "stage"]);
 const ANNOTATION_WORD_RE = /^@([A-Za-z-]+)\b/;
 
 // `@showIf` clause shapes accepted at both generate time (here) and runtime
@@ -309,9 +315,13 @@ export function parseParams(absPath) {
   let pendingFilledByLine = 0;
   // Set by a `// @collapsed` line; consumed by the next section header.
   let pendingSectionCollapsed = false;
+  // Set by `// @stage ...`; consumed by the next section header.
+  let pendingSectionStage = null;
+  let sectionStage = null;
   const params = [];
   const sections = [];
   const collapsedSections = [];
+  const stages = [];
   // File-level design metadata (`// @description` / `// @icon`); first non-empty
   // wins. Populated regardless of section, so a header comment above the first
   // `/* [Section] */` is honoured.
@@ -328,6 +338,7 @@ export function parseParams(absPath) {
     pendingSvg = null;
     pendingFilledBy = null;
     pendingSectionCollapsed = false;
+    pendingSectionStage = null;
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -338,6 +349,17 @@ export function parseParams(absPath) {
       pendingSectionCollapsed = true;
       continue;
     }
+    const stageMatch = line.match(STAGE_RE);
+    if (stageMatch) {
+      pendingSectionStage = {
+        id: stageMatch[1],
+        label: stageMatch[2]?.trim() || null,
+        line: lineNo,
+      };
+      continue;
+    }
+    if (STAGE_ATTEMPT_RE.test(line))
+      fail(absPath, lineNo, `malformed @stage annotation: '${line.trim().replace(/^\/\/\s*/, "")}'`);
     // File-level metadata is section-independent, so capture it before the
     // null-section guard too (a header comment sits above the first section).
     const dmeta = line.match(DESCRIPTION_RE);
@@ -364,6 +386,23 @@ export function parseParams(absPath) {
     if (sm) {
       section = sm[1];
       sectionAdvanced = pendingAdvanced;
+      sectionStage = null;
+      if (section !== "Hidden" && pendingSectionStage) {
+        const prior = stages.find((stage) => stage.id === pendingSectionStage.id);
+        if (prior && pendingSectionStage.label && prior.label !== pendingSectionStage.label)
+          fail(
+            absPath,
+            pendingSectionStage.line,
+            `@stage '${pendingSectionStage.id}' label '${pendingSectionStage.label}' conflicts with earlier label '${prior.label}'`
+          );
+        if (!prior) {
+          stages.push({
+            id: pendingSectionStage.id,
+            label: pendingSectionStage.label ?? humanize(pendingSectionStage.id),
+          });
+        }
+        sectionStage = pendingSectionStage.id;
+      }
       if (section !== "Hidden" && !sections.includes(section))
         sections.push(section);
       if (pendingSectionCollapsed && section !== "Hidden" && !collapsedSections.includes(section))
@@ -392,6 +431,7 @@ export function parseParams(absPath) {
       if ((p.type === "string" || p.type === "enum") && pendingFont)
         p.isFont = true;
       if (pendingAdvanced || sectionAdvanced) p.advanced = true;
+      if (sectionStage) p.stage = sectionStage;
       // Surface this param's value in the viewer info panel (see `// @info`).
       if (pendingInfo) p.info = pendingInfo;
       // Mark a string SVG field for the in-app wizard (see `// @svg`), and a
@@ -474,7 +514,7 @@ export function parseParams(absPath) {
         fail(
           absPath,
           lineNo,
-          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @advanced, @info, @svg, @filledBy, @collapsed, @description, @icon, @image, @doc)`
+          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @advanced, @info, @svg, @filledBy, @stage, @collapsed, @description, @icon, @image, @doc)`
         );
       } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {
@@ -484,5 +524,5 @@ export function parseParams(absPath) {
     }
   }
   validateAnnotations(params, lineInfo, absPath);
-  return { params, sections, collapsedSections, meta };
+  return { params, sections, collapsedSections, stages, meta };
 }

@@ -2,6 +2,7 @@
 // Start → Customize → Review flow. Files stays an unnumbered utility tab.
 import { ArrowRight as NextIcon } from "lucide-react";
 import type { PanelTab } from "../lib/usePanelState";
+import type { GuidedStage } from "../lib/guidedStages";
 import { Button } from "./ui/button";
 import { TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
@@ -9,14 +10,15 @@ import { cn } from "../lib/utils";
 interface NavProps {
   hasPresets: boolean;
   hasFiles: boolean;
+  stages: GuidedStage[];
   onActivate?: () => void;
   className?: string;
 }
 
-export function GuidedFlowNav({ hasPresets, hasFiles, onActivate, className }: NavProps) {
+export function GuidedFlowNav({ hasPresets, hasFiles, stages, onActivate, className }: NavProps) {
   let number = 1;
   const startNumber = hasPresets ? number++ : null;
-  const customizeNumber = number++;
+  const numberedStages = stages.map((stage) => ({ ...stage, number: number++ }));
   const reviewNumber = number;
   const trigger = cn(chipTabTrigger, "min-w-fit flex-1 px-2");
 
@@ -30,9 +32,11 @@ export function GuidedFlowNav({ hasPresets, hasFiles, onActivate, className }: N
           {startNumber} Start
         </TabsTrigger>
       )}
-      <TabsTrigger value="params" className={trigger} onClick={onActivate}>
-        {customizeNumber} Customize
-      </TabsTrigger>
+      {numberedStages.map((stage) => (
+        <TabsTrigger key={stage.value} value={stage.value} className={trigger} onClick={onActivate}>
+          {stage.number} {stage.label}
+        </TabsTrigger>
+      ))}
       <TabsTrigger value="review" className={trigger} onClick={onActivate}>
         {reviewNumber} Review
       </TabsTrigger>
@@ -45,12 +49,11 @@ export function GuidedFlowNav({ hasPresets, hasFiles, onActivate, className }: N
   );
 }
 
-export function GuidedContinue({ to, onContinue }: { to: PanelTab; onContinue: (tab: PanelTab) => void }) {
-  const label = to === "review" ? "Continue to Review" : "Continue to Customize";
+export function GuidedContinue({ to, label, onContinue }: { to: PanelTab; label: string; onContinue: (tab: PanelTab) => void }) {
   return (
     <div className="guided-flow-continue shrink-0 border-t px-3 py-2 text-right">
       <Button size="sm" variant="secondary" onClick={() => onContinue(to)}>
-        {label} <NextIcon size={15} aria-hidden="true" />
+        Continue to {label} <NextIcon size={15} aria-hidden="true" />
       </Button>
     </div>
   );

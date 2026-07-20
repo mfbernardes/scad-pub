@@ -102,6 +102,19 @@ test("validates the optional per-design collapsedSections", () => {
   assert.throws(() => validateSchema(bad), /collapsedSections/);
 });
 
+test("validates guided stage metadata", () => {
+  const ok = validBase();
+  ok.designs[0].stages = [{ id: "content", label: "Content" }];
+  ok.designs[0].params = [
+    { name: "label", section: "Main", stage: "content", type: "string", default: "Hi" },
+  ];
+  assert.doesNotThrow(() => validateSchema(ok));
+
+  const bad = validBase();
+  bad.designs[0].stages = [{ id: "content", label: 1 }];
+  assert.throws(() => validateSchema(bad), /stages/);
+});
+
 test("validates the optional colours and extraCss", () => {
   // null/absent is fine.
   assert.doesNotThrow(() => validateSchema({ ...validBase(), colors: null, extraCss: null }));

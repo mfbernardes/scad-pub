@@ -63,6 +63,8 @@ export interface EnumChoice {
 export interface ParamBase {
   name: string;
   section: string;
+  /** Guided-flow stage inherited from the parameter's annotated section. */
+  stage?: string;
   /** Concise label: the comment line directly above the parameter (OpenSCAD). */
   description: string;
   /** Full preceding comment block, shown as a tooltip. */
@@ -156,6 +158,8 @@ export interface Design {
    *  Null/absent hides the "Design guide" affordance. */
   doc?: string | null;
   sections: string[];
+  /** Ordered guided-flow stages declared by section-level `// @stage`. */
+  stages?: Array<{ id: string; label: string }>;
   /** Section names that start collapsed (from a `// @collapsed` annotation). */
   collapsedSections?: string[];
   params: Param[];

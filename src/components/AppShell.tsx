@@ -53,6 +53,7 @@ import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
 import { useSafeAreaBottom } from "../lib/useSafeAreaBottom";
 import { usePanelState } from "../lib/usePanelState";
+import { guidedStages } from "../lib/guidedStages";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
 import { ns } from "../lib/appId";
 import { readLocal, writeLocal } from "../lib/safeStorage";
@@ -170,6 +171,23 @@ export const AppShell = memo(function AppShell({
   // the tab, clear the search box, or drop focus, since neither component owns
   // this state locally anymore.
   const panelState = usePanelState(bundled.length > 0);
+  const activePanelTab = panelState.tab;
+  const setPanelTab = panelState.setTab;
+  const currentGuidedStages = useMemo(() => guidedStages(design), [design]);
+  // A stage tab belongs to one design. When the user switches designs, move
+  // away from a stage id the new design does not expose instead of leaving an
+  // empty panel behind.
+  useEffect(() => {
+    if (!guided) return;
+    const valid = new Set([
+      ...currentGuidedStages.map((stage) => stage.value),
+      "review",
+      ...(bundled.length > 0 ? ["presets"] : []),
+      ...(schema.fileImport ? ["files"] : []),
+    ]);
+    if (!valid.has(activePanelTab))
+      setPanelTab(bundled.length > 0 ? "presets" : currentGuidedStages[0].value);
+  }, [activePanelTab, bundled.length, currentGuidedStages, guided, schema.fileImport, setPanelTab]);
   // Restore keyboard focus to the search input across a layout switch when it
   // held focus just before the switch (tracked by ParamSearch's onFocus/onBlur
   // via searchFocusedRef). Runs in a layout effect so it fires after the new

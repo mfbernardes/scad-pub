@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/t
 import { cn } from "../lib/utils";
 import { GuidedContinue, GuidedFlowNav } from "./GuidedFlowNav";
 import { GuidedReview } from "./GuidedReview";
+import { guidedStages } from "../lib/guidedStages";
 
 type Tab = PanelTab;
 
@@ -113,6 +114,10 @@ export function SheetTabs({
     clearFiles,
   } = useAppActions();
   const hasFiles = fileImport != null;
+  const stages = guidedStages(design);
+  const parameterStages = guided
+    ? stages
+    : [{ value: "params" as PanelTab, label: parametersLabel, filter: undefined }];
   // Presets first on mobile, then Customize, then Files.
   const tabs: Tab[] = ["presets", "params", ...(guided ? (["review"] as Tab[]) : []), ...(hasFiles ? (["files"] as Tab[]) : [])];
   const debouncedSearch = useDebounce(search, 150);
@@ -126,7 +131,7 @@ export function SheetTabs({
       className="sheet-tabs min-h-0 flex-1 gap-0"
     >
       {guided ? (
-        <GuidedFlowNav hasPresets={bundled.length > 0} hasFiles={hasFiles} onActivate={onActivate} />
+        <GuidedFlowNav hasPresets={bundled.length > 0} hasFiles={hasFiles} stages={stages} onActivate={onActivate} />
       ) : (
         <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
           {tabs.map((t) => (
@@ -137,39 +142,49 @@ export function SheetTabs({
         </TabsList>
       )}
       <div className="flex min-h-0 flex-1 flex-col">
-        <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <PresetDiffBar
-            design={design}
-            values={values}
-            presetBaseline={presetBaseline}
-            presetName={presetName}
-            changedParams={changedParams}
-          />
-          <ParamSearch
-            value={search}
-            onChange={onSearchChange}
-            onClear={() => onSearchChange("")}
-            onFocus={onSearchFocus}
-            onBlur={onSearchBlur}
-          />
-          {design.params.some((p) => p.advanced) && (
-            <button
-              type="button"
-              className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
-              onClick={() => onShowAdvancedChange(!showAdvanced)}
-            >
-              {showAdvanced ? "Show essential settings" : "Show all settings"}
-            </button>
-          )}
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
-          </div>
-          {/* Auto-render is parameter-scoped, so it pins to the bottom of this
-              tab only — not on Presets/Files (mirrors the desktop panel). Reset
-              lives in PresetDiffBar above now (the unified restore control). */}
-          <PanelFooter autoRender={autoRender} className="sheet-footer" />
-          {guided && <GuidedContinue to="review" onContinue={onTabChange} />}
-        </TabsContent>
+        {parameterStages.map((stage, index) => {
+          const next = parameterStages[index + 1];
+          return (
+            <TabsContent key={stage.value} value={stage.value} className="mt-0 flex min-h-0 flex-1 flex-col">
+              <PresetDiffBar
+                design={design}
+                values={values}
+                presetBaseline={presetBaseline}
+                presetName={presetName}
+                changedParams={changedParams}
+              />
+              <ParamSearch
+                value={search}
+                onChange={onSearchChange}
+                onClear={() => onSearchChange("")}
+                onFocus={onSearchFocus}
+                onBlur={onSearchBlur}
+              />
+              {design.params.some((p) => p.advanced) && (
+                <button
+                  type="button"
+                  className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
+                  onClick={() => onShowAdvancedChange(!showAdvanced)}
+                >
+                  {showAdvanced ? "Show essential settings" : "Show all settings"}
+                </button>
+              )}
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+                <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} stage={stage.filter} />
+              </div>
+              {/* Auto-render is parameter-scoped, so it pins to the bottom of
+                  each customization stage only. */}
+              <PanelFooter autoRender={autoRender} className="sheet-footer" />
+              {guided && (
+                <GuidedContinue
+                  to={next?.value ?? "review"}
+                  label={next?.label ?? "Review"}
+                  onContinue={onTabChange}
+                />
+              )}
+            </TabsContent>
+          );
+        })}
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetPicker
             design={design}
@@ -182,7 +197,13 @@ export function SheetTabs({
             onPresetsChange={presetsChange}
             inline
           />
-          {guided && <GuidedContinue to="params" onContinue={onTabChange} />}
+          {guided && (
+            <GuidedContinue
+              to={stages[0].value}
+              label={stages[0].label}
+              onContinue={onTabChange}
+            />
+          )}
         </TabsContent>
         {guided && (
           <TabsContent value="review" className="mt-0 flex min-h-0 flex-1 flex-col">
