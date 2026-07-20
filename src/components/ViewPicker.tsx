@@ -1,19 +1,33 @@
 // ViewPicker.tsx — the viewer's "choose a view" control: a glass HUD icon button
-// that opens a small popover menu of the standard camera views (Isometric, Top,
-// Front, …). It's an action menu, not a form select: clicking any view re-snaps
-// the camera even if it's already the current one (so it doubles as "snap back"
-// after you've orbited away). The active view is checkmarked.
+// that opens a small popover menu of the standard camera views (the default
+// Product view, Isometric, Top, Front, …). It's an action menu, not a form
+// select: clicking any view re-snaps the camera even if it's already the
+// current one (so it doubles as "snap back" after you've orbited away). The
+// active view is checkmarked.
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Box as ViewIcon, Check as CheckIcon } from "lucide-react";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 import { VIEW_OPTIONS, type ViewName } from "./views";
 
 /** The HUD's glass icon-button decoration, shared by every button in the
  *  viewer HUD (IconButtons get it via className; the picker trigger below
- *  carries it directly). */
+ *  carries it directly). Deliberately quieter than the old chrome-forward
+ *  style — a lighter shadow (--shadow-1, not --elevation) and a muted icon
+ *  colour that only brightens on hover/focus — so the controls read as
+ *  secondary to the model itself (the design review's "still looks like a
+ *  CAD workspace" complaint). size-10 keeps the tap target at the WCAG
+ *  44px-ish minimum even though the visible glass surface reads smaller;
+ *  round-2 review item 2 drops that to size-9 below the mobile breakpoint —
+ *  still a real touch target, but a hair less dominant on a small screen
+ *  where the HUD's own strip already eats into the model's clear space (see
+ *  framing.ts's computeViewerInsets, which reserves room for exactly this
+ *  strip). Uses --glass-bg/--glass-border directly rather than the
+ *  `glass-card` utility (src/index.css) because it deliberately swaps in
+ *  --shadow-1 instead of glass-card's baked-in --elevation. */
 export const HUD_GLASS_BTN =
-  "p-[0.45rem] bg-(--glass-bg) border-(color:--glass-border) shadow-(--elevation)";
+  "size-10 max-[860px]:size-9 p-[0.4rem] max-[860px]:p-[0.3rem] bg-(--glass-bg) border-(color:--glass-border) shadow-(--shadow-1) text-muted-foreground hover:text-foreground";
 
 interface Props {
   /** The currently-applied view (checkmarked in the menu). */
@@ -24,7 +38,8 @@ interface Props {
 
 export function ViewPicker({ view, onSelect }: Props) {
   const [open, setOpen] = useState(false);
-  const current = VIEW_OPTIONS.find((o) => o.id === view)?.label ?? "View";
+  const currentOption = VIEW_OPTIONS.find((o) => o.id === view);
+  const current = currentOption ? t(currentOption.labelKey) : t("view.fallback");
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {/* Native button so PopoverTrigger's ref reaches the DOM (Radix anchors to
@@ -38,10 +53,10 @@ export function ViewPicker({ view, onSelect }: Props) {
             "border rounded-(--radius-sm) hover:border-brand data-[state=open]:border-brand data-[state=open]:text-brand",
             HUD_GLASS_BTN
           )}
-          aria-label={`View: ${current}`}
-          title={`View: ${current}`}
+          aria-label={t("view.currentAria", { view: current })}
+          title={t("view.currentAria", { view: current })}
         >
-          <ViewIcon size={18} />
+          <ViewIcon size={16} />
         </button>
       </PopoverTrigger>
       <PopoverContent side="left" align="start" className="w-auto min-w-[9rem] p-1">
@@ -66,7 +81,7 @@ export function ViewPicker({ view, onSelect }: Props) {
                   <span className="inline-flex w-4 shrink-0 text-brand" aria-hidden="true">
                     {active && <CheckIcon size={15} />}
                   </span>
-                  {o.label}
+                  {t(o.labelKey)}
                 </button>
               </li>
             );

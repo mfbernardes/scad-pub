@@ -9,12 +9,13 @@
 // export — purely informative, never part of a print.
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import type { Design, Param } from "../openscad/types";
+import type { Design } from "../openscad/types";
 import type { Dimensions } from "./Viewer";
 import type { Values } from "../lib/presets";
 import type { ComputedInfo } from "../lib/computedInfo";
-import { isVisible } from "../lib/visibility";
+import { formatBoundingBox, paramInfoRows } from "../lib/reviewSummary";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 
 interface Props {
   design: Design;
@@ -32,47 +33,16 @@ interface Props {
   computed?: ComputedInfo[];
 }
 
-// One millimetre figure, always with at least one decimal (90 → "90.0").
-function mm(n: number): string {
-  return (Math.round(n * 10) / 10).toFixed(1);
-}
-
-// Format a parameter's value for display, appending the optional `@info` unit.
-// Returns null when there's nothing worth showing (e.g. an empty string).
-function formatValue(param: Param, values: Values): string | null {
-  const raw = values[param.name] ?? param.default;
-  const unit = param.info?.unit ? ` ${param.info.unit}` : "";
-  switch (param.type) {
-    case "boolean":
-      return raw ? "Yes" : "No";
-    case "string": {
-      const s = String(raw).trim();
-      return s ? s + unit : null;
-    }
-    case "enum": {
-      const choice = param.choices.find((c) => c.value === String(raw));
-      return (choice?.label ?? String(raw)) + unit;
-    }
-    default:
-      return String(raw) + unit; // number
-  }
-}
-
 export function DimensionInfo({ design, size, values, stale = false, computed = [] }: Props) {
   // Folds down to the bounding-box headline alone, so the panel can get out of
   // the way of the model without hiding the overlay entirely.
   const [collapsed, setCollapsed] = useState(false);
 
-  // The headline bounding box, then any params flagged `// @info` that are still
-  // visible under their @showIf (if any) and have a non-empty formatted value.
-  const infoLines = design.params
-    .filter((p) => p.info && isVisible(p, values))
-    .map((p) => ({
-      name: p.name,
-      label: p.info!.label ?? p.description,
-      value: formatValue(p, values),
-    }))
-    .filter((l): l is { name: string; label: string; value: string } => l.value !== null);
+  // The params flagged `// @info` that are still visible under their @showIf
+  // (if any) and have a non-empty formatted value — the exact same row
+  // derivation QuickStart's Review stage reuses (src/lib/reviewSummary.ts),
+  // so the two surfaces can never disagree about what a row says.
+  const infoLines = paramInfoRows(design, values);
 
   const hasRows = infoLines.length > 0 || computed.length > 0;
   // Only the headline shows when collapsed; the toggle only appears when there's
@@ -87,11 +57,11 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
       // (per-layout offsets); pointer-events-auto so the list can scroll while
       // the rest of the canvas stays orbit-able.
       className={cn(
-        "dimension-info pointer-events-auto m-0 flex flex-col gap-[0.15rem] overflow-y-auto overscroll-contain rounded-(--radius-sm) border border-(color:--glass-border) bg-(--glass-bg) px-[0.55rem] py-[0.35rem] text-[0.8rem] text-muted-foreground shadow-(--elevation) [scrollbar-width:thin]",
+        "dimension-info pointer-events-auto m-0 flex flex-col gap-[0.15rem] overflow-y-auto overscroll-contain rounded-(--radius-sm) border glass-card px-[0.55rem] py-[0.35rem] text-[0.8rem] text-muted-foreground [scrollbar-width:thin]",
         // Preview out of date: dim + italic so a stale figure never reads as current.
         stale && "italic opacity-55"
       )}
-      aria-label="Model measurements"
+      aria-label={t("dimensions.aria")}
     >
       <div
         className={cn(
@@ -106,7 +76,7 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
               type="button"
               onClick={() => setCollapsed((c) => !c)}
               aria-expanded={!collapsed}
-              title={collapsed ? "Show measurement details" : "Hide measurement details"}
+              title={collapsed ? t("dimensions.showDetails") : t("dimensions.hideDetails")}
               className="-m-1 inline-flex cursor-pointer items-center gap-[0.3rem] rounded-(--radius-sm) bg-transparent p-1 font-semibold text-foreground hover:text-brand"
             >
               <ChevronDown
@@ -114,17 +84,17 @@ export function DimensionInfo({ design, size, values, stale = false, computed = 
                 aria-hidden
                 className={cn("shrink-0 transition-transform", collapsed && "-rotate-90")}
               />
-              Dimensions
+              {t("dimensions.heading")}
             </button>
           ) : (
-            "Dimensions"
+            t("dimensions.heading")
           )}
         </dt>
-        <dd className={dd}>{`${mm(size.x)} × ${mm(size.y)} × ${mm(size.z)} mm`}</dd>
+        <dd className={dd}>{formatBoundingBox(size)}</dd>
       </div>
       {showRows &&
         infoLines.map((l) => (
-          <div className={row} key={l.name}>
+          <div className={row} key={l.key}>
             <dt>{l.label}</dt>
             <dd className={dd}>{l.value}</dd>
           </div>
