@@ -63,6 +63,8 @@ interface Props {
   /** The selected preset's display name, used to name the revert target in the
    *  per-field revert button ("to <preset>" vs "to default" when none). */
   presetName?: string | null;
+  /** Whether parameters marked `@advanced` are included. */
+  showAdvanced?: boolean;
 }
 
 // Inline, non-alarming hint shown under a `font` control when the selected
@@ -352,7 +354,7 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, baseline, changedParams, presetName }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, baseline, changedParams, presetName, showAdvanced = true }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
@@ -367,6 +369,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
         params: design.params.filter(
           (p) =>
             p.section === section &&
+            (showAdvanced || !p.advanced) &&
             isVisible(p, values) &&
             // Match the variable name, the label, and the full help text, so a
             // term that only appears in the detail (surfaced via the info
@@ -378,7 +381,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
         ),
       }))
       .filter((g) => g.params.length > 0);
-  }, [design, values, q]);
+  }, [design, values, q, showAdvanced]);
 
   // Per-section open/closed state, controlled in React so a search can force a
   // folded group open without losing the user's manual fold/unfold of an

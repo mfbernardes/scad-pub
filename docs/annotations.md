@@ -64,6 +64,14 @@ mounting = "none"; // [none, screw, countersunk]
 
 Collapsed parameters remain in the DOM and are still sent to OpenSCAD.
 
+## Essential and advanced settings (`// @advanced`)
+
+When `ui.essentials` is enabled, parameters marked `// @advanced` start hidden
+behind **Show all settings**. Put the annotation in a parameter's comment block
+to mark one parameter, or directly above a section header to mark the entire
+section. Unmarked parameters are essential by default. The annotation affects
+only the browser UI; every value is still sent to OpenSCAD.
+
 ## Font selectors (`// @font`)
 
 Mark a string parameter as a font selector. In the app, it renders as a **font dropdown** listing every face the renderer can use: bundled fonts plus imported fonts. Friendly names come from the font files themselves, such as "Liberation Sans Bold", never the raw Fontconfig `Family:style=Style` string. The list updates the moment you import a font, and the menu includes an **Import font…** action.

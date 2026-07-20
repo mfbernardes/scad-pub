@@ -20,6 +20,8 @@ export interface Diagnostic {
   text: string;
   /** Optional notice/badge colour (config-driven notice categories only). */
   color?: string;
+  /** Whether downloading should ask the user to review this diagnostic. */
+  attention?: boolean;
 }
 
 /** One count badge for the OpenSCAD output panel header. */
@@ -70,6 +72,7 @@ function classify(
           level: "notice",
           text: echo[1].replace(re, ": "),
           color: n.color,
+          attention: n.attention === true,
           badgeKey: `notice:${n.marker}`,
         };
     }
@@ -81,9 +84,10 @@ function classify(
       level: "assert",
       text: assertM[1].trim(),
       badgeKey: "assert",
+      attention: true,
     };
   const warn = line.match(WARNING_RE);
-  if (warn) return { level: "warning", text: warn[1].trim() };
+  if (warn) return { level: "warning", text: warn[1].trim(), attention: true };
   return null;
 }
 
@@ -100,7 +104,12 @@ export function parseDiagnostics(
     const key = `${c.level}:${c.text}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(c.color ? { level: c.level, text: c.text, color: c.color } : { level: c.level, text: c.text });
+    out.push({
+      level: c.level,
+      text: c.text,
+      ...(c.color ? { color: c.color } : {}),
+      ...(c.attention ? { attention: true } : {}),
+    });
   }
   return out;
 }

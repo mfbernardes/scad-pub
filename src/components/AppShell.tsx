@@ -42,6 +42,7 @@ import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { parseComputedInfo } from "../lib/computedInfo";
 import {
   fontFaces,
+  familyOf,
   fontFamilyNames,
   mergeInstalledFonts,
   normalizeFamily,
@@ -53,6 +54,10 @@ import { useIsMobile } from "../lib/useIsMobile";
 import { useSafeAreaBottom } from "../lib/useSafeAreaBottom";
 import { usePanelState } from "../lib/usePanelState";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
+import { ns } from "../lib/appId";
+import { readLocal, writeLocal } from "../lib/safeStorage";
+
+const ADVANCED_SETTINGS_KEY = ns("settings.advanced");
 
 interface Props {
   schema: Schema;
@@ -115,6 +120,14 @@ export const AppShell = memo(function AppShell({
   openPickerSignal,
 }: Props) {
   const actions = useAppActions();
+  const essentialsEnabled = schema.ui?.essentials === true;
+  const [showAdvanced, setShowAdvanced] = useState(() =>
+    essentialsEnabled ? readLocal(ADVANCED_SETTINGS_KEY) === "true" : true
+  );
+  const handleShowAdvancedChange = useCallback((show: boolean) => {
+    setShowAdvanced(show);
+    writeLocal(ADVANCED_SETTINGS_KEY, String(show));
+  }, []);
   const desktopViewerRef = useRef<ViewerHandle>(null);
   const mobileViewerRef = useRef<ViewerHandle>(null);
   // The mobile layout root — its --sheet-follow-h CSS var sizes the viewer so it
@@ -257,6 +270,17 @@ export const AppShell = memo(function AppShell({
   // Rows from `echo("@info", label, unit, value)` — internally-calculated
   // values the design surfaced at render time (see lib/computedInfo.ts).
   const computedInfo = useMemo(() => parseComputedInfo(log), [log]);
+  const attentionIssues = useMemo(() => {
+    const issues = diagnostics.filter((d) => d.attention).map((d) => d.text);
+    for (const param of design.params) {
+      if ((param.type !== "string" && param.type !== "enum") || !param.isFont) continue;
+      const value = values[param.name];
+      const family = familyOf(String(value ?? ""));
+      if (family && availableFontFamilies.size && !availableFontFamilies.has(normalizeFamily(family)))
+        issues.push(`Font “${family}” is not loaded; the renderer may substitute another face.`);
+    }
+    return [...new Set(issues)];
+  }, [diagnostics, design, values, availableFontFamilies]);
 
   const handleSavePng = useCallback(() => {
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
@@ -373,6 +397,7 @@ export const AppShell = memo(function AppShell({
     canExport: exportable,
     modelFormat: schema.format,
     onSavePng: handleSavePng,
+    attentionIssues,
   };
   return (
     <div className="app-shell">
@@ -437,6 +462,7 @@ export const AppShell = memo(function AppShell({
                       onChange={actions.designChange}
                       openSignal={openPickerSignal}
                       active={isMobile}
+                      gallery={schema.ui?.gallery}
                     />
                   ) : (
                     <span className="whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.85rem] font-semibold">
@@ -538,6 +564,8 @@ export const AppShell = memo(function AppShell({
                   autoRender={autoRender}
                   presetsLabel={presetsLabel}
                   parametersLabel={parametersLabel}
+                  showAdvanced={showAdvanced}
+                  onShowAdvancedChange={handleShowAdvancedChange}
                   tab={panelState.tab}
                   onTabChange={panelState.setTab}
                   search={panelState.search}
@@ -592,6 +620,8 @@ export const AppShell = memo(function AppShell({
               autoRender={autoRender}
               presetsLabel={presetsLabel}
               parametersLabel={parametersLabel}
+              showAdvanced={showAdvanced}
+              onShowAdvancedChange={handleShowAdvancedChange}
               panelTab={panelState.tab}
               onPanelTabChange={panelState.setTab}
               search={panelState.search}

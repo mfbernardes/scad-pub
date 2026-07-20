@@ -12,6 +12,17 @@
 import { useAppActions } from "../lib/appActions";
 import { Button } from "./ui/button";
 import { Download as DownloadIcon, Image as ImageIcon, Link2 as LinkIcon } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "./ui/alert-dialog";
 
 interface Props {
   /** A successful render that still matches the live controls (see
@@ -21,9 +32,10 @@ interface Props {
   canExport: boolean;
   modelFormat: string;
   onSavePng: () => void;
+  attentionIssues?: string[];
 }
 
-export function ActionButtons({ canExport, modelFormat, onSavePng }: Props) {
+export function ActionButtons({ canExport, modelFormat, onSavePng, attentionIssues = [] }: Props) {
   const { exportModel, copyLink } = useAppActions();
   const fmt = modelFormat.toUpperCase();
 
@@ -31,16 +43,41 @@ export function ActionButtons({ canExport, modelFormat, onSavePng }: Props) {
     <>
       {/* "Download", not "Export": the universal word for "get the file". The
           format rides along because the slicer needs it. */}
-      <Button
-        size="sm"
-        variant="default"
-        className="hover:bg-primary hover:brightness-[1.08]"
-        onClick={exportModel}
-        disabled={!canExport}
-        aria-label={`Download ${fmt}`}
-      >
-        <DownloadIcon size={16} /> Download {fmt}
-      </Button>
+      {attentionIssues.length ? (
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button size="sm" variant="default" disabled={!canExport} aria-label={`Download ${fmt}`}>
+              <DownloadIcon size={16} /> Download {fmt}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Review before downloading</AlertDialogTitle>
+              <AlertDialogDescription>
+                The model rendered, but {attentionIssues.length === 1 ? "one issue needs" : `${attentionIssues.length} issues need`} your attention.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
+              {attentionIssues.map((issue) => <li key={issue}>{issue}</li>)}
+            </ul>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Go back and fix</AlertDialogCancel>
+              <AlertDialogAction onClick={exportModel}>Download anyway</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : (
+        <Button
+          size="sm"
+          variant="default"
+          className="hover:bg-primary hover:brightness-[1.08]"
+          onClick={exportModel}
+          disabled={!canExport}
+          aria-label={`Download ${fmt}`}
+        >
+          <DownloadIcon size={16} /> Download {fmt}
+        </Button>
+      )}
       <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!canExport} aria-label="Save image">
         <ImageIcon size={16} /> Image
       </Button>

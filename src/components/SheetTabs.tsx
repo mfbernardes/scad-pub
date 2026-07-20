@@ -47,6 +47,8 @@ interface Props {
   /** Configurable tab labels (default "Presets" / "Parameters"). */
   presetsLabel?: string;
   parametersLabel?: string;
+  showAdvanced: boolean;
+  onShowAdvancedChange: (show: boolean) => void;
   /** Active tab + search query, hoisted to AppShell (usePanelState) so they
    *  survive a desktop/mobile remount — see docs/architecture-review.md M7. */
   tab: PanelTab;
@@ -77,6 +79,8 @@ export function SheetTabs({
   autoRender,
   presetsLabel = "Presets",
   parametersLabel = "Customize",
+  showAdvanced,
+  onShowAdvancedChange,
   tab,
   onTabChange,
   search,
@@ -129,8 +133,17 @@ export function SheetTabs({
             onFocus={onSearchFocus}
             onBlur={onSearchBlur}
           />
+          {design.params.some((p) => p.advanced) && (
+            <button
+              type="button"
+              className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
+              onClick={() => onShowAdvancedChange(!showAdvanced)}
+            >
+              {showAdvanced ? "Show essential settings" : "Show all settings"}
+            </button>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
           {/* Auto-render is parameter-scoped, so it pins to the bottom of this
               tab only — not on Presets/Files (mirrors the desktop panel). Reset

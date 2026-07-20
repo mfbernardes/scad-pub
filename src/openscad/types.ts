@@ -69,6 +69,8 @@ export interface ParamBase {
   help: string;
   /** Optional `@showIf` expression: the control is shown only when it's true. */
   showIf?: string;
+  /** Hidden by the initial essentials view when `ui.essentials` is enabled. */
+  advanced?: boolean;
   /**
    * Optional `@info` annotation: surface this parameter's live value in the
    * viewer's dimension info panel. `label` overrides the displayed name (null →
@@ -147,6 +149,8 @@ export interface Design {
   /** Optional served URL of the design's icon (shown in the picker and used as
    *  the design's manifest-shortcut icon). Null/absent for none. */
   icon?: string | null;
+  /** Optional served URL of larger artwork for the visual design picker. */
+  image?: string | null;
   /** Optional served URL of the design's own user-documentation Markdown
    *  (scad/<id>-doc.md), fetched on demand and rendered in the doc modal.
    *  Null/absent hides the "Design guide" affordance. */
@@ -272,10 +276,12 @@ export interface NoticeCategory {
   label: string;
   /** Optional badge fill colour (a plain CSS colour); falls back to the accent. */
   color?: string;
+  /** Whether this category should be treated as requiring user attention. */
+  attention?: boolean;
 }
 
 /** How often the configurable `popup` notice is shown. */
-export type PopupMode = "always" | "once" | "dismissible";
+export type PopupMode = "always" | "once" | "dismissible" | "picker";
 
 /**
  * Config for the optional notice dialog shown over the app on load. All copy is
@@ -339,6 +345,10 @@ export interface UiConfig {
   presetsLabel?: string;
   /** Label for the "Customize" (parameters) tab/section (default "Customize"). */
   parametersLabel?: string;
+  /** Use the card-grid design picker instead of the compact dropdown. */
+  gallery?: boolean;
+  /** Start with `@advanced` parameters hidden behind a Show all settings action. */
+  essentials?: boolean;
 }
 
 export interface Schema {

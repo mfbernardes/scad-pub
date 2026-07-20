@@ -10,27 +10,52 @@ import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
-import type { PopupNotice } from "../openscad/types";
+import type { Design, PopupNotice } from "../openscad/types";
+import { DesignGallery } from "./DesignPicker";
 
 export function PopupModal({
   popup,
   onClose,
   onPrimary,
+  designs,
+  designId,
+  onDesignChange,
 }: {
   popup: PopupNotice;
   /** Incidental close (backdrop / Escape / X). `remember` persists the dismissal. */
   onClose: (remember: boolean) => void;
   /** The primary button — closes and advances (e.g. opens the design picker). */
   onPrimary: (remember: boolean) => void;
+  designs: Design[];
+  designId: string;
+  onDesignChange: (id: string) => void;
 }) {
   const [dontShow, setDontShow] = useState(false);
 
   // "once" persists on every close; "dismissible" only when the box is ticked;
   // "always" never persists. Shared by the incidental close and the primary CTA.
   const remember = () =>
-    popup.mode === "once" || (popup.mode === "dismissible" && dontShow);
+    popup.mode === "once" || popup.mode === "picker" || (popup.mode === "dismissible" && dontShow);
   const close = () => onClose(remember());
   const primary = () => onPrimary(remember());
+
+  if (popup.mode === "picker" && designs.length > 1) {
+    return (
+      <Modal title={popup.header} onClose={() => onClose(true)}>
+        <div className={cn(MODAL_BODY, "flex flex-col gap-3")}>
+          <Markdown body={popup.body} />
+          <DesignGallery
+            designs={designs}
+            value={designId}
+            onChange={(id) => {
+              onDesignChange(id);
+              onClose(true);
+            }}
+          />
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal title={popup.header} onClose={close}>

@@ -24,6 +24,8 @@ function checkParam(p: unknown, designId: string): void {
   if (param.default === undefined) fail(`${at} has no default`);
   if (param.info !== undefined && (typeof param.info !== "object" || param.info === null))
     fail(`${at} has a non-object info annotation`);
+  if (param.advanced !== undefined && typeof param.advanced !== "boolean")
+    fail(`${at} has a non-boolean advanced annotation`);
 }
 
 function checkDesign(d: unknown): void {
@@ -42,6 +44,8 @@ function checkDesign(d: unknown): void {
     fail(`design '${id}' 'description' must be a string`);
   if (design.icon != null && typeof design.icon !== "string")
     fail(`design '${id}' 'icon' must be a string URL`);
+  if (design.image != null && typeof design.image !== "string")
+    fail(`design '${id}' 'image' must be a string URL`);
   if (design.doc != null && typeof design.doc !== "string")
     fail(`design '${id}' 'doc' must be a string URL`);
   if (
@@ -104,8 +108,8 @@ export function validateSchema(raw: unknown): Schema {
       if (typeof p[key] !== "string" || !p[key])
         fail(`'popup.${key}' must be a non-empty string`);
     }
-    if (!["always", "once", "dismissible"].includes(p.mode as string))
-      fail("'popup.mode' must be \"always\", \"once\" or \"dismissible\"");
+    if (!["always", "once", "dismissible", "picker"].includes(p.mode as string))
+      fail("'popup.mode' must be \"always\", \"once\", \"dismissible\" or \"picker\"");
     if (p.button !== undefined && (typeof p.button !== "string" || !p.button))
       fail("'popup.button', when set, must be a non-empty string");
   }
@@ -120,6 +124,8 @@ export function validateSchema(raw: unknown): Schema {
         fail("a notice category is missing required string 'label'");
       if (e.color !== undefined && typeof e.color !== "string")
         fail("a notice 'color' must be a string");
+      if (e.attention !== undefined && typeof e.attention !== "boolean")
+        fail("a notice 'attention' must be a boolean");
     }
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
@@ -179,6 +185,9 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.install' must be \"auto\" or \"off\"");
     if (ui.showVarName !== undefined && typeof ui.showVarName !== "boolean")
       fail("'ui.showVarName' must be a boolean");
+    for (const key of ["gallery", "essentials"] as const)
+      if (ui[key] !== undefined && typeof ui[key] !== "boolean")
+        fail(`'ui.${key}' must be a boolean`);
     if (ui.measure !== undefined && typeof ui.measure !== "boolean")
       fail("'ui.measure' must be a boolean");
     if (ui.viewPicker !== undefined && typeof ui.viewPicker !== "boolean")

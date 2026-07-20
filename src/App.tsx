@@ -399,7 +399,14 @@ export default function App() {
   return (
     <>
       {showPopup && popup && (
-        <PopupModal popup={popup} onClose={closePopup} onPrimary={popupPrimary} />
+        <PopupModal
+          popup={popup}
+          onClose={closePopup}
+          onPrimary={popupPrimary}
+          designs={schema.designs}
+          designId={designId}
+          onDesignChange={handleDesignChange}
+        />
       )}
       {showHelp && (
         <HelpModal

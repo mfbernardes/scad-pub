@@ -256,7 +256,7 @@ export function parseRender(raw) {
 // The display policies a `popup` may choose: shown on every visit ("always"),
 // only the first visit ("once"), or every visit until the user opts out with a
 // "Don't show this again" checkbox ("dismissible").
-export const POPUP_MODES = ["always", "once", "dismissible"];
+export const POPUP_MODES = ["always", "once", "dismissible", "picker"];
 
 // Validate and normalise the optional `popup` config block: a notice dialog
 // shown over the app on load. `header` (dialog title) and `body` (a
@@ -339,6 +339,11 @@ export function parseNotices(raw) {
         );
       out.color = entry.color.trim();
     }
+    if (entry.attention !== undefined) {
+      if (typeof entry.attention !== "boolean")
+        throw new Error(`gen-schema: 'notices[${i}].attention' must be a boolean`);
+      out.attention = entry.attention;
+    }
     return out;
   });
 }
@@ -347,7 +352,7 @@ export function parseNotices(raw) {
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, presetsLabel: "Presets", parametersLabel: "Customize" };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, gallery: false, essentials: false, presetsLabel: "Presets", parametersLabel: "Customize" };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -405,6 +410,13 @@ export function parseUi(raw) {
     if (typeof raw.fullscreen !== "boolean")
       throw new Error("gen-schema: 'ui.fullscreen' must be a boolean");
     out.fullscreen = raw.fullscreen;
+  }
+  for (const key of ["gallery", "essentials"]) {
+    if (raw[key] !== undefined) {
+      if (typeof raw[key] !== "boolean")
+        throw new Error(`gen-schema: 'ui.${key}' must be a boolean`);
+      out[key] = raw[key];
+    }
   }
   for (const key of ["presetsLabel", "parametersLabel"]) {
     if (raw[key] !== undefined) {

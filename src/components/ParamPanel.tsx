@@ -67,6 +67,8 @@ interface Props {
   /** Configurable tab labels (default "Presets" / "Parameters"). */
   presetsLabel?: string;
   parametersLabel?: string;
+  showAdvanced: boolean;
+  onShowAdvancedChange: (show: boolean) => void;
   /** Active tab + search query, hoisted to AppShell (usePanelState) so they
    *  survive a desktop/mobile remount — see docs/architecture-review.md M7. */
   panelTab: PanelTab;
@@ -98,6 +100,8 @@ export function ParamPanel({
   autoRender,
   presetsLabel = "Presets",
   parametersLabel = "Customize",
+  showAdvanced,
+  onShowAdvancedChange,
   panelTab,
   onPanelTabChange,
   search,
@@ -290,8 +294,17 @@ export function ParamPanel({
             onFocus={onSearchFocus}
             onBlur={onSearchBlur}
           />
+          {design.params.some((p) => p.advanced) && (
+            <button
+              type="button"
+              className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
+              onClick={() => onShowAdvancedChange(!showAdvanced)}
+            >
+              {showAdvanced ? "Show essential settings" : "Show all settings"}
+            </button>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
         </TabsContent>
 

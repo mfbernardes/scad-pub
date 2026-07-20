@@ -28,6 +28,9 @@ const SHOWIF_RE = /^@show-?if\s+(.+)$/i;
 // `@font` directive: marks a string or enum parameter as a font-family selector,
 // so the UI can check its value against the available font set. Invisible to OpenSCAD.
 const FONT_ANNOT_RE = /^@font\s*$/i;
+// `@advanced`: the next parameter, or every parameter in the next section
+// when placed directly before its header, is hidden in essentials-first mode.
+const ADVANCED_ANNOT_RE = /^@advanced\s*$/i;
 // `@info [Label [| unit]]` directive: surface this parameter's live value in the
 // viewer's dimension info panel. The optional text is a custom label, and an
 // optional `| unit` suffix is appended to the value. Invisible to OpenSCAD.
@@ -42,6 +45,7 @@ const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
 // config `designs[]` entry still overrides them — and invisible to OpenSCAD.
 const DESCRIPTION_RE = /^\s*\/\/\s*@description\b\s*(.*)$/i;
 const ICON_RE = /^\s*\/\/\s*@icon\b\s*(.*)$/i;
+const IMAGE_RE = /^\s*\/\/\s*@image\b\s*(.*)$/i;
 const FILEDOC_RE = /^\s*\/\/\s*@doc\b\s*(.*)$/i;
 // `@svg [layers=<param>]` directive: marks a string parameter as an SVG file the
 // in-app wizard prepares (check / fix / import). The optional `layers=<param>`
@@ -60,7 +64,7 @@ const FILLEDBY_RE = /^@filledBy\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i;
 // that grammar — or starts with an unrecognised `@word` at all — fails the
 // build with the file and line, instead of silently degrading to plain doc
 // prose (a typo'd `@shwoIf` used to just become part of the help text).
-const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "info", "svg", "filledby"]);
+const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "advanced", "info", "svg", "filledby"]);
 const ANNOTATION_WORD_RE = /^@([A-Za-z-]+)\b/;
 
 // `@showIf` clause shapes accepted at both generate time (here) and runtime
@@ -293,6 +297,8 @@ export function parseParams(absPath) {
   let pendingShowIf = null;
   let pendingShowIfLine = 0;
   let pendingFont = false;
+  let pendingAdvanced = false;
+  let sectionAdvanced = false;
   // Set by an `// @info [Label | unit]` line; consumed by the next parameter.
   let pendingInfo = null;
   // Set by an `// @svg [layers=<param>]` line; consumed by the next parameter.
@@ -309,7 +315,7 @@ export function parseParams(absPath) {
   // File-level design metadata (`// @description` / `// @icon`); first non-empty
   // wins. Populated regardless of section, so a header comment above the first
   // `/* [Section] */` is honoured.
-  const meta = { description: null, icon: null, doc: null };
+  const meta = { description: null, icon: null, image: null, doc: null };
   // The line each param's @showIf/@svg/@filledBy annotation was declared on,
   // keyed by param name — fed into validateAnnotations below for diagnostics.
   const lineInfo = { showIf: new Map(), svg: new Map(), filledBy: new Map() };
@@ -317,6 +323,7 @@ export function parseParams(absPath) {
     pendingDoc = [];
     pendingShowIf = null;
     pendingFont = false;
+    pendingAdvanced = false;
     pendingInfo = null;
     pendingSvg = null;
     pendingFilledBy = null;
@@ -343,6 +350,11 @@ export function parseParams(absPath) {
       if (meta.icon === null && imeta[1].trim()) meta.icon = imeta[1].trim();
       continue;
     }
+    const imagemeta = line.match(IMAGE_RE);
+    if (imagemeta) {
+      if (meta.image === null && imagemeta[1].trim()) meta.image = imagemeta[1].trim();
+      continue;
+    }
     const docmeta = line.match(FILEDOC_RE);
     if (docmeta) {
       if (meta.doc === null && docmeta[1].trim()) meta.doc = docmeta[1].trim();
@@ -351,6 +363,7 @@ export function parseParams(absPath) {
     const sm = line.match(SECTION_RE);
     if (sm) {
       section = sm[1];
+      sectionAdvanced = pendingAdvanced;
       if (section !== "Hidden" && !sections.includes(section))
         sections.push(section);
       if (pendingSectionCollapsed && section !== "Hidden" && !collapsedSections.includes(section))
@@ -378,6 +391,7 @@ export function parseParams(absPath) {
       // renders) and still get the in-app import / fallback affordance.
       if ((p.type === "string" || p.type === "enum") && pendingFont)
         p.isFont = true;
+      if (pendingAdvanced || sectionAdvanced) p.advanced = true;
       // Surface this param's value in the viewer info panel (see `// @info`).
       if (pendingInfo) p.info = pendingInfo;
       // Mark a string SVG field for the in-app wizard (see `// @svg`), and a
@@ -421,6 +435,7 @@ export function parseParams(absPath) {
         pendingShowIf = expr;
         pendingShowIfLine = lineNo;
       } else if (FONT_ANNOT_RE.test(content)) pendingFont = true;
+      else if (ADVANCED_ANNOT_RE.test(content)) pendingAdvanced = true;
       else if (info) {
         // `@info`, `@info Label`, or `@info Label | unit` — split on a single
         // pipe; empty parts become null (label falls back to the param's own
@@ -459,7 +474,7 @@ export function parseParams(absPath) {
         fail(
           absPath,
           lineNo,
-          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @info, @svg, @filledBy, @collapsed, @description, @icon, @doc)`
+          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @advanced, @info, @svg, @filledBy, @collapsed, @description, @icon, @image, @doc)`
         );
       } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {
