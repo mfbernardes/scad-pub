@@ -74,7 +74,7 @@ test("captures WARNING lines from stdout or stderr (hardcoded)", () => {
     []
   );
   assert.deepEqual(out, [
-    { level: "warning", text: "Can't open font 'Brand Display', using fallback" },
+    { level: "warning", text: "Can't open font 'Brand Display', using fallback", attention: true },
   ]);
 });
 
@@ -87,6 +87,7 @@ test("captures assert failures as a hardcoded diagnostic", () => {
     {
       level: "assert",
       text: "Assertion 'width > 0' failed in file tag.scad, line 5",
+      attention: true,
     },
   ]);
 });

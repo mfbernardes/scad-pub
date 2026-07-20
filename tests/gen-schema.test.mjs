@@ -356,11 +356,12 @@ test("parseParams captures file-level @description / @icon / @doc metadata", () 
   assert.deepEqual(meta, {
     description: "A collapsible gadget.",
     icon: "assets/emblem.svg",
+    image: null,
     doc: "collapsible-doc.md",
   });
   // A design file with no such annotations reports nulls.
   const plain = parseParams(join(FIXTURES, "mini.scad"));
-  assert.deepEqual(plain.meta, { description: null, icon: null, doc: null });
+  assert.deepEqual(plain.meta, { description: null, icon: null, image: null, doc: null });
 });
 
 test("lang/dir + per-design shortcut icons + screenshot fields reach the manifest", () => {

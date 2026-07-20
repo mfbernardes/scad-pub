@@ -52,9 +52,9 @@ These keys tell `gen-schema` which `.scad` files and assets to bundle:
 - **`assets`**: files or directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.
 
-Each `designs[]` entry also accepts optional `description`, `icon`, and `doc` fields. `description` is the short line shown under the label in the design picker. `icon` is a path relative to the config file, shown in the picker and used as the design's manifest shortcut icon. The icon may be an SVG, PNG, or WebP file. ScadPub serves SVG/WebP as-is. For PNG, the build reads the pixel dimensions so the manifest shortcut advertises the real `sizes`. `doc` is a path (also config-relative) to a Markdown file of user documentation; when present, the app shows a button that opens it in a modal.
+Each `designs[]` entry also accepts optional `description`, `icon`, `image`, and `doc` fields. `description` is the short line shown under the label in the design picker. `icon` is a path relative to the config file, shown in the compact picker and used as the design's manifest shortcut icon. `image` is larger card artwork for `ui.gallery` and falls back to the icon. These assets may be SVG, PNG, or WebP. `doc` is a path (also config-relative) to a Markdown file of user documentation; when present, the app shows a button that opens it in a modal.
 
-All three fall back to the design's own [`// @description` / `// @icon` / `// @doc` annotations](annotations.md#design-metadata--description--icon--doc) when omitted here. A config value still wins.
+All four fall back to the design's own `// @description` / `// @icon` / `// @image` / `// @doc` annotations when omitted here. A config value still wins.
 
 ### Rendering
 
@@ -329,7 +329,7 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
   "popup": {
     "header": "Welcome to Tag Studio",          // required: dialog title
     "body": "Configure a nameplate and export a 3MF.\n\nSee the [print guide](https://example.com/guide) for material tips.",  // required
-    "mode": "once"                               // optional: "always" | "once" | "dismissible" (default "once")
+    "mode": "once"                               // optional: "always" | "once" | "dismissible" | "picker"
   }
 }
 ```
@@ -340,6 +340,7 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
   - **`always`**: shown on every visit. No opt-out
   - **`once`** (default): shown on the first visit only. Dismissing it with **OK**, the close button, Escape, or outside click remembers it so it will not return
   - **`dismissible`**: shown on every visit until you tick **Don't show this again**. Closing without ticking the box shows it again next time
+  - **`picker`**: shows the visual design gallery on the first visit. Intended for `ui.gallery: true` deployments with multiple designs
 
 The remembered state is namespaced by the configurator's `id` and keyed by the popup's content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It's purely informational and doesn't affect renders, so it never invalidates the geometry cache.
 
@@ -361,6 +362,8 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
 - **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
 - **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
+- **`gallery`**: `false` by default. Replaces the compact design dropdown with a searchable card grid using each design's `image`, then `icon`, then a letter fallback
+- **`essentials`**: `false` by default. Starts with `// @advanced` parameters hidden behind **Show all settings**
 
 ### PWA manifest
 
@@ -399,6 +402,7 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 - **`marker`**: required. The design-defined word, matched as `: <marker>:` inside an echo, case-insensitive. The first configured category that matches a line claims it
 - **`label`**: optional badge noun, such as `"alerts"`. Defaults to the `marker`
 - **`color`**: optional badge fill, as a plain CSS colour. For `#rgb`/`#rrggbb`, the badge text auto-switches between black and white to stay legible. Other colour forms keep the default badge text, so their contrast is your responsibility. Omit to use the default accent badge styling
+- **`attention`**: optional boolean, default `false`. Attention notices join OpenSCAD warnings, assertions, and missing fonts in the pre-download review dialog; **Download anyway** remains available
 
 Omit `notices`, or set it to `[]`, and no marker categories are recognised. Design echoes appear only in the raw log. The bundled example config (`scadpub.config.json`) opts in with `alert` and `note` categories. The example `tag` design echoes them in specific, parameter-driven situations so you can see the badges appear.
 

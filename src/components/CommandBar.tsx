@@ -71,6 +71,7 @@ export const CommandBar = memo(function CommandBar({
             onChange={designChange}
             openSignal={openPickerSignal}
             active={pickerActive}
+            gallery={schema.ui?.gallery}
           />
         ) : (
           <span className="text-[0.88rem] font-semibold text-foreground">
