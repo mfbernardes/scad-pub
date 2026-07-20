@@ -17,7 +17,7 @@
     "LiberationSans-Regular.ttf"
   ],
 
-  "ui": { "install": "off" },
+  "ui": { "install": "off", "flow": "guided", "essentials": true },
   "fileImport": true,
 
   "popup": {
@@ -38,7 +38,7 @@
           },
           {
             "title": "2. Make it yours",
-            "body": "The **Customize** tab lists everything you can change, grouped into sections.\n\n- Drag a slider (or type a number), pick from a dropdown, type text, or flip a switch.\n- Tap the small **ⓘ** next to a label for a fuller explanation.\n- Click a **section header** to fold or unfold it; some start folded.\n- Some settings only appear when another one makes them relevant.\n- **Reset to defaults** (at the bottom of the panel) undoes your changes for the current design."
+            "body": "The numbered steps split each design's settings into a short guided path. You can jump between steps at any time.\n\n- Drag a slider (or type a number), pick from a dropdown, type text, or flip a switch.\n- Tap the small **ⓘ** next to a label for a fuller explanation.\n- Click a **section header** to fold or unfold it; some start folded.\n- Some settings only appear when another one makes them relevant.\n- **Show all settings** reveals less-common controls.\n- **Reset to defaults** undoes your changes for the current design."
           },
           {
             "title": "3. Look around the preview",

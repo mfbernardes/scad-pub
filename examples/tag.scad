@@ -7,6 +7,7 @@
 //   • import() extrudes an SVG (a default emblem.svg is bundled; upload your own
 //     SVG and set `svg_file` to its filename to swap it).
 
+// @stage layout | Layout
 /* [Tag] */
 // Width of the tag (mm).
 width = 90; // [10:1:160]
@@ -19,6 +20,7 @@ thickness = 3; // [1:0.5:10]
 // @info Corner radius | mm
 corner_radius = 4; // [0:0.5:20]
 
+// @stage content | Content
 /* [Text] */
 // Text to emboss on the tag. Leave empty for none.
 // @info Engraved text
@@ -39,6 +41,7 @@ text_color = "#e23b3b";
 // Carve the text into the plate instead of raising it.
 engrave_text = false;
 
+// @stage content
 /* [Emblem (SVG)] */
 // Extrude an SVG emblem onto the tag.
 show_emblem = true;
@@ -54,6 +57,7 @@ emblem_size = 18; // [4:1:80]
 // @showIf show_emblem
 emblem_height = 1.5; // [0.4:0.1:5]
 
+// @stage layout
 /* [Hanging hole] */
 // Add a hole to hang or thread the tag.
 hole = true;
@@ -63,6 +67,8 @@ hole = true;
 hole_diameter = 5; // [2:0.5:15]
 
 // @collapsed
+// @advanced
+// @stage layout
 /* [Quality] */
 // Maximum facet angle; lower is smoother but slower.
 facet_angle = 4; // [1:1:12]

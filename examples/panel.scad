@@ -8,6 +8,7 @@
 // @icon panel-icon.svg
 // @doc panel.md
 
+// @stage layout | Layout
 /* [Panel] */
 // Panel width (mm).
 panel_width = 120; // [40:1:250]
@@ -22,10 +23,13 @@ corner_radius = 4; // [0:0.5:20]
 // Border between the drawing and the plate edge (mm).
 margin = 6; // [0:1:40]
 // Base plate colour.
+// @advanced
 base_color = "white";
 // Colour of a single-colour (blank svg_layers) relief.
+// @advanced
 relief_color = "steelblue";
 
+// @stage artwork | Artwork
 /* [SVG source] */
 // The drawing to extrude. Drop in an SVG; the wizard checks and fixes it for
 // OpenSCAD import, then reads its region colours into the list below.

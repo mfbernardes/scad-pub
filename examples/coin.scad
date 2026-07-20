@@ -3,6 +3,7 @@
 // engraved text, and an optional hanging hole — a different parameter set
 // from the rectangular tag so the design switcher feels meaningful.
 
+// @stage shape | Shape
 /* [Coin] */
 // Diameter of the coin (mm).
 diameter = 50; // [20:1:100]
@@ -13,6 +14,7 @@ border_width = 4; // [0:0.5:15]
 // How far the border ring stands above the face (mm).
 border_height = 0.8; // [0:0.2:3]
 
+// @stage content | Content
 /* [Text] */
 // Text embossed on the face of the coin.
 label = "ScadPub";
@@ -30,6 +32,7 @@ text_color = "#e23b3b";
 // Carve the text into the face instead of raising it.
 engrave_text = false;
 
+// @stage shape
 /* [Hanging hole] */
 // Add a hole at the top edge for hanging.
 hole = true;
@@ -38,6 +41,8 @@ hole = true;
 hole_diameter = 4; // [2:0.5:12]
 
 // @collapsed
+// @advanced
+// @stage shape
 /* [Quality] */
 // Maximum facet angle; lower is smoother but slower.
 facet_angle = 3; // [1:1:10]

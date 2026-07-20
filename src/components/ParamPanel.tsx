@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
+import type { Dimensions } from "./Viewer";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
@@ -27,6 +28,9 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
 } from "lucide-react";
+import { GuidedContinue, GuidedFlowNav } from "./GuidedFlowNav";
+import { GuidedReview } from "./GuidedReview";
+import { guidedStages } from "../lib/guidedStages";
 
 const panelTabClass = cn(chipTabTrigger, "flex-1");
 
@@ -67,6 +71,12 @@ interface Props {
   /** Configurable tab labels (default "Presets" / "Parameters"). */
   presetsLabel?: string;
   parametersLabel?: string;
+  guided?: boolean;
+  measured?: Dimensions | null;
+  attentionIssues?: string[];
+  rendering?: boolean;
+  stalePreview?: boolean;
+  exportable?: boolean;
   showAdvanced: boolean;
   onShowAdvancedChange: (show: boolean) => void;
   /** Active tab + search query, hoisted to AppShell (usePanelState) so they
@@ -100,6 +110,12 @@ export function ParamPanel({
   autoRender,
   presetsLabel = "Presets",
   parametersLabel = "Customize",
+  guided = false,
+  measured = null,
+  attentionIssues = [],
+  rendering = false,
+  stalePreview = false,
+  exportable = false,
   showAdvanced,
   onShowAdvancedChange,
   panelTab,
@@ -127,6 +143,10 @@ export function ParamPanel({
     return w >= MIN_WIDTH && w <= MAX_WIDTH ? w : DEFAULT_WIDTH;
   });
   const debouncedSearch = useDebounce(search, 150);
+  const stages = guidedStages(design);
+  const parameterStages = guided
+    ? stages
+    : [{ value: "params" as PanelTab, label: parametersLabel, filter: undefined }];
 
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -250,11 +270,20 @@ export function ParamPanel({
         {/* Tab row (Presets / Parameters / Files) with the collapse control on
             the end. Files appears only when the design imports files. */}
         <div className="flex shrink-0 items-stretch border-b">
-          <TabsList className="flex-1 rounded-none border-0 bg-transparent p-0">
-            <TabsTrigger value="presets" className={panelTabClass}>{presetsLabel}</TabsTrigger>
-            <TabsTrigger value="params" className={panelTabClass}>{parametersLabel}</TabsTrigger>
-            {fileImport && <TabsTrigger value="files" className={panelTabClass}>Files</TabsTrigger>}
-          </TabsList>
+          {guided ? (
+            <GuidedFlowNav
+              hasPresets={bundled.length > 0}
+              hasFiles={fileImport != null}
+              stages={stages}
+              className="flex-1 border-b-0"
+            />
+          ) : (
+            <TabsList className="flex-1 rounded-none border-0 bg-transparent p-0">
+              <TabsTrigger value="presets" className={panelTabClass}>{presetsLabel}</TabsTrigger>
+              <TabsTrigger value="params" className={panelTabClass}>{parametersLabel}</TabsTrigger>
+              {fileImport && <TabsTrigger value="files" className={panelTabClass}>Files</TabsTrigger>}
+            </TabsList>
+          )}
           <IconButton
             className="mr-1 self-center"
             label="Collapse panel"
@@ -277,36 +306,70 @@ export function ParamPanel({
             onPresetsChange={presetsChange}
             inline
           />
+          {guided && (
+            <GuidedContinue
+              to={stages[0].value}
+              label={stages[0].label}
+              onContinue={onPanelTabChange}
+            />
+          )}
         </TabsContent>
 
-        <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <PresetDiffBar
-            design={design}
-            values={values}
-            presetBaseline={presetBaseline}
-            presetName={presetName}
-            changedParams={changedParams}
-          />
-          <ParamSearch
-            value={search}
-            onChange={onSearchChange}
-            onClear={() => onSearchChange("")}
-            onFocus={onSearchFocus}
-            onBlur={onSearchBlur}
-          />
-          {design.params.some((p) => p.advanced) && (
-            <button
-              type="button"
-              className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
-              onClick={() => onShowAdvancedChange(!showAdvanced)}
-            >
-              {showAdvanced ? "Show essential settings" : "Show all settings"}
-            </button>
-          )}
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
-          </div>
-        </TabsContent>
+        {parameterStages.map((stage, index) => {
+          const next = parameterStages[index + 1];
+          return (
+            <TabsContent key={stage.value} value={stage.value} className="mt-0 flex min-h-0 flex-1 flex-col">
+              <PresetDiffBar
+                design={design}
+                values={values}
+                presetBaseline={presetBaseline}
+                presetName={presetName}
+                changedParams={changedParams}
+              />
+              <ParamSearch
+                value={search}
+                onChange={onSearchChange}
+                onClear={() => onSearchChange("")}
+                onFocus={onSearchFocus}
+                onBlur={onSearchBlur}
+              />
+              {design.params.some((p) => p.advanced) && (
+                <button
+                  type="button"
+                  className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
+                  onClick={() => onShowAdvancedChange(!showAdvanced)}
+                >
+                  {showAdvanced ? "Show essential settings" : "Show all settings"}
+                </button>
+              )}
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} stage={stage.filter} />
+              </div>
+              {guided && (
+                <GuidedContinue
+                  to={next?.value ?? "review"}
+                  label={next?.label ?? "Review"}
+                  onContinue={onPanelTabChange}
+                />
+              )}
+            </TabsContent>
+          );
+        })}
+
+        {guided && (
+          <TabsContent value="review" className="mt-0 flex min-h-0 flex-1 flex-col">
+            <GuidedReview
+              design={design}
+              values={values}
+              presetName={presetName}
+              measured={measured}
+              attentionIssues={attentionIssues}
+              rendering={rendering}
+              stalePreview={stalePreview}
+              exportable={exportable}
+            />
+          </TabsContent>
+        )}
 
         {fileImport && (
           <TabsContent value="files" className="mt-0 min-h-0 flex-1 overflow-y-auto p-3">

@@ -63,6 +63,8 @@ export interface EnumChoice {
 export interface ParamBase {
   name: string;
   section: string;
+  /** Guided-flow stage inherited from the parameter's annotated section. */
+  stage?: string;
   /** Concise label: the comment line directly above the parameter (OpenSCAD). */
   description: string;
   /** Full preceding comment block, shown as a tooltip. */
@@ -156,6 +158,8 @@ export interface Design {
    *  Null/absent hides the "Design guide" affordance. */
   doc?: string | null;
   sections: string[];
+  /** Ordered guided-flow stages declared by section-level `// @stage`. */
+  stages?: Array<{ id: string; label: string }>;
   /** Section names that start collapsed (from a `// @collapsed` annotation). */
   collapsedSections?: string[];
   params: Param[];
@@ -349,6 +353,11 @@ export interface UiConfig {
   gallery?: boolean;
   /** Start with `@advanced` parameters hidden behind a Show all settings action. */
   essentials?: boolean;
+  /**
+   * Present Presets, Customize, and an automatic Review as a lightweight,
+   * non-blocking sequence. Defaults to the standard panel tabs.
+   */
+  flow?: "standard" | "guided";
 }
 
 export interface Schema {

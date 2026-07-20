@@ -52,9 +52,9 @@ async function shoot(page, base, theme) {
   // Dismiss the first-visit welcome popup if present so it doesn't cover the
   // panel (and would block the tab click below).
   await dismissWelcomePopup(page);
-  // The panel opens on the Presets tab; switch to Parameters so the baseline
-  // keeps exercising the param form (a richer regression surface).
-  await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});
+  // The panel opens on Start; switch to the first design-specific stage so the
+  // baseline keeps exercising the param form (a richer regression surface).
+  await page.getByRole("tab", { name: /^\d+ Layout$/ }).first().click().catch(() => {});
   await page.waitForSelector(".param-form", { timeout: 30000 });
   await page.addStyleTag({ content: MASK_CSS });
   await page.waitForTimeout(150); // let fonts/layout settle
@@ -86,6 +86,10 @@ function compare(theme, actual) {
   if (!ok) {
     mkdirSync(DIFF_DIR, { recursive: true });
     writeFileSync(`${DIFF_DIR}/${theme}-diff.png`, PNG.sync.write(diff));
+    // CI runs on Linux, while maintainers may update screenshots on macOS.
+    // Upload the actual frame beside the pixel diff so an environment-pinned
+    // baseline can be reviewed and adopted without guessing from the diff.
+    writeFileSync(`${DIFF_DIR}/${theme}-actual.png`, PNG.sync.write(actual));
   }
   console.log(
     `  ${ok ? "✅" : "❌"} ${theme}: ${changed} px differ (${(ratio * 100).toFixed(2)}%${

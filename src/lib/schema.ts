@@ -17,6 +17,8 @@ function checkParam(p: unknown, designId: string): void {
   if (typeof param.name !== "string") fail(`${where} has a param without a name`);
   const at = `${where} param '${String(param.name)}'`;
   if (typeof param.section !== "string") fail(`${at} has no section`);
+  if (param.stage !== undefined && typeof param.stage !== "string")
+    fail(`${at} has a non-string stage annotation`);
   if (typeof param.type !== "string" || !PARAM_TYPES.includes(param.type))
     fail(`${at} has invalid type '${String(param.type)}'`);
   if (param.type === "enum" && !Array.isArray(param.choices))
@@ -54,6 +56,18 @@ function checkDesign(d: unknown): void {
       !design.collapsedSections.every((s) => typeof s === "string"))
   )
     fail(`design '${id}' 'collapsedSections' must be an array of strings`);
+  if (
+    design.stages !== undefined &&
+    (!Array.isArray(design.stages) ||
+      !design.stages.every(
+        (stage) =>
+          !!stage &&
+          typeof stage === "object" &&
+          typeof (stage as Record<string, unknown>).id === "string" &&
+          typeof (stage as Record<string, unknown>).label === "string"
+      ))
+  )
+    fail(`design '${id}' 'stages' must be an array of { id, label } strings`);
   for (const p of design.params as unknown[]) checkParam(p, id);
 }
 
@@ -183,6 +197,8 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.outputDefault' must be \"closed\" or \"open\"");
     if (ui.install !== undefined && !["auto", "off"].includes(ui.install as string))
       fail("'ui.install' must be \"auto\" or \"off\"");
+    if (ui.flow !== undefined && !["standard", "guided"].includes(ui.flow as string))
+      fail("'ui.flow' must be \"standard\" or \"guided\"");
     if (ui.showVarName !== undefined && typeof ui.showVarName !== "boolean")
       fail("'ui.showVarName' must be a boolean");
     for (const key of ["gallery", "essentials"] as const)

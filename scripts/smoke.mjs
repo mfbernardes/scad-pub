@@ -302,15 +302,38 @@ async function checkEveryDesignRenders({ page, ids }) {
   for (const id of ids) await selectDesign(page, id);
 }
 
+// Standard flow has one configurable tab label; guided flow replaces it with
+// numbered design stages. Prefer the configured standard label when present,
+// otherwise open the first numbered stage that is neither Start nor Review.
+async function openParamsTab(page, paramsTabName) {
+  const standard = page.getByRole("tab", { name: paramsTabName }).first();
+  if (await standard.count()) {
+    await standard.click();
+    return;
+  }
+  await page
+    .getByRole("tab")
+    .filter({ hasText: /^\d+\s+(?!(?:Start|Review)$).+$/ })
+    .first()
+    .click();
+}
+
+async function openPresetsTab(page, presetsTabName) {
+  const standard = page.getByRole("tab", { name: presetsTabName }).first();
+  if (await standard.count()) {
+    await standard.click();
+    return;
+  }
+  await page.getByRole("tab", { name: /^\d+ Start$/ }).first().click();
+}
+
 // Bundled presets — exercised on the first design that ships any. Desktop
 // presets live in the panel's Presets tab (a button list), applied by click.
 async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTabName }) {
   console.log("=== bundled presets ===");
   let presetTested = false;
-  const gotoPresets = () =>
-    page.getByRole("tab", { name: presetsTabName }).first().click().catch(() => {});
-  const gotoParams = () =>
-    page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  const gotoPresets = () => openPresetsTab(page, presetsTabName).catch(() => {});
+  const gotoParams = () => openParamsTab(page, paramsTabName).catch(() => {});
   for (const id of ids) {
     await selectDesign(page, id);
     await gotoPresets();
@@ -354,7 +377,7 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
 async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabName }) {
   console.log("=== preset import (parameterSets round-trip) ===");
   await selectDesign(page, ids[0]);
-  await page.getByRole("tab", { name: presetsTabName }).first().click().catch(() => {});
+  await openPresetsTab(page, presetsTabName).catch(() => {});
   // An empty set still lists by name (values default in); enough to prove the
   // parse→save→list wiring. Round-trip coercion is covered by the unit tests.
   const setsFile = JSON.stringify({
@@ -372,7 +395,7 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
   );
   await importedItem.first().waitFor({ state: "attached", timeout: 3000 }).catch(() => {});
   check((await importedItem.count()) >= 1, "imported parameterSets file added a saved preset");
-  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  await openParamsTab(page, paramsTabName).catch(() => {});
 }
 
 // Export 3MF + PNG on the first design.
@@ -457,7 +480,7 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   await page.reload({ waitUntil: "load" });
   await waitRendered(page, "tag reloaded");
   // Back to the Customize tab (the file-import test left the panel on Files).
-  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  await openParamsTab(page, paramsTabName).catch(() => {});
 
 
   // @collapsed: the "Quality" group starts folded; its params are hidden
@@ -465,6 +488,7 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   const quality = page.locator("details.param-group", {
     has: page.locator("summary", { hasText: "Quality" }),
   });
+  await page.getByRole("button", { name: "Show all settings" }).click().catch(() => {});
   check((await quality.count()) === 1, "Quality group is collapsible");
   const facet = paramRow(page, "facet_angle");
   check(!(await facet.isVisible()), "collapsed @collapsed group hides its params");
@@ -502,6 +526,7 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   // Engraving the label trips the design's `note` category (a config-driven
   // notice). The console auto-opens on the first notice; open it explicitly
   // in case it was already showing earlier notices (no badge in the top bar).
+  await page.getByRole("tab", { name: /\d+ Content$/ }).click().catch(() => {});
   await paramRow(page, "engrave_text").getByRole("switch").click();
   await openConsole(page);
   check(
@@ -520,7 +545,9 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
     await input.fill(String(value));
     await input.blur();
   };
+  await page.getByRole("tab", { name: /\d+ Layout$/ }).click().catch(() => {});
   await setNum("thickness", 1);
+  await page.getByRole("tab", { name: /\d+ Content$/ }).click().catch(() => {});
   await setNum("text_depth", 2);
   check(
     await waitFor(() =>
@@ -603,7 +630,7 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
     // Tabs unmounts inactive tab content.
     await page.locator(".sheet-handle").click(); // peek -> half
     await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
-    await page.getByRole("tab", { name: paramsTabName }).first().click();
+    await openParamsTab(page, paramsTabName);
     await page.waitForSelector(".param-form", { timeout: 3000 });
     check((await page.locator(".param-form").count()) === 1, "exactly one ParamForm is mounted");
 
@@ -630,7 +657,10 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
       "search query survives the breakpoint change"
     );
     check(
-      (await page.getByRole("tab", { name: paramsTabName }).first().getAttribute("aria-selected")) === "true",
+      (await page.locator('[role="tab"][aria-selected="true"]').count()) === 1 &&
+        !/Start|Review|Files/.test(
+          (await page.locator('[role="tab"][aria-selected="true"]').textContent()) ?? ""
+        ),
       "active tab survives the breakpoint change"
     );
     check(
