@@ -202,7 +202,6 @@ export function CustomizeTab({
   // on" is the meaningful equivalent of "the user has revealed advanced".
   const currentStageAdvancedOn =
     showQuickStart &&
-    !isReviewStage &&
     (variant === "scroll" ? stageAdvanced.size > 0 : !!activeStepId && stageAdvanced.has(activeStepId));
   const showSearch = !showQuickStart || currentStageAdvancedOn;
 

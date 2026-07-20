@@ -11,6 +11,7 @@ import {
   resolveCurrentStep,
   quickStartAvailable,
   currentStepFromIntersections,
+  stepAdvancedInfo,
   REVIEW_STEP_ID,
 } from "../src/lib/quickStart.ts";
 
@@ -226,6 +227,82 @@ test("currentStepFromIntersections: null when nothing intersects (caller keeps t
 
 test("currentStepFromIntersections: an empty order always yields null", () => {
   assert.equal(currentStepFromIntersections([], new Set(["a"])), null);
+});
+
+test("stepAdvancedInfo: no @advanced param in the step -> hasAdvanced/advancedOn false, view passes through", () => {
+  const d = design({
+    sections: ["A"],
+    steps: [{ id: "a", label: "A", sections: ["A"] }],
+    params: [numberParam("a1", { section: "A" })],
+  });
+  const info = stepAdvancedInfo(d, d.steps[0], new Set(), "essentials", true, true);
+  assert.equal(info.hasAdvanced, false);
+  assert.equal(info.advancedOn, false);
+  assert.equal(info.view, "essentials");
+  assert.equal(info.showLivePreview, false);
+});
+
+test("stepAdvancedInfo: an @advanced param makes hasAdvanced true; view stays app-wide until toggled on", () => {
+  const d = design({
+    sections: ["A"],
+    steps: [{ id: "a", label: "A", sections: ["A"] }],
+    params: [numberParam("a1", { section: "A", advanced: true })],
+  });
+  const off = stepAdvancedInfo(d, d.steps[0], new Set(), "essentials", true, true);
+  assert.equal(off.hasAdvanced, true);
+  assert.equal(off.advancedOn, false);
+  assert.equal(off.view, "essentials");
+  assert.equal(off.showLivePreview, false);
+
+  const on = stepAdvancedInfo(d, d.steps[0], new Set(["a"]), "essentials", true, true);
+  assert.equal(on.hasAdvanced, true);
+  assert.equal(on.advancedOn, true);
+  assert.equal(on.view, "all", "toggled-on stage switches ParamRows to the 'all' view");
+  assert.equal(on.showLivePreview, true, "advanced toggle on + advanced params present shows live preview");
+});
+
+test("stepAdvancedInfo: another step's entry in stageAdvanced doesn't toggle this one on", () => {
+  const d = design({
+    sections: ["A"],
+    steps: [{ id: "a", label: "A", sections: ["A"] }],
+    params: [numberParam("a1", { section: "A", advanced: true })],
+  });
+  const info = stepAdvancedInfo(d, d.steps[0], new Set(["other-step"]), "essentials", true, true);
+  assert.equal(info.advancedOn, false);
+  assert.equal(info.view, "essentials");
+});
+
+test("stepAdvancedInfo: autoRender === false + isFirstStep shows the live-preview escape hatch even with no advanced params", () => {
+  const d = design({
+    sections: ["A"],
+    steps: [{ id: "a", label: "A", sections: ["A"] }],
+    params: [numberParam("a1", { section: "A" })],
+  });
+  assert.equal(stepAdvancedInfo(d, d.steps[0], new Set(), "essentials", false, true).showLivePreview, true);
+  // Not the first step: the escape hatch is a single global control, not per-stage.
+  assert.equal(stepAdvancedInfo(d, d.steps[0], new Set(), "essentials", false, false).showLivePreview, false);
+  // autoRender true: no escape hatch needed.
+  assert.equal(stepAdvancedInfo(d, d.steps[0], new Set(), "essentials", true, true).showLivePreview, false);
+  // autoRender undefined (caller hasn't wired it): the escape hatch's formula still
+  // reads false here — the actual PanelFooter mount is gated on `!== undefined`
+  // separately, at the call site, not inside this helper.
+  assert.equal(stepAdvancedInfo(d, d.steps[0], new Set(), "essentials", undefined, true).showLivePreview, false);
+});
+
+test("stepAdvancedInfo: a null/undefined step (e.g. no current step resolved yet) is inert", () => {
+  const d = design({
+    sections: ["A"],
+    steps: [{ id: "a", label: "A", sections: ["A"] }],
+    params: [numberParam("a1", { section: "A", advanced: true })],
+  });
+  const infoNull = stepAdvancedInfo(d, null, new Set(["a"]), "essentials", true, true);
+  assert.equal(infoNull.hasAdvanced, false);
+  assert.equal(infoNull.advancedOn, false);
+  assert.equal(infoNull.view, "essentials");
+
+  const infoUndefined = stepAdvancedInfo(d, undefined, new Set(), "essentials", false, true);
+  assert.equal(infoUndefined.hasAdvanced, false);
+  assert.equal(infoUndefined.showLivePreview, true, "the escape hatch doesn't require a resolved step");
 });
 
 test("quickStartAvailable: requires guided experience, essentials view, a stepped design, and ui.quickStart", () => {

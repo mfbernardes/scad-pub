@@ -1192,14 +1192,14 @@ export const AppShell = memo(function AppShell({
                 result={result}
                 stalePreview={stalePreview}
                 outputOpen={outputOpen}
-                // Wave 1 (round-5): guided-only — the header bell's count
+                // Wave 1 (round-5); harmonized (H8): the header bell's count
                 // must equal the number of visible notice cards the Notices
                 // tab actually renders (AttentionItems' own `attention`
                 // list), not every raw diagnostic (which includes
                 // informational notices/warnings folded into Technical
-                // details and never rendered as a card). "tabs" workflow's
-                // own bell (below, untouched) keeps `diagnostics.length`. See
-                // `noticeBadgeCount` above (shared with CommandBar's own).
+                // details and never rendered as a card). Both workflows'
+                // bells now share this same count — see `noticeBadgeCount`
+                // above (shared with CommandBar's own).
                 noticeCount={noticeBadgeCount}
                 onToggleOutput={toggleOutput}
                 onOpenImportedFiles={openImportedFiles}
@@ -1408,12 +1408,11 @@ export const AppShell = memo(function AppShell({
               result={result}
               stalePreview={stalePreview}
               outputOpen={outputOpen}
-              // Wave 1 (round-5): "tabs" workflow keeps `diagnostics.length`
-              // (unchanged, byte-identical); guided workflow's own bell
-              // counts only the visible attention cards — see
-              // `noticeBadgeCount` above (shared with GuidedMobileHeader's
-              // own). CommandBar itself decides the badge's visual `variant`
-              // from `guided` below, so only the NUMBER differs here.
+              // Wave 1 (round-5); harmonized (H8): both workflows' bells now
+              // count only the visible attention cards, not every raw
+              // diagnostic — see `noticeBadgeCount` above (shared with
+              // GuidedMobileHeader's own). CommandBar itself still decides
+              // the badge's visual `variant` from `guided` below.
               noticeCount={noticeBadgeCount}
               onToggleOutput={toggleOutput}
               openPickerSignal={openPickerSignal}

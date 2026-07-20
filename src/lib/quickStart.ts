@@ -163,6 +163,55 @@ export function currentStepFromIntersections(
   return null;
 }
 
+/** Return shape of {@link stepAdvancedInfo} — see its own doc. */
+export interface StepAdvancedInfo {
+  hasAdvanced: boolean;
+  advancedOn: boolean;
+  view: SettingsView;
+  showLivePreview: boolean;
+}
+
+/**
+ * Per-stage "Show advanced settings" derivation (see QuickStart.tsx's own
+ * `stageAdvancedSet`/`onToggleStageAdvanced`): whether `step` has any
+ * `@advanced` param at all (no toggle button when it doesn't — nothing to
+ * reveal), whether that step's own toggle is currently on, the settings view
+ * ParamRows should use for it ("all" only while the toggle is on, otherwise
+ * the app-wide `view`), and whether the stage-scoped inline Live-preview
+ * footer should show here.
+ *
+ * Shared by both of QuickStart's variants, which previously each re-derived
+ * this formula inline: "steps" mode calls it once for the single mounted
+ * `currentStep`, passing `isFirstStep: true` — only one step is EVER mounted
+ * there, so it always IS the first (and only) one shown. "scroll" mode calls
+ * it once per visible step inside its `steps.map`, passing
+ * `step === steps[0]`.
+ *
+ * `showLivePreview` is true when either: this step's own toggle is on AND it
+ * has advanced params to gate; or (a "no reachable Advanced toggle anywhere"
+ * escape hatch for a heavy/paused design with no `@advanced` params at all)
+ * live preview is currently off and this is the first step. Callers still
+ * gate the actual `PanelFooter` mount on `autoRender !== undefined`
+ * themselves at the call site — `undefined` there means "the caller hasn't
+ * wired autoRender at all", distinct from "off", so that guard is
+ * deliberately NOT folded into this formula.
+ */
+export function stepAdvancedInfo(
+  design: Design,
+  step: QuickStartStep | null | undefined,
+  stageAdvanced: ReadonlySet<string>,
+  view: SettingsView,
+  autoRender: boolean | undefined,
+  isFirstStep: boolean
+): StepAdvancedInfo {
+  const hasAdvanced =
+    !!step && design.params.some((p) => p.advanced && step.sections.includes(p.section));
+  const advancedOn = !!step && stageAdvanced.has(step.id);
+  const resolvedView: SettingsView = advancedOn ? "all" : view;
+  const showLivePreview = (hasAdvanced && advancedOn) || (autoRender === false && isFirstStep);
+  return { hasAdvanced, advancedOn, view: resolvedView, showLivePreview };
+}
+
 /**
  * Whether QuickStart should render at all in place of the classic form: ALL
  * of guided experience, the essentials settings view, a design that

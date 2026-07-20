@@ -61,6 +61,7 @@ import {
   currentStepFromIntersections,
   hasVisibleUnstepped,
   resolveCurrentStep,
+  stepAdvancedInfo,
   unsteppedSectionNames,
   visibleSteps,
   type QuickStartStep,
@@ -281,15 +282,16 @@ interface Props {
    */
   onStepActivate?: () => void;
   /**
-   * Wave 1 (round-5): live-preview (auto-render) state, guided workflow
-   * only — forwarded from CustomizeTab (which gets it as an explicit prop
-   * from ParamPanel/SheetTabs, the same value PanelFooter always used). The
-   * standing PanelFooter switch is gone from guided mode's Content/
-   * Appearance footer (live preview just stays on by default); this prop
-   * instead feeds a `PanelFooter` reused inline, appearing only once the
-   * CURRENT stage's own "Show advanced settings" toggle is on (see
-   * `currentStepAdvancedOn` below) — never in Review. Unused (and safe to
-   * omit) outside `workflow === "guided"`.
+   * Wave 1 (round-5); harmonized (R13) to apply whenever QuickStart itself
+   * shows, in either workflow: live-preview (auto-render) state, forwarded
+   * from CustomizeTab (which gets it as an explicit prop from
+   * ParamPanel/SheetTabs, the same value PanelFooter always used). The
+   * standing PanelFooter switch is gone from QuickStart's own Content/
+   * Appearance footer wherever it shows (live preview just stays on by
+   * default); this prop instead feeds the shared `StageLivePreview` helper,
+   * appearing per-stage per `stepAdvancedInfo`'s `showLivePreview` (see
+   * `src/lib/quickStart.ts`) — never in Review. `undefined` means the caller
+   * hasn't wired autoRender at all (StageLivePreview then renders nothing).
    */
   autoRender?: boolean;
 }
@@ -816,6 +818,58 @@ function sectionsOf(design: Design, names: string[]): ParamSectionGroup[] {
   return names.map((section) => ({ section, params: design.params.filter((p) => p.section === section) }));
 }
 
+/**
+ * The per-stage "Show/Hide advanced settings" text button — identical markup
+ * in both of QuickStart's variants (steps mode below its own current step's
+ * ParamRows; scroll mode below each visible step's group), previously
+ * duplicated inline. `show` is that step's own `stepAdvancedInfo(...).
+ * hasAdvanced` (no button at all when the step has no `@advanced` param to
+ * reveal); `on` is `.advancedOn`, deciding the label.
+ */
+function AdvancedToggleButton({
+  show,
+  on,
+  onClick,
+}: {
+  show: boolean;
+  on: boolean;
+  onClick: () => void;
+}) {
+  if (!show) return null;
+  return (
+    <button
+      type="button"
+      className="quick-start__advanced-toggle mt-(--space-3) cursor-pointer border-none bg-transparent p-0 text-[0.82rem] font-medium text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-offset-2"
+      onClick={onClick}
+    >
+      {on ? t("quickstart.hideAdvanced") : t("quickstart.showAdvanced")}
+    </button>
+  );
+}
+
+/**
+ * The stage-scoped inline Live-preview footer — identical in both of
+ * QuickStart's variants, previously duplicated inline. Only rendered once
+ * `autoRender` is actually wired (`!== undefined` — the caller hasn't wired
+ * it at all otherwise, distinct from "off") AND `visible` (that step's own
+ * `stepAdvancedInfo(...).showLivePreview`, see its own doc).
+ */
+function StageLivePreview({
+  visible,
+  autoRender,
+}: {
+  visible: boolean;
+  autoRender: boolean | undefined;
+}) {
+  if (autoRender === undefined || !visible) return null;
+  return (
+    <PanelFooter
+      autoRender={autoRender}
+      className="quick-start__advanced-live-preview mt-(--space-3) flex items-center gap-2"
+    />
+  );
+}
+
 export function QuickStart({
   design,
   values,
@@ -1153,10 +1207,10 @@ export function QuickStart({
   // tabs and guided workflow reach advanced settings identically. `workflow`
   // itself stays reserved for genuinely STRUCTURAL differences (the Review
   // screen variant, stage-only selection, `stepNav`, …).
-  const currentStepHasAdvanced =
-    !!currentStep && design.params.some((p) => p.advanced && currentStep.sections.includes(p.section));
-  const currentStepAdvancedOn = !!currentStep && stageAdvancedSet.has(currentStep.id);
-  const currentStepView: SettingsView = currentStepAdvancedOn ? "all" : view;
+  const currentStepInfo = stepAdvancedInfo(design, currentStep, stageAdvancedSet, view, autoRender, true);
+  const currentStepHasAdvanced = currentStepInfo.hasAdvanced;
+  const currentStepAdvancedOn = currentStepInfo.advancedOn;
+  const currentStepView = currentStepInfo.view;
 
   const rowProps = {
     design,
@@ -1367,25 +1421,16 @@ export function QuickStart({
           {steps.map((step) => {
             // Per-stage advanced model, generalized to scroll mode (every
             // step's group is mounted at once here, unlike steps mode's
-            // single current step) — same three derived values steps mode
-            // computes only for `currentStep` above, computed per group
-            // instead. Mirrors `currentStepHasAdvanced`/`currentStepAdvancedOn`/
-            // `currentStepView` exactly, just not narrowed to one step.
-            const stepHasAdvanced = design.params.some(
-              (p) => p.advanced && step.sections.includes(p.section)
-            );
-            const stepAdvancedOn = stageAdvancedSet.has(step.id);
-            const stepView: SettingsView = stepAdvancedOn ? "all" : view;
-            // The `!autoRender` fallback (a heavy/paused design with no
-            // reachable Advanced toggle anywhere still needs SOME way to
-            // reach Live preview — see steps mode's own doc below) is a
-            // GLOBAL condition, not a per-stage one — unlike steps mode
-            // (only one step's content is ever mounted), scroll mode mounts
-            // every step's group at once, so gating it on `step === steps[0]`
-            // keeps it to exactly one control instead of one identical
-            // switch repeated under every single step.
-            const showLivePreviewHere =
-              (stepHasAdvanced && stepAdvancedOn) || (!autoRender && step === steps[0]);
+            // single current step) — same `stepAdvancedInfo` steps mode calls
+            // only for `currentStep` above, called per group instead. The
+            // `showLivePreview` fallback for a heavy/paused design with no
+            // reachable Advanced toggle anywhere is a GLOBAL condition, not a
+            // per-stage one — unlike steps mode (only one step's content is
+            // ever mounted), scroll mode mounts every step's group at once,
+            // so `step === steps[0]` (this call's `isFirstStep`) keeps it to
+            // exactly one control instead of one identical switch repeated
+            // under every single step.
+            const stepInfo = stepAdvancedInfo(design, step, stageAdvancedSet, view, autoRender, step === steps[0]);
             return (
               <section
                 key={step.id}
@@ -1403,7 +1448,7 @@ export function QuickStart({
                 </h3>
                 <ParamRows
                   {...rowProps}
-                  view={stepView}
+                  view={stepInfo.view}
                   sections={stepSectionGroups.get(step.id) ?? []}
                   sectionChrome="flat"
                   // The step heading above already names a single-section step;
@@ -1412,28 +1457,15 @@ export function QuickStart({
                   // their own names repeated to tell the sub-groups apart.
                   showSectionHeadings={step.sections.length > 1}
                 />
-                {/* Same per-stage "Show/Hide advanced settings" toggle steps
-                    mode renders below its own ParamRows — see that branch's
-                    own doc for why the condition/markup is identical. */}
-                {stepHasAdvanced && (
-                  <button
-                    type="button"
-                    className="quick-start__advanced-toggle mt-(--space-3) cursor-pointer border-none bg-transparent p-0 text-[0.82rem] font-medium text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-offset-2"
-                    onClick={() => onToggleStageAdvanced?.(step.id)}
-                  >
-                    {stepAdvancedOn ? t("quickstart.hideAdvanced") : t("quickstart.showAdvanced")}
-                  </button>
-                )}
-                {/* Same inline stage-scoped Live-preview control steps mode
-                    renders (see its own doc, below) — reused here so tabs
-                    mode's desktop scroll variant reaches it too, not just
-                    steps mode. */}
-                {autoRender !== undefined && showLivePreviewHere && (
-                  <PanelFooter
-                    autoRender={autoRender}
-                    className="quick-start__advanced-live-preview mt-(--space-3) flex items-center gap-2"
-                  />
-                )}
+                {/* Same per-stage "Show/Hide advanced settings" toggle and
+                    inline Live-preview control steps mode renders below its
+                    own ParamRows — shared components, see their own docs. */}
+                <AdvancedToggleButton
+                  show={stepInfo.hasAdvanced}
+                  on={stepInfo.advancedOn}
+                  onClick={() => onToggleStageAdvanced?.(step.id)}
+                />
+                <StageLivePreview visible={stepInfo.showLivePreview} autoRender={autoRender} />
                 {/* This step's own `@display` rows (src/lib/displayRows.ts) —
                     a read-only "generated automatically" preview surface,
                     after the step's own parameter controls. Renders nothing
@@ -1547,15 +1579,11 @@ export function QuickStart({
                   // their own names repeated to tell the sub-groups apart.
                   showSectionHeadings={currentStep.sections.length > 1}
                 />
-                {currentStepHasAdvanced && (
-                  <button
-                    type="button"
-                    className="quick-start__advanced-toggle mt-(--space-3) cursor-pointer border-none bg-transparent p-0 text-[0.82rem] font-medium text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-offset-2"
-                    onClick={() => onToggleStageAdvanced?.(currentStep.id)}
-                  >
-                    {currentStepAdvancedOn ? t("quickstart.hideAdvanced") : t("quickstart.showAdvanced")}
-                  </button>
-                )}
+                <AdvancedToggleButton
+                  show={currentStepHasAdvanced}
+                  on={currentStepAdvancedOn}
+                  onClick={() => onToggleStageAdvanced?.(currentStep.id)}
+                />
                 {/* Wave 1 (round-5): the standing Live-preview switch is gone
                     from guided mode's Content/Appearance footer (see
                     ParamPanel/SheetTabs — live preview just stays on by
@@ -1573,13 +1601,9 @@ export function QuickStart({
                     currently off (heavy/paused), regardless of the Advanced
                     toggle — the common light-design case (autoRender still
                     on, Advanced closed) is unaffected and keeps it hidden
-                    from the standing footer as before. */}
-                {autoRender !== undefined && ((currentStepHasAdvanced && currentStepAdvancedOn) || !autoRender) && (
-                  <PanelFooter
-                    autoRender={autoRender}
-                    className="quick-start__advanced-live-preview mt-(--space-3) flex items-center gap-2"
-                  />
-                )}
+                    from the standing footer as before. See `stepAdvancedInfo`
+                    (src/lib/quickStart.ts) for the shared formula. */}
+                <StageLivePreview visible={currentStepInfo.showLivePreview} autoRender={autoRender} />
                 <DisplayRowsPanel rows={displayRowsForStep(displayRows, currentStep.id)} compact />
               </>
             ) : null}
