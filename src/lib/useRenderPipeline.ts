@@ -19,7 +19,7 @@
 // only while it stays current per `isSnapshotCurrent`.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { Design, RenderRequest, RenderResult } from "../openscad/types";
+import type { Design, RenderRequest, RenderResult, WorkerProgress } from "../openscad/types";
 import {
   fileSignature,
   OpenSCADRunner,
@@ -28,12 +28,17 @@ import {
 import { toScadExpr } from "./scad";
 import { defaultsFor, type Values } from "./presets";
 import { changedParamLabels, emptyMetrics, recordRender, type RenderMetrics } from "./renderMetrics";
+import { t } from "./i18n";
+import { friendlyRenderError } from "./friendlyErrors";
 import {
   isSnapshotCurrent,
   isSnapshotExportable,
   isStaleEpoch,
+  nextPauseReason,
   resolveRenderCommit,
+  retainedResultAfterFailure,
   shouldFireInitialRender,
+  type PauseReason,
   type RenderSnapshot,
 } from "./renderState";
 
@@ -109,11 +114,43 @@ export function useRenderPipeline({
   // callback and disturb the debounce/auto-render invariants.
   const prevRenderedValuesRef = useRef<Values>(initialValues);
   const [ready, setReady] = useState(false);
-  const [autoRender, setAutoRender] = useState(!design.heavy);
+  // The render worker's bootstrap-download progress (see WorkerProgress),
+  // forwarded by the runner's onProgress. Cleared the moment `ready` fires —
+  // once the worker is up, this stops meaning anything for the current
+  // worker instance, and the runner itself suppresses any further/late
+  // progress messages after ready (see runner.ts's onProgress doc), so this
+  // never gets set again for that instance.
+  const [loadProgress, setLoadProgress] = useState<WorkerProgress | null>(null);
+  // Latches true the first time onProgress ever fires for this component's
+  // lifetime — unlike loadProgress (cleared back to null once ready), this
+  // never resets, so it distinguishes "a real engine download happened THIS
+  // session" (a genuine first-time/cache-miss load) from a warm reload that
+  // hit Cache Storage and posted no progress at all. Consumed by
+  // useAppNotices' one-time offline-claim toast (see offlineClaim.ts) — the
+  // only thing that must never overclaim offline readiness off a cache hit
+  // that didn't actually happen this session.
+  const [engineDownloaded, setEngineDownloaded] = useState(false);
+  const [autoRender, setAutoRenderState] = useState(!design.heavy);
   // Mirrored on every render so async work (doRender) reads the latest value
   // without retriggering the effects that depend on it.
   const autoRenderRef = useRef(autoRender);
   autoRenderRef.current = autoRender;
+  // Why live preview is currently off — see renderState.ts's PauseReason doc.
+  // Seeded the same way a design switch resolves it (nextPauseReason's
+  // "design-switch" branch ignores `current`, so seeding from `null` here is
+  // equivalent to resetForDesign's own call below).
+  const [pauseReason, setPauseReason] = useState<PauseReason>(() =>
+    nextPauseReason(null, { type: "design-switch", heavy: !!design.heavy })
+  );
+  // The external setter (returned below, wired to the "Live preview" toggle):
+  // wraps the raw setAutoRenderState so turning it back on always clears
+  // pauseReason too — re-enabling live preview means whatever paused it no
+  // longer applies, regardless of whether that was the heavy brake or a
+  // heavy design's manual start.
+  const setAutoRender = useCallback((next: boolean) => {
+    setAutoRenderState(next);
+    setPauseReason((prev) => nextPauseReason(prev, { type: "auto-render-toggle", enabled: next }));
+  }, []);
 
   // Bumped by resetForDesign (design switch) and invalidate (render-input
   // invalidation). doRender captures the epoch at render start and compares it
@@ -158,6 +195,13 @@ export function useRenderPipeline({
   // The only thing Download/Image may ever act on: a successful render that
   // still matches the live controls. Never true for a stale or failed result.
   const exportable = isSnapshotExportable(snapshot, renderKey, design.id);
+  // The last successful render to keep DISPLAYING while the latest render
+  // failed (see retainedResultAfterFailure) — the viewer shows this instead
+  // of clearing to an empty canvas, and the friendly-error card's "your last
+  // working preview is still shown" line renders exactly when it's non-null.
+  // Display-only: `exportable` above stays the sole authority for
+  // Download/Image, so a failed latest render still disables both.
+  const retainedResult = retainedResultAfterFailure(result, snapshot, design.id);
 
   const doRender = useCallback(
     async () => {
@@ -224,16 +268,21 @@ export function useRenderPipeline({
         setResult(r);
         setResultKey(startRenderKey);
         if (!r.ok)
-          toast.error("That combination of settings didn't work", {
+          // Same title mapping as the Notices tab's friendly-error card (see
+          // friendlyErrors.ts) — a fatal bootstrap failure and an ordinary
+          // model failure read differently there, so the toast that announces
+          // it shouldn't say something else. Stable id/description unchanged.
+          toast.error(friendlyRenderError(r)?.title ?? t("toast.renderFailed"), {
             id: "render-failed",
-            description: "Open Messages (the bell in the top bar) for details.",
+            description: t("toast.renderFailedDescription"),
           });
         if (r.staleDefines?.length) setBundleStale(true);
         setRendering(false);
         if (r.ok && !r.cached && r.ms > heavyMs && autoRenderRef.current) {
-          setAutoRender(false);
+          setAutoRenderState(false);
+          setPauseReason((prev) => nextPauseReason(prev, { type: "heavy-brake" }));
           setAnnouncement(
-            `This design takes a while to build (${(r.ms / 1000).toFixed(1)} s), so live preview is paused — press "Update" after making changes.`
+            t("toast.heavyRenderPaused", { seconds: (r.ms / 1000).toFixed(1) })
           );
         }
       } catch (e) {
@@ -247,10 +296,10 @@ export function useRenderPipeline({
         // than silently stopping the spinner over a stale model.
         lastKeyRef.current = "";
         setRendering(false);
-        toast.error("The preview couldn't be built", {
+        toast.error(t("pipeline.buildFailed"), {
           id: "render-failed",
           description:
-            e instanceof Error ? e.message : "Unexpected renderer error.",
+            e instanceof Error ? e.message : t("pipeline.unexpectedError"),
         });
       }
     },
@@ -286,7 +335,17 @@ export function useRenderPipeline({
   // after the replay: exactly one live worker (the second runner's), zero
   // leaked ones.
   useEffect(() => {
-    const opts: RunnerCtorOptions = { onReady: () => setReady(true), ...runner };
+    const opts: RunnerCtorOptions = {
+      onReady: () => {
+        setReady(true);
+        setLoadProgress(null);
+      },
+      onProgress: (p) => {
+        setLoadProgress(p);
+        setEngineDownloaded(true);
+      },
+      ...runner,
+    };
     runnerRef.current = createRunner ? createRunner(opts) : new OpenSCADRunner(opts);
     return () => {
       runnerRef.current?.dispose();
@@ -356,7 +415,8 @@ export function useRenderPipeline({
     setSnapshot(null);
     setRendering(false);
     lastKeyRef.current = "";
-    setAutoRender(!next.heavy);
+    setAutoRenderState(!next.heavy);
+    setPauseReason((prev) => nextPauseReason(prev, { type: "design-switch", heavy: !!next.heavy }));
     setRenderMetrics(emptyMetrics);
     initialRenderFiredRef.current = false;
     // Seed the diff baseline with the new design's defaults — what App resets
@@ -368,13 +428,17 @@ export function useRenderPipeline({
 
   return {
     result,
+    retainedResult,
     rendering,
     ready,
+    loadProgress,
+    engineDownloaded,
     renderedValues,
     renderMetrics,
     autoRender,
     setAutoRender,
     stalePreview,
+    pauseReason,
     isCurrent,
     exportable,
     snapshot,

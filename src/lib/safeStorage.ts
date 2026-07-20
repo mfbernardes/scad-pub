@@ -22,3 +22,13 @@ export function writeLocal(key: string, value: string): boolean {
     return false;
   }
 }
+
+/** Remove a key. Best-effort like the two above — a blocked/unavailable
+ *  store just leaves nothing to remove, so this never throws. */
+export function removeLocal(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* storage unavailable — nothing to remove */
+  }
+}

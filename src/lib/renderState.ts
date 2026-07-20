@@ -66,6 +66,55 @@ export function isStaleEpoch(startEpoch: number, currentEpoch: number): boolean 
   return startEpoch !== currentEpoch;
 }
 
+/**
+ * The last successful render to keep showing when the LATEST render failed —
+ * the "your last working preview is still shown" behavior. Non-null exactly
+ * when all of:
+ *  - the latest completed render failed (`result && !result.ok`; a null
+ *    result means no completed attempt to be reassuring about, e.g. right
+ *    after a design switch, whose resetForDesign clears `result`), and
+ *  - a previous successful snapshot exists, and
+ *  - that snapshot belongs to the CURRENT design — resetForDesign already
+ *    nulls the snapshot on a switch, so this check is defense-in-depth
+ *    against ever showing design A's geometry under design B, mirroring
+ *    isSnapshotCurrent's own designId re-check.
+ *
+ * Deliberately does NOT require the snapshot's renderKey to match the live
+ * controls: the whole point is showing the previous (necessarily
+ * different-key) good geometry while the current key's render failed. That is
+ * why this must never feed export gating — `isSnapshotExportable` (which DOES
+ * require key match) remains the only authority for Download/Image.
+ */
+export function retainedResultAfterFailure(
+  result: RenderResult | null,
+  snapshot: RenderSnapshot | null,
+  currentDesignId: string
+): RenderResult | null {
+  if (!result || result.ok) return null;
+  if (!snapshot?.result.ok) return null;
+  if (snapshot.designId !== currentDesignId) return null;
+  return snapshot.result;
+}
+
+/**
+ * Whether a "what will actually be produced" figure — the viewer's
+ * DimensionInfo measurements panel, or QuickStart's Review stage (PR18) — is
+ * stale: either live preview hasn't caught up with the controls yet
+ * (`stalePreview`), or the viewer is showing a RETAINED last-good render
+ * after the latest attempt failed (see retainedResultAfterFailure) — that
+ * geometry was measured from earlier values, not the failed controls, so
+ * it's stale by definition even though `stalePreview` itself reads false once
+ * the failed attempt completes for the current key. Shared by both surfaces
+ * so they can never disagree about staleness.
+ */
+export function isMeasurementStale(
+  stalePreview: boolean,
+  result: RenderResult | null,
+  retainedResult: RenderResult | null
+): boolean {
+  return stalePreview || (!result?.ok && !!retainedResult);
+}
+
 /** Everything doRender knows about a render call at the moment it started —
  * captured before the `await`, so the eventual commit decision is judged
  * against the inputs that were actually live when the runner was asked to
@@ -143,4 +192,47 @@ export function resolveRenderCommit(
  */
 export function shouldFireInitialRender(alreadyFired: boolean, autoRender: boolean): boolean {
   return !alreadyFired && !autoRender;
+}
+
+/**
+ * Why live preview is currently paused (auto-render off), for the UI to
+ * explain rather than just show a bare "Update" button:
+ *  - "heavy": the heavy-render brake fired — a successful, uncached render
+ *    took longer than `heavyMs`, so useRenderPipeline auto-paused it.
+ *  - "manual-design": the design is flagged `heavy` and started in manual
+ *    mode (no brake has necessarily fired yet this session).
+ *  - null: live preview is on, or the user turned it off themselves — their
+ *    own choice needs no explanation.
+ */
+export type PauseReason = "heavy" | "manual-design" | null;
+
+/** The event vocabulary `nextPauseReason` reduces over — the three places
+ * useRenderPipeline's `pauseReason` can change. Modeled as a pure reducer
+ * (current + event -> next) rather than three inline setPauseReason calls so
+ * every transition is independently testable without mounting the hook. */
+export type PauseReasonEvent =
+  // A design switch (or the pipeline's own initial mount, which reduces over
+  // `null` the same way) — resolves from scratch, ignoring `current`.
+  | { type: "design-switch"; heavy: boolean }
+  // The heavy-render brake just fired.
+  | { type: "heavy-brake" }
+  // The user toggled auto-render (Live preview) themselves. Turning it ON
+  // always clears the reason — whatever paused it no longer applies once
+  // live preview is back on. Turning it OFF is the user's own choice, which
+  // carries no "why" to show, but is otherwise a no-op on `current`: nothing
+  // in this codebase invokes this event with `enabled: false` while a reason
+  // is already set (see useRenderPipeline's setAutoRender wrapper), so this
+  // branch never actually has a non-null `current` to preserve in practice —
+  // it's still handled explicitly rather than assumed unreachable.
+  | { type: "auto-render-toggle"; enabled: boolean };
+
+export function nextPauseReason(current: PauseReason, event: PauseReasonEvent): PauseReason {
+  switch (event.type) {
+    case "design-switch":
+      return event.heavy ? "manual-design" : null;
+    case "heavy-brake":
+      return "heavy";
+    case "auto-render-toggle":
+      return event.enabled ? null : current;
+  }
 }
