@@ -18,6 +18,7 @@ import {
   launchChromium,
   gotoWithTheme,
   dismissWelcomePopup,
+  settleFirstVisit,
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
 } from "./lib/browser.mjs";
@@ -45,6 +46,20 @@ async function waitRendered(page) {
 async function shot(page, dir, name) {
   await page.screenshot({ path: `${dir}/${name}.png` });
   console.log(`  ✅ ${name}.png`);
+}
+
+// QuickStart (PR11): the guided step navigation shown in place of the classic
+// form for a stepped design (tag) in guided + essentials — already the
+// default state, so it's naturally in every Customize-tab shot at its first
+// step. Jump to a middle step chip here so the navigated-mid-flow state gets
+// its own shot too. A no-op (no shot taken) when QuickStart isn't showing
+// (e.g. a config with `ui.quickStart: false`, or a design without `@step`s).
+async function shootQuickStartStep(page, dir, name) {
+  const chips = page.locator(".quick-start__step");
+  if ((await chips.count()) <= 2) return;
+  await chips.nth(2).click();
+  await sleep(250);
+  await shot(page, dir, name);
 }
 
 async function selectDesign(page, kind, label) {
@@ -86,7 +101,12 @@ async function captureViewport(context, base, kind, theme) {
   const page = await context.newPage();
 
   // Establish the origin, force the theme, then reload so it applies before paint.
-  await gotoWithTheme(page, base, theme);
+  // Seed the offline-claim once-flag (src/lib/prefs.ts's makeOnceFlag) so the
+  // staged offline-readiness toast (useAppNotices.ts) never appears in a
+  // capture: like screenshots.mjs, this serves dist/ fresh to a fresh browser
+  // context, so the first load here is a genuine cache-miss download that
+  // would otherwise show it at some nondeterministic point during the walk.
+  await gotoWithTheme(page, base, theme, { seedFlags: ["offline.claim.v1"] });
   // The Output bell's status live region always renders but is visually hidden,
   // so wait for it to be attached (not visible) before polling its render state.
   await page.waitForSelector(".render-status", { state: "attached", timeout: 30000 });
@@ -95,7 +115,17 @@ async function captureViewport(context, base, kind, theme) {
   // 1. Welcome popup (config-driven schema.popup, shown on first visit).
   if (await page.locator('[role="dialog"]').count()) {
     await shot(page, dir, "01-welcome-popup");
+    // 1b. Getting-started checklist (guided experience, PR8): dismiss just
+    // the popup so the card is visible for its own shot, then settle the
+    // remaining first-visit surfaces (which dismisses the card) so every
+    // later shot stays checklist-free as before. Skipped silently when the
+    // build/experience doesn't show a checklist.
     await dismissWelcomePopup(page);
+    await sleep(250);
+    if (await page.locator(".getting-started").count()) {
+      await shot(page, dir, "01b-getting-started");
+    }
+    await settleFirstVisit(page);
     await sleep(250);
   }
 
@@ -126,6 +156,7 @@ async function captureViewport(context, base, kind, theme) {
       await page.getByRole("tab", { name: tab }).click().catch(() => {});
       await sleep(250);
       await shot(page, dir, `${n}-tab-${tab.toLowerCase()}`);
+      if (tab === "Customize") await shootQuickStartStep(page, dir, "07b-tab-customize-step");
     }
     await sheetTo(page, "peek");
   } else {
@@ -136,6 +167,7 @@ async function captureViewport(context, base, kind, theme) {
     await shot(page, dir, "04-presets");
     await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});
     await sleep(200);
+    await shootQuickStartStep(page, dir, "04b-quickstart-step");
   }
 
   // 9 / 5. Output console. The Output bell lives in the top bar in both layouts —
@@ -162,8 +194,13 @@ async function captureViewport(context, base, kind, theme) {
   // Help + About dialogs.
   const helpName = kind === "mobile" ? "10-help" : "06-help";
   const aboutName = kind === "mobile" ? "11-about-licenses" : "07-about-licenses";
+  // Both layouts' Help control has the accessible name "Help" (IconButton
+  // sets aria-label from BarActions' `t("bar.help")`; its `title` — "Help &
+  // keyboard shortcuts" on desktop — is a tooltip only and does not win over
+  // aria-label in accessible-name computation, so matching on the title text
+  // here previously never found the button and silently no-opped).
   await openOverflow();
-  await page.getByRole("button", { name: kind === "mobile" ? "Help" : "Help & keyboard shortcuts" })
+  await page.getByRole("button", { name: "Help", exact: true })
     .first().click().catch(() => {});
   await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
   await sleep(300);
@@ -177,6 +214,19 @@ async function captureViewport(context, base, kind, theme) {
   await sleep(300);
   await shot(page, dir, aboutName);
   await closeDialog(page);
+
+  // Design picker dialog (only when the build has `ui.gallery: true` — it
+  // replaces the top bar's dropdown Select with a `.design-picker-button`
+  // that opens this card grid; see DesignPickerDialog.tsx). Absent otherwise.
+  const pickerButtonSel = `${kind === "mobile" ? ".mobile-top-bar__center" : ".command-bar__design-picker"} .design-picker-button`;
+  const pickerName = kind === "mobile" ? "12-design-picker" : "08-design-picker";
+  if (await page.locator(pickerButtonSel).count()) {
+    await page.locator(pickerButtonSel).click();
+    await page.waitForSelector(".design-picker-dialog", { timeout: 5000 }).catch(() => {});
+    await sleep(250);
+    await shot(page, dir, pickerName);
+    await closeDialog(page);
+  }
 
   await page.close();
 }

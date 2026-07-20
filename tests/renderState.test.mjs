@@ -9,10 +9,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  isMeasurementStale,
   isSnapshotCurrent,
   isSnapshotExportable,
   isStaleEpoch,
+  nextPauseReason,
   resolveRenderCommit,
+  retainedResultAfterFailure,
   shouldFireInitialRender,
 } from "../src/lib/renderState.ts";
 
@@ -189,6 +192,76 @@ test("scenario: a newer in-flight render blocks export, including after it fails
   assert.equal(isSnapshotExportable(snapshot, liveRenderKey, "design-a"), false);
 });
 
+// ---- retainedResultAfterFailure (PR6: keep the last working preview) ----
+
+function okSnapshot(overrides = {}) {
+  return { epoch: 0, renderKey: "key-A", designId: "design-a", values: {}, fileSig: "", result: ok(), ...overrides };
+}
+
+test("retainedResultAfterFailure: a same-design failure retains the last successful result", () => {
+  const snap = okSnapshot();
+  assert.equal(retainedResultAfterFailure(fail(), snap, "design-a"), snap.result);
+});
+
+test("retainedResultAfterFailure: an ok latest render retains nothing (the live result is shown)", () => {
+  assert.equal(retainedResultAfterFailure(ok(), okSnapshot(), "design-a"), null);
+});
+
+test("retainedResultAfterFailure: no completed render yet (null result) retains nothing", () => {
+  // A design switch resets `result` to null (resetForDesign) — there's no
+  // failure on screen to be reassuring about.
+  assert.equal(retainedResultAfterFailure(null, okSnapshot(), "design-a"), null);
+});
+
+test("retainedResultAfterFailure: no previous success (null snapshot) retains nothing", () => {
+  // e.g. the very first render of a design view failed — the canvas was
+  // empty before, so there is no "last working preview" to keep.
+  assert.equal(retainedResultAfterFailure(fail(), null, "design-a"), null);
+});
+
+test("retainedResultAfterFailure: a design switch clears retention — never design A's model under design B", () => {
+  // resetForDesign nulls the snapshot on a real switch; the designId check
+  // here is the defense-in-depth twin (mirrors isSnapshotCurrent's).
+  const snapA = okSnapshot({ designId: "design-a" });
+  assert.equal(retainedResultAfterFailure(fail(), snapA, "design-b"), null);
+});
+
+test("retainedResultAfterFailure: retention is display-only — the failed key stays non-exportable", () => {
+  // The retained snapshot's key (the previous, successful controls) never
+  // matches the failed live key, so isSnapshotExportable stays false —
+  // Download/Image remain disabled while retained geometry is displayed.
+  const snap = okSnapshot({ renderKey: "key-A" });
+  const liveFailedKey = "key-B";
+  assert.equal(retainedResultAfterFailure(fail(), snap, "design-a"), snap.result);
+  assert.equal(isSnapshotExportable(snap, liveFailedKey, "design-a"), false);
+});
+
+// ---- isMeasurementStale (PR18 — shared by DimensionInfo and QuickStart's
+// Review stage so they can never disagree about staleness) ----
+
+test("isMeasurementStale: stalePreview alone is enough", () => {
+  assert.equal(isMeasurementStale(true, ok(), null), true);
+  assert.equal(isMeasurementStale(false, ok(), null), false);
+});
+
+test("isMeasurementStale: a retained result after a failed latest render is stale, even with stalePreview false", () => {
+  assert.equal(isMeasurementStale(false, fail(), ok()), true);
+});
+
+test("isMeasurementStale: a successful latest render with no retained result is not stale", () => {
+  assert.equal(isMeasurementStale(false, ok(), null), false);
+});
+
+test("isMeasurementStale: a failed render with nothing retained is not stale (nothing to be stale about)", () => {
+  assert.equal(isMeasurementStale(false, fail(), null), false);
+});
+
+test("isMeasurementStale: a null result reads as stale too when a retained snapshot is present, mirroring the literal !result?.ok check ViewerStage always used (retainedResultAfterFailure itself never actually produces this combination — a null `result` never yields a retained snapshot in practice)", () => {
+  assert.equal(isMeasurementStale(false, null, ok()), true);
+  // With no retained snapshot at all, a null result is simply not stale.
+  assert.equal(isMeasurementStale(false, null, null), false);
+});
+
 // ---- shouldFireInitialRender (M15) ----
 
 test("shouldFireInitialRender: fires exactly once for a manual-mode (heavy) design", () => {
@@ -206,4 +279,40 @@ test("shouldFireInitialRender: the predicate takes no readiness input at all", (
   // only a render itself produces, deadlocking heavy designs. The fix is
   // structural — this predicate has no readiness parameter to gate on.
   assert.equal(shouldFireInitialRender.length, 2);
+});
+
+// ---- nextPauseReason (PR4: live-preview pause reason) ----
+
+test("nextPauseReason: a design switch resolves from scratch, ignoring `current`", () => {
+  assert.equal(nextPauseReason(null, { type: "design-switch", heavy: true }), "manual-design");
+  assert.equal(nextPauseReason(null, { type: "design-switch", heavy: false }), null);
+  // Switching TO a light design always clears whatever reason a previous
+  // heavy design (or a brake) left behind.
+  assert.equal(nextPauseReason("heavy", { type: "design-switch", heavy: false }), null);
+  assert.equal(nextPauseReason("manual-design", { type: "design-switch", heavy: false }), null);
+  // Switching TO a heavy design always reports "manual-design", even if the
+  // previous design's reason was "heavy" (a fresh design view is a fresh
+  // manual start, not a leftover brake).
+  assert.equal(nextPauseReason("heavy", { type: "design-switch", heavy: true }), "manual-design");
+});
+
+test("nextPauseReason: the heavy brake always reports \"heavy\", regardless of `current`", () => {
+  assert.equal(nextPauseReason(null, { type: "heavy-brake" }), "heavy");
+  assert.equal(nextPauseReason("manual-design", { type: "heavy-brake" }), "heavy");
+  assert.equal(nextPauseReason("heavy", { type: "heavy-brake" }), "heavy");
+});
+
+test("nextPauseReason: re-enabling auto-render always clears the reason", () => {
+  assert.equal(nextPauseReason("heavy", { type: "auto-render-toggle", enabled: true }), null);
+  assert.equal(nextPauseReason("manual-design", { type: "auto-render-toggle", enabled: true }), null);
+  assert.equal(nextPauseReason(null, { type: "auto-render-toggle", enabled: true }), null);
+});
+
+test("nextPauseReason: turning auto-render off (the user's own choice) leaves the reason as-is", () => {
+  // In practice this is always called with `current === null` (nothing else
+  // sets a reason without also turning auto-render off itself), but the
+  // reducer is still exercised directly against every `current` value so the
+  // "no reason for a user's own choice" contract can't silently regress.
+  assert.equal(nextPauseReason(null, { type: "auto-render-toggle", enabled: false }), null);
+  assert.equal(nextPauseReason("heavy", { type: "auto-render-toggle", enabled: false }), "heavy");
 });

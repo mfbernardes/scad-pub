@@ -35,8 +35,15 @@ globalThis.history = {
   },
 };
 
-const { readInitialState, persistState, buildShareUrl, parseHashState, sessionStateEquals } =
-  await import("../src/lib/urlState.ts");
+const {
+  readInitialState,
+  persistState,
+  buildShareUrl,
+  parseHashState,
+  sessionStateEquals,
+  hashDesignIdMissing,
+  hashHasDesignId,
+} = await import("../src/lib/urlState.ts");
 
 const param = (name, type, def) => ({
   name,
@@ -245,6 +252,36 @@ test("parseHashState parses an arbitrary hash string, not just location.hash", (
 test("parseHashState returns null for an empty hash or an unknown design", () => {
   assert.equal(parseHashState(schema, ""), null);
   assert.equal(parseHashState(schema, "#d=nonexistent"), null);
+});
+
+// PR7: App.tsx opens DesignPickerDialog once on load when the visit's deep
+// link named a design id this build doesn't have — a stale/broken link. This
+// is a distinct signal from parseHashState's own null return (which already
+// covers "no hash" and "unknown design" the same way, for the ordinary
+// fallback-to-defaults runtime behavior).
+test("hashDesignIdMissing: true only for a d= naming an unknown design", () => {
+  assert.equal(hashDesignIdMissing(schema, "#d=nonexistent"), true);
+  assert.equal(hashDesignIdMissing(schema, "d=nonexistent"), true); // no leading '#'
+  assert.equal(hashDesignIdMissing(schema, "#d=d"), false); // a real design
+  assert.equal(hashDesignIdMissing(schema, "#d=d&v=%7B%7D"), false);
+  assert.equal(hashDesignIdMissing(schema, ""), false); // no hash at all — not "broken"
+  assert.equal(hashDesignIdMissing(schema, "#p=bundled:Foo"), false); // no d= param at all
+  assert.equal(hashDesignIdMissing(schema, "#d="), true); // empty id still names no design
+});
+
+// hashHasDesignId — used by the welcome design picker (popup.mode: "picker",
+// see src/lib/popup.ts's resolvePopupSurface) to skip itself on a deep/share
+// link: ANY d= counts, valid or stale, unlike hashDesignIdMissing above which
+// only cares about a specifically UNKNOWN one.
+test("hashHasDesignId: true for any d=, valid or unknown; false with none", () => {
+  assert.equal(hashHasDesignId("#d=d"), true);
+  assert.equal(hashHasDesignId("d=d"), true); // no leading '#'
+  assert.equal(hashHasDesignId("#d=nonexistent"), true); // stale/unknown id still counts
+  assert.equal(hashHasDesignId("#d="), true); // empty id still counts as "named"
+  assert.equal(hashHasDesignId("#d=d&v=%7B%7D"), true);
+  assert.equal(hashHasDesignId(""), false); // no hash at all
+  assert.equal(hashHasDesignId("#p=bundled:Foo"), false); // no d= param at all
+  assert.equal(hashHasDesignId("#%"), false); // malformed — fails safe, not a deep link
 });
 
 test("sessionStateEquals — the external-navigation loop guard", () => {

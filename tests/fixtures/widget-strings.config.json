@@ -1,0 +1,10 @@
+{
+  "source": "src",
+  "features": [],
+  "fonts": [],
+  "strings": {
+    "action.image": "Bild",
+    "action.share": "Teilen"
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

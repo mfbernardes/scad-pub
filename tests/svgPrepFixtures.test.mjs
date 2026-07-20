@@ -1,5 +1,5 @@
 // Fixture-driven tests for the SVG-prep engine over the shared corner-case
-// suite (tests/fixtures/svg/*, mirrored from taktildots' examples/corner-cases).
+// suite (tests/fixtures/svg/*, mirrored from a downstream deployment's corner-case examples).
 // Category A files must import cleanly (no WARN/ERROR from the checker); Category
 // B files must each raise their known issue, and the fixable ones must be
 // resolved by applyFixes. The background cases are the regression guard for a

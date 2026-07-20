@@ -21,7 +21,11 @@ import {
   renderStatusText,
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
+  settleFirstVisit,
   dismissWelcomePopup,
+  withMobileContext,
+  settleAnimations,
+  runAxe,
 } from "./lib/browser.mjs";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
@@ -44,6 +48,16 @@ async function resetDefaults(page) {
   if (shown) await dlg.getByRole("button", { name: /^Reset$/ }).click();
 }
 
+// Expands the compact one-line checklist (PR14 rule 1 — shown whenever
+// QuickStart is the active guide for the current design+view) into its full
+// row list. A no-op when the full card is already showing (single-design
+// builds, All settings, a design without @step, ui.quickStart:false) — those
+// never render the `.getting-started__expand` chevron in the first place.
+async function expandChecklist(page) {
+  const expand = page.locator(".getting-started__expand");
+  if (await expand.count()) await expand.click();
+}
+
 async function waitRendered(page, label) {
   await waitRenderDone(page);
   console.log(`  ${label ?? "default"}: ${((await renderStatusText(page)) ?? "").replace(/^Render status: /, "").trim()} ✅`);
@@ -60,22 +74,129 @@ async function selectDesign(page, id) {
   await waitRendered(page, id);
 }
 
+// Staged offline-readiness claim (this milestone): a one-time, informational
+// toast telling a visitor this configurator (or its render engine) now works
+// offline — see src/lib/useAppNotices.ts and src/lib/offlineClaim.ts. Every
+// smoke run is a fresh browser instance with an empty Cache Storage, so the
+// first load here is always a genuine cache-miss download, and the check
+// runs FIRST (before anything else touches storage/reloads the page) so it
+// races nothing else in this suite. main() blocks the service worker's own
+// script for the whole run (see its own comment) specifically so THIS check
+// is deterministic: with no service worker to independently win the binary-
+// cache race, the render worker's own bootstrap always sees the miss and
+// posts progress, and (with no controlling service worker) the claim is
+// always the weaker "engine offline" one — see selectOfflineClaim's doc for
+// why that's the honest choice when nothing controls the page yet. The
+// stronger "ready for offline use" claim (a controlling service worker AND a
+// verified precache) is exercised by the pure-logic unit tests instead
+// (tests/offlineClaim.test.mjs), since reproducing it here would mean
+// un-blocking the service worker and accepting back the very race this
+// check exists to avoid.
+async function checkOfflineClaimToast({ page, check }) {
+  console.log("=== offline-claim toast (staged offline readiness) ===");
+  const claimToast = page.getByText(/now available offline|ready for offline use/i);
+  const shown = await claimToast
+    .first()
+    .waitFor({ state: "visible", timeout: 10000 })
+    .then(() => true)
+    .catch(() => false);
+  check(shown, "a one-time offline-readiness toast appears after the first real engine download");
+}
+
 // Configurable popup (schema.popup): a welcome notice on load. It overlays
 // the app behind a modal backdrop that intercepts pointer events, so dismiss
-// it before driving the UI — ticking "Don't show this again" (when the mode
-// offers it) persists the dismissal so it stays gone across the reloads the
-// later checks perform. The dialog's accessible name is the configured
-// header, so look it up from the schema rather than hardcoding one config's.
-async function checkWelcomePopup({ page, check, schema }) {
+// it before driving the UI. Two surfaces (src/lib/popup.ts's
+// resolvePopupSurface): the classic text PopupModal, or — `popup.mode:
+// "picker"` plus `ui.gallery` and more than one design, the dogfood config's
+// own setup — the welcome DesignPickerDialog: a two-step "highlight a card,
+// then confirm" flow (a card click only highlights it; the footer's
+// `.design-picker-dialog__start` "Start with {design}" button is what
+// actually switches design and closes the dialog), plus an optional
+// `.design-picker-dialog__browse` "Browse examples" action for a design that
+// ships bundled presets. The dialog's accessible name is the configured
+// header either way, so look it up from the schema rather than hardcoding one.
+async function checkWelcomePopup({ page, check, schema, ids }) {
   console.log("=== welcome popup ===");
-  if (schema.popup) {
-    const popup = page.getByRole("dialog", { name: schema.popup.header });
-    check((await popup.count()) > 0, "welcome popup shown on load");
-    if (/\]\(/.test(schema.popup.body ?? "")) {
-      check((await popup.getByRole("link").count()) > 0, "popup body renders its link");
+  if (!schema.popup) {
+    console.log("  (no popup in this config — skipped)");
+    return;
+  }
+  const galleryEnabled = !!schema.ui?.gallery && schema.designs.length > 1;
+  const isWelcomePicker = schema.popup.mode === "picker" && galleryEnabled;
+  const popup = page.getByRole("dialog", { name: schema.popup.header });
+  check((await popup.count()) > 0, "welcome popup shown on load");
+  if (/\]\(/.test(schema.popup.body ?? "")) {
+    check((await popup.getByRole("link").count()) > 0, "popup body renders its link");
+  }
+
+  if (isWelcomePicker) {
+    console.log("--- welcome design picker (popup.mode: \"picker\") ---");
+    const cards = popup.locator(".design-picker-dialog__card");
+    check((await cards.count()) === ids.length, `dialog shows one card per design (${ids.length})`);
+    if (schema.popup.footnote) {
+      check(
+        ((await popup.locator(".design-picker-dialog__footer").textContent()) ?? "").includes(schema.popup.footnote),
+        "the footer shows the configured footnote"
+      );
     }
-    // The primary button's label is config-driven (schema.popup.button), so read
-    // it from the schema instead of hardcoding "OK".
+    // Round-2 review fix (8dc8cd5, item 1): the footer (footnote + Browse
+    // examples + "Start with…") is a sibling of the scrollable card grid, not
+    // nested inside it — a structural check, not a scroll-position one, so
+    // it holds regardless of whether this build's design count actually
+    // overflows the grid. That's what keeps it visible/reachable ("fixed") no
+    // matter how far the grid itself is scrolled.
+    check(
+      await popup
+        .locator(".design-picker-dialog__footer")
+        .evaluate((el) => el.closest(".design-picker-dialog__grid-scroll") === null),
+      "the footer sits outside the scrollable card-grid area, so it stays fixed in place while the grid scrolls"
+    );
+
+    // The card's own visible label text picks up a sr-only " — Selected"/
+    // " — Current" suffix once highlighted (DesignCard.tsx), so a text-based
+    // filter can't reliably target it — the stable `data-design` hook can.
+    const cardFor = (id) => popup.locator(`.design-picker-dialog__card[data-design="${id}"]`);
+    check(
+      (await cardFor(ids[0]).getAttribute("aria-pressed")) === "true",
+      "the design already loaded starts as the highlighted card"
+    );
+
+    // Highlighting a DIFFERENT card is step one of two — it must NOT close the
+    // dialog or switch the loaded design yet.
+    const otherId = ids.find((id) => id !== ids[0]) ?? ids[0];
+    await cardFor(otherId).click();
+    check((await cardFor(otherId).getAttribute("aria-pressed")) === "true", "clicking a card highlights it");
+    check((await cardFor(ids[0]).getAttribute("aria-pressed")) !== "true", "highlighting a card un-highlights the previous one");
+    check((await popup.count()) === 1, "the dialog stays open after merely highlighting a card");
+    check(
+      !(await page.evaluate(() => location.hash)).includes(`d=${otherId}`),
+      "highlighting alone does not switch the loaded design"
+    );
+    const startBtn = popup.locator(".design-picker-dialog__start");
+    check(
+      ((await startBtn.textContent()) ?? "").trim() === `Start with ${designLabels[otherId] ?? otherId}`,
+      "the footer's primary button tracks the highlighted card's own label"
+    );
+
+    // Re-highlight the shipped default (ids[0], which ships bundled presets in
+    // the dogfood config) to exercise "Browse examples".
+    await cardFor(ids[0]).click();
+    const browseBtn = popup.locator(".design-picker-dialog__browse");
+    check((await browseBtn.count()) === 1, "\"Browse examples\" is offered for a design that ships bundled presets");
+    await browseBtn.click();
+    await popup.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+    check((await popup.count()) === 0, "\"Browse examples\" closes the welcome picker");
+    await waitRendered(page, ids[0]);
+    const presetsTabName = schema.ui?.presetsLabel || "Presets";
+    check(
+      (await page.getByRole("tab", { name: presetsTabName }).first().getAttribute("aria-selected")) === "true",
+      "\"Browse examples\" switches to the Presets tab"
+    );
+    await page.getByRole("tab", { name: schema.ui?.parametersLabel || "Customize" }).first().click().catch(() => {});
+  } else {
+    console.log("--- classic popup (plain text modal) ---");
+    // The primary button's label is config-driven (schema.popup.button), so
+    // read it from the schema instead of hardcoding "OK".
     const buttonLabel = schema.popup.button ?? "OK";
     const cta = popup.getByRole("button", { name: buttonLabel, exact: true });
     check((await cta.count()) > 0, `popup shows its configured button "${buttonLabel}"`);
@@ -83,24 +204,254 @@ async function checkWelcomePopup({ page, check, schema }) {
     if (await dontShow.count()) await dontShow.check();
     await cta.click();
     await popup.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
-    check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
+    check((await popup.count()) === 0, "popup dismissed");
     // The primary CTA also opens the design picker (when there's more than one
     // design) so the user's next step — choosing what to make — is obvious.
     if (schema.designs.length > 1) {
-      const listbox = page.getByRole("listbox");
-      const opened = await listbox
-        .first()
-        .waitFor({ state: "visible", timeout: 3000 })
-        .then(() => true)
-        .catch(() => false);
-      check(opened, "primary CTA opens the design picker");
-      // Close it so it doesn't intercept the later checks' interactions.
-      await page.keyboard.press("Escape");
-      await listbox.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+      if (galleryEnabled) {
+        const dialog = page.locator(".design-picker-dialog");
+        const opened = await dialog
+          .first()
+          .waitFor({ state: "visible", timeout: 3000 })
+          .then(() => true)
+          .catch(() => false);
+        check(opened, "primary CTA opens the design picker dialog");
+        await page.keyboard.press("Escape");
+        await dialog.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+      } else {
+        const listbox = page.getByRole("listbox");
+        const opened = await listbox
+          .first()
+          .waitFor({ state: "visible", timeout: 3000 })
+          .then(() => true)
+          .catch(() => false);
+        check(opened, "primary CTA opens the design picker");
+        await page.keyboard.press("Escape");
+        await listbox.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+      }
     }
-  } else {
-    console.log("  (no popup in this config — skipped)");
   }
+}
+
+// Getting-started checklist (PR8; compact/peek/retirement — PR14): a
+// dismissible onboarding checklist, shown only in guided experience — the
+// dogfood config's default (ui.experience.default) — above the panel's tab
+// strip in both layouts. Runs immediately after the welcome popup (which
+// only OPENS/closes the design picker via Escape, picking nothing) and
+// before any other check switches design or settings view, so the "fresh
+// visitor" assertions below are honest.
+//
+// The dogfood config's default landing (tag, guided, essentials, quickStart
+// enabled by default) makes QuickStart the active guide from the very first
+// load — so PR14's rule 1 applies immediately: the checklist starts in its
+// COMPACT one-line form, not the full row list (src/components/
+// GettingStarted.tsx's `quickStartActive` branch). Deliberately does NOT
+// dismiss the checklist at the end (unlike its PR8-era self) — it leaves the
+// card alive, restored to a fresh compact state, for checkChecklistRetirement
+// (run immediately after this one) to drive its own export through.
+async function checkGettingStarted({ page, check, ids, paramsTabName, schema }) {
+  console.log("=== getting-started checklist: compact form (QuickStart active) ===");
+  const card = page.locator(".getting-started");
+  check((await card.count()) === 1, "getting-started checklist shown on a fresh guided-experience load");
+  check(
+    (await card.locator("li").count()) === 0,
+    "starts in the compact one-line form (QuickStart is the active guide for tag/essentials)"
+  );
+  const totalTasks = ids.length > 1 ? 3 : 2; // design (multi-design only) + review + export
+  // The welcome design-picker's own confirm action ("Start with…"/"Browse
+  // examples") ALWAYS calls pickDesign (App.tsx: "the user did just
+  // deliberately confirm a choice in the dialog"), even when the highlighted
+  // card was already the loaded design — so checkWelcomePopup's earlier pass
+  // through that flow already completes "Choose a design" by the time this
+  // check runs, for exactly the builds where that welcome flow exists
+  // (`popup.mode: "picker"` + `ui.gallery` + more than one design).
+  const designPreconfirmed = schema.popup?.mode === "picker" && !!schema.ui?.gallery && ids.length > 1;
+  const initialDone = designPreconfirmed ? 1 : 0;
+  check(
+    new RegExp(`${initialDone} of ${totalTasks} complete`).test((await card.textContent()) ?? ""),
+    `compact line reads "${initialDone} of ${totalTasks} complete" before any further progress` +
+      (designPreconfirmed ? ' ("Choose a design" already completed by the welcome picker\'s confirm action)' : "")
+  );
+
+  await runAxe(page, check, "getting-started checklist visible (compact)");
+
+  // PR22 copy fix: "Hide" -> "Hide guide" on the COMPACT row too, so the
+  // dismiss control reads the same everywhere (the full card already said
+  // "Hide guide" — see the expanded-card check further below).
+  const compactDismissBtn = card.locator(".getting-started__dismiss");
+  check(
+    ((await compactDismissBtn.textContent()) ?? "").trim() === "Hide guide",
+    "the compact row's dismiss control also reads \"Hide guide\", not a bare \"Hide\""
+  );
+
+  console.log("=== getting-started checklist: expand chevron reveals the full card ===");
+  await card.locator(".getting-started__expand").click();
+  const rows = card.locator("li");
+  const expectedRowCount = ids.length > 1 ? 4 : 3;
+  check(
+    (await rows.count()) === expectedRowCount,
+    `expanding shows ${expectedRowCount} row(s) for ${ids.length} design(s)`
+  );
+  const designRow = card.locator("li", { hasText: "Choose a design" });
+  if (ids.length > 1) {
+    check((await designRow.count()) === 1, "\"Choose a design\" row present for a multi-design build");
+  }
+  const reviewRow = card.locator("li", { hasText: "Adjust the essential settings" });
+  const exportRow = card.locator("li", { hasText: "Download the model" });
+  const previewRow = card.locator("li", { hasText: "Preview" });
+  check(!/done/.test((await reviewRow.textContent()) ?? ""), "\"Adjust the essential settings\" starts pending");
+  check(!/done/.test((await exportRow.textContent()) ?? ""), "\"Download the model\" starts pending");
+  check(
+    /ready/.test((await previewRow.textContent()) ?? ""),
+    "\"Preview\" status row reads \"ready\" once the initial render has already succeeded"
+  );
+
+  await runAxe(page, check, "getting-started checklist visible (expanded)");
+
+  // A real param edit completes "Adjust the essential settings" — and, per
+  // the documented rule (src/lib/checklist.ts), implicitly "Choose a design"
+  // too (adjusting settings is only possible once a design is settled on).
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  const widthInput = paramRow(page, "width").locator('input[type="number"]');
+  await widthInput.fill("95");
+  await widthInput.blur();
+  await waitRendered(page, "width edited (checklist)");
+  check(/done/.test((await reviewRow.textContent()) ?? ""), "\"Adjust the essential settings\" completes on a real param edit");
+  if (ids.length > 1) {
+    check(
+      /done/.test((await designRow.textContent()) ?? ""),
+      "\"Choose a design\" completes implicitly once settings are reviewed"
+    );
+  }
+
+  // Collapse back: the compact count reflects the very same progress live.
+  await card.locator(".getting-started__expand").click();
+  check((await card.locator("li").count()) === 0, "collapsing returns to the one-line form");
+  const doneTasks = ids.length > 1 ? 2 : 1; // design (implicit) + review; export still pending
+  check(
+    new RegExp(`${doneTasks} of ${totalTasks} complete`).test((await card.textContent()) ?? ""),
+    `compact line updates live to "${doneTasks} of ${totalTasks} complete"`
+  );
+
+  console.log("=== getting-started checklist: dismiss + replay ===");
+  await card.locator(".getting-started__expand").click(); // re-expand for the full-card dismiss control below
+  const dismissBtn = card.locator(".getting-started__dismiss");
+  check(
+    ((await dismissBtn.textContent()) ?? "").trim() === "Hide guide",
+    "the full card's dismiss control reads \"Hide guide\", not a bare \"×\""
+  );
+  // Dismiss: hides the card and persists across a reload (the checklist.v1
+  // once-flag) — settleFirstVisit's own `.getting-started__dismiss` click is
+  // exercised by every OTHER check via its call at the top of main(); this
+  // exercises the control itself (hook unchanged) and its persistence
+  // explicitly.
+  await dismissBtn.click();
+  check((await card.count()) === 0, "\"Hide guide\" hides the checklist");
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "reloaded after checklist dismiss");
+  check((await page.locator(".getting-started").count()) === 0, "dismissal persists across a reload");
+
+  // Help modal's replay row. Not selected by accessible name: Radix sets
+  // aria-labelledby to the rendered DialogTitle (the modal's title text),
+  // which wins over Modal's own aria-label prop per ARIA name computation —
+  // only one dialog is open at this point, so an unfiltered role suffices.
+  await page.getByRole("button", { name: "Help", exact: true }).click();
+  const helpDialog = page.getByRole("dialog");
+  await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  const replayBtn = helpDialog.getByRole("button", { name: /show the getting-started checklist again/i });
+  check((await replayBtn.count()) === 1, "Help modal offers the \"show checklist again\" row");
+  await replayBtn.click();
+  await page.keyboard.press("Escape");
+  await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".getting-started").count()) === 1, "Help modal's replay row brings the checklist back");
+
+  // Restore the width edited above so later checks see pristine defaults.
+  // Deliberately does NOT dismiss the checklist again — checkChecklistRetirement
+  // (run immediately after this) needs a live, un-dismissed checklist to
+  // drive its own export through and observe the retirement rule.
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  await resetDefaults(page);
+  await waitRendered(page, "defaults restored (checklist)");
+}
+
+// Retirement after first export (PR14, rule 2): once an export completes,
+// the checklist doesn't retire mid-session (a `useState` lazy initializer in
+// GettingStarted.tsx only ever runs at mount, so the session that performs
+// the export keeps showing its current state normally, same as before this
+// milestone) — but the NEXT app load reads the persisted
+// `checklist.exported.v1` flag and skips rendering the checklist outright,
+// no dismiss needed. The simpler of the two options the milestone brief
+// offered (vs. a ~5s timed auto-hide): fully deterministic, no race against
+// paint/render timing. Runs immediately after checkGettingStarted, which
+// deliberately leaves the checklist alive (compact, undismissed) for this.
+async function checkChecklistRetirement({ page, check, ids, dir }) {
+  console.log("=== getting-started checklist: retires on the next load after an export ===");
+  await selectDesign(page, ids[0]);
+  const card = page.locator(".getting-started");
+  check((await card.count()) === 1, "checklist still alive going into the export (left visible by the previous check)");
+
+  // Drive a real export (same technique checkExports uses below).
+  const [model] = await Promise.all([
+    page.waitForEvent("download"),
+    page.click(".action-export"),
+  ]);
+  await model.saveAs(join(dir, `retirement-${await model.suggestedFilename()}`));
+
+  // Same session: the mounted card does NOT retroactively hide itself —
+  // it keeps showing, with "Download the model" now done.
+  check((await card.count()) === 1, "the checklist stays visible in the SAME session the export completed in");
+  await card.locator(".getting-started__expand").click();
+  const exportRow = card.locator("li", { hasText: "Download the model" });
+  check(/done/.test((await exportRow.textContent()) ?? ""), "\"Download the model\" completes on a real export");
+
+  // Close whatever the export itself opened so it doesn't intercept the reload below.
+  await page.locator(".export-success__dismiss").click().catch(() => {});
+
+  // Next app load: retires permanently — simply never rendered, no dismiss
+  // click involved.
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "reloaded after the export that retires the checklist");
+  check((await page.locator(".getting-started").count()) === 0, "checklist auto-retires on the next load after an export");
+
+  // Stays retired on a further reload too — persisted, not a one-off.
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "reloaded again (retirement persists)");
+  check((await page.locator(".getting-started").count()) === 0, "retirement persists across further reloads");
+
+  // Help replay is still the one deliberate escape hatch out of retirement.
+  await page.getByRole("button", { name: "Help", exact: true }).click();
+  const helpDialog = page.getByRole("dialog");
+  await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await helpDialog.getByRole("button", { name: /show the getting-started checklist again/i }).click();
+  await page.keyboard.press("Escape");
+  await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".getting-started").count()) === 1, "Help replay still resurrects a retired checklist");
+
+  // Leave the suite in a clean, dismissed state for the checks that follow
+  // (checkReadiness's own comment already documents relying on exactly this).
+  await page.locator(".getting-started__dismiss").click().catch(() => {});
+}
+
+// Viewer gesture hint (PR8): a one-time, non-blocking chip over the viewer,
+// shown only in guided experience once the first successful render has
+// landed (already true here — the initial render completed in main() before
+// any of these checks ran).
+async function checkViewerHint({ page, check }) {
+  console.log("=== viewer gesture hint ===");
+  const hint = page.locator(".viewer-hint");
+  check((await hint.count()) === 1, "viewer-hint shown after the first successful render (guided experience)");
+  check(/rotate/i.test((await hint.textContent()) ?? ""), "viewer-hint carries the rotate/zoom gesture copy");
+
+  // A pointerdown anywhere inside the viewer dismisses it (dispatchEvent
+  // bypasses the chip's own pointer-events:none, matching a real user's
+  // pointerdown landing on the canvas underneath it).
+  await page.locator(".viewer-wrap").first().dispatchEvent("pointerdown");
+  await hint.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  check((await hint.count()) === 0, "a pointerdown on the viewer dismisses the hint");
+
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "reloaded after viewer hint dismiss");
+  check((await page.locator(".viewer-hint").count()) === 0, "dismissal persists across a reload");
 }
 
 // Generic file import: the Files manager shows an "Import file" button when
@@ -192,6 +543,130 @@ async function checkFileImport({ page, check, ids, schema }) {
   }
 }
 
+// Files tab task cards (PR19 item 1; collapsed from three cards to two in the
+// round-2 review pass — the old standalone SVG card and generic "Other
+// files" catch-all merged into one graphic card, see filesCards.ts/
+// FileBar.tsx): a font card only for a design with @font params, a graphic
+// card only for one with @svg params (per-design — a global fileImport.accept
+// that admits SVGs does not alone conjure the card). The dogfood config's
+// example designs cover every combination
+// without a bespoke fixture: `tag` has both @font and @svg params
+// (examples/tag.scad), `coin` has only @font, `panel` has only @svg.
+async function checkFilesCards({ page, check, ids, paramsTabName, schema }) {
+  if (!schema?.fileImport || !ids.includes("tag")) return;
+  console.log("=== Files tab: schema-driven task cards ===");
+  const gotoFiles = () => page.getByRole("tab", { name: "Files" }).click().catch(() => {});
+  const gotoParams = () => page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+
+  await selectDesign(page, "tag");
+  await gotoFiles();
+  // Round-2 review: exactly two cards now (font + graphic) — no third
+  // generic "Other files" catch-all left to show alongside them.
+  check((await page.locator(".file-card").count()) === 2, "tag (font + svg params) shows exactly two task cards (font + graphic)");
+  check(
+    (await page.getByRole("button", { name: /Import font/i }).count()) === 1,
+    "font card offers its own Import action"
+  );
+  check(
+    (await page.getByRole("button", { name: /Import SVG/i }).count()) === 1,
+    "the graphic card offers its own Import action"
+  );
+  check(
+    (await page.locator('.file-card[role="status"]').count()) === 0,
+    "no card leads with the attention-styled state while the selected font is loaded"
+  );
+  // The "Choose bundled font" fallback action only shows once a font is
+  // actually missing (checkFilesFontMissingCard exercises that state) — here,
+  // with the default font loaded, only the plain Import action is offered.
+  check(
+    (await page.getByRole("button", { name: "Choose bundled font" }).count()) === 0,
+    "\"Choose bundled font\" is not offered while the selected font is already loaded"
+  );
+  check(
+    (await page.locator(".file-manager__privacy").count()) === 1,
+    "the shared on-device privacy line is shown"
+  );
+  check(
+    /never uploaded/i.test((await page.locator(".file-manager__privacy").textContent()) ?? ""),
+    "the privacy line reads as an on-device-only assurance"
+  );
+  await runAxe(page, check, "Files tab (tag: font + SVG cards)");
+
+  if (ids.includes("coin")) {
+    await selectDesign(page, "coin");
+    await gotoFiles();
+    check(
+      (await page.getByRole("button", { name: /Import font/i }).count()) === 1,
+      "coin (font-only design) shows the font card"
+    );
+    check(
+      (await page.getByRole("button", { name: /Import SVG/i }).count()) === 0,
+      "coin (no @svg params) does not show the SVG card"
+    );
+  }
+
+  if (ids.includes("panel")) {
+    await selectDesign(page, "panel");
+    await gotoFiles();
+    check(
+      (await page.getByRole("button", { name: /Import SVG/i }).count()) === 1,
+      "panel (svg-only design) shows the SVG card"
+    );
+    check(
+      (await page.getByRole("button", { name: /Import font/i }).count()) === 0,
+      "panel (no @font params) does not show the font card"
+    );
+  }
+
+  await selectDesign(page, "tag");
+  await gotoParams();
+}
+
+// The Files tab's font card leads with the "not loaded" state — reusing the
+// same URL-state trick as checkReadiness (a missing font family encoded
+// directly into the share-link hash) so the two surfaces are proven to agree
+// about what "missing" means, not just asserted to by comment.
+async function checkFilesFontMissingCard({ page, check, ids, base, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== Files tab: font card leads with the missing-font state ===");
+  const hash = `d=tag&v=${encodeURIComponent(JSON.stringify({ font: "No Such Font" }))}`;
+  await page.goto(`${base}#${hash}`, { waitUntil: "load" });
+  await page.reload({ waitUntil: "load" });
+  await settleFirstVisit(page).catch(() => {});
+  await waitRendered(page, "tag with a missing font family (Files tab card)");
+
+  await page.getByRole("tab", { name: "Files" }).click().catch(() => {});
+  const leadCard = page.locator('.file-card[role="status"]');
+  await leadCard.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await leadCard.count()) === 1, "exactly one file-card leads with the attention-styled state");
+  check(
+    ((await leadCard.textContent()) ?? "").includes("No Such Font"),
+    "the leading card names the missing family, same as the Customize tab's attention chip"
+  );
+  // Round-2 review fix: the font card now offers a SECOND action beside
+  // Import — "Choose bundled font" (FontImportActions' renderFallback slot,
+  // wired for the first time into FileBar) — reusing the exact same one-click
+  // fontChoices.ts substitution AttentionItems.tsx's own "Use a bundled font"
+  // already offers, so both actions sit side by side only while a fallback
+  // genuinely exists for the missing param.
+  check(
+    (await leadCard.getByRole("button", { name: /Import font/i }).count()) === 1,
+    "the leading font card still offers Import"
+  );
+  check(
+    (await leadCard.getByRole("button", { name: "Choose bundled font" }).count()) === 1,
+    "the leading font card ALSO offers \"Choose bundled font\" beside Import"
+  );
+  await runAxe(page, check, "Files tab with the missing-font card");
+
+  // Restore defaults so later checks that reuse `tag` start clean.
+  await page.goto(`${base}#d=tag`, { waitUntil: "load" });
+  await page.reload({ waitUntil: "load" });
+  await settleFirstVisit(page).catch(() => {});
+  await waitRendered(page, "tag reloaded with defaults (Files card cleanup)");
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+}
+
 async function checkThemeToggle({ page, check }) {
   console.log("=== theme toggle ===");
   const bg0 = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
@@ -252,48 +727,151 @@ async function checkIdleRenderCount({ page, check }) {
 
 async function checkAxe({ page, check }) {
   console.log("=== accessibility (axe-core) ===");
-  await page.addScriptTag({
-    path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
-  });
   // axe's color-contrast check reads *computed* colours. Several controls (the
   // tab chips especially) carry `transition-[color,box-shadow]`, and a theme
   // swap animates every colour token, so sampling an element mid-transition
-  // yields an intermediate colour and a spurious contrast violation. A fixed
-  // wait was flaky (the transition outlasts a short sleep on slower CI); wait
-  // for all running CSS transitions/animations to actually settle instead.
-  const settle = async () => {
-    await page.waitForTimeout(50); // let a just-started transition register first
-    await page
-      .waitForFunction(
-        () => document.getAnimations().every((a) => a.playState !== "running"),
-        null,
-        { timeout: 3000 }
-      )
-      .catch(() => {});
-  };
+  // yields an intermediate colour and a spurious contrast violation — settled
+  // by runAxe()'s own settleAnimations() call (see its doc; the same reason
+  // it's used on every other pass in this suite).
   // Palettes are per-theme (and config-overridable per theme), so a contrast
   // regression can hide in whichever theme a single sweep doesn't visit: run
   // the AA sweep in the current theme, then toggle and sweep the other. The
   // second toggle also returns the app to the theme it started the section in.
   for (let pass = 0; pass < 2; pass++) {
     const theme = await page.getAttribute("html", "data-theme");
-    await settle();
-    const axeRes = await page.evaluate(async () =>
-      // WCAG 2.1 AA tags; report only violations.
-      window.axe.run(document, {
-        resultTypes: ["violations"],
-        runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
-      })
-    );
-    const serious = axeRes.violations.filter((v) =>
-      ["serious", "critical"].includes(v.impact)
-    );
-    for (const v of serious)
-      console.log(`  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node(s)) -> ${v.nodes.map((n) => n.target.join(" ")).join("; ")}`);
-    check(serious.length === 0, `axe (${theme}): ${serious.length} serious/critical violation(s)`);
+    await runAxe(page, check, theme);
     if (pass === 0) {
       await page.locator('.command-bar__right button[aria-label^="Switch to"]').first().click();
     }
+  }
+}
+
+// The card-grid DesignPickerDialog (`ui.gallery: true`, PR7): the top bar
+// shows a `.design-picker-button` instead of the classic Select; it opens a
+// dialog with one card per design, a click switches design + renders, the
+// dialog is axe-clean while open, and ⌘K/Ctrl-K opens it from anywhere.
+async function checkDesignPickerDialog({ page, check, ids, schema }) {
+  if (!(schema.ui?.gallery && schema.designs.length > 1)) return;
+  console.log("=== design picker dialog (ui.gallery) ===");
+  const dialog = page.locator(".design-picker-dialog");
+  const button = page.locator(".command-bar__design-picker .design-picker-button");
+  check((await button.count()) === 1, "design-picker-button shown in the top bar (desktop)");
+  await button.click();
+  await dialog.waitFor({ state: "visible", timeout: 3000 });
+  const cards = page.locator(".design-picker-dialog__card");
+  check((await cards.count()) === ids.length, `dialog shows one card per design (${ids.length})`);
+
+  // Round-2 review fix (8dc8cd5, item 1): the grid is now an EXACT
+  // `grid-cols-2 sm:grid-cols-3` (was auto-fill/minmax(150px), which packed
+  // 4 dense columns at desktop widths) — read the actual computed
+  // `grid-template-columns` track count rather than inferring it from card
+  // positions, so this doesn't depend on having enough cards to fill a row.
+  const gridColumnCount = (loc) =>
+    loc.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length);
+  const grid = page.locator(".design-picker-dialog__grid").first();
+  check((await gridColumnCount(grid)) === 3, "the card grid is 3 columns at the default desktop viewport width");
+  await runAxe(page, check, "design picker dialog open");
+
+  // Selecting a card (other than the current design) switches design and renders.
+  const targetId = ids.find((id) => id !== ids[0]) ?? ids[0];
+  const targetLabel = designLabels[targetId] ?? targetId;
+  await page
+    .locator(".design-picker-dialog__card")
+    .filter({ has: page.getByText(targetLabel, { exact: true }) })
+    .first()
+    .click();
+  await dialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  await waitRendered(page, targetId);
+  check(
+    (await page.evaluate(() => location.hash)).includes(`d=${targetId}`),
+    "selecting a card switches the design"
+  );
+  // Back to the first design for the checks that follow.
+  await selectDesign(page, ids[0]);
+
+  console.log("=== ⌘K / Ctrl-K opens the design picker ===");
+  await page.keyboard.press("Control+k");
+  await dialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(await dialog.isVisible().catch(() => false), "Ctrl-K opens the design picker dialog");
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  check((await dialog.count()) === 0, "Escape closes the design picker dialog");
+
+  // Adaptive search box (this milestone): below SEARCH_THRESHOLD (6), the box
+  // is hidden until the card grid actually overflows the dialog's scroll area
+  // — only exercisable when the build itself is under that count (the dogfood
+  // config's 3 designs), since at/above it the fast path already forces the
+  // box on regardless of viewport, which the earlier assertions already cover
+  // implicitly via `searchVisible`'s count-rule branch.
+  if (ids.length <= 6) {
+    console.log("=== design picker: adaptive search (overflow, not just count) ===");
+    const search = page.locator(".design-picker-dialog__search");
+    await button.click();
+    await dialog.waitFor({ state: "visible", timeout: 3000 });
+    check(
+      (await search.count()) === 0,
+      `no search box for ${ids.length} designs at the default viewport (no overflow)`
+    );
+    const original = page.viewportSize();
+    // A short viewport (same width, so the layout stays desktop) leaves the
+    // dialog's max-height small enough that even a handful of cards overflow
+    // its scroll area — the adaptive ResizeObserver check should reveal the
+    // search box without any count-rule help.
+    await page.setViewportSize({ width: original?.width ?? 1280, height: 300 });
+    await search.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    check((await search.count()) === 1, "shrinking the viewport reveals the search box once the grid overflows");
+
+    // Round-2 review fix (8dc8cd5, item 1): the same bottom-edge scroll fade
+    // HelpModal's mobile tab strip uses, mirrored for the card grid's OWN
+    // scroll axis (top-to-bottom) — `data-fade-bottom` toggles on a real
+    // scroll-position listener, not just this same overflow heuristic. The
+    // short 300px-tall viewport above already guarantees more cards are
+    // scrolled out of view below than fit, so the attribute should be set
+    // immediately.
+    const gridScroll = page.locator(".design-picker-dialog__grid-scroll");
+    check(
+      (await gridScroll.getAttribute("data-fade-bottom")) !== null,
+      "the card grid's bottom-edge scroll fade is active while more cards sit below the fold"
+    );
+    await gridScroll.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+    await page
+      .waitForFunction(
+        () => document.querySelector(".design-picker-dialog__grid-scroll")?.getAttribute("data-fade-bottom") === null,
+        { timeout: 3000 }
+      )
+      .catch(() => {});
+    check(
+      (await gridScroll.getAttribute("data-fade-bottom")) === null,
+      "the fade clears once scrolled all the way to the bottom"
+    );
+
+    if (original) await page.setViewportSize(original);
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  }
+
+  // Round-2 review fix (8dc8cd5, item 1): grid-cols-2 below Tailwind's `sm`
+  // breakpoint (640px) — a genuinely narrower viewport, not just a shorter
+  // one (the overflow check above only varies height). 640px is well under
+  // this suite's own desktop/mobile app-layout breakpoint (860px, see
+  // AppShell/index.css), so the desktop CommandBar — and its
+  // `.command-bar__design-picker` button — would itself disappear if resized
+  // BEFORE opening the dialog; open it at the normal desktop width first
+  // (same as the overflow-search check above), THEN shrink, mirroring that
+  // check's own working order.
+  {
+    console.log("=== design picker: 2-column grid below the sm breakpoint ===");
+    const original = page.viewportSize();
+    await button.click();
+    await dialog.waitFor({ state: "visible", timeout: 3000 });
+    await page.setViewportSize({ width: 390, height: original?.height ?? 900 });
+    check(
+      (await gridColumnCount(page.locator(".design-picker-dialog__grid").first())) === 2,
+      "the card grid is 2 columns below the 640px sm breakpoint"
+    );
+    if (original) await page.setViewportSize(original);
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
   }
 }
 
@@ -318,6 +896,34 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
     // the applied one carries aria-pressed="true" (see PresetPicker.tsx).
     const bundled = page.locator('[aria-label="Ready-made presets"] .preset-picker__item');
     if (await bundled.count()) {
+      // Round-2 review fix (8dc8cd5, item 2): bundled presets are grouped
+      // into one section per parsed badge (groupPresetsByBadge), each with
+      // its own `<h3>` heading — a badge-less run (this build's `tag`
+      // presets, "Large tag"/"No hole", carry no trailing "(Language)") still
+      // gets the SAME heading treatment, just reading "Ready-made" instead of
+      // a language name. This confirms the grouped-heading rendering itself
+      // works; a config with badged presets (unit-tested directly by
+      // presetCard.test.mjs's groupPresetsByBadge cases) would show one
+      // heading per badge instead of this single "Ready-made" run.
+      const readyMadeHeading = page.locator("h3", { hasText: "Ready-made" });
+      check((await readyMadeHeading.count()) === 1, "the bundled presets sit under a \"Ready-made\" section heading");
+      const headingBox = await readyMadeHeading.boundingBox();
+      const firstCardBox = await bundled.first().boundingBox();
+      check(
+        !!headingBox && !!firstCardBox && headingBox.y < firstCardBox.y,
+        "the section heading sits above its own bundled-preset cards"
+      );
+      // Bundled cards are now compact horizontal rows (thumbnail left when
+      // `design.presetImages` has an entry for that exact preset name, else
+      // text-only). This build's config sets no `presetImages` (unit-tested
+      // directly by gen-schema.test.mjs/schema.test.mjs's presetImages
+      // fixtures), so every card here should gracefully render text-only —
+      // confirms the "no thumb configured" branch doesn't leave a broken
+      // image or empty gap behind.
+      check(
+        (await bundled.first().locator(".preset-picker__thumb").count()) === 0,
+        "a bundled card with no configured presetImages entry renders text-only (no broken thumbnail slot)"
+      );
       const name = (await bundled.first().textContent())?.trim() ?? "";
       await bundled.first().click();
       await waitRendered(page, `${id} + "${name}"`);
@@ -375,29 +981,213 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
   await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
 }
 
-// Export 3MF + PNG on the first design.
+// "Save as preset…" (PR19 item 2): demoted from an always-visible input row
+// to a button that reveals it on demand, auto-focused; Escape or a blur while
+// still empty collapses it back.
+async function checkPresetSaveReveal({ page, check, ids, presetsTabName, paramsTabName }) {
+  console.log("=== presets: \"Save as preset…\" reveals inline, Escape/blur-empty collapses ===");
+  await selectDesign(page, ids[0]);
+  await page.getByRole("tab", { name: presetsTabName }).first().click().catch(() => {});
+
+  const trigger = page.locator(".preset-picker__save-trigger");
+  await trigger.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await trigger.count()) === 1, "the 'Save as preset…' trigger button is shown");
+  check((await page.locator(".preset-picker__save-row").count()) === 0, "the inline save row is collapsed by default");
+
+  // Round-2 review fix (8dc8cd5, item 2): "Save as preset…" moved OFF a
+  // permanent, always-visible bottom bar into a small ghost action beside the
+  // "Saved by you" header — confirm it actually landed there (a sibling of
+  // that heading, in the same small header row) rather than just checking
+  // the trigger exists somewhere on the page.
+  const savedByYouHeading = page.locator("h3", { hasText: "Saved by you" });
+  check((await savedByYouHeading.count()) === 1, "the \"Saved by you\" section heading is shown");
+  check(
+    await trigger.evaluate((el, headingText) => {
+      const row = el.parentElement;
+      return !!row && Array.from(row.children).some((c) => c.tagName === "H3" && c.textContent?.includes(headingText));
+    }, "Saved by you"),
+    "the \"Save as preset…\" trigger is a sibling of the \"Saved by you\" heading, not a standalone bottom bar"
+  );
+
+  const row = page.locator(".preset-picker__save-row");
+
+  await trigger.click();
+  await row.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await row.count()) === 1, "clicking the trigger reveals the inline save row");
+  check(
+    await row.locator("input").evaluate((el) => el === document.activeElement),
+    "the revealed input is auto-focused"
+  );
+
+  // Escape collapses back to the trigger, discarding whatever was typed.
+  await row.locator("input").fill("Throwaway");
+  await page.keyboard.press("Escape");
+  await trigger.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".preset-picker__save-row").count()) === 0, "Escape collapses the reveal back to the trigger");
+
+  // A blur while the field is still empty also collapses it.
+  await trigger.click();
+  await row.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await page.keyboard.press("Tab");
+  await trigger.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".preset-picker__save-row").count()) === 0, "blurring the still-empty input also collapses it");
+
+  // A real save: reveal, type a name, press Enter — the row collapses and the
+  // preset lists under "Saved by you".
+  await trigger.click();
+  await row.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  const name = "Smoke Saved Preset";
+  await row.locator("input").fill(name);
+  await page.keyboard.press("Enter");
+  const savedItem = page.locator('[aria-label="Your saved presets"] .preset-picker__item', { hasText: name });
+  await savedItem.first().waitFor({ state: "attached", timeout: 3000 }).catch(() => {});
+  check((await savedItem.count()) >= 1, "Enter saves the preset and it appears under 'Saved by you'");
+  check((await page.locator(".preset-picker__save-row").count()) === 0, "saving collapses the reveal back to the trigger");
+
+  await runAxe(page, check, "Presets tab (save-as-preset reveal/collapse)");
+
+  // Clean up: delete the smoke-created preset so it doesn't pollute later
+  // checks that iterate "Saved by you" (e.g. a rerun's own checkPresetImport).
+  await page
+    .locator('[aria-label="Your saved presets"] li', { hasText: name })
+    .getByRole("button", { name: /^Delete/i })
+    .click()
+    .catch(() => {});
+  const deleteDlg = page.getByRole("alertdialog");
+  const deleteDlgShown = await deleteDlg
+    .waitFor({ state: "visible", timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  if (deleteDlgShown) await deleteDlg.getByRole("button", { name: /^Delete$/ }).click();
+  await savedItem.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+}
+
+// The export dock's two menus (visual-alignment pass restructure —
+// ActionButtons.tsx): the split trigger's `.action-export-menu` (an
+// informational format note only — nothing to pick, the export format is
+// fixed at build time) and the More menu's `.action-more-menu` ("Save
+// image", plus "Copy link" only on a device where Share itself goes native —
+// headless Chromium never does, see checkMobileActionBar's own
+// navigator.share sanity check, so that item must be absent here).
+async function checkExportMenus({ page, check, ids }) {
+  console.log("=== export dock: the split-trigger and More menus ===");
+  await selectDesign(page, ids[0]);
+
+  // Round-2 review fix (fa49bcb, item 4): the "3MF · for slicers and print
+  // services" format sublabel now shows directly under the primary row on
+  // DESKTOP (ActionButtons.tsx's `.action-export-format-note`), not hidden a
+  // click away behind the split "▾" trigger — that menu keeps its own copy
+  // too (`.action-export-menu__format-note`, checked below) since the split
+  // trigger needs SOME content when opened. Desktop-only: checkMobileActionBar
+  // confirms this same element is CSS-hidden (display:none) below the 860px
+  // breakpoint, where the mobile card has no room for a second text line.
+  const formatNote = page.locator(".action-export-format-note");
+  check((await formatNote.isVisible()) === true, "the export card's format sublabel is visible directly on desktop");
+  check(
+    /for slicers and print services/i.test((await formatNote.textContent()) ?? ""),
+    "the visible format sublabel names what the export includes"
+  );
+
+  await page.click(".action-export-options");
+  const exportMenu = page.locator(".action-export-menu");
+  await exportMenu.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await exportMenu.count()) === 1, "the split trigger opens the export options menu");
+  check(
+    /for slicers and print services/i.test((await page.locator(".action-export-menu__format-note").textContent()) ?? ""),
+    "the menu shows the informational format note"
+  );
+  await page.keyboard.press("Escape");
+  await exportMenu.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+
+  await page.click(".action-more");
+  const moreMenu = page.locator(".action-more-menu");
+  await moreMenu.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await moreMenu.count()) === 1, "the More trigger opens its own menu");
+  check((await moreMenu.locator(".action-more-menu__save-image").count()) === 1, "the More menu offers \"Save image\"");
+  check(
+    (await moreMenu.locator(".action-more-menu__copy-link").count()) === 0,
+    "the More menu omits \"Copy link\" here — Share itself already offers a copy-link fallback when navigator.share is unavailable"
+  );
+  await page.keyboard.press("Escape");
+  await moreMenu.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+}
+
+// Export 3MF + PNG on the first design, plus the after-export panel it drives
+// (PR9): the dogfood config sets `ui.afterExport.helpTab` ("Printing"), so
+// every completed export here should surface the panel.
 async function checkExports({ page, check, ids, dir }) {
   await selectDesign(page, ids[0]);
   console.log("=== export 3MF ===");
   const [model] = await Promise.all([
     page.waitForEvent("download"),
-    // ActionCluster uses aria-label="Export STL/3MF"; button text is just the format
-    page.click('[aria-label^="Download "]'),
+    // The CTA's own label/aria-label keep evolving (currently "Download for
+    // 3D printing", src/locales/*.json's action.export/action.exportAria) —
+    // smoke selects the stable `.action-export` hook rather than the visible
+    // text/aria-label.
+    page.click(".action-export"),
   ]);
   const modelOut = join(dir, await model.suggestedFilename());
   await model.saveAs(modelOut);
   check((await stat(modelOut)).size > 0, `${await model.suggestedFilename()} (${(await stat(modelOut)).size} bytes)`);
+  check(
+    (await page.getByLabel(/Download for 3D printing/i).count()) >= 1,
+    "the export CTA is present with its outcome-led label"
+  );
+
+  console.log("=== after-export panel ===");
+  // Headless Chromium has no Web Share API target here, so exportModel falls
+  // back to a plain browser download — the panel should show the
+  // "downloaded" wording (src/lib/exportOutcome.ts's exportOutcomeTitleKey).
+  const successPanel = page.locator(".export-success");
+  await successPanel.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await successPanel.count()) === 1, "export-success panel appears after a completed 3MF export");
+  check(
+    /downloaded/i.test((await successPanel.textContent()) ?? ""),
+    "export-success panel shows the downloaded wording for a plain browser download"
+  );
+  await runAxe(page, check, "export-success panel visible");
+
+  const guideLink = successPanel.getByRole("button", { name: "Printing guide" });
+  check((await guideLink.count()) === 1, 'export-success panel offers a "Printing guide" action');
+  await guideLink.click();
+  const helpDialog = page.getByRole("dialog");
+  await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  const printingTab = helpDialog.getByRole("tab", { name: "Printing" });
+  check(
+    (await printingTab.getAttribute("aria-selected")) === "true",
+    '"Printing guide" opens Help deep-linked to the Printing tab'
+  );
+  await page.keyboard.press("Escape");
+  await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+
+  // Export again (the panel from the first export never got its own X) to
+  // exercise the dismiss button itself.
+  const [model2] = await Promise.all([
+    page.waitForEvent("download"),
+    page.click(".action-export"),
+  ]);
+  await model2.saveAs(join(dir, `redownload-${await model2.suggestedFilename()}`));
+  await successPanel.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await successPanel.locator(".export-success__dismiss").click();
+  check((await successPanel.count()) === 0, "export-success panel's dismiss (X) hides it");
 
   console.log("=== save PNG ===");
+  // "Save image" moved from its own always-visible ghost button into the
+  // More menu (ActionButtons.tsx's visual-alignment pass) — open it first.
+  await page.click(".action-more");
   const [png] = await Promise.all([
     page.waitForEvent("download"),
-    page.click('[aria-label="Save image"]'),
+    page.click(".action-more-menu__save-image"),
   ]);
   const pngOut = join(dir, await png.suggestedFilename());
   await png.saveAs(pngOut);
   const head = (await readFile(pngOut)).subarray(0, 4);
   const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
   check(isPng && (await stat(pngOut)).size > 0, `${await png.suggestedFilename()} (png=${isPng})`);
+  // The PNG snapshot is about a picture of the model, not the printable model
+  // itself — it must never surface the export-success panel.
+  check((await successPanel.count()) === 0, "Image export does not show the export-success panel");
 }
 
 async function checkPreviewControls({ page, check }) {
@@ -413,6 +1203,50 @@ async function checkPreviewControls({ page, check }) {
   await auto.click();
   check(!(await autoOn()), "live preview can be turned off");
   await auto.click();
+}
+
+// Viewer HUD: reference grid toggle (new in the visual-alignment pass — off
+// by default, config `ui.grid`, alongside the pre-existing measure/reset/
+// zoom/fullscreen controls). Toggling doesn't move the camera or touch the
+// model, just the ground-plane reference; the preference persists across a
+// reload (src/lib/viewerPrefs.ts).
+async function checkViewerHudGrid({ page, check }) {
+  console.log("=== viewer HUD: reference grid toggle ===");
+
+  // Round-2 review fix (fa49bcb, item 2): HUD buttons are size-10 (40px) on
+  // desktop, dropping to size-9 (36px, HUD_GLASS_BTN's `max-[860px]:size-9`)
+  // below the 860px mobile breakpoint — Tailwind's `size-*` fixes the
+  // button's actual box regardless of its (also breakpoint-varying) padding,
+  // so the bounding box itself is the right thing to measure. This desktop
+  // context (checkViewerHudGrid always runs at the shared default >860px
+  // viewport) exercises the size-10 side; checkMobileActionBar's own per-width
+  // loop (320-820px, all under the breakpoint) exercises size-9.
+  const hudBtnBox = await page.locator(".viewer-hud button").first().boundingBox();
+  check(
+    !!hudBtnBox && Math.round(hudBtnBox.width) === 40 && Math.round(hudBtnBox.height) === 40,
+    `viewer HUD buttons are size-10 (40px) on desktop (measured ${hudBtnBox?.width}x${hudBtnBox?.height})`
+  );
+
+  const gridOff = page.getByRole("button", { name: "Show reference grid" });
+  check((await gridOff.count()) === 1, "grid toggle shown in the viewer HUD, off by default");
+  check((await gridOff.getAttribute("aria-pressed")) === "false", "grid toggle starts unpressed (off)");
+
+  await gridOff.click();
+  const gridOn = page.getByRole("button", { name: "Hide reference grid" });
+  await gridOn.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await gridOn.count()) === 1, "toggling flips the label to \"Hide reference grid\"");
+  check((await gridOn.getAttribute("aria-pressed")) === "true", "grid toggle now reads pressed (on)");
+
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "reloaded with the grid preference on");
+  const gridOnAfterReload = page.getByRole("button", { name: "Hide reference grid" });
+  check((await gridOnAfterReload.count()) === 1, "the grid preference persists across a reload");
+
+  // Restore the default (off) for the checks/screenshots that follow.
+  await gridOnAfterReload.click();
+  const gridRestored = page.getByRole("button", { name: "Show reference grid" });
+  await gridRestored.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await gridRestored.count()) === 1, "grid toggle restored to off");
 }
 
 async function checkServiceWorker({ page, check, base }) {
@@ -437,6 +1271,553 @@ async function checkServiceWorker({ page, check, base }) {
 // of ui.showVarName), shared by the tag + signage checks.
 const paramRow = (page, name) => page.locator(`.param[data-param="${name}"]`);
 
+// Fill a number param's own numeric input (the box beside its slider) and
+// blur to commit — shared by checkTagDesign's assert-trip flow and the PR16
+// mobile Messages check, which reproduces the same trip on a mobile context.
+const setNumField = async (page, name, value) => {
+  const input = paramRow(page, name).locator('input[type="number"]');
+  await input.fill(String(value));
+  await input.blur();
+};
+
+// Click the essentials/all settings-view segmented control (CustomizeTab /
+// SettingsViewToggle) — present only when the active design has at least one
+// @advanced param. No-op (rather than a throw) when it's absent, so callers
+// that run against a design/config without any advanced params stay safe.
+async function switchSettingsView(page, view) {
+  const label = view === "all" ? "All settings" : "Essential settings";
+  const btn = page.locator(".settings-view-toggle").getByRole("button", { name: label, exact: true });
+  if (await btn.count()) await btn.click();
+}
+
+// PR23 item 4's Review card block-level DOM order, rebuilt for the visual-
+// alignment pass's layout: readiness, subtitle, summary, front-view, EITHER
+// the warning card (attention) or the ready strip, then actions. Shared by
+// checkQuickStart (the clean, no-attention state, where the ready strip
+// shows) and checkReadiness (every optional block present, including the
+// warning card) — both used to hand-roll the identical `wanted`-selector-list
+// + evaluate()/map()/filter() walk and only differed in which of
+// attention/ready belonged in the expected order.
+const REVIEW_BLOCK_SELECTORS = [
+  ".quick-start__review-readiness",
+  ".quick-start__review-subtitle",
+  ".quick-start__review-summary",
+  ".quick-start__review-front-view",
+  ".quick-start__review-attention",
+  ".quick-start__review-ready",
+  ".quick-start__review-actions",
+];
+
+async function reviewBlockOrder(reviewLocator, check, { expectAttention, message }) {
+  const actual = await reviewLocator.evaluate(
+    (el, wanted) =>
+      Array.from(el.children)
+        .map((child) => wanted.find((sel) => child.matches(sel)))
+        .filter(Boolean),
+    REVIEW_BLOCK_SELECTORS
+  );
+  const expected = REVIEW_BLOCK_SELECTORS.filter((sel) =>
+    expectAttention ? sel !== ".quick-start__review-ready" : sel !== ".quick-start__review-attention"
+  );
+  check(actual.join(" -> ") === expected.join(" -> "), `${message} (saw ${actual.join(" -> ")})`);
+}
+
+// Essentials/all settings view (the essentials/beginner milestone): the
+// dogfood config's guided default (ui.experience.default) starts a FRESH
+// visitor on the essentials view, which hides every @advanced param — tag's
+// Quality section (facet_angle/facet_size). Must run before any other check
+// has touched the settingsView preference (it reads the still-fresh page
+// straight after the welcome popup is dismissed), and deliberately ends with
+// the choice persisted as "all" — later checks (bundled presets' Import/
+// Export row, the @showIf/@collapsed checks in checkTagDesign) expect the
+// full, ungated panel.
+async function checkSettingsView({ page, check, ids, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== settings view (essentials/all) ===");
+  await selectDesign(page, "tag");
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+
+  const toggle = page.locator(".settings-view-toggle");
+  check((await toggle.count()) === 1, "settings-view toggle shown for a design with @advanced params");
+  check(
+    (await toggle.getByRole("button", { name: "Essential settings" }).getAttribute("aria-pressed")) === "true",
+    "fresh visitor starts on the Essential settings view (config ui.experience.default)"
+  );
+
+  const facet = paramRow(page, "facet_angle");
+  check((await facet.count()) === 0, "essentials view: the @advanced facet_angle control isn't in the DOM at all");
+  const hiddenNote = page.locator(".settings-hidden-note");
+  check((await hiddenNote.count()) === 1, "hidden-settings note shown at the bottom of the form in essentials view");
+  const hiddenNoteText = ((await hiddenNote.textContent()) ?? "").trim();
+  check(/\b2\b/.test(hiddenNoteText), `hidden-settings note reports the right count (saw "${hiddenNoteText}")`);
+  await runAxe(page, check, "essentials view, tag Customize tab");
+
+  // A search term matching only a hidden (advanced) param surfaces the
+  // "N matching settings are in All settings — Show them" note; clicking it
+  // switches view and (via ParamForm's existing search-force-open behavior)
+  // reveals the match.
+  const search = page.locator("#param-search-input");
+  await search.fill("facet");
+  const searchNote = page.locator(".settings-search-note");
+  await searchNote.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await searchNote.count()) === 1, "search note shown when a query matches only hidden (essentials-demoted) settings");
+  await searchNote.getByRole("button", { name: "Show them" }).click();
+  await facet.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(
+    (await facet.count()) > 0 && (await facet.first().isVisible()),
+    "\"Show them\" switches to All settings and reveals the matching hidden setting"
+  );
+  check(
+    (await toggle.getByRole("button", { name: "All settings" }).getAttribute("aria-pressed")) === "true",
+    "toggle reflects the switch to All settings"
+  );
+  await search.fill("");
+  await search.press("Escape").catch(() => {});
+  await runAxe(page, check, "all settings view, tag Customize tab");
+
+  // The switch persists across a reload.
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, "tag reloaded (settings view)");
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  check(
+    (await paramRow(page, "facet_angle").count()) > 0,
+    "the All-settings choice is honored (persisted) after a reload"
+  );
+  check(
+    (await page.locator(".settings-view-toggle").getByRole("button", { name: "All settings" }).getAttribute("aria-pressed")) === "true",
+    "toggle still reads All settings after reload"
+  );
+
+  // The toggle itself (not just the shortcut links) switches views.
+  await switchSettingsView(page, "essentials");
+  check(
+    (await paramRow(page, "facet_angle").count()) === 0,
+    "clicking \"Essential settings\" on the toggle hides facet_angle again"
+  );
+  // Leave the suite in All settings — the checks that follow (bundled
+  // presets' Import/Export row, checkTagDesign's @showIf/@collapsed checks)
+  // expect the full, ungated panel.
+  await switchSettingsView(page, "all");
+}
+
+// QuickStart step navigation (PR11; scroll mode PR15): shown instead of the
+// classic scrolling form when guided + essentials + a stepped design (tag,
+// via examples/tag.scad's `@step` annotations) + `ui.quickStart` (default
+// true). Runs right after checkSettingsView, which conveniently leaves the
+// suite on "All settings" — switch to essentials here to exercise QuickStart,
+// and leave the suite back on "All settings" at the end (per
+// checkSettingsView's own comment, later checks — bundled presets' Import/
+// Export row, checkTagDesign's @showIf/@collapsed checks — expect the full,
+// ungated panel).
+//
+// This desktop-context pass exercises "scroll" mode (ParamPanel's own docked
+// panel + its scroll container): every step renders at once, chips are
+// scroll anchors, and there's no Back/Next — see QuickStart.tsx's own
+// variant doc. Mobile's unchanged "steps" mode (one step at a time,
+// Back/Next) has its own pass, checkQuickStartMobile, in its own mobile
+// context alongside checkResponsiveLayout.
+async function checkQuickStart({ page, check, ids, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== QuickStart step navigation (desktop scroll mode) ===");
+  await selectDesign(page, "tag");
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  await switchSettingsView(page, "essentials");
+
+  const quickStart = page.locator(".quick-start");
+  await quickStart.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await quickStart.count()) === 1, "QuickStart shown in guided + essentials for a stepped design (tag)");
+
+  const chips = page.locator(".quick-start__step");
+  check((await chips.count()) === 5, "5 chips shown (4 @step sections + Review)");
+  check((await chips.nth(0).getAttribute("aria-current")) === "step", "the first step chip starts current");
+
+  // Round-2 review fix (9a25e91): the chip restyle — a small circular number
+  // badge + label joined by a thin connector, no full pill background on an
+  // inactive chip. Structural check on the new class names (chip DOM shape
+  // changed: `.quick-start__step-number` is a differently classed/sized
+  // badge, a new `.quick-start__step-label` span wraps the text, a new
+  // `.quick-start__step-connector` sits between chips).
+  check(
+    (await chips.first().locator(".quick-start__step-number").count()) === 1,
+    "each chip has its own number badge"
+  );
+  check(
+    (await chips.first().locator(".quick-start__step-label").count()) === 1,
+    "each chip's text sits in its own label span"
+  );
+  const chipCount = await chips.count();
+  check(
+    (await page.locator(".quick-start__step-connector").count()) === chipCount - 1,
+    "a thin connector sits between every pair of chips (one fewer connector than chips — none trails the last, Review, chip)"
+  );
+  // The Review chip drops its old leading ClipboardCheck icon glyph for the
+  // same numbered-badge treatment as every other chip — confirm no leftover
+  // icon element (an <svg>) sits inside it; its number badge + attention dot
+  // (a plain <span>, checked elsewhere) are the only non-text children now.
+  const reviewChipIcons = page.locator(".quick-start__step--review svg");
+  check((await reviewChipIcons.count()) === 0, "the Review chip no longer renders a leading icon glyph");
+
+  // Round-2 review fix (9a25e91): the chip strip is hoisted OUT of
+  // `.customize-tab__scroll` entirely (into `.quick-start-strip-slot`, a
+  // portal target CustomizeTab positions above the Essential/All toggle) for
+  // BOTH layouts now — previously only mobile did this. It stays visible
+  // while scrolling step content without needing `position: sticky`.
+  const stripInScrollContainer = await page
+    .locator(".quick-start__strip")
+    .evaluate((el) => el.closest(".customize-tab__scroll") !== null);
+  check(!stripInScrollContainer, "the chip strip lives outside .customize-tab__scroll (hoisted, not scrolled-with-content)");
+
+  // Round-2 review fix (9a25e91): panel order is now guide line -> stage
+  // chips -> Essential/All toggle -> search -> step content, on BOTH
+  // layouts (previously only mobile hoisted the strip above the toggle).
+  // DOM order (not just visual position) is what actually matters for
+  // screen-reader/keyboard traversal, so compare each block's position in
+  // the DOM via compareDocumentPosition rather than just bounding-box Y.
+  const order = await page.evaluate(() => {
+    const slot = document.querySelector(".quick-start-strip-slot");
+    const toggle = document.querySelector(".settings-view-toggle");
+    const search = document.querySelector("#param-search-input");
+    if (!slot || !toggle || !search) return null;
+    // Node.compareDocumentPosition: bit 4 (0x4, DOCUMENT_POSITION_FOLLOWING)
+    // set on B means "A precedes B in the document".
+    const before = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return before(slot, toggle) && before(toggle, search);
+  });
+  check(
+    order === true,
+    "DOM order is stage-chip strip -> Essential/All toggle -> search (chips hoisted above the toggle, desktop scroll mode)"
+  );
+
+  // Scroll mode: every step's group renders simultaneously — a scrollable
+  // form, not a one-step-at-a-time wizard — and there's no Back/Next.
+  const groupHeadings = page.locator(".quick-start__group h3");
+  check((await groupHeadings.count()) === 4, "all 4 step groups render at once (scroll mode, not a wizard)");
+  const headingTexts = await groupHeadings.allTextContents();
+  check(
+    ["Size", "Text", "Emblem", "Hanging hole"].every((label) => headingTexts.includes(label)),
+    "every step's own heading is present in the scrolled form"
+  );
+  check((await page.locator(".quick-start__back").count()) === 0, "no Back button in desktop scroll mode");
+  check((await page.locator(".quick-start__next").count()) === 0, "no Next button in desktop scroll mode");
+
+  await runAxe(page, check, "QuickStart visible (essentials view, tag, scroll mode)");
+
+  // A param edit inside a step re-renders the preview — the same pipeline as
+  // the classic form, just mounted through ParamRows' flat chrome. Every
+  // step's own params are already in the DOM (scroll mode), so no navigation
+  // is needed first — unlike steps mode, which has to walk there.
+  const labelInput = paramRow(page, "label").locator('input[type="text"]');
+  if (await labelInput.count()) {
+    await labelInput.fill("QuickStart");
+    await labelInput.blur();
+    await waitRendered(page, "quickstart param edit");
+  }
+
+  // Chip click smooth-scrolls its group into view and moves focus to the
+  // step heading (this suite doesn't force prefers-reduced-motion, so the
+  // real scroll animation plays — see QuickStart.tsx's own reduced-motion
+  // handling, covered structurally by its pure helper's unit tests instead).
+  await chips.nth(2).click(); // "Emblem"
+  await page
+    .waitForFunction(() => document.activeElement?.tagName === "H3", { timeout: 3000 })
+    .catch(() => {});
+  check(
+    await page.evaluate(() => document.activeElement?.textContent?.includes("Emblem") ?? false),
+    "clicking a chip moves focus to that step's heading"
+  );
+  check((await chips.nth(2).getAttribute("aria-current")) === "step", "clicking a chip sets it current immediately");
+  // The click above triggers a native smooth-scroll animation (this suite
+  // doesn't force prefers-reduced-motion), which takes a few hundred ms to
+  // settle — poll the heading's position instead of reading it the instant
+  // focus lands (focus({preventScroll: true}) is effectively synchronous
+  // with the scrollIntoView call, well before the animation finishes).
+  const scrolledNearTop = await page
+    .waitForFunction(
+      () => {
+        const el = Array.from(document.querySelectorAll(".quick-start__group h3")).find((h) =>
+          (h.textContent ?? "").includes("Emblem")
+        );
+        const container = el?.closest(".customize-tab__scroll");
+        if (!el || !container) return false;
+        const r = el.getBoundingClientRect();
+        const c = container.getBoundingClientRect();
+        // "Near the top" (not necessarily pixel-0 — the sticky chip strip
+        // and its scroll-margin sit above it): generous enough to avoid
+        // flaking on exact scroll-animation easing while still catching a
+        // chip click that scrolled nowhere.
+        return r.top >= c.top - 40 && r.top <= c.top + 250;
+      },
+      { timeout: 3000, polling: 50 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(scrolledNearTop, "the clicked step's heading actually scrolled near the top of the panel");
+
+  // Review chip (PR18, rebuilt by the visual-alignment pass — see
+  // ReviewContent in QuickStart.tsx): scrolls to the end of the form and
+  // shows a readiness line, a one-line subtitle, the structured summary CARD
+  // (every essential parameter's current value, then the design's own
+  // `@display` rows, then the dimension/@info/computed rows —
+  // reviewSummary.ts's buildReviewSummaryRows), a "Front view" button, EITHER
+  // the one warning card or a "Ready for download" success strip, and finally
+  // an actions row holding the Review stage's OWN primary Export button
+  // (`.quick-start__review-export` — reuses the same `exportModel` action as
+  // the floating dock's, not a duplicate pointer at it) plus, only when a
+  // font-fallback attention item exists, an "Open font settings" link.
+  await chips.last().click();
+  check((await chips.last().getAttribute("aria-current")) === "step", "clicking the Review chip sets it current");
+  const review = page.locator(".quick-start__review");
+  check(await review.isVisible(), "the Review chip's own section actually scrolled into view");
+  check(
+    /Ready to download/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
+    "Review's readiness line reads \"Ready to download\" for the default, fully-rendered, no-attention state"
+  );
+  check(
+    /Dimensions/.test((await page.locator(".quick-start__review-summary").textContent()) ?? ""),
+    "Review's summary includes the Dimensions row (reused from DimensionInfo's own derivation)"
+  );
+  check(
+    (await page.locator(".quick-start__review-summary > div").count()) > 1,
+    "Review's summary includes more than just the Dimensions row (tag's own essential-parameter rows lead it)"
+  );
+  check(
+    (await review.locator(".quick-start__review-export").count()) === 1 &&
+      /^Download for 3D printing$/.test(((await review.locator(".quick-start__review-export").textContent()) ?? "").trim()),
+    "Review's own primary Export button reuses the plain export label (no attention, nothing to \"export anyway\")"
+  );
+  check(
+    (await review.locator(".quick-start__review-ready").count()) === 1,
+    "the \"Ready for download\" success strip is shown in place of a warning card when there's nothing to review"
+  );
+
+  // PR23's block order, rebuilt (visual-alignment pass): readiness line,
+  // subtitle, the summary card, the front-view action, EITHER the warning
+  // card or the ready strip, then the actions row (export + optional font
+  // link) — no separate "Font status" row anymore (a font's current family
+  // already shows as an ordinary essential-parameter row; see
+  // ReviewContent's own doc in QuickStart.tsx). Reads the block-level
+  // markers in actual DOM order rather than asserting on any one in isolation.
+  await reviewBlockOrder(review, check, {
+    expectAttention: false,
+    message: "Review card blocks render readiness -> subtitle -> summary -> front view -> ready strip -> actions",
+  });
+  // The summary card's own dt sequence now LEADS with every essential
+  // parameter's current value (reviewSummary.ts's essentialParamRows), not
+  // the Dimensions headline — that (plus any @info rows) comes later, from
+  // buildReviewRows. Confirm Dimensions is present, past the essential rows,
+  // rather than asserting it leads (PR23's own restructure).
+  const reviewDtOrder = await page.locator(".quick-start__review-summary dt").allTextContents();
+  const dimensionsIndex = reviewDtOrder.indexOf("Dimensions");
+  check(
+    dimensionsIndex > 0 && reviewDtOrder.length > dimensionsIndex + 1,
+    `the summary's own dt sequence leads with essential-parameter rows, then Dimensions, then @info rows (saw: ${reviewDtOrder.join(", ")})`
+  );
+
+  // "Front view" actually drives the shared viewer: the HUD's view picker
+  // trigger reflects the newly-applied view (ViewPicker.tsx's own
+  // aria-label/title), proving the button is wired through AppShell's
+  // onSelectView the same way the HUD's own picker is.
+  await review.getByRole("button", { name: "Front view" }).click();
+  await page
+    .waitForFunction(
+      () => document.querySelector(".viewer-hud button[title^='View:']")?.getAttribute("title") === "View: Front",
+      { timeout: 3000 }
+    )
+    .catch(() => {});
+  check(
+    (await page.locator(".viewer-hud button[title='View: Front']").count()) === 1,
+    "Review's \"Front view\" button snaps the shared viewer to the front view"
+  );
+
+  await runAxe(page, check, "QuickStart Review stage visible (essentials view, tag, scroll mode)");
+
+  // All settings escape: switching to All settings shows the classic form
+  // (and facet_angle — the @advanced Quality section, per PR3's toggle
+  // behavior) instead of QuickStart; switching back to essentials brings
+  // QuickStart back.
+  await switchSettingsView(page, "all");
+  check((await page.locator(".quick-start").count()) === 0, "All settings shows the classic form, not QuickStart");
+  check((await paramRow(page, "facet_angle").count()) > 0, "facet_angle (advanced) is reachable in All settings");
+  await switchSettingsView(page, "essentials");
+  await quickStart.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".quick-start").count()) === 1, "QuickStart returns when switching back to essentials");
+
+  // Search interplay: typing a query bypasses QuickStart for the classic
+  // filtered form; clearing it restores QuickStart.
+  const search = page.locator("#param-search-input");
+  await search.fill("width");
+  await page.locator(".quick-start").waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".quick-start").count()) === 0, "a search query shows the classic filtered form, not QuickStart");
+  check((await paramRow(page, "width").count()) > 0, "the search actually filters to the matching param");
+  await search.fill("");
+  await quickStart.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".quick-start").count()) === 1, "clearing the search restores QuickStart");
+
+  // Leave the suite in All settings for the checks that follow.
+  await switchSettingsView(page, "all");
+}
+
+// QuickStart step navigation, mobile (PR15): the bottom sheet keeps today's
+// one-step-at-a-time "steps" variant unchanged (Back/Next, one step's
+// ParamRows mounted at a time) — desktop's own scroll-mode assertions live in
+// checkQuickStart above. Needs its own real mobile viewport/context, same
+// reasoning as checkResponsiveLayout's own doc (the shared `page` above is
+// desktop-sized) — a fresh context so this doesn't inherit any state the
+// desktop pass above left behind.
+async function checkQuickStartMobile({ browser, base, check, ids, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== QuickStart step navigation (mobile steps mode) ===");
+  await withMobileContext(browser, async (page) => {
+    await page.goto(base, { waitUntil: "load" });
+    await settleFirstVisit(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // The dogfood config's default landing (tag, guided, essentials) already
+    // makes QuickStart the active guide, and guided+half policy starts the
+    // sheet at Half (see checkResponsiveLayout) — Parameters is reachable
+    // without raising the sheet first.
+    await page.getByRole("tab", { name: paramsTabName }).first().click();
+    await page.waitForSelector(".quick-start", { timeout: 5000 }).catch(() => {});
+
+    const quickStart = page.locator(".quick-start");
+    check((await quickStart.count()) === 1, "QuickStart shown on mobile too (guided + essentials + stepped design)");
+
+    const chips = page.locator(".quick-start__step");
+    check((await chips.count()) === 5, "5 chips shown on mobile (4 @step sections + Review)");
+
+    // Round-2 review fix (9a25e91): panel order — guide line -> stage chips
+    // -> Essential/All toggle -> search -> step content — now applies to
+    // BOTH layouts; this was already true on mobile before this pass (only
+    // desktop scroll mode needed the hoist), so this is a same-as-before
+    // regression guard rather than a new behavior on this layout.
+    const order = await page.evaluate(() => {
+      const slot = document.querySelector(".quick-start-strip-slot");
+      const toggle = document.querySelector(".settings-view-toggle");
+      const search = document.querySelector("#param-search-input");
+      if (!slot || !toggle || !search) return null;
+      const before = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      return before(slot, toggle) && before(toggle, search);
+    });
+    check(
+      order === true,
+      "DOM order is stage-chip strip -> Essential/All toggle -> search on mobile too (steps mode)"
+    );
+
+    // Mobile stays one-step-at-a-time: scroll mode's simultaneous-group
+    // markup never mounts here, and Back/Next still drive navigation.
+    check((await page.locator(".quick-start__group").count()) === 0, "mobile never renders scroll mode's step-group markup");
+    check((await page.locator(".quick-start__content").count()) === 1, "mobile renders exactly one step's content at a time");
+    const nextBtn = page.locator(".quick-start__next");
+    check((await nextBtn.count()) === 1, "Next button present on mobile");
+
+    check((await chips.nth(0).getAttribute("aria-current")) === "step", "the first step chip starts current on mobile");
+    check((await paramRow(page, "width").count()) > 0, "the current (first, \"Size\") step's own params are shown");
+    check((await paramRow(page, "label").count()) === 0, "a later step's (\"Text\") params are NOT shown until navigated to");
+
+    // Round-2 review fix: no disabled Back button on the very first step —
+    // it's omitted entirely (a disabled control with nothing to explain why
+    // is worse than none) — and the lone forward action names the
+    // destination up front: "Next: <next step label>" instead of a bare
+    // "Next". Both regress to smoke's OLD 1489/9a25e91 assumption of a
+    // permanent, always-present (if disabled) Back button, which no longer
+    // holds on step 1.
+    check((await page.locator(".quick-start__back").count()) === 0, "no Back button at all on the very first step (mobile)");
+    check(
+      /Next: Text/.test((await nextBtn.textContent()) ?? ""),
+      "the first step's lone Next button names the destination: \"Next: Text\""
+    );
+
+    await nextBtn.click(); // Size -> Text
+    check((await chips.nth(1).getAttribute("aria-current")) === "step", "Next advances to the second step on mobile");
+    check((await paramRow(page, "label").count()) > 0, "the Text step's own param appears once current");
+    check((await paramRow(page, "width").count()) === 0, "the previous step's param is no longer shown (one step at a time)");
+    // Back reappears from the second step on: only the very first step omits it.
+    check((await page.locator(".quick-start__back").count()) === 1, "Back button present once past the first step (mobile)");
+    check(
+      (await nextBtn.textContent()) === "Next",
+      "the second step's Next button reads the bare \"Next\" (Back is alongside it, no destination naming needed)"
+    );
+
+    // Chip jump still works directly too (free navigation, not a wizard).
+    await chips.nth(0).click();
+    check((await chips.nth(0).getAttribute("aria-current")) === "step", "clicking a chip jumps directly to it on mobile");
+    check((await paramRow(page, "width").count()) > 0, "jumping back via chip shows that step's params again");
+
+    await runAxe(page, check, "QuickStart visible on mobile (steps mode)");
+
+    // Walk forward through every real step via Next to the terminal Review
+    // stage (PR18): the LAST real step's Next button reads "Next: Review"
+    // (was "Next: Export"), and clicking it actually lands on the Review
+    // stage's own content — the same stage scroll mode shows all at once,
+    // here reached one step at a time like every other mobile step.
+    await chips.nth(0).click(); // back to Size, a known starting point
+    for (let i = 0; i < 3; i++) await nextBtn.click(); // Size -> Text -> Emblem -> Hanging hole
+    check(
+      /Next: Review/.test((await nextBtn.textContent()) ?? ""),
+      "the last real step's Next button reads \"Next: Review\""
+    );
+    await nextBtn.click(); // Hanging hole -> Review
+    check((await page.locator(".quick-start__review").count()) === 1, "\"Next: Review\" walks to the Review step on mobile");
+    check((await page.locator(".quick-start__back").count()) === 1, "Back is still reachable from the Review step");
+    check((await page.locator(".quick-start__next").count()) === 0, "no Next button once the Review step is current");
+    check(
+      /Ready to download/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
+      "mobile Review stage shows the same readiness line as desktop"
+    );
+
+    await runAxe(page, check, "QuickStart Review stage visible on mobile (steps mode)");
+  });
+}
+
+// Regression guard (fa49bcb), mobile half: the same "click .export-attention
+// jumps to the Review chip" fix checkReadiness confirms on desktop (scroll
+// mode), driven the mobile (steps mode) way. handleReviewAttention's bug was
+// in the shared nonce-bump timing (App.tsx), not per-layout code, but the two
+// variants consume the signal through different QuickStart code paths
+// (`select` vs `scrollToGroup`, see the `focusReviewSignal` handler in
+// QuickStart.tsx) — worth its own direct check rather than assuming the
+// desktop pass covers it. Own mobile context/hash, same "No Such Font" trick
+// as checkReadiness/checkFilesFontMissingCard.
+async function checkExportAttentionReviewRoutingMobile({ browser, base, check, ids, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== export dock attention -> Review chip routing (mobile steps mode) ===");
+  await withMobileContext(browser, async (page) => {
+    const hash = `d=tag&v=${encodeURIComponent(JSON.stringify({ font: "No Such Font" }))}`;
+    await page.goto(`${base}#${hash}`, { waitUntil: "load" });
+    await page.reload({ waitUntil: "load" });
+    await settleFirstVisit(page).catch(() => {});
+    await waitRendered(page, "tag with a missing font family (mobile export-attention routing)");
+
+    await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+    const exportAttention = page.locator(".export-attention");
+    await exportAttention.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    check((await exportAttention.count()) === 1, "the export dock shows the attention line on mobile too");
+
+    await exportAttention.click();
+    const reviewChip = page.locator(".quick-start__step--review");
+    await page
+      .waitForFunction(
+        () => document.querySelector(".quick-start__step--review")?.getAttribute("aria-current") === "step",
+        { timeout: 3000 }
+      )
+      .catch(() => {});
+    check(
+      (await reviewChip.getAttribute("aria-current")) === "step",
+      "the export dock's attention line sets the Review chip aria-current=step on mobile (steps mode)"
+    );
+    check(
+      (await page.locator(".quick-start__review").count()) === 1,
+      "the Review stage's own content is what's actually showing on mobile after the click"
+    );
+
+    // Leave the suite in a clean state for whatever runs after this.
+    await page.goto(`${base}#d=tag`, { waitUntil: "load" });
+    await page.reload({ waitUntil: "load" });
+    await settleFirstVisit(page).catch(() => {});
+    await waitRendered(page, "tag reloaded with defaults (mobile export-attention routing cleanup)");
+  });
+}
+
 // @showIf + @collapsed — exercised on the example "tag" design when present.
 // Param rows are located by their stable data-param hook, which exists
 // regardless of ui.showVarName, so this block runs in every config.
@@ -458,7 +1839,11 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   await waitRendered(page, "tag reloaded");
   // Back to the Customize tab (the file-import test left the panel on Files).
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
-
+  // "Quality" (facet_angle/facet_size) is @advanced — the config's guided
+  // default starts in the essentials view, which hides it entirely. Switch to
+  // All settings so the @showIf/@collapsed checks below see it at all; the
+  // essentials-view behavior itself is covered by checkSettingsView.
+  await switchSettingsView(page, "all");
 
   // @collapsed: the "Quality" group starts folded; its params are hidden
   // until the group header is opened.
@@ -515,12 +1900,22 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
 
   // Making the engraving deeper than the plate trips a hard assert(): the
   // render fails and the hardcoded "asserts" badge appears.
-  const setNum = async (name, value) => {
-    const input = paramRow(page, name).locator('input[type="number"]');
-    await input.fill(String(value));
-    await input.blur();
-  };
+  const setNum = (name, value) => setNumField(page, name, value);
+  // Quality (facet_angle/facet_size) is @advanced and untouched (still at its
+  // defaults) — switch back to the essentials view so the friendly-error
+  // checks below exercise the real "nothing hidden differs from defaults"
+  // case, not the trivially-empty "all settings" case (hiddenAdvancedDiff is
+  // always [] in "all" — see paramFilter.ts). This (re-)mounts QuickStart
+  // fresh (tag is a stepped design), starting on its first step ("Size",
+  // which holds `thickness`). Desktop scroll mode (PR15) already mounts
+  // every step's params at once, so `text_depth` (the "Text" step) exists
+  // regardless — click its chip anyway, both to exercise chip navigation
+  // here too and to keep this check meaningful if a future variant reverts
+  // to mounting only the current step's ParamRows.
+  await switchSettingsView(page, "essentials");
   await setNum("thickness", 1);
+  if (await page.locator(".quick-start").count())
+    await page.locator(".quick-start__step").filter({ hasText: "Text" }).first().click();
   await setNum("text_depth", 2);
   check(
     await waitFor(() =>
@@ -535,9 +1930,371 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
     "an assert failure raises an asserts badge"
   );
 
-  // Restore a clean, rendering state for the checks that follow.
+  console.log("=== friendly render-failure summary (tag) ===");
+  check(
+    (await page.locator(".friendly-error").count()) === 1,
+    "the friendly error card is shown in Notices on a failed render"
+  );
+  const friendlyText = await page.locator(".friendly-error").innerText();
+  check(
+    friendlyText.includes(
+      "engraved text is deeper than the plate is thick; reduce text depth or thicken the plate"
+    ),
+    "the friendly error's body is the assert's authored message, verbatim and unquoted"
+  );
+  // A successful tag render preceded this failure, so the pipeline retains
+  // it: the reassurance line must be present AND true — the viewer keeps the
+  // last good geometry (dimmed) instead of clearing to an empty canvas.
+  check(
+    friendlyText.includes("Your last working preview is still shown"),
+    "the reassurance line is shown (a previous successful render is retained)"
+  );
+  check(
+    (await page.locator(".viewer-wrap .opacity-55").count()) > 0,
+    "the retained last-good geometry is displayed dimmed while the latest render failed"
+  );
+  check(
+    (await page.locator(".friendly-error").getByRole("button", { name: "Review hidden settings" }).count()) === 0,
+    "Quality (advanced, still default) means no hidden setting differs, so 'Review hidden settings' is not offered"
+  );
+  await page.locator(".friendly-error").getByText("Show raw output").click();
+  const technicalText = await page.locator(".friendly-error details").innerText();
+  check(
+    /Assertion '.*' failed/.test(technicalText),
+    "the raw-output disclosure reveals the raw assertion line"
+  );
+  await runAxe(page, check, "Notices tab: friendly-error card visible");
+
+  // Restore a clean, rendering state for the checks that follow — and confirm
+  // the canvas recovers: the render succeeds again, the friendly card clears,
+  // and the retained-geometry dimming lifts.
   await resetDefaults(page);
   await waitRendered(page, "tag");
+  check(
+    await waitFor(() => document.querySelector(".friendly-error") === null),
+    "the friendly error card clears once a render succeeds again"
+  );
+  check(
+    (await page.locator(".viewer-wrap .opacity-55").count()) === 0,
+    "the dimmed retained-geometry treatment lifts after recovery"
+  );
+}
+
+// Production-readiness attention surfacing (PR13; consolidated PR22;
+// rebuilt again by the visual-alignment pass): a design can render
+// successfully while its selected font family isn't loaded — Fontconfig
+// silently substitutes a fallback, and dimensions/spacing can shift, yet
+// nothing about the render itself failed. "Rendered" and "ready to ship" are
+// different claims (src/lib/readiness.ts); this exercises the whole path:
+// the checklist's "needs attention" wording, AttentionItems.tsx's ONE
+// warning-card treatment reused in its three surfaces (ParamRows' contextual
+// `.font-missing` card right under the control, the Notices tab's
+// `.console-attention`, and the Review stage's `.quick-start__review-
+// attention` — the top-of-panel attention chip this used to also appear in
+// is gone entirely, see CustomizeTab.tsx's own doc), the export dock's
+// explicit single-button `.export-attention` line (replacing the old
+// ambiguous corner dot, and then its own nested "Review" link), and the
+// Review stage's rebuilt actions row (no separate "Font status" row
+// anymore — a font's current family already shows as an ordinary
+// essential-parameter row in the summary). Runs against the desktop `page`
+// (scroll mode, PR15): every step's ParamRows is already mounted, so "the
+// jump" is really a scroll+focus of the font control itself rather than a
+// step swap — QuickStart still moves `aria-current` to "Text" alongside it
+// (see QuickStart.tsx's focusParam effect), which the assertions below still
+// check for.
+async function checkReadiness({ page, check, ids, base, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== production readiness: font-fallback attention ===");
+
+  // A URL hash directly encodes the missing-font override — see
+  // src/lib/urlState.ts's "d=/v=/p=" encoding (`v` is a JSON diff-from-
+  // defaults object). Navigating to a URL differing only by its hash is a
+  // same-document navigation (App.tsx's own `hashchange` listener applies
+  // it via applyExternalState) rather than a fresh module load, which would
+  // leave session-only state (paramInteracted etc., carried over from
+  // earlier checks in this suite) stale — so `goto` then an explicit
+  // `reload` to force a genuine fresh mount that re-derives EVERYTHING
+  // (including those session flags) from this hash, same as a visitor
+  // opening the link fresh. Every first-visit once-flag it could trip
+  // (welcome popup dismissal, getting-started dismissal) was already
+  // persisted by earlier checks in this suite, so nothing blocks driving
+  // the UI here. Only `font` differs from the design's shipped defaults, so
+  // the "1 alert + 1 note" the tag design fires out of the box (see its own
+  // "Configurator notices" comment) is present here too — reused below for
+  // the singular-badge check (item 5).
+  const hash = `d=tag&v=${encodeURIComponent(JSON.stringify({ font: "No Such Font" }))}`;
+  await page.goto(`${base}#${hash}`, { waitUntil: "load" });
+  await page.reload({ waitUntil: "load" });
+  await settleFirstVisit(page).catch(() => {});
+  await waitRendered(page, "tag with a missing font family");
+
+  // The getting-started checklist was dismissed (and that dismissal
+  // persisted) by an earlier check — bring it back via the Help modal's
+  // replay row (same action checkGettingStarted itself exercises) so its
+  // live "Preview" status is visible here too.
+  await page.getByRole("button", { name: "Help", exact: true }).click();
+  const helpDialog = page.getByRole("dialog");
+  await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await helpDialog.getByRole("button", { name: /show the getting-started checklist again/i }).click();
+  await page.keyboard.press("Escape");
+  await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+
+  // QuickStart is the active guide here too (tag/essentials/guided), so the
+  // replayed checklist lands in its compact one-line form — expand it (PR14)
+  // before reading the Preview row.
+  await expandChecklist(page);
+  const previewRow = page.locator(".getting-started li", { hasText: "Preview" });
+  await previewRow.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(
+    /needs attention/.test((await previewRow.textContent()) ?? ""),
+    "checklist 'Preview' row reads 'needs attention' when the selected font isn't loaded"
+  );
+
+  // The contextual warning card (visual-alignment pass — AttentionItems.tsx,
+  // reused verbatim in three places): right under the font control itself,
+  // via ParamRows' `.font-missing` synthetic single-item card. Replaces the
+  // old top-of-panel attention chip entirely (CustomizeTab.tsx: "the
+  // top-of-panel attention chip that used to live here is gone"). Scroll
+  // mode mounts every step's ParamRows at once, so the Text step's own font
+  // control (and its card) already exist without navigating there first.
+  await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
+  const fontMissingCard = page.locator(".font-missing");
+  await fontMissingCard.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await fontMissingCard.count()) === 1, "exactly one contextual font-missing card shown, right under the control");
+  check(
+    ((await fontMissingCard.textContent()) ?? "").includes("No Such Font"),
+    "the contextual card names the missing family"
+  );
+  check(
+    (await fontMissingCard.getByRole("button", { name: /Import font/i }).count()) === 1,
+    "the contextual card offers \"Import font\""
+  );
+  check(
+    (await fontMissingCard.getByRole("button", { name: "Use a bundled font" }).count()) === 1,
+    "the contextual card ALSO offers \"Use a bundled font\" since a bundled family is available"
+  );
+  check(
+    (await fontMissingCard.getByRole("button", { name: "Go to setting" }).count()) === 0,
+    "the contextual card omits \"Go to setting\" — the visitor is already at the control"
+  );
+
+  // The export dock's explicit attention line (PR22, restyled to a single
+  // whole-line button by the visual-alignment pass): real text — just the
+  // count, no per-item text (see ExportAttention.tsx's own doc) — that opens
+  // the Review stage when clicked anywhere on it. Export stays enabled and
+  // uninterrupted throughout — it's a caution, never a block.
+  const exportBtn = page.locator(".action-export");
+  const exportAttention = page.locator(".export-attention");
+  await exportAttention.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await exportAttention.count()) === 1, "the export dock shows the attention line");
+  check(
+    ((await exportAttention.textContent()) ?? "").trim() === "1 issue to review before download",
+    "the export dock's attention line reads the plain \"N issue(s) to review before download\" count, no per-item text"
+  );
+  check(await exportBtn.isEnabled(), "export stays enabled despite the attention line");
+  check(
+    (await exportBtn.getAttribute("aria-describedby")) === "export-attention-hint",
+    "export button is described by the visible attention line for assistive tech"
+  );
+
+  await runAxe(page, check, "Customize tab with the font-missing card visible");
+
+  // The export dock's attention line is now itself a single button (not text
+  // plus a nested "Review" link) — clicking anywhere on it jumps to the
+  // Review stage: scroll mode scrolls the trailing Review section into view
+  // AND focuses its heading (scrollToGroup's own contract) — a deterministic
+  // signal that doesn't depend on the IntersectionObserver having caught up yet.
+  await exportAttention.click();
+  await page
+    .waitForFunction(() => document.activeElement?.id === "quick-start-heading-__review__", { timeout: 3000 })
+    .catch(() => {});
+  check(
+    await page.evaluate(() => document.activeElement?.id === "quick-start-heading-__review__"),
+    "the export dock's attention line scrolls to and focuses the Review stage heading"
+  );
+  // Regression guard (fa49bcb): handleReviewAttention used to bump
+  // QuickStart's focus-review nonce in the SAME tick as the tab switch, so
+  // QuickStart's first mount already saw the bumped value and useSignal's
+  // mount-seeded "last seen" ref never detected a change — the visitor landed
+  // on the first step's chip instead of Review. Fixed by deferring the bump
+  // to the next animation frame. Assert the actual regressed symptom
+  // directly (the Review CHIP's aria-current), not just that focus moved —
+  // the two are set by different code paths and a fix to one doesn't
+  // guarantee the other.
+  check(
+    (await page.locator(".quick-start__step--review").getAttribute("aria-current")) === "step",
+    "the export dock's attention line also sets the Review chip aria-current=step (desktop scroll mode)"
+  );
+
+  // Notices tab: the same gap leads as a friendly card, above the raw rows
+  // (PR22 item 4) — a visitor who opens Messages directly still gets the
+  // readable summary, not just parsed log lines. Also where the singular-
+  // labelOne badge (item 5) is reliably drivable: the shipped tag defaults
+  // fire exactly one alert and one note (see the hash comment above). Unlike
+  // the contextual card, Messages isn't anchored near any control, so this
+  // is the one AttentionItems instance that DOES offer "Go to setting"
+  // (AttentionItems.tsx's own doc) — exercised below.
+  await openConsole(page);
+  const consoleAttention = page.locator(".console-attention");
+  await consoleAttention.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await consoleAttention.count()) === 1, "the Notices tab shows one friendly attention card block");
+  check(
+    ((await consoleAttention.textContent()) ?? "").includes("No Such Font"),
+    "the friendly attention card names the missing family, same as the contextual card"
+  );
+  check(
+    (await consoleAttention.getByRole("button", { name: "Use a bundled font" }).count()) === 1,
+    "the friendly attention card offers \"Use a bundled font\" too"
+  );
+  check(
+    (await consoleAttention.getByRole("button", { name: "Go to setting" }).count()) === 1,
+    "the friendly attention card (only, of the three AttentionItems instances) offers \"Go to setting\", since Messages isn't anchored near the control"
+  );
+  const attentionBox = await consoleAttention.boundingBox();
+  const rawRowsBox = await page.locator(".output-console ul, .output-console p").first().boundingBox();
+  check(
+    !!attentionBox && !!rawRowsBox && attentionBox.y <= rawRowsBox.y,
+    "the friendly attention card leads the raw notices rows, not the other way around"
+  );
+  check(
+    (await page.locator('.output-console [aria-label="1 alert"]').count()) === 1,
+    "the alert count badge's accessible name uses the singular labelOne (\"1 alert\", not \"1 alerts\")"
+  );
+  check(
+    (await page.locator('.output-console [aria-label="1 note"]').count()) === 1,
+    "the note count badge's accessible name uses the singular labelOne (\"1 note\", not \"1 notes\") too"
+  );
+  await runAxe(page, check, "Notices tab with the friendly attention card visible");
+
+  // "Go to setting": tag mounts QuickStart on its first ("Size") step by
+  // default on a fresh design view — the font control lives on "Text", a
+  // DIFFERENT step — so this also exercises QuickStart's own step-jump
+  // composition, not just a scroll on an already-visible control.
+  await consoleAttention.getByRole("button", { name: "Go to setting" }).click();
+  await page
+    .waitForFunction(() => document.activeElement?.classList.contains("font-select"), { timeout: 3000 })
+    .catch(() => {});
+  check(
+    await page.evaluate(() => document.activeElement?.classList.contains("font-select")),
+    "\"Go to setting\" switches to the Text step and focuses the font control"
+  );
+  check(
+    ((await page.locator(".quick-start__step--current").textContent()) ?? "").includes("Text"),
+    "QuickStart's current step actually switched to Text"
+  );
+  // AppShell closes Messages as part of that jump (the same "go to setting"
+  // signal the friendly-error card's own action uses) — confirm nothing is
+  // left stacked over the panel.
+  check((await page.locator(".output-console").count()) === 0, "\"Go to setting\" also closes Messages");
+
+  // The Review stage (rebuilt by the visual-alignment pass) surfaces the
+  // same gap a third time: its own readiness line and warning card — no
+  // separate "Font status" row anymore (a font's current family already
+  // shows as an ordinary essential-parameter row in the summary; see
+  // ReviewContent's own doc in QuickStart.tsx) — plus a single "Open font
+  // settings" link in the actions row (replacing any per-item "Go to
+  // setting" there, which would just duplicate it — see the fix alongside
+  // this rewrite). Scroll mode mounts every step's group at once (including
+  // the trailing Review section), so these are already in the DOM regardless
+  // of which chip is "current" — no navigation needed.
+  check(
+    /Needs attention/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
+    "Review's readiness line reads \"Needs attention\" while the font fallback is unresolved"
+  );
+  check(
+    (await page.locator(".quick-start__review-font").count()) === 0,
+    "there is no separate \"Font status\" row anymore — the font shows as an ordinary essential-parameter row in the summary"
+  );
+  const reviewAttentionCard = page.locator(".quick-start__review-attention");
+  check(
+    ((await reviewAttentionCard.textContent()) ?? "").includes("No Such Font"),
+    "Review's own warning card names the missing family too"
+  );
+  check(
+    (await reviewAttentionCard.getByRole("button", { name: "Go to setting" }).count()) === 0,
+    "Review's warning card omits a per-item \"Go to setting\" — the actions row's own link covers it once"
+  );
+  const openFontSettingsLink = page.locator(".quick-start__review-open-setting");
+  check((await openFontSettingsLink.count()) === 1, "Review's actions row offers a single \"Open font settings\" link");
+  check(
+    (await page.locator(".quick-start__review-ready").count()) === 0,
+    "the \"Ready for download\" strip is NOT shown while there's something to review"
+  );
+  check(
+    ((await page.locator(".quick-start__review-export").textContent()) ?? "").trim() === "Download anyway",
+    "Review's own primary Export button reads \"Download anyway\" while attention items exist"
+  );
+
+  // PR23 item 4, the attention-present variant: confirm the full block order
+  // with every optional block actually present (the warning card in place of
+  // the ready strip this time).
+  await reviewBlockOrder(page.locator(".quick-start__review").first(), check, {
+    expectAttention: true,
+    message:
+      "with every optional block present, Review still renders readiness -> subtitle -> summary -> front view -> warning card -> actions",
+  });
+
+  // "Open font settings" (the actions-row link): a one-click jump back to
+  // the font control, mirroring "Go to setting" above but from the Review
+  // stage's own single link instead of Messages'.
+  await openFontSettingsLink.click();
+  await page
+    .waitForFunction(() => document.activeElement?.classList.contains("font-select"), { timeout: 3000 })
+    .catch(() => {});
+  check(
+    await page.evaluate(() => document.activeElement?.classList.contains("font-select")),
+    "\"Open font settings\" focuses the font control"
+  );
+
+  // "Use a bundled font" (a one-click fix, not just a pointer — resolves the
+  // issue in place, no manual dropdown needed) — via the contextual card,
+  // right under the now-focused font control.
+  await fontMissingCard.getByRole("button", { name: "Use a bundled font" }).click();
+  await waitRendered(page, "tag with a bundled font restored via \"Use a bundled font\"");
+  check((await page.locator(".font-missing").count()) === 0, "the contextual card clears once a loaded family is selected");
+  check((await page.locator(".export-attention").count()) === 0, "the export dock's attention line clears too");
+  check(
+    /Ready to download/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
+    "Review's readiness line returns to \"Ready to download\" once the font is restored"
+  );
+  check(
+    (await page.locator(".quick-start__review-ready").count()) === 1,
+    "the \"Ready for download\" strip returns once the font is resolved"
+  );
+  check(
+    ((await page.locator(".quick-start__review-export").textContent()) ?? "").trim() === "Download for 3D printing",
+    "Review's own primary Export button drops \"Download anyway\" back to the plain label once resolved"
+  );
+
+  // Confirm the checklist itself returns to "ready" too. Selecting the
+  // restored font above was itself a real param edit, which already
+  // completed "Adjust the essential settings" — combined with "Choose a
+  // design"/"Download the model" already done (persisted flags from earlier
+  // checks), the card may now be fully collapsed (see GettingStarted.tsx —
+  // checklistAllDone doesn't depend on the Preview row at all, so that
+  // collapse is a red herring here, not evidence either way). Reload fresh
+  // (defaults -> a loaded font) and replay the checklist the same way as
+  // above for an unambiguous read on the Preview row alone.
+  await page.goto(`${base}#d=tag`, { waitUntil: "load" });
+  await page.reload({ waitUntil: "load" });
+  await settleFirstVisit(page).catch(() => {});
+  await waitRendered(page, "tag reloaded with defaults (readiness cleanup)");
+  await page.getByRole("button", { name: "Help", exact: true }).click();
+  await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await helpDialog.getByRole("button", { name: /show the getting-started checklist again/i }).click();
+  await page.keyboard.press("Escape");
+  await helpDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  await expandChecklist(page); // compact by default here too — see above
+  const previewRow2 = page.locator(".getting-started li", { hasText: "Preview" });
+  await previewRow2.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  const previewText2 = (await previewRow2.textContent()) ?? "";
+  check(
+    /ready/i.test(previewText2) && !/needs attention/.test(previewText2),
+    "checklist 'Preview' row returns to 'ready' once a loaded font is selected"
+  );
+
+  // Leave the suite in a clean state for whatever runs after this.
+  await page.locator(".getting-started__dismiss").click().catch(() => {});
 }
 
 // @showIf arrow_style — exercised on a "signage" design when present. (No
@@ -563,10 +2320,11 @@ async function checkSignageDesign({ page, check, ids }) {
   await waitRendered(page, "arrow");
 }
 
-// M7 + M16 (docs/architecture-review.md): responsive layout mounting and
-// mobile bottom-sheet focus behavior. These need a real mobile-sized
-// viewport/context (the default page above is desktop-sized), so this opens
-// its own context rather than reusing `page`. Covers:
+// M7 + M16 (docs/architecture-review.md) + PR4 (guided mobile sheet policy):
+// responsive layout mounting and mobile bottom-sheet focus behavior. These
+// need a real mobile-sized viewport/context (the default page above is
+// desktop-sized), so this opens its own context rather than reusing `page`.
+// Covers:
 //  - M7: exactly one interactive layout (ParamForm) is in the DOM at a given
 //    breakpoint, and a breakpoint change preserves active tab, search text,
 //    search focus, and (on the way back) the sheet's detent.
@@ -574,18 +2332,16 @@ async function checkSignageDesign({ page, check, ids }) {
 //    (not `inert`); at Full it's `inert` and focus is trapped inside the
 //    sheet — Tab never lands on a covered background control — with Escape
 //    collapsing back out and focus returning to the sheet.
+//  - PR4: the dogfood config sets guided experience + `mobileInitialSheet:
+//    "half"` (scadpub.config.json), so a fresh mobile visit lands the sheet
+//    at Half (not the long-standing Peek default) with a one-time
+//    "Drag up for all settings" hint on the handle — dismissed by the first
+//    detent change and never shown again (once-flag), even across a reload.
 async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
   console.log("=== responsive layout: single mounted tree + state across a breakpoint change (M7) ===");
-  const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  });
-  const page = await context.newPage();
-  try {
+  await withMobileContext(browser, async (page) => {
     await page.goto(base, { waitUntil: "load" });
-    await dismissWelcomePopup(page);
+    await settleFirstVisit(page);
     await waitRenderDone(page).catch(() => {});
 
     // Only the active (mobile) layout is in the DOM — the desktop tree isn't
@@ -596,24 +2352,36 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
       "mobile viewport mounts only the mobile layout tree"
     );
 
-    // Raise the sheet to Half and switch to the Parameters tab (tapping a tab
-    // at Peek also raises it, but starting from Half keeps this deterministic
-    // regardless of the landing tab). The design may land on Presets (bundled
-    // presets), so ParamForm only mounts once Parameters is active — Radix
-    // Tabs unmounts inactive tab content.
-    await page.locator(".sheet-handle").click(); // peek -> half
-    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
+    // PR4: guided experience + mobileInitialSheet "half" (the dogfood config)
+    // lands a fresh visit's sheet at Half, not Peek, with the one-time handle
+    // hint showing.
+    check((await page.locator(".bottom-sheet--half").count()) === 1, "guided+half policy starts the sheet at half");
+    check((await page.locator(".sheet-hint").count()) === 1, "one-time sheet hint shows on first load");
+
+    // Switch to the Parameters tab (the sheet is already at Half via the
+    // policy above, so no handle tap is needed to raise it here). The design
+    // may land on Presets (bundled presets), so ParamForm only mounts once
+    // Parameters is active — Radix Tabs unmounts inactive tab content.
     await page.getByRole("tab", { name: paramsTabName }).first().click();
     await page.waitForSelector(".param-form", { timeout: 3000 });
     check((await page.locator(".param-form").count()) === 1, "exactly one ParamForm is mounted");
 
-    // Type into the search box and leave it focused.
+    // Type into the search box and leave it focused. AppShell's own "focus a
+    // text-entry control while the sheet is at Half" effect (keeps the
+    // on-screen keyboard from covering the field the visitor just tapped)
+    // fires on this very click/focus, raising the sheet from Half to Full —
+    // a real, intentional behavior this check has to account for below,
+    // not fight.
     const mobileSearch = page.locator("#param-search-input");
     await mobileSearch.click();
     await mobileSearch.fill("thick");
     check(
       await page.evaluate((id) => document.activeElement?.id === id, "param-search-input"),
       "search input holds focus before the breakpoint change"
+    );
+    check(
+      (await page.locator(".bottom-sheet--full").count()) === 1,
+      "sanity: focusing the search field raised the sheet from Half to Full (its own focus-while-at-half effect)"
     );
 
     // Flip the breakpoint (a real device rotation crossing 860px would fire
@@ -633,17 +2401,23 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
       (await page.getByRole("tab", { name: paramsTabName }).first().getAttribute("aria-selected")) === "true",
       "active tab survives the breakpoint change"
     );
-    check(
-      await page.evaluate((id) => document.activeElement?.id === id, "param-search-input"),
-      "search focus is restored after the breakpoint change"
-    );
+    // Poll rather than snapshot: the restore lands in a layout effect after
+    // the desktop tree commits, and other mount-time focus (Radix tabs) can
+    // hold the active element for a frame or two first. A bounded wait is
+    // what a user experiences; a one-shot read here was a long-lived flake.
+    const focusRestored = await page
+      .waitForFunction((id) => document.activeElement?.id === id, "param-search-input", { timeout: 2000 })
+      .then(() => true)
+      .catch(() => false);
+    check(focusRestored, "search focus is restored after the breakpoint change");
 
-    // Back to mobile: the sheet detent set above (Half) must not have reset
-    // to Peek just because the layout remounted.
+    // Back to mobile: the sheet detent set above (Full, via the focus effect
+    // just confirmed — not Half) must not have reset to Peek just because
+    // the layout remounted.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForSelector(".app-shell__mobile", { timeout: 3000 });
     check(
-      (await page.locator(".bottom-sheet--half").count()) === 1,
+      (await page.locator(".bottom-sheet--full").count()) === 1,
       "sheet detent survives a round-trip breakpoint change"
     );
 
@@ -657,6 +2431,9 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
       await page.waitForTimeout(50);
     }
     check((await page.locator(".bottom-sheet--peek").count()) === 1, "sheet returned to peek");
+    // PR4: the loop above changed detents at least once (half -> full and/or
+    // full -> peek) — the one-time hint must be dismissed by now.
+    check((await page.locator(".sheet-hint").count()) === 0, "sheet hint is dismissed after a detent change");
     check(
       !(await page.locator(".app-shell__mobile-background").getAttribute("inert").catch(() => null)),
       "background is not inert at peek"
@@ -714,16 +2491,516 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
       !(await page.locator(".app-shell__mobile-background").getAttribute("inert").catch(() => null)),
       "Escape collapses full and un-inerts the background"
     );
-  } finally {
-    await context.close();
-  }
+
+    // PR4: the hint's once-flag is a persisted (localStorage) preference —
+    // reloading must not re-arm it, even though the guided+half policy still
+    // lands the sheet at Half every time (it isn't itself persisted).
+    await page.reload({ waitUntil: "load" });
+    await settleFirstVisit(page);
+    await waitRenderDone(page).catch(() => {});
+    check(
+      (await page.locator(".bottom-sheet--half").count()) === 1,
+      "guided+half policy still starts the sheet at half after reload"
+    );
+    check(
+      (await page.locator(".sheet-hint").count()) === 0,
+      "sheet hint does not return after reload (once-flag)"
+    );
+  });
 }
 
+// Mobile peek is a real peek (PR14, rule 3): at the sheet's Peek detent, the
+// checklist card (compact OR full) must NOT mount inside the sheet — only a
+// slim, non-dismissible progress line may. BottomSheet measures the Peek
+// height from whatever sits between the sheet's top edge and its tab strip
+// (see BottomSheet.tsx's `measure()`), so a full card there balloons Peek
+// past "handle + tab strip", exactly the bug this milestone fixes. Needs its
+// own fresh mobile context: checkResponsiveLayout's context deliberately
+// dismisses every first-visit surface (settleFirstVisit) before it starts,
+// since ITS assertions are about focus/tab-order, not the checklist.
+async function checkMobileChecklistPeek({ browser, base, check }) {
+  console.log("=== mobile bottom sheet: checklist at peek/half/full (PR14) ===");
+  await withMobileContext(browser, async (page) => {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // The dogfood config's guided+half policy lands a fresh mobile visit at
+    // Half, not Peek — the checklist (compact; QuickStart is active for tag)
+    // shows normally there, above the tab strip.
+    check((await page.locator(".bottom-sheet--half").count()) === 1, "fresh mobile load starts at half (guided+half policy)");
+    check((await page.locator(".getting-started").count()) === 1, "checklist card shown inside the sheet at half");
+    check((await page.locator(".getting-started-peek").count()) === 0, "no peek strip while at half");
+
+    // Collapse to Peek (cycleDetent order is peek -> half -> full -> peek;
+    // nudge the handle deterministically the same way checkResponsiveLayout does).
+    for (let i = 0; i < 3 && !(await page.locator(".bottom-sheet--peek").count()); i++) {
+      await page.locator(".sheet-handle").click();
+      await page.waitForTimeout(50);
+    }
+    check((await page.locator(".bottom-sheet--peek").count()) === 1, "sheet reached peek");
+    check((await page.locator(".getting-started").count()) === 0, "no checklist card (compact or full) inside the sheet at peek");
+    const peekLine = page.locator(".getting-started-peek");
+    check((await peekLine.count()) === 1, "a slim progress line takes its place at peek");
+    check(/of \d+ complete/.test((await peekLine.textContent()) ?? ""), "the peek line carries the same task-progress copy");
+
+    await runAxe(page, check, "mobile sheet at peek with the checklist progress strip");
+
+    // Half again: the full checklist mounts back inside the sheet.
+    await page.locator(".sheet-handle").click(); // peek -> half
+    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
+    check((await page.locator(".getting-started").count()) === 1, "checklist card returns inside the sheet at half");
+    check((await page.locator(".getting-started-peek").count()) === 0, "peek strip is gone once raised off peek");
+
+    // Full: same rule (card mounts, not the slim strip).
+    await page.locator(".sheet-handle").click(); // half -> full
+    await page.waitForSelector(".bottom-sheet--full", { timeout: 3000 });
+    check((await page.locator(".getting-started").count()) === 1, "checklist card shown inside the sheet at full");
+    check((await page.locator(".getting-started-peek").count()) === 0, "no peek strip at full");
+  });
+}
+
+// PR16: mobile Messages is a full-height MODAL DIALOG, not a second bottom
+// surface stacked over the persistent sheet (see AppShell.tsx's own doc on
+// openOutput / the mobile JSX for the full rationale). Covers:
+//  - opening via the bell mounts exactly one surface: the reused
+//    <OutputConsole> lives INSIDE the dialog, and the sheet is hidden from
+//    assistive tech (Radix's own hideOthers) while it's up — never two
+//    stacked bottom surfaces.
+//  - closing (the console's own `.output-console__close`, or Escape) leaves
+//    the sheet's detent exactly where it was — nothing was ever moved by
+//    opening it, so there's nothing to "restore".
+//  - the bell still opens it (the toggle's close branch is exercised by the
+//    desktop checks elsewhere in this suite — see openConsole/closeOutput —
+//    since on mobile the bell sits UNDER the now-opaque dialog and can't be
+//    clicked at all while it's open, same as every other modal in the app).
+//  - the pre-existing auto-open-on-first-warning effect (AppShell's
+//    hasProblem) still fires on mobile, still doesn't touch the sheet's
+//    detent, and the one deliberate exception — stepping Full down to Half
+//    so this dialog's focus trap doesn't stack under the sheet's own Full-
+//    detent trap — actually holds a keyboard user inside a single trap.
+//  - axe with the console open on mobile.
+async function checkMobileOutputConsole({ browser, base, check, ids, paramsTabName }) {
+  console.log("=== mobile Messages: one bottom surface at a time (PR16) ===");
+  await withMobileContext(browser, async (page) => {
+    const sheetInert = () =>
+      page.evaluate(() => {
+        let el = document.querySelector(".bottom-sheet");
+        while (el) {
+          if (el.getAttribute("aria-hidden") === "true") return true;
+          el = el.parentElement;
+        }
+        return false;
+      });
+    await page.goto(base, { waitUntil: "load" });
+    await settleFirstVisit(page);
+    await waitRenderDone(page).catch(() => {});
+
+    check((await page.locator(".output-console").count()) === 0, "Messages starts closed");
+    // Guided+half policy (see checkResponsiveLayout) lands a fresh visit at Half.
+    check((await page.locator(".bottom-sheet--half").count()) === 1, "sheet starts at half");
+
+    console.log("--- opening via the bell ---");
+    await page.locator(".mobile-top-bar__output").click();
+    await page.waitForSelector('[role="dialog"]', { timeout: 3000 });
+    check((await page.locator('[role="dialog"]').count()) === 1, "the bell opens a single modal dialog");
+    check(
+      (await page.locator('[role="dialog"] .output-console').count()) === 1,
+      "the reused OutputConsole (Notices/Log/Metrics) lives INSIDE the dialog"
+    );
+    check((await page.locator(".output-console").count()) === 1, "exactly one .output-console in the DOM");
+    check(await sheetInert(), "the sheet is hidden from assistive tech while the dialog is open — never two stacked surfaces");
+    check(
+      (await page.locator(".bottom-sheet--half").count()) === 1,
+      "opening Messages left the sheet's own detent (half) untouched"
+    );
+
+    await runAxe(page, check, "mobile Messages open (modal dialog)");
+
+    console.log("--- closing restores nothing, because nothing moved ---");
+    await page.locator(".output-console__close").click();
+    await page.waitForSelector('[role="dialog"]', { state: "detached", timeout: 3000 });
+    check((await page.locator('[role="dialog"]').count()) === 0, "closing Messages removes the dialog");
+    check(!(await sheetInert()), "the sheet is reachable again once the dialog is gone");
+    check(
+      (await page.locator(".bottom-sheet--half").count()) === 1,
+      "the sheet is still exactly where it was (half) after closing"
+    );
+
+    if (ids.includes("tag")) {
+      console.log("--- auto-open on the first warning/assert (AppShell's hasProblem effect) ---");
+      await page.getByRole("tab", { name: paramsTabName }).first().click();
+      await page.waitForSelector(".quick-start", { timeout: 5000 }).catch(() => {});
+      if (await page.locator(".quick-start__step").count())
+        await page.locator(".quick-start__step").filter({ hasText: "Text" }).first().click();
+
+      // Raise the sheet to Full FIRST, driving the trip from controls INSIDE
+      // it (not the top bar bell — M16 marks the background `inert` and
+      // covers it with the sheet's own scrim at Full, so a bell click can
+      // never reach it there in the first place; the sheet's own content
+      // stays fully reachable at every detent, including Full). This is the
+      // one path that actually exercises openOutput's Full -> Half step-down
+      // (see its own doc in AppShell.tsx): the auto-open effect fires from
+      // this state change, not a click, so it's a faithful repro of the only
+      // way a maker could realistically hit "Messages wants to open while
+      // the sheet already covers the screen at Full".
+      for (let i = 0; i < 3 && !(await page.locator(".bottom-sheet--full").count()); i++) {
+        await page.locator(".sheet-handle").click();
+        await page.waitForTimeout(50);
+      }
+      check((await page.locator(".bottom-sheet--full").count()) === 1, "sheet reached full for this scenario");
+
+      await paramRow(page, "engrave_text").getByRole("switch").click();
+      // engrave_text && label != "" (default "ScadPub") && text_depth(3) >= thickness(3, default) -> assert.
+      await setNumField(page, "text_depth", 3);
+      await page
+        .waitForFunction(() => /Failed/.test(document.querySelector(".render-status")?.textContent || ""), {
+          timeout: 30000,
+        })
+        .catch(() => {});
+      check(
+        (await page.locator(".bottom-sheet--half").count()) === 1,
+        "auto-opening Messages from Full steps the sheet down to Half (avoids the sheet's own Full-detent trap stacking under the dialog's)"
+      );
+      let escaped = false;
+      for (let i = 0; i < 20; i++) {
+        await page.keyboard.press("Tab");
+        escaped = await page.evaluate(() => {
+          const dialog = document.querySelector('[role="dialog"]');
+          const el = document.activeElement;
+          return !el || el === document.body || !dialog?.contains(el);
+        });
+        if (escaped) break;
+      }
+      check(!escaped, "Tab never escapes the dialog while it's open (a single, unambiguous trap)");
+      check(
+        (await page.locator('[role="dialog"] .output-console').count()) === 1,
+        "a failed-assert render auto-opens Messages as the same modal dialog, unprompted"
+      );
+      check(
+        /engraved text is deeper than the plate/.test((await page.locator(".output-console").textContent()) ?? ""),
+        "the auto-opened console shows the assert's own message"
+      );
+      await page.locator(".output-console__close").click();
+      await page.waitForSelector('[role="dialog"]', { state: "detached", timeout: 3000 });
+    }
+  });
+}
+
+// Mobile action bar: single row, no wrap, real TEXT LABELS at typical phone
+// widths (design review directive: "Use text labels, not unexplained image
+// and chain-link icons" — icon-only is a last resort, not the default).
+// ActionButtons.tsx is the exact same component/markup on both layouts (see
+// its own doc) — only CSS (index.css's `.app-shell__mobile .action-cluster`/
+// `.action-dock` rules) makes mobile behave differently: two tiers below
+// ~460px shrink the primary's font/padding, and only below ~360px does
+// Share/More drop to icon-only. Verified across the full mobile-layout
+// breadth (320/360/390/430/600/820px — everything under the 860px
+// desktop/mobile breakpoint, including the 460-859px "mobile-layout
+// tablets" band the mid-range truncation bug lived in) rather than just the
+// narrowest phone widths.
+async function checkMobileActionBar({ browser, base, check }) {
+  console.log("=== mobile action bar: single row, real text labels, no truncation (320-820px) ===");
+  await withMobileContext(browser, async (page) => {
+    await page.goto(base, { waitUntil: "load" });
+    await settleFirstVisit(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // Whether an element's own text content is being clipped by CSS
+    // (overflow:hidden + truncate) rather than laid out at its natural size —
+    // the one thing the design review says must never happen to the primary
+    // label's text, at ANY of these widths.
+    const isTextClipped = (loc) =>
+      loc.evaluate((el) => el.scrollWidth > el.clientWidth + 1).catch(() => false);
+    // Whether an element is using the sr-only visually-hidden technique
+    // (position:absolute; width:1px; height:1px; clip:rect(0,0,0,0) — see
+    // index.css's tier-two `.action-btn-label` rule): Playwright's own
+    // `.isVisible()` is the WRONG tool for this — that 1x1 box still has a
+    // non-empty bounding rect and no display:none/visibility:hidden, so
+    // Playwright reports it "visible" even though no sighted visitor can
+    // read it. A real rendered label is comfortably wider than a couple of
+    // pixels ("Share"/"More" at even the smallest font here measure
+    // 25px+), so a tiny width threshold cleanly tells the two apart.
+    const isSrOnlyHidden = (loc) =>
+      loc.evaluate((el) => el.getBoundingClientRect().width <= 2).catch(() => true);
+
+    for (const width of [320, 360, 390, 430, 600, 820]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.waitForTimeout(150); // let the reflow settle
+      const box = await page.locator(".action-cluster").boundingBox();
+      // A wrapped (two-row) cluster is roughly 2x a single row's height; a
+      // single row measures well under this. 70px comfortably separates the
+      // two cases without pinning an exact, font/DPI-brittle figure.
+      check(!!box && box.height < 70, `action row is a single line at ${width}px (height ${box?.height})`);
+      check(!!box && box.x >= 0 && box.x + box.width <= width, `action row stays within the ${width}px viewport`);
+      check(
+        !(await isTextClipped(page.locator(".action-export__label"))),
+        `the primary "Download for 3D printing" label's TEXT is never truncated at ${width}px`
+      );
+      // Round-2 review fix (fa49bcb, item 4): the desktop-only format
+      // sublabel (checkExportMenus confirms it's visible there) would become
+      // a third flex item once the mobile single-row cluster forms — CSS
+      // drops it out of layout entirely (display:none, not just a hidden
+      // text) below the 860px breakpoint, which covers every width tested here.
+      check(
+        !(await page.locator(".action-export-format-note").isVisible()),
+        `the export card's format sublabel stays hidden on mobile at ${width}px`
+      );
+      // Round-2 review fix (fa49bcb, item 2): HUD buttons drop to size-9
+      // (36px) below the 860px breakpoint — every width in this loop
+      // qualifies. See checkViewerHudGrid's own desktop-side (size-10) check.
+      const hudBtnBox = await page.locator(".viewer-hud button").first().boundingBox();
+      check(
+        !!hudBtnBox && Math.round(hudBtnBox.width) === 36 && Math.round(hudBtnBox.height) === 36,
+        `viewer HUD buttons are size-9 (36px) at ${width}px (measured ${hudBtnBox?.width}x${hudBtnBox?.height})`
+      );
+
+      const share = page.locator(".action-share");
+      const more = page.locator(".action-more");
+      const shareLabelVisible = !(await isSrOnlyHidden(share.locator(".action-btn-label")));
+      const moreLabelVisible = !(await isSrOnlyHidden(more.locator(".action-btn-label")));
+      if (width >= 370) {
+        // Typical phone widths and up: ALL THREE controls carry real text —
+        // no unexplained icon-only chain-link/image glyphs.
+        check(shareLabelVisible, `Share shows its text label at ${width}px (>= ~370px)`);
+        check(moreLabelVisible, `More shows its text label at ${width}px (>= ~370px)`);
+      } else {
+        // Only below ~360px does the last-resort icon-only fallback apply —
+        // aria-label/title still carry the name for assistive tech (checked
+        // below, once, since it's width-independent).
+        check(!shareLabelVisible, `Share falls back to icon-only at ${width}px (< ~360px)`);
+        check(!moreLabelVisible, `More falls back to icon-only at ${width}px (< ~360px)`);
+      }
+    }
+
+    console.log("--- Share/More stay reachable by aria-label even when icon-only ---");
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.waitForTimeout(150);
+    const share = page.locator('[aria-label="Copy share link"]');
+    const more = page.locator('[aria-label="More"]');
+    check((await share.count()) === 1 && (await share.isVisible()), "Share is reachable by its aria-label");
+    check((await more.count()) === 1 && (await more.isVisible()), "More is reachable by its aria-label");
+
+    // Round-2 review fix (fa49bcb, item 3): the Share button's ICON is now
+    // Share2 in EVERY case, including this deterministic copy-link fallback
+    // (headless Chromium has no navigator.share) — it's still the Share
+    // button, just backed by a different mechanism; the accessible name
+    // (shareAria) still says "Copy share link" here, so the icon no longer
+    // tracks the branch the way it used to (was Link2 in this fallback,
+    // Share2 only for the native-share branch). The More menu's own separate,
+    // always-clipboard "Copy link" entry is the one place Link2 still shows —
+    // it only renders on a device where Share itself goes native (see line
+    // ~977's own check that it's absent here, in this same no-native-share
+    // environment), so its icon isn't independently exercisable in headless
+    // Chromium. lucide-react's default per-icon class (`.lucide-share-2` /
+    // `.lucide-link-2`) is a stable enough hook for this.
+    const hasNativeShare = await page.evaluate(() => "share" in navigator);
+    check(
+      !hasNativeShare,
+      "sanity: this headless browser has no navigator.share, so the copy-link fallback is the branch actually exercised"
+    );
+    check(
+      (await share.locator(".lucide-share-2").count()) === 1,
+      "Share shows the Share2 icon even in the copy-link fallback (no native share sheet here)"
+    );
+    check(
+      (await share.locator(".lucide-link-2").count()) === 0,
+      "Share does NOT show the Link2 (chain-link) icon — that glyph is reserved for the More menu's own Copy link entry"
+    );
+
+    console.log("--- More menu: \"Save image\" moved here off the always-visible row ---");
+    await more.click();
+    const saveImageItem = page.locator(".action-more-menu__save-image");
+    await saveImageItem.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    check((await saveImageItem.count()) === 1, "the More menu offers \"Save image\"");
+    await page.keyboard.press("Escape");
+    await saveImageItem.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+
+    console.log("--- export + the after-export panel still work (minimal — see checkExports for the full desktop flow) ---");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(100);
+    const [dl] = await Promise.all([page.waitForEvent("download"), page.click(".action-export")]);
+    check(!!dl, "Export still produces a download on the compact mobile bar");
+    const successPanel = page.locator(".export-success");
+    await successPanel.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    check((await successPanel.count()) === 1, "the after-export panel still appears");
+    const successBox = await successPanel.boundingBox();
+    const clusterBox = await page.locator(".action-cluster").boundingBox();
+    check(
+      !!successBox && !!clusterBox && successBox.y + successBox.height <= clusterBox.y + 1,
+      "the after-export panel rides above the action cluster (PR9's .action-dock), not overlapping it"
+    );
+  });
+}
+
+// Help modal mobile polish (PR19 item 4): the config-level intro collapses
+// into a closed <details> "About" disclosure below the mobile breakpoint (so
+// tabs + content lead instead of being pushed down), and the tab strip
+// scrolls horizontally on one row instead of wrapping to several. Desktop is
+// covered implicitly (untouched) by every other Help-modal check in this
+// suite, which all run at the desktop viewport.
+async function checkHelpModalMobile({ browser, base, check }) {
+  console.log("=== Help modal (mobile): intro collapses to \"About\", tab strip scrolls without wrapping ===");
+  await withMobileContext(browser, async (page) => {
+    await page.goto(base, { waitUntil: "load" });
+    await settleFirstVisit(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // The mobile top bar collapses theme/help/licenses into a "⋮" overflow
+    // popover (BarActions.tsx's `collapse` presentation) — open it first.
+    await page.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("button", { name: "Help", exact: true }).click();
+    const helpDialog = page.getByRole("dialog");
+    await helpDialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+
+    const about = helpDialog.locator("details.help-about");
+    check((await about.count()) === 1, "the config intro renders as a collapsible <details> \"About\" disclosure on mobile");
+    check(
+      !(await about.evaluate((el) => el.open)),
+      "the About disclosure starts collapsed, so the tabs aren't pushed down by it"
+    );
+    await about.locator("summary").click();
+    check(await about.evaluate((el) => el.open), "tapping the summary opens the About disclosure");
+    await about.locator("summary").click(); // collapse again before the rest of this check
+
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.waitForTimeout(150); // let the reflow settle
+      const rows = await page.evaluate(() => {
+        const tabs = Array.from(document.querySelectorAll('[role="dialog"] [role="tab"]'));
+        const tops = tabs.map((el) => el.getBoundingClientRect().top);
+        return { count: tabs.length, sameRow: tops.every((y) => Math.abs(y - tops[0]) < 1) };
+      });
+      check(rows.count >= 3, `at least the config's ${rows.count} help tabs are present at ${width}px`);
+      check(rows.sameRow, `all tab chips share one row at ${width}px — scrolling, not wrapping`);
+      const overflowX = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+      );
+      check(overflowX <= 0, `no horizontal page overflow at ${width}px (excess ${overflowX}px)`);
+    }
+
+    console.log("--- edge-fade affordance (PR23 item 3): appears/disappears with actual scroll position ---");
+    // The loop above leaves the viewport at 320px, the narrowest case and the
+    // one most likely to clip tabs.
+    const scroller = page.locator(".help-tabs-scroll");
+    const fadeState = () => scroller.getAttribute("data-fade");
+    check(
+      (await fadeState()) === "right" || (await fadeState()) === "both",
+      `unscrolled tab strip fades the right edge only (saw "${await fadeState()}") — more topics are off-screen there, none to the left yet`
+    );
+    await scroller.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
+    await page.waitForTimeout(50); // the scroll listener is passive/async
+    check(
+      (await fadeState()) === "left",
+      `scrolling all the way right flips the fade to the left edge only (saw "${await fadeState()}")`
+    );
+    await scroller.evaluate((el) => { el.scrollLeft = 0; });
+    await page.waitForTimeout(50);
+
+    console.log("--- tab strip keyboard operability: roving tabindex reaches every chip and scrolls it into view ---");
+    const tabs = helpDialog.getByRole("tab");
+    // Clicking a tab focuses AND activates it — the selection change swaps the
+    // tab panel and re-derives Radix's roving tabindex asynchronously. Pressing
+    // End before that settles was a recurring flake: wait until the click's
+    // focus has actually landed, press End, then POLL for the focus move (a
+    // keyboard user experiences the settled state, not the same-tick race).
+    await tabs.first().click();
+    await page.waitForFunction(
+      () => document.activeElement?.getAttribute("role") === "tab",
+      null,
+      { timeout: 2000 }
+    );
+    await page.keyboard.press("End"); // Radix roving focus: jump to the last tab
+    const endMovedFocus = await tabs
+      .last()
+      .evaluate(
+        (el) =>
+          new Promise((resolve) => {
+            const deadline = Date.now() + 2000;
+            const tick = () => {
+              if (document.activeElement === el) return resolve(true);
+              if (Date.now() > deadline) return resolve(false);
+              requestAnimationFrame(tick);
+            };
+            tick();
+          })
+      );
+    // Same poll discipline as the focus check above: the browser performs the
+    // focus-driven scroll in its own frame(s) after focus lands, so a one-shot
+    // containment read here raced it (recurring flake).
+    const lastVisible = await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const deadline = Date.now() + 2000;
+          const tick = () => {
+            const scrollEl = document.querySelector(".help-tabs-scroll");
+            const focused = document.activeElement;
+            if (scrollEl && focused) {
+              const box = focused.getBoundingClientRect();
+              const scrollBox = scrollEl.getBoundingClientRect();
+              if (box.left >= scrollBox.left - 1 && box.right <= scrollBox.right + 1) return resolve(true);
+            }
+            if (Date.now() > deadline) return resolve(false);
+            requestAnimationFrame(tick);
+          };
+          tick();
+        })
+    );
+    check(endMovedFocus, "pressing End on the tab strip moves focus to the last tab (Radix roving tabindex)");
+    check(lastVisible, "the newly-focused last tab is scrolled fully into view, not left clipped off-screen");
+    await page.keyboard.press("Home"); // leave the strip focused at the first tab for anything after this
+
+    await runAxe(page, check, "Help modal open on mobile (About collapsed, tabs scrollable)");
+    await page.keyboard.press("Escape");
+  });
+}
+
+// F10: ORDERING — main()'s call sequence below isn't arbitrary; several
+// checks are load-bearing on state (once-flags, Cache Storage, settings-view,
+// the checklist's dismiss/retirement flag, …) a PRIOR check left behind, and
+// reordering them would break that chain silently rather than loudly. This
+// map collects the ordering rationale that's otherwise scattered across each
+// check's own doc comment (kept in place below — this is a single point of
+// reference, not a replacement for them) into one list, in main()'s actual
+// call order:
+//   1. checkOfflineClaimToast runs FIRST, before anything else reloads the
+//      page or otherwise disturbs Cache Storage — it needs a genuine,
+//      deterministic cache-MISS download to exercise the offline-claim toast
+//      (see the sw.js route-block above and the check's own doc).
+//   2. checkGettingStarted deliberately leaves the checklist alive (compact,
+//      undismissed) for checkChecklistRetirement, right after it, to drive a
+//      real export against.
+//   3. checkViewerHint runs BEFORE checkChecklistRetirement: the gesture hint
+//      auto-fades 8s after first render if untouched, and that fade PERSISTS
+//      (the same once-flag a real dismiss uses) — running it first keeps its
+//      own wall-clock budget short and deterministic instead of racing
+//      checkChecklistRetirement's heavier reload/dialog round-trips.
+//   4. checkChecklistRetirement leaves the checklist DISMISSED (persisted)
+//      at the end — checkReadiness (much later) relies on exactly that: it
+//      brings the checklist back itself via the Help modal's replay row to
+//      check the live "Preview" status, and leaves it dismissed again
+//      afterward for whatever runs after it.
+//   5. checkSettingsView leaves the panel in "All settings" for checkQuickStart
+//      right after it (which switches to essentials to exercise QuickStart,
+//      then switches back) — and, transitively, for every later check that
+//      also expects the full, ungated panel: bundled presets' Import/Export
+//      row and checkTagDesign's @showIf/@collapsed checks.
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
   const browser = await launchChromium();
   const page = await browser.newPage();
+  // Block the service worker's own script (public/sw.js) for this whole run.
+  // Its `install` handler independently warms the render worker's binary
+  // cache (see sw.js's precacheBin) — on a fast loopback connection that
+  // background fetch usually wins the race against the render worker's own
+  // bootstrap download, leaving worker.ts with a Cache Storage HIT and no
+  // `loadProgress` events. checkOfflineClaimToast below needs a genuine,
+  // deterministic cache-miss download to exercise the offline-claim toast
+  // (useAppNotices.ts) reliably; nothing else in this suite depends on an
+  // actually-registered/controlling service worker (checkServiceWorker reads
+  // sw.js's raw source via an HTTP GET, not through a live registration).
+  await page.context().route("**/sw.js*", (route) => route.abort());
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   let failures = 0;
@@ -749,20 +3026,48 @@ async function main() {
     await waitRendered(page, ids[0]);
 
     const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName };
+    // Runs first, before anything else reloads the page or otherwise disturbs
+    // Cache Storage — see the check's own doc comment for why ordering matters.
+    await checkOfflineClaimToast(ctx);
     await checkWelcomePopup(ctx);
+    await checkGettingStarted(ctx);
+    // Runs BEFORE checkChecklistRetirement (which drives a real export
+    // through several reload/dialog round-trips) — the viewer gesture hint
+    // auto-fades 8s after its first successful render if untouched
+    // (ViewerGestureHint.tsx's FADE_TIMEOUT_MS), and that fade PERSISTS (the
+    // same once-flag a real dismiss uses) — ordering it here keeps this
+    // check's own wall-clock budget short and deterministic instead of
+    // racing checkChecklistRetirement's heavier round-trips.
+    await checkViewerHint(ctx);
+    await checkChecklistRetirement(ctx);
+    await checkDesignPickerDialog(ctx);
+    await checkSettingsView(ctx);
+    await checkQuickStart(ctx);
     await checkFileImport(ctx);
+    await checkFilesCards(ctx);
     await checkThemeToggle(ctx);
     await checkIdleRenderCount(ctx);
     await checkAxe(ctx);
     await checkEveryDesignRenders(ctx);
     await checkBundledPresets(ctx);
     await checkPresetImport(ctx);
+    await checkPresetSaveReveal(ctx);
+    await checkExportMenus(ctx);
     await checkExports(ctx);
     await checkPreviewControls(ctx);
+    await checkViewerHudGrid(ctx);
     await checkServiceWorker(ctx);
     await checkTagDesign(ctx);
+    await checkReadiness(ctx);
+    await checkFilesFontMissingCard(ctx);
     await checkSignageDesign(ctx);
     await checkResponsiveLayout(ctx);
+    await checkQuickStartMobile(ctx);
+    await checkExportAttentionReviewRoutingMobile(ctx);
+    await checkMobileChecklistPeek(ctx);
+    await checkMobileOutputConsole(ctx);
+    await checkMobileActionBar(ctx);
+    await checkHelpModalMobile(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);

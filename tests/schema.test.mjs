@@ -93,6 +93,95 @@ test("validates the model format", () => {
   assert.throws(() => validateSchema({ ...validBase(), format: "obj" }), /'format' must be/);
 });
 
+test("validates the optional ui.gallery flag", () => {
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { gallery: true } }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { gallery: false } }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: {} }));
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { gallery: "yes" } }),
+    /'ui\.gallery' must be a boolean/
+  );
+});
+
+test("validates the optional ui.checklist flag", () => {
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { checklist: true } }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { checklist: false } }));
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { checklist: "yes" } }),
+    /'ui\.checklist' must be a boolean/
+  );
+});
+
+test("validates the optional per-design image (distinct from icon)", () => {
+  const ok = validBase();
+  ok.designs[0].image = "scad/x-image.png";
+  assert.doesNotThrow(() => validateSchema(ok));
+  ok.designs[0].image = null;
+  assert.doesNotThrow(() => validateSchema(ok));
+  const bad = validBase();
+  bad.designs[0].image = 5;
+  assert.throws(() => validateSchema(bad), /design 'x' 'image' must be a string URL/);
+});
+
+test("validates the optional per-design badge", () => {
+  const ok = validBase();
+  ok.designs[0].badge = "Popular";
+  assert.doesNotThrow(() => validateSchema(ok));
+  ok.designs[0].badge = null;
+  assert.doesNotThrow(() => validateSchema(ok));
+  const bad = validBase();
+  bad.designs[0].badge = 5;
+  assert.throws(() => validateSchema(bad), /design 'x' 'badge' must be a string/);
+});
+
+test("validates the optional per-design presetImages", () => {
+  const ok = validBase();
+  ok.designs[0].presetImages = { Tall: "scad/x-preset-0.svg" };
+  assert.doesNotThrow(() => validateSchema(ok));
+  ok.designs[0].presetImages = undefined;
+  assert.doesNotThrow(() => validateSchema(ok));
+  const badShape = validBase();
+  badShape.designs[0].presetImages = ["Tall"];
+  assert.throws(() => validateSchema(badShape), /design 'x' 'presetImages' must be an object/);
+  const badValue = validBase();
+  badValue.designs[0].presetImages = { Tall: 5 };
+  assert.throws(
+    () => validateSchema(badValue),
+    /design 'x' 'presetImages\.Tall' must be a non-empty string URL/
+  );
+});
+
+test("validates the optional per-design reviewLabels and reviewNote", () => {
+  const ok = validBase();
+  ok.designs[0].reviewLabels = { label: "Text" };
+  ok.designs[0].reviewNote = "Text prints in capitals.";
+  assert.doesNotThrow(() => validateSchema(ok));
+  ok.designs[0].reviewLabels = undefined;
+  ok.designs[0].reviewNote = null;
+  assert.doesNotThrow(() => validateSchema(ok));
+  const badShape = validBase();
+  badShape.designs[0].reviewLabels = ["label"];
+  assert.throws(() => validateSchema(badShape), /design 'x' 'reviewLabels' must be an object/);
+  const badValue = validBase();
+  badValue.designs[0].reviewLabels = { label: 5 };
+  assert.throws(
+    () => validateSchema(badValue),
+    /design 'x' 'reviewLabels\["label"\]' must be a non-empty string/
+  );
+  const badNote = validBase();
+  badNote.designs[0].reviewNote = 5;
+  assert.throws(() => validateSchema(badNote), /design 'x' 'reviewNote' must be a string/);
+});
+
+test("validates the optional ui.workflow flag", () => {
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { workflow: "tabs" } }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { workflow: "guided" } }));
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { workflow: "wizard" } }),
+    /'ui\.workflow' must be "tabs" or "guided"/
+  );
+});
+
 test("validates the optional per-design collapsedSections", () => {
   const ok = validBase();
   ok.designs[0].collapsedSections = ["Advanced"];
@@ -236,7 +325,7 @@ test("validates the optional fileImport shape", () => {
 test("validates the optional popup shape", () => {
   // null/absent is fine (the default).
   assert.doesNotThrow(() => validateSchema({ ...validBase(), popup: null }));
-  for (const mode of ["always", "once", "dismissible"]) {
+  for (const mode of ["always", "once", "dismissible", "picker"]) {
     assert.doesNotThrow(() =>
       validateSchema({ ...validBase(), popup: { header: "Hi", body: "Body", mode } })
     );
@@ -270,5 +359,27 @@ test("validates the optional popup shape", () => {
         popup: { header: "x", body: "y", mode: "once", button: "" },
       }),
     /'popup\.button', when set, must be a non-empty string/
+  );
+  // optional footer footnote ("picker" mode's welcome variant): a string
+  // (any mode — the app just ignores it outside "picker") or null is fine.
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      popup: { header: "Hi", body: "Body", mode: "picker", footnote: "No uploads." },
+    })
+  );
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      popup: { header: "Hi", body: "Body", mode: "picker", footnote: null },
+    })
+  );
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        popup: { header: "x", body: "y", mode: "picker", footnote: 5 },
+      }),
+    /'popup\.footnote', when set, must be a string/
   );
 });

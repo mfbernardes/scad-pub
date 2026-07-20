@@ -1,0 +1,9 @@
+{
+  "source": "src",
+  "features": [],
+  "fonts": [],
+  "strings": {
+    "action.imag": "Bild"
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

@@ -92,6 +92,19 @@ test("headStyleInjection: double-quotes in extraCss are escaped to prevent HTML 
   assert.match(out, /href="evil&quot;onload=&quot;alert\(1\)"/);
 });
 
+test("colorStyle passes through the new shape/semantic token names verbatim", () => {
+  // configCss itself doesn't own the allow-list (gen-schema's COLOR_TOKENS
+  // does, see tests/gen-schema.test.mjs) — it only enforces the structural
+  // safety regexes, which the new tokens' names/values (multi-part shadow
+  // strings included) must still satisfy.
+  const css = colorStyle({
+    light: { "radius-card": "14px", "shadow-1": "0 1px 3px rgba(20, 30, 60, 0.08)", "warn-bg": "#fff8e9" },
+  });
+  assert.match(css, /--radius-card: 14px;/);
+  assert.match(css, /--shadow-1: 0 1px 3px rgba\(20, 30, 60, 0\.08\);/);
+  assert.match(css, /--warn-bg: #fff8e9;/);
+});
+
 test("escapeHtml neutralises element-text and attribute breakouts", () => {
   // Element-text context (<title>): a closing tag must not survive.
   assert.equal(

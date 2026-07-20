@@ -1,0 +1,8 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "ui": { "workflow": "guided" },
+  "designs": [
+    { "id": "widget", "label": "Widget" }
+  ]
+}

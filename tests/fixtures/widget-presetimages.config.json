@@ -1,0 +1,11 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "designs": [
+    {
+      "id": "widget",
+      "label": "Widget",
+      "presetImages": { "Tall": "logo.svg" }
+    }
+  ]
+}

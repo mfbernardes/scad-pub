@@ -23,6 +23,7 @@ import {
   firstSentence,
   parseEnumHint,
   parseColors,
+  COLOR_TOKENS,
   parseLicenses,
   parseFileImport,
   parsePopup,
@@ -31,10 +32,12 @@ import {
   parseNotices,
   parseUi,
   parseParams,
+  unsteppedEssentialSections,
   parseFontFallback,
   parseLang,
   parseDir,
   parseRender,
+  parseStrings,
   renderFontsConf,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
@@ -282,6 +285,40 @@ test("lang/dir default to en/ltr and pass through to the schema", () => {
   assert.equal(schema.dir, "rtl");
 });
 
+// src/generated/locales.json — the runtime-only subset of src/locales/*.json
+// src/lib/i18n.ts actually imports (see gen-schema.mjs's GENERATED_LOCALES
+// comment). src/locales/en.json and de.json stay the SOURCE of truth (see
+// tests/i18n.test.mjs's own key-parity check); these tests are the
+// regression net for the generated artifact staying in sync with them.
+const readLocales = (out) => JSON.parse(readFileSync(join(out, "schema", "locales.json"), "utf-8"));
+const rawBundle = (tag) => JSON.parse(readFileSync(join(HERE, "..", "src", "locales", `${tag}.json`), "utf-8"));
+
+test("generated locales: an English (default) build emits only the English bundle", () => {
+  const { out } = run("widget-autodeps.config.json");
+  const locales = readLocales(out);
+  assert.deepEqual(Object.keys(locales), ["en"]);
+  assert.deepEqual(locales.en, rawBundle("en"));
+});
+
+test("generated locales: a bundled non-English 'lang' also emits that locale's bundle", () => {
+  const { schema, out } = run("widget-lang-de.config.json");
+  assert.equal(schema.lang, "de-AT"); // primary-subtag resolution ("de-AT" -> "de") happens at read time, not here
+  const locales = readLocales(out);
+  assert.deepEqual(new Set(Object.keys(locales)), new Set(["en", "de"]));
+  assert.deepEqual(locales.en, rawBundle("en"));
+  assert.deepEqual(locales.de, rawBundle("de"));
+});
+
+test("generated locales: an unbundled 'lang' (no matching src/locales/*.json) falls back to English alone", () => {
+  // widget-designmeta.config.json's lang is "pt-BR" — a valid BCP-47 tag, but
+  // there is no src/locales/pt.json, matching i18n.ts's own runtime fallback
+  // (BUNDLES[primarySubtag] ?? "en" — see tests/i18n.test.mjs's "an unbundled
+  // locale falls back to English entirely").
+  const { out } = run("widget-designmeta.config.json");
+  const locales = readLocales(out);
+  assert.deepEqual(Object.keys(locales), ["en"]);
+});
+
 test("render tuning and defaultDesign pass through to the schema", () => {
   const { schema } = run("widget-designmeta.config.json");
   assert.deepEqual(schema.render, { heavyMs: 9000, cache: { maxEntries: 4, persistent: false } });
@@ -312,6 +349,103 @@ test("per-design description + icon are parsed, copied and served", () => {
   assert.equal(collapsible.description, "A collapsible gadget.");
   assert.equal(collapsible.icon, "scad/collapsible-icon.svg");
   assert.ok(existsSync(join(out, "scad", "collapsible-icon.svg")));
+});
+
+test("per-design badge: an optional plain string, no annotation fallback", () => {
+  const { schema } = run("widget-designmeta.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  const collapsible = schema.designs.find((d) => d.id === "collapsible");
+  assert.equal(widget.badge, "Popular");
+  // Unlike description/icon/image/doc, badge has no `// @badge` annotation to
+  // fall back to — a design that doesn't set it in config gets null.
+  assert.equal(collapsible.badge, null);
+});
+
+test("a blank badge fails the build like the other design string fields", () => {
+  assert.throws(
+    () => run("widget-bad-badge.config.json"),
+    /design 'widget' 'badge' must be a non-empty string/
+  );
+});
+
+test("per-design image is parsed, copied and served (config + annotation paths, distinct from icon)", () => {
+  const { schema, out } = run("widget-designmeta.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  const collapsible = schema.designs.find((d) => d.id === "collapsible");
+  // Config `designs[].image` wins, resolved config-relative (like `icon`), and
+  // copied under a distinct <id>-image.<ext> name so a design can carry both.
+  assert.equal(widget.image, "scad/widget-image.svg");
+  assert.notEqual(widget.image, widget.icon);
+  assert.ok(existsSync(join(out, "scad", "widget-image.svg")));
+  // collapsible sets no config image, so it falls back to its `// @image`
+  // annotation (resolved relative to the design file).
+  assert.equal(collapsible.image, "scad/collapsible-image.svg");
+  assert.ok(existsSync(join(out, "scad", "collapsible-image.svg")));
+});
+
+test("a design with no image / @image has image null", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].image ?? null, null);
+});
+
+test("presetImages: a name matching a bundled preset is resolved, copied and served", () => {
+  const { schema, out } = run("widget-presetimages.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  assert.deepEqual(widget.presetImages, { Tall: "scad/widget-preset-0.svg" });
+  assert.ok(existsSync(join(out, "scad", "widget-preset-0.svg")));
+});
+
+test("a design with no configured presetImages omits the field entirely", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].presetImages, undefined);
+});
+
+test("presetImages: a name not matching any bundled preset fails the build", () => {
+  assert.throws(
+    () => run("widget-presetimages-badname.config.json"),
+    /'presetImages\["Nope"\]' does not match any bundled preset name in 'widget\.json'/
+  );
+});
+
+test("presetImages: a blank value fails the build like the other design string fields", () => {
+  assert.throws(
+    () => run("widget-presetimages-badtype.config.json"),
+    /'presetImages\["Tall"\]' must be a non-empty string/
+  );
+});
+
+test("presetImages: a design with no bundled presets at all fails the build with a clear reason", () => {
+  assert.throws(
+    () => run("widget-presetimages-nopresets.config.json"),
+    /'presetImages\["Anything"\]' does not match any bundled preset — design 'collapsible' has no bundled presets/
+  );
+});
+
+test("reviewLabels: keys matching declared params are resolved, plus a reviewNote string", () => {
+  const { schema } = run("widget-reviewlabels.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  assert.deepEqual(widget.reviewLabels, { label: "Text", FontSize: "Text", thickness: "Thickness" });
+  assert.equal(widget.reviewNote, "Text prints in capitals even though you typed it in lowercase.");
+});
+
+test("a design with no configured reviewLabels/reviewNote omits/nulls them", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].reviewLabels, undefined);
+  assert.equal(schema.designs[0].reviewNote ?? null, null);
+});
+
+test("reviewLabels: a key not matching any declared parameter fails the build", () => {
+  assert.throws(
+    () => run("widget-reviewlabels-badname.config.json"),
+    /'reviewLabels\["nope"\]' does not match any declared parameter/
+  );
+});
+
+test("reviewLabels: a blank value fails the build like the other design string fields", () => {
+  assert.throws(
+    () => run("widget-reviewlabels-badtype.config.json"),
+    /'reviewLabels\["label"\]' must be a non-empty string/
+  );
 });
 
 test("per-design @doc is resolved, copied and served (config + annotation paths)", () => {
@@ -351,16 +485,17 @@ test("a missing @doc target fails the build", () => {
   );
 });
 
-test("parseParams captures file-level @description / @icon / @doc metadata", () => {
+test("parseParams captures file-level @description / @icon / @image / @doc metadata", () => {
   const { meta } = parseParams(join(FIXTURES, "src", "collapsible.scad"));
   assert.deepEqual(meta, {
     description: "A collapsible gadget.",
     icon: "assets/emblem.svg",
+    image: "assets/emblem.svg",
     doc: "collapsible-doc.md",
   });
   // A design file with no such annotations reports nulls.
   const plain = parseParams(join(FIXTURES, "mini.scad"));
-  assert.deepEqual(plain.meta, { description: null, icon: null, doc: null });
+  assert.deepEqual(plain.meta, { description: null, icon: null, image: null, doc: null });
 });
 
 test("lang/dir + per-design shortcut icons + screenshot fields reach the manifest", () => {
@@ -502,6 +637,13 @@ test("an `assets` entry that escapes the source root fails the build", () => {
 
 test("a design `file` that escapes the source root fails the build", () => {
   assert.throws(() => run("widget-escape-file.config.json"), /escapes the source root/);
+});
+
+test("F4: a config `designs[].image` that escapes the config directory fails the build", () => {
+  // Unlike icon/doc (deliberately unchecked for a config-relative path — see
+  // buildDesigns' own comment), `image` is now checked against CONFIG_DIR the
+  // same way its `// @image` annotation counterpart is checked against SOURCE.
+  assert.throws(() => run("widget-escape-image.config.json"), /escapes the source root/);
 });
 
 test("a missing use/include target names the missing path and the referencing file", () => {
@@ -809,6 +951,33 @@ test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () =>
   assert.throws(() => parseUi({ zoom: 1 }), /'ui\.zoom' must be a boolean/);
 });
 
+test("ui.grid defaults to \"off\", accepts \"off\"/\"on\", rejects anything else", () => {
+  assert.equal(parseUi(undefined).grid, "off");
+  assert.equal(parseUi({}).grid, "off");
+  assert.equal(parseUi({ grid: "on" }).grid, "on");
+  assert.equal(parseUi({ grid: "off" }).grid, "off");
+  assert.throws(() => parseUi({ grid: "true" }), /'ui\.grid' must be one of "off", "on"/);
+  assert.throws(() => parseUi({ grid: true }), /'ui\.grid' must be one of "off", "on"/);
+});
+
+test("ui.gallery defaults to false, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).gallery, false);
+  assert.equal(parseUi({}).gallery, false);
+  assert.equal(parseUi({ gallery: true }).gallery, true);
+  assert.equal(parseUi({ gallery: false }).gallery, false);
+  assert.throws(() => parseUi({ gallery: "yes" }), /'ui\.gallery' must be a boolean/);
+  assert.throws(() => parseUi({ gallery: 1 }), /'ui\.gallery' must be a boolean/);
+});
+
+test("ui.checklist defaults to true, accepts a boolean, rejects non-booleans", () => {
+  assert.equal(parseUi(undefined).checklist, true);
+  assert.equal(parseUi({}).checklist, true);
+  assert.equal(parseUi({ checklist: false }).checklist, false);
+  assert.equal(parseUi({ checklist: true }).checklist, true);
+  assert.throws(() => parseUi({ checklist: "no" }), /'ui\.checklist' must be a boolean/);
+  assert.throws(() => parseUi({ checklist: 0 }), /'ui\.checklist' must be a boolean/);
+});
+
 test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
   assert.equal(parseUi(undefined).presetsLabel, "Presets");
   assert.equal(parseUi(undefined).parametersLabel, "Customize");
@@ -816,6 +985,45 @@ test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-stri
   assert.equal(parseUi({ parametersLabel: "Options" }).parametersLabel, "Options");
   assert.throws(() => parseUi({ presetsLabel: "  " }), /'ui\.presetsLabel' must be a non-empty string/);
   assert.throws(() => parseUi({ parametersLabel: 5 }), /'ui\.parametersLabel' must be a non-empty string/);
+});
+
+test("ui.experience is absent by default and accepts each valid field", () => {
+  assert.equal(parseUi(undefined).experience, undefined);
+  assert.equal(parseUi({}).experience, undefined);
+  assert.deepEqual(parseUi({ experience: { default: "guided" } }).experience, { default: "guided" });
+  assert.deepEqual(parseUi({ experience: { settingsView: "essentials" } }).experience, {
+    settingsView: "essentials",
+  });
+  assert.deepEqual(parseUi({ experience: { mobileInitialSheet: "half" } }).experience, {
+    mobileInitialSheet: "half",
+  });
+  assert.deepEqual(
+    parseUi({
+      experience: { default: "standard", settingsView: "all", mobileInitialSheet: "peek" },
+    }).experience,
+    { default: "standard", settingsView: "all", mobileInitialSheet: "peek" }
+  );
+});
+
+test("ui.experience rejects invalid enum values and unknown nested keys", () => {
+  assert.throws(
+    () => parseUi({ experience: { default: "expert" } }),
+    /'ui\.experience\.default' must be one of "guided", "standard"/
+  );
+  assert.throws(
+    () => parseUi({ experience: { settingsView: "basic" } }),
+    /'ui\.experience\.settingsView' must be one of "essentials", "all"/
+  );
+  assert.throws(
+    () => parseUi({ experience: { mobileInitialSheet: "full" } }),
+    /'ui\.experience\.mobileInitialSheet' must be one of "peek", "half"/
+  );
+  assert.throws(
+    () => parseUi({ experience: { defualt: "guided" } }),
+    /unknown 'ui\.experience' key 'defualt'/
+  );
+  assert.throws(() => parseUi({ experience: "guided" }), /'ui\.experience' must be an object/);
+  assert.throws(() => parseUi({ experience: [] }), /'ui\.experience' must be an object/);
 });
 
 test("notices are off by default (omitted -> [])", () => {
@@ -854,6 +1062,64 @@ test("notices: validates shape, marker, label and colour", () => {
   assert.throws(
     () => parseNotices([{ marker: "n", color: "#fff; } body { display:none" }]),
     /'notices\[0\]\.color' must be a plain CSS colour/
+  );
+});
+
+// PR22: `labelOne` is an optional singular override for `label`, used
+// wherever a live count renders alongside it (see src/lib/diagnostics.ts's
+// noticeLabel and docs/config.md's Notice badges section).
+test("notices: labelOne is optional, trimmed, and validated like label", () => {
+  assert.deepEqual(parseNotices([{ marker: "alert", label: "alerts", labelOne: " alert " }]), [
+    { marker: "alert", label: "alerts", labelOne: "alert" },
+  ]);
+  assert.deepEqual(parseNotices([{ marker: "note" }]), [{ marker: "note", label: "note" }]);
+  assert.throws(
+    () => parseNotices([{ marker: "n", labelOne: "  " }]),
+    /'notices\[0\]\.labelOne' must be a non-empty string/
+  );
+});
+
+// PR13: `attention` flags a notice category as a production-readiness
+// concern (src/lib/readiness.ts) rather than a routine, passive notice —
+// see docs/config.md's Notice badges section.
+test("notices: attention is off by default and sparse-emitted (omitted, not false, when not set)", () => {
+  assert.deepEqual(parseNotices([{ marker: "note" }]), [{ marker: "note", label: "note" }]);
+  assert.deepEqual(parseNotices([{ marker: "note", attention: false }]), [{ marker: "note", label: "note" }]);
+});
+
+test("notices: attention: true is preserved on the normalised entry", () => {
+  assert.deepEqual(parseNotices([{ marker: "alert", attention: true }]), [
+    { marker: "alert", label: "alert", attention: true },
+  ]);
+});
+
+test("notices: attention validates as a boolean", () => {
+  assert.throws(
+    () => parseNotices([{ marker: "n", attention: "yes" }]),
+    /'notices\[0\]\.attention' must be a boolean/
+  );
+});
+
+// Wave 1 (round-5): `subsumedByFont` marks an attention-flagged category as
+// a symptom of a missing font rather than its own distinct issue (see
+// src/lib/readiness.ts's deriveAttention and docs/config.md's Notice badges
+// section) — sparse-emitted exactly like `attention`.
+test("notices: subsumedByFont is off by default and sparse-emitted (omitted, not false, when not set)", () => {
+  assert.deepEqual(parseNotices([{ marker: "note" }]), [{ marker: "note", label: "note" }]);
+  assert.deepEqual(parseNotices([{ marker: "note", subsumedByFont: false }]), [{ marker: "note", label: "note" }]);
+});
+
+test("notices: subsumedByFont: true is preserved on the normalised entry, alongside attention", () => {
+  assert.deepEqual(
+    parseNotices([{ marker: "alert", attention: true, subsumedByFont: true }]),
+    [{ marker: "alert", label: "alert", attention: true, subsumedByFont: true }]
+  );
+});
+
+test("notices: subsumedByFont validates as a boolean", () => {
+  assert.throws(
+    () => parseNotices([{ marker: "n", subsumedByFont: "yes" }]),
+    /'notices\[0\]\.subsumedByFont' must be a boolean/
   );
 });
 
@@ -1036,6 +1302,39 @@ test("parseColors validates tokens and values", () => {
   assert.throws(() => parseColors({ dark: "#fff" }), /'colors\.dark' must be an object/);
 });
 
+test("colors: the visual-redesign token layer (radius roles, shadow scale, warn/success) is overridable", () => {
+  // The new roles introduced alongside src/index.css's --space-*/--radius-*/
+  // --shadow-*/--warn-bg/--success/--success-bg tokens must be reachable from
+  // a deployment config exactly like the pre-existing shape tokens (radius,
+  // elevation, glass-*) — this is the config-facing half of that token
+  // contract; --space-* is deliberately NOT in COLOR_TOKENS (internal layout,
+  // not a per-deployment design token).
+  for (const token of [
+    "radius-control",
+    "radius-card",
+    "radius-panel",
+    "shadow-1",
+    "shadow-2",
+    "shadow-3",
+    "warn-bg",
+    "success",
+    "success-bg",
+  ]) {
+    assert.ok(COLOR_TOKENS.includes(token), `COLOR_TOKENS must list '${token}'`);
+  }
+  assert.ok(!COLOR_TOKENS.includes("space-1"), "spacing tokens stay internal, not config-overridable");
+  assert.deepEqual(
+    parseColors({
+      light: { "radius-card": "18px", success: "#1f7a3d" },
+      dark: { "shadow-2": "0 6px 18px rgba(0, 0, 0, 0.5)" },
+    }),
+    {
+      light: { "radius-card": "18px", success: "#1f7a3d" },
+      dark: { "shadow-2": "0 6px 18px rgba(0, 0, 0, 0.5)" },
+    }
+  );
+});
+
 test("help: tabs pass through to the schema verbatim", () => {
   const { schema } = run("widget-help-tabs.config.json");
   assert.equal(schema.help.intro, "Shared intro shown above every tab.");
@@ -1050,6 +1349,54 @@ test("help: tabs pass through to the schema verbatim", () => {
 test("help defaults to null when omitted", () => {
   const { schema } = run("widget-autodeps.config.json");
   assert.equal(schema.help, null);
+});
+
+test("ui.afterExport is absent by default and accepts each valid field", () => {
+  assert.equal(parseUi(undefined).afterExport, undefined);
+  assert.equal(parseUi({}).afterExport, undefined);
+  assert.deepEqual(parseUi({ afterExport: { title: "Done" } }).afterExport, { title: "Done" });
+  assert.deepEqual(parseUi({ afterExport: { body: "Next steps" } }).afterExport, { body: "Next steps" });
+  assert.deepEqual(parseUi({ afterExport: { helpTab: "Printing" } }).afterExport, { helpTab: "Printing" });
+  assert.deepEqual(
+    parseUi({ afterExport: { title: " Done ", body: "Next", helpTab: "Printing" } }).afterExport,
+    { title: "Done", body: "Next", helpTab: "Printing" }
+  );
+});
+
+test("ui.afterExport rejects empty/wrong-typed fields, unknown keys and wrong shapes", () => {
+  assert.throws(
+    () => parseUi({ afterExport: { title: "" } }),
+    /'ui\.afterExport\.title' must be a non-empty string/
+  );
+  assert.throws(
+    () => parseUi({ afterExport: { helpTab: 3 } }),
+    /'ui\.afterExport\.helpTab' must be a non-empty string/
+  );
+  assert.throws(
+    () => parseUi({ afterExport: { subtitle: "x" } }),
+    /unknown 'ui\.afterExport' key 'subtitle'/
+  );
+  assert.throws(() => parseUi({ afterExport: "on" }), /'ui\.afterExport' must be an object/);
+  assert.throws(() => parseUi({ afterExport: [] }), /'ui\.afterExport' must be an object/);
+});
+
+test("ui.afterExport.helpTab: build succeeds when it names a real help tab", () => {
+  const { schema } = run("widget-afterexport-ok.config.json");
+  assert.equal(schema.ui.afterExport.helpTab, "Printing");
+});
+
+test("ui.afterExport.helpTab: build fails when no help tab has that label", () => {
+  assert.throws(
+    () => run("widget-afterexport-bad.config.json"),
+    /'ui\.afterExport\.helpTab' is "Nope", but no 'help' tab has that label/
+  );
+});
+
+test("ui.afterExport.helpTab: build fails with a clear message when the config has no help tabs at all", () => {
+  assert.throws(
+    () => run("widget-afterexport-notabs.config.json"),
+    /This config's 'help' has no tabs defined/
+  );
 });
 
 test("licenses: extra entries are appended, sanitised, and unknown keys dropped", () => {
@@ -1196,7 +1543,7 @@ test("parsePopup: defaults, modes, links and errors", () => {
     mode: "once",
   });
   // Every mode is accepted; body may carry Markdown links.
-  for (const mode of ["always", "once", "dismissible"]) {
+  for (const mode of ["always", "once", "dismissible", "picker"]) {
     assert.deepEqual(
       parsePopup({ header: "H", body: "See [docs](https://x).", mode }),
       { header: "H", body: "See [docs](https://x).", mode }
@@ -1209,7 +1556,16 @@ test("parsePopup: defaults, modes, links and errors", () => {
     { header: "H", body: "B", mode: "once", button: "Start designing" }
   );
   assert.equal("button" in parsePopup({ header: "H", body: "B" }), false);
-  // Wrong shapes / missing required fields / bad mode / blank button -> clear errors.
+  // "picker" mode's optional footer footnote passes through the same way;
+  // absent -> omitted, null -> also omitted (both mean "no note").
+  assert.deepEqual(
+    parsePopup({ header: "H", body: "B", mode: "picker", footnote: "No uploads." }),
+    { header: "H", body: "B", mode: "picker", footnote: "No uploads." }
+  );
+  assert.equal("footnote" in parsePopup({ header: "H", body: "B", mode: "picker" }), false);
+  assert.equal("footnote" in parsePopup({ header: "H", body: "B", mode: "picker", footnote: null }), false);
+  // Wrong shapes / missing required fields / bad mode / blank button / blank
+  // footnote -> clear errors.
   assert.throws(() => parsePopup([]), /'popup' must be an object/);
   assert.throws(() => parsePopup({ body: "x" }), /'popup\.header' is required/);
   assert.throws(() => parsePopup({ header: "x" }), /'popup\.body' is required/);
@@ -1222,6 +1578,62 @@ test("parsePopup: defaults, modes, links and errors", () => {
     () => parsePopup({ header: "x", body: "y", button: "  " }),
     /'popup\.button', when set, must be a non-empty string/
   );
+  assert.throws(
+    () => parsePopup({ header: "x", body: "y", mode: "picker", footnote: "  " }),
+    /'popup\.footnote', when set, must be a non-empty string/
+  );
+});
+
+test("strings: valid overrides pass through into the schema", () => {
+  const { schema } = run("widget-strings.config.json");
+  assert.deepEqual(schema.strings, {
+    "action.image": "Bild",
+    "action.share": "Teilen",
+  });
+});
+
+test("strings: absent -> {}", () => {
+  const { schema } = run("widget-autodeps.config.json");
+  assert.deepEqual(schema.strings, {});
+});
+
+test("strings: unknown key fails the build with a did-you-mean suggestion", () => {
+  assert.throws(
+    () => run("widget-bad-strings.config.json"),
+    /unknown 'strings' key 'action\.imag'[\s\S]*Did you mean 'action\.image'/
+  );
+});
+
+test("parseStrings validates shape and key membership", () => {
+  const validKeys = ["a.b", "a.c"];
+  // Absent -> {}.
+  assert.deepEqual(parseStrings(undefined, validKeys), {});
+  assert.deepEqual(parseStrings(null, validKeys), {});
+  // A recognised key passes through verbatim.
+  assert.deepEqual(parseStrings({ "a.b": "Hi" }, validKeys), { "a.b": "Hi" });
+  // Wrong shapes / non-string values / unrecognised keys -> clear errors.
+  assert.throws(() => parseStrings([], validKeys), /'strings' must be an object/);
+  assert.throws(() => parseStrings({ "a.b": 5 }, validKeys), /'strings\.a\.b' must be a string/);
+  assert.throws(() => parseStrings({ "a.bb": "Hi" }, validKeys), /unknown 'strings' key 'a\.bb'/);
+  // A key unrelated to any real one still fails, without a bogus suggestion.
+  assert.throws(
+    () => parseStrings({ "totally.unrelated.key": "Hi" }, validKeys),
+    /unknown 'strings' key 'totally\.unrelated\.key'/
+  );
+});
+
+test("scadpub's own strings, once defined, must resolve in src/locales/en.json", () => {
+  // Guards KNOWN_TOP_LEVEL_KEYS/parseStrings drift the same way the top-level
+  // key test above guards KNOWN_TOP_LEVEL_KEYS: any 'strings' override the
+  // dogfood config someday adds must name a real catalogue key.
+  const config = JSON.parse(
+    readFileSync(join(HERE, "..", "scadpub.config.json"), "utf-8")
+  );
+  const en = JSON.parse(
+    readFileSync(join(HERE, "..", "src", "locales", "en.json"), "utf-8")
+  );
+  for (const key of Object.keys(config.strings ?? {}))
+    assert.ok(key in en, `scadpub.config.json 'strings.${key}' is not a known catalogue key`);
 });
 
 test("parseEnumHint ignores single-item and non-enum hints", () => {
@@ -1241,6 +1653,19 @@ function paramsOf(scad) {
   writeFileSync(file, scad);
   try {
     return parseParams(file).params;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// Like paramsOf, but returns parseParams' full result (params, sections,
+// steps, …) — the @step tests below need `sections`/`steps`, not just `params`.
+function parseOf(scad) {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-step-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(file, scad);
+  try {
+    return parseParams(file);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -1459,6 +1884,440 @@ test("the well-formed @svg/@filledBy fixture (existing test above) still passes 
         `// @filledBy svg_file\n` +
         `svg_layers = "";\n`
     )
+  );
+});
+
+// ── @advanced / @essential ──────────────────────────────────────────────────
+
+test("@advanced on a parameter marks it advanced; unmarked parameters are not", () => {
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Facet override.\n` +
+      `// @advanced\n` +
+      `facets = 0; // [0:1:64]\n` +
+      `// A plain parameter.\n` +
+      `width = 10;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.facets.advanced, true);
+  // The annotation line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.facets.help.includes("@advanced"));
+  assert.equal(byName.width.advanced, undefined);
+});
+
+test("@advanced directly above a section header marks every parameter in that occurrence advanced", () => {
+  const params = paramsOf(
+    `// @advanced\n` +
+      `/* [Extras] */\n` +
+      `edge_style = "plain"; // [plain, reeded]\n` +
+      `edge_depth = 0.6;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.edge_style.advanced, true);
+  assert.equal(byName.edge_depth.advanced, true);
+});
+
+test("a section-level @advanced applies only to the occurrence it directly precedes", () => {
+  // "Extras" appears twice; only the first occurrence is marked.
+  const params = paramsOf(
+    `// @advanced\n` +
+      `/* [Extras] */\n` +
+      `a = 1;\n` +
+      `/* [Extras] */\n` +
+      `b = 2;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.a.advanced, true);
+  assert.equal(byName.b.advanced, undefined);
+});
+
+test("@essential overrides a section-level @advanced for that one parameter", () => {
+  const params = paramsOf(
+    `// @advanced\n` +
+      `/* [Extras] */\n` +
+      `edge_style = "plain"; // [plain, reeded]\n` +
+      `// @essential\n` +
+      `edge_depth = 0.6;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.edge_style.advanced, true);
+  assert.equal(byName.edge_depth.advanced, undefined);
+});
+
+test("@essential outside an advanced section is a legal no-op", () => {
+  const params = paramsOf(`/* [Main] */\n// @essential\nnote = "hi";\n`);
+  assert.equal(params[0].advanced, undefined);
+});
+
+test("a param-level @advanced wins even when its section isn't advanced", () => {
+  const params = paramsOf(`/* [Main] */\n// @advanced\nfacets = 0;\n`);
+  assert.equal(params[0].advanced, true);
+});
+
+test("@advanced with trailing junk is malformed", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @advanced x\nbar = 1;\n`),
+    /f\.scad:2: malformed @advanced annotation: '@advanced x'/
+  );
+});
+
+test("@essential with trailing junk is malformed", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @essential x\nbar = 1;\n`),
+    /f\.scad:2: malformed @essential annotation: '@essential x'/
+  );
+});
+
+test("@essential directly above a section header is malformed", () => {
+  assert.throws(
+    () => paramsOf(`// @essential\n/* [S] */\nbar = 1;\n`),
+    /f\.scad:1: malformed @essential annotation/
+  );
+});
+
+test("@advanced inside the [Hidden] section is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [Hidden] */\n// @advanced\nsecret = 1;\n`),
+    /f\.scad:2: @advanced is not allowed inside the \[Hidden\] section/
+  );
+});
+
+test("@essential inside the [Hidden] section is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [Hidden] */\n// @essential\nsecret = 1;\n`),
+    /f\.scad:2: @essential is not allowed inside the \[Hidden\] section/
+  );
+});
+
+test("@advanced directly above the [Hidden] section header is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [Main] */\na = 1;\n// @advanced\n/* [Hidden] */\nsecret = 1;\n`),
+    /f\.scad:3: @advanced is not allowed on the \[Hidden\] section/
+  );
+});
+
+test("a parameter with both @advanced and @essential fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @advanced\n// @essential\nbar = 1;\n`),
+    /f\.scad:2: parameter 'bar' has both '@advanced' and '@essential' annotations/
+  );
+});
+
+test("the unknown-annotation error message lists @advanced and @essential", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @shwoIf foo\nbar = 1;\n`),
+    /expected one of:.*@advanced, @essential/
+  );
+});
+
+test("@advanced / @essential resolve end to end through generate()", () => {
+  const { schema } = run("advanced.config.json");
+  const d = schema.designs[0];
+  const byName = Object.fromEntries(d.params.map((p) => [p.name, p]));
+  assert.equal(byName.width.advanced, undefined);
+  assert.equal(byName.facets.advanced, true); // param-level @advanced
+  assert.equal(byName.edge_style.advanced, true); // section-level @advanced
+  assert.equal(byName.edge_depth.advanced, undefined); // @essential override
+  assert.equal(byName.note.advanced, undefined); // @essential no-op outside an advanced section
+  assert.equal(byName.finish.advanced, undefined); // repeated "Extras" occurrence, unmarked
+});
+
+// ── @step ────────────────────────────────────────────────────────────────
+
+test("@step attaches to the section header it directly precedes, with an explicit label", () => {
+  const { steps } = parseOf(
+    `// @step basics | Basic settings\n` +
+      `/* [Main] */\n` +
+      `width = 10;\n`
+  );
+  assert.deepEqual(steps, [{ id: "basics", label: "Basic settings", sections: ["Main"] }]);
+});
+
+test("an omitted label defaults to the section name of the id's first occurrence", () => {
+  const { steps } = parseOf(`// @step mounting\n/* [Mounting] */\nmounting = "none";\n`);
+  assert.deepEqual(steps, [{ id: "mounting", label: "Mounting", sections: ["Mounting"] }]);
+});
+
+test("several section occurrences sharing one step id concatenate their sections in file order", () => {
+  const { steps, sections } = parseOf(
+    `// @step tag | Tag details\n` +
+      `/* [Text] */\n` +
+      `label = "hi";\n` +
+      `// @step tag\n` +
+      `/* [Size] */\n` +
+      `width = 10;\n`
+  );
+  assert.deepEqual(steps, [{ id: "tag", label: "Tag details", sections: ["Text", "Size"] }]);
+  assert.deepEqual(sections, ["Text", "Size"]);
+});
+
+test("a later occurrence's own label is ignored — only the first occurrence's label wins", () => {
+  const { steps } = parseOf(
+    `// @step tag | First label\n` +
+      `/* [Text] */\n` +
+      `label = "hi";\n` +
+      `// @step tag | Ignored label\n` +
+      `/* [Size] */\n` +
+      `width = 10;\n`
+  );
+  assert.equal(steps[0].label, "First label");
+});
+
+test("step ORDER is the order each id first appears, independent of section order", () => {
+  const { steps } = parseOf(
+    `// @step second\n` +
+      `/* [B] */\n` +
+      `b = 1;\n` +
+      `// @step first\n` +
+      `/* [A] */\n` +
+      `a = 1;\n`
+  );
+  assert.deepEqual(steps.map((s) => s.id), ["second", "first"]);
+});
+
+test("a section without @step is legal; sections/params are unaffected", () => {
+  const { steps, sections, params } = parseOf(
+    `// @step a\n` +
+      `/* [A] */\n` +
+      `x = 1;\n` +
+      `/* [B] */\n` +
+      `y = 2;\n`
+  );
+  assert.deepEqual(steps, [{ id: "a", label: "A", sections: ["A"] }]);
+  assert.deepEqual(sections, ["A", "B"]);
+  assert.equal(params.length, 2);
+});
+
+test("a design with no @step at all has an empty steps array", () => {
+  const { steps } = parseOf(`/* [Main] */\nwidth = 10;\n`);
+  assert.deepEqual(steps, []);
+});
+
+test("bare @step (no id) is malformed", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @step\nbar = 1;\n`),
+    /f\.scad:2: malformed @step annotation: '@step'/
+  );
+});
+
+test("@step with characters outside [A-Za-z0-9_-] in the id is malformed", () => {
+  assert.throws(
+    () => paramsOf(`// @step my.id\n/* [S] */\nbar = 1;\n`),
+    /f\.scad:1: malformed @step annotation/
+  );
+});
+
+test("@step with an explicit empty label after '|' is malformed", () => {
+  assert.throws(
+    () => paramsOf(`// @step foo |   \n/* [S] */\nbar = 1;\n`),
+    /f\.scad:1: malformed @step annotation/
+  );
+});
+
+test("F3: a doubled '||' separator (label beginning with '|') is malformed, not a mangled label", () => {
+  assert.throws(
+    () => paramsOf(`// @step tag || Weird\n/* [S] */\nbar = 1;\n`),
+    /f\.scad:1: malformed @step annotation: '@step tag \|\| Weird'/
+  );
+});
+
+test("@step directly above a parameter (not a section header) is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @step foo\nbar = 1;\n`),
+    /f\.scad:2: malformed @step annotation: '@step' is a section-level annotation, not valid directly above a parameter/
+  );
+});
+
+test("@step directly above the [Hidden] section header is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [Main] */\na = 1;\n// @step foo\n/* [Hidden] */\nsecret = 1;\n`),
+    /f\.scad:3: @step is not allowed on the \[Hidden\] section/
+  );
+});
+
+test("@step inside the [Hidden] section is a build error", () => {
+  assert.throws(
+    () => paramsOf(`/* [Hidden] */\n// @step foo\nsecret = 1;\n`),
+    /f\.scad:2: @step is not allowed inside the \[Hidden\] section/
+  );
+});
+
+test("the unknown-annotation error message lists @step", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @shwoIf foo\nbar = 1;\n`),
+    /expected one of:.*@step/
+  );
+});
+
+// F1: a dangling annotation at end-of-file used to be silently dropped
+// instead of failing the build (e.g. a file ending in `// @step orphan`
+// parsed cleanly with `steps: []`) — see parseParams' EOF check.
+test("F1: a dangling @step at EOF (no section header follows it) fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @step orphan\n`),
+    /f\.scad:3: dangling @step annotation: no section header follows it before end of file/
+  );
+});
+
+test("F1: a dangling @advanced at EOF (no parameter or section header follows it) fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @advanced\n`),
+    /f\.scad:3: dangling @advanced annotation: no parameter or section header follows it before end of file/
+  );
+});
+
+test("F1: a dangling @showIf at EOF (no parameter follows it) fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @showIf bar\n`),
+    /f\.scad:3: dangling @showIf annotation: no parameter follows it before end of file/
+  );
+});
+
+test("F1: a dangling @essential at EOF fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @essential\n`),
+    /f\.scad:3: dangling @essential annotation: no parameter follows it before end of file/
+  );
+});
+
+test("F1: a dangling @collapsed at EOF (no section header follows it) fails the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @collapsed\n`),
+    /f\.scad:3: dangling @collapsed annotation: no section header follows it before end of file/
+  );
+});
+
+test("F1: a dangling @font/@info/@svg/@filledBy at EOF each fail the build", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @font\n`),
+    /f\.scad:3: dangling @font annotation: no parameter follows it before end of file/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\nbar = 1;\n// @info Label\n`),
+    /f\.scad:3: dangling @info annotation: no parameter follows it before end of file/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\nname = "x"; // [str]\n// @svg\n`),
+    /f\.scad:3: dangling @svg annotation: no parameter follows it before end of file/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\nname = "x"; // [str]\n// @filledBy name\n`),
+    /f\.scad:3: dangling @filledBy annotation: no parameter follows it before end of file/
+  );
+});
+
+// A trailing plain doc-comment run (no annotation) at EOF is harmless — only
+// annotation-shaped pendings fail the build.
+test("F1: trailing plain doc-comment prose at EOF is NOT an error", () => {
+  const { params } = parseOf(`/* [S] */\nbar = 1;\n// just a trailing comment\n`);
+  assert.equal(params.length, 1);
+});
+
+test("unsteppedEssentialSections: [] when the design declares no steps", () => {
+  const { sections, params } = parseOf(`/* [Main] */\nwidth = 10;\n`);
+  assert.deepEqual(unsteppedEssentialSections(sections, [], []), []);
+  assert.deepEqual(unsteppedEssentialSections(sections, params, []), []);
+});
+
+test("unsteppedEssentialSections: an all-@advanced section left un-stepped is not flagged", () => {
+  const { sections, params, steps } = parseOf(
+    `// @step a\n` +
+      `/* [A] */\n` +
+      `x = 1;\n` +
+      `// @advanced\n` +
+      `/* [B] */\n` +
+      `y = 1;\n`
+  );
+  assert.deepEqual(unsteppedEssentialSections(sections, params, steps), []);
+});
+
+test("unsteppedEssentialSections: an essential section left un-stepped is flagged, in section order", () => {
+  const { sections, params, steps } = parseOf(
+    `// @step a\n` +
+      `/* [A] */\n` +
+      `x = 1;\n` +
+      `/* [B] */\n` +
+      `y = 1;\n` +
+      `/* [C] */\n` +
+      `z = 1;\n`
+  );
+  assert.deepEqual(unsteppedEssentialSections(sections, params, steps), ["B", "C"]);
+});
+
+test("@step resolves end to end through generate(): steps, ordering, shared sections", () => {
+  const { schema } = run("steps.config.json");
+  const d = schema.designs[0];
+  assert.deepEqual(d.steps, [
+    { id: "tag", label: "Tag details", sections: ["Text", "Size"] },
+    { id: "mounting", label: "Mounting", sections: ["Mounting"] },
+  ]);
+  assert.deepEqual(d.sections, ["Text", "Size", "Mounting", "Advanced tweaks", "Extra"]);
+});
+
+test("a design with no @step omits the `steps` field entirely (not [])", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].steps, undefined);
+});
+
+test("gen-schema warns (not fails) when an essential section is left un-stepped", () => {
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    run("steps.config.json");
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(
+    warnings.some((w) => /essential section\(s\) carry no step: Extra/.test(w)),
+    `expected a coverage warning mentioning 'Extra', got: ${JSON.stringify(warnings)}`
+  );
+});
+
+test("ui.strictSteps promotes the un-stepped-essential-section warning to a build error", () => {
+  assert.throws(
+    () => run("steps-strict.config.json"),
+    /gen-schema: design 'stepped' \(stepped\.scad\) declares @step but 1 essential section\(s\) carry no step: Extra/
+  );
+});
+
+test("parseUi: strictSteps defaults false and validates as a boolean", () => {
+  assert.equal(parseUi(undefined).strictSteps, false);
+  assert.equal(parseUi({ strictSteps: true }).strictSteps, true);
+  assert.throws(() => parseUi({ strictSteps: "yes" }), /'ui\.strictSteps' must be a boolean/);
+});
+
+test("parseUi: quickStart defaults true (declaring @step sections is the opt-in) and validates as a boolean", () => {
+  assert.equal(parseUi(undefined).quickStart, true);
+  assert.equal(parseUi({}).quickStart, true);
+  assert.equal(parseUi({ quickStart: false }).quickStart, false);
+  assert.equal(parseUi({ quickStart: true }).quickStart, true);
+  assert.throws(() => parseUi({ quickStart: "no" }), /'ui\.quickStart' must be a boolean/);
+  assert.throws(() => parseUi({ quickStart: 0 }), /'ui\.quickStart' must be a boolean/);
+});
+
+test("parseUi: workflow defaults \"tabs\" (today's behavior, unchanged) and validates against the known modes", () => {
+  assert.equal(parseUi(undefined).workflow, "tabs");
+  assert.equal(parseUi({}).workflow, "tabs");
+  assert.equal(parseUi({ workflow: "guided" }).workflow, "guided");
+  assert.equal(parseUi({ workflow: "tabs" }).workflow, "tabs");
+  assert.throws(() => parseUi({ workflow: "wizard" }), /'ui\.workflow' must be one of "tabs", "guided"/);
+});
+
+test("ui.workflow: a config that leaves it unset builds with the default \"tabs\" mode", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.ui.workflow, "tabs");
+});
+
+test("ui.workflow: \"guided\" is accepted and passed through to the schema", () => {
+  const { schema } = run("widget-workflow-guided.config.json");
+  assert.equal(schema.ui.workflow, "guided");
+});
+
+test("ui.workflow: an unknown value fails the build", () => {
+  assert.throws(
+    () => run("widget-workflow-bad.config.json"),
+    /'ui\.workflow' must be one of "tabs", "guided"/
   );
 });
 
