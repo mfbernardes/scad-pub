@@ -6,7 +6,7 @@
 // and "ready to ship" are NOT the same claim; this module is what tells them
 // apart, feeding both the checklist's "Preview" row (checklist.ts) and the
 // warning-card surfaces (AttentionItems.tsx) / export-button indicator
-// (ExportAttention.tsx / ActionButtons.tsx). Mirrors checklist.ts's own
+// (ActionButtons.tsx). Mirrors checklist.ts's own
 // "STATUS, NOT THEATER" discipline: every item keys off real, checkable
 // state, never an assumption.
 import type { Param } from "../openscad/types";
@@ -218,7 +218,7 @@ export function readinessState(renderOk: boolean | null, attention: AttentionIte
  * "font-fallback"` items. A font fallback is a READINESS gap, not a design
  * NOTICE: it already has its own carrier in guided workflow (the Review
  * chip's amber dot, the contextual card in Appearance, and Review's own full
- * issue card — see AppShell's `showExportAttentionBanner` doc), so folding it
+ * issue card — see ActionButtons.tsx's `hasAttention` doc), so folding it
  * into a "how many notices" count double-counts the same problem through two
  * different vocabularies and, worse, can show a non-zero notice count next to
  * a Notices panel that has no actual notice CARD to match it (a font-only

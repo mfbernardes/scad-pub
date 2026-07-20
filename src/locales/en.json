@@ -11,9 +11,6 @@
 
   "action.image": "Image",
   "action.share": "Share",
-  "action.more": "More",
-  "action.exportOptions": "Download options",
-  "action.saveImage": "Save image",
   "action.copyShareLink": "Copy share link",
   "action.export": "Download for 3D printing",
   "action.exportAria": "Download for 3D printing ({format})",
@@ -111,7 +108,6 @@
 
   "overflow.messages": "Messages",
 
-  "export.formatNote": "{format} · for slicers and print services",
   "export.downloaded": "Model downloaded",
   "export.readyToShare": "Model ready to share",
   "export.printingGuide": "Printing guide",

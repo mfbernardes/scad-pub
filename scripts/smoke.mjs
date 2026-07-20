@@ -1063,54 +1063,31 @@ async function checkPresetSaveReveal({ page, check, ids, presetsTabName, paramsT
   await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
 }
 
-// The export dock's two menus (visual-alignment pass restructure —
-// ActionButtons.tsx): the split trigger's `.action-export-menu` (an
-// informational format note only — nothing to pick, the export format is
-// fixed at build time) and the More menu's `.action-more-menu` ("Save
-// image", plus "Copy link" only on a device where Share itself goes native —
-// headless Chromium never does, see checkMobileActionBar's own
-// navigator.share sanity check, so that item must be absent here).
-async function checkExportMenus({ page, check, ids }) {
-  console.log("=== export dock: the split-trigger and More menus ===");
+// The export dock, unified across every workflow (dock-unification pass):
+// exactly two direct buttons, Download and Share — no split "▾" trigger, no
+// export-format dropdown menu, no "More" menu, no "Save image", no "Copy
+// link" menu entry, and no visible "3MF · …" format caption. This used to
+// differ by `ui.workflow` (tabs got a two-row card with a split trigger and a
+// "More" menu; guided got exactly these two buttons) — the guided treatment
+// is now the ONLY treatment, in every workflow, mirroring
+// scripts/smoke-guided.mjs's own `checkDesktopExportFlow` assertions for the
+// guided config.
+async function checkExportDock({ page, check, ids }) {
+  console.log("=== export dock: exactly Download + Share, no menus ===");
   await selectDesign(page, ids[0]);
 
-  // Round-2 review fix (fa49bcb, item 4): the "3MF · for slicers and print
-  // services" format sublabel now shows directly under the primary row on
-  // DESKTOP (ActionButtons.tsx's `.action-export-format-note`), not hidden a
-  // click away behind the split "▾" trigger — that menu keeps its own copy
-  // too (`.action-export-menu__format-note`, checked below) since the split
-  // trigger needs SOME content when opened. Desktop-only: checkMobileActionBar
-  // confirms this same element is CSS-hidden (display:none) below the 860px
-  // breakpoint, where the mobile card has no room for a second text line.
-  const formatNote = page.locator(".action-export-format-note");
-  check((await formatNote.isVisible()) === true, "the export card's format sublabel is visible directly on desktop");
+  check((await page.locator(".action-export").count()) === 1, "direct Download button (no split trigger)");
+  check((await page.locator(".action-export-options").count()) === 0, "no split \"▾\" trigger");
+  check((await page.locator(".action-export-menu").count()) === 0, "no export format dropdown menu");
+  check((await page.locator(".action-share").count()) === 1, "direct Share button");
+  check((await page.locator(".action-more").count()) === 0, "no \"More\" menu (Save image/Copy link)");
+  check((await page.locator(".action-more-menu").count()) === 0, "no \"More\" menu content in the DOM either");
   check(
-    /for slicers and print services/i.test((await formatNote.textContent()) ?? ""),
-    "the visible format sublabel names what the export includes"
+    !(await page.locator(".action-export-format-note").isVisible().catch(() => false)),
+    "no visible \"3MF · …\" format caption under Download"
   );
-
-  await page.click(".action-export-options");
-  const exportMenu = page.locator(".action-export-menu");
-  await exportMenu.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-  check((await exportMenu.count()) === 1, "the split trigger opens the export options menu");
-  check(
-    /for slicers and print services/i.test((await page.locator(".action-export-menu__format-note").textContent()) ?? ""),
-    "the menu shows the informational format note"
-  );
-  await page.keyboard.press("Escape");
-  await exportMenu.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
-
-  await page.click(".action-more");
-  const moreMenu = page.locator(".action-more-menu");
-  await moreMenu.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-  check((await moreMenu.count()) === 1, "the More trigger opens its own menu");
-  check((await moreMenu.locator(".action-more-menu__save-image").count()) === 1, "the More menu offers \"Save image\"");
-  check(
-    (await moreMenu.locator(".action-more-menu__copy-link").count()) === 0,
-    "the More menu omits \"Copy link\" here — Share itself already offers a copy-link fallback when navigator.share is unavailable"
-  );
-  await page.keyboard.press("Escape");
-  await moreMenu.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  check((await page.locator(".export-attention").count()) === 0, "no standing \"N issues to review\" banner over the viewer (no attention gap here)");
+  check((await page.locator(".action-cluster").count()) === 1, "exactly one export dock card, a single row (Download + Share only)");
 }
 
 // Export 3MF + PNG on the first design, plus the after-export panel it drives
@@ -1171,23 +1148,6 @@ async function checkExports({ page, check, ids, dir }) {
   await successPanel.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
   await successPanel.locator(".export-success__dismiss").click();
   check((await successPanel.count()) === 0, "export-success panel's dismiss (X) hides it");
-
-  console.log("=== save PNG ===");
-  // "Save image" moved from its own always-visible ghost button into the
-  // More menu (ActionButtons.tsx's visual-alignment pass) — open it first.
-  await page.click(".action-more");
-  const [png] = await Promise.all([
-    page.waitForEvent("download"),
-    page.click(".action-more-menu__save-image"),
-  ]);
-  const pngOut = join(dir, await png.suggestedFilename());
-  await png.saveAs(pngOut);
-  const head = (await readFile(pngOut)).subarray(0, 4);
-  const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
-  check(isPng && (await stat(pngOut)).size > 0, `${await png.suggestedFilename()} (png=${isPng})`);
-  // The PNG snapshot is about a picture of the model, not the printable model
-  // itself — it must never surface the export-success panel.
-  check((await successPanel.count()) === 0, "Image export does not show the export-success panel");
 }
 
 async function checkPreviewControls({ page, check }) {
@@ -1769,55 +1729,6 @@ async function checkQuickStartMobile({ browser, base, check, ids, paramsTabName 
   });
 }
 
-// Regression guard (fa49bcb), mobile half: the same "click .export-attention
-// jumps to the Review chip" fix checkReadiness confirms on desktop (scroll
-// mode), driven the mobile (steps mode) way. handleReviewAttention's bug was
-// in the shared nonce-bump timing (App.tsx), not per-layout code, but the two
-// variants consume the signal through different QuickStart code paths
-// (`select` vs `scrollToGroup`, see the `focusReviewSignal` handler in
-// QuickStart.tsx) — worth its own direct check rather than assuming the
-// desktop pass covers it. Own mobile context/hash, same "No Such Font" trick
-// as checkReadiness/checkFilesFontMissingCard.
-async function checkExportAttentionReviewRoutingMobile({ browser, base, check, ids, paramsTabName }) {
-  if (!ids.includes("tag")) return;
-  console.log("=== export dock attention -> Review chip routing (mobile steps mode) ===");
-  await withMobileContext(browser, async (page) => {
-    const hash = `d=tag&v=${encodeURIComponent(JSON.stringify({ font: "No Such Font" }))}`;
-    await page.goto(`${base}#${hash}`, { waitUntil: "load" });
-    await page.reload({ waitUntil: "load" });
-    await settleFirstVisit(page).catch(() => {});
-    await waitRendered(page, "tag with a missing font family (mobile export-attention routing)");
-
-    await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
-    const exportAttention = page.locator(".export-attention");
-    await exportAttention.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-    check((await exportAttention.count()) === 1, "the export dock shows the attention line on mobile too");
-
-    await exportAttention.click();
-    const reviewChip = page.locator(".quick-start__step--review");
-    await page
-      .waitForFunction(
-        () => document.querySelector(".quick-start__step--review")?.getAttribute("aria-current") === "step",
-        { timeout: 3000 }
-      )
-      .catch(() => {});
-    check(
-      (await reviewChip.getAttribute("aria-current")) === "step",
-      "the export dock's attention line sets the Review chip aria-current=step on mobile (steps mode)"
-    );
-    check(
-      (await page.locator(".quick-start__review").count()) === 1,
-      "the Review stage's own content is what's actually showing on mobile after the click"
-    );
-
-    // Leave the suite in a clean state for whatever runs after this.
-    await page.goto(`${base}#d=tag`, { waitUntil: "load" });
-    await page.reload({ waitUntil: "load" });
-    await settleFirstVisit(page).catch(() => {});
-    await waitRendered(page, "tag reloaded with defaults (mobile export-attention routing cleanup)");
-  });
-}
-
 // @showIf + @collapsed — exercised on the example "tag" design when present.
 // Param rows are located by their stable data-param hook, which exists
 // regardless of ui.showVarName, so this block runs in every config.
@@ -1991,10 +1902,12 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
 // `.font-missing` card right under the control, the Notices tab's
 // `.console-attention`, and the Review stage's `.quick-start__review-
 // attention` — the top-of-panel attention chip this used to also appear in
-// is gone entirely, see CustomizeTab.tsx's own doc), the export dock's
-// explicit single-button `.export-attention` line (replacing the old
-// ambiguous corner dot, and then its own nested "Review" link), and the
-// Review stage's rebuilt actions row (no separate "Font status" row
+// is gone entirely, see CustomizeTab.tsx's own doc), Download's own small
+// amber attention dot + sr-only hint (dock-unification pass — replacing the
+// tabs-mode-only standing `.export-attention` banner this used to check;
+// every workflow now carries the same dot + hint ActionButtons.tsx always
+// rendered for guided workflow), and the Review stage's rebuilt actions row
+// (no separate "Font status" row
 // anymore — a font's current family already shows as an ordinary
 // essential-parameter row in the summary). Runs against the desktop `page`
 // (scroll mode, PR15): every step's ParamRows is already mounted, so "the
@@ -2078,53 +1991,29 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
     "the contextual card omits \"Go to setting\" — the visitor is already at the control"
   );
 
-  // The export dock's explicit attention line (PR22, restyled to a single
-  // whole-line button by the visual-alignment pass): real text — just the
-  // count, no per-item text (see ExportAttention.tsx's own doc) — that opens
-  // the Review stage when clicked anywhere on it. Export stays enabled and
-  // uninterrupted throughout — it's a caution, never a block.
+  // The export dock's attention signal (dock-unification pass): no standing
+  // "N issues to review" banner over the viewer anymore, in ANY workflow —
+  // Download's own small amber dot + a sr-only hint (wired via
+  // aria-describedby) carry it instead, the same treatment guided workflow
+  // always used (see ActionButtons.tsx's own doc). Export stays enabled and
+  // uninterrupted throughout — it's a caution, never a block, in tabs mode.
   const exportBtn = page.locator(".action-export");
-  const exportAttention = page.locator(".export-attention");
-  await exportAttention.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-  check((await exportAttention.count()) === 1, "the export dock shows the attention line");
-  check(
-    ((await exportAttention.textContent()) ?? "").trim() === "1 issue to review before download",
-    "the export dock's attention line reads the plain \"N issue(s) to review before download\" count, no per-item text"
-  );
-  check(await exportBtn.isEnabled(), "export stays enabled despite the attention line");
+  check((await page.locator(".export-attention").count()) === 0, "no standing \"N issues to review\" banner over the viewer");
+  check(await exportBtn.isEnabled(), "export stays enabled despite the unresolved issue");
   check(
     (await exportBtn.getAttribute("aria-describedby")) === "export-attention-hint",
-    "export button is described by the visible attention line for assistive tech"
+    "Download is described by the sr-only attention hint for assistive tech"
+  );
+  const attentionDot = exportBtn.locator(".action-export__attention");
+  check((await attentionDot.count()) === 1, "Download shows its small amber attention dot");
+  const attentionHint = page.locator("#export-attention-hint");
+  check((await attentionHint.count()) === 1, "the sr-only attention hint element exists (what aria-describedby resolves to)");
+  check(
+    ((await attentionHint.textContent()) ?? "").trim() === "1 issue to review before download",
+    "the sr-only hint reads the plain \"N issue(s) to review before download\" count, no per-item text"
   );
 
   await runAxe(page, check, "Customize tab with the font-missing card visible");
-
-  // The export dock's attention line is now itself a single button (not text
-  // plus a nested "Review" link) — clicking anywhere on it jumps to the
-  // Review stage: scroll mode scrolls the trailing Review section into view
-  // AND focuses its heading (scrollToGroup's own contract) — a deterministic
-  // signal that doesn't depend on the IntersectionObserver having caught up yet.
-  await exportAttention.click();
-  await page
-    .waitForFunction(() => document.activeElement?.id === "quick-start-heading-__review__", { timeout: 3000 })
-    .catch(() => {});
-  check(
-    await page.evaluate(() => document.activeElement?.id === "quick-start-heading-__review__"),
-    "the export dock's attention line scrolls to and focuses the Review stage heading"
-  );
-  // Regression guard (fa49bcb): handleReviewAttention used to bump
-  // QuickStart's focus-review nonce in the SAME tick as the tab switch, so
-  // QuickStart's first mount already saw the bumped value and useSignal's
-  // mount-seeded "last seen" ref never detected a change — the visitor landed
-  // on the first step's chip instead of Review. Fixed by deferring the bump
-  // to the next animation frame. Assert the actual regressed symptom
-  // directly (the Review CHIP's aria-current), not just that focus moved —
-  // the two are set by different code paths and a fix to one doesn't
-  // guarantee the other.
-  check(
-    (await page.locator(".quick-start__step--review").getAttribute("aria-current")) === "step",
-    "the export dock's attention line also sets the Review chip aria-current=step (desktop scroll mode)"
-  );
 
   // Notices tab: the same gap leads as a friendly card, above the raw rows
   // (PR22 item 4) — a visitor who opens Messages directly still gets the
@@ -2252,7 +2141,11 @@ async function checkReadiness({ page, check, ids, base, paramsTabName }) {
   await fontMissingCard.getByRole("button", { name: "Use a bundled font" }).click();
   await waitRendered(page, "tag with a bundled font restored via \"Use a bundled font\"");
   check((await page.locator(".font-missing").count()) === 0, "the contextual card clears once a loaded family is selected");
-  check((await page.locator(".export-attention").count()) === 0, "the export dock's attention line clears too");
+  check((await page.locator(".action-export__attention").count()) === 0, "Download's amber attention dot clears too");
+  check(
+    (await page.locator(".action-export").getAttribute("aria-describedby")) === null,
+    "Download's aria-describedby clears once there's nothing to describe"
+  );
   check(
     /Ready to download/.test((await page.locator(".quick-start__review-readiness").textContent()) ?? ""),
     "Review's readiness line returns to \"Ready to download\" once the font is restored"
@@ -2694,17 +2587,22 @@ async function checkMobileOutputConsole({ browser, base, check, ids, paramsTabNa
 // its own doc) — only CSS (index.css's `.app-shell__mobile .action-cluster`/
 // `.action-dock` rules) makes mobile behave differently: two tiers below
 // ~460px shrink the primary's font/padding, and only below ~360px does
-// Share/More drop to icon-only. Verified across the full mobile-layout
-// breadth (320/360/390/430/600/820px — everything under the 860px
-// desktop/mobile breakpoint, including the 460-859px "mobile-layout
-// tablets" band the mid-range truncation bug lived in) rather than just the
-// narrowest phone widths.
+// Share drop to icon-only. Exactly two buttons (Download, Share) in every
+// workflow now (dock-unification pass) — no split trigger, no "More" menu,
+// no "Save image". Verified across the full mobile-layout breadth
+// (320/360/390/430/600/820px — everything under the 860px desktop/mobile
+// breakpoint, including the 460-859px "mobile-layout tablets" band the
+// mid-range truncation bug lived in) rather than just the narrowest phone
+// widths.
 async function checkMobileActionBar({ browser, base, check }) {
   console.log("=== mobile action bar: single row, real text labels, no truncation (320-820px) ===");
   await withMobileContext(browser, async (page) => {
     await page.goto(base, { waitUntil: "load" });
     await settleFirstVisit(page);
     await waitRenderDone(page).catch(() => {});
+
+    check((await page.locator(".action-more").count()) === 0, "no \"More\" menu on mobile either");
+    check((await page.locator(".action-export-options").count()) === 0, "no split \"▾\" trigger on mobile either");
 
     // Whether an element's own text content is being clipped by CSS
     // (overflow:hidden + truncate) rather than laid out at its natural size —
@@ -2719,8 +2617,8 @@ async function checkMobileActionBar({ browser, base, check }) {
     // non-empty bounding rect and no display:none/visibility:hidden, so
     // Playwright reports it "visible" even though no sighted visitor can
     // read it. A real rendered label is comfortably wider than a couple of
-    // pixels ("Share"/"More" at even the smallest font here measure
-    // 25px+), so a tiny width threshold cleanly tells the two apart.
+    // pixels ("Share" at even the smallest font here measures 25px+), so a
+    // tiny width threshold cleanly tells the two apart.
     const isSrOnlyHidden = (loc) =>
       loc.evaluate((el) => el.getBoundingClientRect().width <= 2).catch(() => true);
 
@@ -2737,14 +2635,12 @@ async function checkMobileActionBar({ browser, base, check }) {
         !(await isTextClipped(page.locator(".action-export__label"))),
         `the primary "Download for 3D printing" label's TEXT is never truncated at ${width}px`
       );
-      // Round-2 review fix (fa49bcb, item 4): the desktop-only format
-      // sublabel (checkExportMenus confirms it's visible there) would become
-      // a third flex item once the mobile single-row cluster forms — CSS
-      // drops it out of layout entirely (display:none, not just a hidden
-      // text) below the 860px breakpoint, which covers every width tested here.
+      // Round-2 review fix (fa49bcb, item 4): the format sublabel is gone
+      // from the markup entirely now (dock-unification pass) — never present
+      // on desktop OR mobile, so there's nothing left to hide here.
       check(
-        !(await page.locator(".action-export-format-note").isVisible()),
-        `the export card's format sublabel stays hidden on mobile at ${width}px`
+        (await page.locator(".action-export-format-note").count()) === 0,
+        `no "3MF · …" format sublabel in the DOM at ${width}px`
       );
       // Round-2 review fix (fa49bcb, item 2): HUD buttons drop to size-9
       // (36px) below the 860px breakpoint — every width in this loop
@@ -2756,30 +2652,24 @@ async function checkMobileActionBar({ browser, base, check }) {
       );
 
       const share = page.locator(".action-share");
-      const more = page.locator(".action-more");
       const shareLabelVisible = !(await isSrOnlyHidden(share.locator(".action-btn-label")));
-      const moreLabelVisible = !(await isSrOnlyHidden(more.locator(".action-btn-label")));
       if (width >= 370) {
-        // Typical phone widths and up: ALL THREE controls carry real text —
-        // no unexplained icon-only chain-link/image glyphs.
+        // Typical phone widths and up: Share carries real text — no
+        // unexplained icon-only chain-link glyph.
         check(shareLabelVisible, `Share shows its text label at ${width}px (>= ~370px)`);
-        check(moreLabelVisible, `More shows its text label at ${width}px (>= ~370px)`);
       } else {
         // Only below ~360px does the last-resort icon-only fallback apply —
         // aria-label/title still carry the name for assistive tech (checked
         // below, once, since it's width-independent).
         check(!shareLabelVisible, `Share falls back to icon-only at ${width}px (< ~360px)`);
-        check(!moreLabelVisible, `More falls back to icon-only at ${width}px (< ~360px)`);
       }
     }
 
-    console.log("--- Share/More stay reachable by aria-label even when icon-only ---");
+    console.log("--- Share stays reachable by aria-label even when icon-only ---");
     await page.setViewportSize({ width: 320, height: 844 });
     await page.waitForTimeout(150);
     const share = page.locator('[aria-label="Copy share link"]');
-    const more = page.locator('[aria-label="More"]');
     check((await share.count()) === 1 && (await share.isVisible()), "Share is reachable by its aria-label");
-    check((await more.count()) === 1 && (await more.isVisible()), "More is reachable by its aria-label");
 
     // Round-2 review fix (fa49bcb, item 3): the Share button's ICON is now
     // Share2 in EVERY case, including this deterministic copy-link fallback
@@ -2787,13 +2677,8 @@ async function checkMobileActionBar({ browser, base, check }) {
     // button, just backed by a different mechanism; the accessible name
     // (shareAria) still says "Copy share link" here, so the icon no longer
     // tracks the branch the way it used to (was Link2 in this fallback,
-    // Share2 only for the native-share branch). The More menu's own separate,
-    // always-clipboard "Copy link" entry is the one place Link2 still shows —
-    // it only renders on a device where Share itself goes native (see line
-    // ~977's own check that it's absent here, in this same no-native-share
-    // environment), so its icon isn't independently exercisable in headless
-    // Chromium. lucide-react's default per-icon class (`.lucide-share-2` /
-    // `.lucide-link-2`) is a stable enough hook for this.
+    // Share2 only for the native-share branch). lucide-react's default
+    // per-icon class (`.lucide-share-2`) is a stable enough hook for this.
     const hasNativeShare = await page.evaluate(() => "share" in navigator);
     check(
       !hasNativeShare,
@@ -2803,18 +2688,6 @@ async function checkMobileActionBar({ browser, base, check }) {
       (await share.locator(".lucide-share-2").count()) === 1,
       "Share shows the Share2 icon even in the copy-link fallback (no native share sheet here)"
     );
-    check(
-      (await share.locator(".lucide-link-2").count()) === 0,
-      "Share does NOT show the Link2 (chain-link) icon — that glyph is reserved for the More menu's own Copy link entry"
-    );
-
-    console.log("--- More menu: \"Save image\" moved here off the always-visible row ---");
-    await more.click();
-    const saveImageItem = page.locator(".action-more-menu__save-image");
-    await saveImageItem.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-    check((await saveImageItem.count()) === 1, "the More menu offers \"Save image\"");
-    await page.keyboard.press("Escape");
-    await saveImageItem.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
 
     console.log("--- export + the after-export panel still work (minimal — see checkExports for the full desktop flow) ---");
     await page.setViewportSize({ width: 390, height: 844 });
@@ -3052,7 +2925,7 @@ async function main() {
     await checkBundledPresets(ctx);
     await checkPresetImport(ctx);
     await checkPresetSaveReveal(ctx);
-    await checkExportMenus(ctx);
+    await checkExportDock(ctx);
     await checkExports(ctx);
     await checkPreviewControls(ctx);
     await checkViewerHudGrid(ctx);
@@ -3063,7 +2936,6 @@ async function main() {
     await checkSignageDesign(ctx);
     await checkResponsiveLayout(ctx);
     await checkQuickStartMobile(ctx);
-    await checkExportAttentionReviewRoutingMobile(ctx);
     await checkMobileChecklistPeek(ctx);
     await checkMobileOutputConsole(ctx);
     await checkMobileActionBar(ctx);

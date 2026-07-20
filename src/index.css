@@ -653,53 +653,43 @@ button:disabled { cursor: default; }
   }
 }
 
-/* Floating dock (Download/Share/More card, plus the after-export panel and
-   the export-attention line riding above it when shown). Desktop docks it at
-   the viewer's LOWER RIGHT (mockup target — a compact card, not a
-   bottom-center pill); mobile rides it centered on the sheet's top edge — see
-   the mobile override below, which resets the horizontal anchor back to
-   center. Anchoring the DOCK's bottom edge (not the cluster's own) means the
-   cluster's screen position never moves when a panel appears/disappears above
-   it — the box's height is auto, so it only ever grows upward. `align-items`
-   is set here rather than as a Tailwind utility on ACTION_DOCK_CLASS for the
-   same cross-layer-override reason documented there. See AppShell's
-   ACTION_DOCK_CLASS doc.
+/* Floating dock (Download/Share card, plus the after-export panel riding
+   above it when shown). Centred horizontally in the viewer (bottom-centre) —
+   a single, symmetric call-to-action under the model, the same treatment on
+   every workflow (unification pass; previously bottom-right on desktop in
+   tabs mode, centred only in guided mode via a `--guided` modifier this pass
+   removed). The box stays shrink-to-fit (only `left` set, not `right`/
+   `width`), so `translateX(-50%)` centres its own content width; mobile rides
+   it centered on the sheet's top edge instead — see the mobile override
+   below, which is higher-specificity and wins there. Anchoring the DOCK's
+   bottom edge (not the cluster's own) means the cluster's screen position
+   never moves when a panel appears/disappears above it — the box's height is
+   auto, so it only ever grows upward. `align-items` is set here rather than
+   as a Tailwind utility on ACTION_DOCK_CLASS for the same cross-layer-
+   override reason documented there. See AppShell's ACTION_DOCK_CLASS doc.
    Round-2 review item 4: `stretch` (was `flex-end`, right-aligned-but-
-   independently-sized riders) — flex-end already right-ALIGNED the export-
-   attention banner and the ExportSuccess panel above the card since a column
-   flex container's cross-axis alignment is per-item regardless of each
-   item's own width, but the review also wants them the exact same WIDTH as
-   the card, not just a shared right edge. `stretch` makes every child fill
-   the dock's own auto width — which itself sizes (shrink-to-fit, see the
-   `max-width` note below) to the widest child's natural content, in
-   practice `.action-cluster` — so the banner/success panel (now `w-full` in
-   their own components, not their old fixed `max-w-[22rem]`) stretch to
-   match the card exactly, on BOTH edges. */
+   independently-sized riders) — flex-end already right-ALIGNED the
+   ExportSuccess panel above the card since a column flex container's
+   cross-axis alignment is per-item regardless of each item's own width, but
+   the review also wants them the exact same WIDTH as the card, not just a
+   shared right edge. `stretch` makes every child fill the dock's own auto
+   width — which itself sizes (shrink-to-fit, see the `max-width` note below)
+   to the widest child's natural content, in practice `.action-cluster` — so
+   the success panel (`w-full` in its own component, not a fixed
+   `max-w-[22rem]`) stretches to match the card exactly, on BOTH edges. */
 .action-dock {
   position: absolute;
   bottom: calc(0.75rem + var(--safe-area-bottom));
-  right: calc(0.75rem + env(safe-area-inset-right, 0px));
-  align-items: stretch;
-  z-index: 10;
-  /* An absolutely-positioned box with only `right` set sizes to its content's
-     preferred (max-content) width, uncapped by the viewport — without this, a
-     narrow viewport could push the dock past the screen's left edge instead
-     of its rows adapting. Both the cluster and the after-export panel below
-     cap their own widths against this same budget. */
-  max-width: calc(100vw - 1.5rem);
-}
-
-/* Guided workflow: centre the dock horizontally in the viewer (bottom-centre)
-   instead of the tabs-mode bottom-right anchor above — a single, symmetric
-   call-to-action under the model. The box stays shrink-to-fit (only `left`
-   set, not `right`/`width`), so `translateX(-50%)` centres its own content
-   width. Same specificity as `.action-dock` above, so this must come after it
-   to win; on mobile the higher-specificity `.app-shell__mobile .action-dock`
-   rule below still wins, keeping the full-width bar tracking the sheet. */
-.action-dock--guided {
-  right: auto;
   left: 50%;
   transform: translateX(-50%);
+  align-items: stretch;
+  z-index: 10;
+  /* An absolutely-positioned box with only `left` set sizes to its content's
+     preferred (max-content) width, uncapped by the viewport — without this, a
+     narrow viewport could push the dock past the screen's edge instead of its
+     row adapting. Both the cluster and the after-export panel below cap their
+     own widths against this same budget. */
+  max-width: calc(100vw - 1.5rem);
 }
 
 /* Mobile: centered (a full-width single-row bar, not a right-docked card —
@@ -721,7 +711,7 @@ button:disabled { cursor: default; }
        here left .action-cluster sized to its own unconstrained content width
        (a flex item under `align-items: center` doesn't stretch to the line's
        cross size), which is what caused it to overflow the 390px viewport
-       outright instead of compressing Download/Share/More to fit. */
+       outright instead of compressing Download/Share to fit. */
     align-items: stretch;
     /* Fixes the 460-859px truncation bug (mobile-layout tablets): an
        absolutely-positioned box with `left` set but not `right` sizes by
@@ -741,8 +731,8 @@ button:disabled { cursor: default; }
     bottom: calc(var(--sheet-top) + 0.6rem);
     transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
     /* Round-2 review item 4: a bit tighter than desktop's own gap-2 (0.5rem,
-       ACTION_DOCK_CLASS) between this card and any ExportAttention/
-       ExportSuccess rider above it — mobile screen height is the scarcer
+       ACTION_DOCK_CLASS) between this card and any ExportSuccess rider above
+       it — mobile screen height is the scarcer
        resource, and every rem saved here is a rem the sheet gets back.
        `!important`: ACTION_DOCK_CLASS's `gap-2` is a Tailwind utility (see
        this file's cascade-layer note at the top) and always wins over a
@@ -754,130 +744,68 @@ button:disabled { cursor: default; }
   }
 }
 
-/* Export dock card (visual-alignment pass, replacing PR16's single-row
-   pill): two stacked rows on desktop (row 1 — Download + the split "▾"
-   trigger; row 2 — Share/More, equal width) inside one compact card; a
-   single row on mobile. `flex-direction`/`display` live here (not as
-   Tailwind utilities on the elements — see ACTION_CLUSTER_CLASS's own doc)
-   specifically because they're the properties this breakpoint override
-   changes: a `@layer utilities` class for the same property would always
-   beat a `@layer components` override regardless of the media query, so the
-   swap has to happen entirely within this one layer. */
+/* Export dock card: a single row — Download (fills) + Share (sized to its
+   own content) — on EVERY viewport and EVERY workflow (unification pass;
+   previously two stacked rows in tabs mode — Download + a split "▾" trigger,
+   then Share/More below — with this single-row treatment gated behind a
+   `--guided` modifier class only guided mode got). `flex-direction`/`display`
+   live here (not as Tailwind utilities on the elements — see
+   ACTION_CLUSTER_CLASS's own doc) since the mobile override below still needs
+   to win over them regardless of specificity: a `@layer utilities` class for
+   the same property would always beat a `@layer components` override
+   regardless of the media query, so the swap has to happen entirely within
+   this one layer. `!important` on Download/Share's flex-grow/shrink for the
+   same utilities-vs-components-layer reason: shadcn Button's own `shrink-0`
+   utility would otherwise stop Download from filling/shrinking. */
 .action-cluster {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: stretch;
   /* Without this, the card's "automatic minimum size" as a flex item of
      .action-dock (stretch clamps a cross size to the item's min, and an
      `auto` min-width resolves to the content's own min-content width) wins
-     over the stretched width the moment its row(s) genuinely need to shrink
-     — exactly the mobile single-row case below, where Download/Share/More
-     together would rather overflow than compress. Confirmed by measurement:
-     without this the card rendered ~55px WIDER than its own dock at 390px. */
+     over the stretched width the moment its row genuinely needs to shrink —
+     exactly the mobile case below, where Download/Share would rather
+     overflow than compress. Confirmed by measurement: without this the card
+     rendered ~55px WIDER than its own dock at 390px. */
   min-width: 0;
 }
-.action-row--secondary {
-  display: flex;
-  align-items: stretch;
-  gap: 0.5rem;
-}
-
-/* The GUIDED export dock is a single row on EVERY viewport — Download fills,
-   Share sized to its own content, the "3MF · …" format sublabel hidden — so
-   the desktop dock reads exactly like the mobile guided dock (user request).
-   Mobile already gets this from the `.app-shell__mobile--guided` rules below;
-   `.action-cluster--guided` (set by AppShell only in guided mode) extends the
-   identical treatment to the desktop dock, overriding the two-row column
-   default above. `!important` on flex-grow/shrink for the same
-   utilities-vs-components-layer reason as the mobile rules: shadcn Button's
-   own `shrink-0` utility would otherwise stop Download from filling/shrinking.
-   Tabs mode (no `--guided` class) keeps the two-row card with the caption. */
-.action-cluster--guided {
-  flex-direction: row;
-  flex-wrap: nowrap;
-}
-.action-cluster--guided .action-export-format-note {
-  display: none;
-}
-.action-cluster--guided .action-export {
+.action-cluster .action-export {
   flex-grow: 1 !important;
   flex-shrink: 1 !important;
   flex-basis: auto;
   min-width: 0;
 }
-.action-cluster--guided .action-share {
+.action-cluster .action-share {
   flex: none;
 }
 
-/* Mobile: the card becomes ONE row — the primary group (Download + split
-   trigger) grows more than Share/More (flex: 2.8 vs. their own flex-1 —
-   ActionButtons.tsx applies flex-1 directly to the Share/More buttons since
-   that value doesn't change per breakpoint); the secondary row's own
-   wrapper becomes `display: contents` so Share/More escape it and become
-   direct flex items of the single mobile row alongside the primary group,
-   rather than staying nested in a second row. 2.8 (up from an earlier 2.3):
-   measured directly against real layout at 390/430px — with Share/More's
-   own text kept (design review: real words down to ~370px, not the old
-   icon-only-by-default assumption), 2.3 left the primary only ~178px of a
-   366px row (390px viewport) — short of "Download for 3D printing" even
-   with its own tier-below font/padding/icon squeeze (index.css's ≤460px
-   rules) by a double-digit pixel margin. Share/More's own short one-word
-   labels have plenty of slack to give up a slightly smaller proportional
-   share without truncating themselves. Verified against a 320px viewport
-   too (the narrowest realistic target). */
+/* Mobile: the same single row, just tighter padding — the card doesn't need
+   as much breathing room as it would at desktop's roomier px-[0.5rem]/
+   py-[0.5rem] (ACTION_CLUSTER_CLASS), and the saved height adds up with the
+   dock's own tighter gap above. `!important` for the same
+   utilities-vs-components-layer reason as the dock's `gap` override above. */
 @media (max-width: 860px) {
   .app-shell__mobile .action-cluster {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    /* Round-2 review item 4: tighter than desktop's px-[0.5rem]/py-[0.5rem]
-       (ACTION_CLUSTER_CLASS) — the single mobile row doesn't need as much
-       breathing room as the two-row desktop card, and the saved height adds
-       up with the dock's own tighter gap above. `!important` for the same
-       utilities-vs-components-layer reason as the dock's `gap` override
-       above. */
     padding-block: 0.4rem !important;
     padding-inline: 0.45rem !important;
-  }
-  /* The desktop-only format sublabel (ActionButtons.tsx, "3MF · for slicers
-     and print services" under the primary row) would otherwise become a
-     THIRD flex item once .action-cluster flips to a single row here,
-     squeezing Download/Share/More for a line the split "▾" trigger already
-     carries at this width. display:none (not just hiding its text) drops it
-     out of the row's flex layout — and its share of .action-cluster's own
-     gap — entirely. */
-  .app-shell__mobile .action-export-format-note {
-    display: none;
-  }
-  .app-shell__mobile .action-row--primary {
-    /* 2.8 (measured against 390/430px real layout — see this rule's own
-       history) left the primary's own label 2px short of its natural
-       content width at exactly 390px (scrollWidth 134 vs. clientWidth 132),
-       triggering the truncation the design review's #3 finding exists to
-       forbid — Share/More's own short one-word labels give up a slightly
-       smaller share instead, still comfortably legible at every width this
-       suite checks (320-820px). */
-    flex: 3 1 0%;
-    min-width: 0;
-  }
-  .app-shell__mobile .action-row--secondary {
-    display: contents;
   }
 }
 
 /* Narrower phones (~460px and below — every current portrait phone width,
-   390/360/320px included): even with the 2.3:1:1 split above, "Download for
-   3D printing" alongside Share/More's full labels doesn't fit one row and
-   truncates ("Download …" — the design review's #3 finding). The primary
-   label's TEXT is the one thing that must never truncate, so it shrinks
-   (font-size/padding, still one line) first. Design review directive: real
-   words, not unexplained icons — "Download for 3D printing" / "Share" /
-   "More" all stay TEXT-labelled down to ~370px (typical phone widths:
-   320/360/390/430px all keep three readable labels); only below ~360px
-   (tier two, further down) does Share/More fall back to icon-only as a last
-   resort, with their aria-label/title still carrying the name for assistive
-   tech (see ActionButtons.tsx) — losing nothing there, just screen space.
-   `!important`: these buttons get their font-size/padding/icon size from
-   shadcn Button's own Tailwind utility classes (cva's size="sm") and
+   390/360/320px included): "Download for 3D printing" alongside Share's full
+   label doesn't fit one row and truncates ("Download …" — the design
+   review's #3 finding). The primary label's TEXT is the one thing that must
+   never truncate, so it shrinks (font-size/padding, still one line) first.
+   Design review directive: real words, not unexplained icons — "Download for
+   3D printing" / "Share" both stay TEXT-labelled down to ~370px (typical
+   phone widths: 320/360/390/430px all keep both labels readable); only below
+   ~360px (tier two, further down) does Share fall back to icon-only as a
+   last resort, with its aria-label/title still carrying the name for
+   assistive tech (see ActionButtons.tsx) — losing nothing there, just screen
+   space. `!important`: these buttons get their font-size/padding/icon size
+   from shadcn Button's own Tailwind utility classes (cva's size="sm") and
    lucide's `size` prop (an inline SVG width/height), which — like every
    Tailwind utility — live in the `utilities` layer (or as an inline style,
    above every layer) and beat a plain `components`-layer rule regardless of
@@ -893,28 +821,23 @@ button:disabled { cursor: default; }
   }
   /* The leading Download arrow icon drops here too (not just at tier two's
      ≤360px) — measured against real layout (390/430px, the two widths that
-     still truncated with the icon kept): the primary group's own flex-grow
-     share of a single-row bar leaves it only ~135-155px at this tier, and
-     the icon+its gap (~18px) was consistently the difference between the
-     label text fitting and clipping. The label TEXT must never truncate —
-     an icon is the part that can go. */
+     still truncated with the icon kept): the primary's own flex-grow share
+     of a single-row bar leaves it only ~135-155px at this tier, and the
+     icon+its gap (~18px) was consistently the difference between the label
+     text fitting and clipping. The label TEXT must never truncate — an icon
+     is the part that can go. */
   .app-shell__mobile .action-export svg {
     display: none !important;
   }
-  .app-shell__mobile .action-export-options {
-    padding-inline: 0.3rem !important;
-  }
-  /* Share/More still carry their full text at this tier — only their own
-     font-size/padding shrink, mirroring Download's own squeeze, so all
-     three keep real words down to ~370px. */
-  .app-shell__mobile .action-share,
-  .app-shell__mobile .action-more {
+  /* Share still carries its full text at this tier — only its own
+     font-size/padding shrink, mirroring Download's own squeeze, so both keep
+     real words down to ~370px. */
+  .app-shell__mobile .action-share {
     font-size: 0.76rem !important;
     padding-inline: 0.45rem !important;
     gap: 0.3rem !important;
   }
-  .app-shell__mobile .action-share svg,
-  .app-shell__mobile .action-more svg {
+  .app-shell__mobile .action-share svg {
     width: 14px !important;
     height: 14px !important;
   }
@@ -922,20 +845,16 @@ button:disabled { cursor: default; }
 
 /* Tier two (~360px and below — narrower than any current mainstream phone
    in portrait, but a real WCAG 1.4.10 reflow floor this suite still has to
-   hold): tier one's shrunk text no longer fits three real words on one row.
+   hold): tier one's shrunk text no longer fits both real words on one row.
    Shrink Download further still (its leading icon is already gone from tier
-   one, above) before falling back to hiding Share/More's visible words as
-   the very last resort. */
+   one, above) before falling back to hiding Share's visible word as the very
+   last resort. */
 @media (max-width: 360px) {
   .app-shell__mobile .action-export {
     font-size: 0.68rem !important;
     padding-inline: 0.4rem !important;
   }
-  .app-shell__mobile .action-export-options {
-    padding-inline: 0.25rem !important;
-  }
-  .app-shell__mobile .action-share,
-  .app-shell__mobile .action-more {
+  .app-shell__mobile .action-share {
     flex: 0 0 auto !important;
     padding-inline: 0.5rem !important;
   }
@@ -955,10 +874,10 @@ button:disabled { cursor: default; }
 }
 
 /* One-time viewer gesture hint (ViewerGestureHint) — bottom-centre, riding
-   above the action dock so it never overlaps the Export/PNG/Share row OR
-   whatever taller card (ExportAttention, ExportSuccess) is riding above that
-   row at the time. Non-interactive (pointer-events:none on the component
-   itself), so no z-index fight with anything below it matters.
+   above the action dock so it never overlaps the Download/Share row OR
+   whatever taller card (ExportSuccess) is riding above that row at the time.
+   Non-interactive (pointer-events:none on the component itself), so no
+   z-index fight with anything below it matters.
    Unlike .action-dock, this lives INSIDE .viewer-wrap on BOTH layouts (it's
    rendered by ViewerStage itself, not passed in as layout-specific children —
    see ViewerStage.tsx) — on mobile, .viewer-wrap's own bottom edge already
@@ -969,9 +888,9 @@ button:disabled { cursor: default; }
    --action-dock-h is the dock's OWN live-measured height (AppShell's dockRef
    ResizeObserver, set on document.documentElement since only one of the two
    layouts' docks is ever mounted at a time) — a flat rem guess here can't
-   track the dock's real content height (it grows upward when
-   ExportAttention/ExportSuccess ride above the cluster, and the export CTA
-   itself can wrap to two lines on a narrow width), so this instead adds the
+   track the dock's real content height (it grows upward when ExportSuccess
+   rides above the cluster, and the export CTA itself can wrap to two lines
+   on a narrow width), so this instead adds the
    dock's OWN bottom-anchor offset (mirroring .action-dock's own `bottom`,
    see below) to its measured height plus a fixed gap — guaranteeing the hint
    clears the dock regardless of what's currently inside it. The px fallback
@@ -1374,61 +1293,25 @@ button:disabled { cursor: default; }
   }
 
   /* Round-6 Wave 2, item 10: the export dock's Download/Share row — guided
-     mobile only (tabs-mode mobile's own single-row cluster is unchanged) —
-     grows from its plain `size="sm"` (32px) buttons + 0.4rem block padding
-     (~47px measured total) to the 64-72px compaction target: a 48px button
-     floor plus a touch more block padding gets there without needing a
-     restructure. `[data-slot="button"]` (shadcn's own primitive attribute,
-     not a bespoke hook class) reaches both `GuidedActionButtons`' direct
-     Download/Share buttons uniformly. `!important` on the padding for the
-     same utilities-vs-components-layer reason as the HUD rule just above —
+     mobile only (tabs-mode mobile's own single-row cluster keeps the plain
+     `size="sm"` height) — grows from its plain `size="sm"` (32px) buttons +
+     0.4rem block padding (~47px measured total) to the 64-72px compaction
+     target: a 48px button floor plus a touch more block padding gets there
+     without needing a restructure. `[data-slot="button"]` (shadcn's own
+     primitive attribute, not a bespoke hook class) reaches both Download and
+     Share uniformly. `!important` on the padding for the same
+     utilities-vs-components-layer reason as the HUD rule just above —
      `.action-cluster`'s own mobile `padding-block` override further up this
      file is itself a `!important` Tailwind-layer-beating rule this has to
-     out-rank. */
+     out-rank. The row's own flex layout (Download fills, Share sized to its
+     own content, never wraps) is now the shared, unconditional
+     `.action-cluster`/`.action-export`/`.action-share` treatment further up
+     this file — nothing guided-specific left to restate here. */
   .app-shell__mobile--guided .action-cluster [data-slot="button"] {
     min-height: 48px;
   }
   .app-shell__mobile--guided .action-cluster {
     padding-block: 0.5rem !important;
-  }
-
-  /* UX-plan 2.1: the guided dock's two direct buttons (GuidedActionButtons —
-     no split trigger, no More menu, unlike tabs mode's three-item row) used
-     to size themselves to their own content under the shared
-     `.app-shell__mobile .action-cluster { flex-direction: row }` rule above,
-     leaving empty space to the right of Share once Download's own content
-     was narrower than the row — visibly "about a third of the card" per the
-     UX review. Download now fills that space (`flex: 1 1 auto`, shrinking
-     via `min-width: 0` + its own `.action-export__label` truncate rather
-     than ever overflowing); Share stays sized to its own content
-     (`flex: none`) rather than either growing into the freed space or
-     shrinking away — its ≥44px target and full label both stay intact. */
-  /* `!important` on flex-shrink/flex-grow: shadcn Button's own base classes
-     (buttonVariants, `shrink-0`) are a Tailwind utility — utilities layer
-     always beats a plain components-layer rule regardless of specificity
-     (CLAUDE.md's cascade-layer note, same reasoning as every other
-     `!important` in this block) — so without it Download couldn't actually
-     shrink/grow and this fix would be a no-op. */
-  .app-shell__mobile--guided .action-export {
-    flex-grow: 1 !important;
-    flex-shrink: 1 !important;
-    flex-basis: auto;
-    min-width: 0;
-  }
-  .app-shell__mobile--guided .action-share {
-    flex: none;
-  }
-  /* Defensive hardening: `.action-cluster` already inherits `flex-wrap:
-     nowrap` from the shared `.app-shell__mobile .action-cluster` rule
-     above (this row is never meant to wrap to a second line — the dock is
-     a fixed-height bar pinned above the sheet), but restated here
-     `!important` and guided-scoped so the two-button guided row can never
-     wrap regardless of label length: Download's own `min-width: 0` +
-     `.action-export__label`'s `truncate` (ActionButtons.tsx) let its text
-     ellipsize instead, and Share (`flex: none` above) never gives up its
-     own space to force a wrap. */
-  .app-shell__mobile--guided .action-cluster {
-    flex-wrap: nowrap !important;
   }
 }
 

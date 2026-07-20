@@ -14,8 +14,8 @@
 //   - OutputConsole's Notices tab (the full list, WITH "go to setting" this
 //     time — Messages isn't anchored near any control, so jumping there is
 //     the only way back to it).
-// The export dock's own "N issues to review" line (ExportAttention.tsx) and
-// the Review chip's amber dot are deliberately NOT this component — they're
+// The export dock's own amber dot + sr-only hint (ActionButtons.tsx) and the
+// Review chip's amber dot are deliberately NOT this component — they're
 // glance-only indicators, not places to read or act on an item's own text.
 // The "Import font…" action itself is FontImportActions.tsx — the same
 // FileInput + addFile wiring FileBar.tsx's font TaskCard uses, so this is

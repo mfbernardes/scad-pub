@@ -32,19 +32,17 @@ import { noticeAttentionCount } from "../lib/readiness";
 const PEEK_HEIGHT = 60;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
 const EMPTY_LOG: string[] = [];
-// The floating action cluster — a compact card housing ActionButtons' two
-// rows (primary Download + split trigger, then Share/More). Desktop docks it
-// at the viewer's lower right; mobile collapses it to a single row between
-// the preview and the sheet — see index.css's `.action-cluster`/
-// `.action-row--*` doc for why the flex-direction/display swap that does
-// that lives entirely in CSS (a Tailwind utility here for the very
-// properties that swap per breakpoint would lose to the responsive override
-// every time — cascade layers put `@layer utilities` ahead of the app's own
-// `@layer components` regardless of specificity or media-query scoping).
-// Only genuinely breakpoint-INVARIANT decoration stays here as Tailwind
-// utilities (the card chrome); layout that differs by breakpoint (direction,
-// display, flex-basis) is pure CSS on the `.action-cluster`/`.action-row--*`
-// hooks below.
+// The floating action cluster — a compact card housing ActionButtons' single
+// row (Download + Share; see ActionButtons.tsx's own doc — there is no
+// second row or menu in any workflow anymore). Desktop docks it centered
+// under the viewer; mobile collapses it to the same single row between the
+// preview and the sheet — see index.css's `.action-cluster` doc for why the
+// breakpoint-specific sizing (padding, font-size tiers) lives entirely in CSS
+// (a Tailwind utility here for a property a media query needs to override
+// would lose to the responsive rule every time — cascade layers put `@layer
+// utilities` ahead of the app's own `@layer components` regardless of
+// specificity or media-query scoping). Only genuinely breakpoint-INVARIANT
+// decoration stays here as Tailwind utilities (the card chrome).
 const ACTION_CLUSTER_CLASS =
   "action-cluster gap-2 rounded-(--radius-card) border-(color:--glass-border) border bg-(--glass-bg) px-[0.5rem] py-[0.5rem] shadow-(--shadow-2)";
 // Wraps the action cluster (and, when present, the after-export panel riding
@@ -68,7 +66,6 @@ import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
 import { ExportSuccess, type ExportSuccessState } from "./ExportSuccess";
-import { ExportAttention } from "./ExportAttention";
 import { OutputToggle } from "./OutputToggle";
 import { BarActions } from "./BarActions";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
@@ -718,12 +715,13 @@ export const AppShell = memo(function AppShell({
     setFocusAttentionParam({ name, nonce: Date.now() });
   }, [openParamsTab]);
 
-  // PR22: "Review" from the export dock's attention line (see ExportAttention
-  // below) — jumps to wherever the visitor can actually resolve the gap:
-  // QuickStart's own Review stage when it's the active guide (bumping this
-  // nonce, mirroring reviewHiddenSignal above), or just the Customize tab
-  // otherwise — its attention chip already sits pinned above the scrollable
-  // form (see CustomizeTab.tsx), so simply switching tabs is enough there.
+  // PR22: jump to wherever the visitor can actually resolve an attention
+  // gap — used by `handleDownloadClick` below when guided Download reroutes
+  // to Review. QuickStart's own Review stage when it's the active guide
+  // (bumping this nonce, mirroring reviewHiddenSignal above), or just the
+  // Customize tab otherwise — its attention chip already sits pinned above
+  // the scrollable form (see CustomizeTab.tsx), so simply switching tabs is
+  // enough there.
   //
   // Round-2 review item 4 fix: the click most commonly arrives while the
   // Presets (or Files) tab is showing — Customize/QuickStart isn't mounted
@@ -745,15 +743,16 @@ export const AppShell = memo(function AppShell({
     }
   }, [openParamsTab, quickStartActive]);
 
-  // Wave 1 (guided workflow): the export dock's Download button. In tabs
-  // mode (or guided with nothing to review) this exports immediately —
-  // byte-identical to the plain `exportModel` binding ActionButtons uses
-  // directly in tabs mode (see actionButtonsProps below, which only wires
-  // this handler up for `workflow: "guided"`). Guided AND an unresolved
-  // issue: does NOT download — opens Review (reusing handleReviewAttention's
-  // own rAF dance so QuickStart mounts seeing the OLD signal value first,
-  // same reasoning as its own doc) and arms the just-in-time "Download
-  // anyway" confirmation there instead of downloading — see panelData's
+  // Wave 1 (guided workflow): the export dock's Download button, wired up
+  // unconditionally via actionButtonsProps below (ActionButtons.tsx's
+  // `onDownloadClick ?? exportModel`) — this function is itself
+  // workflow-aware, so passing it in every mode is safe. In tabs mode (or
+  // guided with nothing to review) this exports immediately, byte-identical
+  // to calling `exportModel` directly. Guided AND an unresolved issue: does
+  // NOT download — opens Review (reusing handleReviewAttention's own rAF
+  // dance so QuickStart mounts seeing the OLD signal value first, same
+  // reasoning as its own doc) and arms the just-in-time "Download anyway"
+  // confirmation there instead of downloading — see panelData's
   // `downloadConfirmPending` / `onDownloadAnyway`.
   const handleDownloadClick = useCallback(() => {
     if (workflowGuided && readiness === "attention") {
@@ -775,11 +774,6 @@ export const AppShell = memo(function AppShell({
   useEffect(() => {
     if (readiness !== "attention") setDownloadConfirmPending(false);
   }, [readiness]);
-
-  const handleSavePng = useCallback(() => {
-    const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
-    if (url) actions.savePng(url);
-  }, [isMobile, actions]);
 
   // Snap the active viewer to a view and remember it (the prop keeps a
   // freshly-mounted viewer in step; the imperative call re-applies on every pick).
@@ -847,7 +841,7 @@ export const AppShell = memo(function AppShell({
   // Mirrors the action dock's own live-measured height into --action-dock-h,
   // so .viewer-hint (index.css) can sit just above it with a fixed gap no
   // matter what's currently inside the dock — a plain Export row, or the
-  // taller ExportAttention/ExportSuccess card riding above it. Only one of
+  // taller ExportSuccess card riding above it. Only one of
   // the two layouts' ACTION_DOCK_CLASS divs is ever mounted at a time (see
   // the desktop/mobile JSX below), both wired to this same ref callback, so
   // writing the var to the document root (not a layout-specific root) is
@@ -1035,7 +1029,7 @@ export const AppShell = memo(function AppShell({
   // (kind "font-fallback"), which is a READINESS gap, not a design notice: it
   // already has its own carrier (the Review chip's amber dot, plus the
   // contextual card in Appearance and the full issue card in Review — see
-  // AppShell's `showExportAttentionBanner` doc). Folding font-fallback items
+  // ActionButtons.tsx's `hasAttention` doc). Folding font-fallback items
   // into this count is what produced the round-5 bug this revision fixes:
   // the bell lit up for a font problem the Review dot already represented,
   // and (in the aria-label / an eventual numeric surface) announced a count
@@ -1119,42 +1113,33 @@ export const AppShell = memo(function AppShell({
     attention,
     onGoToAttentionSetting: handleGoToAttentionSetting,
   };
-  // PR22: the export dock's own readiness — gates BOTH the export-attention
-  // line below (item 2) and ActionButtons' aria-describedby wiring, in place
-  // of the old attention.length > 0 corner dot. Distinct from that raw count:
-  // a font fallback is known independent of any render (it just reads the
-  // live controls), so attention.length can be > 0 even while a render is
+  // PR22: the export dock's own readiness — gates both ActionButtons'
+  // amber-dot + aria-describedby wiring. Distinct from the raw attention
+  // count: a font fallback is known independent of any render (it just reads
+  // the live controls), so attention.length can be > 0 even while a render is
   // still building or has failed — this only lights up once a render has
   // actually SUCCEEDED with something still worth reviewing (readiness.ts's
   // own failed > attention > ready precedence).
   const hasExportAttention = readiness === "attention";
-  // Round-6, item 2 (supersedes round-5 Wave 2 item 3): in guided workflow,
-  // the standing "N issues to review before download" banner over the
-  // viewer never shows, on ANY stage — including Review itself. Round-5 kept
-  // it there as "a compact summary above the viewer, alongside Review's own
-  // detail", but that made it a literal duplicate: Review already shows the
-  // same unresolved-issue count and detail via its own issue card
-  // (GuidedReviewContent's `review.issueCount` + AttentionItems, in
-  // QuickStart.tsx), so this banner floating above the SAME content was
-  // redundant, not complementary. Guided readiness is now carried entirely
-  // by the Review chip's own amber dot, the contextual font warning inline
-  // in Appearance, and Review's own full issue card — never a standing
-  // viewer-overlay banner. Unchanged at every stage in "tabs" workflow (no
-  // `@step`/Review notion there to gate on, and no duplicate surface to
-  // collide with). Pressing Download while issues exist still routes to
-  // Review regardless (see handleDownloadClick above) — only the passive
-  // banner itself is gone from guided mode.
-  const showExportAttentionBanner = hasExportAttention && !workflowGuided;
+  // Round-6, item 2 (supersedes round-5 Wave 2 item 3; extended by the dock
+  // unification pass to every workflow, not just guided): the standing "N
+  // issues to review before download" banner over the viewer never shows, on
+  // ANY stage or workflow — it read as a literal duplicate once Review (or,
+  // in tabs mode, the Customize tab's own contextual card) already shows the
+  // same unresolved-issue detail inline. Readiness is now carried entirely by
+  // Download's own amber dot + sr-only hint (ActionButtons.tsx), the
+  // contextual font warning inline in the form, and Review's own full issue
+  // card in guided mode — never a standing viewer-overlay banner. Pressing
+  // Download while issues exist still routes to Review in guided mode
+  // regardless (see handleDownloadClick above) — only the passive banner
+  // itself is gone, everywhere.
   const actionButtonsProps = {
     canExport: exportable,
     modelFormat: schema.format,
-    onSavePng: handleSavePng,
     hasAttention: hasExportAttention,
-    // Guided-only (see ActionButtons' own doc): the count GuidedActionButtons
-    // needs for its sr-only #export-attention-hint text, since ExportAttention
-    // (which owns that id in tabs mode) is never mounted in guided workflow.
+    // The count ActionButtons needs for its sr-only #export-attention-hint
+    // text.
     attentionCount: attention.length,
-    workflow: workflowMode,
     onDownloadClick: handleDownloadClick,
   };
   // The action dock: byte-identical markup on both layouts (only its
@@ -1165,8 +1150,7 @@ export const AppShell = memo(function AppShell({
   // one of the two layouts' copies is ever mounted at a time, so sharing the
   // one ref callback across both is safe.
   const actionDock = (
-    <div className={cn(ACTION_DOCK_CLASS, workflowGuided && "action-dock--guided")} ref={dockRef}>
-      {showExportAttentionBanner && <ExportAttention attention={attention} onReview={handleReviewAttention} />}
+    <div className={ACTION_DOCK_CLASS} ref={dockRef}>
       {exportSuccess && (
         <ExportSuccess
           state={exportSuccess}
@@ -1176,7 +1160,7 @@ export const AppShell = memo(function AppShell({
           onDismiss={onDismissExportSuccess}
         />
       )}
-      <div className={cn(ACTION_CLUSTER_CLASS, workflowGuided && "action-cluster--guided")}>
+      <div className={ACTION_CLUSTER_CLASS}>
         <ActionButtons {...actionButtonsProps} />
       </div>
     </div>

@@ -647,8 +647,8 @@ export const Viewer = forwardRef<
 
   // Re-fit whenever the caller's insets (or, round-5 Wave 2 item 7, its
   // fitFraction target) change shape — the HUD appearing/disappearing, the
-  // export dock's measured height changing (an ExportAttention/ExportSuccess
-  // card riding above the cluster), a mobile/desktop breakpoint flip, or
+  // export dock's measured height changing (an ExportSuccess card riding
+  // above the cluster), a mobile/desktop breakpoint flip, or
   // guided workflow's Content/Appearance <-> Review stage switch changing
   // which fill-fraction target applies (AppShell's own `fitFraction`, tied
   // to `activeStepId`). Orientation-preserving (see refit()'s own doc), so

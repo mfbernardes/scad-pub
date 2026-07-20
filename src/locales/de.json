@@ -11,9 +11,6 @@
 
   "action.image": "Bild",
   "action.share": "Teilen",
-  "action.more": "Mehr",
-  "action.exportOptions": "Download-Optionen",
-  "action.saveImage": "Bild speichern",
   "action.copyShareLink": "Link zum Teilen kopieren",
   "action.export": "Für den 3D-Druck herunterladen",
   "action.exportAria": "Für den 3D-Druck herunterladen ({format})",
@@ -111,7 +108,6 @@
 
   "overflow.messages": "Meldungen",
 
-  "export.formatNote": "{format} · für Slicer und Druckdienste",
   "export.downloaded": "Modell heruntergeladen",
   "export.readyToShare": "Modell bereit zum Teilen",
   "export.printingGuide": "Druckanleitung",
