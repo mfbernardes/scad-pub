@@ -1176,7 +1176,7 @@ export const AppShell = memo(function AppShell({
           onDismiss={onDismissExportSuccess}
         />
       )}
-      <div className={ACTION_CLUSTER_CLASS}>
+      <div className={cn(ACTION_CLUSTER_CLASS, workflowGuided && "action-cluster--guided")}>
         <ActionButtons {...actionButtonsProps} />
       </div>
     </div>

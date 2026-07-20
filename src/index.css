@@ -769,6 +769,33 @@ button:disabled { cursor: default; }
   gap: 0.5rem;
 }
 
+/* The GUIDED export dock is a single row on EVERY viewport — Download fills,
+   Share sized to its own content, the "3MF · …" format sublabel hidden — so
+   the desktop dock reads exactly like the mobile guided dock (user request).
+   Mobile already gets this from the `.app-shell__mobile--guided` rules below;
+   `.action-cluster--guided` (set by AppShell only in guided mode) extends the
+   identical treatment to the desktop dock, overriding the two-row column
+   default above. `!important` on flex-grow/shrink for the same
+   utilities-vs-components-layer reason as the mobile rules: shadcn Button's
+   own `shrink-0` utility would otherwise stop Download from filling/shrinking.
+   Tabs mode (no `--guided` class) keeps the two-row card with the caption. */
+.action-cluster--guided {
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+.action-cluster--guided .action-export-format-note {
+  display: none;
+}
+.action-cluster--guided .action-export {
+  flex-grow: 1 !important;
+  flex-shrink: 1 !important;
+  flex-basis: auto;
+  min-width: 0;
+}
+.action-cluster--guided .action-share {
+  flex: none;
+}
+
 /* Mobile: the card becomes ONE row — the primary group (Download + split
    trigger) grows more than Share/More (flex: 2.8 vs. their own flex-1 —
    ActionButtons.tsx applies flex-1 directly to the Share/More buttons since

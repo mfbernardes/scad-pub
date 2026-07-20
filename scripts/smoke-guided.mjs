@@ -581,7 +581,7 @@ async function checkDesktopExportFlow({ page, check }) {
   check((await page.locator(".action-export-menu").count()) === 0, "no export format dropdown menu in guided mode");
   check((await page.locator(".action-share").count()) === 1, "direct Share button");
   check((await page.locator(".action-more").count()) === 0, "no \"More\" menu (Save image/Copy link) in guided mode");
-  check((await page.locator(".action-export-format-note").count()) === 1, "the format note still shows as a caption");
+  check(!(await page.locator(".action-export-format-note").isVisible()), "the format note (3MF caption) is hidden on the guided dock, matching mobile");
 
   // Force an unresolved issue (missing font), then press Download: must NOT
   // download immediately — routes to Review with the just-in-time confirm.
