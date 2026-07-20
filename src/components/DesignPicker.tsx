@@ -160,7 +160,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, active = tr
           <span className="truncate">{current?.label ?? value}</span>
           <ChevronDownIcon size={14} aria-hidden="true" />
         </button>
-        <DialogContent className="flex max-h-[90vh] max-w-5xl flex-col">
+        <DialogContent className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Choose a design</DialogTitle>
             <DialogDescription>Select what you want to configure.</DialogDescription>
