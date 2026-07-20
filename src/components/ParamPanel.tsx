@@ -20,6 +20,7 @@ import { usePanelData } from "../lib/panelData";
 import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
+import { useDebounce } from "../lib/useDebounce";
 import { t } from "../lib/i18n";
 import { CustomizeTab } from "./CustomizeTab";
 import { FileBar, type LoadedFile } from "./FileBar";
@@ -108,7 +109,15 @@ export function ParamPanel({
   // component's own direct consumers (PresetPicker, FileBar) — CustomizeTab
   // below reads the very same context itself, so none of this needs to be
   // threaded through as a prop.
-  const { design, values, attention, settingsView, workflowGuided } = usePanelData();
+  const { design, values, attention, settingsView, workflowGuided, quickStartActive } = usePanelData();
+  // H6: whether QuickStart is showing — mirrors CustomizeTab's own
+  // `showQuickStart` (quickStartActive && !q, the same 150ms debounce over
+  // the same `search` prop) so the standing Live-preview footer below can be
+  // hidden in lockstep with QuickStart's own reveal/hide, in EITHER
+  // workflow. Recomputed here (not threaded down from CustomizeTab) because
+  // PanelFooter docks OUTSIDE CustomizeTab — see this file's own top doc.
+  const debouncedSearch = useDebounce(search, 150);
+  const showQuickStart = quickStartActive && !debouncedSearch.trim();
   const [open, setOpen] = useState(() => {
     const v = readLocal(PANEL_OPEN_KEY);
     return v !== null ? v === "true" : panelDefaultOpen;
@@ -360,14 +369,15 @@ export function ParamPanel({
         </>
       )}
 
-      {/* Wave 1 (round-5): the standing Live-preview footer is gone from
-          guided workflow ENTIRELY now, not just while Review is active —
-          live preview just stays on by default there; QuickStart hosts its
-          own stage-scoped toggle instead (see its own `autoRender` doc),
-          appearing only once a stage's Advanced settings are shown, never
-          in Review. Tabs mode (workflowGuided false) is completely
-          unaffected — it always renders this footer, unchanged. */}
-      {!workflowGuided && (
+      {/* H6: the standing Live-preview footer is gone whenever QuickStart is
+          showing, in EITHER workflow — guided already dropped it entirely
+          (live preview just stays on by default there); tabs mode now
+          matches: QuickStart hosts its own stage-scoped toggle instead (see
+          its own `autoRender` doc), appearing only once a stage's Advanced
+          settings are shown (or `!autoRender`), never in Review. The
+          no-QuickStart path (no `@step`s, or an active search query) is
+          unaffected — this footer still always renders there. */}
+      {!showQuickStart && (
         <PanelFooter
           autoRender={autoRender}
           className="flex shrink-0 items-center gap-2 border-t px-3 py-[0.4rem]"

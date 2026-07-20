@@ -157,15 +157,22 @@ export function CustomizeTab({
 
   // Wave 1 (guided workflow): whether QuickStart is showing under
   // `ui.workflow: "guided"` (vs. `showQuickStart` alone, which is also true
-  // in tabs mode) — gates every guided-only suppression/behavior below. Its
-  // own Review stage is a further-scoped subset: `isReviewStage`.
+  // in tabs mode) — gates purely STRUCTURAL guided-only behavior below (the
+  // Review screen, stage-only selection, `stepNav`, the guided mobile
+  // header, …). Its own Review stage is a further-scoped subset:
+  // `isReviewStage`. The per-stage ADVANCED machinery below (`stageAdvanced`/
+  // `showSearch`/the standing toggle/the hidden-diff banners) is gated on
+  // `showQuickStart` instead — round-N harmonization: tabs workflow reaches
+  // advanced settings identically to guided, so anything that used to say
+  // "guided only" there now says "whenever QuickStart is showing, in either
+  // workflow" (see docs/config.md's `ui.workflow`).
   const guidedActive = workflowGuided && showQuickStart;
   const isReviewStage = guidedActive && activeStepId === REVIEW_STEP_ID;
 
-  // Wave 1: "Advanced settings as a secondary action" (docs/config.md's
+  // "Advanced settings as a secondary action" (docs/config.md's
   // `ui.workflow`) — replaces the standing Essential/All `SettingsViewToggle`
   // with a quiet per-STAGE toggle QuickStart itself renders at the bottom of
-  // the active stage's essential content (see QuickStart's own
+  // each stage's essential content (see QuickStart's own
   // `stageAdvancedSet`/`onToggleStageAdvanced` props). Deliberately NOT the
   // app-wide `settingsView` state: turning advanced on for one stage must
   // never reveal another stage's advanced params, and must never itself exit
@@ -173,6 +180,8 @@ export function CustomizeTab({
   // only ever shows in the essentials view — see quickStartAvailable). A
   // plain Set of step ids that have been toggled on, so each stage
   // remembers its own choice independently for the rest of this design view.
+  // Active whenever QuickStart is showing (`showQuickStart`) — tabs and
+  // guided workflow share this exact model now, not just guided.
   const [stageAdvanced, setStageAdvanced] = useState<Set<string>>(() => new Set());
   const toggleStageAdvanced = (stepId: string) =>
     setStageAdvanced((prev) => {
@@ -181,22 +190,25 @@ export function CustomizeTab({
       else next.add(stepId);
       return next;
     });
-  // The search box only appears once the ACTIVE stage's advanced toggle is
-  // on (docs/config.md: "search only ever appears once advanced is on") —
-  // never on Review, which has no advanced controls at all.
+  // The search box only appears once advanced has been revealed somewhere
+  // relevant (docs/config.md: "search only ever appears once advanced is
+  // on") — never on Review, which has no advanced controls at all. Steps
+  // mode (mobile, either workflow, and guided desktop) has one CURRENT stage
+  // — mirroring guided's original behavior exactly, only the current stage's
+  // own toggle counts, so moving on to a later stage hides search again
+  // until THAT stage's toggle is on too. Scroll mode (tabs desktop) has no
+  // such single "current" stage — every step's group is mounted and
+  // independently toggleable at once — so there "any stage's advanced is
+  // on" is the meaningful equivalent of "the user has revealed advanced".
   const currentStageAdvancedOn =
-    guidedActive && !isReviewStage && !!activeStepId && stageAdvanced.has(activeStepId);
-  const showSearch = !guidedActive || currentStageAdvancedOn;
-
-  const reviewHiddenDiff = () => {
-    settingsViewChange("all");
-    const first = hiddenDiff[0];
-    if (first) setFocusParam({ name: first.name, nonce: Date.now() });
-  };
+    showQuickStart &&
+    !isReviewStage &&
+    (variant === "scroll" ? stageAdvanced.size > 0 : !!activeStepId && stageAdvanced.has(activeStepId));
+  const showSearch = !showQuickStart || currentStageAdvancedOn;
 
   // The attention chip's "Go to setting" action (see the chip below):
   // reveal + focus the owning param's control. Switches to All settings
-  // FIRST when the view is what's hiding it (mirrors reviewHiddenDiff above)
+  // FIRST when the view is what's hiding it (mirrors reviewHiddenDiff below)
   // — that switch also exits QuickStart (it only shows in essentials view),
   // so the classic form's own focusParam handling takes it from there.
   // Staying in essentials, QuickStart gets the same `focusParam` request
@@ -204,16 +216,20 @@ export function CustomizeTab({
   // own doc for why that composition is buffered through local state there
   // rather than built again here.
   //
-  // Wave 1 (guided): an advanced target reveals via the STAGE-scoped toggle
-  // above instead of the global settingsView switch — flipping settingsView
-  // here would exit QuickStart entirely, defeating "advanced stays stage-
-  // scoped". Finds the target's owning step the same way QuickStart's own
-  // focusParam effect does.
+  // Whenever QuickStart is showing (either workflow), an advanced target
+  // reveals via the STAGE-scoped toggle above instead of the global
+  // settingsView switch — flipping settingsView here would exit QuickStart
+  // entirely, defeating "advanced stays stage-scoped". Finds the target's
+  // owning step the same way QuickStart's own focusParam effect does; that
+  // step's own visibility (quickStart.ts's `visibleSteps`) already honours
+  // this same `stageAdvanced` set, so a step made visible ONLY by this
+  // reveal (every one of its params `@advanced`) still gets a group/chip to
+  // land the focus on.
   const focusOnParam = (name: string) => {
     const target = design.params.find((p) => p.name === name);
     if (!target) return;
     if (target.advanced) {
-      if (guidedActive) {
+      if (showQuickStart) {
         const step = design.steps?.find((s) => s.sections.includes(target.section));
         if (step) setStageAdvanced((prev) => (prev.has(step.id) ? prev : new Set(prev).add(step.id)));
       } else if (settingsView === "essentials") {
@@ -221,6 +237,25 @@ export function CustomizeTab({
       }
     }
     setFocusParam({ name, nonce: Date.now() });
+  };
+
+  // Reveal + focus the first hidden-but-differs-from-default param — the
+  // "settings-hidden-diff" banner's own action (below, no-QuickStart path
+  // only now — see that banner's gate) AND the friendly-error card's "Review
+  // hidden settings" action (via focusHiddenDiffSignal below), which CAN
+  // fire while QuickStart is showing. Reveals via the stage-scoped toggle in
+  // that case (delegating to focusOnParam, which already knows how) instead
+  // of `settingsViewChange("all")`, which would exit QuickStart entirely —
+  // see focusOnParam's own doc for why. The "all" fallback is kept only for
+  // the no-QuickStart path, where there's no stage to scope a reveal to.
+  const reviewHiddenDiff = () => {
+    const first = hiddenDiff[0];
+    if (showQuickStart) {
+      if (first) focusOnParam(first.name);
+      return;
+    }
+    settingsViewChange("all");
+    if (first) setFocusParam({ name: first.name, nonce: Date.now() });
   };
 
   // External trigger for the same action (the friendly-error card's "Review
@@ -268,16 +303,20 @@ export function CustomizeTab({
           gap between each of this component's own top-level blocks (chip
           strip, toggle, search), not just the horizontal insets. */}
       {hoistStrip && <div className="quick-start-strip-slot mx-(--space-5) mt-(--space-5) shrink-0" ref={setStripSlot} />}
-      {/* Wave 1 (guided workflow): NONE of the standing Essential/All toggle,
-          the hidden-advanced-diff banner, or (on Review specifically) the
-          preset-diff bar render — see docs/config.md's `ui.workflow`. The
+      {/* Whenever QuickStart is showing (either workflow now — see
+          `showQuickStart`'s own doc): NONE of the standing Essential/All
+          toggle, the hidden-advanced-diff banner, or (on Review specifically)
+          the preset-diff bar render — see docs/config.md's `ui.workflow`. The
           toggle is replaced by QuickStart's own quiet per-stage "Show
           advanced settings" button; the hidden-diff banner has no equivalent
           (it exists purely to point at the now-absent global toggle); the
           preset-diff bar stays available on non-Review guided stages,
-          unchanged, matching the mockup's "Review is verification only". */}
-      {hasAdvanced && !guidedActive && <SettingsViewToggle view={settingsView} />}
-      {!guidedActive && settingsView === "essentials" && hiddenDiff.length > 0 && (
+          unchanged, matching the mockup's "Review is verification only" (the
+          no-QuickStart path — no steps, or an active search query — is
+          UNCHANGED: every one of these still renders there exactly as
+          before). */}
+      {hasAdvanced && !showQuickStart && <SettingsViewToggle view={settingsView} />}
+      {!showQuickStart && settingsView === "essentials" && hiddenDiff.length > 0 && (
         <NoteBar
           as="button"
           className="settings-hidden-diff flex shrink-0 items-center gap-[0.4rem] border-b bg-muted px-(--space-5) py-[0.4rem] text-left text-[0.8rem] font-medium text-foreground hover:bg-secondary"
@@ -297,10 +336,10 @@ export function CustomizeTab({
           settingsView={settingsView}
         />
       )}
-      {/* Wave 1: search only ever appears once the active stage's own
-          Advanced toggle is on (never on Review, which has no advanced
-          controls at all) — see `showSearch`'s own doc above. Unaffected in
-          tabs mode (guidedActive is always false there). */}
+      {/* Search only ever appears once advanced has been revealed somewhere
+          relevant (never on Review, which has no advanced controls at all)
+          — see `showSearch`'s own doc above. Now applies in tabs mode too,
+          not just guided. */}
       {showSearch && (
         <ParamSearch
           value={search}
@@ -377,9 +416,13 @@ export function CustomizeTab({
             // workflow, which already renders the standing PanelFooter
             // outside CustomizeTab — passing `undefined` there (as before
             // this value moved into PanelDataContext) keeps QuickStart's
-            // `autoRender !== undefined` gate byte-identical to today's tabs
-            // behavior.
-            autoRender={workflowGuided ? autoRender : undefined}
+            // `autoRender !== undefined` gate byte-identical to today's
+            // no-QuickStart behavior. Now passed through whenever QuickStart
+            // is showing (either workflow) — H6: the standing PanelFooter is
+            // gone from the tabs path too while QuickStart shows (see
+            // ParamPanel.tsx / SheetTabs.tsx), so QuickStart's own inline
+            // stage-scoped Live-preview control is what reaches it there.
+            autoRender={showQuickStart ? autoRender : undefined}
           />
         ) : (
           <ParamForm
@@ -400,7 +443,7 @@ export function CustomizeTab({
           />
         )}
       </div>
-      {!guidedActive && settingsView === "essentials" && hiddenCount > 0 && (
+      {!showQuickStart && settingsView === "essentials" && hiddenCount > 0 && (
         <NoteBar
           as="div"
           className={`settings-hidden-note ${noteClass}`}

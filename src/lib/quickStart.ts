@@ -37,10 +37,30 @@ function sectionHasVisibleParam(
  * whenever `design`, `values`, or `view` change: a value change can reveal or
  * hide a `@showIf`-conditional param and so flip a step's visibility either
  * way, in either direction.
+ *
+ * `stageAdvanced` (the per-stage "Show advanced settings" model, see
+ * QuickStart.tsx's own `stageAdvancedSet`) lets a step whose id is in the set
+ * be checked against the "all" view instead of `view` — so a step made
+ * visible ONLY by its own `@advanced` params doesn't vanish the moment its
+ * own toggle (or CustomizeTab's `focusOnParam`, pre-toggling a step for a
+ * jump target that lives entirely behind its advanced toggle) turns it on.
+ * Omitted (or empty), this is exactly the pre-existing `view`-only rule.
  */
-export function visibleSteps(design: Design, values: Values, view: SettingsView): QuickStartStep[] {
+export function visibleSteps(
+  design: Design,
+  values: Values,
+  view: SettingsView,
+  stageAdvanced?: ReadonlySet<string>
+): QuickStartStep[] {
   const steps = design.steps ?? [];
-  return steps.filter((step) => sectionHasVisibleParam(design, new Set(step.sections), values, view));
+  return steps.filter((step) =>
+    sectionHasVisibleParam(
+      design,
+      new Set(step.sections),
+      values,
+      stageAdvanced?.has(step.id) ? "all" : view
+    )
+  );
 }
 
 /**

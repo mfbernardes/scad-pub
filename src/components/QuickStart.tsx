@@ -865,7 +865,10 @@ export function QuickStart({
   // keeping its identity stable across an unrelated re-render lets those stay
   // stable too, which is what actually keeps ParamRows' own memo (below)
   // effective — see its own comment.
-  const steps = useMemo(() => visibleSteps(design, values, view), [design, values, view]);
+  const steps = useMemo(
+    () => visibleSteps(design, values, view, stageAdvancedSet),
+    [design, values, view, stageAdvancedSet]
+  );
   const stepOrder = useMemo(() => [...steps.map((s) => s.id), REVIEW_STEP_ID], [steps]);
 
   const [currentId, setCurrentId] = useState<string>(() => steps[0]?.id ?? REVIEW_STEP_ID);
@@ -1139,16 +1142,21 @@ export function QuickStart({
   // declared step, mirroring a deliberate chip click.
   const onEditStep = (id: string) => select(id, { focus: true });
 
-  // Guided workflow's per-STAGE "Show advanced settings" toggle (see
-  // `stageAdvancedSet`'s own doc): whether the CURRENT step has any
-  // `@advanced` param at all (no button when it doesn't — nothing to
-  // reveal), and the view ParamRows should actually use for it — "all" only
-  // while this one step's own toggle is on, never touching the app-wide
-  // `view` prop (which stays "essentials" throughout).
+  // The per-STAGE "Show advanced settings" toggle (see `stageAdvancedSet`'s
+  // own doc): whether the CURRENT step has any `@advanced` param at all (no
+  // button when it doesn't — nothing to reveal), and the view ParamRows
+  // should actually use for it — "all" only while this one step's own toggle
+  // is on, never touching the app-wide `view` prop (which stays "essentials"
+  // throughout). Applies whenever QuickStart itself is mounted — CustomizeTab
+  // only ever mounts this component while its own `showQuickStart` is true
+  // (see CustomizeTab.tsx), so there's no separate flag to gate on here:
+  // tabs and guided workflow reach advanced settings identically. `workflow`
+  // itself stays reserved for genuinely STRUCTURAL differences (the Review
+  // screen variant, stage-only selection, `stepNav`, …).
   const currentStepHasAdvanced =
-    workflow === "guided" && !!currentStep && design.params.some((p) => p.advanced && currentStep.sections.includes(p.section));
+    !!currentStep && design.params.some((p) => p.advanced && currentStep.sections.includes(p.section));
   const currentStepAdvancedOn = !!currentStep && stageAdvancedSet.has(currentStep.id);
-  const currentStepView: SettingsView = workflow === "guided" && currentStepAdvancedOn ? "all" : view;
+  const currentStepView: SettingsView = currentStepAdvancedOn ? "all" : view;
 
   const rowProps = {
     design,
@@ -1356,39 +1364,85 @@ export function QuickStart({
         // gap-6 (32px) -> --space-5 (24px), matching the "panel sections
         // spaced ~24px" rhythm target.
         <div className="quick-start__scroll-content flex min-w-0 flex-col gap-(--space-5)">
-          {steps.map((step) => (
-            <section
-              key={step.id}
-              className="quick-start__group"
-              aria-labelledby={`quick-start-heading-${step.id}`}
-            >
-              <h3
-                id={`quick-start-heading-${step.id}`}
-                data-step-group={step.id}
-                ref={groupHeadingRef(step.id)}
-                tabIndex={-1}
-                className={groupHeadingClass}
+          {steps.map((step) => {
+            // Per-stage advanced model, generalized to scroll mode (every
+            // step's group is mounted at once here, unlike steps mode's
+            // single current step) — same three derived values steps mode
+            // computes only for `currentStep` above, computed per group
+            // instead. Mirrors `currentStepHasAdvanced`/`currentStepAdvancedOn`/
+            // `currentStepView` exactly, just not narrowed to one step.
+            const stepHasAdvanced = design.params.some(
+              (p) => p.advanced && step.sections.includes(p.section)
+            );
+            const stepAdvancedOn = stageAdvancedSet.has(step.id);
+            const stepView: SettingsView = stepAdvancedOn ? "all" : view;
+            // The `!autoRender` fallback (a heavy/paused design with no
+            // reachable Advanced toggle anywhere still needs SOME way to
+            // reach Live preview — see steps mode's own doc below) is a
+            // GLOBAL condition, not a per-stage one — unlike steps mode
+            // (only one step's content is ever mounted), scroll mode mounts
+            // every step's group at once, so gating it on `step === steps[0]`
+            // keeps it to exactly one control instead of one identical
+            // switch repeated under every single step.
+            const showLivePreviewHere =
+              (stepHasAdvanced && stepAdvancedOn) || (!autoRender && step === steps[0]);
+            return (
+              <section
+                key={step.id}
+                className="quick-start__group"
+                aria-labelledby={`quick-start-heading-${step.id}`}
               >
-                {step.label}
-              </h3>
-              <ParamRows
-                {...rowProps}
-                sections={stepSectionGroups.get(step.id) ?? []}
-                sectionChrome="flat"
-                // The step heading above already names a single-section step;
-                // only a step sharing several sections (see docs/
-                // annotations.md's "Sharing a step across sections") needs
-                // their own names repeated to tell the sub-groups apart.
-                showSectionHeadings={step.sections.length > 1}
-              />
-              {/* This step's own `@display` rows (src/lib/displayRows.ts) —
-                  a read-only "generated automatically" preview surface,
-                  after the step's own parameter controls. Renders nothing
-                  before the first successful render, or for a step with no
-                  `@display` rows at all. */}
-              <DisplayRowsPanel rows={displayRowsForStep(displayRows, step.id)} />
-            </section>
-          ))}
+                <h3
+                  id={`quick-start-heading-${step.id}`}
+                  data-step-group={step.id}
+                  ref={groupHeadingRef(step.id)}
+                  tabIndex={-1}
+                  className={groupHeadingClass}
+                >
+                  {step.label}
+                </h3>
+                <ParamRows
+                  {...rowProps}
+                  view={stepView}
+                  sections={stepSectionGroups.get(step.id) ?? []}
+                  sectionChrome="flat"
+                  // The step heading above already names a single-section step;
+                  // only a step sharing several sections (see docs/
+                  // annotations.md's "Sharing a step across sections") needs
+                  // their own names repeated to tell the sub-groups apart.
+                  showSectionHeadings={step.sections.length > 1}
+                />
+                {/* Same per-stage "Show/Hide advanced settings" toggle steps
+                    mode renders below its own ParamRows — see that branch's
+                    own doc for why the condition/markup is identical. */}
+                {stepHasAdvanced && (
+                  <button
+                    type="button"
+                    className="quick-start__advanced-toggle mt-(--space-3) cursor-pointer border-none bg-transparent p-0 text-[0.82rem] font-medium text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-offset-2"
+                    onClick={() => onToggleStageAdvanced?.(step.id)}
+                  >
+                    {stepAdvancedOn ? t("quickstart.hideAdvanced") : t("quickstart.showAdvanced")}
+                  </button>
+                )}
+                {/* Same inline stage-scoped Live-preview control steps mode
+                    renders (see its own doc, below) — reused here so tabs
+                    mode's desktop scroll variant reaches it too, not just
+                    steps mode. */}
+                {autoRender !== undefined && showLivePreviewHere && (
+                  <PanelFooter
+                    autoRender={autoRender}
+                    className="quick-start__advanced-live-preview mt-(--space-3) flex items-center gap-2"
+                  />
+                )}
+                {/* This step's own `@display` rows (src/lib/displayRows.ts) —
+                    a read-only "generated automatically" preview surface,
+                    after the step's own parameter controls. Renders nothing
+                    before the first successful render, or for a step with no
+                    `@display` rows at all. */}
+                <DisplayRowsPanel rows={displayRowsForStep(displayRows, step.id)} />
+              </section>
+            );
+          })}
 
           {showAlsoAvailable && (
             <div className="quick-start__also border-t pt-3">

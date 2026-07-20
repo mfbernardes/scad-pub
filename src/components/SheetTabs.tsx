@@ -17,6 +17,7 @@ import { PresetPicker } from "./PresetPicker";
 import { PanelFooter } from "./PanelFooter";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
+import { useDebounce } from "../lib/useDebounce";
 import { t } from "../lib/i18n";
 
 type Tab = PanelTab;
@@ -69,7 +70,12 @@ export function SheetTabs({
   // design/values/attention/settingsView: read from context for THIS
   // component's own direct consumers (PresetPicker, FileBar) — CustomizeTab
   // below reads the very same context itself.
-  const { design, values, attention, settingsView, workflowGuided } = usePanelData();
+  const { design, values, attention, settingsView, workflowGuided, quickStartActive } = usePanelData();
+  // H6: mirrors ParamPanel.tsx's own `showQuickStart` (same reasoning — see
+  // its doc) so the tabs-mode standing Live-preview footer hides in lockstep
+  // with QuickStart's own reveal/hide here too.
+  const debouncedSearch = useDebounce(search, 150);
+  const showQuickStart = quickStartActive && !debouncedSearch.trim();
   const hasFiles = fileImport != null;
   // Presets first on mobile, then Customize, then Files.
   const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
@@ -141,10 +147,14 @@ export function SheetTabs({
             {/* Auto-render is parameter-scoped, so it pins to the bottom of this
                 tab only — not on Presets/Files (mirrors the desktop panel).
                 Reset lives in PresetDiffBar above now (the unified restore
-                control). Always rendered here: "tabs" workflow (the only
-                mode that reaches this branch — guided returns above) never
-                suppresses it. */}
-            <PanelFooter autoRender={autoRender} className="sheet-footer" />
+                control). H6: hidden whenever QuickStart is showing (this
+                branch is "tabs" workflow only — guided returns above — but
+                tabs QuickStart now has the exact same stage-scoped inline
+                Live-preview control guided always had, see QuickStart.tsx's
+                own `autoRender` doc) — unaffected in the no-QuickStart path
+                (no `@step`s, or an active search query), which still always
+                renders this footer. */}
+            {!showQuickStart && <PanelFooter autoRender={autoRender} className="sheet-footer" />}
           </TabsContent>
           <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
             <PresetPicker

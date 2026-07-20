@@ -38,6 +38,7 @@ hole = true;
 hole_diameter = 4; // [2:0.5:12]
 
 // @collapsed
+// @advanced
 /* [Quality] */
 // Maximum facet angle; lower is smoother but slower.
 facet_angle = 3; // [1:1:10]

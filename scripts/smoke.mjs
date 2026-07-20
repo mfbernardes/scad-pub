@@ -1074,17 +1074,26 @@ async function reviewBlockOrder(reviewLocator, check, { expectAttention, message
 
 // Essentials/all settings view (the essentials/beginner milestone): the
 // dogfood config's guided default (ui.experience.default) starts a FRESH
-// visitor on the essentials view, which hides every @advanced param — tag's
-// Quality section (facet_angle/facet_size). Must run before any other check
-// has touched the settingsView preference (it reads the still-fresh page
-// straight after the welcome popup is dismissed), and deliberately ends with
-// the choice persisted as "all" — later checks (bundled presets' Import/
-// Export row, the @showIf/@collapsed checks in checkTagDesign) expect the
-// full, ungated panel.
+// visitor on the essentials view, which hides every @advanced param.
+// Deliberately exercised on "coin", not "tag": coin has the identical
+// "Quality" (facet_angle/facet_size, @advanced) section but declares no
+// `@step`s at all, so `quickStartActive` is always false for it and the
+// standing Essential/All toggle this test drives is ALWAYS the one showing
+// (the per-stage model — see checkQuickStart below — only ever applies while
+// QuickStart itself is showing; a design with no steps never reaches that
+// state, so this test's own subject is unaffected by it). Using "tag" here
+// would be circular: tag's own `@step`s make QuickStart the active guide the
+// instant this lands on essentials, which now suppresses this very toggle
+// (H1) — that replacement is what checkQuickStart exercises instead. Must
+// run before any other check has touched the settingsView preference (it
+// reads the still-fresh page straight after the welcome popup is dismissed),
+// and deliberately ends with the choice persisted as "all" — later checks
+// (bundled presets' Import/Export row, the @showIf/@collapsed checks in
+// checkTagDesign) expect the full, ungated panel.
 async function checkSettingsView({ page, check, ids, paramsTabName }) {
-  if (!ids.includes("tag")) return;
+  if (!ids.includes("coin")) return;
   console.log("=== settings view (essentials/all) ===");
-  await selectDesign(page, "tag");
+  await selectDesign(page, "coin");
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
 
   const toggle = page.locator(".settings-view-toggle");
@@ -1100,7 +1109,7 @@ async function checkSettingsView({ page, check, ids, paramsTabName }) {
   check((await hiddenNote.count()) === 1, "hidden-settings note shown at the bottom of the form in essentials view");
   const hiddenNoteText = ((await hiddenNote.textContent()) ?? "").trim();
   check(/\b2\b/.test(hiddenNoteText), `hidden-settings note reports the right count (saw "${hiddenNoteText}")`);
-  await runAxe(page, check, "essentials view, tag Customize tab");
+  await runAxe(page, check, "essentials view, coin Customize tab");
 
   // A search term matching only a hidden (advanced) param surfaces the
   // "N matching settings are in All settings — Show them" note; clicking it
@@ -1123,11 +1132,11 @@ async function checkSettingsView({ page, check, ids, paramsTabName }) {
   );
   await search.fill("");
   await search.press("Escape").catch(() => {});
-  await runAxe(page, check, "all settings view, tag Customize tab");
+  await runAxe(page, check, "all settings view, coin Customize tab");
 
   // The switch persists across a reload.
   await page.reload({ waitUntil: "load" });
-  await waitRendered(page, "tag reloaded (settings view)");
+  await waitRendered(page, "coin reloaded (settings view)");
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
   check(
     (await paramRow(page, "facet_angle").count()) > 0,
@@ -1217,25 +1226,37 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
     .evaluate((el) => el.closest(".customize-tab__scroll") !== null);
   check(!stripInScrollContainer, "the chip strip lives outside .customize-tab__scroll (hoisted, not scrolled-with-content)");
 
-  // Round-2 review fix (9a25e91): panel order is now guide line -> stage
-  // chips -> Essential/All toggle -> search -> step content, on BOTH
-  // layouts (previously only mobile hoisted the strip above the toggle).
-  // DOM order (not just visual position) is what actually matters for
-  // screen-reader/keyboard traversal, so compare each block's position in
-  // the DOM via compareDocumentPosition rather than just bounding-box Y.
-  const order = await page.evaluate(() => {
+  // Per-stage advanced model (harmonized with guided — see docs/config.md's
+  // `ui.workflow`): the standing Essential/All toggle and the search box are
+  // BOTH gone the instant QuickStart is showing (H1/H2) — replaced by each
+  // stage's own quiet "Show advanced settings" toggle. tag's own `@step`s
+  // (Size/Text/Emblem/Hanging hole) carry no `@advanced` params at all — its
+  // only advanced params (facet_angle/facet_size) sit in the un-stepped
+  // "Quality" section — so scroll mode renders no `.quick-start__advanced-
+  // toggle` anywhere either (sanity, mirroring smoke-guided.mjs's own
+  // "tag, no @advanced params in any step" check). The chip strip is still
+  // hoisted into its own slot ahead of the step content, same as before.
+  check(
+    (await page.locator(".settings-view-toggle").count()) === 0,
+    "the standing Essential/All toggle is gone while QuickStart is showing (H1)"
+  );
+  check(
+    (await page.locator("#param-search-input").count()) === 0,
+    "search is hidden until advanced is revealed somewhere — none of tag's own steps carry an @advanced param, so it never appears here (H2)"
+  );
+  check(
+    (await page.locator(".quick-start__advanced-toggle").count()) === 0,
+    "sanity: no stage has a \"Show advanced settings\" toggle either — tag's @advanced params are all in the un-stepped Quality section"
+  );
+  const stripBeforeContent = await page.evaluate(() => {
     const slot = document.querySelector(".quick-start-strip-slot");
-    const toggle = document.querySelector(".settings-view-toggle");
-    const search = document.querySelector("#param-search-input");
-    if (!slot || !toggle || !search) return null;
-    // Node.compareDocumentPosition: bit 4 (0x4, DOCUMENT_POSITION_FOLLOWING)
-    // set on B means "A precedes B in the document".
-    const before = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    return before(slot, toggle) && before(toggle, search);
+    const content = document.querySelector(".quick-start__scroll-content");
+    if (!slot || !content) return null;
+    return !!(slot.compareDocumentPosition(content) & Node.DOCUMENT_POSITION_FOLLOWING);
   });
   check(
-    order === true,
-    "DOM order is stage-chip strip -> Essential/All toggle -> search (chips hoisted above the toggle, desktop scroll mode)"
+    stripBeforeContent === true,
+    "DOM order is stage-chip strip -> step content (chips hoisted above the content, desktop scroll mode)"
   );
 
   // Scroll mode: every step's group renders simultaneously — a scrollable
@@ -1370,30 +1391,39 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
 
   await runAxe(page, check, "QuickStart Review stage visible (essentials view, tag, scroll mode)");
 
-  // All settings escape: switching to All settings shows the classic form
-  // (and facet_angle — the @advanced Quality section, per PR3's toggle
-  // behavior) instead of QuickStart; switching back to essentials brings
-  // QuickStart back.
-  await switchSettingsView(page, "all");
-  check((await page.locator(".quick-start").count()) === 0, "All settings shows the classic form, not QuickStart");
-  check((await paramRow(page, "facet_angle").count()) > 0, "facet_angle (advanced) is reachable in All settings");
-  await switchSettingsView(page, "essentials");
-  await quickStart.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-  check((await page.locator(".quick-start").count()) === 1, "QuickStart returns when switching back to essentials");
+  // Per-stage model note: the OLD "All settings escape" (click the standing
+  // toggle to drop into the classic form) and "search interplay" (type a
+  // query to bypass QuickStart, via the always-present search box) checks
+  // that used to live here are gone — both needed a UI affordance (the
+  // standing toggle, or a reachable search box) that H1/H2 deliberately
+  // removed the instant QuickStart is showing. tag's own `@step`s carry no
+  // `@advanced` param at all (see the sanity check above), so — exactly
+  // mirroring guided workflow's own pre-existing, already-shipped behavior
+  // for this same design (smoke-guided.mjs's own "no @advanced params in any
+  // step" checks) — there is now no in-app path to reveal either one for
+  // THIS design without an external trigger (e.g. `focusOnParam`, exercised
+  // elsewhere via the attention chip's "Go to setting"/the friendly-error
+  // card's "Review hidden settings"). The underlying bypass mechanism itself
+  // (`showQuickStart = quickStartActive && !q`) is untouched source — only
+  // the UI's ability to populate `q`/`stageAdvanced` for tag specifically
+  // changed — but this smoke suite has no other stepped design on hand to
+  // re-exercise it through the UI; see checkQuickStart's own report note.
 
-  // Search interplay: typing a query bypasses QuickStart for the classic
-  // filtered form; clearing it restores QuickStart.
-  const search = page.locator("#param-search-input");
-  await search.fill("width");
-  await page.locator(".quick-start").waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
-  check((await page.locator(".quick-start").count()) === 0, "a search query shows the classic filtered form, not QuickStart");
-  check((await paramRow(page, "width").count()) > 0, "the search actually filters to the matching param");
-  await search.fill("");
-  await quickStart.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-  check((await page.locator(".quick-start").count()) === 1, "clearing the search restores QuickStart");
+  // Sanity: with no reachable advanced toggle anywhere, QuickStart simply
+  // stays put — reloading changes nothing about which mode is showing.
+  check((await page.locator(".quick-start").count()) === 1, "QuickStart is still the active guide (nothing above changed settingsView)");
 
-  // Leave the suite in All settings for the checks that follow.
+  // Leave the suite in All settings, on "tag", for the checks that follow
+  // (bundled presets' Import/Export row, checkTagDesign's own @showIf/
+  // @collapsed checks expect the full, ungated panel, on tag specifically).
+  // settingsView is a single, design-independent preference, and tag's own
+  // standing toggle is unreachable while QuickStart is showing (H1), so flip
+  // it via a design with no `@step`s (coin) instead — exactly like
+  // checkSettingsView does — then switch back to tag so the rest of this
+  // check's own state (which design is selected) is otherwise unchanged.
+  await selectDesign(page, "coin");
   await switchSettingsView(page, "all");
+  await selectDesign(page, "tag");
 }
 
 // QuickStart step navigation, mobile (PR15): the bottom sheet keeps today's
@@ -1424,22 +1454,36 @@ async function checkQuickStartMobile({ browser, base, check, ids, paramsTabName 
     const chips = page.locator(".quick-start__step");
     check((await chips.count()) === 5, "5 chips shown on mobile (4 @step sections + Review)");
 
-    // Round-2 review fix (9a25e91): panel order — guide line -> stage chips
-    // -> Essential/All toggle -> search -> step content — now applies to
-    // BOTH layouts; this was already true on mobile before this pass (only
-    // desktop scroll mode needed the hoist), so this is a same-as-before
-    // regression guard rather than a new behavior on this layout.
-    const order = await page.evaluate(() => {
+    // Per-stage advanced model, harmonized with guided (see checkQuickStart's
+    // own matching comment, desktop scroll mode): the standing Essential/All
+    // toggle and the search box are both gone the instant QuickStart shows,
+    // on mobile too — replaced by each stage's own quiet "Show advanced
+    // settings" toggle. tag's own `@step`s carry no `@advanced` param at all
+    // (its only advanced params sit in the un-stepped "Quality" section), so
+    // none of them render one here either — sanity, mirroring smoke-
+    // guided.mjs's own "tag, no @advanced params in any step" check, which
+    // already covered this exact fact for mobile steps mode under guided.
+    check(
+      (await page.locator(".settings-view-toggle").count()) === 0,
+      "the standing Essential/All toggle is gone while QuickStart is showing (H1, mobile)"
+    );
+    check(
+      (await page.locator("#param-search-input").count()) === 0,
+      "search is hidden until advanced is revealed somewhere — no step here has one (H2, mobile)"
+    );
+    check(
+      (await page.locator(".quick-start__advanced-toggle").count()) === 0,
+      "sanity: no stage has a \"Show advanced settings\" toggle either — tag's @advanced params are all in the un-stepped Quality section"
+    );
+    const stripBeforeContent = await page.evaluate(() => {
       const slot = document.querySelector(".quick-start-strip-slot");
-      const toggle = document.querySelector(".settings-view-toggle");
-      const search = document.querySelector("#param-search-input");
-      if (!slot || !toggle || !search) return null;
-      const before = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-      return before(slot, toggle) && before(toggle, search);
+      const content = document.querySelector(".quick-start__content");
+      if (!slot || !content) return null;
+      return !!(slot.compareDocumentPosition(content) & Node.DOCUMENT_POSITION_FOLLOWING);
     });
     check(
-      order === true,
-      "DOM order is stage-chip strip -> Essential/All toggle -> search on mobile too (steps mode)"
+      stripBeforeContent === true,
+      "DOM order is stage-chip strip -> step content on mobile too (steps mode)"
     );
 
     // Mobile stays one-step-at-a-time: scroll mode's simultaneous-group
@@ -1985,6 +2029,19 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
     await page.getByRole("tab", { name: paramsTabName }).first().click();
     await page.waitForSelector(".param-form", { timeout: 3000 });
     check((await page.locator(".param-form").count()) === 1, "exactly one ParamForm is mounted");
+
+    // This check's own subject is state survival (search value + focus, tab,
+    // sheet detent) across a breakpoint change — orthogonal to QuickStart.
+    // The default landing design (tag) has QuickStart as its active guide
+    // (guided + essentials + `@step`s), which now hides the search box until
+    // a stage's advanced is revealed (H2) — none of tag's own steps have
+    // one (see checkQuickStart's own note), so it isn't reachable here.
+    // Switch to "coin" (no `@step`s, so QuickStart never engages) first,
+    // purely so the search box this check actually cares about is present —
+    // unrelated to what's being tested below.
+    await selectDesign(page, "coin");
+    await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+    await page.waitForSelector(".param-form", { timeout: 3000 });
 
     // Type into the search box and leave it focused. AppShell's own "focus a
     // text-entry control while the sheet is at Half" effect (keeps the
