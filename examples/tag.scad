@@ -20,6 +20,15 @@ thickness = 3; // [1:0.5:10]
 // @info Corner radius | mm
 corner_radius = 4; // [0:0.5:20]
 
+// @step size
+// @collapsed
+// @advanced
+/* [Quality] */
+// Maximum facet angle; lower is smoother but slower.
+facet_angle = 4; // [1:1:12]
+// Maximum facet size (mm); lower is smoother but slower.
+facet_size = 0.3; // [0.1:0.1:1]
+
 // @step text | Text
 /* [Text] */
 // Text to emboss on the tag. Leave empty for none.
@@ -65,14 +74,6 @@ hole = true;
 // @showIf hole
 // @info Hole diameter | mm
 hole_diameter = 5; // [2:0.5:15]
-
-// @collapsed
-// @advanced
-/* [Quality] */
-// Maximum facet angle; lower is smoother but slower.
-facet_angle = 4; // [1:1:12]
-// Maximum facet size (mm); lower is smoother but slower.
-facet_size = 0.3; // [0.1:0.1:1]
 
 /* [Hidden] */
 $fa = facet_angle;

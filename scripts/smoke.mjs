@@ -1229,12 +1229,10 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
   // Per-stage advanced model (harmonized with guided — see docs/config.md's
   // `ui.workflow`): the standing Essential/All toggle and the search box are
   // BOTH gone the instant QuickStart is showing (H1/H2) — replaced by each
-  // stage's own quiet "Show advanced settings" toggle. tag's own `@step`s
-  // (Size/Text/Emblem/Hanging hole) carry no `@advanced` params at all — its
-  // only advanced params (facet_angle/facet_size) sit in the un-stepped
-  // "Quality" section — so scroll mode renders no `.quick-start__advanced-
-  // toggle` anywhere either (sanity, mirroring smoke-guided.mjs's own
-  // "tag, no @advanced params in any step" check). The chip strip is still
+  // stage's own quiet "Show advanced settings" toggle. tag's `[Quality]`
+  // section (facet_angle/facet_size) now lives IN the "size" step, so the
+  // Size group is the one stage with a real toggle — Text/Emblem/Hanging
+  // hole carry no `@advanced` param and render none. The chip strip is still
   // hoisted into its own slot ahead of the step content, same as before.
   check(
     (await page.locator(".settings-view-toggle").count()) === 0,
@@ -1242,12 +1240,50 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
   );
   check(
     (await page.locator("#param-search-input").count()) === 0,
-    "search is hidden until advanced is revealed somewhere — none of tag's own steps carry an @advanced param, so it never appears here (H2)"
+    "search is hidden until advanced is revealed somewhere — no stage's toggle has been clicked yet (H2)"
+  );
+  const groups = page.locator(".quick-start__group");
+  const sizeGroup = groups.filter({ has: page.locator("h3", { hasText: "Size" }) });
+  const textGroup = groups.filter({ has: page.locator("h3", { hasText: "Text" }) });
+  const emblemGroup = groups.filter({ has: page.locator("h3", { hasText: "Emblem" }) });
+  const holeGroup = groups.filter({ has: page.locator("h3", { hasText: "Hanging hole" }) });
+  check(
+    (await sizeGroup.locator(".quick-start__advanced-toggle").count()) === 1,
+    "the Size stage (now hosting tag's [Quality] section) renders its own \"Show advanced settings\" toggle"
+  );
+  check((await textGroup.locator(".quick-start__advanced-toggle").count()) === 0, "the Text stage has no advanced toggle (no @advanced params)");
+  check((await emblemGroup.locator(".quick-start__advanced-toggle").count()) === 0, "the Emblem stage has no advanced toggle (no @advanced params)");
+  check((await holeGroup.locator(".quick-start__advanced-toggle").count()) === 0, "the Hanging hole stage has no advanced toggle (no @advanced params)");
+  check(
+    (await page.locator(".quick-start__advanced-toggle").count()) === 1,
+    "exactly one \"Show advanced settings\" toggle exists across every stage (Size's own)"
+  );
+
+  // Round-N: restore per-stage-reveal coverage — click Size's own "Show
+  // advanced settings" toggle and confirm it (a) reveals the search box
+  // globally, per scroll mode's `stageAdvanced.size > 0` rule
+  // (CustomizeTab.tsx), and (b) makes facet_angle's own ParamRow reachable
+  // inside the Size group. This re-exercises showQuickStart's
+  // advanced-reveal path end-to-end, which had no in-step advanced param to
+  // demonstrate it on before tag's `[Quality]` section moved into "size".
+  const sizeToggle = sizeGroup.locator(".quick-start__advanced-toggle");
+  await sizeToggle.click();
+  check((await page.locator("#param-search-input").count()) === 1, "clicking Size's advanced toggle reveals the search box (H2)");
+  check(
+    (await sizeGroup.locator('.param[data-param="facet_angle"]').count()) === 1,
+    "facet_angle's own ParamRow becomes reachable once Size's advanced toggle is on"
   );
   check(
-    (await page.locator(".quick-start__advanced-toggle").count()) === 0,
-    "sanity: no stage has a \"Show advanced settings\" toggle either — tag's @advanced params are all in the un-stepped Quality section"
+    /Hide advanced/.test((await sizeToggle.textContent()) ?? ""),
+    "the toggle's own label flips to \"Hide advanced settings\" once on"
   );
+  await sizeToggle.click(); // toggle back off, leaving the stage as found
+  check((await page.locator("#param-search-input").count()) === 0, "toggling Size's advanced back off hides search again");
+  check(
+    (await sizeGroup.locator('.param[data-param="facet_angle"]').count()) === 0,
+    "facet_angle's own ParamRow is hidden again once the toggle is off"
+  );
+
   const stripBeforeContent = await page.evaluate(() => {
     const slot = document.querySelector(".quick-start-strip-slot");
     const content = document.querySelector(".quick-start__scroll-content");
@@ -1393,24 +1429,20 @@ async function checkQuickStart({ page, check, ids, paramsTabName }) {
 
   // Per-stage model note: the OLD "All settings escape" (click the standing
   // toggle to drop into the classic form) and "search interplay" (type a
-  // query to bypass QuickStart, via the always-present search box) checks
-  // that used to live here are gone — both needed a UI affordance (the
-  // standing toggle, or a reachable search box) that H1/H2 deliberately
-  // removed the instant QuickStart is showing. tag's own `@step`s carry no
-  // `@advanced` param at all (see the sanity check above), so — exactly
-  // mirroring guided workflow's own pre-existing, already-shipped behavior
-  // for this same design (smoke-guided.mjs's own "no @advanced params in any
-  // step" checks) — there is now no in-app path to reveal either one for
-  // THIS design without an external trigger (e.g. `focusOnParam`, exercised
-  // elsewhere via the attention chip's "Go to setting"/the friendly-error
-  // card's "Review hidden settings"). The underlying bypass mechanism itself
-  // (`showQuickStart = quickStartActive && !q`) is untouched source — only
-  // the UI's ability to populate `q`/`stageAdvanced` for tag specifically
-  // changed — but this smoke suite has no other stepped design on hand to
-  // re-exercise it through the UI; see checkQuickStart's own report note.
+  // query to bypass QuickStart while no stage has advanced revealed) checks
+  // that used to live here are still gone — both needed a UI affordance (the
+  // standing toggle, or a search box reachable before any reveal) that H1/H2
+  // deliberately removed the instant QuickStart is showing; that part is
+  // unchanged. What's different now: tag's `[Quality]` section moved into
+  // its "size" step, so there IS a real in-app path to reveal advanced/
+  // search for this design again — exercised above via Size's own "Show
+  // advanced settings" toggle, the same `showQuickStart = quickStartActive
+  // && !q` bypass mechanism, now actually reachable through the UI (Text/
+  // Emblem/Hanging hole still have no toggle of their own — see the
+  // per-group checks above).
 
-  // Sanity: with no reachable advanced toggle anywhere, QuickStart simply
-  // stays put — reloading changes nothing about which mode is showing.
+  // Sanity: toggling Size's advanced setting on and back off above never
+  // touched `settingsView` — QuickStart simply stays put throughout.
   check((await page.locator(".quick-start").count()) === 1, "QuickStart is still the active guide (nothing above changed settingsView)");
 
   // Leave the suite in All settings, on "tag", for the checks that follow
@@ -1458,23 +1490,42 @@ async function checkQuickStartMobile({ browser, base, check, ids, paramsTabName 
     // own matching comment, desktop scroll mode): the standing Essential/All
     // toggle and the search box are both gone the instant QuickStart shows,
     // on mobile too — replaced by each stage's own quiet "Show advanced
-    // settings" toggle. tag's own `@step`s carry no `@advanced` param at all
-    // (its only advanced params sit in the un-stepped "Quality" section), so
-    // none of them render one here either — sanity, mirroring smoke-
-    // guided.mjs's own "tag, no @advanced params in any step" check, which
-    // already covered this exact fact for mobile steps mode under guided.
+    // settings" toggle. tag's `[Quality]` section (facet_angle/facet_size)
+    // now lives IN the "size" step, so the Size stage — the default landing
+    // stage — is the one with a real toggle; Text/Emblem/Hanging hole still
+    // carry no `@advanced` param and render none.
+    await chips.nth(0).click(); // land on Size explicitly (it's the default anyway)
     check(
       (await page.locator(".settings-view-toggle").count()) === 0,
       "the standing Essential/All toggle is gone while QuickStart is showing (H1, mobile)"
     );
     check(
       (await page.locator("#param-search-input").count()) === 0,
-      "search is hidden until advanced is revealed somewhere — no step here has one (H2, mobile)"
+      "search is hidden until advanced is revealed somewhere — Size's own toggle hasn't been clicked yet (H2, mobile)"
     );
     check(
-      (await page.locator(".quick-start__advanced-toggle").count()) === 0,
-      "sanity: no stage has a \"Show advanced settings\" toggle either — tag's @advanced params are all in the un-stepped Quality section"
+      (await page.locator(".quick-start__advanced-toggle").count()) === 1,
+      "the current stage (Size) renders exactly one \"Show advanced settings\" toggle — it now hosts tag's [Quality] section"
     );
+
+    // Round-N: restore per-stage-reveal coverage on mobile too — click
+    // Size's own toggle and confirm it reveals search (steps mode's
+    // single-current-stage rule, CustomizeTab.tsx) and makes facet_angle's
+    // own ParamRow reachable, then toggle it back off.
+    const sizeToggle = page.locator(".quick-start__advanced-toggle");
+    await sizeToggle.click();
+    check((await page.locator("#param-search-input").count()) === 1, "clicking Size's advanced toggle reveals the search box (H2, mobile)");
+    check(
+      (await paramRow(page, "facet_angle").count()) > 0,
+      "facet_angle's own ParamRow becomes reachable once Size's advanced toggle is on (mobile)"
+    );
+    await sizeToggle.click(); // toggle back off, leaving the stage as found
+    check((await page.locator("#param-search-input").count()) === 0, "toggling Size's advanced back off hides search again (mobile)");
+    check(
+      (await paramRow(page, "facet_angle").count()) === 0,
+      "facet_angle's own ParamRow is hidden again once the toggle is off (mobile)"
+    );
+
     const stripBeforeContent = await page.evaluate(() => {
       const slot = document.querySelector(".quick-start-strip-slot");
       const content = document.querySelector(".quick-start__content");

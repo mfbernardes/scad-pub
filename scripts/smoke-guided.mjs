@@ -138,11 +138,12 @@ function buildGuidedConfig() {
 // See HEAVY_CONFIG/HEAVY_DIST's own doc — a small, explicit delta on the SAME
 // base config, `tag` (the only `@step`-declaring example design, so the only
 // one QuickStart ever runs for) marked `heavy: true`. tag.scad's only
-// `@advanced` params (facet_angle/facet_size, under the unstepped `Quality`
-// section) belong to no declared step, so no step's own "Show advanced
-// settings" toggle ever appears — exactly the shape the round-5 review's
-// functional item 9 fix targets (a heavy design with no @advanced params
-// reachable from any stage).
+// `@advanced` params (facet_angle/facet_size, under the `[Quality]` section)
+// belong to the "size" step, so its own "Show advanced settings" toggle
+// appears there — but not on the other three stages (Text/Emblem/Hanging
+// hole). checkHeavyDesignLivePreview below navigates off the Size stage to
+// one of those, to exercise the shape the round-5 review's functional item 9
+// fix targets (a heavy design on a stage with no @advanced params reachable).
 function buildGuidedHeavyConfig() {
   const base = JSON.parse(readFileSync(BASE_CONFIG, "utf-8"));
   const guided = structuredClone(base);
@@ -1017,7 +1018,7 @@ async function checkUnifiedSelectorAutoOpenMobile({ browser, base, check }) {
   });
 }
 
-// ─── Isolated: a heavy design with no reachable per-stage Advanced toggle ──
+// ─── Isolated: a heavy design, on a stage with no per-stage Advanced toggle ──
 // still has a reachable Live-preview control (round-5 review, functional
 // item 9). Builds its OWN separate config+dist (see HEAVY_CONFIG/HEAVY_DIST's
 // own doc) so marking `tag` heavy never leaks into the main guided suite
@@ -1026,7 +1027,7 @@ async function checkUnifiedSelectorAutoOpenMobile({ browser, base, check }) {
 // doc, since a heavy design starts with autoRender off, which is exactly
 // the condition that now surfaces this control).
 async function checkHeavyDesignLivePreview({ check }) {
-  console.log("=== isolated: heavy design (tag, no @advanced params in any step) still reaches Live preview ===");
+  console.log("=== isolated: heavy design (tag, on a stage with no @advanced params) still reaches Live preview ===");
   buildGuidedHeavyConfig();
   run(process.execPath, [GEN_SCHEMA], { SCADPUB_CONFIG: HEAVY_CONFIG });
   run(fileURLToPath(new URL("../node_modules/.bin/vite", import.meta.url)), ["build", "--outDir", HEAVY_DIST], {});
@@ -1035,40 +1036,59 @@ async function checkHeavyDesignLivePreview({ check }) {
   const base = `http://127.0.0.1:${port}${basePath}`;
   const browser = await launchChromium();
   try {
-    const page = await browser.newPage();
-    await page.context().route("**/sw.js*", (route) => route.abort());
-    await page.goto(base, { waitUntil: "load" });
-    await dismissWelcomePopup(page);
-    // A heavy design still fires exactly one initial render on load
-    // (renderState.ts's shouldFireInitialRender) — only SUBSEQUENT live
-    // edits are paused.
-    await waitRenderDone(page);
+    // Mobile ("steps") navigation, not desktop scroll: desktop mounts every
+    // stage's group simultaneously (QuickStart.tsx's scroll-mode `steps.map`),
+    // so Size's now-present Advanced toggle would stay in the DOM no matter
+    // where the page is scrolled — "no Advanced toggle reachable on the
+    // current stage" can only be checked honestly where only ONE step's
+    // group is ever mounted at a time. That's also exactly the mode
+    // `stepAdvancedInfo`'s `isFirstStep` doc calls out: "steps" mode always
+    // passes `isFirstStep: true` for whichever step is currently mounted, so
+    // the live-preview escape hatch still fires on Text even though it isn't
+    // literally the first declared step.
+    await withMobileContext(browser, async (page) => {
+      await page.context().route("**/sw.js*", (route) => route.abort());
+      await page.goto(base, { waitUntil: "load" });
+      await dismissWelcomePopup(page);
+      // A heavy design still fires exactly one initial render on load
+      // (renderState.ts's shouldFireInitialRender) — only SUBSEQUENT live
+      // edits are paused.
+      await waitRenderDone(page);
 
-    // Sanity: this stage genuinely has no Advanced toggle to open — tag's
-    // only `@advanced` params belong to the unstepped "Quality" section, so
-    // `currentStepHasAdvanced` is false for every real step.
-    check((await page.locator(".quick-start__advanced-toggle").count()) === 0, "sanity: the current stage has no \"Show advanced settings\" toggle at all");
+      // The landing stage is "Size", which now carries tag's `[Quality]`
+      // section (facet_angle/facet_size) and so has its own Advanced toggle —
+      // navigate to "Text" instead, which (like Emblem/Hanging hole) has
+      // none, to keep this check's premise (a stage with NO reachable
+      // Advanced toggle) genuinely true. In mobile "steps" mode this actually
+      // unmounts Size's group, unlike desktop scroll mode.
+      await page.locator(".quick-start__step").filter({ hasText: "Text" }).click();
 
-    const livePreview = page.locator(".quick-start__advanced-live-preview .auto-render");
-    await livePreview.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
-    check((await livePreview.count()) === 1, "the Live-preview control is reachable anyway, because autoRender starts off for a heavy design");
+      // Sanity: the Text stage genuinely has no Advanced toggle to open —
+      // none of its params are `// @advanced`, unlike Size (which now hosts
+      // the `[Quality]` section), so `currentStepHasAdvanced` is false here.
+      check((await page.locator(".quick-start__advanced-toggle").count()) === 0, "sanity: the current stage (Text) has no \"Show advanced settings\" toggle at all");
 
-    const toggle = page.getByRole("switch", { name: "Live preview" });
-    check(await toggle.isVisible(), "the Live-preview switch itself is visible and interactive");
-    check((await toggle.getAttribute("aria-checked")) === "false", "it honestly reflects autoRender being off (heavy design, not yet turned on)");
+      const livePreview = page.locator(".quick-start__advanced-live-preview .auto-render");
+      await livePreview.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+      check((await livePreview.count()) === 1, "the Live-preview control is reachable anyway, because autoRender starts off for a heavy design");
 
-    await runAxe(page, check, "guided heavy-design stage, Live-preview control visible");
+      const toggle = page.getByRole("switch", { name: "Live preview" });
+      check(await toggle.isVisible(), "the Live-preview switch itself is visible and interactive");
+      check((await toggle.getAttribute("aria-checked")) === "false", "it honestly reflects autoRender being off (heavy design, not yet turned on)");
 
-    // Clicking it actually flips autoRender on — proven not by re-reading the
-    // SAME switch (its own reveal condition, `!autoRender` with no per-stage
-    // Advanced toggle here, stops holding the INSTANT autoRender flips true,
-    // so the control correctly tucks itself away again — the same
-    // standing-footer-free behavior a light, non-heavy design already has)
-    // but by the control disappearing once turned on, which could only
-    // happen if the click actually reached `autoRenderChange`.
-    await toggle.click();
-    await livePreview.waitFor({ state: "hidden", timeout: 5000 }).catch(() => {});
-    check((await livePreview.count()) === 0, "turning Live preview on tucks the control away again (no Advanced toggle to keep it open) — proves the click actually flipped autoRender");
+      await runAxe(page, check, "guided heavy-design stage, Live-preview control visible");
+
+      // Clicking it actually flips autoRender on — proven not by re-reading
+      // the SAME switch (its own reveal condition, `!autoRender` with no
+      // per-stage Advanced toggle here, stops holding the INSTANT autoRender
+      // flips true, so the control correctly tucks itself away again — the
+      // same standing-footer-free behavior a light, non-heavy design already
+      // has) but by the control disappearing once turned on, which could
+      // only happen if the click actually reached `autoRenderChange`.
+      await toggle.click();
+      await livePreview.waitFor({ state: "hidden", timeout: 5000 }).catch(() => {});
+      check((await livePreview.count()) === 0, "turning Live preview on tucks the control away again (no Advanced toggle to keep it open) — proves the click actually flipped autoRender");
+    });
   } finally {
     await browser.close();
     server.close();
