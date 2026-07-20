@@ -52,9 +52,9 @@ async function shoot(page, base, theme) {
   // Dismiss the first-visit welcome popup if present so it doesn't cover the
   // panel (and would block the tab click below).
   await dismissWelcomePopup(page);
-  // The panel opens on the Presets tab; switch to Parameters so the baseline
-  // keeps exercising the param form (a richer regression surface).
-  await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});
+  // The panel opens on Start; switch to the first design-specific stage so the
+  // baseline keeps exercising the param form (a richer regression surface).
+  await page.getByRole("tab", { name: /^\d+ Layout$/ }).first().click().catch(() => {});
   await page.waitForSelector(".param-form", { timeout: 30000 });
   await page.addStyleTag({ content: MASK_CSS });
   await page.waitForTimeout(150); // let fonts/layout settle

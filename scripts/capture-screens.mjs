@@ -6,8 +6,8 @@
 // through each view at a desktop and a phone viewport for each theme, writes the
 // PNGs under screenshots/captures/<viewport>/<theme>/ and zips them to
 // screenshots/scadpub-screenshots.zip. On mobile it also walks the bottom sheet
-// through all three detents (peek/half/full) and each of its tabs (Presets,
-// Parameters, Files). Output lives under the gitignored screenshots/ dir. Needs
+// through all three detents (peek/half/full) and each guided step. Output lives
+// under the gitignored screenshots/ dir. Needs
 // Chromium (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or a `playwright install chromium`).
 import { mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -119,9 +119,11 @@ async function captureViewport(context, base, kind, theme) {
     await shot(page, dir, "05-drawer-half");
     await sheetTo(page, "full");
     for (const [n, tab] of [
-      ["06", "Presets"],
-      ["07", "Customize"],
-      ["08", "Files"],
+      ["06", "1 Start"],
+      ["07", "2 Layout"],
+      ["08", "3 Content"],
+      ["09", "4 Review"],
+      ["10", "Files"],
     ]) {
       await page.getByRole("tab", { name: tab }).click().catch(() => {});
       await sleep(250);
@@ -130,21 +132,21 @@ async function captureViewport(context, base, kind, theme) {
     await sheetTo(page, "peek");
   } else {
     // 4. Desktop parameters are always docked (visible in 02); switch the panel
-    // to its Presets tab for the shot, then back to Parameters.
-    await page.getByRole("tab", { name: "Presets" }).first().click().catch(() => {});
+    // to its Start tab for the shot, then back to the first design stage.
+    await page.getByRole("tab", { name: "1 Start" }).first().click().catch(() => {});
     await sleep(300);
     await shot(page, dir, "04-presets");
-    await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});
+    await page.getByRole("tab", { name: "2 Layout" }).first().click().catch(() => {});
     await sleep(200);
   }
 
-  // 9 / 5. Output console. The Output bell lives in the top bar in both layouts —
+  // 11 / 5. Output console. The Output bell lives in the top bar in both layouts —
   // the mobile top bar and the desktop CommandBar.
   const outputSel =
     kind === "mobile"
       ? '.mobile-top-bar__output[aria-label^="Open messages"]'
       : '.command-bar__output[aria-label^="Open messages"]';
-  const consoleName = kind === "mobile" ? "09-output-console" : "05-output-console";
+  const consoleName = kind === "mobile" ? "11-output-console" : "05-output-console";
   await page.locator(outputSel).click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 5000 }).catch(() => {});
   await sleep(300);
@@ -160,8 +162,8 @@ async function captureViewport(context, base, kind, theme) {
   };
 
   // Help + About dialogs.
-  const helpName = kind === "mobile" ? "10-help" : "06-help";
-  const aboutName = kind === "mobile" ? "11-about-licenses" : "07-about-licenses";
+  const helpName = kind === "mobile" ? "12-help" : "06-help";
+  const aboutName = kind === "mobile" ? "13-about-licenses" : "07-about-licenses";
   await openOverflow();
   await page.getByRole("button", { name: kind === "mobile" ? "Help" : "Help & keyboard shortcuts" })
     .first().click().catch(() => {});
