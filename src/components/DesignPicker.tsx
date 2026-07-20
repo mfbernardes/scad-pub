@@ -1,8 +1,11 @@
 // DesignPicker.tsx — the shadcn Select used to switch designs. Shared by the
 // desktop CommandBar and the mobile top bar (each wraps it differently and
 // handles the single-design fallback in its own markup).
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { Design } from "../openscad/types";
+import { useAppActions } from "../lib/appActions";
+import { t } from "../lib/i18n";
+import { useSignal } from "../lib/useSignal";
 import {
   Select,
   SelectContent,
@@ -16,7 +19,6 @@ import {
 interface Props {
   designs: Design[];
   value: string;
-  onChange: (id: string) => void;
   /**
    * Monotonically-increasing signal: each increment asks this picker to open
    * (used by the intro popup's "start designing" CTA). Ignored unless `active`,
@@ -31,7 +33,7 @@ interface Props {
 // group's run starts where its first design appears, and ungrouped designs
 // (group null/absent) stay as a headerless run. Falls back to a flat list when
 // no design declares a group.
-function groupDesigns(designs: Design[]): { group: string | null; items: Design[] }[] {
+export function groupDesigns(designs: Design[]): { group: string | null; items: Design[] }[] {
   const runs: { group: string | null; items: Design[] }[] = [];
   for (const d of designs) {
     const group = d.group ?? null;
@@ -49,25 +51,20 @@ function designIcon(d: Design): ReactNode {
   ) : undefined;
 }
 
-export function DesignPicker({ designs, value, onChange, openSignal, active = true }: Props) {
+export function DesignPicker({ designs, value, openSignal, active = true }: Props) {
+  const { designChange } = useAppActions();
   const runs = groupDesigns(designs);
   const grouped = runs.some((r) => r.group !== null);
   const [open, setOpen] = useState(false);
 
-  // Open on a fresh signal (the CTA), but only for the visible layout's picker.
-  // A ref tracks the last-seen value so a later `active` flip alone can't re-open it.
-  const lastSignal = useRef(openSignal);
-  useEffect(() => {
-    if (openSignal !== undefined && openSignal !== lastSignal.current) {
-      lastSignal.current = openSignal;
-      // Deliberate: `openSignal` is an external one-shot broadcast (a CTA
-      // click elsewhere in the tree), not state derived from props, so it
-      // can't be computed during render — a ref already tracks "last seen"
-      // to make this idempotent against re-renders.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (active) setOpen(true);
-    }
-  }, [openSignal, active]);
+  // Open on a fresh signal (the CTA), but only for the visible layout's
+  // picker (both bars mount at once — see the prop's own doc). useSignal
+  // (F8) tracks "last seen" internally so a later `active` flip alone can't
+  // re-open it; `active` itself is read at fire time via useSignal's
+  // latest-callback ref, so this closure never goes stale.
+  useSignal(openSignal, () => {
+    if (active) setOpen(true);
+  });
 
   const item = (d: Design) => (
     <SelectItem key={d.id} value={d.id} icon={designIcon(d)} description={d.description ?? undefined}>
@@ -75,10 +72,10 @@ export function DesignPicker({ designs, value, onChange, openSignal, active = tr
     </SelectItem>
   );
   return (
-    <Select value={value} onValueChange={onChange} open={open} onOpenChange={setOpen}>
+    <Select value={value} onValueChange={designChange} open={open} onOpenChange={setOpen}>
       <SelectTrigger
         size="sm"
-        aria-label="Choose a design"
+        aria-label={t("picker.button")}
         className="font-display h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-0"
       >
         <SelectValue />

@@ -11,6 +11,7 @@ import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
 import type { PopupNotice } from "../openscad/types";
+import { t } from "../lib/i18n";
 
 export function PopupModal({
   popup,
@@ -50,11 +51,11 @@ export function PopupModal({
               checked={dontShow}
               onCheckedChange={(v) => setDontShow(v === true)}
             />
-            Don’t show this again
+            {t("popup.dontShowAgain")}
           </Label>
         )}
         <Button className="notice-ok ml-auto" onClick={primary}>
-          {popup.button ?? "OK"}
+          {popup.button ?? t("popup.okButton")}
         </Button>
       </div>
     </Modal>
