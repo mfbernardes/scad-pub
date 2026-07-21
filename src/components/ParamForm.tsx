@@ -278,10 +278,15 @@ function Control({
           aria-label={label}
         />
       );
-    case "enum":
+    case "enum": {
+      // The full label of the selected choice as a `title`, so a value too
+      // long to fit the trigger (now ellipsis-truncated, not hard-clipped —
+      // see ui/select.tsx) is still readable on hover — e.g. a long language
+      // name at a narrow panel width.
+      const selectedLabel = param.choices.find((c) => c.value === String(value))?.label;
       return (
         <Select value={String(value)} onValueChange={(v) => onChange(v)}>
-          <SelectTrigger className="w-full" aria-label={label}>
+          <SelectTrigger className="w-full" aria-label={label} title={selectedLabel}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -293,6 +298,7 @@ function Control({
           </SelectContent>
         </Select>
       );
+    }
     case "string":
       return (
         <Input
@@ -307,18 +313,23 @@ function Control({
   }
 }
 
-// Surfaces a parameter's full help text in a tap/click popover next to its
-// label. The detail was previously reachable only through the hover-only
-// `title` tooltip, which is invisible on touch devices.
+// Surfaces a parameter's full help text in a tap/click popover, rendered
+// INLINE right after the last word of the label/help text it belongs to (a
+// plain sibling in the same text flow, not a flex row item) — so when that
+// text wraps to multiple lines, the button flows with it instead of sitting
+// detached to the row's right edge at the first line's height. The detail
+// was previously reachable only through the hover-only `title` tooltip,
+// which is invisible on touch devices.
 function ParamHelp({ help, label }: { help: string; label: string }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        {/* 15px glyph with a >=24px tap target (WCAG 2.2): the negative margin
-            absorbs the padding so the row layout is unchanged. */}
+        {/* 15px glyph with a >=44x44px tap target (WCAG 2.2 AAA "Target Size
+            (Enhanced)"): the negative margin absorbs the padding so it
+            doesn't push the surrounding text apart. */}
         <button
           type="button"
-          className="-m-[5px] inline-flex shrink-0 cursor-pointer items-center justify-center self-center rounded-[4px] border-none bg-transparent p-[5px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
+          className="-m-[14.5px] inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[4px] border-none bg-transparent p-[14.5px] align-middle leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
           aria-label={`Help for ${label}`}
         >
           <InfoIcon aria-hidden="true" focusable="false" />
@@ -456,8 +467,11 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                           aria-hidden="true"
                         />
                       )}
-                      <span className="text-foreground">{label}</span>
-                      {hasHelp && <ParamHelp help={p.help} label={label} />}
+                      <span className="min-w-0 text-foreground">
+                        {label}
+                        {hasHelp && " "}
+                        {hasHelp && <ParamHelp help={p.help} label={label} />}
+                      </span>
                       {showVarName && p.description && (
                         <code className="param-var shrink-0 font-mono text-[11px] leading-[normal] text-muted-foreground">
                           {p.name}

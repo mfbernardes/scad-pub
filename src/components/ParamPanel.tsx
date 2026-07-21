@@ -3,13 +3,14 @@
 // files), parameter search + ParamForm, and a Reset footer. Collapsible and
 // resizable; state persisted to localStorage. Presets live here (a tab,
 // mirroring the mobile sheet) rather than in the top bar.
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
+import { hiddenAdvancedCount } from "../lib/essentials";
 import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
@@ -131,6 +132,11 @@ export function ParamPanel({
     return w >= MIN_WIDTH && w <= MAX_WIDTH ? w : DEFAULT_WIDTH;
   });
   const debouncedSearch = useDebounce(search, 150);
+  // "Show all settings (N more)" tells the visitor how many @advanced params
+  // are currently hidden — falls back to the plain label when that count is
+  // zero (every @advanced param is itself @showIf-hidden right now).
+  const hiddenCount = useMemo(() => hiddenAdvancedCount(design.params, values), [design.params, values]);
+  const essentialsToggleLabel = hiddenCount > 0 ? `Show all settings (${hiddenCount} more)` : "Show all settings";
 
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -306,7 +312,7 @@ export function ParamPanel({
               className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
               onClick={() => onShowAdvancedChange(!showAdvanced)}
             >
-              {showAdvanced ? "Show essential settings" : "Show all settings"}
+              {showAdvanced ? "Show essential settings" : essentialsToggleLabel}
             </button>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto p-3">

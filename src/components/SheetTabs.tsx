@@ -1,10 +1,12 @@
 // SheetTabs.tsx — segmented tabs (shadcn/ui Tabs) inside the mobile bottom sheet.
 // Parameters / Presets / Files. Prevents the stacked-sheet anti-pattern.
+import { useMemo } from "react";
 import type { Design, FileImport } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
+import { hiddenAdvancedCount } from "../lib/essentials";
 import type { PanelTab } from "../lib/usePanelState";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
@@ -108,6 +110,10 @@ export function SheetTabs({
   // Presets first on mobile, then Customize, then Files.
   const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
   const debouncedSearch = useDebounce(search, 150);
+  // "Show all settings (N more)" — see ParamPanel.tsx's own doc (its desktop
+  // twin) for why the count only reflects currently @showIf-visible params.
+  const hiddenCount = useMemo(() => hiddenAdvancedCount(design.params, values), [design.params, values]);
+  const essentialsToggleLabel = hiddenCount > 0 ? `Show all settings (${hiddenCount} more)` : "Show all settings";
 
   const triggerClass = cn(chipTabTrigger, "flex-1");
 
@@ -147,7 +153,7 @@ export function SheetTabs({
               className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
               onClick={() => onShowAdvancedChange(!showAdvanced)}
             >
-              {showAdvanced ? "Show essential settings" : "Show all settings"}
+              {showAdvanced ? "Show essential settings" : essentialsToggleLabel}
             </button>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
