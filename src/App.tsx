@@ -127,6 +127,7 @@ export default function App() {
     result,
     rendering,
     ready,
+    progress,
     renderedValues,
     renderMetrics,
     autoRender,
@@ -475,6 +476,7 @@ export default function App() {
           result={result}
           rendering={rendering}
           ready={ready}
+          loadProgress={progress}
           autoRender={autoRender}
           stalePreview={stalePreview}
           exportable={exportable}

@@ -5,7 +5,7 @@
 // mobile no longer reserves a solid footer band. All state/logic stays in
 // App.tsx; this is a pure view extraction.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Design, Schema } from "../openscad/types";
+import type { Design, Schema, WorkerProgress } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
 import type { RenderMetrics } from "../lib/renderMetrics";
@@ -93,6 +93,10 @@ interface Props {
   result: RenderResult | null;
   rendering: boolean;
   ready: boolean;
+  /** The render worker's bootstrap-download progress; null once ready (or
+   *  never set at all on a warm Cache Storage hit). Surfaced by ViewerStage's
+   *  loading overlay as a thin progress bar. */
+  loadProgress: WorkerProgress | null;
   autoRender: boolean;
   stalePreview: boolean;
   /** A successful render that still matches the live controls — the only
@@ -127,6 +131,7 @@ export const AppShell = memo(function AppShell({
   result,
   rendering,
   ready,
+  loadProgress,
   autoRender,
   stalePreview,
   exportable,
@@ -458,6 +463,7 @@ export const AppShell = memo(function AppShell({
     result,
     ready,
     rendering,
+    loadProgress,
     autoRender,
     stalePreview,
     theme,
