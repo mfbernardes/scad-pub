@@ -101,12 +101,9 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
 
   return (
     <div className="viewer-hud">
-      {/* ViewPicker (a separate component) renders its own trigger button and
-          already carries a native `title` — it isn't wrapped in the new
-          hover/focus Tooltip here because it doesn't forward a ref either
-          (same constraint as IconButton, see HudIconButton's own doc above),
-          and refactoring its Popover composition to do so is out of scope
-          for this pass. */}
+      {/* ViewPicker (a separate component) renders its own trigger button,
+          wrapped in the same hover/focus Tooltip as every other HUD button
+          (nested around its Popover trigger — see ViewPicker's own doc). */}
       {viewPicker && <ViewPicker view={view} onSelect={onSelectView} />}
       {zoom && (
         <>

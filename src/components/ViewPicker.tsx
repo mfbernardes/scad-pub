@@ -5,6 +5,7 @@
 // after you've orbited away). The active view is checkmarked.
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Box as ViewIcon, Check as CheckIcon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { VIEW_OPTIONS, type ViewName } from "./views";
@@ -27,23 +28,31 @@ export function ViewPicker({ view, onSelect }: Props) {
   const current = VIEW_OPTIONS.find((o) => o.id === view)?.label ?? "View";
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      {/* Native button so PopoverTrigger's ref reaches the DOM (Radix anchors to
-          it); styled to match the HUD's glass icon buttons. Its radius is the
-          smaller --radius-sm (the pre-port value), unlike the shadcn Buttons. */}
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "icon-btn size-8 inline-flex items-center justify-center cursor-pointer outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50",
-            "border rounded-(--radius-sm) hover:border-brand data-[state=open]:border-brand data-[state=open]:text-brand",
-            HUD_GLASS_BTN
-          )}
-          aria-label={`View: ${current}`}
-          title={`View: ${current}`}
-        >
-          <ViewIcon size={18} />
-        </button>
-      </PopoverTrigger>
+      {/* Same hover/focus Tooltip treatment as the rest of the HUD
+          (ViewerHUD.tsx's HudIconButton) — nested around the Popover trigger
+          rather than IconButton's own asChild restructuring, since the
+          trigger already needs to stay a plain-ref-forwarding native
+          <button> for the Popover; `title` stays too, as the no-JS/
+          assistive fallback. */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "icon-btn size-8 inline-flex items-center justify-center cursor-pointer outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                "border rounded-(--radius-sm) hover:border-brand data-[state=open]:border-brand data-[state=open]:text-brand",
+                HUD_GLASS_BTN
+              )}
+              aria-label={`View: ${current}`}
+              title={`View: ${current}`}
+            >
+              <ViewIcon size={18} />
+            </button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="left">{`View: ${current}`}</TooltipContent>
+      </Tooltip>
       <PopoverContent side="left" align="start" className="w-auto min-w-[9rem] p-1">
         <ul className="flex flex-col gap-[0.1rem]">
           {VIEW_OPTIONS.map((o) => {

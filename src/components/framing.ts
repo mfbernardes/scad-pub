@@ -38,7 +38,7 @@ export interface FitFraction {
  *  edges, verified against a flat plate, a tall thin model, and a cube from
  *  every standard view (see framing.test.mjs). */
 export const DEFAULT_FIT_FRACTION: Readonly<FitFraction> = Object.freeze({
-  width: 0.62,
+  width: 0.66,
   height: 0.58,
 });
 
