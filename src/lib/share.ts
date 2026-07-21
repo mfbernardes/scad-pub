@@ -20,6 +20,22 @@ function isTouchDevice(): boolean {
   );
 }
 
+/** Whether shareUrl()/shareFile() would actually attempt the native OS share
+ *  sheet on this device (a touch device exposing `navigator.share`) rather
+ *  than falling straight to clipboard/download — the same test those
+ *  functions apply internally. ActionButtons uses this to pick an icon and
+ *  label that match the Share button's real behavior instead of always
+ *  implying "copy a link". The capability doesn't change mid-session, so
+ *  callers can compute it once (e.g. a module-level constant) rather than
+ *  re-checking on every render. */
+export function canShareNatively(): boolean {
+  return (
+    isTouchDevice() &&
+    typeof navigator !== "undefined" &&
+    typeof navigator.share === "function"
+  );
+}
+
 function outcomeFromError(e: unknown): ShareOutcome {
   // A user dismissing the share sheet rejects with AbortError — not a failure,
   // and the caller must NOT then fall back (the user already declined).
