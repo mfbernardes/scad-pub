@@ -26,11 +26,17 @@ interface Props {
   stalePreview: boolean;
   outputOpen: boolean;
   noticeCount: number;
+  /** Whether a pending notice belongs to an attention-flagged category (or is
+   *  a hardcoded warning/assert) — decides the bell's amber styling. */
+  hasAttention?: boolean;
   onToggleOutput: () => void;
   /** Bumped by the intro popup's CTA to open the design picker. */
   openPickerSignal: number;
   /** Whether the desktop bar is the visible layout (so only its picker opens). */
   pickerActive: boolean;
+  /** Save-image (PNG) — relocated here from the export dock (BarActions.tsx). */
+  onSavePng?: () => void;
+  canSavePng?: boolean;
 }
 
 export const CommandBar = memo(function CommandBar({
@@ -45,9 +51,12 @@ export const CommandBar = memo(function CommandBar({
   stalePreview,
   outputOpen,
   noticeCount,
+  hasAttention = false,
   onToggleOutput,
   openPickerSignal,
   pickerActive,
+  onSavePng,
+  canSavePng,
 }: Props) {
   const { designChange, showDesignDoc } = useAppActions();
   const currentDesign = designs.find((d) => d.id === designId);
@@ -97,11 +106,12 @@ export const CommandBar = memo(function CommandBar({
         <OutputToggle
           outputOpen={outputOpen}
           noticeCount={noticeCount}
+          hasAttention={hasAttention}
           onToggleOutput={onToggleOutput}
           status={{ rendering, ready, result, stale: stalePreview }}
           className={cn(ICON_BUTTON_CLASS, "command-bar__output")}
         />
-        <BarActions themeMode={themeMode} />
+        <BarActions themeMode={themeMode} onSavePng={onSavePng} canSavePng={canSavePng} />
       </div>
     </header>
   );
