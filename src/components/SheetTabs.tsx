@@ -7,6 +7,7 @@ import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
 import { hiddenAdvancedCount } from "../lib/essentials";
+import { t, tn } from "../lib/i18n";
 import type { PanelTab } from "../lib/usePanelState";
 import { ParamForm } from "./ParamForm";
 import { FileBar, type LoadedFile } from "./FileBar";
@@ -113,7 +114,8 @@ export function SheetTabs({
   // "Show all settings (N more)" — see ParamPanel.tsx's own doc (its desktop
   // twin) for why the count only reflects currently @showIf-visible params.
   const hiddenCount = useMemo(() => hiddenAdvancedCount(design.params, values), [design.params, values]);
-  const essentialsToggleLabel = hiddenCount > 0 ? `Show all settings (${hiddenCount} more)` : "Show all settings";
+  const essentialsToggleLabel =
+    hiddenCount > 0 ? tn("settings.showAllCount", hiddenCount) : t("settings.showAll");
 
   const triggerClass = cn(chipTabTrigger, "flex-1");
 
@@ -153,7 +155,7 @@ export function SheetTabs({
               className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
               onClick={() => onShowAdvancedChange(!showAdvanced)}
             >
-              {showAdvanced ? "Show essential settings" : essentialsToggleLabel}
+              {showAdvanced ? t("settings.showEssential") : essentialsToggleLabel}
             </button>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">

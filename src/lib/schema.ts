@@ -144,6 +144,13 @@ export function validateSchema(raw: unknown): Schema {
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
   if (s.lang !== undefined && typeof s.lang !== "string") fail("'lang' must be a string");
+  if (s.strings !== undefined) {
+    if (typeof s.strings !== "object" || s.strings === null || Array.isArray(s.strings))
+      fail("'strings' must be an object of key: string pairs");
+    for (const [key, value] of Object.entries(s.strings as Record<string, unknown>)) {
+      if (typeof value !== "string") fail(`'strings.${key}' must be a string`);
+    }
+  }
   if (s.dir !== undefined && !["ltr", "rtl", "auto"].includes(s.dir as string))
     fail("'dir' must be \"ltr\", \"rtl\" or \"auto\"");
   if (s.defaultDesign != null) {

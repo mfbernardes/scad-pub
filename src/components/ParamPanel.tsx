@@ -11,6 +11,7 @@ import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
 import { hiddenAdvancedCount } from "../lib/essentials";
+import { t, tn } from "../lib/i18n";
 import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
@@ -136,7 +137,8 @@ export function ParamPanel({
   // are currently hidden — falls back to the plain label when that count is
   // zero (every @advanced param is itself @showIf-hidden right now).
   const hiddenCount = useMemo(() => hiddenAdvancedCount(design.params, values), [design.params, values]);
-  const essentialsToggleLabel = hiddenCount > 0 ? `Show all settings (${hiddenCount} more)` : "Show all settings";
+  const essentialsToggleLabel =
+    hiddenCount > 0 ? tn("settings.showAllCount", hiddenCount) : t("settings.showAll");
 
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -312,7 +314,7 @@ export function ParamPanel({
               className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
               onClick={() => onShowAdvancedChange(!showAdvanced)}
             >
-              {showAdvanced ? "Show essential settings" : essentialsToggleLabel}
+              {showAdvanced ? t("settings.showEssential") : essentialsToggleLabel}
             </button>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto p-3">

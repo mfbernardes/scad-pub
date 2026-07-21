@@ -35,6 +35,7 @@ import {
   parseLang,
   parseDir,
   parseRender,
+  parseStrings,
   renderFontsConf,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
@@ -1222,6 +1223,30 @@ test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
   assert.throws(() => parseRender({ cache: 5 }), /'render\.cache' must be an object/);
   assert.throws(() => parseRender({ cache: { maxBytes: "lots" } }), /'render\.cache\.maxBytes' must be a non-negative number/);
   assert.throws(() => parseRender({ cache: { persistent: "yes" } }), /'render\.cache\.persistent' must be a boolean/);
+});
+
+test("parseStrings: absent -> {}, a known key overrides, an unknown key fails with a suggestion", () => {
+  const validKeys = ["action.export", "action.share", "review.title"];
+  assert.deepEqual(parseStrings(undefined, validKeys), {});
+  assert.deepEqual(parseStrings(null, validKeys), {});
+  assert.deepEqual(
+    parseStrings({ "action.export": "Download now" }, validKeys),
+    { "action.export": "Download now" }
+  );
+  assert.throws(() => parseStrings([], validKeys), /'strings' must be an object/);
+  assert.throws(
+    () => parseStrings({ "action.exprot": "x" }, validKeys),
+    /unknown 'strings' key 'action.exprot'.*Did you mean 'action.export'/s
+  );
+  // No plausibly-close key -> no suggestion, just the generic pointer.
+  assert.throws(
+    () => parseStrings({ "totally.unrelated.key": "x" }, validKeys),
+    /unknown 'strings' key 'totally.unrelated.key'\.\s*\n\s*See src\/locales\/en\.json/
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": 5 }, validKeys),
+    /'strings\.action\.export' must be a string/
+  );
 });
 
 test("parseUi: fullscreen defaults true and validates", () => {

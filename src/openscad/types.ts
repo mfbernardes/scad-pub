@@ -470,6 +470,14 @@ export interface Schema {
   lang?: string;
   /** Document / manifest text direction. Default "ltr". */
   dir?: "ltr" | "rtl" | "auto";
+  /**
+   * Optional per-deployment UI text overrides (config's `strings` key; see
+   * docs/config.md and src/lib/i18n.ts). Keyed by the same dot-namespaced
+   * keys (including plural `#one`/`#other` variants) as
+   * src/locales/en.json, and validated at build time against that catalogue's
+   * key set. Consulted first, ahead of the bundled English catalogue.
+   */
+  strings?: Record<string, string>;
   /** Optional help content shown in the Help modal. When null, a generic,
    *  project-agnostic default is used. */
   help: HelpContent | null;

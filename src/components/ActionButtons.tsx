@@ -17,6 +17,7 @@ import { Button } from "./ui/button";
 import { Download as DownloadIcon, Share2 as ShareIcon, Link2 as LinkIcon } from "lucide-react";
 import type { ReadinessState } from "../lib/readiness";
 import { canShareNatively } from "../lib/share";
+import { t, tn } from "../lib/i18n";
 
 // The id the Download button's `aria-describedby` points at, and the sr-only
 // span below carries — assistive tech gets the same "N issues to review"
@@ -58,7 +59,7 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
   const hasAttention = readiness === "attention";
   // The format rides in aria-label/title (a slicer needs it), not the visible
   // label — "Download for 3D printing" reads the same regardless of format.
-  const exportAria = `Download ${fmt} for slicers and print services`;
+  const exportAria = t("dock.exportAria", { format: fmt });
   // Mirrors ActionButtons' own `disabled` gate: "building" (nothing has
   // rendered yet, so there's nothing to review either) and "ready but the
   // render no longer matches the live controls" are the only two states that
@@ -68,9 +69,9 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
   // matches whichever branch actually disabled it.
   const disabledReason =
     readiness === "building"
-      ? "Still building the preview…"
+      ? t("dock.buildingReason")
       : readiness === "ready" && !canExport
-        ? "Preview out of date — render first"
+        ? t("dock.staleReason")
         : null;
   const disabled = disabledReason !== null;
 
@@ -93,7 +94,7 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
           aria-describedby={disabledReason ? DOWNLOAD_DISABLED_HINT_ID : hasAttention ? EXPORT_ATTENTION_HINT_ID : undefined}
         >
           <DownloadIcon size={16} aria-hidden="true" className="shrink-0" />
-          <span className="action-export__label min-w-0 truncate">Download for 3D printing</span>
+          <span className="action-export__label min-w-0 truncate">{t("action.export")}</span>
           {/* Visual "something here still needs a look" signal — same amber
               treatment as the status strip. Decorative only; the sr-only hint
               below carries the actual meaning. */}
@@ -104,7 +105,7 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
       </span>
       {hasAttention && (
         <span id={EXPORT_ATTENTION_HINT_ID} className="sr-only">
-          {attentionCount} issue{attentionCount === 1 ? "" : "s"} to review
+          {tn("review.issueCount", attentionCount)}
         </span>
       )}
       {disabledReason && (
@@ -122,15 +123,15 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
         variant="ghost"
         className="action-share min-w-0 max-[360px]:flex-none"
         onClick={copyLink}
-        aria-label={NATIVE_SHARE ? "Share" : "Copy link"}
-        title={NATIVE_SHARE ? "Share" : "Copy link"}
+        aria-label={NATIVE_SHARE ? t("action.share") : t("dock.copyLink")}
+        title={NATIVE_SHARE ? t("action.share") : t("dock.copyLink")}
       >
         {NATIVE_SHARE ? (
           <ShareIcon size={16} aria-hidden="true" className="shrink-0" />
         ) : (
           <LinkIcon size={16} aria-hidden="true" className="shrink-0" />
         )}
-        <span className="action-btn-label min-w-0 truncate">{NATIVE_SHARE ? "Share" : "Copy link"}</span>
+        <span className="action-btn-label min-w-0 truncate">{NATIVE_SHARE ? t("action.share") : t("dock.copyLink")}</span>
       </Button>
     </>
   );

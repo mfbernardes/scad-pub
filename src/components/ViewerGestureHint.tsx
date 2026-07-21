@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ns } from "../lib/appId";
 import { readLocal, writeLocal } from "../lib/safeStorage";
+import { t } from "../lib/i18n";
 
 const HINT_SEEN_KEY = ns("hint.viewer.v1");
 // How long the hint stays up before auto-fading if the visitor never touches
@@ -61,7 +62,7 @@ export function ViewerGestureHint({ resultOk }: { resultOk: boolean }) {
   if (!visible) return null;
 
   const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-  const text = coarse ? "Drag to rotate · Pinch to zoom" : "Drag to rotate · Scroll to zoom";
+  const text = coarse ? t("hint.rotateZoomTouch") : t("hint.rotateZoomMouse");
 
   return (
     <div

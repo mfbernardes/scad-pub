@@ -13,21 +13,21 @@
 // never before — so this panel can never appear over, or race, the native
 // share sheet.
 //
-// Ported (simplified) from a donor branch's design-reference component: no
-// i18n, and a single generic title/body regardless of share-vs-download
-// outcome (the donor distinguished "shared" from "downloaded" wording via a
-// dedicated exportOutcome.ts; CLAUDE.md's Phase 2 scope asks for one plain
-// default, "Your file is on its way", so that extra machinery isn't ported).
+// Ported (simplified) from a donor branch's design-reference component: a
+// single generic title/body (exportSuccess.title/exportSuccess.body in
+// src/locales/en.json) regardless of share-vs-download outcome — the donor
+// distinguished "shared" from "downloaded" wording via a dedicated
+// exportOutcome.ts; CLAUDE.md's Phase 2 scope asked for one plain default, so
+// that extra machinery isn't ported.
 import { useEffect, useRef } from "react";
 import { X as CloseIcon } from "lucide-react";
 import { useAppActions } from "../lib/appActions";
 import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
 import { IconButton } from "./IconButton";
+import { t } from "../lib/i18n";
 
 const AUTO_HIDE_MS = 9000;
-const DEFAULT_TITLE = "Your file is on its way";
-const DEFAULT_BODY = "Check your browser's downloads, then slice and print when you're ready.";
 
 export interface ExportSuccessState {
   /** Distinguishes this export from the previous one so the auto-hide timer
@@ -43,9 +43,9 @@ export function ExportSuccess({
   onDismiss,
 }: {
   state: ExportSuccessState;
-  /** Config `ui.afterExport.title` override; falls back to DEFAULT_TITLE. */
+  /** Config `ui.afterExport.title` override; falls back to t("exportSuccess.title"). */
   title?: string;
-  /** Config `ui.afterExport.body` override; falls back to DEFAULT_BODY. */
+  /** Config `ui.afterExport.body` override; falls back to t("exportSuccess.body"). */
   body?: string;
   /** Config `ui.afterExport.helpTab` — shows the "Open printing help" action,
    *  deep-linking Help to that tab, only when set. gen-schema's build-time
@@ -73,9 +73,9 @@ export function ExportSuccess({
       aria-live="polite"
     >
       <div className="min-w-0 flex-1">
-        <p className="m-0 font-medium text-foreground">{title ?? DEFAULT_TITLE}</p>
+        <p className="m-0 font-medium text-foreground">{title ?? t("exportSuccess.title")}</p>
         <div className="mt-[0.15rem] text-muted-foreground [&_p]:m-0">
-          <Markdown body={body ?? DEFAULT_BODY} />
+          <Markdown body={body ?? t("exportSuccess.body")} />
         </div>
         {helpTab && (
           <Button
@@ -84,12 +84,12 @@ export function ExportSuccess({
             className="export-success__guide mt-[0.2rem] h-auto p-0 text-brand"
             onClick={() => showHelp(helpTab)}
           >
-            Open printing help
+            {t("exportSuccess.openHelp")}
           </Button>
         )}
       </div>
       <IconButton
-        label="Dismiss"
+        label={t("exportSuccess.dismiss")}
         className="export-success__dismiss size-6 shrink-0 border-none bg-transparent p-1 hover:border"
         onClick={onDismiss}
       >

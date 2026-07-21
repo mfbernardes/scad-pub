@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { ReadinessState } from "../lib/readiness";
 import { cn } from "../lib/utils";
+import { t, tn } from "../lib/i18n";
 
 export interface StatusStripProps {
   readiness: ReadinessState;
@@ -45,13 +46,13 @@ const TONE: Record<ReadinessState, string> = {
 function label(readiness: ReadinessState, attentionCount: number): string {
   switch (readiness) {
     case "building":
-      return "Building preview…";
+      return t("status.building");
     case "ready":
-      return "Ready to download";
+      return t("status.ready");
     case "attention":
-      return `${attentionCount} issue${attentionCount === 1 ? "" : "s"} to review`;
+      return tn("review.issueCount", attentionCount);
     case "failed":
-      return "Preview failed";
+      return t("status.failed");
   }
 }
 
@@ -68,7 +69,7 @@ export function StatusStrip({ readiness, attentionCount, onOpen, className }: St
       )}
       onClick={onOpen}
       aria-haspopup="dialog"
-      title="Review this design before downloading"
+      title={t("status.reviewTitle")}
     >
       <Icon
         size={14}

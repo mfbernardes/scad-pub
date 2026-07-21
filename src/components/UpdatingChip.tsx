@@ -4,6 +4,7 @@
 // this (StaleBanner returns null while autoRender is on, so the two can
 // never both show), and showing both would double-message the same thing.
 import { Spinner } from "./ui/spinner";
+import { t } from "../lib/i18n";
 
 export function UpdatingChip() {
   return (
@@ -13,7 +14,7 @@ export function UpdatingChip() {
       aria-live="polite"
     >
       <Spinner className="size-3.5" />
-      Updating…
+      {t("stale.updating")}
     </div>
   );
 }

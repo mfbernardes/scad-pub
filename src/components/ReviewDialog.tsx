@@ -28,6 +28,7 @@ import { parseReviewOverrides } from "../lib/reviewOverrides";
 import { buildReviewSummaryRows } from "../lib/reviewSummary";
 import { useAppActions } from "../lib/appActions";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 import { AttentionItems } from "./AttentionItems";
 import { FriendlyFailureCard } from "./FriendlyFailureCard";
 import { Button } from "./ui/button";
@@ -97,11 +98,9 @@ export function ReviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="review-dialog max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Review</DialogTitle>
+          <DialogTitle>{t("review.title")}</DialogTitle>
           <DialogDescription className="sr-only">
-            {failure
-              ? "The last render failed — see the details below."
-              : "A summary of what will be downloaded, and anything that still needs your attention."}
+            {failure ? t("review.descriptionFailure") : t("review.descriptionSummary")}
           </DialogDescription>
         </DialogHeader>
 
@@ -153,19 +152,19 @@ export function ReviewDialog({
           {trigger === "download" ? (
             <>
               <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Go back and fix
+                {t("review.goBackAndFix")}
               </Button>
               <Button onClick={handleDownload} disabled={!canExport}>
-                Download anyway
+                {t("review.downloadAnyway")}
               </Button>
             </>
           ) : (
             <>
               <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Close
+                {t("common.close")}
               </Button>
               <Button onClick={handleDownload} disabled={!canExport}>
-                Download for 3D printing
+                {t("action.export")}
               </Button>
             </>
           )}

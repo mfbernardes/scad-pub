@@ -4,6 +4,7 @@
 // Notices tab and ReviewDialog so a failure reads identically wherever it
 // surfaces (see CLAUDE.md item 6b).
 import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
+import { t } from "../lib/i18n";
 
 export function FriendlyFailureCard({ info }: { info: FriendlyErrorInfo }) {
   return (
@@ -13,7 +14,7 @@ export function FriendlyFailureCard({ info }: { info: FriendlyErrorInfo }) {
       {info.technical.length > 0 && (
         <details className="friendly-failure__raw mt-1">
           <summary className="cursor-pointer select-none text-[0.82rem] text-muted-foreground hover:text-brand">
-            Raw output
+            {t("console.rawOutput")}
           </summary>
           <pre className="log m-0 mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-(--radius-sm) bg-code px-3 py-2 font-mono text-xs leading-[1.4] text-muted-foreground">
             {info.technical.join("\n")}

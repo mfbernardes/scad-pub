@@ -13,6 +13,7 @@ import type { AttentionItem } from "../lib/readiness";
 import { fontFallback } from "../lib/fontFallback";
 import { useAppActions } from "../lib/appActions";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 import { FontImportActions } from "./FontImportActions";
 import { Button } from "./ui/button";
 
@@ -69,19 +70,19 @@ export function AttentionItems({
               {item.kind === "font-fallback" ? (
                 <>
                   <p className="m-0 font-semibold text-foreground">
-                    Font not loaded:{" "}
+                    {t("attention.fontFallbackLead")}:{" "}
                     <span className="inline-block max-w-[12rem] truncate align-bottom" title={item.family}>
                       {item.family}
                     </span>
                   </p>
                   <p className="m-0 text-[0.85rem] text-muted-foreground">
-                    The preview uses a substitute font.
+                    {t("attention.substituteFont")}
                   </p>
                   <FontImportActions
                     className="mt-1 flex flex-wrap gap-2"
                     renderImport={(open) => (
                       <Button type="button" variant="secondary" size="sm" onClick={open}>
-                        Import font…
+                        {t("attention.importFont")}
                       </Button>
                     )}
                     renderFallback={
@@ -93,7 +94,7 @@ export function AttentionItems({
                               size="sm"
                               onClick={() => change(item.param, fallback.value)}
                             >
-                              Use a bundled font
+                              {t("attention.useBundledFont")}
                             </Button>
                           )
                         : undefined
@@ -103,11 +104,11 @@ export function AttentionItems({
               ) : (
                 <>
                   <p className="m-0 font-semibold text-foreground">
-                    {item.count} {item.label} pending
+                    {t("attention.noticePending", { count: item.count, label: item.label })}
                   </p>
                   <div className="mt-1 flex flex-wrap gap-2">
                     <Button type="button" variant="secondary" size="sm" onClick={onOpenMessages}>
-                      View messages
+                      {t("attention.viewMessages")}
                     </Button>
                   </div>
                 </>

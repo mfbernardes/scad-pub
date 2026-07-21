@@ -50,6 +50,7 @@ import {
   parseNotices,
   parsePopup,
   parseRender,
+  parseStrings,
   parseUi,
 } from "./lib/config-parsers.mjs";
 
@@ -67,6 +68,7 @@ export {
   parseNotices,
   parsePopup,
   parseRender,
+  parseStrings,
   parseUi,
 } from "./lib/config-parsers.mjs";
 export { parseFontFallback, renderFontsConf, fontFamilyNames } from "./lib/fonts.mjs";
@@ -92,7 +94,16 @@ export const KNOWN_TOP_LEVEL_KEYS = new Set([
   "logo", "colors", "extraCss", "ui", "fileImport",
   // In-app content
   "popup", "help", "notices", "licenses",
+  // UI text overrides
+  "strings",
 ]);
+
+// Path to the bundled English UI-text catalogue (src/locales/en.json),
+// resolved relative to this file rather than the config being built — it's
+// part of the app, not the consumer's project. `strings` overrides are
+// validated against its key set (see parseStrings): a config key that isn't a
+// real catalogue key would otherwise be silently ignored by every `t()` call.
+const EN_CATALOG_PATH = fileURLToPath(new URL("../src/locales/en.json", import.meta.url));
 
 // Fail early and clearly when a configured path doesn't exist — these are the
 // most common ways a config drifts from the designs it points at.
@@ -730,6 +741,11 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Optional extra third-party software / license notices. Validated and
   // appended (never replacing the built-ins) by the in-app licenses modal.
   const LICENSES_EXTRA = parseLicenses(config.licenses);
+  // Optional per-deployment UI text overrides (config's `strings` key),
+  // validated against the bundled English catalogue's key set — see
+  // src/lib/i18n.ts and docs/config.md's `strings` section. Absent -> {}.
+  const EN_CATALOG_KEYS = Object.keys(JSON.parse(readFileSync(EN_CATALOG_PATH, "utf-8")));
+  const STRINGS = parseStrings(config.strings, EN_CATALOG_KEYS);
 
   // outScadDir is entirely generated. H6/M8: build the complete new tree in a
   // staging directory first, and only replace the live outScadDir once every
@@ -859,6 +875,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     description: DESCRIPTION,
     lang: LANG,
     dir: DIR,
+    strings: STRINGS,
     themeColor: THEME_COLOR,
     themeColorLight: THEME_COLOR_LIGHT,
     appleSplash,
