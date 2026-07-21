@@ -48,6 +48,14 @@ function checkDesign(d: unknown): void {
     fail(`design '${id}' 'image' must be a string URL`);
   if (design.doc != null && typeof design.doc !== "string")
     fail(`design '${id}' 'doc' must be a string URL`);
+  if (design.presetImages != null) {
+    if (typeof design.presetImages !== "object" || Array.isArray(design.presetImages))
+      fail(`design '${id}' 'presetImages' must be an object`);
+    for (const [name, url] of Object.entries(design.presetImages as Record<string, unknown>)) {
+      if (typeof url !== "string" || !url)
+        fail(`design '${id}' 'presetImages["${name}"]' must be a non-empty string URL`);
+    }
+  }
   if (
     design.collapsedSections !== undefined &&
     (!Array.isArray(design.collapsedSections) ||

@@ -74,6 +74,25 @@ Each `designs[]` entry also accepts optional **`reviewLabels`** and **`reviewNot
 - **`reviewLabels`**: an object mapping a **declared parameter's exact name** to the label its value is shown under in a review summary. Every key must match one of that design's own params — a stale or misspelled name fails the build. Several params sharing the same label merge into one summary row, their formatted values joined by `" / "`. A design with no `reviewLabels` still shows the summary's overall bounding-box "Dimensions" row, just no curated section above it. A row's value can be overridden by an `echo("@review", param, value)` from the design itself — see [`echo("@review", …)`](annotations.md#curated-review-override-echoreview-) — when the printed model doesn't literally match the stored parameter value (e.g. an uppercasing transform)
 - **`reviewNote`**: an optional short string, a generic hook for a design whose printed output transforms a parameter's raw value in a way worth calling out (e.g. "Text prints in capitals even though you typed it in lowercase"). Plain text, not Markdown. Omit for no note
 
+Each `designs[]` entry also accepts an optional **`presetImages`** field — bundled-preset thumbnails:
+
+```jsonc
+{
+  "designs": [
+    {
+      "id": "tag",
+      "label": "Tag",
+      "presetImages": {
+        "Large tag": "examples/tag-preset-large.png",
+        "No hole": "examples/tag-preset-nohole.png"
+      }
+    }
+  ]
+}
+```
+
+- **`presetImages`**: an object mapping a **bundled preset's exact name** (as it appears as a key inside that design's sibling `<design>.json` parameterSets file — see "Bundled presets" above) to an image path, relative to the config file (like `icon`/`image`/`doc`). Every key must match a real bundled preset name — a stale or misspelled name fails the build, and a design with no bundled presets at all can't configure `presetImages` either. Images may be SVG, PNG, or WebP. When a design configures any `presetImages`, the in-app preset picker renders that design's bundled presets as a card grid (thumbnail + title, matching the visual design picker's card treatment) instead of the default compact list; a design with none keeps the compact list. A preset's display name is split into an optional leading **overline** (`"Category | Title"`) and an optional trailing **badge** (`"Title (Language)"`) for the card — see `src/lib/presetCard.ts`; the stored preset name itself is never changed, only how it's parsed for display
+
 ### Rendering
 
 These keys affect render arguments, bundled fonts, and cache behavior:

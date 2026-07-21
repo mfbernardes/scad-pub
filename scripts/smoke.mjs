@@ -356,6 +356,38 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
   if (!presetTested) console.log("  (no bundled presets in this config — skipped)");
 }
 
+// Bundled-preset card grid (PresetPicker.tsx, config's `designs[].presetImages`
+// — see docs/config.md's "Bundled presets" note). Exercised on the first
+// design the schema configures any presetImages for (the dogfood config sets
+// two on "tag" — see scadpub.config.json); a config with none is skipped
+// rather than assumed.
+async function checkPresetCardGrid({ page, check, schema, ids, presetsTabName, paramsTabName }) {
+  console.log("=== bundled-preset card grid (presetImages) ===");
+  const design = schema.designs.find((d) => d.presetImages && Object.keys(d.presetImages).length);
+  if (!design) {
+    console.log("  (no design configures presetImages in this config — skipped)");
+    return;
+  }
+  await selectDesign(page, design.id);
+  await page.getByRole("tab", { name: presetsTabName }).first().click().catch(() => {});
+  const cards = page.locator('[aria-label="Ready-made presets"] .preset-picker__card');
+  const expectedCount = Object.keys(design.presetImages).length;
+  await cards.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await cards.count()) === expectedCount, `preset card grid shows ${expectedCount} card(s) for "${design.id}"`);
+  check((await cards.locator("img").count()) >= 1, "at least one preset card renders its thumbnail image");
+  // Cards are still plain buttons: clicking one applies the preset, same as
+  // the list variant (checkBundledPresets already exercises apply/URL/reload
+  // — this just confirms the card path routes through the same handler).
+  const firstCardText = (await cards.first().textContent())?.trim() ?? "";
+  await cards.first().click();
+  await waitRendered(page, `${design.id} + preset card "${firstCardText}"`);
+  check(
+    (await page.locator('[aria-label="Ready-made presets"] .preset-picker__card[aria-pressed="true"]').count()) >= 1,
+    "clicking a preset card applies it (aria-pressed)"
+  );
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+}
+
 // Preset import: an OpenSCAD parameterSets file becomes a saved preset.
 async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabName }) {
   console.log("=== preset import (parameterSets round-trip) ===");
@@ -877,6 +909,7 @@ async function main() {
     await checkAxe(ctx);
     await checkEveryDesignRenders(ctx);
     await checkBundledPresets(ctx);
+    await checkPresetCardGrid(ctx);
     await checkPresetImport(ctx);
     await checkExports(ctx);
     await checkExportDock(ctx);

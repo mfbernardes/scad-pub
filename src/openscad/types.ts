@@ -177,6 +177,16 @@ export interface Design {
    *  (scad/<id>-doc.md), fetched on demand and rendered in the doc modal.
    *  Null/absent hides the "Design guide" affordance. */
   doc?: string | null;
+  /**
+   * Optional bundled-preset thumbnails (config's `designs[].presetImages`;
+   * see docs/config.md). Maps a bundled preset's EXACT name (as it appears in
+   * the sibling parameterSets file) to a served image URL — gen-schema fails
+   * the build if a key doesn't match a real bundled preset name. When set
+   * (non-empty), PresetPicker renders that design's bundled presets as a card
+   * grid (src/lib/presetCard.ts parses each name into overline/title/badge)
+   * instead of the plain compact list. Absent/undefined for the list view.
+   */
+  presetImages?: Record<string, string>;
   sections: string[];
   /** Section names that start collapsed (from a `// @collapsed` annotation). */
   collapsedSections?: string[];

@@ -11,7 +11,11 @@
       "description": "Personalised name tag with text.",
       "icon": "examples/tag-icon.svg",
       "reviewLabels": { "label": "Text", "font": "Typeface" },
-      "reviewNote": "The engraved or raised text keeps your capitalisation exactly as typed."
+      "reviewNote": "The engraved or raised text keeps your capitalisation exactly as typed.",
+      "presetImages": {
+        "Large tag": "examples/tag-preset-large.png",
+        "No hole": "examples/tag-preset-nohole.png"
+      }
     },
     { "id": "coin", "label": "Coin", "description": "Round coin with an embossed emblem.", "icon": "examples/coin-icon.svg" },
     { "id": "panel", "label": "Panel", "description": "An SVG extruded as a coloured relief panel." }

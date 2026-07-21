@@ -1,0 +1,11 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "designs": [
+    {
+      "id": "collapsible",
+      "label": "Collapsible",
+      "presetImages": { "Anything": "design-icon.png" }
+    }
+  ]
+}

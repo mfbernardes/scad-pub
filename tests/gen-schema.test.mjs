@@ -326,6 +326,32 @@ test("reviewLabels: a blank value fails the build like the other design string f
   );
 });
 
+test("presetImages: a key matching a bundled preset name is resolved and copied", () => {
+  const { schema, out } = run("widget-presetimages.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  assert.deepEqual(widget.presetImages, { Tall: "scad/widget-preset-0.png" });
+  assert.ok(existsSync(join(out, "scad", "widget-preset-0.png")));
+});
+
+test("a design with no configured presetImages omits the field", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].presetImages, undefined);
+});
+
+test("presetImages: a key not matching any bundled preset name fails the build", () => {
+  assert.throws(
+    () => run("widget-presetimages-badname.config.json"),
+    /'presetImages\["Nope"\]' does not match any bundled preset name/
+  );
+});
+
+test("presetImages: configuring it on a design with no bundled presets fails the build", () => {
+  assert.throws(
+    () => run("widget-presetimages-nopresets.config.json"),
+    /'presetImages\["Anything"\]' does not match any bundled preset — design 'collapsible' has no bundled presets/
+  );
+});
+
 test("per-design description + icon are parsed, copied and served", () => {
   const { schema, out } = run("widget-designmeta.config.json");
   const widget = schema.designs.find((d) => d.id === "widget");
