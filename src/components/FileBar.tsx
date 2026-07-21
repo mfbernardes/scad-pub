@@ -1,8 +1,8 @@
 // FileBar.tsx — the generic file manager (fonts, SVGs, data files, …): a list of
 // imported files with sizes + per-file remove, plus "Import file" and "Clear all"
-// actions. Shown as the Files tab on mobile and at the bottom of the desktop
-// parameter panel. All copy is config-driven (see `fileImport`); uploads are
-// stored client-side and mounted by the renderer.
+// actions. Hosted inside FilesModal (opened from the toolbar's "Files" action —
+// see BarActions.tsx), not a panel tab anymore. All copy is config-driven (see
+// `fileImport`); uploads are stored client-side and mounted by the renderer.
 import { toast } from "sonner";
 import type { FileImport } from "../openscad/types";
 import { FileInput } from "./FileInput";

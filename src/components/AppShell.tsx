@@ -11,7 +11,7 @@ import type { RenderResult } from "../openscad/types";
 import type { RenderMetrics } from "../lib/renderMetrics";
 import type { ViewerHandle, Dimensions } from "./Viewer";
 
-// Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
+// Peek shows just the drag handle + the tab bar (Presets/Parameters),
 // ending at the tab underline — no sliver of the tab's content.
 const PEEK_HEIGHT = 60;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
@@ -256,11 +256,12 @@ export const AppShell = memo(function AppShell({
   // Memoized so a config without `notices` doesn't hand a fresh `[]` to the
   // useMemo hooks below on every render.
   const notices = useMemo(() => schema.notices ?? [], [schema.notices]);
-  const fileImport = schema.fileImport ?? null;
-  const loadedFiles = useMemo(
-    () => Object.entries(userFiles).map(([name, bytes]) => ({ name, size: bytes.byteLength })),
-    [userFiles]
-  );
+  // Gates the toolbar's "Files" action (BarActions) — the actual FilesModal
+  // (import button + imported-file list) is hosted in App.tsx alongside
+  // Help/Licenses/DesignDoc, opened via AppActions' `showFiles`. Neither
+  // ParamPanel nor SheetTabs knows about file imports anymore now that Files
+  // is no longer a panel tab.
+  const hasFiles = schema.fileImport != null;
 
   // The set of font families the renderer can actually use: bundled families
   // (parsed at build time) plus the embedded families of any imported font.
@@ -601,7 +602,13 @@ export const AppShell = memo(function AppShell({
                     status={{ rendering, ready, result, stale: stalePreview }}
                     className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
                   />
-                  <BarActions themeMode={themeMode} collapse onSavePng={handleSavePng} canSavePng={exportable} />
+                  <BarActions
+                    themeMode={themeMode}
+                    collapse
+                    onSavePng={handleSavePng}
+                    canSavePng={exportable}
+                    hasFiles={hasFiles}
+                  />
                 </div>
               </div>
             </div>
@@ -675,8 +682,6 @@ export const AppShell = memo(function AppShell({
                   presetName={presetName}
                   baseline={baseline}
                   changedParams={changedParams}
-                  fileImport={fileImport}
-                  loadedFiles={loadedFiles}
                   availableFontFamilies={availableFontFamilies}
                   fontSuggestion={fontSuggestion}
                   installedFonts={installedFonts}
@@ -720,10 +725,11 @@ export const AppShell = memo(function AppShell({
             pickerActive={!isMobile}
             onSavePng={handleSavePng}
             canSavePng={exportable}
+            hasFiles={hasFiles}
           />
 
           <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
-            {/* Docked panel: Presets / Parameters / Files tabs (mirrors mobile). */}
+            {/* Docked panel: Presets / Parameters tabs (mirrors mobile). */}
             <ParamPanel
               design={design}
               values={values}
@@ -734,8 +740,6 @@ export const AppShell = memo(function AppShell({
               presetName={presetName}
               baseline={baseline}
               changedParams={changedParams}
-              fileImport={fileImport}
-              loadedFiles={loadedFiles}
               availableFontFamilies={availableFontFamilies}
               fontSuggestion={fontSuggestion}
               installedFonts={installedFonts}

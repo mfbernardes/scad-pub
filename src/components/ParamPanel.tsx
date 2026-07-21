@@ -1,10 +1,12 @@
 // ParamPanel.tsx — docked desktop parameter panel: a slim header (collapse), a
-// Presets / Parameters / Files tab split (Files only when the design imports
-// files), parameter search + ParamForm, and a Reset footer. Collapsible and
-// resizable; state persisted to localStorage. Presets live here (a tab,
-// mirroring the mobile sheet) rather than in the top bar.
+// Presets / Parameters tab split, parameter search + ParamForm, and a Reset
+// footer. Collapsible and resizable; state persisted to localStorage. Presets
+// live here (a tab, mirroring the mobile sheet) rather than in the top bar.
+// Files used to be a third tab here; it's now FilesModal, opened from
+// BarActions (see CommandBar.tsx) — a design that imports files is no longer
+// special-cased in this component at all.
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import type { Design, FileImport } from "../openscad/types";
+import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
@@ -16,7 +18,6 @@ import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
 import { ParamForm } from "./ParamForm";
-import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
@@ -54,8 +55,6 @@ interface Props {
   baseline: Values;
   /** Names of params whose value differs from `baseline`. */
   changedParams: Set<string>;
-  fileImport: FileImport | null;
-  loadedFiles: LoadedFile[];
   /** Font families the renderer can use (normalised), for the missing-font hint. */
   availableFontFamilies?: Set<string>;
   /** A bundled family to offer as a one-click fallback for a missing font. */
@@ -94,8 +93,6 @@ export function ParamPanel({
   presetName,
   baseline,
   changedParams,
-  fileImport,
-  loadedFiles,
   availableFontFamilies,
   fontSuggestion,
   installedFonts,
@@ -115,15 +112,7 @@ export function ParamPanel({
   onSearchBlur,
   statusStrip,
 }: Props) {
-  const {
-    change,
-    applyPreset,
-    selectedPresetChange,
-    presetsChange,
-    addFile,
-    removeFile,
-    clearFiles,
-  } = useAppActions();
+  const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
   const [open, setOpen] = useState(() => {
     const v = readLocal(PANEL_OPEN_KEY);
     return v !== null ? v === "true" : panelDefaultOpen;
@@ -261,13 +250,11 @@ export function ParamPanel({
         onValueChange={(v) => onPanelTabChange(v as PanelTab)}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        {/* Tab row (Presets / Parameters / Files) with the collapse control on
-            the end. Files appears only when the design imports files. */}
+        {/* Tab row (Presets / Parameters) with the collapse control on the end. */}
         <div className="flex shrink-0 items-stretch border-b">
           <TabsList className="flex-1 rounded-none border-0 bg-transparent p-0">
             <TabsTrigger value="presets" className={panelTabClass}>{presetsLabel}</TabsTrigger>
             <TabsTrigger value="params" className={panelTabClass}>{parametersLabel}</TabsTrigger>
-            {fileImport && <TabsTrigger value="files" className={panelTabClass}>Files</TabsTrigger>}
           </TabsList>
           <IconButton
             className="mr-1 self-center"
@@ -321,18 +308,6 @@ export function ParamPanel({
             <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
         </TabsContent>
-
-        {fileImport && (
-          <TabsContent value="files" className="mt-0 min-h-0 flex-1 overflow-y-auto p-3">
-            <FileBar
-              fileImport={fileImport}
-              loadedFiles={loadedFiles}
-              onAddFile={addFile}
-              onRemoveFile={removeFile}
-              onClearFiles={clearFiles}
-            />
-          </TabsContent>
-        )}
       </Tabs>
 
       <PanelFooter

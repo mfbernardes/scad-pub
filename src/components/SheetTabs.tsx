@@ -1,7 +1,9 @@
 // SheetTabs.tsx — segmented tabs (shadcn/ui Tabs) inside the mobile bottom sheet.
-// Parameters / Presets / Files. Prevents the stacked-sheet anti-pattern.
+// Parameters / Presets. Prevents the stacked-sheet anti-pattern. Files used to
+// be a third tab here; it's now FilesModal, opened from the mobile top bar's
+// "⋮" overflow (BarActions.tsx) — see ParamPanel.tsx's own doc for its desktop twin.
 import { useMemo } from "react";
-import type { Design, FileImport } from "../openscad/types";
+import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
@@ -10,7 +12,6 @@ import { hiddenAdvancedCount } from "../lib/essentials";
 import { t, tn } from "../lib/i18n";
 import type { PanelTab } from "../lib/usePanelState";
 import { ParamForm } from "./ParamForm";
-import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
@@ -35,8 +36,6 @@ interface Props {
   baseline: Values;
   /** Names of params whose value differs from `baseline`. */
   changedParams: Set<string>;
-  fileImport: FileImport | null;
-  loadedFiles: LoadedFile[];
   /** Font families the renderer can use (normalised), for the missing-font hint. */
   availableFontFamilies?: Set<string>;
   /** A bundled family to offer as a one-click fallback for a missing font. */
@@ -78,8 +77,6 @@ export function SheetTabs({
   presetName,
   baseline,
   changedParams,
-  fileImport,
-  loadedFiles,
   availableFontFamilies,
   fontSuggestion,
   installedFonts,
@@ -98,18 +95,9 @@ export function SheetTabs({
   onSearchBlur,
   statusStrip,
 }: Props) {
-  const {
-    change,
-    applyPreset,
-    selectedPresetChange,
-    presetsChange,
-    addFile,
-    removeFile,
-    clearFiles,
-  } = useAppActions();
-  const hasFiles = fileImport != null;
-  // Presets first on mobile, then Customize, then Files.
-  const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
+  const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
+  // Presets first on mobile, then Customize.
+  const tabs: Tab[] = ["presets", "params"];
   const debouncedSearch = useDebounce(search, 150);
   // "Show all settings (N more)" — see ParamPanel.tsx's own doc (its desktop
   // twin) for why the count only reflects currently @showIf-visible params.
@@ -129,7 +117,7 @@ export function SheetTabs({
       <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
         {tabs.map((t) => (
           <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
-            {t === "params" ? parametersLabel : t === "presets" ? presetsLabel : "Files"}
+            {t === "params" ? parametersLabel : presetsLabel}
           </TabsTrigger>
         ))}
       </TabsList>
@@ -162,7 +150,7 @@ export function SheetTabs({
             <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
           {/* Auto-render is parameter-scoped, so it pins to the bottom of this
-              tab only — not on Presets/Files (mirrors the desktop panel). Reset
+              tab only — not on Presets (mirrors the desktop panel). Reset
               lives in PresetDiffBar above now (the unified restore control). */}
           <PanelFooter autoRender={autoRender} className="sheet-footer" />
         </TabsContent>
@@ -179,17 +167,6 @@ export function SheetTabs({
             inline
           />
         </TabsContent>
-        {hasFiles && (
-          <TabsContent value="files" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-            <FileBar
-              fileImport={fileImport}
-              loadedFiles={loadedFiles}
-              onAddFile={addFile}
-              onRemoveFile={removeFile}
-              onClearFiles={clearFiles}
-            />
-          </TabsContent>
-        )}
       </div>
     </Tabs>
   );

@@ -42,6 +42,8 @@
   "console.title": "Messages",
   "console.rawOutput": "Raw output",
 
+  "files.title": "Files",
+
   "settings.showAll": "Show all settings",
   "settings.showAllCount#one": "Show all settings ({count} more)",
   "settings.showAllCount#other": "Show all settings ({count} more)",

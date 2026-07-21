@@ -1,9 +1,9 @@
 // BarActions.tsx — the secondary actions shared by both top bars: Save image
-// (PNG), theme toggle, Help, and open-source licenses. One component, two
-// presentations chosen by the `collapse` prop (the caller knows which layout
-// it's in — both layout trees mount at once, so a viewport hook would render
-// a stray hidden ⋮ button):
-//   • inline (desktop CommandBar): four icon buttons in a row.
+// (PNG), Files, theme toggle, Help, and open-source licenses. One component,
+// two presentations chosen by the `collapse` prop (the caller knows which
+// layout it's in — both layout trees mount at once, so a viewport hook would
+// render a stray hidden ⋮ button):
+//   • inline (desktop CommandBar): icon buttons in a row.
 //   • collapsed (mobile top bar): a single "⋮" Popover of rows, so the narrow
 //     bar stays uncluttered.
 // Render status rides separately on the Output bell (see OutputToggle).
@@ -12,7 +12,10 @@
 // unified two-button dock (Download + Share only) — it's a lower-frequency
 // secondary action, and this is where the app's other secondary chrome
 // (theme/help/licenses) already lives in both layouts, so it needs no new
-// overflow surface of its own.
+// overflow surface of its own. Files followed the same path: it used to be a
+// third panel tab (ParamPanel/SheetTabs), which felt out of place next to
+// Presets/Customize — it now opens FilesModal from here instead, gated on
+// `hasFiles` (the caller knows whether the design's config sets `fileImport`).
 import { useState } from "react";
 import { useAppActions } from "../lib/appActions";
 import { ThemeToggle } from "./ThemeToggle";
@@ -24,6 +27,7 @@ import {
   Image as ImageIcon,
   Info as InfoIcon,
   EllipsisVertical as MoreIcon,
+  Paperclip as FilesIcon,
   Sun as SunIcon,
   Moon as MoonIcon,
   SunMoon as AutoThemeIcon,
@@ -54,12 +58,16 @@ interface Props {
   /** Gates Save-image the same way the dock's Download button is gated for
    *  its direct-export path — a successful render matching the live controls. */
   canSavePng?: boolean;
+  /** Shows the Files action, which opens FilesModal — set when the config's
+   *  `fileImport` is present (the caller derives this from the schema; see
+   *  AppShell's `hasFiles`). False by default: most designs import nothing. */
+  hasFiles?: boolean;
 }
 
-export function BarActions({ themeMode, collapse = false, onSavePng, canSavePng = true }: Props) {
-  const { cycleTheme, showHelp, showLicenses } = useAppActions();
+export function BarActions({ themeMode, collapse = false, onSavePng, canSavePng = true, hasFiles = false }: Props) {
+  const { cycleTheme, showHelp, showLicenses, showFiles } = useAppActions();
   const [open, setOpen] = useState(false);
-  // Help/licenses/Save-image close the menu; theme cycles in place.
+  // Help/licenses/Save-image/Files close the menu; theme cycles in place.
   const openModal = (fn: () => void) => () => { fn(); setOpen(false); };
 
   if (collapse) {
@@ -86,6 +94,16 @@ export function BarActions({ themeMode, collapse = false, onSavePng, canSavePng 
               <ImageIcon size={16} /> Save image
             </button>
           )}
+          {hasFiles && (
+            <button
+              type="button"
+              className={rowClass}
+              onClick={openModal(showFiles)}
+              aria-label="Files"
+            >
+              <FilesIcon size={16} /> Files
+            </button>
+          )}
           <button type="button" className={rowClass} onClick={cycleTheme} aria-label="Toggle theme">
             {THEME_ICON[themeMode]} Theme
           </button>
@@ -110,6 +128,11 @@ export function BarActions({ themeMode, collapse = false, onSavePng, canSavePng 
           disabled={!canSavePng}
         >
           <ImageIcon size={16} />
+        </IconButton>
+      )}
+      {hasFiles && (
+        <IconButton label="Files" title="Files" onClick={showFiles}>
+          <FilesIcon size={16} />
         </IconButton>
       )}
       <ThemeToggle mode={themeMode} onCycle={cycleTheme} />

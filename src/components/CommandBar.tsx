@@ -37,6 +37,9 @@ interface Props {
   /** Save-image (PNG) — relocated here from the export dock (BarActions.tsx). */
   onSavePng?: () => void;
   canSavePng?: boolean;
+  /** Shows BarActions' Files action — set when the config's `fileImport` is
+   *  present. See AppShell's `hasFiles`. */
+  hasFiles?: boolean;
 }
 
 export const CommandBar = memo(function CommandBar({
@@ -57,6 +60,7 @@ export const CommandBar = memo(function CommandBar({
   pickerActive,
   onSavePng,
   canSavePng,
+  hasFiles,
 }: Props) {
   const { designChange, showDesignDoc } = useAppActions();
   const currentDesign = designs.find((d) => d.id === designId);
@@ -111,7 +115,7 @@ export const CommandBar = memo(function CommandBar({
           status={{ rendering, ready, result, stale: stalePreview }}
           className={cn(ICON_BUTTON_CLASS, "command-bar__output")}
         />
-        <BarActions themeMode={themeMode} onSavePng={onSavePng} canSavePng={canSavePng} />
+        <BarActions themeMode={themeMode} onSavePng={onSavePng} canSavePng={canSavePng} hasFiles={hasFiles} />
       </div>
     </header>
   );

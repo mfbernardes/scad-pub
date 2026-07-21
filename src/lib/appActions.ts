@@ -38,6 +38,9 @@ export interface AppActions {
   showHelp: (tab?: string) => void;
   showDesignDoc: () => void;
   showLicenses: () => void;
+  /** Opens FilesModal (the imported-file manager) — see BarActions' "Files"
+   *  action, which is the only entry point into it. */
+  showFiles: () => void;
 }
 
 const AppActionsContext = createContext<AppActions | null>(null);
@@ -77,6 +80,7 @@ export function AppActionsProvider({
       showHelp: (tab) => latest.current.showHelp(tab),
       showDesignDoc: () => latest.current.showDesignDoc(),
       showLicenses: () => latest.current.showLicenses(),
+      showFiles: () => latest.current.showFiles(),
     };
   return createElement(AppActionsContext.Provider, { value: stable.current }, children);
 }
