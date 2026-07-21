@@ -361,7 +361,7 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
 // design the schema configures any presetImages for (the dogfood config sets
 // two on "tag" — see scadpub.config.json); a config with none is skipped
 // rather than assumed.
-async function checkPresetCardGrid({ page, check, schema, ids, presetsTabName, paramsTabName }) {
+async function checkPresetCardGrid({ page, check, schema, presetsTabName, paramsTabName }) {
   console.log("=== bundled-preset card grid (presetImages) ===");
   const design = schema.designs.find((d) => d.presetImages && Object.keys(d.presetImages).length);
   if (!design) {
