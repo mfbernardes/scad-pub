@@ -12,9 +12,11 @@ import type { ViewName } from "./views";
 import type { ComputedInfo } from "../lib/computedInfo";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { StaleBanner } from "./StaleBanner";
+import { UpdatingChip } from "./UpdatingChip";
 import { DimensionInfo } from "./DimensionInfo";
 import { Spinner } from "./ui/spinner";
 import { Progress } from "./ui/progress";
+import { ViewerGestureHint } from "./ViewerGestureHint";
 import { useAppActions } from "../lib/appActions";
 
 const Viewer = lazy(() =>
@@ -30,9 +32,8 @@ interface Props {
   ready: boolean;
   rendering: boolean;
   /** The render worker's bootstrap-download progress; null once ready (or
-   *  never set at all on a warm Cache Storage hit — see loadPhase copy
-   *  below). Surfaced as a thin progress bar under the loading overlay's
-   *  "Getting things ready…" text. */
+   *  never set at all on a warm Cache Storage hit). Surfaced as a thin
+   *  progress bar under the loading overlay's "Getting things ready…" text. */
   loadProgress: WorkerProgress | null;
   autoRender: boolean;
   stalePreview: boolean;
@@ -72,6 +73,12 @@ export function ViewerStage({
   children,
 }: Props) {
   const { render } = useAppActions();
+  // "Updating…" chip: a re-render is running AND a previous result is still
+  // on screen. Auto-render only — in manual mode StaleBanner already shows
+  // its own "Updating…" state while `rendering` is true (see StaleBanner's
+  // own early-return), so gating this on `autoRender` avoids saying the same
+  // thing twice over the canvas.
+  const showUpdatingChip = autoRender && rendering && !!result?.ok;
   return (
     <div className="viewer-wrap">
       <ErrorBoundary resetKey={result}>
@@ -120,6 +127,12 @@ export function ViewerStage({
         stalePreview={stalePreview}
         onRender={render}
       />
+      {showUpdatingChip && <UpdatingChip />}
+
+      {/* One-time orbit/zoom gesture hint — only once a model has actually
+          been shown, and only until the visitor interacts with the canvas or
+          the timeout fades it (see ViewerGestureHint's own doc). */}
+      <ViewerGestureHint resultOk={!!result?.ok} />
 
       {/* Measurements panel — top-left; shown only while dimensions are on: the
           bounding-box headline plus any per-design @info values. Measured from

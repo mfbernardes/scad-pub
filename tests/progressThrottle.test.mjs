@@ -66,7 +66,7 @@ test("a report satisfying both thresholds posts", () => {
 test("posts at most ~5/sec across a burst of rapid, large-delta reports", () => {
   const posts = [];
   const c = clock();
-  const report = makeProgressThrottle((loaded, total) => posts.push(loaded), { now: c.now });
+  const report = makeProgressThrottle((loaded) => posts.push(loaded), { now: c.now });
   for (let i = 0; i <= 50; i++) {
     report(i * 20_000, 1_000_000); // huge delta every call
     c.advance(10); // 500ms total across 50 calls at 10ms apart
