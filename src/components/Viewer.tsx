@@ -12,6 +12,14 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildDimensions, type DimensionsGroup } from "./dimensions";
 import { VIEW_DIRECTIONS, DEFAULT_VIEW, type ViewName } from "./views";
 import { toIndexedGeometry } from "@/lib/meshIndex";
+import {
+  frameDistanceForBox,
+  cameraBasis,
+  insetHeightFraction,
+  insetTargetShift,
+  DEFAULT_FIT_FRACTION,
+  type Box3Like,
+} from "./framing";
 
 // The build-time model format (Vite define; see vite.config.ts). A literal, so
 // the unused branch below — and its loader import — drop out of the bundle.
@@ -138,30 +146,81 @@ export const Viewer = forwardRef<
   const modelSizeRef = useRef<THREE.Vector3 | null>(null);
   // The live dimension-annotation overlay (see dimensions.ts), or null when off.
   const dimGroupRef = useRef<DimensionsGroup | null>(null);
-  // Bounding-sphere radius of the framed model, so "Reset view" can reproduce
-  // the default framing on demand. null until the first model is framed.
-  const frameRadiusRef = useRef<number | null>(null);
 
-  // Frame the orbit camera for a model of the given bounding-sphere radius, from
-  // the named standard view (default = the current one). The camera's up stays
-  // +Z for every view (set once at init), so OrbitControls keeps orbiting
-  // correctly; only the look-from direction changes.
-  function frameView(radius: number, name: ViewName = viewRef.current) {
+  // The export dock (`.action-dock`) floats over the canvas via CSS
+  // `position: absolute` — it does NOT shrink the canvas's own box the way
+  // the mobile bottom sheet does (`.app-shell__mobile-viewer`'s `bottom:
+  // var(--sheet-top)` already excludes the sheet from `mount`'s own
+  // clientHeight, so that side needs no extra handling here). So the dock is
+  // the one piece of floating chrome the camera fit has to account for
+  // itself: how many pixels of `mount`'s own bottom edge it covers, measured
+  // live from the DOM rather than duplicating its CSS geometry (gap/safe-area
+  // constants) here. Only one `.action-dock` is ever in the document at a
+  // time — AppShell mounts exactly one of the desktop/mobile layouts, never
+  // both (see AppShell.tsx's M7) — so a plain, unscoped query is safe.
+  function dockInsetPx(mount: HTMLElement): number {
+    const dock = document.querySelector<HTMLElement>(".action-dock");
+    if (!dock) return 0;
+    const mountBottom = mount.getBoundingClientRect().bottom;
+    const dockTop = dock.getBoundingClientRect().top;
+    return Math.max(0, mountBottom - dockTop);
+  }
+
+  // Frame the orbit camera for the current model (modelSizeRef), from the
+  // named standard view (default = the current one), fitting its actual
+  // bounding BOX (see framing.ts) rather than a bounding-sphere radius — a
+  // sphere over-estimates a flat/wide model's on-screen footprint, which
+  // used to leave e.g. flat plates reading much smaller than intended. The
+  // camera's up stays +Z for every view (set once at init), so OrbitControls
+  // keeps orbiting correctly; only the look-from direction changes.
+  function frameView(name: ViewName = viewRef.current) {
     const cam = camRef.current;
     const controls = controlsRef.current;
-    if (!cam || !controls) return;
-    if (name === "isometric") {
-      // The long-standing default three-quarter framing, kept pixel-exact.
-      const d = radius * 2.6;
-      cam.position.set(d * 0.6, -d, d * 0.7);
-    } else {
-      const [x, y, z] = VIEW_DIRECTIONS[name];
-      cam.position
-        .set(x, y, z)
-        .normalize()
-        .multiplyScalar(radius * 3.4);
+    const mount = mountRef.current;
+    const size = modelSizeRef.current;
+    if (!cam || !controls || !mount || !size) return;
+
+    // Reconstruct the model's world-space bounding box from its size, in the
+    // same two positioning modes the geometry-swap effect below applies
+    // (both centred at target (0,0,0) in X/Y): centred on all three axes by
+    // default, or — restOnGrid — resting its base on z=0 instead of being
+    // vertically centred. Cheaper than re-measuring a live THREE.Box3, and
+    // exactly reproduces that effect's own math (translation only, so `size`
+    // alone is enough to reconstruct it).
+    const halfX = size.x / 2;
+    const halfY = size.y / 2;
+    const box: Box3Like = __APP_REST_ON_GRID__
+      ? { min: new THREE.Vector3(-halfX, -halfY, 0), max: new THREE.Vector3(halfX, halfY, size.z) }
+      : { min: new THREE.Vector3(-halfX, -halfY, -size.z / 2), max: new THREE.Vector3(halfX, halfY, size.z / 2) };
+
+    const [dx, dy, dz] = VIEW_DIRECTIONS[name];
+    const direction = new THREE.Vector3(dx, dy, dz);
+    const target = new THREE.Vector3(0, 0, 0);
+
+    const w = mount.clientWidth || 1;
+    const h = mount.clientHeight || 1;
+    const aspect = w / h;
+
+    // Leave room for the export dock: shrink the height target to the
+    // USABLE strip above it, so the box-fit solve below asks for a distance
+    // that fits the model into that strip, not the full canvas.
+    const inset = dockInsetPx(mount);
+    const fit = { width: DEFAULT_FIT_FRACTION.width, height: insetHeightFraction(DEFAULT_FIT_FRACTION.height, h, inset) };
+
+    const distance = frameDistanceForBox(box, target, direction, aspect, cam.fov, fit);
+
+    // Shift the orbit target opposite the screen "up" direction by half the
+    // inset, in world units at this distance, so the (unmoved) model renders
+    // centred in the usable strip above the dock instead of the full canvas
+    // — see framing.ts's insetTargetShift for the sign/derivation.
+    if (inset > 0) {
+      const { up } = cameraBasis(direction);
+      const shift = insetTargetShift(distance, cam.fov, h, inset);
+      target.addScaledVector(up, -shift);
     }
-    controls.target.set(0, 0, 0);
+
+    cam.position.copy(target).addScaledVector(direction.clone().normalize(), distance);
+    controls.target.copy(target);
     controls.update();
   }
 
@@ -219,11 +278,11 @@ export const Viewer = forwardRef<
       return r.domElement.toDataURL("image/png");
     },
     resetView() {
-      if (frameRadiusRef.current != null) frameView(frameRadiusRef.current);
+      if (modelSizeRef.current) frameView();
     },
     setView(name) {
       viewRef.current = name; // stick for the next new-model reframe
-      if (frameRadiusRef.current != null) frameView(frameRadiusRef.current, name);
+      if (modelSizeRef.current) frameView(name);
     },
     zoomIn() {
       dolly(0.8);
@@ -533,21 +592,18 @@ export const Viewer = forwardRef<
     syncDimensions(showDimensions); // refresh the overlay for the new bounds
     onMeasureRef.current?.({ x: size.x, y: size.y, z: size.z });
 
-    // Remember the model's size so "Reset view" can reproduce this framing even
-    // after the user has orbited or zoomed away.
-    const r = box.getBoundingSphere(new THREE.Sphere()).radius || 50;
-    frameRadiusRef.current = r;
-
     // Reframe when the design changed — and, on desktop (reframeOnPreset), when
     // the preset changed too — or on the first model. A re-render from the same
     // framing key (e.g. a parameter tweak, or a preset change on mobile) keeps
     // the user's current orbit/zoom so the view doesn't jump. designId/presetId
     // are read fresh here rather than via the dep array: a preset change doesn't
     // clear the old geometry, so reframing must wait for the new model to arrive
-    // (this effect) and use *its* bounds, not the stale ones.
+    // (this effect) and use *its* bounds, not the stale ones. frameView() reads
+    // modelSizeRef (just set above) to fit the model's actual bounding box —
+    // see framing.ts — rather than a bounding-sphere radius.
     const frameKey = reframeOnPreset ? `${designId}\n${presetId}` : designId;
     if (framedKeyRef.current !== frameKey) {
-      frameView(r); // moves the camera, which self-invalidates via controls' "change" event
+      frameView(); // moves the camera, which self-invalidates via controls' "change" event
       framedKeyRef.current = frameKey;
     } else {
       requestRenderRef.current(); // same framing (e.g. a param tweak) — camera didn't move, so invalidate explicitly
