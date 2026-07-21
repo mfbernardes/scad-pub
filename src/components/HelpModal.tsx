@@ -48,12 +48,20 @@ function HelpSections({
 
 /** Tab strip + panels, built on the shared Radix Tabs primitive (which provides
  *  the full ARIA tabs pattern — roving tabindex, arrow/Home/End nav — for free). */
-function HelpTabs({ tabs }: { tabs: HelpTab[] }) {
+function HelpTabs({ tabs, initialTab }: { tabs: HelpTab[]; initialTab?: string }) {
+  // `initialTab` (from ui.afterExport's "Open printing help" action, or any
+  // other future deep link) picks which tab is active on mount — matched by
+  // its exact label; an unmatched or omitted value falls back to the first
+  // tab, same as before this prop existed. Radix Tabs' `defaultValue` is
+  // uncontrolled, so this only matters at mount — fine here since HelpModal
+  // remounts fresh every time it opens (see App.tsx's `{showHelp && <HelpModal/>}`).
+  const matched = initialTab ? tabs.findIndex((t) => t.label === initialTab) : -1;
+  const defaultValue = matched >= 0 ? String(matched) : "0";
   // `min-h-0 flex-1` lets this tab block fill the dialog's remaining height and,
   // crucially, shrink below its content — otherwise the default `min-height:auto`
   // makes it grow past the dialog, which clips (rather than scrolls) long tabs.
   return (
-    <Tabs defaultValue="0" className="min-h-0 flex-1 gap-0">
+    <Tabs defaultValue={defaultValue} className="min-h-0 flex-1 gap-0">
       <TabsList
         className="mx-4 mt-2 h-auto w-auto flex-wrap justify-start rounded-none border-0 border-b bg-transparent p-0"
         aria-label="Help topics"
@@ -85,6 +93,7 @@ export function HelpModal({
   onClose,
   canInstall = false,
   onInstall,
+  initialTab,
 }: {
   help?: HelpContent | null;
   onClose: () => void;
@@ -92,6 +101,9 @@ export function HelpModal({
    *  the config allows it). Demoted here from a standing top-bar button. */
   canInstall?: boolean;
   onInstall?: () => void;
+  /** Deep-link to a specific tab by its exact label (e.g. from the after-export
+   *  panel's "Open printing help" action) — see HelpTabs' own doc. */
+  initialTab?: string;
 }) {
   const content = help ?? DEFAULT_HELP;
   // Normalise to tabs when the config supplies any. Top-level `sections` (the
@@ -114,7 +126,7 @@ export function HelpModal({
         </div>
       )}
       {tabs ? (
-        <HelpTabs tabs={tabs} />
+        <HelpTabs tabs={tabs} initialTab={initialTab} />
       ) : (
         <div className={HELP_BODY}>
           <HelpSections sections={content.sections ?? []} />

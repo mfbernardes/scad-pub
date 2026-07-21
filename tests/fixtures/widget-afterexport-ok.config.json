@@ -1,0 +1,19 @@
+{
+  "source": "src",
+  "features": [],
+  "fonts": [],
+  "ui": { "afterExport": { "title": "Done", "body": "Slice it.", "helpTab": "Printing" } },
+  "help": {
+    "tabs": [
+      {
+        "label": "Getting started",
+        "sections": [{ "title": "Step 1", "body": "Pick a design." }]
+      },
+      {
+        "label": "Printing",
+        "sections": [{ "title": "Material", "body": "Use **PLA**." }]
+      }
+    ]
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

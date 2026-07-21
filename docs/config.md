@@ -386,6 +386,29 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
 - **`gallery`**: `false` by default. Replaces the compact design dropdown with a searchable card grid using each design's `image`, then `icon`, then a letter fallback
 - **`essentials`**: `false` by default. Starts with `// @advanced` parameters hidden behind **Show all settings**
+- **`afterExport`**: turns on the inline after-export success panel. Absent by default (no panel). See [After-export panel (`ui.afterExport`)](#after-export-panel-uiafterexport)
+
+### After-export panel (`ui.afterExport`)
+
+The optional `ui.afterExport` object turns on a compact, non-modal panel (`src/components/ExportSuccess.tsx`) that appears above the floating export dock right after a successful model export. Absent entirely (the default) → no panel is ever shown, on any export. Every field inside it is also optional:
+
+```jsonc
+{
+  "ui": {
+    "afterExport": {
+      "title": "Model downloaded",     // optional; defaults to "Your file is on its way"
+      "body": "Slice it and print.",   // optional; defaults to a generic next-step line
+      "helpTab": "Printing"            // optional; must name an existing help.tabs[].label
+    }
+  }
+}
+```
+
+- **`title`**: overrides the panel's headline. Left unset, the panel reads "Your file is on its way"
+- **`body`**: overrides the panel's one-line next step. Rendered as the same Markdown subset as `help`/`fileImport.note`. Left unset, the panel gives a generic "check your downloads, then slice and print" line
+- **`helpTab`**: when set, the panel shows an "Open printing help" action that opens Help scrolled straight to the tab with this exact label (`HelpModal`'s `initialTab`, matched by [`help.tabs[].label`](#help-content-help)). **Validated at build time**: `gen-schema` fails the build if no tab in this config's `help` carries that label. Omit to hide the action
+
+The panel is dismissible (an ✕) and auto-hides itself after a few seconds; it never appears while a native share sheet is open — it's only ever shown once the export's share-or-download outcome has actually settled, and it replaces the export flow's one-time "install this app" toast on any deployment that configures it (the two never stack on the same export).
 
 ### PWA manifest
 

@@ -5,7 +5,14 @@
 
   "source": "examples",
   "designs": [
-    { "id": "tag", "label": "Tag", "description": "Personalised name tag with text.", "icon": "examples/tag-icon.svg" },
+    {
+      "id": "tag",
+      "label": "Tag",
+      "description": "Personalised name tag with text.",
+      "icon": "examples/tag-icon.svg",
+      "reviewLabels": { "label": "Text", "font": "Typeface" },
+      "reviewNote": "The engraved or raised text keeps your capitalisation exactly as typed."
+    },
     { "id": "coin", "label": "Coin", "description": "Round coin with an embossed emblem.", "icon": "examples/coin-icon.svg" },
     { "id": "panel", "label": "Panel", "description": "An SVG extruded as a coloured relief panel." }
   ],
@@ -17,7 +24,7 @@
     "LiberationSans-Regular.ttf"
   ],
 
-  "ui": { "install": "off" },
+  "ui": { "install": "off", "afterExport": { "helpTab": "Printing" } },
   "fileImport": true,
 
   "popup": {
@@ -92,7 +99,7 @@
     ]
   },
   "notices": [
-    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
-    { "marker": "note", "label": "notes", "color": "#86a9ff" }
+    { "marker": "alert", "label": "alerts", "labelOne": "alert", "color": "#e0a458", "attention": true },
+    { "marker": "note", "label": "notes", "labelOne": "note", "color": "#86a9ff" }
   ]
 }

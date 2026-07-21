@@ -1,0 +1,15 @@
+{
+  "source": "src",
+  "features": [],
+  "fonts": [],
+  "ui": { "afterExport": { "helpTab": "Nope" } },
+  "help": {
+    "tabs": [
+      {
+        "label": "Printing",
+        "sections": [{ "title": "Material", "body": "Use **PLA**." }]
+      }
+    ]
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

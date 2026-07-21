@@ -704,6 +704,26 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
+  // ui.afterExport.helpTab (if set) must name an existing Help tab — checked
+  // here rather than inside parseUi (config-parsers.mjs) because it's a
+  // cross-field validation against HELP, only available now. Mirrors
+  // HelpModal's own tab-list logic (top-level `help.sections` synthesize a
+  // leading tab labelled "Overview" when `help.tabs` are also present — see
+  // HelpModal.tsx's own HelpModal() — so a value that passes here is
+  // guaranteed to match a real tab the modal renders).
+  if (UI.afterExport?.helpTab) {
+    const tabLabels = HELP?.tabs?.length
+      ? [...(HELP.sections?.length ? ["Overview"] : []), ...HELP.tabs.map((t) => t.label)]
+      : [];
+    if (!tabLabels.includes(UI.afterExport.helpTab)) {
+      throw new Error(
+        `gen-schema: 'ui.afterExport.helpTab' is ${JSON.stringify(UI.afterExport.helpTab)}, but no 'help' tab has that label.\n` +
+          (tabLabels.length
+            ? `  Available tabs: ${tabLabels.map((l) => JSON.stringify(l)).join(", ")}`
+            : `  This config's 'help' has no tabs defined.`)
+      );
+    }
+  }
   // Config-driven notice categories surfaced on the OpenSCAD output panel.
   // Validated; off by default (omitted -> none).
   const NOTICES = parseNotices(config.notices);

@@ -32,7 +32,10 @@ export interface AppActions {
   clearFiles: () => void;
   autoRenderChange: (v: boolean) => void;
   cycleTheme: () => void;
-  showHelp: () => void;
+  /** Opens the Help modal, optionally scrolled straight to a tab (matched by
+   *  its exact `help.tabs[].label` — see HelpModal's `initialTab`). Omit for
+   *  the modal's default landing tab. */
+  showHelp: (tab?: string) => void;
   showDesignDoc: () => void;
   showLicenses: () => void;
 }
@@ -71,7 +74,7 @@ export function AppActionsProvider({
       clearFiles: () => latest.current.clearFiles(),
       autoRenderChange: (v) => latest.current.autoRenderChange(v),
       cycleTheme: () => latest.current.cycleTheme(),
-      showHelp: () => latest.current.showHelp(),
+      showHelp: (tab) => latest.current.showHelp(tab),
       showDesignDoc: () => latest.current.showDesignDoc(),
       showLicenses: () => latest.current.showLicenses(),
     };

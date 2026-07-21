@@ -375,6 +375,28 @@ export interface UiConfig {
   gallery?: boolean;
   /** Start with `@advanced` parameters hidden behind a Show all settings action. */
   essentials?: boolean;
+  /**
+   * Optional inline success panel shown above the action dock after a
+   * successful export (see src/components/ExportSuccess.tsx). Absent -> the
+   * feature is off entirely — no panel is ever shown, on any export. All
+   * fields are optional even when the object is present; omitted `title`/
+   * `body` fall back to built-in copy. None of these fields affect geometry
+   * (absent from renderHash).
+   */
+  afterExport?: {
+    /** Overrides the panel's default headline ("Your file is on its way"). */
+    title?: string;
+    /** Overrides the panel's default next-step body text. Rendered as the
+     *  same Markdown subset as `help`/`fileImport.note`. */
+    body?: string;
+    /**
+     * Help-modal tab label to deep-link the panel's "Open printing help"
+     * action to (HelpModal's `initialTab`). Validated at build time against
+     * this config's `help` tabs — gen-schema fails the build if no tab
+     * carries this exact label. Omit to hide the action entirely.
+     */
+    helpTab?: string;
+  };
 }
 
 export interface Schema {
