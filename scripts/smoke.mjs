@@ -22,6 +22,8 @@ import {
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
   dismissWelcomePopup,
+  openDialog,
+  closeDialog,
 } from "./lib/browser.mjs";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
@@ -88,7 +90,7 @@ async function checkWelcomePopup({ page, check, schema }) {
     const dontShow = popup.getByRole("checkbox");
     if (await dontShow.count()) await dontShow.check();
     await cta.click();
-    await popup.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+    await closeDialog(page, schema.popup.header).catch(() => {});
     check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
     // The primary CTA also opens the design picker (when there's more than one
     // design) so the user's next step — choosing what to make — is obvious.
@@ -200,10 +202,7 @@ async function checkFileImport({ page, check, ids, schema }) {
     // Close it — later checks click other toolbar/panel controls, and an open
     // dialog's overlay would intercept those clicks.
     await closeFiles();
-    await page
-      .getByRole("dialog", { name: "Files" })
-      .waitFor({ state: "detached", timeout: 3000 })
-      .catch(() => {});
+    await closeDialog(page, "Files").catch(() => {});
   } else {
     console.log("  (no fileImport in this config — skipped)");
   }
@@ -439,8 +438,7 @@ async function checkExports({ page, check, ids, dir }) {
   const downloadPromise = page.waitForEvent("download");
   await page.click('[aria-label^="Download "]');
   const reviewDialog = page.getByRole("dialog", { name: "Review" });
-  const opened = await reviewDialog
-    .waitFor({ state: "visible", timeout: 2000 })
+  const opened = await openDialog(page, "Review", { timeout: 2000 })
     .then(() => true)
     .catch(() => false);
   check(opened, "downloading with a pending attention issue opens the Review dialog");
@@ -499,8 +497,7 @@ async function checkStatusStripAndReview({ page, check, ids }) {
   // Scope to the footer for the "Close" button — Radix's own built-in dialog
   // close (X) button is ALSO named "Close", so an unscoped lookup is ambiguous.
   await strip.click();
-  const infoDialog = page.getByRole("dialog", { name: "Review" });
-  await infoDialog.waitFor({ state: "visible", timeout: 3000 });
+  const infoDialog = await openDialog(page, "Review");
   const infoFooter = infoDialog.locator('[data-slot="dialog-footer"]');
   check(
     (await infoFooter.getByRole("button", { name: "Download for 3D printing" }).count()) === 1,
@@ -508,7 +505,7 @@ async function checkStatusStripAndReview({ page, check, ids }) {
   );
   check((await infoFooter.getByRole("button", { name: "Close" }).count()) === 1, "status-triggered dialog offers Close");
   await infoFooter.getByRole("button", { name: "Close" }).click();
-  await infoDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  await closeDialog(page, "Review").catch(() => {});
 
   // A clean design's strip reads "Ready to download".
   await selectDesign(page, "panel");
@@ -532,7 +529,7 @@ async function checkAfterExport({ page, check, ids, schema }) {
   const downloadPromise = page.waitForEvent("download");
   await page.click('[aria-label^="Download "]');
   const reviewDialog = page.getByRole("dialog", { name: "Review" });
-  if (await reviewDialog.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
+  if (await openDialog(page, "Review", { timeout: 2000 }).then(() => true).catch(() => false)) {
     await reviewDialog.getByRole("button", { name: /Download/ }).click();
   }
   await downloadPromise;
@@ -547,7 +544,16 @@ async function checkAfterExport({ page, check, ids, schema }) {
       .catch(() => false);
     check(guideVisible, `after-export panel offers "Open printing help"`);
     await guideBtn.click();
-    const helpDialog = page.getByRole("dialog").filter({ has: page.getByRole("tab", { name: schema.ui.afterExport.helpTab } ) });
+    // NOT openDialog/closeDialog here: Help's accessible NAME isn't stable
+    // across configs. Modal.tsx's `aria-label={label ?? title}` sets an
+    // `aria-label="Help"` attribute, but Radix's DialogContent also wires
+    // `aria-labelledby` to the rendered DialogTitle (the config's `help.title`,
+    // defaulting to "How to use this configurator") — and per the ARIA
+    // accessible-name algorithm, aria-labelledby wins over aria-label, so the
+    // dialog's actual accessible name is that title text, not "Help". Locate
+    // it structurally instead (any dialog containing the deep-linked tab),
+    // which is name-agnostic and was the original approach here.
+    const helpDialog = page.getByRole("dialog").filter({ has: page.getByRole("tab", { name: schema.ui.afterExport.helpTab }) });
     const helpOpened = await helpDialog.first().waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false);
     check(helpOpened, `"Open printing help" opens Help scrolled to "${schema.ui.afterExport.helpTab}"`);
     check(

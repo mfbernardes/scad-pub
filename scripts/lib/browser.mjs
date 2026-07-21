@@ -98,6 +98,34 @@ export async function dismissWelcomePopup(page) {
   await page.keyboard.press("Escape").catch(() => {});
 }
 
+// Shared timeout for openDialog/closeDialog below — every hand-rolled
+// dialog-visibility wait across smoke.mjs used 3000ms except two 2000ms
+// outliers (still passable via the `timeout` option), so this is the one
+// place that constant lives now.
+const DIALOG_TIMEOUT = 3000;
+
+/** Wait for a `role="dialog"` with the given accessible name to become
+ *  visible, then return its locator (so a caller can keep interacting with
+ *  it — e.g. `.locator(...)`/`.getByRole(...)` for a footer button — without
+ *  a second `page.getByRole("dialog", { name })` lookup). Throws on timeout,
+ *  same as `waitRendered` above — callers that only want to know WHETHER it
+ *  opened should `.catch()` it. */
+export async function openDialog(page, name, { timeout = DIALOG_TIMEOUT } = {}) {
+  const dialog = page.getByRole("dialog", { name });
+  await dialog.waitFor({ state: "visible", timeout });
+  return dialog;
+}
+
+/** Wait for a `role="dialog"` with the given accessible name to close.
+ *  Playwright's "hidden" wait state matches both a fully unmounted dialog and
+ *  one that's merely display:none/zero-size, covering every close pattern
+ *  the app uses (a Dialog that unmounts vs. one that just hides) with a
+ *  single helper. Throws on timeout — callers that tolerate a dialog staying
+ *  open (a best-effort cleanup step) should `.catch()` it. */
+export async function closeDialog(page, name, { timeout = DIALOG_TIMEOUT } = {}) {
+  await page.getByRole("dialog", { name }).waitFor({ state: "hidden", timeout });
+}
+
 /** Navigate to `base` with the given theme forced. Load once to establish the
  *  origin (localStorage isn't available on about:blank), set the persisted
  *  theme, then reload so it applies before first paint. The storage key is
