@@ -122,6 +122,8 @@ export function validateSchema(raw: unknown): Schema {
       fail("'popup.mode' must be \"always\", \"once\", \"dismissible\" or \"picker\"");
     if (p.button !== undefined && (typeof p.button !== "string" || !p.button))
       fail("'popup.button', when set, must be a non-empty string");
+    if (p.footnote !== undefined && (typeof p.footnote !== "string" || !p.footnote))
+      fail("'popup.footnote', when set, must be a non-empty string");
   }
   if (s.notices !== undefined) {
     if (!Array.isArray(s.notices)) fail("'notices' must be an array");

@@ -1314,7 +1314,13 @@ test("parsePopup: defaults, modes, links and errors", () => {
     { header: "H", body: "B", mode: "once", button: "Start designing" }
   );
   assert.equal("button" in parsePopup({ header: "H", body: "B" }), false);
-  // Wrong shapes / missing required fields / bad mode / blank button -> clear errors.
+  // An optional footnote passes through the same way; absent -> omitted.
+  assert.deepEqual(
+    parsePopup({ header: "H", body: "B", mode: "once", footnote: "Nothing is uploaded." }),
+    { header: "H", body: "B", mode: "once", footnote: "Nothing is uploaded." }
+  );
+  assert.equal("footnote" in parsePopup({ header: "H", body: "B" }), false);
+  // Wrong shapes / missing required fields / bad mode / blank button/footnote -> clear errors.
   assert.throws(() => parsePopup([]), /'popup' must be an object/);
   assert.throws(() => parsePopup({ body: "x" }), /'popup\.header' is required/);
   assert.throws(() => parsePopup({ header: "x" }), /'popup\.body' is required/);
@@ -1327,6 +1333,15 @@ test("parsePopup: defaults, modes, links and errors", () => {
     () => parsePopup({ header: "x", body: "y", button: "  " }),
     /'popup\.button', when set, must be a non-empty string/
   );
+  assert.throws(
+    () => parsePopup({ header: "x", body: "y", footnote: "  " }),
+    /'popup\.footnote', when set, must be a non-empty string/
+  );
+});
+
+test("popup.footnote: a full build carries it through to the generated schema", () => {
+  const { schema } = run("widget-popup.config.json");
+  assert.equal(schema.popup.footnote, "Everything runs in your browser. Nothing is uploaded.");
 });
 
 test("parseEnumHint ignores single-item and non-enum hints", () => {

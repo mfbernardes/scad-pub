@@ -353,6 +353,13 @@ export interface PopupNotice {
    * the design picker so the user's obvious next step is to choose what to make.
    */
   button?: string;
+  /**
+   * Optional plain-text footnote, rendered small and muted at the bottom of
+   * the dialog, in every mode (including "picker"). For a short standing
+   * disclosure that doesn't belong in `body`'s main message, e.g. "Everything
+   * runs in your browser. Nothing is uploaded." Plain text, not Markdown.
+   */
+  footnote?: string;
 }
 
 /** Build-time UI behaviour overrides. None affect geometry (absent from renderHash). */

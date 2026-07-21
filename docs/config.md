@@ -351,7 +351,8 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
   "popup": {
     "header": "Welcome to Tag Studio",          // required: dialog title
     "body": "Configure a nameplate and export a 3MF.\n\nSee the [print guide](https://example.com/guide) for material tips.",  // required
-    "mode": "once"                               // optional: "always" | "once" | "dismissible" | "picker"
+    "mode": "once",                              // optional: "always" | "once" | "dismissible" | "picker"
+    "footnote": "Everything runs in your browser. Nothing is uploaded."  // optional
   }
 }
 ```
@@ -363,6 +364,7 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
   - **`once`** (default): shown on the first visit only. Dismissing it with **OK**, the close button, Escape, or outside click remembers it so it will not return
   - **`dismissible`**: shown on every visit until you tick **Don't show this again**. Closing without ticking the box shows it again next time
   - **`picker`**: shows the visual design gallery on the first visit. Intended for `ui.gallery: true` deployments with multiple designs
+- **`footnote`**: an optional short line of plain text (not Markdown), shown small and muted at the bottom of the dialog in every mode, including `picker`. For a standing disclosure that doesn't belong in the main `body` message, such as a privacy note
 
 The remembered state is namespaced by the configurator's `id` and keyed by the popup's content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It's purely informational and doesn't affect renders, so it never invalidates the geometry cache.
 

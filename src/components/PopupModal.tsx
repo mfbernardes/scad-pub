@@ -39,6 +39,15 @@ export function PopupModal({
   const close = () => onClose(remember());
   const primary = () => onPrimary(remember());
 
+  // Small, muted standing disclosure — same treatment in every mode, incl.
+  // the picker below (plain text, not Markdown: it's meant for a short,
+  // config-fixed line, not free-form content).
+  const footnote = popup.footnote && (
+    <p className="notice-footnote m-0 text-[0.78rem] leading-[1.4] text-muted-foreground">
+      {popup.footnote}
+    </p>
+  );
+
   if (popup.mode === "picker" && designs.length > 1) {
     return (
       <Modal title={popup.header} onClose={() => onClose(true)}>
@@ -52,6 +61,7 @@ export function PopupModal({
               onClose(true);
             }}
           />
+          {footnote}
         </div>
       </Modal>
     );
@@ -81,6 +91,7 @@ export function PopupModal({
         <Button className="notice-ok ml-auto" onClick={primary}>
           {popup.button ?? "OK"}
         </Button>
+        {footnote && <div className="basis-full">{footnote}</div>}
       </div>
     </Modal>
   );

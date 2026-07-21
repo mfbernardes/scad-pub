@@ -74,6 +74,12 @@ async function checkWelcomePopup({ page, check, schema }) {
     if (/\]\(/.test(schema.popup.body ?? "")) {
       check((await popup.getByRole("link").count()) > 0, "popup body renders its link");
     }
+    if (schema.popup.footnote) {
+      check(
+        (await popup.getByText(schema.popup.footnote, { exact: true }).count()) > 0,
+        "popup renders its configured footnote"
+      );
+    }
     // The primary button's label is config-driven (schema.popup.button), so read
     // it from the schema instead of hardcoding "OK".
     const buttonLabel = schema.popup.button ?? "OK";

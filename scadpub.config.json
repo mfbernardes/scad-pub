@@ -30,7 +30,8 @@
   "popup": {
     "header": "Welcome to ScadPub",
     "body": "Configure an OpenSCAD design in your browser and export a ready-to-print model — everything runs locally.\n\nScadPub is open source: see the [project on GitHub](https://github.com/mfbernardes/scad-pub).",
-    "mode": "dismissible"
+    "mode": "dismissible",
+    "footnote": "Everything runs in your browser. Nothing is uploaded."
   },
   "help": {
     "intro": "Customize an OpenSCAD design in your browser and download a ready-to-print model — everything runs on your device.",
