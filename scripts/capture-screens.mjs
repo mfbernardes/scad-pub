@@ -7,8 +7,10 @@
 // PNGs under screenshots/captures/<viewport>/<theme>/ and zips them to
 // screenshots/scadpub-screenshots.zip. On mobile it also walks the bottom sheet
 // through all three detents (peek/half/full) and each of its tabs (Presets,
-// Parameters, Files). Output lives under the gitignored screenshots/ dir. Needs
-// Chromium (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or a `playwright install chromium`).
+// Parameters) — Files is a toolbar-opened dialog now, not a tab, so it's
+// captured alongside Help/Licenses instead. Output lives under the gitignored
+// screenshots/ dir. Needs Chromium (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or a
+// `playwright install chromium`).
 import { mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -121,7 +123,6 @@ async function captureViewport(context, base, kind, theme) {
     for (const [n, tab] of [
       ["06", "Presets"],
       ["07", "Customize"],
-      ["08", "Files"],
     ]) {
       await page.getByRole("tab", { name: tab }).click().catch(() => {});
       await sleep(250);
@@ -138,30 +139,49 @@ async function captureViewport(context, base, kind, theme) {
     await sleep(200);
   }
 
-  // 9 / 5. Output console. The Output bell lives in the top bar in both layouts —
+  // 8 / 5. Output console. The Output bell lives in the top bar in both layouts —
   // the mobile top bar and the desktop CommandBar.
   const outputSel =
     kind === "mobile"
       ? '.mobile-top-bar__output[aria-label^="Open Messages"]'
       : '.command-bar__output[aria-label^="Open Messages"]';
-  const consoleName = kind === "mobile" ? "09-output-console" : "05-output-console";
+  const consoleName = kind === "mobile" ? "08-output-console" : "05-output-console";
   await page.locator(outputSel).click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 5000 }).catch(() => {});
   await sleep(300);
   await shot(page, dir, consoleName);
   await closeConsole(page);
 
-  // On mobile, Help + licenses live behind the top bar's "⋮" overflow menu;
-  // open it before each. On desktop they're inline in the CommandBar.
+  // On mobile, Files/Help/Licenses live behind the top bar's "⋮" overflow menu;
+  // open it before each. On desktop they're inline in the CommandBar (BarActions).
   const openOverflow = async () => {
     if (kind !== "mobile") return;
     await page.getByRole("button", { name: "More actions" }).first().click().catch(() => {});
     await sleep(150);
   };
 
+  // Files dialog (BarActions' "Files" action — a toolbar icon on desktop, a
+  // row in the mobile overflow). Only rendered when the config sets
+  // `fileImport` (this repo's example config does); skip gracefully otherwise,
+  // same guard as smoke.mjs's own file-import check, closing any overflow
+  // popover this opened so it doesn't linger over the next shot.
+  const filesName = kind === "mobile" ? "09-files" : "06-files";
+  await openOverflow();
+  const filesBtn = page.getByRole("button", { name: "Files", exact: true }).first();
+  if (await filesBtn.count()) {
+    await filesBtn.click().catch(() => {});
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
+    await sleep(300);
+    await shot(page, dir, filesName);
+    await closeDialog(page);
+  } else {
+    console.log("  (no fileImport in this config — Files dialog skipped)");
+    await page.keyboard.press("Escape").catch(() => {});
+  }
+
   // Help + About dialogs.
-  const helpName = kind === "mobile" ? "10-help" : "06-help";
-  const aboutName = kind === "mobile" ? "11-about-licenses" : "07-about-licenses";
+  const helpName = kind === "mobile" ? "10-help" : "07-help";
+  const aboutName = kind === "mobile" ? "11-about-licenses" : "08-about-licenses";
   await openOverflow();
   await page.getByRole("button", { name: kind === "mobile" ? "Help" : "Help & keyboard shortcuts" })
     .first().click().catch(() => {});

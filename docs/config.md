@@ -307,12 +307,12 @@ ScadPub's own chrome text — the status strip, the Review dialog, attention car
 - Each key must already exist in `src/locales/en.json` — an unknown key (typically a typo) fails the build, with a "did you mean" suggestion when a close match exists. There is no way to *add* a brand-new key this way, only override an existing one.
 - Each value is a plain string. Where the built-in text interpolates a variable (`{count}`, `{format}`, …), keep the same `{name}` placeholder(s) in your override — an override that drops a placeholder just renders literal text where the value would have gone.
 - A pluralized key is really **two** catalogue keys, suffixed `#one` and `#other` (English's only two [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) plural categories) — e.g. `review.issueCount#one` ("{count} issue to review") and `review.issueCount#other` ("{count} issues to review"). Override both together if you override either, so a count of exactly 1 doesn't fall back to the built-in English text while every other count uses yours.
-- This surface is intentionally a **subset** of ScadPub's UI, not a full translation layer: it covers the surfaces `t()`/`tn()` have been wired into so far (see `src/locales/en.json` for the exhaustive key list). Older/legacy panels (the parameter form, the Presets/Files tabs, the Help modal chrome, …) are not yet routed through this catalogue and stay plain English regardless of `strings`.
+- This surface is intentionally a **subset** of ScadPub's UI, not a full translation layer: it covers the surfaces `t()`/`tn()` have been wired into so far (see `src/locales/en.json` for the exhaustive key list). Older/legacy panels (the parameter form, the Presets tab, the Files dialog's own body copy, the Help modal chrome, …) are not yet routed through this catalogue and stay plain English regardless of `strings`.
 - `strings` never affects geometry, so it's absent from `renderHash`.
 
 ## Import file (`fileImport`)
 
-Designs sometimes need a file the app cannot bundle, such as a license-restricted font, an SVG to `import()`, or a `surface()` data file. Setting `fileImport` adds one **Import file** button to the preset panel. You can supply those files at runtime, entirely client-side. Nothing is uploaded to a server.
+Designs sometimes need a file the app cannot bundle, such as a license-restricted font, an SVG to `import()`, or a `surface()` data file. Setting `fileImport` adds a **Files** action to the toolbar (an icon in the desktop command bar's action cluster, a row in the mobile "⋮" menu) that opens the Files dialog, with an **Import file** button inside. You can supply those files at runtime, entirely client-side. Nothing is uploaded to a server.
 
 ```jsonc
 {
@@ -340,7 +340,7 @@ ScadPub chooses the mounting behavior from the file extension, so one button cov
 - **Fonts** (`.ttf`/`.otf`/`.ttc`) are mounted where the renderer's fontconfig can find them, so `text(font = "…")` can use them. They're matched by their **embedded family name**, not the filename, so a renamed file still resolves.
 - **Any other file** is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. The reference must match the uploaded file's name (use `note` to tell users which name to use).
 
-Uploaded files persist in IndexedDB and are re-applied on the next visit; the panel lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no import button is shown.
+Uploaded files persist in IndexedDB and are re-applied on the next visit; the Files dialog lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no Files action is shown at all.
 
 ## Fonts (`fonts`, `fontFallback`)
 

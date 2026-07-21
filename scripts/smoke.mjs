@@ -109,14 +109,18 @@ async function checkWelcomePopup({ page, check, schema }) {
   }
 }
 
-// Generic file import: the Files manager shows an "Import file" button when
+// Generic file import: the Files action (BarActions, a toolbar icon button —
+// it used to be a panel tab, now a modal) shows an "Import file" button when
 // the config sets `fileImport`. Uploading a file should surface it in the
 // file list and persist across a reload (IndexedDB).
 async function checkFileImport({ page, check, ids, schema }) {
   console.log("=== file import ===");
-  // On desktop the file manager is the panel's "Files" tab (Radix unmounts the
-  // inactive tab, so it must be activated — and re-activated after each reload).
-  const gotoFiles = () => page.getByRole("tab", { name: "Files" }).click().catch(() => {});
+  // FilesModal (a Dialog) doesn't persist across a reload, so it must be
+  // re-opened each time — exact match: a substring "Files" would also catch
+  // "Clear all imported files" once the modal is open.
+  const gotoFiles = () =>
+    page.getByRole("button", { name: "Files", exact: true }).first().click().catch(() => {});
+  const closeFiles = () => page.keyboard.press("Escape").catch(() => {});
   await gotoFiles();
   const importBtn = page.getByRole("button", { name: /Import file/i });
   if (await importBtn.count()) {
@@ -193,6 +197,13 @@ async function checkFileImport({ page, check, ids, schema }) {
         .count()) === 0,
       "cleared file stays cleared after reload"
     );
+    // Close it — later checks click other toolbar/panel controls, and an open
+    // dialog's overlay would intercept those clicks.
+    await closeFiles();
+    await page
+      .getByRole("dialog", { name: "Files" })
+      .waitFor({ state: "detached", timeout: 3000 })
+      .catch(() => {});
   } else {
     console.log("  (no fileImport in this config — skipped)");
   }
@@ -609,7 +620,9 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   });
   await page.reload({ waitUntil: "load" });
   await waitRendered(page, "tag reloaded");
-  // Back to the Customize tab (the file-import test left the panel on Files).
+  // The reload above re-derives the panel's tab (Presets when the design ships
+  // bundled presets, else Customize) — land on Customize explicitly since the
+  // checks below drive parameter controls.
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
 
 
