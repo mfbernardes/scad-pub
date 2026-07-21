@@ -11,6 +11,15 @@ interface Props {
   outputOpen: boolean;
   /** How many notices/warnings are pending — shown as a corner count badge when > 0. */
   noticeCount?: number;
+  /**
+   * Whether at least one of those pending notices belongs to an
+   * `attention: true` category (or is one of OpenSCAD's own hardcoded
+   * warning/assert lines, always attention-worthy) — the ONLY thing that
+   * colours the bell/badge amber. A purely informational notice count still
+   * shows (so nothing pending goes unnoticed) but stays neutral, so the bell
+   * never contradicts a "Ready to download" status strip (see CLAUDE.md item 6a).
+   */
+  hasAttention?: boolean;
   onToggleOutput: () => void;
   /**
    * When provided, the bell doubles as the render-status indicator: a small
@@ -25,6 +34,7 @@ interface Props {
 export function OutputToggle({
   outputOpen,
   noticeCount = 0,
+  hasAttention = false,
   onToggleOutput,
   status,
   className,
@@ -52,15 +62,15 @@ export function OutputToggle({
       className={cn(
         "relative",
         outputOpen && "border-brand text-brand",
-        hasNotices && "text-warn",
+        hasAttention && "text-warn",
         className
       )}
       onClick={onToggleOutput}
-      aria-label={`${outputOpen ? "Close" : "Open"} messages${
+      aria-label={`${outputOpen ? "Close" : "Open"} Messages${
         hasNotices ? ` (${noticeCount} notice${noticeCount === 1 ? "" : "s"})` : ""
       }`}
       aria-pressed={outputOpen}
-      title="Messages from the design — notices & log"
+      title="Messages"
     >
       <BellGlyph size={16} />
       {hasNotices ? (
@@ -70,8 +80,16 @@ export function OutputToggle({
           // dark-theme text pairs with --background (near-black, close to the
           // badge's own dark surfaces); light-theme text uses --on-accent
           // (white), both bridged config-overridable tokens rather than raw
-          // hex, so a config colour override keeps the badge legible.
-          className="pointer-events-none absolute top-[2px] right-[2px] inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-warn px-[0.3rem] text-[0.7rem] font-bold leading-none text-background tabular-nums shadow-[0_0_0_2px_var(--panel)] [[data-theme=light]_&]:text-primary-foreground"
+          // hex, so a config colour override keeps the badge legible. A
+          // purely informational count (no attention-flagged notice pending)
+          // stays on the same neutral "secondary" treatment Badge's own
+          // variant uses elsewhere, instead of amber.
+          className={cn(
+            "pointer-events-none absolute top-[2px] right-[2px] inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full px-[0.3rem] text-[0.7rem] font-bold leading-none tabular-nums shadow-[0_0_0_2px_var(--panel)]",
+            hasAttention
+              ? "bg-warn text-background [[data-theme=light]_&]:text-primary-foreground"
+              : "bg-secondary text-secondary-foreground"
+          )}
           aria-hidden="true"
         >
           {noticeCount}

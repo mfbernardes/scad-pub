@@ -130,17 +130,29 @@ test("countBadges tallies per category (raw counts, config order) plus asserts",
     "[err] ERROR: Assertion 'x' failed in file f.scad, line 1",
   ];
   assert.deepEqual(countBadges(log, NOTICES), [
-    { key: "notice:alert", label: "alerts", count: 2, color: "#e0a458" },
-    { key: "notice:note", label: "notes", count: 1 },
-    { key: "assert", label: "asserts", count: 1 },
+    { key: "notice:alert", label: "alerts", count: 2, attention: false, color: "#e0a458" },
+    { key: "notice:note", label: "notes", count: 1, attention: false },
+    { key: "assert", label: "asserts", count: 1, attention: true },
   ]);
 });
 
 test("countBadges omits categories with no matches", () => {
   assert.deepEqual(
     countBadges(['[out] ECHO: "x: note: only one"'], NOTICES),
-    [{ key: "notice:note", label: "notes", count: 1 }]
+    [{ key: "notice:note", label: "notes", count: 1, attention: false }]
   );
+});
+
+test("countBadges marks a category attention:true when config flags it, and the assert badge is always attention:true", () => {
+  const notices = [
+    { marker: "alert", label: "alerts", attention: true },
+    { marker: "note", label: "notes" },
+  ];
+  const log = ['[out] ECHO: "a: alert: one"', '[out] ECHO: "b: note: two"'];
+  assert.deepEqual(countBadges(log, notices), [
+    { key: "notice:alert", label: "alerts", count: 1, attention: true },
+    { key: "notice:note", label: "notes", count: 1, attention: false },
+  ]);
 });
 
 test("badgeTextColor: white text on dark backgrounds", () => {

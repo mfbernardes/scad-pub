@@ -5,9 +5,11 @@
 import { useState } from "react";
 import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
 import { type RenderMetrics, formatDuration } from "../lib/renderMetrics";
+import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { CountBadges } from "./CountBadges";
+import { FriendlyFailureCard } from "./FriendlyFailureCard";
 import { IconButton } from "./IconButton";
 import { X as XIcon } from "lucide-react";
 
@@ -29,11 +31,16 @@ interface Props {
   metrics: RenderMetrics;
   open: boolean;
   onClose: () => void;
+  /** friendlyRenderError(result) — when set, the Notices tab leads with this
+   *  {title, body} instead of the raw diagnostics list, with the technical
+   *  tail tucked into a collapsed "Raw output" details block (the Log tab
+   *  stays raw either way). Null on a missing/successful result. */
+  failure?: FriendlyErrorInfo | null;
   /** Layout-specific sizing/positioning (desktop band vs mobile overlay). */
   className?: string;
 }
 
-export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose, className }: Props) {
+export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose, failure, className }: Props) {
   const [tab, setTab] = useState("notices");
 
   if (!open) return null;
@@ -42,10 +49,13 @@ export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose
     <div
       className={cn("output-console flex shrink-0 flex-col border-t bg-card", className)}
       role="region"
-      aria-label="Messages from the design"
+      aria-label="Messages"
     >
       <Tabs value={tab} onValueChange={setTab} className="gap-0">
-        <div className="flex shrink-0 items-stretch border-b">
+        <div className="flex shrink-0 items-center border-b">
+          <span className="output-console__title self-center pl-3 pr-1 font-display text-[0.8rem] font-semibold text-foreground">
+            Messages
+          </span>
           <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
             <TabsTrigger value="notices" className={cn(chipTabTrigger, "px-3")}>
               Notices
@@ -59,7 +69,7 @@ export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose
             </TabsTrigger>
           </TabsList>
           <IconButton
-            label="Close messages"
+            label="Close Messages"
             className="output-console__close my-1 ml-auto mr-[0.4rem] shrink-0 self-center"
             onClick={onClose}
           >
@@ -68,7 +78,11 @@ export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <TabsContent value="notices" className="mt-0">
-            {diagnostics.length ? (
+            {failure ? (
+              <div className="px-3 py-[0.5rem]">
+                <FriendlyFailureCard info={failure} />
+              </div>
+            ) : diagnostics.length ? (
               <ul className="px-3 py-[0.4rem]" aria-live="polite">
                 {diagnostics.map((d, i) => (
                   <li key={i} className="flex items-baseline gap-2 py-[0.2rem] text-[0.82rem]">

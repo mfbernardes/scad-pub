@@ -33,6 +33,10 @@ export interface BadgeCount {
   count: number;
   /** Optional fill colour; falls back to the default badge styling. */
   color?: string;
+  /** Whether this category is flagged `attention: true` in config (always
+   *  true for the hardcoded "assert" badge) — decides whether the badge/bell
+   *  reads as amber-urgent or plain neutral (see CLAUDE.md item 6a). */
+  attention?: boolean;
 }
 
 // An OpenSCAD echo line, e.g. `[err] ECHO: "tag: alert: …"`. OpenSCAD-WASM
@@ -134,9 +138,10 @@ export function countBadges(
       key: `notice:${n.marker}`,
       label: n.label,
       count: 0,
+      attention: n.attention === true,
       ...(n.color ? { color: n.color } : {}),
     });
-  byKey.set("assert", { key: "assert", label: "asserts", count: 0 });
+  byKey.set("assert", { key: "assert", label: "asserts", count: 0, attention: true });
 
   for (const line of log) {
     const c = classify(line, notices);

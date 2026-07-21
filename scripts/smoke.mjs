@@ -27,11 +27,11 @@ import {
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
 // means it may be shut — so click the Output bell when it's not already open.
-// The bell's label is "Open messages" while closed.
+// The bell's label is "Open Messages" while closed.
 async function openConsole(page) {
   if (await page.locator(".output-console").count()) return;
   // Desktop bell (the mobile top bar's twin is CSS-hidden at this viewport).
-  await page.locator('.command-bar__output[aria-label^="Open messages"]').click().catch(() => {});
+  await page.locator('.command-bar__output[aria-label^="Open Messages"]').click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
 }
 
@@ -376,19 +376,38 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
 }
 
 // Export 3MF + PNG on the first design.
+//
+// The example "tag" design (ids[0]) carries an attention-flagged notice by
+// default (both an emblem and a label shown at once — see tag.scad's own
+// comment), so Download opens the Review dialog (ReviewDialog.tsx) armed with
+// "Download anyway" instead of exporting immediately (ActionButtons.tsx's
+// onDownloadClick). Arm the download listener BEFORE the click so the event
+// can never fire and go unheard while we're still deciding whether a dialog
+// showed up.
 async function checkExports({ page, check, ids, dir }) {
   await selectDesign(page, ids[0]);
-  console.log("=== export 3MF ===");
-  const [model] = await Promise.all([
-    page.waitForEvent("download"),
-    // ActionCluster uses aria-label="Export STL/3MF"; button text is just the format
-    page.click('[aria-label^="Download "]'),
-  ]);
+  console.log("=== export 3MF (with a pending attention issue) ===");
+  const downloadPromise = page.waitForEvent("download");
+  await page.click('[aria-label^="Download "]');
+  const reviewDialog = page.getByRole("dialog", { name: "Review" });
+  const opened = await reviewDialog
+    .waitFor({ state: "visible", timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  check(opened, "downloading with a pending attention issue opens the Review dialog");
+  if (opened) {
+    check(
+      (await reviewDialog.locator(".attention-card").count()) > 0,
+      "Review dialog shows an attention card"
+    );
+    await reviewDialog.getByRole("button", { name: "Download anyway" }).click();
+  }
+  const model = await downloadPromise;
   const modelOut = join(dir, await model.suggestedFilename());
   await model.saveAs(modelOut);
   check((await stat(modelOut)).size > 0, `${await model.suggestedFilename()} (${(await stat(modelOut)).size} bytes)`);
 
-  console.log("=== save PNG ===");
+  console.log("=== save PNG (relocated to the top-bar overflow) ===");
   const [png] = await Promise.all([
     page.waitForEvent("download"),
     page.click('[aria-label="Save image"]'),
@@ -398,6 +417,99 @@ async function checkExports({ page, check, ids, dir }) {
   const head = (await readFile(pngOut)).subarray(0, 4);
   const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
   check(isPng && (await stat(pngOut)).size > 0, `${await png.suggestedFilename()} (png=${isPng})`);
+}
+
+// The unified export dock (ActionButtons.tsx): exactly two buttons (Download
+// + Share), no separate Image button — Save-image moved to the top-bar
+// overflow (BarActions.tsx), exercised above by checkExports' PNG click.
+async function checkExportDock({ page, check }) {
+  console.log("=== export dock (two buttons, no Image button) ===");
+  const cluster = page.locator(".app-shell__desktop .action-cluster");
+  check((await cluster.locator('[data-slot="button"]').count()) === 2, "dock shows exactly two buttons");
+  check((await cluster.getByRole("button", { name: /^Image$/ }).count()) === 0, "no bare Image button in the dock");
+  check((await cluster.locator('[aria-label="Save image"]').count()) === 0, "Save image is not in the dock");
+}
+
+// Status strip (StatusStrip.tsx) + Review dialog (ReviewDialog.tsx): a
+// one-line readiness surface above the desktop panel's tabs that opens the
+// dialog. "tag" (ids[0]) carries a default attention issue; "panel" (a clean
+// SVG-extrusion design with no font/notice concerns) is clean once selected.
+async function checkStatusStripAndReview({ page, check, ids }) {
+  console.log("=== status strip + review dialog ===");
+  if (!ids.includes("panel")) {
+    console.log("  (no attention-free design in this config — skipped)");
+    return;
+  }
+  await selectDesign(page, ids[0]); // "tag" — attention by default
+  const strip = page.locator(".status-strip").first();
+  await strip.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(await strip.isVisible(), "status strip is visible on the attention design");
+  check(/issue/i.test((await strip.textContent()) ?? ""), "status strip names the pending issue(s)");
+
+  // Opened from the strip: informational footer (primary Download + Close).
+  // Scope to the footer for the "Close" button — Radix's own built-in dialog
+  // close (X) button is ALSO named "Close", so an unscoped lookup is ambiguous.
+  await strip.click();
+  const infoDialog = page.getByRole("dialog", { name: "Review" });
+  await infoDialog.waitFor({ state: "visible", timeout: 3000 });
+  const infoFooter = infoDialog.locator('[data-slot="dialog-footer"]');
+  check(
+    (await infoFooter.getByRole("button", { name: "Download for 3D printing" }).count()) === 1,
+    "status-triggered dialog offers the plain Download action"
+  );
+  check((await infoFooter.getByRole("button", { name: "Close" }).count()) === 1, "status-triggered dialog offers Close");
+  await infoFooter.getByRole("button", { name: "Close" }).click();
+  await infoDialog.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+
+  // A clean design's strip reads "Ready to download".
+  await selectDesign(page, "panel");
+  const cleanStrip = page.locator(".status-strip").first();
+  await cleanStrip.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(/ready to download/i.test((await cleanStrip.textContent()) ?? ""), "status strip reads Ready on a clean design");
+
+  // Back to the design the rest of the suite expects to be selected.
+  await selectDesign(page, ids[0]);
+}
+
+// After-export panel (ExportSuccess.tsx, ui.afterExport — the dogfood config
+// sets `helpTab: "Printing"`). Exercised by re-downloading the first design.
+async function checkAfterExport({ page, check, ids, schema }) {
+  if (!schema.ui?.afterExport) {
+    console.log("=== after-export panel === (ui.afterExport not configured — skipped)");
+    return;
+  }
+  console.log("=== after-export panel ===");
+  await selectDesign(page, ids[0]);
+  const downloadPromise = page.waitForEvent("download");
+  await page.click('[aria-label^="Download "]');
+  const reviewDialog = page.getByRole("dialog", { name: "Review" });
+  if (await reviewDialog.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
+    await reviewDialog.getByRole("button", { name: /Download/ }).click();
+  }
+  await downloadPromise;
+  const panel = page.locator(".export-success");
+  await panel.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await panel.count()) > 0, "after-export panel appears once the download settles");
+  if (schema.ui.afterExport.helpTab) {
+    const guideBtn = panel.getByRole("button", { name: "Open printing help" });
+    const guideVisible = await guideBtn
+      .waitFor({ state: "visible", timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    check(guideVisible, `after-export panel offers "Open printing help"`);
+    await guideBtn.click();
+    const helpDialog = page.getByRole("dialog").filter({ has: page.getByRole("tab", { name: schema.ui.afterExport.helpTab } ) });
+    const helpOpened = await helpDialog.first().waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false);
+    check(helpOpened, `"Open printing help" opens Help scrolled to "${schema.ui.afterExport.helpTab}"`);
+    check(
+      (await page.getByRole("tab", { name: schema.ui.afterExport.helpTab, selected: true }).count()) === 1,
+      `the "${schema.ui.afterExport.helpTab}" tab is the active one`
+    );
+    await page.keyboard.press("Escape");
+    await helpDialog.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  } else {
+    await panel.locator(".export-success__dismiss").click().catch(() => {});
+  }
 }
 
 async function checkPreviewControls({ page, check }) {
@@ -758,6 +870,9 @@ async function main() {
     await checkBundledPresets(ctx);
     await checkPresetImport(ctx);
     await checkExports(ctx);
+    await checkExportDock(ctx);
+    await checkStatusStripAndReview(ctx);
+    await checkAfterExport(ctx);
     await checkPreviewControls(ctx);
     await checkServiceWorker(ctx);
     await checkTagDesign(ctx);

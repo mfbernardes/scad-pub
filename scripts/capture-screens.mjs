@@ -142,8 +142,8 @@ async function captureViewport(context, base, kind, theme) {
   // the mobile top bar and the desktop CommandBar.
   const outputSel =
     kind === "mobile"
-      ? '.mobile-top-bar__output[aria-label^="Open messages"]'
-      : '.command-bar__output[aria-label^="Open messages"]';
+      ? '.mobile-top-bar__output[aria-label^="Open Messages"]'
+      : '.command-bar__output[aria-label^="Open Messages"]';
   const consoleName = kind === "mobile" ? "09-output-console" : "05-output-console";
   await page.locator(outputSel).click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 5000 }).catch(() => {});
