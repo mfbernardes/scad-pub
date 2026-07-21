@@ -4,7 +4,7 @@
 // is dependency-free.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deriveAttention, readinessState, noticeAttentionCount } from "../src/lib/readiness.ts";
+import { deriveAttention, readinessState } from "../src/lib/readiness.ts";
 
 // A minimal font param, matching gen-schema's real shape closely enough for
 // isVisible/familyOf/normalizeFamily to behave identically to production.
@@ -215,6 +215,80 @@ test("deriveAttention: font fallbacks come before flagged notices, and notices k
   assert.deepEqual(items[2], { kind: "notice", marker: "warn", label: "warnings", count: 3 });
 });
 
+// Restores the pre-Phase-2 "warnings/asserts join the review dialog" contract
+// (docs/config.md) at the mechanism level: a bare OpenSCAD WARNING:/assert
+// failure the caller (AppShell) supplies via `diagnostics` becomes its own
+// structured item, distinct from a config `notices[]` category.
+test("deriveAttention: an attention-flagged diagnostic produces a diagnostic item", () => {
+  const items = deriveAttention({
+    params: [],
+    values: {},
+    availableFontFamilies: new Set(),
+    notices: [],
+    diagnostics: [{ text: "Can't open font 'Brand Display', using fallback" }],
+  });
+  assert.deepEqual(items, [
+    { kind: "diagnostic", text: "Can't open font 'Brand Display', using fallback" },
+  ]);
+});
+
+test("deriveAttention: multiple diagnostics each produce their own item, in the given order", () => {
+  const items = deriveAttention({
+    params: [],
+    values: {},
+    availableFontFamilies: new Set(),
+    notices: [],
+    diagnostics: [{ text: "first warning" }, { text: "second warning" }],
+  });
+  assert.deepEqual(items, [
+    { kind: "diagnostic", text: "first warning" },
+    { kind: "diagnostic", text: "second warning" },
+  ]);
+});
+
+test("deriveAttention: an omitted diagnostics input behaves like an empty one (existing callers unaffected)", () => {
+  const items = deriveAttention({
+    params: [],
+    values: {},
+    availableFontFamilies: new Set(),
+    notices: [],
+  });
+  assert.deepEqual(items, []);
+});
+
+// A config-notice-category diagnostic (diagnostics.ts's `level: "notice"`) is
+// never something a caller should pass through `diagnostics` — it's already
+// represented via `notices` above. This isn't deriveAttention's own job to
+// filter (AppShell does the level !== "notice" filtering before calling in —
+// see its own comment), but confirms a `diagnostics` entry and a `notices`
+// entry for "the same" category simply produce two distinct items rather than
+// deriveAttention silently merging or deduping them — the caller owns not
+// double-supplying the same category both ways.
+test("deriveAttention: diagnostics and notices are independent inputs — no implicit de-duplication between them", () => {
+  const items = deriveAttention({
+    params: [],
+    values: {},
+    availableFontFamilies: new Set(),
+    notices: [{ marker: "alert", label: "alerts", attention: true, count: 1 }],
+    diagnostics: [{ text: "a bare warning, unrelated to the alert notice category" }],
+  });
+  assert.deepEqual(items, [
+    { kind: "diagnostic", text: "a bare warning, unrelated to the alert notice category" },
+    { kind: "notice", marker: "alert", label: "alerts", count: 1 },
+  ]);
+});
+
+test("deriveAttention: diagnostics come after font fallbacks and before flagged notices", () => {
+  const items = deriveAttention({
+    params: [fontParam()],
+    values: { font: "No Such Font" },
+    availableFontFamilies: LOADED,
+    notices: [{ marker: "alert", label: "alerts", attention: true, count: 1 }],
+    diagnostics: [{ text: "a bare warning" }],
+  });
+  assert.deepEqual(items.map((i) => i.kind), ["font-fallback", "diagnostic", "notice"]);
+});
+
 test("readinessState: null renderOk (nothing landed yet) reads 'building', regardless of attention", () => {
   assert.equal(readinessState(null, []), "building");
   assert.equal(readinessState(null, [{ kind: "notice", marker: "a", label: "a", count: 1 }]), "building");
@@ -228,33 +302,27 @@ test("readinessState: precedence — failed beats attention", () => {
   assert.equal(readinessState(false, [{ kind: "notice", marker: "a", label: "a", count: 1 }]), "failed");
 });
 
+// The scenario item 1 explicitly calls out: a FAILED render whose own log
+// carries the assert-failure diagnostic that failed it. AppShell only feeds
+// deriveAttention's `diagnostics` input on a render that actually succeeded
+// (see its own comment — a failed render's diagnostics are already explained
+// by the Review dialog's friendly-failure card), so in practice a failed
+// render's `attention` array never contains a diagnostic item at all; this
+// pins readinessState's OWN precedence for the case where it did anyway
+// (e.g. a future caller that doesn't apply that gate) — failed still wins,
+// matching how main behaved (Download was disabled outright on a failed
+// render, so attentionIssues never surfaced there either).
+test("readinessState: precedence — failed beats attention even for a diagnostic (assert-failure) item", () => {
+  assert.equal(
+    readinessState(false, [{ kind: "diagnostic", text: "Assertion 'x > 0' failed in file f.scad, line 1" }]),
+    "failed"
+  );
+});
+
 test("readinessState: a successful render with attention items reads 'attention', not 'ready'", () => {
   assert.equal(readinessState(true, [{ kind: "font-fallback", param: "font", family: "X" }]), "attention");
 });
 
 test("readinessState: a successful render with no attention items reads 'ready'", () => {
   assert.equal(readinessState(true, []), "ready");
-});
-
-test("noticeAttentionCount: an empty attention list counts 0", () => {
-  assert.equal(noticeAttentionCount([]), 0);
-});
-
-test("noticeAttentionCount: a font-fallback item alone counts 0, not 1 — a font problem isn't a notice card", () => {
-  assert.equal(noticeAttentionCount([{ kind: "font-fallback", param: "font", family: "X" }]), 0);
-});
-
-test("noticeAttentionCount: a notice item counts 1", () => {
-  assert.equal(noticeAttentionCount([{ kind: "notice", marker: "alert", label: "1 alert", count: 1 }]), 1);
-});
-
-test("noticeAttentionCount: counts ONLY notice-kind items, ignoring font-fallback items mixed in", () => {
-  assert.equal(
-    noticeAttentionCount([
-      { kind: "font-fallback", param: "font", family: "X" },
-      { kind: "notice", marker: "alert", label: "1 alert", count: 1 },
-      { kind: "notice", marker: "note", label: "1 note", count: 1 },
-    ]),
-    2
-  );
 });

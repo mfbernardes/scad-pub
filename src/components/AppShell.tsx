@@ -4,8 +4,8 @@
 // Both layouts float the same compact action cluster over the viewer bottom —
 // mobile no longer reserves a solid footer band. All state/logic stays in
 // App.tsx; this is a pure view extraction.
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Design, Schema, WorkerProgress } from "../openscad/types";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import type { Design, Schema, UiConfig, WorkerProgress } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
 import type { RenderMetrics } from "../lib/renderMetrics";
@@ -63,11 +63,50 @@ import { usePanelState } from "../lib/usePanelState";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
 import { ns } from "../lib/appId";
 import { readLocal, writeLocal } from "../lib/safeStorage";
-import { deriveAttention, readinessState, type NoticeAttentionInput } from "../lib/readiness";
+import {
+  deriveAttention,
+  readinessState,
+  type DiagnosticAttentionInput,
+  type NoticeAttentionInput,
+} from "../lib/readiness";
 import { friendlyRenderError } from "../lib/friendlyErrors";
 import { ReviewDialog, type ReviewTrigger } from "./ReviewDialog";
 
 const ADVANCED_SETTINGS_KEY = ns("settings.advanced");
+
+// The bottom-anchored dock: the ActionButtons cluster, with an optional
+// after-export panel riding above it (see ACTION_DOCK_CLASS's own doc). The
+// desktop and mobile layouts each mount this verbatim inside their own
+// positioning context (.app-shell__mobile / __desktop) — extracted so a tweak
+// to either half's markup only has to land once instead of twice in step.
+function ActionDock({
+  exportSuccess,
+  afterExport,
+  onDismissExportSuccess,
+  actionButtonsProps,
+}: {
+  exportSuccess: ExportSuccessState | null;
+  afterExport: UiConfig["afterExport"];
+  onDismissExportSuccess: () => void;
+  actionButtonsProps: ComponentProps<typeof ActionButtons>;
+}) {
+  return (
+    <div className={ACTION_DOCK_CLASS}>
+      {exportSuccess && (
+        <ExportSuccess
+          state={exportSuccess}
+          title={afterExport?.title}
+          body={afterExport?.body}
+          helpTab={afterExport?.helpTab}
+          onDismiss={onDismissExportSuccess}
+        />
+      )}
+      <div className={ACTION_CLUSTER_CLASS}>
+        <ActionButtons {...actionButtonsProps} />
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   schema: Schema;
@@ -317,6 +356,33 @@ export const AppShell = memo(function AppShell({
       })),
     [notices, badges]
   );
+  // Attention-flagged diagnostics NOT already one of the notice categories
+  // above: diagnostics.ts's hardcoded, non-configurable rules (a bare
+  // `WARNING:` line, or an assert() failure) always carry `attention: true`
+  // at `level` "warning"/"assert"; a config `notices[]` category's own
+  // diagnostics carry `level: "notice"` instead and are already reflected via
+  // `noticeAttentionInputs`/`badges` above, so excluding `level === "notice"`
+  // here avoids double-counting the same category through two vocabularies.
+  // Restores docs/config.md's "Attention notices join OpenSCAD warnings,
+  // assertions, and missing fonts in the pre-download review dialog" contract
+  // (readiness.ts's structured deriveAttention replaced main's flat
+  // `attentionIssues` string list, which lost this case).
+  //
+  // Only surfaced for a render that actually SUCCEEDED: a currently-FAILED
+  // render's own diagnostics (e.g. the very assert that failed it) are
+  // already explained by the Review dialog's friendly-failure card (see
+  // `failure` below) — stacking them as attention items too would just
+  // repeat the same message under a second heading. readinessState's own
+  // failed > attention precedence already keeps the overall readiness state
+  // correct either way, but the Review dialog renders `attention` cards
+  // unconditionally alongside a failure card, so the gate has to live here.
+  const diagnosticAttentionInputs: DiagnosticAttentionInput[] = useMemo(
+    () =>
+      result?.ok
+        ? diagnostics.filter((d) => d.attention && d.level !== "notice").map((d) => ({ text: d.text }))
+        : [],
+    [diagnostics, result]
+  );
   const attention = useMemo(
     () =>
       deriveAttention({
@@ -324,8 +390,9 @@ export const AppShell = memo(function AppShell({
         values,
         availableFontFamilies,
         notices: noticeAttentionInputs,
+        diagnostics: diagnosticAttentionInputs,
       }),
-    [design.params, values, availableFontFamilies, noticeAttentionInputs]
+    [design.params, values, availableFontFamilies, noticeAttentionInputs, diagnosticAttentionInputs]
   );
   // `result` is the only render outcome readiness cares about: null until a
   // FIRST render has ever landed (readinessState's "building"), regardless of
@@ -619,20 +686,12 @@ export const AppShell = memo(function AppShell({
                 sheet up to the half detent via --sheet-follow-h) instead of a
                 solid docked footer band that would reserve a strip of the
                 viewport. Identical markup to the desktop dock. */}
-            <div className={ACTION_DOCK_CLASS}>
-              {exportSuccess && (
-                <ExportSuccess
-                  state={exportSuccess}
-                  title={afterExport?.title}
-                  body={afterExport?.body}
-                  helpTab={afterExport?.helpTab}
-                  onDismiss={onDismissExportSuccess}
-                />
-              )}
-              <div className={ACTION_CLUSTER_CLASS}>
-                <ActionButtons {...actionButtonsProps} />
-              </div>
-            </div>
+            <ActionDock
+              exportSuccess={exportSuccess}
+              afterExport={afterExport}
+              onDismissExportSuccess={onDismissExportSuccess}
+              actionButtonsProps={actionButtonsProps}
+            />
 
             <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
           </div>
@@ -767,20 +826,12 @@ export const AppShell = memo(function AppShell({
                     canvas — which shrinks when the output console docks below it —
                     rather than overlapping the console's notices. An optional
                     after-export panel stacks above the dock (see ACTION_DOCK_CLASS). */}
-                <div className={ACTION_DOCK_CLASS}>
-                  {exportSuccess && (
-                    <ExportSuccess
-                      state={exportSuccess}
-                      title={afterExport?.title}
-                      body={afterExport?.body}
-                      helpTab={afterExport?.helpTab}
-                      onDismiss={onDismissExportSuccess}
-                    />
-                  )}
-                  <div className={ACTION_CLUSTER_CLASS}>
-                    <ActionButtons {...actionButtonsProps} />
-                  </div>
-                </div>
+                <ActionDock
+                  exportSuccess={exportSuccess}
+                  afterExport={afterExport}
+                  onDismissExportSuccess={onDismissExportSuccess}
+                  actionButtonsProps={actionButtonsProps}
+                />
                 <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
               </ViewerStage>
 

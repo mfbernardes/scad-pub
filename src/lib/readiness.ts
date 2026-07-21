@@ -4,12 +4,15 @@
 // isn't loaded — Fontconfig silently substitutes a fallback, dimensions/
 // spacing can shift, yet nothing about the render itself failed. "Rendered"
 // and "ready to ship" are NOT the same claim; this module is what tells them
-// apart. It's a structured extraction of the flat message list AppShell.tsx
-// currently builds inline (its own `attentionIssues` memo, which feeds
-// ActionButtons' pre-download review dialog) — a future caller can use this
-// to render distinct font/notice affordances instead of a plain string list.
-// AppShell itself is not rewired to consume this yet. Pure functions, no
-// React.
+// apart. AppShell.tsx is the sole caller: it feeds deriveAttention a font-param
+// scan, config `notices[]` categories (via badges + noticeAttentionInputs),
+// and any attention-flagged OpenSCAD diagnostic (a bare WARNING:/assert
+// failure — see DeriveAttentionInputs' `diagnostics` field) that isn't already
+// one of those notice categories, then threads the structured result to the
+// status strip, the export dock, and ReviewDialog's attention cards
+// (AttentionItems.tsx) — see docs/config.md's "Attention notices join OpenSCAD
+// warnings, assertions, and missing fonts in the pre-download review dialog"
+// contract. Pure functions, no React.
 import type { Param } from "../openscad/types";
 import type { Values } from "./presets";
 import { familyOf, normalizeFamily } from "./fonts";
@@ -17,9 +20,8 @@ import { isVisible } from "./visibility";
 
 /**
  * A `font` parameter whose selected family isn't in the loaded set —
- * `type is string|enum && isFont`, mirroring the check AppShell.tsx's
- * `attentionIssues` memo already does. An empty font value (a cleared
- * control) never counts as missing, and neither does any family when
+ * `type is string|enum && isFont`. An empty font value (a cleared control)
+ * never counts as missing, and neither does any family when
  * `availableFontFamilies` is empty (we can't be authoritative about
  * availability without it, so we don't warn).
  */
@@ -41,7 +43,26 @@ export interface NoticeAttentionItem {
   count: number;
 }
 
-export type AttentionItem = FontFallbackItem | NoticeAttentionItem;
+/**
+ * An attention-flagged OpenSCAD diagnostic that ISN'T a config `notices[]`
+ * category — i.e. one of diagnostics.ts's hardcoded, non-configurable rules:
+ * a bare `WARNING:` line, or an `assert()` failure's raw text
+ * (`Diagnostic.level` "warning"/"assert", both always `attention: true`).
+ * Restores the pre-Phase-2 contract (docs/config.md: "Attention notices join
+ * OpenSCAD warnings, assertions, and missing fonts in the pre-download review
+ * dialog") now that attention is a structured list rather than a flat string
+ * dump — see `DeriveAttentionInputs.diagnostics` for how a caller supplies
+ * these without double-counting a config-notice-category diagnostic (`level:
+ * "notice"`), which is already represented as a `NoticeAttentionItem` above.
+ */
+export interface DiagnosticAttentionItem {
+  kind: "diagnostic";
+  /** The diagnostic's own text (diagnostics.ts's `Diagnostic.text`), shown
+   *  verbatim — a bare warning's message, or an assert's raw failure text. */
+  text: string;
+}
+
+export type AttentionItem = FontFallbackItem | NoticeAttentionItem | DiagnosticAttentionItem;
 
 /**
  * One notice category's live pending count this render, alongside its
@@ -61,6 +82,15 @@ export interface NoticeAttentionInput {
   count: number;
 }
 
+/**
+ * One attention-flagged diagnostic to surface as a `DiagnosticAttentionItem`
+ * — see that type's doc for what qualifies (a bare warning/assert, never a
+ * config-notice-category diagnostic).
+ */
+export interface DiagnosticAttentionInput {
+  text: string;
+}
+
 export interface DeriveAttentionInputs {
   /** The active design's full parameter list (unfiltered by section/view) —
    *  same list ParamForm derives its sections from. */
@@ -76,19 +106,35 @@ export interface DeriveAttentionInputs {
   availableFontFamilies: Set<string>;
   /** Notice categories with their live pending counts this render. */
   notices: NoticeAttentionInput[];
+  /**
+   * Attention-flagged OpenSCAD diagnostics that are NOT already one of the
+   * `notices` categories above — i.e. diagnostics.ts's Diagnostic list
+   * filtered to `attention === true && level !== "notice"` (a `level:
+   * "notice"` diagnostic IS a config notice category and is already covered
+   * by `notices`; including it again here would double-count it). The caller
+   * (AppShell) also excludes a currently-FAILED render's own diagnostics —
+   * see its own comment: those are already explained by the Review dialog's
+   * friendly-failure card, so repeating them as attention items would just
+   * show the same message twice. Defaults to none, so existing callers/tests
+   * that don't pass it are unaffected.
+   */
+  diagnostics?: DiagnosticAttentionInput[];
 }
 
 /**
- * The visible-in-design font params whose selected family isn't loaded, plus
- * any flagged notice category with a pending notice this render.
+ * The visible-in-design font params whose selected family isn't loaded,
+ * attention-flagged OpenSCAD diagnostics (bare warnings/asserts) not already
+ * covered by a notice category, and any flagged notice category with a
+ * pending notice this render.
  *
  * "Visible-in-design" means `@showIf`-visible (`isVisible`): a hidden
  * control's value is still sent to OpenSCAD unchanged, but it's not
  * something a visitor can currently see or act on, so it doesn't clutter the
  * attention list.
  *
- * Order: font fallbacks first (in design param order), then flagged notices
- * (in config order) — deterministic, no randomness.
+ * Order: font fallbacks first (in design param order), then diagnostics (in
+ * log order), then flagged notices (in config order) — deterministic, no
+ * randomness.
  */
 export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] {
   const items: AttentionItem[] = [];
@@ -101,6 +147,9 @@ export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] 
     if (!inputs.availableFontFamilies.size) continue;
     if (inputs.availableFontFamilies.has(normalizeFamily(family))) continue;
     items.push({ kind: "font-fallback", param: p.name, family });
+  }
+  for (const d of inputs.diagnostics ?? []) {
+    items.push({ kind: "diagnostic", text: d.text });
   }
   for (const n of inputs.notices) {
     if (!n.attention || n.count <= 0) continue;
@@ -129,17 +178,4 @@ export function readinessState(renderOk: boolean | null, attention: AttentionIte
   if (renderOk === null) return "building";
   if (renderOk === false) return "failed";
   return attention.length > 0 ? "attention" : "ready";
-}
-
-/**
- * The count of GENUINE notice cards among `attention` — the `kind: "notice"`
- * items (a config `notices[]` category flagged `attention: true` with a
- * pending count this render), never `kind: "font-fallback"` items. A font
- * fallback is a readiness gap, not a design notice, so folding it into "how
- * many notices" double-counts the same problem through two different
- * vocabularies. A future notice-count badge should read this instead of
- * re-deriving its own count from `attention`.
- */
-export function noticeAttentionCount(attention: AttentionItem[]): number {
-  return attention.reduce((n, a) => n + (a.kind === "notice" ? 1 : 0), 0);
 }

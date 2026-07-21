@@ -36,6 +36,7 @@ import {
   shouldFireInitialRender,
   type RenderSnapshot,
 } from "./renderState";
+import { t } from "./i18n";
 
 /** The subset of OpenSCADRunner's API the pipeline depends on — narrow enough
  * that tests can inject a fake runner without a real worker/WASM/IndexedDB. */
@@ -230,7 +231,7 @@ export function useRenderPipeline({
         setResult(r);
         setResultKey(startRenderKey);
         if (!r.ok)
-          toast.error("That combination of settings didn't work", {
+          toast.error(t("error.generic"), {
             id: "render-failed",
             description: "Open Messages (the bell in the top bar) for details.",
           });

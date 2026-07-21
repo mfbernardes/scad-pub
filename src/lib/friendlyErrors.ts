@@ -1,12 +1,13 @@
 // friendlyErrors.ts — maps a failed RenderResult onto friendly copy: a title,
 // an optional body, and a short "technical details" tail. Deliberately NOT a
-// React component or hook — a pure function over the render outcome, kept
-// dependency-free (besides diagnostics.ts's own regexes) so
-// tests/friendlyErrors.test.mjs can drive every branch directly. A future
-// caller can use this for the Notices tab's failure card and the
-// render-failed toast title (useRenderPipeline.ts currently hardcodes its own
-// "That combination of settings didn't work" text — the same copy this
-// module's generic fallback returns).
+// React component or hook — a pure function over the render outcome (its
+// three titles resolve through i18n.ts's `t()`, itself a pure function, so
+// this stays framework-free), kept dependency-free (besides diagnostics.ts's
+// own regexes) so tests/friendlyErrors.test.mjs can drive every branch
+// directly. The three titles are also the shared copy behind
+// useRenderPipeline.ts's render-failed toast (`t("error.generic")`), so the
+// toast and this module's generic fallback can never drift apart — see
+// src/locales/en.json's `error.*` keys.
 //
 // Priority, matching how a render can fail:
 //  1. A fatal bootstrap failure (RenderResult.fatal — see worker.ts's
@@ -26,6 +27,7 @@
 // assert/warning line.
 import type { RenderResult } from "../openscad/types";
 import { ASSERT_RE, WARNING_RE } from "./diagnostics";
+import { t } from "./i18n";
 
 export interface FriendlyErrorInfo {
   title: string;
@@ -106,7 +108,7 @@ export function friendlyRenderError(
 
   if (result.fatal)
     return {
-      title: "The 3D engine couldn't start — check your connection and try again.",
+      title: t("error.bootstrapFailed"),
       body: null,
       technical,
     };
@@ -125,10 +127,10 @@ export function friendlyRenderError(
   }
   if (firstAssert !== null)
     return {
-      title: "Preview could not be updated",
+      title: t("error.renderFailed"),
       body: assertMessage(firstAssert) ?? firstAssert,
       technical,
     };
 
-  return { title: "That combination of settings didn't work", body: null, technical };
+  return { title: t("error.generic"), body: null, technical };
 }
