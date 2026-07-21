@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { parsePresetCardName, groupPresetsByBadge } = await import("../src/lib/presetCard.ts");
+const { parsePresetCardName } = await import("../src/lib/presetCard.ts");
 
 test("a trailing parenthetical becomes the badge", () => {
   assert.deepEqual(parsePresetCardName("Erdgeschoss (Deutsch)"), {
@@ -58,59 +58,4 @@ test("degrades gracefully when the overline/title split would be empty", () => {
     title: "Category |",
     badge: "Deutsch",
   });
-});
-
-const named = (name) => ({ name });
-
-test("groupPresetsByBadge: presets sharing a badge land in one section even when interleaved", () => {
-  const groups = groupPresetsByBadge([
-    named("Erdgeschoss (Deutsch)"),
-    named("Nameplate (English US)"),
-    named("Obergeschoss (Deutsch)"),
-  ]);
-  assert.deepEqual(
-    groups.map((g) => ({ badge: g.badge, names: g.items.map((i) => i.name) })),
-    [
-      { badge: "Deutsch", names: ["Erdgeschoss (Deutsch)", "Obergeschoss (Deutsch)"] },
-      { badge: "English US", names: ["Nameplate (English US)"] },
-    ]
-  );
-});
-
-test("groupPresetsByBadge: badge-less presets land in a single null-badge group", () => {
-  const groups = groupPresetsByBadge([named("Plain One"), named("Plain Two")]);
-  assert.deepEqual(groups, [
-    {
-      badge: null,
-      items: [
-        { name: "Plain One", parsed: { title: "Plain One" } },
-        { name: "Plain Two", parsed: { title: "Plain Two" } },
-      ],
-    },
-  ]);
-});
-
-test("groupPresetsByBadge: each item carries its own already-parsed name, so a caller doesn't need a second parsePresetCardName call per card", () => {
-  const groups = groupPresetsByBadge([named("Basisschrift | a–z (Deutsch)")]);
-  assert.deepEqual(groups[0].items[0].parsed, {
-    overline: "Basisschrift",
-    title: "a–z",
-    badge: "Deutsch",
-  });
-});
-
-test("groupPresetsByBadge: section order follows each badge's first appearance", () => {
-  const groups = groupPresetsByBadge([
-    named("Nameplate (English US)"),
-    named("Erdgeschoss (Deutsch)"),
-    named("Plain"),
-  ]);
-  assert.deepEqual(
-    groups.map((g) => g.badge),
-    ["English US", "Deutsch", null]
-  );
-});
-
-test("groupPresetsByBadge: an empty list yields no groups", () => {
-  assert.deepEqual(groupPresetsByBadge([]), []);
 });

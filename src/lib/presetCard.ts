@@ -1,12 +1,10 @@
 // presetCard.ts — presentation-only parsing of a bundled preset's NAME into
 // the pieces its picker card renders (PresetPicker.tsx's bundled-preset
 // list): an optional small overline, the title, and an optional trailing
-// badge — plus `groupPresetsByBadge`, which buckets a design's bundled
-// presets by that same parsed badge so the picker can render one section per
-// language/category. This is purely a display convention (documented in
-// docs/config.md's "Bundled presets" note) — the stored preset name and the
-// OpenSCAD parameterSets file format are both untouched; only how the
-// existing name is SPLIT (and grouped) for display changes.
+// badge. This is purely a display convention (documented in docs/config.md's
+// "Bundled presets" note) — the stored preset name and the OpenSCAD
+// parameterSets file format are both untouched; only how the existing name is
+// SPLIT for display changes.
 //
 // Rules, applied to the trimmed name:
 //   1. A trailing " (...)" becomes the badge, e.g. "Erdgeschoss (Deutsch)"
@@ -27,8 +25,7 @@ export interface PresetCardName {
 // Trailing "(...)" with no nested parens — greedy on the part before it so
 // only the LAST parenthetical is captured (a title that itself legitimately
 // ends in "(word) (Lang)" still splits on the final one). Hoisted to module
-// scope since parsePresetCardName runs once per preset name, per preset list
-// (groupPresetsByBadge loops it).
+// scope rather than re-literalized inside parsePresetCardName.
 const TRAILING_PAREN_RE = /^(.*\S)\s+\(([^()]+)\)$/;
 
 export function parsePresetCardName(name: string): PresetCardName {
@@ -49,49 +46,4 @@ export function parsePresetCardName(name: string): PresetCardName {
 
 function withBadge(title: string, badge: string): PresetCardName {
   return badge ? { title, badge } : { title };
-}
-
-/** One run of bundled presets sharing a parsed badge (`null` for the
- *  badge-less run — PresetPicker.tsx renders that one under its existing
- *  "Ready-made" label; every other run's header is the badge text itself,
- *  e.g. "Deutsch"). */
-export interface PresetBadgeGroup<T> {
-  badge: string | null;
-  items: T[];
-}
-
-/**
- * Groups bundled presets by their parsed badge (see `parsePresetCardName`)
- * — a TRUE group-by, not merely an adjacent-run merge like DesignPicker.tsx's
- * `groupDesigns`: every preset sharing a badge lands in the same section
- * regardless of where it falls in the input order, since a config's preset
- * list isn't guaranteed to already cluster same-language presets together.
- * Section order follows each badge's (or the badge-less run's) FIRST
- * appearance in `presets`; item order within a section is preserved from the
- * input. Accepts anything carrying a preset `name` (bundled `ParsedSet`s in
- * practice) so it stays independent of presets.ts's types.
- *
- * Each returned item also carries its own already-computed `parsed` result,
- * so a caller that both groups presets AND renders a per-card title/overline/
- * badge (UnifiedSelectorDialog's Examples group) doesn't have to call
- * `parsePresetCardName` a second time per card — this function already parsed
- * every name once to bucket it.
- */
-export function groupPresetsByBadge<T extends { name: string }>(
-  presets: T[]
-): PresetBadgeGroup<T & { parsed: PresetCardName }>[] {
-  const order: (string | null)[] = [];
-  const buckets = new Map<string | null, (T & { parsed: PresetCardName })[]>();
-  for (const p of presets) {
-    const parsed = parsePresetCardName(p.name);
-    const badge = parsed.badge ?? null;
-    let bucket = buckets.get(badge);
-    if (!bucket) {
-      bucket = [];
-      buckets.set(badge, bucket);
-      order.push(badge);
-    }
-    bucket.push({ ...p, parsed });
-  }
-  return order.map((badge) => ({ badge, items: buckets.get(badge)! }));
 }

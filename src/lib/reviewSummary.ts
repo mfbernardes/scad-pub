@@ -12,15 +12,19 @@
 // curates reviewLabels or it doesn't; there's no second "everything" variant
 // to keep in sync.
 //
-// Value formatting intentionally mirrors DimensionInfo.tsx's own `mm`/
-// `formatValue` (and computedInfo.ts's row shape) so the viewer's
-// measurements panel and a review summary never disagree about what a value
-// says. Kept as a separate copy here rather than an import so this
-// dependency-light lib module never has to import a component file — see
-// that component before changing either copy.
-import type { Design, Param } from "../openscad/types";
+// Value formatting (`mm`/`formatReviewValue`, re-exported here so existing
+// importers of this module — including tests/reviewSummary.test.mjs — are
+// unaffected) is src/lib/format.ts's shared `mm`/`formatParamValue`, the same
+// functions DimensionInfo.tsx's `@info` rows use — see that module's own doc.
+// A review summary and the viewer's measurements panel can never disagree
+// about what a value says, because they're now the same code, not a
+// hand-kept-in-sync copy.
+import type { Design } from "../openscad/types";
 import type { Values } from "./presets";
 import { isVisible } from "./visibility";
+import { mm, formatParamValue } from "./format";
+
+export { mm };
 
 /** Axis-aligned bounding-box size in millimetres — structurally the same
  *  shape as Viewer.tsx's own `Dimensions`, kept local so this dependency-
@@ -40,39 +44,17 @@ export interface ReviewRow {
   headline?: boolean;
 }
 
-/** One millimetre figure, always with at least one decimal (90 -> "90.0") —
- *  same rule as DimensionInfo.tsx's own `mm`. */
-export function mm(n: number): string {
-  return (Math.round(n * 10) / 10).toFixed(1);
-}
-
 /** The bounding-box row's value, e.g. "120.0 × 80.0 × 6.0 mm". */
 export function formatBoundingBox(size: BoundingBoxSize): string {
   return `${mm(size.x)} × ${mm(size.y)} × ${mm(size.z)} mm`;
 }
 
 /** Format a parameter's current value for display, appending its optional
- *  `@info` unit — the same rules as DimensionInfo.tsx's own `formatValue`
- *  (booleans as Yes/No, enums by choice label, empty strings excluded).
- *  Returns null when there's nothing worth showing. */
-export function formatReviewValue(param: Param, values: Values): string | null {
-  const raw = values[param.name] ?? param.default;
-  const unit = param.info?.unit ? ` ${param.info.unit}` : "";
-  switch (param.type) {
-    case "boolean":
-      return raw ? "Yes" : "No";
-    case "string": {
-      const s = String(raw).trim();
-      return s ? s + unit : null;
-    }
-    case "enum": {
-      const choice = param.choices.find((c) => c.value === String(raw));
-      return (choice?.label ?? String(raw)) + unit;
-    }
-    default:
-      return String(raw) + unit; // number
-  }
-}
+ *  `@info` unit — format.ts's `formatParamValue` (booleans as Yes/No, enums
+ *  by choice label, empty strings excluded). Returns null when there's
+ *  nothing worth showing. Kept under this module's existing export name so
+ *  callers (including tests/reviewSummary.test.mjs) are unaffected. */
+export const formatReviewValue = formatParamValue;
 
 /**
  * The review summary's row list: one row per `designs[].reviewLabels` entry

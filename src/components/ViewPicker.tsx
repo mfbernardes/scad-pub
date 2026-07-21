@@ -29,11 +29,11 @@ export function ViewPicker({ view, onSelect }: Props) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {/* Same hover/focus Tooltip treatment as the rest of the HUD
-          (ViewerHUD.tsx's HudIconButton) — nested around the Popover trigger
-          rather than IconButton's own asChild restructuring, since the
-          trigger already needs to stay a plain-ref-forwarding native
-          <button> for the Popover; `title` stays too, as the no-JS/
-          assistive fallback. */}
+          (ViewerHUD.tsx's IconButton-based buttons) — nested around the
+          Popover trigger rather than composing IconButton itself here, since
+          this trigger already needs to stay a plain-ref-forwarding native
+          <button> serving BOTH the Tooltip's and the Popover's `asChild`;
+          `title` stays too, as the no-JS/assistive fallback. */}
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>

@@ -44,9 +44,7 @@ function outcomeFromError(e: unknown): ShareOutcome {
 
 /** Share a URL via the native share sheet. "unsupported" → fall back to clipboard. */
 export async function shareUrl(url: string, title?: string): Promise<ShareOutcome> {
-  if (!isTouchDevice()) return "unsupported"; // desktop → copy to clipboard instead
-  if (typeof navigator === "undefined" || typeof navigator.share !== "function")
-    return "unsupported";
+  if (!canShareNatively()) return "unsupported"; // desktop, or no navigator.share → copy to clipboard instead
   try {
     await navigator.share(title ? { url, title } : { url });
     return "shared";
@@ -71,13 +69,8 @@ export async function shareFileOrFallback(
 
 /** Share a file (e.g. an exported model). "unsupported" → fall back to download. */
 export async function shareFile(file: File, title?: string): Promise<ShareOutcome> {
-  if (!isTouchDevice()) return "unsupported"; // desktop → download instead
-  if (
-    typeof navigator === "undefined" ||
-    typeof navigator.share !== "function" ||
-    typeof navigator.canShare !== "function" ||
-    !navigator.canShare({ files: [file] })
-  )
+  if (!canShareNatively()) return "unsupported"; // desktop, or no navigator.share → download instead
+  if (typeof navigator.canShare !== "function" || !navigator.canShare({ files: [file] }))
     return "unsupported";
   try {
     await navigator.share(title ? { files: [file], title } : { files: [file] });

@@ -7,14 +7,20 @@
 // for values OpenSCAD itself computes internally, which gen-schema's static
 // parser could never know. All of it is measured/read downstream of the
 // export — purely informative, never part of a print.
+//
+// `mm`/`formatValue` are src/lib/format.ts's shared `mm`/`formatParamValue` —
+// the same functions reviewSummary.ts's curated review rows use, so this
+// panel and a pre-download review summary can never disagree about what a
+// value says (see format.ts's own doc).
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import type { Design, Param } from "../openscad/types";
+import type { Design } from "../openscad/types";
 import type { Dimensions } from "./Viewer";
 import type { Values } from "../lib/presets";
 import type { ComputedInfo } from "../lib/computedInfo";
 import { isVisible } from "../lib/visibility";
 import { cn } from "../lib/utils";
+import { mm, formatParamValue as formatValue } from "../lib/format";
 
 interface Props {
   design: Design;
@@ -30,32 +36,6 @@ interface Props {
    *  in the design's .scad source — see lib/computedInfo.ts. Rendered as plain
    *  rows after the bounding box and param-@info rows, in echo order. */
   computed?: ComputedInfo[];
-}
-
-// One millimetre figure, always with at least one decimal (90 → "90.0").
-function mm(n: number): string {
-  return (Math.round(n * 10) / 10).toFixed(1);
-}
-
-// Format a parameter's value for display, appending the optional `@info` unit.
-// Returns null when there's nothing worth showing (e.g. an empty string).
-function formatValue(param: Param, values: Values): string | null {
-  const raw = values[param.name] ?? param.default;
-  const unit = param.info?.unit ? ` ${param.info.unit}` : "";
-  switch (param.type) {
-    case "boolean":
-      return raw ? "Yes" : "No";
-    case "string": {
-      const s = String(raw).trim();
-      return s ? s + unit : null;
-    }
-    case "enum": {
-      const choice = param.choices.find((c) => c.value === String(raw));
-      return (choice?.label ?? String(raw)) + unit;
-    }
-    default:
-      return String(raw) + unit; // number
-  }
 }
 
 export function DimensionInfo({ design, size, values, stale = false, computed = [] }: Props) {

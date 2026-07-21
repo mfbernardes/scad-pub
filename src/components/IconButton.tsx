@@ -4,13 +4,19 @@
 // disabled handling. Context-specific styling (viewer HUD glass, …) comes in
 // via className and wins through tailwind-merge; `icon-btn` stays as an inert
 // semantic hook for tests/extraCss.
-import type { ReactNode } from "react";
+//
+// Forwards an optional `ref` straight through to Button (React 19's "ref as a
+// prop" — no forwardRef wrapper needed), so a caller that needs the
+// underlying DOM node — e.g. a Radix `TooltipTrigger asChild` — can compose
+// a plain IconButton instead of hand-rolling its own Button call (see
+// ViewerHUD.tsx's HUD buttons).
+import type { ReactNode, Ref } from "react";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 
 // The top-bar / panel icon-button look (bordered, muted fill). Exported so the
-// few icon controls that can't be an IconButton — e.g. a Popover trigger, which
-// needs a ref the shadcn Button doesn't forward — match it without repeating it.
+// few icon controls that can't be an IconButton — e.g. a Popover trigger that
+// needs to compose its own asChild ref target — match it without repeating it.
 export const ICON_BUTTON_CLASS =
   "icon-btn size-8 rounded-(--radius-sm) p-[0.35rem] bg-muted border hover:border-brand";
 
@@ -23,6 +29,9 @@ interface Props {
   /** For toggle buttons: announces on/off state to assistive tech. */
   pressed?: boolean;
   children: ReactNode;
+  /** Forwarded to the underlying Button/native `<button>` — e.g. for a Radix
+   *  `asChild` trigger, which clones its ref onto its single child. */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 export function IconButton({
@@ -33,9 +42,11 @@ export function IconButton({
   className,
   pressed,
   children,
+  ref,
 }: Props) {
   return (
     <Button
+      ref={ref}
       type="button"
       variant="ghost"
       size="icon"

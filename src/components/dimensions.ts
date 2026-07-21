@@ -15,7 +15,12 @@ export interface DimensionsGroup extends THREE.Group {
 }
 
 // Format a measurement like the reference CAD callouts — always one decimal,
-// so 120 reads "120.0 mm" and 8 reads "8.0 mm".
+// so 120 reads "120.0 mm" and 8 reads "8.0 mm". Rounds identically to
+// src/lib/format.ts's `mm`, but isn't the same helper: `mm` returns the bare
+// number ("120.0") so a caller can join three of them into one "W × D × H mm"
+// string with a single trailing unit, while every dimension label here is its
+// own standalone billboarded sprite and needs the " mm" suffix baked into
+// EACH one. Not byte-identical, so not folded into format.ts.
 function mmLabel(n: number): string {
   return `${(Math.round(n * 10) / 10).toFixed(1)} mm`;
 }

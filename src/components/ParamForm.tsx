@@ -12,8 +12,7 @@ import { displayValue } from "../lib/paramDiff";
 import { isVisible } from "../lib/visibility";
 import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
 import { fontFallback } from "../lib/fontFallback";
-import { useAppActions } from "../lib/appActions";
-import { FileInput } from "./FileInput";
+import { FontImportActions } from "./FontImportActions";
 import { FontSelect } from "./FontSelect";
 import { SvgPrepareControl } from "./SvgPrepareControl";
 import { Slider } from "./ui/slider";
@@ -71,7 +70,10 @@ interface Props {
 // Inline, non-alarming hint shown under a `font` control when the selected
 // family isn't loaded. Offers the two actions that actually fix it: import the
 // real font, or switch to an available bundled family — so availability is
-// communicated immediately, without needing a render to find out.
+// communicated immediately, without needing a render to find out. The
+// hidden-FileInput+addFile plumbing behind "Import font…" is FontImportActions
+// (shared with AttentionItems' own font-fallback card) — this only supplies
+// the copy/visuals, which stay identical to before.
 function FontMissingHint({
   family,
   fallback,
@@ -81,7 +83,6 @@ function FontMissingHint({
   fallback: { value: string; label: string } | null;
   onUse: (next: string) => void;
 }) {
-  const { addFile } = useAppActions();
   // The action links that actually fix a missing font (import it, or switch
   // to a loaded family).
   const actionBtn =
@@ -94,23 +95,23 @@ function FontMissingHint({
       <span className="text-[0.82rem] leading-[1.4] text-foreground">
         “{family}” isn’t loaded — text may render in another font.
       </span>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        <FileInput
-          accept=".ttf,.otf,.ttc"
-          onFile={async (file) => addFile(file.name, new Uint8Array(await file.arrayBuffer()))}
-        >
-          {(open) => (
-            <button type="button" className={actionBtn} onClick={open}>
-              <UploadIcon size={13} aria-hidden="true" /> Import font…
-            </button>
-          )}
-        </FileInput>
-        {fallback && (
-          <button type="button" className={actionBtn} onClick={() => onUse(fallback.value)}>
-            Use {fallback.label}
+      <FontImportActions
+        className="flex flex-wrap gap-x-4 gap-y-1"
+        renderImport={(open) => (
+          <button type="button" className={actionBtn} onClick={open}>
+            <UploadIcon size={13} aria-hidden="true" /> Import font…
           </button>
         )}
-      </div>
+        renderFallback={
+          fallback
+            ? () => (
+                <button type="button" className={actionBtn} onClick={() => onUse(fallback.value)}>
+                  Use {fallback.label}
+                </button>
+              )
+            : undefined
+        }
+      />
     </div>
   );
 }

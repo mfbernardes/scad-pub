@@ -12,11 +12,7 @@
 //
 // No build-time component: gen-schema.mjs never parses either tag; the app
 // only scans the worker's log for them after a render.
-
-// Escapes regex metacharacters in a caller-supplied tag before it's spliced
-// into the pattern below. Static (doesn't depend on the tag), so it's hoisted
-// out of parseEchoTag rather than re-literalized on every call.
-const REGEXP_ESCAPE_RE = /[.*+?^${}()|[\]\\]/g;
+import { escapeRegExp } from "./diagnostics";
 
 /**
  * Match every `[out]`/`[err]` ECHO line for a fixed-arity `echo("@tag", …)`
@@ -33,7 +29,7 @@ const REGEXP_ESCAPE_RE = /[.*+?^${}()|[\]\\]/g;
  * strings followed by the raw final-argument text.
  */
 export function parseEchoTag(log: string[], tag: string, quotedArgCount: number): string[][] {
-  const escapedTag = tag.replace(REGEXP_ESCAPE_RE, "\\$&");
+  const escapedTag = escapeRegExp(tag);
   const re = new RegExp(
     `^\\[(?:out|err)\\]\\s*ECHO:\\s*"${escapedTag}"` +
       `,\\s*"([^"]*)"`.repeat(quotedArgCount) +
