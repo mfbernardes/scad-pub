@@ -352,6 +352,23 @@ test("presetImages: configuring it on a design with no bundled presets fails the
   );
 });
 
+test("strings: a key that exists in en.json overrides the built-in text", () => {
+  const { schema } = run("widget-strings.config.json");
+  assert.deepEqual(schema.strings, { "action.export": "Download now" });
+});
+
+test("a config with no 'strings' key yields an empty object", () => {
+  const { schema } = run("widget.config.json");
+  assert.deepEqual(schema.strings, {});
+});
+
+test("strings: an unknown key fails the build with a 'did you mean' suggestion", () => {
+  assert.throws(
+    () => run("widget-strings-badkey.config.json"),
+    /unknown 'strings' key 'action.exprot'.*Did you mean 'action.export'/s
+  );
+});
+
 test("per-design description + icon are parsed, copied and served", () => {
   const { schema, out } = run("widget-designmeta.config.json");
   const widget = schema.designs.find((d) => d.id === "widget");
