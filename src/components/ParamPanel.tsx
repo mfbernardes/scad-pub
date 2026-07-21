@@ -20,6 +20,7 @@ import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
 import { IconButton } from "./IconButton";
 import { PanelFooter } from "./PanelFooter";
+import { StatusStrip, type StatusStripProps } from "./StatusStrip";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
@@ -77,6 +78,8 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
+  /** Readiness status strip, mounted above the tabs (see StatusStrip.tsx). */
+  statusStrip: Omit<StatusStripProps, "className">;
 }
 
 export function ParamPanel({
@@ -108,6 +111,7 @@ export function ParamPanel({
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
+  statusStrip,
 }: Props) {
   const {
     change,
@@ -241,6 +245,8 @@ export function ParamPanel({
           if (e.key === grow) setWidth((w) => Math.min(MAX_WIDTH, w + 20));
         }}
       />
+
+      <StatusStrip {...statusStrip} className="shrink-0" />
 
       <Tabs
         value={panelTab}

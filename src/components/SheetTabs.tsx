@@ -12,6 +12,7 @@ import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
 import { PanelFooter } from "./PanelFooter";
+import { StatusStrip, type StatusStripProps } from "./StatusStrip";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 
@@ -57,6 +58,11 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
+  /** Readiness status strip, mounted above the tab row — see StatusStrip.tsx's
+   *  own doc for why that keeps it inside the sheet's always-visible peek
+   *  header (BottomSheet measures Peek from the sheet's top down to the tab
+   *  row's bottom edge). */
+  statusStrip: Omit<StatusStripProps, "className">;
 }
 
 export function SheetTabs({
@@ -87,6 +93,7 @@ export function SheetTabs({
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
+  statusStrip,
 }: Props) {
   const {
     change,
@@ -110,6 +117,7 @@ export function SheetTabs({
       onValueChange={(v) => onTabChange(v as Tab)}
       className="sheet-tabs min-h-0 flex-1 gap-0"
     >
+      <StatusStrip {...statusStrip} className="shrink-0" />
       <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
         {tabs.map((t) => (
           <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>

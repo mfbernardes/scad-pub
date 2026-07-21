@@ -447,10 +447,16 @@ button:disabled { cursor: default; }
   }
 }
 
-/* Floating bottom-center action cluster (Export / PNG / Share). Desktop hovers
-   it over the viewer bottom; mobile rides it on the sheet's top edge — see the
-   mobile override below. */
-.action-cluster {
+/* Floating bottom-center action dock: the export cluster (Download / Share),
+   plus — when shown — an ExportSuccess panel stacked above it (see
+   ACTION_DOCK_CLASS's own doc in AppShell.tsx). Positioning lives here, on
+   the OUTER dock wrapper, not on `.action-cluster` itself: a plain flex
+   column bottom-anchored by `bottom` means the panel simply pushes the
+   cluster down from a fixed bottom edge when it mounts — no height
+   measurement needed to stack the two. Desktop hovers the dock over the
+   viewer bottom; mobile rides it on the sheet's top edge — see the mobile
+   override below. */
+.action-dock {
   position: absolute;
   bottom: calc(0.75rem + var(--safe-area-bottom));
   left: 50%;
@@ -458,18 +464,18 @@ button:disabled { cursor: default; }
   z-index: 10;
 }
 
-/* Mobile: ride the cluster 0.6rem above the sheet's live top edge (--sheet-top,
+/* Mobile: ride the dock 0.6rem above the sheet's live top edge (--sheet-top,
    shared with the viewer bottom), so it tracks the sheet up from peek to the
    half detent and stays visible there. Past half it stays pinned at the half
-   line while the sheet (z-30) rises over it, so the cluster is covered only once
+   line while the sheet (z-30) rises over it, so the dock is covered only once
    the sheet is (near) full. Easing mirrors the viewer's; data-sheet-dragging
    disables it so the pill tracks the finger 1:1. */
 @media (max-width: 860px) {
-  .app-shell__mobile .action-cluster {
+  .app-shell__mobile .action-dock {
     bottom: calc(var(--sheet-top) + 0.6rem);
     transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
-  .app-shell__mobile[data-sheet-dragging="true"] .action-cluster {
+  .app-shell__mobile[data-sheet-dragging="true"] .action-dock {
     transition: none;
   }
 }
