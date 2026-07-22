@@ -541,6 +541,7 @@ export const AppShell = memo(function AppShell({
     onMeasure: setMeasured,
     measured,
     renderedValues,
+    values,
     computedInfo,
   };
   const hudProps = {
@@ -614,6 +615,7 @@ export const AppShell = memo(function AppShell({
                 viewerRef={mobileViewerRef}
                 active
                 reframeOnPreset={false}
+                mobile
               />
 
               {/* Mobile top bar — logo left, design centered, actions right

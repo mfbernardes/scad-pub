@@ -525,6 +525,25 @@ button:disabled { cursor: default; }
   }
 }
 
+/* On-model "edit text" chip (ViewerEditOnModel) — the always-visible affordance
+   for the on-model text editor. Desktop: bottom-LEFT, the one corner clear of
+   the centred dock/hint, the right-edge HUD, and the (opt-in, top-left)
+   measurements panel. Mobile: top-LEFT, level with the HUD, below the floating
+   top bar, since the bottom edge belongs to the sheet + dock there. */
+.viewer-edit-chip {
+  position: absolute;
+  bottom: calc(0.75rem + var(--safe-area-bottom));
+  left: calc(0.75rem + env(safe-area-inset-left, 0px));
+  z-index: 9;
+}
+
+@media (max-width: 860px) {
+  .app-shell__mobile .viewer-edit-chip {
+    top: calc(env(safe-area-inset-top, 0px) + 4rem);
+    bottom: auto;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    STATUS PILL — render state chip
    ═══════════════════════════════════════════════════════════════ */

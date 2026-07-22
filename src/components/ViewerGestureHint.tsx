@@ -24,7 +24,7 @@ const HINT_SEEN_KEY = ns("hint.viewer.v1");
 // linger indefinitely over the model.
 const FADE_TIMEOUT_MS = 8000;
 
-export function ViewerGestureHint({ resultOk }: { resultOk: boolean }) {
+export function ViewerGestureHint({ resultOk, suppressed = false }: { resultOk: boolean; suppressed?: boolean }) {
   // Sticky: once the first successful render has landed this mount, stays
   // true even if a later edit fails or is mid-render — the hint is about
   // "you've now seen a model", not "the model is currently fine".
@@ -32,7 +32,10 @@ export function ViewerGestureHint({ resultOk }: { resultOk: boolean }) {
   if (resultOk) hasRenderedOnceRef.current = true;
 
   const [dismissed, setDismissed] = useState(() => readLocal(HINT_SEEN_KEY) !== null);
-  const visible = !dismissed && hasRenderedOnceRef.current;
+  // `suppressed` (the on-model editor is open) hides the hint without
+  // dismissing it — they'd otherwise overlap over the model — so it can still
+  // show later once the editor closes, until the visitor interacts or it fades.
+  const visible = !dismissed && !suppressed && hasRenderedOnceRef.current;
 
   const dismiss = useCallback(() => {
     setDismissed((was) => {

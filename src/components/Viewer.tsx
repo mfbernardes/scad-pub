@@ -12,6 +12,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildDimensions, type DimensionsGroup } from "./dimensions";
 import { VIEW_DIRECTIONS, DEFAULT_VIEW, type ViewName } from "./views";
 import { toIndexedGeometry } from "@/lib/meshIndex";
+import { isModelClick } from "@/lib/editOnModel";
 import {
   frameDistanceForBox,
   cameraBasis,
@@ -115,8 +116,15 @@ export const Viewer = forwardRef<
     view?: ViewName;
     /** Reports the model's bounding-box size in mm (null when geometry clears). */
     onMeasure?: (size: Dimensions | null) => void;
+    /** When true (design has an `@editOnModel` param and a model is shown), a
+     *  click/tap on the mesh raycasts the model and reports the hit's
+     *  screen-space position via `onModelPick`; orbit/pan/zoom are unaffected. */
+    editable?: boolean;
+    /** Called when a plain click/tap lands on the model mesh, with the hit's
+     *  position (px) relative to the viewer's top-left. A miss does nothing. */
+    onModelPick?: (pos: { x: number; y: number }) => void;
   }
->(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, view = DEFAULT_VIEW, onMeasure }, ref) {
+>(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, view = DEFAULT_VIEW, onMeasure, editable = false, onModelPick }, ref) {
   // Latest selected view, read inside the [stl]-only reframe effect and the
   // imperative handle without re-running them.
   const viewRef = useRef(view);
@@ -124,6 +132,12 @@ export const Viewer = forwardRef<
   // Keep the latest onMeasure without re-running the [stl]-only geometry effect.
   const onMeasureRef = useRef(onMeasure);
   onMeasureRef.current = onMeasure;
+  // Latest on-model-edit props, read inside the one-time setup effect's pointer
+  // handlers (which have no deps) without re-running setup.
+  const editableRef = useRef(editable);
+  editableRef.current = editable;
+  const onModelPickRef = useRef(onModelPick);
+  onModelPickRef.current = onModelPick;
   const mountRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<THREE.Object3D | null>(null);
   // The design+preset whose geometry is currently framed. A new model from the
@@ -348,6 +362,70 @@ export const Viewer = forwardRef<
     controls.enableDamping = true;
     controlsRef.current = controls;
 
+    // ── On-model text editing: click/tap the mesh to open the inline editor ──
+    // A plain click (a pointerdown→pointerup pair that moved under the
+    // click threshold, single pointer) raycasts the model — and ONLY the
+    // model, never the grid/floor — and reports the hit's screen position so
+    // ViewerStage can float the editor there. These listeners are purely
+    // observational (no preventDefault / stopPropagation), so OrbitControls'
+    // own orbit/pan/zoom on the same canvas is completely unaffected: a real
+    // drag moves the camera and, having moved past the threshold, never opens
+    // the editor. Only wired when `editableRef` is set (design has an
+    // `@editOnModel` param and a model is shown).
+    const canvasEl = renderer.domElement;
+    const raycaster = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    const activePointers = new Set<number>();
+    let downPt: { x: number; y: number } | null = null;
+    let multiTouch = false;
+
+    const onPointerDown = (e: PointerEvent) => {
+      activePointers.add(e.pointerId);
+      if (activePointers.size > 1) {
+        multiTouch = true; // a second finger landed — this is a pinch/rotate, not a tap
+        downPt = null;
+        return;
+      }
+      downPt = { x: e.clientX, y: e.clientY };
+    };
+    const clearPointer = (e: PointerEvent) => {
+      activePointers.delete(e.pointerId);
+      if (activePointers.size === 0) multiTouch = false;
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      const down = downPt;
+      const wasMulti = multiTouch;
+      clearPointer(e);
+      downPt = null;
+      const pick = onModelPickRef.current;
+      const model = modelRef.current;
+      if (!editableRef.current || !pick || !model) return;
+      if (!isModelClick({ down, up: { x: e.clientX, y: e.clientY }, multiTouch: wasMulti })) return;
+      const rect = canvasEl.getBoundingClientRect();
+      ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(ndc, cam);
+      if (raycaster.intersectObject(model, true).length === 0) return; // a miss does nothing
+      pick({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    };
+    // Hover affordance: point the cursor while genuinely over the model (only
+    // while editable and not mid-drag), so the on-model click is discoverable.
+    // A single-object raycast, and only on a plain hover move, so it's cheap.
+    const onPointerMove = (e: PointerEvent) => {
+      if (!editableRef.current || e.buttons !== 0) return;
+      const model = modelRef.current;
+      const rect = canvasEl.getBoundingClientRect();
+      ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(ndc, cam);
+      const over = !!model && raycaster.intersectObject(model, true).length > 0;
+      canvasEl.style.cursor = over ? "pointer" : "";
+    };
+    canvasEl.addEventListener("pointerdown", onPointerDown);
+    canvasEl.addEventListener("pointerup", onPointerUp);
+    canvasEl.addEventListener("pointercancel", clearPointer);
+    canvasEl.addEventListener("pointermove", onPointerMove);
+
     const io = new IntersectionObserver(
       ([entry]) => {
         visibleRef.current = entry.isIntersecting;
@@ -432,6 +510,10 @@ export const Viewer = forwardRef<
     return () => {
       cancelAnimationFrame(raf);
       controls.removeEventListener("change", requestRender);
+      canvasEl.removeEventListener("pointerdown", onPointerDown);
+      canvasEl.removeEventListener("pointerup", onPointerUp);
+      canvasEl.removeEventListener("pointercancel", clearPointer);
+      canvasEl.removeEventListener("pointermove", onPointerMove);
       ro.disconnect();
       io.disconnect();
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -500,6 +582,17 @@ export const Viewer = forwardRef<
     syncDimensions(showDimensions);
     requestRenderRef.current();
   }, [showDimensions]);
+
+  // Drop the on-model hover cursor the moment editing is no longer offered
+  // (render failed, or the design has no `@editOnModel` param), so a stale
+  // "pointer" cursor never lingers over an inert canvas. The pointermove
+  // handler above re-applies it while editable.
+  useEffect(() => {
+    if (!editable) {
+      const canvas = rendererRef.current?.domElement;
+      if (canvas) canvas.style.cursor = "";
+    }
+  }, [editable]);
 
   // Swap geometry when a new model arrives.
   useEffect(() => {
