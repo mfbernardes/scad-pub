@@ -180,6 +180,11 @@ export const Viewer = forwardRef<
     const size = modelSizeRef.current;
     if (!show || !size) return;
     const group = buildDimensions(size, cssColor("--viewer-dim", "#86a9ff"));
+    // buildDimensions assumes a model centred on the origin (spanning [-s/2, +s/2]
+    // on each axis). That matches the default centring, but when `restOnGrid` is
+    // set the model is anchored with its base on z=0 (spanning [0, s.z]), so lift
+    // the overlay by half its height to sit around the model instead of the origin.
+    if (__APP_REST_ON_GRID__) group.position.z = size.z / 2;
     scene.add(group);
     dimGroupRef.current = group;
   }
