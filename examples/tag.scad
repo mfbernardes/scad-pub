@@ -22,6 +22,7 @@ corner_radius = 4; // [0:0.5:20]
 /* [Text] */
 // Text to emboss on the tag. Leave empty for none.
 // @info Engraved text
+// @editOnModel
 label = "ScadPub";
 // Font height (mm).
 // @info Text height | mm

@@ -26,6 +26,14 @@ function checkParam(p: unknown, designId: string): void {
     fail(`${at} has a non-object info annotation`);
   if (param.advanced !== undefined && typeof param.advanced !== "boolean")
     fail(`${at} has a non-boolean advanced annotation`);
+  // `@editOnModel` is a string-only marker gen-schema only ever emits as `true`
+  // (and only on a plain, non-font string param). Reject any other shape so a
+  // hand-edited or drifted schema fails loudly rather than half-enabling the
+  // on-model editor.
+  if (param.editOnModel !== undefined) {
+    if (param.editOnModel !== true) fail(`${at} 'editOnModel' must be true`);
+    if (param.type !== "string") fail(`${at} has 'editOnModel' on a non-string param`);
+  }
 }
 
 function checkDesign(d: unknown): void {

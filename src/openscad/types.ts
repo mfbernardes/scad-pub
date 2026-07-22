@@ -151,6 +151,15 @@ export type Param = ParamBase &
          * renders it as a "Prepare SVG…" affordance instead of a plain text box.
          */
         svg?: SvgFieldMeta;
+        /**
+         * This string is the design's on-model editable text. Set by gen-schema
+         * from an explicit `// @editOnModel` annotation (valid only on a plain,
+         * non-font string param, at most one per design). The viewer lets the
+         * user edit it directly on the rendered mesh — a click/tap opens a
+         * floating inline text editor over the model — in addition to the panel's
+         * own text box. See src/lib/editOnModel.ts and ViewerEditOnModel.tsx.
+         */
+        editOnModel?: true;
       }
   );
 
