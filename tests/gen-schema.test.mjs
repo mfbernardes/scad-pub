@@ -1650,6 +1650,81 @@ test("the well-formed @svg/@filledBy fixture (existing test above) still passes 
   );
 });
 
+// ── @editOnModel (on-model editable text) ──────────────────────────────────
+
+test("@editOnModel flags a plain string param and is consumed, not leaked", () => {
+  const params = paramsOf(
+    `/* [Text] */\n` +
+      `// Text to emboss on the tag.\n` +
+      `// @editOnModel\n` +
+      `label = "ScadPub";\n` +
+      `// A plain string with no annotation.\n` +
+      `note = "hi";\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.label.editOnModel, true);
+  assert.equal(byName.label.type, "string");
+  // The annotation line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.label.help.includes("@editOnModel"));
+  assert.equal(byName.label.description, "Text to emboss on the tag.");
+  // No annotation -> not flagged.
+  assert.equal(byName.note.editOnModel, undefined);
+});
+
+test("@editOnModel on a non-string parameter fails with file and line", () => {
+  // number
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @editOnModel\nsize = 5;\n`),
+    /f\.scad:2: @editOnModel on 'size' must be a string parameter \(got type number\)/
+  );
+  // boolean
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @editOnModel\nflag = true;\n`),
+    /f\.scad:2: @editOnModel on 'flag' must be a string parameter \(got type boolean\)/
+  );
+});
+
+test("@editOnModel on an enum (dropdown) parameter fails", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @editOnModel\nmode = "a"; // [a, b, c]\n`),
+    /f\.scad:2: @editOnModel on 'mode' must be a string parameter \(got type enum\)/
+  );
+});
+
+test("@editOnModel on a @font parameter fails (a font string isn't editable on the model)", () => {
+  assert.throws(
+    () =>
+      paramsOf(
+        `/* [S] */\n` +
+          `// @font\n` +
+          `// @editOnModel\n` +
+          `font = "Liberation Sans:style=Bold";\n`
+      ),
+    /f\.scad:3: @editOnModel on 'font' cannot be a font parameter/
+  );
+});
+
+test("@editOnModel declared on two params fails, naming the first owner", () => {
+  assert.throws(
+    () =>
+      paramsOf(
+        `/* [Text] */\n` +
+          `// @editOnModel\n` +
+          `label = "a";\n` +
+          `// @editOnModel\n` +
+          `subtitle = "b";\n`
+      ),
+    /f\.scad:4: @editOnModel is already declared on 'label'; only one parameter per design may be @editOnModel/
+  );
+});
+
+test("a bare @editOnModel with trailing text fails as a malformed annotation", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @editOnModel please\nlabel = "a";\n`),
+    /f\.scad:2: malformed @editOnModel annotation/
+  );
+});
+
 test("parseFontFallback accepts a trimmed string or null; rejects empty", () => {
   assert.equal(parseFontFallback(undefined), null);
   assert.equal(parseFontFallback(null), null);

@@ -712,6 +712,123 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   await waitRendered(page, "tag");
 }
 
+// On-model text editing ("type on the sign") — exercised on the example "tag"
+// design, whose `label` param is annotated `// @editOnModel`. Covers the pointer
+// path (click the mesh → floating editor → type → panel + render follow), the
+// keyboard/AT path (the pencil chip), Escape-reverts, and axe with the editor
+// open. Runs only when "tag" is present.
+async function checkEditOnModel({ page, check, ids, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== on-model text editing (@editOnModel, tag) ===");
+  await selectDesign(page, "tag");
+  await waitRendered(page, "tag (edit-on-model)");
+
+  // The always-visible pencil chip is the discoverable, keyboard-reachable
+  // affordance. Only the active (desktop) layout is mounted, so there's one.
+  const chip = page.locator(".viewer-edit-chip");
+  await chip.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+  check((await chip.count()) === 1, "the edit-on-model pencil chip is shown for @editOnModel");
+
+  const labelInput = () => paramRow(page, "label").locator('input[type="text"]');
+  const editor = page.locator(".model-text-editor");
+  const editorInput = editor.locator("input");
+
+  // Open the editor by clicking the rendered mesh. The tag plate fills most of
+  // the canvas, but try a few points around the centre in case the exact centre
+  // lands on a gap. A miss simply doesn't open the editor.
+  const canvas = page.locator(".app-shell__desktop .viewer canvas");
+  const box = await canvas.boundingBox();
+  const clickModel = async () => {
+    for (const [fx, fy] of [[0.5, 0.5], [0.5, 0.45], [0.5, 0.55], [0.45, 0.5], [0.55, 0.5]]) {
+      await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+      if (
+        await editor
+          .first()
+          .waitFor({ state: "visible", timeout: 1200 })
+          .then(() => true)
+          .catch(() => false)
+      )
+        return true;
+    }
+    return false;
+  };
+  check(await clickModel(), "clicking the model opens the inline text editor");
+
+  // Type a new value ON THE MODEL and confirm both the render re-runs and the
+  // panel's own text box follows — same change() the panel input calls.
+  const typed = "SMOKE-EDIT";
+  const statusBefore = (await renderStatusText(page)) ?? "";
+  await editorInput.fill(typed);
+  const rerendered = await page
+    .waitForFunction(
+      (prev) => {
+        const s = document.querySelector(".render-status")?.textContent || "";
+        return /\d+ ms/.test(s) && s !== prev;
+      },
+      statusBefore,
+      { timeout: 30000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(rerendered, "typing on the model re-runs the render");
+  await page.keyboard.press("Enter"); // Enter closes; value already applied
+  await editor.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  check((await labelInput().inputValue()) === typed, "the panel's text input shows the on-model edit");
+
+  // Keyboard path: focus the chip and open the editor from it (Enter). Focus
+  // must land in the input.
+  await chip.first().focus();
+  check(
+    await page.evaluate(() => document.activeElement?.classList.contains("viewer-edit-chip")),
+    "the pencil chip is keyboard-focusable"
+  );
+  await page.keyboard.press("Enter");
+  const kbOpened = await editor
+    .first()
+    .waitFor({ state: "visible", timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  check(kbOpened, "the pencil chip opens the editor (keyboard path)");
+  check(
+    await page.evaluate((id) => document.activeElement?.id === id, "model-text-editor-input"),
+    "focus lands in the editor input on open"
+  );
+
+  // Escape reverts to the value the editor had when it opened (still "typed").
+  await editorInput.fill("DISCARD-ME");
+  await page.keyboard.press("Escape");
+  await editor.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  check(
+    (await labelInput().inputValue()) === typed,
+    "Escape reverts the on-model edit to the value at open"
+  );
+
+  // Accessibility: no serious/critical axe violation with the editor open.
+  await chip.first().click();
+  await editor.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await page.addScriptTag({
+    path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
+  });
+  const axeRes = await page.evaluate(async () =>
+    window.axe.run(document, {
+      resultTypes: ["violations"],
+      runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
+    })
+  );
+  const serious = axeRes.violations.filter((v) => ["serious", "critical"].includes(v.impact));
+  for (const v of serious)
+    console.log(`  [${v.impact}] ${v.id}: ${v.help} -> ${v.nodes.map((n) => n.target.join(" ")).join("; ")}`);
+  check(serious.length === 0, `axe with the on-model editor open: ${serious.length} serious/critical`);
+  await page.keyboard.press("Escape");
+  await editor.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+
+  // Leave the design at its defaults for whatever runs next.
+  await resetDefaults(page);
+  await waitRendered(page, "tag");
+}
+
 // @showIf arrow_style — exercised on a "signage" design when present. (No
 // notice expectation here: a well-tuned config renders its defaults
 // advisory-free; the notice/assert badge machinery is covered by "tag".)
@@ -937,6 +1054,7 @@ async function main() {
     await checkPreviewControls(ctx);
     await checkServiceWorker(ctx);
     await checkTagDesign(ctx);
+    await checkEditOnModel(ctx);
     await checkSignageDesign(ctx);
     await checkResponsiveLayout(ctx);
 

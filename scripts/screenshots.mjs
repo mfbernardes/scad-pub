@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import { startServer } from "./serve-dist.mjs";
-import { launchChromium, gotoWithTheme, dismissWelcomePopup } from "./lib/browser.mjs";
+import { launchChromium, gotoWithTheme, dismissWelcomePopup, waitRendered } from "./lib/browser.mjs";
 
 const UPDATE = process.argv.includes("--update");
 const BASELINE_DIR = fileURLToPath(new URL("../tests/screenshots", import.meta.url));
@@ -56,6 +56,12 @@ async function shoot(page, base, theme) {
   // keeps exercising the param form (a richer regression surface).
   await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});
   await page.waitForSelector(".param-form", { timeout: 30000 });
+  // Wait for the render to actually finish before shooting, so the render-gated
+  // viewer chrome that ISN'T masked — the status strip, the on-model edit chip
+  // (.viewer-edit-chip), the HUD — is deterministically present rather than
+  // sometimes caught mid-build. The canvas + loading overlay themselves stay
+  // masked (MASK_CSS); this only pins the surrounding chrome's state.
+  await waitRendered(page).catch(() => {});
   await page.addStyleTag({ content: MASK_CSS });
   await page.waitForTimeout(150); // let fonts/layout settle
   return PNG.sync.read(await page.screenshot({ fullPage: true }));
