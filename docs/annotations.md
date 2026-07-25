@@ -132,6 +132,31 @@ On the colours step, the wizard cautions when a drawing yields several regions t
 
 `@svg` composes with a co-located `// @showIf`, so a conditional SVG field still gets the affordance. Both annotations are invisible to OpenSCAD, which imports the file and, for the per-region path, selects regions by their `<g id>`.
 
+## On-model text editing (`// @editOnModel`)
+
+Mark one plain string parameter `// @editOnModel` to let the user edit its value **directly on the 3D model** — "type on the sign". In the viewer, a click or tap on the rendered mesh opens a small floating text box pre-filled with the current value; each keystroke updates the parameter exactly like the panel's own text box (same debounced auto-render). An always-visible **edit** pencil chip over the viewer gives the same editor a keyboard- and screen-reader-accessible path, and opens it centered.
+
+```scad
+/* [Text] */
+// Text to emboss on the tag.
+// @editOnModel
+label = "ScadPub";
+```
+
+Constraints, enforced at build time:
+
+- It is valid **only on a plain `string`** parameter — not a number/boolean, not a `// [..]` enum dropdown, and not a `// @font` string. Any of those fails the build with the file and line.
+- **At most one** parameter per design may carry it. A second one fails the build, naming the first.
+
+Behaviour:
+
+- The mesh click is a **click, not a drag**: a pointerdown→pointerup that moved only a few pixels, single-pointer. Orbit, pan, pinch and zoom gestures are completely unaffected and never open the editor. A click that misses the model (grid/empty space) does nothing.
+- The editor floats near where you clicked, clamped inside the viewer; on a phone it anchors toward the top so the on-screen keyboard can't cover it.
+- **Enter** or clicking away closes it (the value is already applied). **Escape** closes it *and* reverts to the value it had when you opened it.
+- The mesh click is offered only once a model is on screen (the last render succeeded). The pencil chip appears whenever the capability is active.
+
+This annotation is purely a UI affordance: the parameter is an ordinary Customizer string everywhere else (the panel, the desktop OpenSCAD Customizer, presets, the URL). A deployment adopts the feature by adding the one comment line to its design; nothing else changes.
+
 ## Viewer info (`// @info`)
 
 Mark a parameter with `// @info` to surface its value in the viewer's measurements panel, which appears while the **dimensions** overlay is toggled on (the ruler button). The panel always leads with the model's bounding box (`Dimensions  W × D × H mm`); annotated parameters follow beneath it. Each design chooses its own fields, so the panel is model-specific:

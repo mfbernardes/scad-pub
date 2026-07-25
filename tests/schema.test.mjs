@@ -123,6 +123,26 @@ test("validates the optional per-design reviewLabels/reviewNote", () => {
   assert.throws(() => validateSchema(badNote), /'reviewNote' must be a string/);
 });
 
+test("validates the optional per-param editOnModel flag", () => {
+  const ok = validBase();
+  ok.designs[0].params = [
+    { name: "label", section: "Text", type: "string", default: "Hi", editOnModel: true },
+  ];
+  assert.doesNotThrow(() => validateSchema(ok));
+  // Any shape other than `true` is rejected (only value gen-schema emits).
+  const badVal = validBase();
+  badVal.designs[0].params = [
+    { name: "label", section: "Text", type: "string", default: "Hi", editOnModel: "yes" },
+  ];
+  assert.throws(() => validateSchema(badVal), /'editOnModel' must be true/);
+  // editOnModel on a non-string param is rejected (string-only marker).
+  const badType = validBase();
+  badType.designs[0].params = [
+    { name: "n", section: "S", type: "number", default: 1, editOnModel: true },
+  ];
+  assert.throws(() => validateSchema(badType), /'editOnModel' on a non-string param/);
+});
+
 test("validates the optional colours and extraCss", () => {
   // null/absent is fine.
   assert.doesNotThrow(() => validateSchema({ ...validBase(), colors: null, extraCss: null }));

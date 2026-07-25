@@ -41,6 +41,9 @@
   "hint.rotateZoomMouse": "Drag to rotate · Scroll to zoom",
   "hint.rotateZoomTouch": "Drag to rotate · Pinch to zoom",
 
+  "editOnModel.open": "Edit text",
+  "editOnModel.label": "Text",
+
   "stale.updating": "Updating…",
 
   "console.title": "Messages",
