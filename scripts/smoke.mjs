@@ -414,8 +414,11 @@ async function checkExports({ page, check, ids, dir }) {
   await infoFooter.getByRole("button", { name: "Go back and fix" }).click();
 async function checkPreviewControls({ page, check }) {
   console.log("=== preview controls (share link + live preview) ===");
+  // Headless Chromium never implements navigator.share, so canShareNatively()
+  // is always false here — the Share button always renders its clipboard-copy
+  // form (see ActionButtons.tsx's NATIVE_SHARE / share.ts's own doc).
   check(
-    (await page.locator('[aria-label="Copy share link"]').count()) >= 1,
+    (await page.locator('[aria-label="Copy link"]').count()) >= 1,
     "copy-link button present"
   );
   // Live preview (auto-render): a shadcn/ui Switch (role=switch) in the params footer.

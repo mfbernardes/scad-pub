@@ -41,6 +41,7 @@ import { HelpModal } from "./components/HelpModal";
 import { DesignDocModal } from "./components/DesignDocModal";
 import { PopupModal } from "./components/PopupModal";
 import { shouldShowPopup, rememberPopup } from "./lib/popup";
+import type { ExportSuccessState } from "./components/ExportSuccess";
 
 const schema = validateSchema(schemaJson);
 const initialState = readInitialState(schema);
@@ -56,6 +57,8 @@ const cacheConfig = schema.render?.cache;
 const popup = schema.popup ?? null;
 const installMode = schema.ui?.install ?? "auto";
 const INSTALL_HINT_KEY = ns("install.hint.seen");
+// Absent -> the after-export panel is off entirely; see ExportSuccess.tsx.
+const afterExportConfig = schema.ui?.afterExport ?? null;
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
@@ -85,7 +88,18 @@ export default function App() {
   }, []);
   const [showLicenses, setShowLicenses] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // Set alongside showHelp whenever a caller (e.g. the after-export panel's
+  // "Open printing help") asks for a specific tab; cleared (undefined) by the
+  // generic Help affordances, which never pass one — see showHelpModal below.
+  const [helpInitialTab, setHelpInitialTab] = useState<string | undefined>(undefined);
   const [showDesignDoc, setShowDesignDoc] = useState(false);
+  // Non-null right after a successful export while `ui.afterExport` is
+  // configured — see ExportSuccess.tsx. `key` increments so the panel's
+  // auto-hide timer restarts even when two exports in a row reuse the same
+  // (or no) title/body override.
+  const [exportSuccess, setExportSuccess] = useState<ExportSuccessState | null>(null);
+  const exportSuccessKeyRef = useRef(0);
+  const dismissExportSuccess = useCallback(() => setExportSuccess(null), []);
   const [showPopup, setShowPopup] = useState(() => shouldShowPopup(popup));
   const closePopup = (remember: boolean) => {
     if (remember && popup) rememberPopup(popup);
@@ -307,8 +321,18 @@ export default function App() {
       () => downloadBlob(blob, name)
     );
     if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
-    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
-    offerInstallHint();
+    if (afterExportConfig) {
+      // The panel is this deployment's one and only post-export surface — it
+      // replaces the plain announcement toast entirely rather than stacking
+      // with it (see the precedence rule below for the install hint too).
+      exportSuccessKeyRef.current += 1;
+      setExportSuccess({ key: exportSuccessKeyRef.current });
+    } else {
+      setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
+    }
+    // The install-hint toast and the after-export panel are both "here's what
+    // to do next" surfaces — never stack two of those on the same export.
+    if (!afterExportConfig) offerInstallHint();
   }, [exportable, snapshot, offerInstallHint, setAnnouncement]);
 
   const savePng = useCallback(async (url: string) => {
@@ -359,7 +383,10 @@ export default function App() {
   }, [design, values, presetSel, shareability, setAnnouncement]);
 
   const handleReset = useCallback(() => { setValues(defaultsFor(design)); setPresetSel(""); }, [design]);
-  const showHelpModal = useCallback(() => setShowHelp(true), []);
+  const showHelpModal = useCallback((tab?: string) => {
+    setHelpInitialTab(tab);
+    setShowHelp(true);
+  }, []);
   const showDesignDocModal = useCallback(() => setShowDesignDoc(true), []);
   const showLicensesModal = useCallback(() => setShowLicenses(true), []);
 
@@ -414,6 +441,7 @@ export default function App() {
           onClose={() => setShowHelp(false)}
           canInstall={canInstall && installMode !== "off"}
           onInstall={promptInstall}
+          initialTab={helpInitialTab}
         />
       )}
       {showDesignDoc && design.doc && (
@@ -453,6 +481,8 @@ export default function App() {
           theme={theme}
           themeMode={themeMode}
           openPickerSignal={openPickerSignal}
+          exportSuccess={exportSuccess}
+          onDismissExportSuccess={dismissExportSuccess}
         />
       </AppActionsProvider>
     </>

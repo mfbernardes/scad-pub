@@ -289,6 +289,7 @@ test("render tuning and defaultDesign pass through to the schema", () => {
   assert.equal(schema.defaultDesign, "collapsible");
   assert.deepEqual(schema.fileImport, { maxBytes: 1048576 });
   assert.equal(schema.ui.fullscreen, false);
+  assert.equal(schema.ui.saveImage, false);
 });
 
 test("defaultDesign must name a configured design", () => {
@@ -1266,6 +1267,76 @@ test("parseUi: fullscreen defaults true and validates", () => {
   assert.equal(parseUi({}).fullscreen, true);
   assert.equal(parseUi({ fullscreen: false }).fullscreen, false);
   assert.throws(() => parseUi({ fullscreen: "no" }), /'ui\.fullscreen' must be a boolean/);
+});
+
+test("parseUi: saveImage is absent by default, carried only when set, rejects non-booleans", () => {
+  // Default is "shown": the key is not defaulted onto the object, so the app's
+  // `ui.saveImage !== false` treats absent as true.
+  assert.equal(parseUi(undefined).saveImage, undefined);
+  assert.equal(parseUi({}).saveImage, undefined);
+  assert.equal(parseUi({ saveImage: false }).saveImage, false);
+  assert.equal(parseUi({ saveImage: true }).saveImage, true);
+  assert.throws(() => parseUi({ saveImage: "no" }), /'ui\.saveImage' must be a boolean/);
+  assert.throws(() => parseUi({ saveImage: 0 }), /'ui\.saveImage' must be a boolean/);
+});
+
+test("parseUi.afterExport is absent by default and accepts each valid field", () => {
+  assert.equal(parseUi(undefined).afterExport, undefined);
+  assert.equal(parseUi({}).afterExport, undefined);
+  assert.deepEqual(parseUi({ afterExport: { title: "Done" } }).afterExport, { title: "Done" });
+  assert.deepEqual(parseUi({ afterExport: { body: "Next steps" } }).afterExport, { body: "Next steps" });
+  assert.deepEqual(parseUi({ afterExport: { helpTab: "Printing" } }).afterExport, { helpTab: "Printing" });
+  assert.deepEqual(
+    parseUi({ afterExport: { title: " Done ", body: "Next", helpTab: "Printing" } }).afterExport,
+    { title: "Done", body: "Next", helpTab: "Printing" }
+  );
+});
+
+test("parseUi.afterExport rejects empty/wrong-typed fields, unknown keys and wrong shapes", () => {
+  assert.throws(
+    () => parseUi({ afterExport: { title: "" } }),
+    /'ui\.afterExport\.title' must be a non-empty string/
+  );
+  assert.throws(
+    () => parseUi({ afterExport: { helpTab: 3 } }),
+    /'ui\.afterExport\.helpTab' must be a non-empty string/
+  );
+  assert.throws(
+    () => parseUi({ afterExport: { subtitle: "x" } }),
+    /unknown 'ui\.afterExport' key 'subtitle'/
+  );
+  assert.throws(() => parseUi({ afterExport: "on" }), /'ui\.afterExport' must be an object/);
+  assert.throws(() => parseUi({ afterExport: [] }), /'ui\.afterExport' must be an object/);
+});
+
+test("parseUi.afterExport: null is treated the same as absent (no panel)", () => {
+  assert.equal(parseUi({ afterExport: null }).afterExport, undefined);
+});
+
+test("ui.afterExport.helpTab: build succeeds when it names a real help tab", () => {
+  const { schema } = run("widget-afterexport-ok.config.json");
+  assert.equal(schema.ui.afterExport.helpTab, "Printing");
+  assert.equal(schema.ui.afterExport.title, "Done");
+  assert.equal(schema.ui.afterExport.body, "Slice it.");
+});
+
+test("ui.afterExport.helpTab: build succeeds against the synthetic leading 'Overview' tab", () => {
+  const { schema } = run("widget-afterexport-overview.config.json");
+  assert.equal(schema.ui.afterExport.helpTab, "Overview");
+});
+
+test("ui.afterExport.helpTab: build fails when no help tab has that label", () => {
+  assert.throws(
+    () => run("widget-afterexport-bad.config.json"),
+    /'ui\.afterExport\.helpTab' is "Nope", but no 'help' tab has that label/
+  );
+});
+
+test("ui.afterExport.helpTab: build fails with a clear message when the config has no help tabs at all", () => {
+  assert.throws(
+    () => run("widget-afterexport-notabs.config.json"),
+    /'ui\.afterExport\.helpTab' is "Printing", but no 'help' tab has that label/
+  );
 });
 
 test("parsePopup: defaults, modes, links and errors", () => {

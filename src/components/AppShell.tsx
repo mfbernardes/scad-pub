@@ -272,6 +272,9 @@ export const AppShell = memo(function AppShell({
   // ruler button; the overlay + panel are only reachable through it, so they
   // stay hidden too.
   const showMeasure = ui.measure !== false;
+  // Whether the "Save image (PNG)" action is offered (default true). Off hides
+  // it in both secondary-action surfaces (desktop CommandBar and mobile ⋮ menu).
+  const showSaveImage = ui.saveImage !== false;
   // Whether the viewer offers the view picker (camera-angle menu).
   const showViewPicker = ui.viewPicker !== false;
   // Whether the viewer offers the "reset view" button.
@@ -646,7 +649,7 @@ export const AppShell = memo(function AppShell({
                     status={{ rendering, ready, result, stale: stalePreview }}
                     className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
                   />
-                  <BarActions themeMode={themeMode} collapse />
+                    onSavePng={showSaveImage ? handleSavePng : undefined}
                 </div>
               </div>
             </div>
@@ -755,6 +758,7 @@ export const AppShell = memo(function AppShell({
             onToggleOutput={toggleOutput}
             openPickerSignal={openPickerSignal}
             pickerActive={!isMobile}
+            onSavePng={showSaveImage ? handleSavePng : undefined}
             canSavePng={exportable}
           />
 
