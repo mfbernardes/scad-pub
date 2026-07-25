@@ -84,6 +84,31 @@ test("validates the title and per-theme logo shape", () => {
   );
 });
 
+test("validates the optional ScadPub version stamp", () => {
+  // Absent (a git-less build tree) is the normal fallback, not an error.
+  assert.doesNotThrow(() => validateSchema(validBase()));
+  assert.doesNotThrow(() =>
+    validateSchema({ ...validBase(), scadpubVersion: "v1.4.0-3-gab12cd6" })
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), scadpubVersion: 1.4 }),
+    /'scadpubVersion' must be a string/
+  );
+});
+
+test("validates the bundled-package versions map", () => {
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), componentVersions: {} }));
+  assert.doesNotThrow(() =>
+    validateSchema({ ...validBase(), componentVersions: { three: "0.185.1" } })
+  );
+  for (const bad of [[], null, { three: 185 }]) {
+    assert.throws(
+      () => validateSchema({ ...validBase(), componentVersions: bad }),
+      /'componentVersions' must be an object of package: version strings/
+    );
+  }
+});
+
 test("validates the model format", () => {
   assert.doesNotThrow(() => validateSchema({ ...validBase(), format: "3mf" }));
   assert.doesNotThrow(() => validateSchema({ ...validBase(), format: "stl" }));

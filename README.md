@@ -44,7 +44,7 @@ ScadPub packages the configurator, renderer, offline shell, and export flow into
 - **Live preview with brake**: the preview re-renders after a debounce. Designs flagged `heavy` start in manual mode. Any render slower than ~6 s pauses live updates for that design.
 - **Import file**: optional `fileImport` config adds an upload button for non-bundled files. Fonts are mounted for OpenSCAD, and SVG/data files can be referenced with `import()` or `surface()`. See [docs/config.md](docs/config.md#import-file-fileimport).
 - **Help**: the `?` button shows a config-driven user guide with one or more tabs. See [docs/config.md](docs/config.md#help-content-help).
-- **Open-source notice**: the ⓘ button lists bundled third-party components with licenses and source links. A deployment can append its own notices via config. See [docs/config.md](docs/config.md#open-source-notices-licenses).
+- **Open-source notice**: the ⓘ button lists bundled third-party components with licenses and source links, including the ScadPub version the site was built from (`git describe` of the building checkout, so it also works when ScadPub is forked, submoduled, or built from a sibling directory). A deployment can append its own notices via config. See [docs/config.md](docs/config.md#open-source-notices-licenses).
 
 ## Repository layout
 

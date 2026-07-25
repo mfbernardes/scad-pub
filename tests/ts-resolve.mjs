@@ -13,6 +13,11 @@ import { dirname, resolve as joinPath } from "node:path";
 import ts from "typescript";
 
 const HAS_EXT = /\.[cm]?[jt]sx?$/;
+// Vite's `?raw` suffix (`import text from "./x.txt?raw"`), which app code uses
+// to inline text assets such as a bundled license. Node has no such loader, so
+// the hooks below resolve the path themselves and hand back the file's text as
+// a default export.
+const RAW = /\?raw$/;
 // src/ dir, for resolving the `@/…` alias (mirrors tsconfig paths + vite alias)
 // so tests can import alias-using source.
 const SRC_DIR = fileURLToPath(new URL("../src/", import.meta.url));
@@ -24,6 +29,17 @@ function resolveTs(base) {
 }
 
 export async function resolve(specifier, context, next) {
+  // `./x.txt?raw` / `@/x.txt?raw` -> the file itself, loaded as text below.
+  if (RAW.test(specifier)) {
+    const path = specifier.replace(RAW, "");
+    const base = path.startsWith("@/")
+      ? joinPath(SRC_DIR, path.slice(2))
+      : context.parentURL?.startsWith("file:")
+        ? joinPath(dirname(fileURLToPath(context.parentURL)), path)
+        : null;
+    if (base && existsSync(base))
+      return { url: `${pathToFileURL(base).href}?raw`, format: "module", shortCircuit: true };
+  }
   // `@/foo` alias -> src/foo(.ts|.tsx)
   if (specifier.startsWith("@/")) {
     const base = joinPath(SRC_DIR, specifier.slice(2));
@@ -47,6 +63,14 @@ export async function resolve(specifier, context, next) {
 // here and are compiled with the automatic JSX runtime (`react/jsx-runtime`).
 // Plain `.ts` and everything else fall through to the default loader.
 export async function load(url, context, next) {
+  if (url.startsWith("file:") && RAW.test(url)) {
+    const text = readFileSync(fileURLToPath(url.replace(RAW, "")), "utf8");
+    return {
+      format: "module",
+      source: `export default ${JSON.stringify(text)};`,
+      shortCircuit: true,
+    };
+  }
   if (url.startsWith("file:") && url.endsWith(".tsx")) {
     const source = readFileSync(fileURLToPath(url), "utf8");
     const { outputText } = ts.transpileModule(source, {
