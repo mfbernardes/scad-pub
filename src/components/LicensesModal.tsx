@@ -63,7 +63,7 @@ export function LicensesModal({
                 <summary className="cursor-pointer text-[0.82rem] text-muted-foreground">
                   Show full license text
                 </summary>
-                <pre className="lic-text mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-(--radius-sm) bg-code px-[0.8rem] py-[0.6rem] font-mono text-[11px] leading-[1.45] text-muted-foreground">
+                <pre className="lic-text mt-2 max-h-64 overflow-auto overscroll-contain whitespace-pre-wrap rounded-(--radius-sm) bg-code px-[0.8rem] py-[0.6rem] font-mono text-[11px] leading-[1.45] text-muted-foreground">
                   {l.text}
                 </pre>
               </details>

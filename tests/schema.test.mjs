@@ -102,6 +102,47 @@ test("validates the optional per-design collapsedSections", () => {
   assert.throws(() => validateSchema(bad), /collapsedSections/);
 });
 
+test("validates the optional per-design reviewLabels/reviewNote", () => {
+  const ok = validBase();
+  ok.designs[0].reviewLabels = { label: "Text" };
+  ok.designs[0].reviewNote = "Prints in capitals.";
+  assert.doesNotThrow(() => validateSchema(ok));
+  // absent is fine.
+  assert.doesNotThrow(() => validateSchema(validBase()));
+  const badLabels = validBase();
+  badLabels.designs[0].reviewLabels = [];
+  assert.throws(() => validateSchema(badLabels), /'reviewLabels' must be an object/);
+  const blankLabel = validBase();
+  blankLabel.designs[0].reviewLabels = { label: "" };
+  assert.throws(
+    () => validateSchema(blankLabel),
+    /'reviewLabels\["label"\]' must be a non-empty string/
+  );
+  const badNote = validBase();
+  badNote.designs[0].reviewNote = 5;
+  assert.throws(() => validateSchema(badNote), /'reviewNote' must be a string/);
+});
+
+test("validates the optional per-param editOnModel flag", () => {
+  const ok = validBase();
+  ok.designs[0].params = [
+    { name: "label", section: "Text", type: "string", default: "Hi", editOnModel: true },
+  ];
+  assert.doesNotThrow(() => validateSchema(ok));
+  // Any shape other than `true` is rejected (only value gen-schema emits).
+  const badVal = validBase();
+  badVal.designs[0].params = [
+    { name: "label", section: "Text", type: "string", default: "Hi", editOnModel: "yes" },
+  ];
+  assert.throws(() => validateSchema(badVal), /'editOnModel' must be true/);
+  // editOnModel on a non-string param is rejected (string-only marker).
+  const badType = validBase();
+  badType.designs[0].params = [
+    { name: "n", section: "S", type: "number", default: 1, editOnModel: true },
+  ];
+  assert.throws(() => validateSchema(badType), /'editOnModel' on a non-string param/);
+});
+
 test("validates the optional colours and extraCss", () => {
   // null/absent is fine.
   assert.doesNotThrow(() => validateSchema({ ...validBase(), colors: null, extraCss: null }));
@@ -175,6 +216,15 @@ test("validates the optional help (single-pane and tabbed) shape", () => {
     () => validateSchema({ ...validBase(), help: { intro: "x" } }),
     /'help' must provide/
   );
+});
+
+test("validates the optional notices' labelOne field", () => {
+  const ok = validBase();
+  ok.notices = [{ marker: "alert", label: "alerts", labelOne: "alert" }];
+  assert.doesNotThrow(() => validateSchema(ok));
+  const bad = validBase();
+  bad.notices = [{ marker: "alert", label: "alerts", labelOne: 5 }];
+  assert.throws(() => validateSchema(bad), /a notice 'labelOne' must be a string/);
 });
 
 test("validates the optional appended licenses", () => {

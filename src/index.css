@@ -42,6 +42,9 @@
   --color-input: var(--line);
   --color-ring: var(--focus);
   --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
   --color-brand: var(--accent);
   --color-link: var(--link);
   --color-code: var(--code-bg);
@@ -89,6 +92,9 @@
   --focus: #6db0ff; /* focus-ring colour, >7:1 vs panels (WCAG 1.4.11) */
   --link: #8ab4f8;
   --warn: #e0a458;
+  --warn-bg: #332812; /* warm amber tint behind a warning card, dark surface (~6.6:1) */
+  --success: #4ade80; /* AA on every panel (dark, ~10:1) */
+  --success-bg: #142615; /* muted green tint behind a success card, dark surface */
   --danger: #f87171;
   --code-bg: #101218;
   --overlay: rgba(20, 22, 28, 0.72);
@@ -139,6 +145,9 @@
   --focus: #2563eb;
   --link: #1558c0;
   --warn: #9a5512;
+  --warn-bg: #fff8e9; /* warm amber tint behind a warning card */
+  --success: #1f7a3d; /* AA as text on white (~5.1:1) */
+  --success-bg: #eaf6ee; /* muted green tint behind a success card */
   --danger: #c0341d;
   --code-bg: #e8ecf3;
   --overlay: rgba(245, 247, 250, 0.72);
@@ -411,6 +420,21 @@ button:disabled { cursor: default; }
   }
 }
 
+/* Touch targets: on coarse-pointer (touch) devices the tightly-stacked viewer
+   HUD column and the mobile top-bar icon cluster render 32px (size-8) icon
+   buttons that are mis-tap-prone. Raise their hit area to a comfortable ~44px
+   (WCAG 2.5.5) and widen the HUD gap. Glyph sizes are unchanged — only the
+   touch/hit area grows. Gated to (pointer: coarse) so desktop layout and
+   visual baselines are untouched. */
+@media (pointer: coarse) {
+  .viewer-hud { gap: 0.6rem; }
+  .viewer-hud .icon-btn,
+  .mobile-top-bar .icon-btn {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    FLOATING OVERLAY GEOMETRY — measurements panel, action cluster,
    stale banner. Decoration lives on the components; only the
@@ -438,10 +462,16 @@ button:disabled { cursor: default; }
   }
 }
 
-/* Floating bottom-center action cluster (Export / PNG / Share). Desktop hovers
-   it over the viewer bottom; mobile rides it on the sheet's top edge — see the
-   mobile override below. */
-.action-cluster {
+/* Floating bottom-center action dock: the export cluster (Download / Share),
+   plus — when shown — an ExportSuccess panel stacked above it (see
+   ACTION_DOCK_CLASS's own doc in AppShell.tsx). Positioning lives here, on
+   the OUTER dock wrapper, not on `.action-cluster` itself: a plain flex
+   column bottom-anchored by `bottom` means the panel simply pushes the
+   cluster down from a fixed bottom edge when it mounts — no height
+   measurement needed to stack the two. Desktop hovers the dock over the
+   viewer bottom; mobile rides it on the sheet's top edge — see the mobile
+   override below. */
+.action-dock {
   position: absolute;
   bottom: calc(0.75rem + var(--safe-area-bottom));
   left: 50%;
@@ -449,24 +479,27 @@ button:disabled { cursor: default; }
   z-index: 10;
 }
 
-/* Mobile: ride the cluster 0.6rem above the sheet's live top edge (--sheet-top,
+/* Mobile: ride the dock 0.6rem above the sheet's live top edge (--sheet-top,
    shared with the viewer bottom), so it tracks the sheet up from peek to the
    half detent and stays visible there. Past half it stays pinned at the half
-   line while the sheet (z-30) rises over it, so the cluster is covered only once
+   line while the sheet (z-30) rises over it, so the dock is covered only once
    the sheet is (near) full. Easing mirrors the viewer's; data-sheet-dragging
    disables it so the pill tracks the finger 1:1. */
 @media (max-width: 860px) {
-  .app-shell__mobile .action-cluster {
+  .app-shell__mobile .action-dock {
     bottom: calc(var(--sheet-top) + 0.6rem);
     transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
-  .app-shell__mobile[data-sheet-dragging="true"] .action-cluster {
+  .app-shell__mobile[data-sheet-dragging="true"] .action-dock {
     transition: none;
   }
 }
 
-/* "Preview out of date" — top-centre over the viewer. */
-.stale-banner {
+/* "Preview out of date" (manual mode) / "Updating…" (auto mode) — top-centre
+   over the viewer. Share one slot: StaleBanner returns null while
+   autoRender is on and UpdatingChip only ever shows while it's on, so the
+   two are mutually exclusive — see UpdatingChip's own doc. */
+.stale-banner, .updating-chip {
   position: absolute;
   top: calc(0.75rem + env(safe-area-inset-top, 0px));
   left: 50%;
@@ -476,8 +509,53 @@ button:disabled { cursor: default; }
 
 /* Mobile: drop below the floating top bar (and any notch). */
 @media (max-width: 860px) {
-  .app-shell__mobile .stale-banner {
+  .app-shell__mobile .stale-banner, .app-shell__mobile .updating-chip {
     top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
+  }
+}
+
+/* One-time viewer gesture hint (ViewerGestureHint) — bottom-centre, riding
+   above the export dock. A flat offset (not a live measurement of the
+   dock's height, which would need a ResizeObserver + CSS var this small a
+   feature doesn't warrant) sized to comfortably clear a single-row dock:
+   the dock's own `bottom` (0.75rem + safe-area) plus ~3.25rem of headroom
+   for its button row. */
+.viewer-hint {
+  position: absolute;
+  bottom: calc(0.75rem + var(--safe-area-bottom) + 3.25rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+}
+
+/* Mobile: the dock rides the sheet's live top edge instead of a fixed
+   bottom offset — mirror that same relationship here. */
+@media (max-width: 860px) {
+  .app-shell__mobile .viewer-hint {
+    bottom: calc(var(--sheet-top) + 0.6rem + 3.25rem);
+    transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .app-shell__mobile[data-sheet-dragging="true"] .viewer-hint {
+    transition: none;
+  }
+}
+
+/* On-model "edit text" chip (ViewerEditOnModel) — the always-visible affordance
+   for the on-model text editor. Desktop: bottom-LEFT, the one corner clear of
+   the centred dock/hint, the right-edge HUD, and the (opt-in, top-left)
+   measurements panel. Mobile: top-LEFT, level with the HUD, below the floating
+   top bar, since the bottom edge belongs to the sheet + dock there. */
+.viewer-edit-chip {
+  position: absolute;
+  bottom: calc(0.75rem + var(--safe-area-bottom));
+  left: calc(0.75rem + env(safe-area-inset-left, 0px));
+  z-index: 9;
+}
+
+@media (max-width: 860px) {
+  .app-shell__mobile .viewer-edit-chip {
+    top: calc(env(safe-area-inset-top, 0px) + 4rem);
+    bottom: auto;
   }
 }
 
@@ -488,6 +566,15 @@ button:disabled { cursor: default; }
 @keyframes pill-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
+}
+
+/* Indeterminate download progress (ui/progress.tsx): a fixed-width bar
+   sweeping left-to-right, for the loading overlay's progress bar when the
+   WASM fetch's Content-Length isn't known. motion-reduce disables the
+   animation (see the component's motion-reduce:data-[state=indeterminate]:animate-none). */
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -567,6 +654,7 @@ button:disabled { cursor: default; }
 .sheet-content {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   min-height: 0;

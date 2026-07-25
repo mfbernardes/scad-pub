@@ -50,6 +50,7 @@ import {
   parseNotices,
   parsePopup,
   parseRender,
+  parseStrings,
   parseUi,
 } from "./lib/config-parsers.mjs";
 
@@ -67,6 +68,7 @@ export {
   parseNotices,
   parsePopup,
   parseRender,
+  parseStrings,
   parseUi,
 } from "./lib/config-parsers.mjs";
 export { parseFontFallback, renderFontsConf, fontFamilyNames } from "./lib/fonts.mjs";
@@ -92,7 +94,16 @@ export const KNOWN_TOP_LEVEL_KEYS = new Set([
   "logo", "colors", "extraCss", "ui", "fileImport",
   // In-app content
   "popup", "help", "notices", "licenses",
+  // UI text overrides
+  "strings",
 ]);
+
+// Path to the bundled English UI-text catalogue (src/locales/en.json),
+// resolved relative to this file rather than the config being built — it's
+// part of the app, not the consumer's project. `strings` overrides are
+// validated against its key set (see parseStrings): a config key that isn't a
+// real catalogue key would otherwise be silently ignored by every `t()` call.
+const EN_CATALOG_PATH = fileURLToPath(new URL("../src/locales/en.json", import.meta.url));
 
 // Fail early and clearly when a configured path doesn't exist — these are the
 // most common ways a config drifts from the designs it points at.
@@ -128,6 +139,14 @@ const parseStringArray = (raw, key) => {
   if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string" || !v.trim()))
     throw new Error(`gen-schema: '${key}' must be an array of non-empty strings (got ${JSON.stringify(raw)})`);
   return raw;
+};
+
+// Dotted extension (incl. the leading dot) of a relative path, or "" when it
+// has none. `dot > 0` so a leading-dot "dotfile" with no real extension yields
+// "" rather than the whole basename.
+const extOf = (relPath) => {
+  const dot = relPath.lastIndexOf(".");
+  return dot > 0 ? relPath.slice(dot) : "";
 };
 
 // Load + sanity-check the config. Catches typo'd / stale top-level keys before
@@ -349,6 +368,22 @@ function resolveDesignList(config, SOURCE) {
       throw new Error(`gen-schema: design '${id}' '${field}' must be a non-empty string`);
     return raw.trim();
   };
+  // Shared validator for a config `designs[]` field that must be an object
+  // mapping string keys to non-empty string values (presetImages, reviewLabels).
+  // The per-key cross-checks (real preset names / declared param names) happen
+  // later in buildDesigns; this only enforces the shape.
+  const checkStringMap = (raw, id, field) => {
+    if (raw === undefined || raw === null) return null;
+    if (typeof raw !== "object" || Array.isArray(raw))
+      throw new Error(`gen-schema: design '${id}' '${field}' must be an object`);
+    for (const [name, value] of Object.entries(raw)) {
+      if (typeof value !== "string" || !value.trim())
+        throw new Error(
+          `gen-schema: design '${id}' '${field}["${name}"]' must be a non-empty string`
+        );
+    }
+    return raw;
+  };
   if (Array.isArray(config.designs) && config.designs.length) {
     // Two designs sharing an id would clobber each other's generated
     // <id>-icon/<id>-doc output and collide in storage/URLs (#d=<id>).
@@ -373,6 +408,12 @@ function resolveDesignList(config, SOURCE) {
       iconSrc: checkDesignString(d.icon, d.id, "icon"),
       imageSrc: checkDesignString(d.image, d.id, "image"),
       docSrc: checkDesignString(d.doc, d.id, "doc"),
+      presetImagesSrc: checkStringMap(d.presetImages, d.id, "presetImages"),
+      reviewLabelsSrc: checkStringMap(d.reviewLabels, d.id, "reviewLabels"),
+      // Plain deployment-authored text, like description — no annotation
+      // fallback, and no cross-reference against the design's own params
+      // (unlike reviewLabels), so it resolves fully here.
+      reviewNote: checkDesignString(d.reviewNote, d.id, "reviewNote"),
     }));
   }
   return readdirSync(SOURCE)
@@ -380,14 +421,14 @@ function resolveDesignList(config, SOURCE) {
     .sort()
     .map((f) => {
       const id = f.replace(/\.scad$/, "");
-      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null, imageSrc: null, docSrc: null };
+      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null, imageSrc: null, docSrc: null, presetImagesSrc: null, reviewLabelsSrc: null, reviewNote: null };
     });
 }
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
 function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register }) {
-  return resolveDesignList(config, SOURCE).map(({ iconSrc, imageSrc, docSrc, ...d }) => {
+  return resolveDesignList(config, SOURCE).map(({ iconSrc, imageSrc, docSrc, presetImagesSrc, reviewLabelsSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
@@ -421,8 +462,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       // `// @icon` (unlike a config `icon`) resolves relative to the design's
       // own file, i.e. within SOURCE — so it must stay within SOURCE too.
       if (!iconSrc) checkContained(src, `design '${d.id}' icon '${iconRel}'`, relPosix(abs));
-      const dot = iconRel.lastIndexOf(".");
-      const ext = dot > 0 ? iconRel.slice(dot) : "";
+      const ext = extOf(iconRel);
       const name = `${d.id}-icon${ext}`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' icon`);
@@ -437,8 +477,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       const base = imageSrc ? CONFIG_DIR : dirname(abs);
       const src = mustExist(resolve(base, imageRel), `design '${d.id}' image '${imageRel}'`);
       if (!imageSrc) checkContained(src, `design '${d.id}' image '${imageRel}'`, relPosix(abs));
-      const dot = imageRel.lastIndexOf(".");
-      const ext = dot > 0 ? imageRel.slice(dot) : "";
+      const ext = extOf(imageRel);
       const name = `${d.id}-image${ext}`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' image`);
@@ -463,7 +502,71 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       copyFileSync(src, dest);
       doc = `scad/${name}`;
     }
-    return { ...d, description, icon, image, doc, presets, abs, sections, collapsedSections, params };
+    // Bundled-preset thumbnails (`designs[].presetImages`): each key must
+    // name an actual preset in the sibling parameterSets file — the same
+    // typo-protection stance as the rest of the config, so a stale/misspelled
+    // preset name fails the build instead of silently rendering a text-only
+    // card forever. Each value is a config-relative image path, resolved and
+    // copied into the served tree exactly like `icon`/`image`, under a
+    // deterministic `<id>-preset-<n>.<ext>` name (n = insertion order — the
+    // preset NAME itself, not the filename, is what the UI keys off of, so a
+    // stable index is enough for a reproducible build).
+    let presetImages;
+    if (presetImagesSrc && Object.keys(presetImagesSrc).length) {
+      const presetNames = presets.length
+        ? new Set(Object.keys(JSON.parse(readFileSync(presetAbs, "utf-8")).parameterSets ?? {}))
+        : new Set();
+      presetImages = {};
+      Object.entries(presetImagesSrc).forEach(([presetName, rel], i) => {
+        if (!presetNames.has(presetName))
+          throw new Error(
+            `gen-schema: design '${d.id}' 'presetImages["${presetName}"]' does not match any bundled ` +
+              `preset name in '${presetRel}'`
+          );
+        const src = mustExist(
+          resolve(CONFIG_DIR, rel),
+          `design '${d.id}' presetImages["${presetName}"] '${rel}'`
+        );
+        const ext = extOf(rel);
+        const outName = `${d.id}-preset-${i}${ext}`;
+        const dest = join(outScadDir, outName);
+        register(dest, `design '${d.id}' presetImages["${presetName}"]`);
+        copyBrowserFacing(src, dest);
+        presetImages[presetName] = `scad/${outName}`;
+      });
+    }
+    // `reviewLabels`: each key must name an actual DECLARED PARAM of this
+    // design — the same typo-protection stance the icon/doc annotation
+    // fallbacks already apply, just cross-referenced against `params` (only
+    // known now that parseParams has run).
+    let reviewLabels;
+    if (reviewLabelsSrc && Object.keys(reviewLabelsSrc).length) {
+      const paramNames = new Set(params.map((p) => p.name));
+      reviewLabels = {};
+      for (const [name, label] of Object.entries(reviewLabelsSrc)) {
+        if (!paramNames.has(name))
+          throw new Error(
+            `gen-schema: design '${d.id}' 'reviewLabels["${name}"]' does not match any declared parameter`
+          );
+        reviewLabels[name] = label;
+      }
+    }
+    return {
+      ...d,
+      description,
+      icon,
+      image,
+      doc,
+      presets,
+      abs,
+      sections,
+      collapsedSections,
+      params,
+      // Only present when the design configures at least one preset image.
+      ...(presetImages ? { presetImages } : {}),
+      // Only present when the design configures at least one review label.
+      ...(reviewLabels ? { reviewLabels } : {}),
+    };
   });
 }
 
@@ -653,12 +756,37 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
   // Optional help content; passed through verbatim. Absent -> null -> the app
   // falls back to its generic, project-agnostic default help.
   const HELP = config.help ?? null;
+  // ui.afterExport.helpTab (if set) must name an existing Help tab — checked
+  // here rather than inside parseUi (config-parsers.mjs) because it's a
+  // cross-field validation against HELP, only available now. Mirrors
+  // HelpModal's own tab-list logic (top-level `help.sections` synthesize a
+  // leading tab labelled "Overview" when `help.tabs` are also present — see
+  // HelpModal.tsx's own HelpModal() — so a value that passes here is
+  // guaranteed to match a real tab the modal renders).
+  if (UI.afterExport?.helpTab) {
+    const tabLabels = HELP?.tabs?.length
+      ? [...(HELP.sections?.length ? ["Overview"] : []), ...HELP.tabs.map((t) => t.label)]
+      : [];
+    if (!tabLabels.includes(UI.afterExport.helpTab)) {
+      throw new Error(
+        `gen-schema: 'ui.afterExport.helpTab' is ${JSON.stringify(UI.afterExport.helpTab)}, but no 'help' tab has that label.\n` +
+          (tabLabels.length
+            ? `  Available tabs: ${tabLabels.map((l) => JSON.stringify(l)).join(", ")}`
+            : `  This config's 'help' has no tabs defined.`)
+      );
+    }
+  }
   // Config-driven notice categories surfaced on the OpenSCAD output panel.
   // Validated; off by default (omitted -> none).
   const NOTICES = parseNotices(config.notices);
   // Optional extra third-party software / license notices. Validated and
   // appended (never replacing the built-ins) by the in-app licenses modal.
   const LICENSES_EXTRA = parseLicenses(config.licenses);
+  // Optional per-deployment UI text overrides (config's `strings` key),
+  // validated against the bundled English catalogue's key set — see
+  // src/lib/i18n.ts and docs/config.md's `strings` section. Absent -> {}.
+  const EN_CATALOG_KEYS = Object.keys(JSON.parse(readFileSync(EN_CATALOG_PATH, "utf-8")));
+  const STRINGS = parseStrings(config.strings, EN_CATALOG_KEYS);
 
   // outScadDir is entirely generated. H6/M8: build the complete new tree in a
   // staging directory first, and only replace the live outScadDir once every
@@ -788,6 +916,7 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     description: DESCRIPTION,
     lang: LANG,
     dir: DIR,
+    strings: STRINGS,
     themeColor: THEME_COLOR,
     themeColorLight: THEME_COLOR_LIGHT,
     appleSplash,

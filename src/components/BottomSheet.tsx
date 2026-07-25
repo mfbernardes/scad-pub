@@ -18,6 +18,7 @@ import {
 } from "react";
 import { tapFeedback } from "../lib/haptics";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
+import { useScrollFocusedIntoView } from "../lib/useScrollFocusedIntoView";
 
 export type SheetDetent = "peek" | "half" | "full";
 
@@ -71,6 +72,9 @@ export function BottomSheet({
   const setDetent = onDetentChange;
   // The sheet root, used to measure the natural peek height (handle + tab row).
   const sheetRef = useRef<HTMLDivElement>(null);
+  // On touch devices, keep a focused field inside the sheet clear of the
+  // on-screen keyboard by centring it in the scroll area on focus.
+  useScrollFocusedIntoView(sheetRef);
   // Measured px from the sheet's top edge down to the bottom of the tab row;
   // null until first layout, when it replaces the peekHeight fallback.
   const [autoPeek, setAutoPeek] = useState<number | null>(null);

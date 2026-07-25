@@ -39,8 +39,10 @@ import { Toaster } from "./components/ui/sonner";
 import { LicensesModal } from "./components/LicensesModal";
 import { HelpModal } from "./components/HelpModal";
 import { DesignDocModal } from "./components/DesignDocModal";
+import { FilesModal } from "./components/FilesModal";
 import { PopupModal } from "./components/PopupModal";
 import { shouldShowPopup, rememberPopup } from "./lib/popup";
+import type { ExportSuccessState } from "./components/ExportSuccess";
 
 const schema = validateSchema(schemaJson);
 const initialState = readInitialState(schema);
@@ -56,6 +58,8 @@ const cacheConfig = schema.render?.cache;
 const popup = schema.popup ?? null;
 const installMode = schema.ui?.install ?? "auto";
 const INSTALL_HINT_KEY = ns("install.hint.seen");
+// Absent -> the after-export panel is off entirely; see ExportSuccess.tsx.
+const afterExportConfig = schema.ui?.afterExport ?? null;
 
 export default function App() {
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
@@ -85,7 +89,22 @@ export default function App() {
   }, []);
   const [showLicenses, setShowLicenses] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // Set alongside showHelp whenever a caller (e.g. the after-export panel's
+  // "Open printing help") asks for a specific tab; cleared (undefined) by the
+  // generic Help affordances, which never pass one — see showHelpModal below.
+  const [helpInitialTab, setHelpInitialTab] = useState<string | undefined>(undefined);
   const [showDesignDoc, setShowDesignDoc] = useState(false);
+  // FilesModal (the imported-file manager) — hosted here like Help/Licenses/
+  // DesignDoc, opened only via BarActions' "Files" action (gated on
+  // `schema.fileImport` being set — see AppShell's `hasFiles`).
+  const [showFiles, setShowFiles] = useState(false);
+  // Non-null right after a successful export while `ui.afterExport` is
+  // configured — see ExportSuccess.tsx. `key` increments so the panel's
+  // auto-hide timer restarts even when two exports in a row reuse the same
+  // (or no) title/body override.
+  const [exportSuccess, setExportSuccess] = useState<ExportSuccessState | null>(null);
+  const exportSuccessKeyRef = useRef(0);
+  const dismissExportSuccess = useCallback(() => setExportSuccess(null), []);
   const [showPopup, setShowPopup] = useState(() => shouldShowPopup(popup));
   const closePopup = (remember: boolean) => {
     if (remember && popup) rememberPopup(popup);
@@ -108,11 +127,19 @@ export default function App() {
     invalidate: useCallback(() => invalidateRef.current(), []),
     setAnnouncement,
   });
+  // Every user-supplied file currently loaded (name + byte size) — FilesModal's
+  // own list. Derived here (not in AppShell) since FilesModal is hosted
+  // alongside Help/Licenses/DesignDoc, not drilled through the layout split.
+  const loadedFiles = useMemo(
+    () => Object.entries(userFiles).map(([name, bytes]) => ({ name, size: bytes.byteLength })),
+    [userFiles]
+  );
 
   const {
     result,
     rendering,
     ready,
+    progress,
     renderedValues,
     renderMetrics,
     autoRender,
@@ -307,8 +334,18 @@ export default function App() {
       () => downloadBlob(blob, name)
     );
     if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
-    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
-    offerInstallHint();
+    if (afterExportConfig) {
+      // The panel is this deployment's one and only post-export surface — it
+      // replaces the plain announcement toast entirely rather than stacking
+      // with it (see the precedence rule below for the install hint too).
+      exportSuccessKeyRef.current += 1;
+      setExportSuccess({ key: exportSuccessKeyRef.current });
+    } else {
+      setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
+    }
+    // The install-hint toast and the after-export panel are both "here's what
+    // to do next" surfaces — never stack two of those on the same export.
+    if (!afterExportConfig) offerInstallHint();
   }, [exportable, snapshot, offerInstallHint, setAnnouncement]);
 
   const savePng = useCallback(async (url: string) => {
@@ -359,9 +396,13 @@ export default function App() {
   }, [design, values, presetSel, shareability, setAnnouncement]);
 
   const handleReset = useCallback(() => { setValues(defaultsFor(design)); setPresetSel(""); }, [design]);
-  const showHelpModal = useCallback(() => setShowHelp(true), []);
+  const showHelpModal = useCallback((tab?: string) => {
+    setHelpInitialTab(tab);
+    setShowHelp(true);
+  }, []);
   const showDesignDocModal = useCallback(() => setShowDesignDoc(true), []);
   const showLicensesModal = useCallback(() => setShowLicenses(true), []);
+  const showFilesModal = useCallback(() => setShowFiles(true), []);
 
   // The app-level action bundle, read via useAppActions() by the panels. Rebuilt
   // each render; the provider keeps a stable identity so consumers don't churn.
@@ -385,6 +426,7 @@ export default function App() {
     showHelp: showHelpModal,
     showDesignDoc: showDesignDocModal,
     showLicenses: showLicensesModal,
+    showFiles: showFilesModal,
   };
 
   useAppNotices({
@@ -414,6 +456,7 @@ export default function App() {
           onClose={() => setShowHelp(false)}
           canInstall={canInstall && installMode !== "off"}
           onInstall={promptInstall}
+          initialTab={helpInitialTab}
         />
       )}
       {showDesignDoc && design.doc && (
@@ -424,6 +467,16 @@ export default function App() {
       )}
       {showLicenses && (
         <LicensesModal extra={schema.licenses} onClose={() => setShowLicenses(false)} />
+      )}
+      {showFiles && (
+        <FilesModal
+          fileImport={schema.fileImport ?? null}
+          loadedFiles={loadedFiles}
+          onAddFile={addFile}
+          onRemoveFile={removeFile}
+          onClearFiles={clearImportedFiles}
+          onClose={() => setShowFiles(false)}
+        />
       )}
 
       <Toaster theme={theme} />
@@ -447,12 +500,15 @@ export default function App() {
           result={result}
           rendering={rendering}
           ready={ready}
+          loadProgress={progress}
           autoRender={autoRender}
           stalePreview={stalePreview}
           exportable={exportable}
           theme={theme}
           themeMode={themeMode}
           openPickerSignal={openPickerSignal}
+          exportSuccess={exportSuccess}
+          onDismissExportSuccess={dismissExportSuccess}
         />
       </AppActionsProvider>
     </>

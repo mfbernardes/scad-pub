@@ -104,5 +104,5 @@ test("escapeHtml neutralises element-text and attribute breakouts", () => {
   // & is escaped first so entities aren't double-mangled.
   assert.equal(escapeHtml("a & b &amp; c"), "a &amp; b &amp;amp; c");
   // Plain text passes through untouched.
-  assert.equal(escapeHtml("Tactile Braille configurator"), "Tactile Braille configurator");
+  assert.equal(escapeHtml("Parametric widget configurator"), "Parametric widget configurator");
 });

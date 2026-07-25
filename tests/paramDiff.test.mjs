@@ -43,31 +43,31 @@ test("displayValue: boolean renders on/off", () => {
 
 test("displayValue: enum resolves to the matching choice's label", () => {
   const p = {
-    name: "lang",
-    description: "Language",
+    name: "units",
+    description: "Units",
     help: "",
     section: "",
     type: "enum",
-    default: "de",
+    default: "mm",
     choices: [
-      { value: "de", label: "Deutsch" },
-      { value: "en", label: "English" },
+      { value: "mm", label: "Millimetres" },
+      { value: "in", label: "Inches" },
     ],
   };
-  assert.equal(displayValue(p, "en"), "English");
+  assert.equal(displayValue(p, "in"), "Inches");
 });
 
 test("displayValue: enum falls back to the raw value when no choice matches", () => {
   const p = {
-    name: "lang",
-    description: "Language",
+    name: "units",
+    description: "Units",
     help: "",
     section: "",
     type: "enum",
-    default: "de",
-    choices: [{ value: "de", label: "Deutsch" }],
+    default: "mm",
+    choices: [{ value: "mm", label: "Millimetres" }],
   };
-  assert.equal(displayValue(p, "fr"), "fr");
+  assert.equal(displayValue(p, "cm"), "cm");
 });
 
 test("displayValue: number/string values stringify plainly", () => {

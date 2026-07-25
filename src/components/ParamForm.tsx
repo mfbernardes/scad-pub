@@ -10,9 +10,9 @@ import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { displayValue } from "../lib/paramDiff";
 import { isVisible } from "../lib/visibility";
-import { familyOf, normalizeFamily, withFamily, type InstalledFont } from "../lib/fonts";
-import { useAppActions } from "../lib/appActions";
-import { FileInput } from "./FileInput";
+import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
+import { fontFallback } from "../lib/fontFallback";
+import { FontImportActions } from "./FontImportActions";
 import { FontSelect } from "./FontSelect";
 import { SvgPrepareControl } from "./SvgPrepareControl";
 import { Slider } from "./ui/slider";
@@ -70,7 +70,10 @@ interface Props {
 // Inline, non-alarming hint shown under a `font` control when the selected
 // family isn't loaded. Offers the two actions that actually fix it: import the
 // real font, or switch to an available bundled family — so availability is
-// communicated immediately, without needing a render to find out.
+// communicated immediately, without needing a render to find out. The
+// hidden-FileInput+addFile plumbing behind "Import font…" is FontImportActions
+// (shared with AttentionItems' own font-fallback card) — this only supplies
+// the copy/visuals, which stay identical to before.
 function FontMissingHint({
   family,
   fallback,
@@ -80,7 +83,6 @@ function FontMissingHint({
   fallback: { value: string; label: string } | null;
   onUse: (next: string) => void;
 }) {
-  const { addFile } = useAppActions();
   // The action links that actually fix a missing font (import it, or switch
   // to a loaded family).
   const actionBtn =
@@ -93,23 +95,23 @@ function FontMissingHint({
       <span className="text-[0.82rem] leading-[1.4] text-foreground">
         “{family}” isn’t loaded — text may render in another font.
       </span>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        <FileInput
-          accept=".ttf,.otf,.ttc"
-          onFile={async (file) => addFile(file.name, new Uint8Array(await file.arrayBuffer()))}
-        >
-          {(open) => (
-            <button type="button" className={actionBtn} onClick={open}>
-              <UploadIcon size={13} aria-hidden="true" /> Import font…
-            </button>
-          )}
-        </FileInput>
-        {fallback && (
-          <button type="button" className={actionBtn} onClick={() => onUse(fallback.value)}>
-            Use {fallback.label}
+      <FontImportActions
+        className="flex flex-wrap gap-x-4 gap-y-1"
+        renderImport={(open) => (
+          <button type="button" className={actionBtn} onClick={open}>
+            <UploadIcon size={13} aria-hidden="true" /> Import font…
           </button>
         )}
-      </div>
+        renderFallback={
+          fallback
+            ? () => (
+                <button type="button" className={actionBtn} onClick={() => onUse(fallback.value)}>
+                  Use {fallback.label}
+                </button>
+              )
+            : undefined
+        }
+      />
     </div>
   );
 }
@@ -127,27 +129,6 @@ function missingFont(
   if (!isFontParam || !available?.size) return null;
   const v = String(value ?? "");
   return available.has(normalizeFamily(familyOf(v))) ? null : v;
-}
-
-// A one-click replacement whose family is loaded, or null when none fits. For an
-// enum the result must be a listed choice (the dropdown can't show an off-list
-// value), so pick the first choice whose family is available; for free text,
-// graft the suggested bundled family onto the current value.
-function fontFallback(
-  param: Param,
-  value: string,
-  available: Set<string> | undefined,
-  suggestion: string | null | undefined
-): { value: string; label: string } | null {
-  if (param.type === "enum") {
-    const choice = param.choices.find((c) =>
-      available?.has(normalizeFamily(familyOf(c.value)))
-    );
-    return choice ? { value: choice.value, label: familyOf(choice.value) } : null;
-  }
-  if (suggestion && normalizeFamily(suggestion) !== normalizeFamily(familyOf(value)))
-    return { value: withFamily(value, suggestion), label: suggestion };
-  return null;
 }
 
 function committedNumber(param: Extract<Param, { type: "number" }>, value: ParamValue): number {
@@ -216,6 +197,7 @@ function NumberControl({
       )}
       <Input
         type="number"
+        inputMode="decimal"
         name={param.name}
         autoComplete="off"
         className="w-20"
@@ -298,10 +280,15 @@ function Control({
           aria-label={label}
         />
       );
-    case "enum":
+    case "enum": {
+      // The full label of the selected choice as a `title`, so a value too
+      // long to fit the trigger (now ellipsis-truncated, not hard-clipped —
+      // see ui/select.tsx) is still readable on hover — e.g. a long language
+      // name at a narrow panel width.
+      const selectedLabel = param.choices.find((c) => c.value === String(value))?.label;
       return (
         <Select value={String(value)} onValueChange={(v) => onChange(v)}>
-          <SelectTrigger className="w-full" aria-label={label}>
+          <SelectTrigger className="w-full" aria-label={label} title={selectedLabel}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -313,6 +300,7 @@ function Control({
           </SelectContent>
         </Select>
       );
+    }
     case "string":
       return (
         <Input
@@ -327,18 +315,23 @@ function Control({
   }
 }
 
-// Surfaces a parameter's full help text in a tap/click popover next to its
-// label. The detail was previously reachable only through the hover-only
-// `title` tooltip, which is invisible on touch devices.
+// Surfaces a parameter's full help text in a tap/click popover, rendered
+// INLINE right after the last word of the label/help text it belongs to (a
+// plain sibling in the same text flow, not a flex row item) — so when that
+// text wraps to multiple lines, the button flows with it instead of sitting
+// detached to the row's right edge at the first line's height. The detail
+// was previously reachable only through the hover-only `title` tooltip,
+// which is invisible on touch devices.
 function ParamHelp({ help, label }: { help: string; label: string }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        {/* 15px glyph with a >=24px tap target (WCAG 2.2): the negative margin
-            absorbs the padding so the row layout is unchanged. */}
+        {/* 15px glyph with a >=44x44px tap target (WCAG 2.2 AAA "Target Size
+            (Enhanced)"): the negative margin absorbs the padding so it
+            doesn't push the surrounding text apart. */}
         <button
           type="button"
-          className="-m-[5px] inline-flex shrink-0 cursor-pointer items-center justify-center self-center rounded-[4px] border-none bg-transparent p-[5px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
+          className="-m-[14.5px] inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[4px] border-none bg-transparent p-[14.5px] align-middle leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
           aria-label={`Help for ${label}`}
         >
           <InfoIcon aria-hidden="true" focusable="false" />
@@ -476,8 +469,11 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                           aria-hidden="true"
                         />
                       )}
-                      <span className="text-foreground">{label}</span>
-                      {hasHelp && <ParamHelp help={p.help} label={label} />}
+                      <span className="min-w-0 text-foreground">
+                        {label}
+                        {hasHelp && " "}
+                        {hasHelp && <ParamHelp help={p.help} label={label} />}
+                      </span>
                       {showVarName && p.description && (
                         <code className="param-var shrink-0 font-mono text-[11px] leading-[normal] text-muted-foreground">
                           {p.name}

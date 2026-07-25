@@ -20,6 +20,22 @@ function isTouchDevice(): boolean {
   );
 }
 
+/** Whether shareUrl()/shareFile() would actually attempt the native OS share
+ *  sheet on this device (a touch device exposing `navigator.share`) rather
+ *  than falling straight to clipboard/download — the same test those
+ *  functions apply internally. ActionButtons uses this to pick an icon and
+ *  label that match the Share button's real behavior instead of always
+ *  implying "copy a link". The capability doesn't change mid-session, so
+ *  callers can compute it once (e.g. a module-level constant) rather than
+ *  re-checking on every render. */
+export function canShareNatively(): boolean {
+  return (
+    isTouchDevice() &&
+    typeof navigator !== "undefined" &&
+    typeof navigator.share === "function"
+  );
+}
+
 function outcomeFromError(e: unknown): ShareOutcome {
   // A user dismissing the share sheet rejects with AbortError — not a failure,
   // and the caller must NOT then fall back (the user already declined).
@@ -28,9 +44,7 @@ function outcomeFromError(e: unknown): ShareOutcome {
 
 /** Share a URL via the native share sheet. "unsupported" → fall back to clipboard. */
 export async function shareUrl(url: string, title?: string): Promise<ShareOutcome> {
-  if (!isTouchDevice()) return "unsupported"; // desktop → copy to clipboard instead
-  if (typeof navigator === "undefined" || typeof navigator.share !== "function")
-    return "unsupported";
+  if (!canShareNatively()) return "unsupported"; // desktop, or no navigator.share → copy to clipboard instead
   try {
     await navigator.share(title ? { url, title } : { url });
     return "shared";
@@ -55,13 +69,8 @@ export async function shareFileOrFallback(
 
 /** Share a file (e.g. an exported model). "unsupported" → fall back to download. */
 export async function shareFile(file: File, title?: string): Promise<ShareOutcome> {
-  if (!isTouchDevice()) return "unsupported"; // desktop → download instead
-  if (
-    typeof navigator === "undefined" ||
-    typeof navigator.share !== "function" ||
-    typeof navigator.canShare !== "function" ||
-    !navigator.canShare({ files: [file] })
-  )
+  if (!canShareNatively()) return "unsupported"; // desktop, or no navigator.share → download instead
+  if (typeof navigator.canShare !== "function" || !navigator.canShare({ files: [file] }))
     return "unsupported";
   try {
     await navigator.share(title ? { files: [file], title } : { files: [file] });

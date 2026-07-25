@@ -15,6 +15,14 @@ import type { NoticeCategory } from "../openscad/types";
 
 export type DiagnosticLevel = "notice" | "warning" | "assert";
 
+/** Escapes regex metacharacters in a caller-supplied string before it's
+ *  spliced into a RegExp pattern. Exported so echoTags.ts's own tag-matching
+ *  regex (a sibling lib module, no layering issue) can reuse it instead of
+ *  hand-rolling the same escape set. */
+export function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export interface Diagnostic {
   level: DiagnosticLevel;
   text: string;
@@ -33,19 +41,23 @@ export interface BadgeCount {
   count: number;
   /** Optional fill colour; falls back to the default badge styling. */
   color?: string;
+  /** Whether this category is flagged `attention: true` in config (always
+   *  true for the hardcoded "assert" badge) — decides whether the badge/bell
+   *  reads as amber-urgent or plain neutral (see docs/config.md's Notice
+   *  badges section). */
+  attention?: boolean;
 }
 
 // An OpenSCAD echo line, e.g. `[err] ECHO: "tag: alert: …"`. OpenSCAD-WASM
 // routes ECHO to stderr, so accept both streams (like WARNING/ERROR below).
 const ECHO_RE = /^\[(?:out|err)\]\s*ECHO:\s*"(.*)"\s*$/;
-// Hardcoded OpenSCAD diagnostics (not configurable):
-const WARNING_RE = /^\[(?:out|err)\]\s*WARNING:\s*(.*)$/;
+// Hardcoded OpenSCAD diagnostics (not configurable). Exported so
+// friendlyErrors.ts's failed-render mapping can recognise the same lines —
+// the Notices list and the friendly failure card can never disagree about
+// what counts as a warning/assert line.
+export const WARNING_RE = /^\[(?:out|err)\]\s*WARNING:\s*(.*)$/;
 // An `assert()` failure: OpenSCAD prints `ERROR: Assertion '…' failed …`.
-const ASSERT_RE = /^\[(?:out|err)\]\s*ERROR:\s*(Assertion\b.*)$/;
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+export const ASSERT_RE = /^\[(?:out|err)\]\s*ERROR:\s*(Assertion\b.*)$/;
 
 // A line classified into a diagnostic, plus the key of the badge it contributes
 // to (if any — warnings get a notice but no badge). `null` for plain output
@@ -131,9 +143,10 @@ export function countBadges(
       key: `notice:${n.marker}`,
       label: n.label,
       count: 0,
+      attention: n.attention === true,
       ...(n.color ? { color: n.color } : {}),
     });
-  byKey.set("assert", { key: "assert", label: "asserts", count: 0 });
+  byKey.set("assert", { key: "assert", label: "asserts", count: 0, attention: true });
 
   for (const line of log) {
     const c = classify(line, notices);

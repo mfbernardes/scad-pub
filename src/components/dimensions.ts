@@ -8,6 +8,7 @@
 // The model is centred on the origin by the Viewer, so it spans [-s/2, +s/2] on
 // each axis; every annotation is derived from the half-extents below.
 import * as THREE from "three";
+import { mm } from "../lib/format";
 
 // A dimension overlay group that also frees the GPU resources it created.
 export interface DimensionsGroup extends THREE.Group {
@@ -15,9 +16,11 @@ export interface DimensionsGroup extends THREE.Group {
 }
 
 // Format a measurement like the reference CAD callouts — always one decimal,
-// so 120 reads "120.0 mm" and 8 reads "8.0 mm".
+// so 120 reads "120.0 mm" and 8 reads "8.0 mm". Each dimension label here is
+// its own standalone billboarded sprite, so the " mm" unit is baked into
+// every one rather than trailing a joined "W × D × H" string.
 function mmLabel(n: number): string {
-  return `${(Math.round(n * 10) / 10).toFixed(1)} mm`;
+  return `${mm(n)} mm`;
 }
 
 // Relative luminance of a three.js colour (sRGB-ish), to pick a contrasting halo

@@ -13,12 +13,13 @@ import {
   parseParameterSetsFile,
 } from "../lib/presets";
 import { downloadBlob } from "../lib/download";
+import { parsePresetCardName } from "../lib/presetCard";
 import { Button } from "./ui/button";
 import { IconButton } from "./IconButton";
 import { FileInput } from "./FileInput";
 import { Input } from "./ui/input";
 import { cn } from "../lib/utils";
-import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon } from "lucide-react";
+import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon, Check as CheckIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +46,20 @@ const itemClass = (isSelected: boolean) =>
 // Shared look for the "Ready-made" / "Saved by you" section headers.
 const sectionHeadingClass =
   "font-display mt-2 mb-[0.2rem] px-[0.4rem] text-[0.72rem] font-semibold uppercase tracking-[0.04em] text-muted-foreground";
+
+// One bundled-preset card (design.presetImages is set) — same art treatment
+// as DesignGallery.tsx's design cards: an aspect-[4/3] object-cover
+// thumbnail, a selected-state checkmark badge instead of a filled
+// background (the plain list's `itemClass` fill would clash with a photo),
+// and the name split into overline/title/badge by presetCard.ts. Keeps the
+// `preset-picker__item` hook class (the roving-focus querySelector above and
+// the smoke script both key off it) even though the layout is a card, not a
+// list row.
+const cardClass = (isSelected: boolean) =>
+  cn(
+    "preset-picker__item preset-picker__card relative flex w-full flex-col overflow-hidden rounded-lg border bg-background/40 text-left outline-none",
+    isSelected ? "border-primary" : "border-border enabled:hover:border-brand"
+  );
 
 interface Props {
   design: Design;
@@ -76,6 +91,13 @@ export function PresetPicker({
   onClose,
   presetsLabel = "Presets",
 }: Props) {
+  // Preset images are optional per preset (docs/config.md's "Bundled presets"
+  // note). A bundled preset that has a configured image renders as a card; one
+  // without renders as a plain list row (the same `itemClass` row the "Saved by
+  // you" section uses). A design with no `presetImages` at all → every preset is
+  // imageless → the whole section is the compact list, exactly as before.
+  const imagedBundled = bundled.filter((p) => design.presetImages?.[p.name]);
+  const plainBundled = bundled.filter((p) => !design.presetImages?.[p.name]);
   const [saveName, setSaveName] = useState("");
   // The saved preset pending a delete confirmation (its name), or null when no
   // confirmation dialog is open. Deleting a saved preset is un-undoable, so it
@@ -172,7 +194,7 @@ export function PresetPicker({
       {/* Inline (mobile sheet): fill the tab height so the list grows and the
           "Save current as…" row pins to the bottom. */}
       <div
-        className={cn("overflow-y-auto px-1 pt-1 pb-2", inline ? "flex-1" : "max-h-72")}
+        className={cn("overflow-y-auto overscroll-contain px-1 pt-1 pb-2", inline ? "flex-1" : "max-h-72")}
         ref={sectionsRef}
         onKeyDown={onListKeyDown}
       >
@@ -181,22 +203,76 @@ export function PresetPicker({
             <h3 className={sectionHeadingClass}>
               Ready-made
             </h3>
-            <ul aria-label="Ready-made presets">
-              {bundled.map((p) => {
-                const id = `bundled:${design.id}:${p.name}`;
-                return (
-                  <li key={p.name}>
-                    <button
-                      className={itemClass(selected === id)}
-                      aria-pressed={selected === id}
-                      onClick={() => applyBundled(p)}
-                    >
-                      {p.name}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            {/* Presets with a configured image render as a card grid; the rest
+                render as plain list rows below them. We group (grid, then rows)
+                rather than interleave, so a mixed design still reads cleanly
+                under the one "Ready-made" heading. The grid keeps the
+                "Ready-made presets" aria-label (smoke/vis scripts key off it);
+                when there are no imaged presets the row list carries that label
+                instead, so a fully-imageless design is unchanged. */}
+            {imagedBundled.length > 0 && (
+              <ul aria-label="Ready-made presets" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {imagedBundled.map((p) => {
+                  const id = `bundled:${design.id}:${p.name}`;
+                  const isSelected = selected === id;
+                  const parsed = parsePresetCardName(p.name);
+                  const image = design.presetImages?.[p.name];
+                  return (
+                    <li key={p.name}>
+                      <button
+                        type="button"
+                        className={cardClass(isSelected)}
+                        aria-pressed={isSelected}
+                        onClick={() => applyBundled(p)}
+                      >
+                        <span className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted">
+                          <img src={image} alt="" loading="lazy" className="h-full w-full object-cover" />
+                        </span>
+                        {isSelected && (
+                          <span
+                            className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                            aria-hidden="true"
+                          >
+                            <CheckIcon size={12} />
+                          </span>
+                        )}
+                        <span className="preset-picker__card-body flex min-h-14 flex-col gap-0.5 px-2 py-[0.4rem]">
+                          {parsed.overline && (
+                            <span className="truncate text-[0.66rem] font-semibold uppercase tracking-[0.03em] text-muted-foreground">
+                              {parsed.overline}
+                            </span>
+                          )}
+                          <span className="truncate text-[0.82rem] font-medium text-foreground">{parsed.title}</span>
+                          {parsed.badge && (
+                            <span className="w-fit rounded-full bg-muted px-[0.4rem] py-[0.05rem] text-[0.66rem] text-muted-foreground">
+                              {parsed.badge}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {plainBundled.length > 0 && (
+              <ul aria-label={imagedBundled.length > 0 ? "More ready-made presets" : "Ready-made presets"}>
+                {plainBundled.map((p) => {
+                  const id = `bundled:${design.id}:${p.name}`;
+                  return (
+                    <li key={p.name}>
+                      <button
+                        className={itemClass(selected === id)}
+                        aria-pressed={selected === id}
+                        onClick={() => applyBundled(p)}
+                      >
+                        {p.name}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </section>
         )}
         {userPresets.length > 0 && (

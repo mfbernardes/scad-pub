@@ -56,6 +56,43 @@ Each `designs[]` entry also accepts optional `description`, `icon`, `image`, and
 
 All four fall back to the design's own `// @description` / `// @icon` / `// @image` / `// @doc` annotations when omitted here. A config value still wins.
 
+Each `designs[]` entry also accepts optional **`reviewLabels`** and **`reviewNote`** fields, feeding a curated review summary (`src/lib/reviewSummary.ts`):
+
+```jsonc
+{
+  "designs": [
+    {
+      "id": "tag",
+      "label": "Tag",
+      "reviewLabels": { "label": "Text", "font": "Typeface" },
+      "reviewNote": "Text prints in capitals even though you typed it in lowercase."
+    }
+  ]
+}
+```
+
+- **`reviewLabels`**: an object mapping a **declared parameter's exact name** to the label its value is shown under in a review summary. Every key must match one of that design's own params — a stale or misspelled name fails the build. Several params sharing the same label merge into one summary row, their formatted values joined by `" / "`. A design with no `reviewLabels` still shows the summary's overall bounding-box "Dimensions" row, just no curated section above it. A row's value can be overridden by an `echo("@review", param, value)` from the design itself — see [`echo("@review", …)`](annotations.md#curated-review-override-echoreview-) — when the printed model doesn't literally match the stored parameter value (e.g. an uppercasing transform)
+- **`reviewNote`**: an optional short string, a generic hook for a design whose printed output transforms a parameter's raw value in a way worth calling out (e.g. "Text prints in capitals even though you typed it in lowercase"). Plain text, not Markdown. Omit for no note
+
+Each `designs[]` entry also accepts an optional **`presetImages`** field — bundled-preset thumbnails:
+
+```jsonc
+{
+  "designs": [
+    {
+      "id": "tag",
+      "label": "Tag",
+      "presetImages": {
+        "Large tag": "examples/tag-preset-large.png",
+        "No hole": "examples/tag-preset-nohole.png"
+      }
+    }
+  ]
+}
+```
+
+- **`presetImages`**: an object mapping a **bundled preset's exact name** (as it appears as a key inside that design's sibling `<design>.json` parameterSets file — see "Bundled presets" above) to an image path, relative to the config file (like `icon`/`image`/`doc`). Every key must match a real bundled preset name — a stale or misspelled name fails the build, and a design with no bundled presets at all can't configure `presetImages` either. Images may be SVG, PNG, or WebP. Preset images are **optional per preset**: in the in-app preset picker a bundled preset that has a configured image renders as a card (thumbnail + title, matching the visual design picker's card treatment), while a bundled preset without one renders as a compact list row — the same row style the "Saved by you" section uses. Under the single "Ready-made" heading the imaged presets show first as a card grid, then the imageless ones as list rows. A design with no `presetImages` at all keeps the plain compact list exactly. A preset's display name is split into an optional leading **overline** (`"Category | Title"`) and an optional trailing **badge** (`"Title (Language)"`) for the card — see `src/lib/presetCard.ts`; the stored preset name itself is never changed, only how it's parsed for display
+
 ### Rendering
 
 These keys affect render arguments, bundled fonts, and cache behavior:
@@ -74,6 +111,7 @@ These keys control branding, theme overrides, and interactive controls:
 - **`extraCss`**: optional raw-CSS escape hatch for advanced restyling. See [Custom CSS](#custom-css-extracss)
 - **`ui`**: see [UI behaviour and PWA](#ui-behaviour-and-pwa)
 - **`fileImport`**: see [Import file button](#import-file-fileimport)
+- **`strings`**: optional per-deployment overrides of the built-in UI text. See [Text overrides (`strings`)](#text-overrides-strings)
 
 ### In-app content
 
@@ -188,8 +226,9 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
   --accent-solid: #2f55ff;
   --on-accent: #ffffff;
   /* --bg, --panel, --panel-2, --line, --text, --muted, --focus, --link, --warn,
-     --code-bg, --overlay, --glass-bg, --glass-border, --elevation,
-     --radius, --radius-sm, --viewer-bg/-grid/-grid-2, --viewer-model */
+     --warn-bg, --success, --success-bg, --code-bg, --overlay, --glass-bg,
+     --glass-border, --elevation, --radius, --radius-sm,
+     --viewer-bg/-grid/-grid-2, --viewer-model */
 }
 :root[data-theme="light"] {
   --accent: #1d4ed8;
@@ -209,6 +248,9 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--focus` | keyboard focus ring |
 | `--link` | hyperlinks |
 | `--warn` | warning text/icons |
+| `--warn-bg` | tint behind a warning card |
+| `--success` | success text/icons |
+| `--success-bg` | tint behind a success card |
 | `--code-bg` | code and log backgrounds (output console, inline code) |
 | `--overlay` | modal/dialog scrim backdrop |
 | `--glass-bg` / `--glass-border` | translucent "glass" surfaces: command bar, sheets, viewer HUD |
@@ -249,9 +291,28 @@ Use `extraCss` when the `colors` token map does not cover your spacing, fonts, b
 
 Load order, last wins: app bundle CSS -> `colors` `<style>` -> `extraCss` `<link>`.
 
+## Text overrides (`strings`)
+
+ScadPub's own chrome text — the status strip, the Review dialog, attention cards, the export dock, the output console and the share/export toasts — is generated from a small built-in catalogue (`src/locales/en.json`), resolved through `src/lib/i18n.ts`'s `t()`/`tn()`. The optional `strings` config key lets a deployment override any of those keys without a fork:
+
+```jsonc
+{
+  "strings": {
+    "action.export": "Download for printing",
+    "review.title": "Check before you print"
+  }
+}
+```
+
+- Each key must already exist in `src/locales/en.json` — an unknown key (typically a typo) fails the build, pointing you at that catalogue. There is no way to *add* a brand-new key this way, only override an existing one.
+- Each value is a plain string. Where the built-in text interpolates a variable (`{count}`, `{format}`, …), keep the same `{name}` placeholder(s) in your override — an override that drops a placeholder just renders literal text where the value would have gone.
+- A pluralized key is really **two** catalogue keys, suffixed `#one` and `#other` (English's only two [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) plural categories) — e.g. `review.issueCount#one` ("{count} issue to review") and `review.issueCount#other` ("{count} issues to review"). Override both together if you override either, so a count of exactly 1 doesn't fall back to the built-in English text while every other count uses yours.
+- This surface is intentionally a **subset** of ScadPub's UI, not a full translation layer: it covers the surfaces `t()`/`tn()` have been wired into so far (see `src/locales/en.json` for the exhaustive key list). Older/legacy panels (the parameter form, the Presets tab, the Files dialog's own body copy, the Help modal chrome, …) are not yet routed through this catalogue and stay plain English regardless of `strings`.
+- `strings` never affects geometry, so it's absent from `renderHash`.
+
 ## Import file (`fileImport`)
 
-Designs sometimes need a file the app cannot bundle, such as a license-restricted font, an SVG to `import()`, or a `surface()` data file. Setting `fileImport` adds one **Import file** button to the preset panel. You can supply those files at runtime, entirely client-side. Nothing is uploaded to a server.
+Designs sometimes need a file the app cannot bundle, such as a license-restricted font, an SVG to `import()`, or a `surface()` data file. Setting `fileImport` adds a **Files** action to the toolbar (an icon in the desktop command bar's action cluster, a row in the mobile "⋮" menu) that opens the Files dialog, with an **Import file** button inside. You can supply those files at runtime, entirely client-side. Nothing is uploaded to a server.
 
 ```jsonc
 {
@@ -279,7 +340,7 @@ ScadPub chooses the mounting behavior from the file extension, so one button cov
 - **Fonts** (`.ttf`/`.otf`/`.ttc`) are mounted where the renderer's fontconfig can find them, so `text(font = "…")` can use them. They're matched by their **embedded family name**, not the filename, so a renamed file still resolves.
 - **Any other file** is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. The reference must match the uploaded file's name (use `note` to tell users which name to use).
 
-Uploaded files persist in IndexedDB and are re-applied on the next visit; the panel lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no import button is shown.
+Uploaded files persist in IndexedDB and are re-applied on the next visit; the Files dialog lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no Files action is shown at all.
 
 ## Fonts (`fonts`, `fontFallback`)
 
@@ -329,7 +390,8 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
   "popup": {
     "header": "Welcome to Tag Studio",          // required: dialog title
     "body": "Configure a nameplate and export a 3MF.\n\nSee the [print guide](https://example.com/guide) for material tips.",  // required
-    "mode": "once"                               // optional: "always" | "once" | "dismissible" | "picker"
+    "mode": "once",                              // optional: "always" | "once" | "dismissible" | "picker"
+    "footnote": "Everything runs in your browser. Nothing is uploaded."  // optional
   }
 }
 ```
@@ -341,6 +403,7 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
   - **`once`** (default): shown on the first visit only. Dismissing it with **OK**, the close button, Escape, or outside click remembers it so it will not return
   - **`dismissible`**: shown on every visit until you tick **Don't show this again**. Closing without ticking the box shows it again next time
   - **`picker`**: shows the visual design gallery on the first visit. Intended for `ui.gallery: true` deployments with multiple designs
+- **`footnote`**: an optional short line of plain text (not Markdown), shown small and muted at the bottom of the dialog in every mode, including `picker`. For a standing disclosure that doesn't belong in the main `body` message, such as a privacy note
 
 The remembered state is namespaced by the configurator's `id` and keyed by the popup's content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It's purely informational and doesn't affect renders, so it never invalidates the geometry cache.
 
@@ -360,10 +423,34 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`reset`**: `true` by default, or `false`. Controls the "reset view" button. Mouse/touch orbit and zoom still work regardless
 - **`zoom`**: `false` by default, or `true`. Controls the zoom in/out buttons. Mouse-wheel and pinch zoom already work, so the buttons are off by default
 - **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
+- **`saveImage`**: `true` by default, or `false`. Controls the "Save image (PNG)" action in the secondary-action surfaces (the desktop command bar and the mobile ⋮ overflow menu). Set `false` to hide the Save-image action entirely
 - **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
 - **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
 - **`gallery`**: `false` by default. Replaces the compact design dropdown with a searchable card grid using each design's `image`, then `icon`, then a letter fallback
 - **`essentials`**: `false` by default. Starts with `// @advanced` parameters hidden behind **Show all settings**
+- **`afterExport`**: turns on the inline after-export success panel. Absent by default (no panel). See [After-export panel (`ui.afterExport`)](#after-export-panel-uiafterexport)
+
+### After-export panel (`ui.afterExport`)
+
+The optional `ui.afterExport` object turns on a compact, non-modal panel (`src/components/ExportSuccess.tsx`) that appears above the floating export dock right after a successful model export. Absent entirely (the default) → no panel is ever shown, on any export. Every field inside it is also optional:
+
+```jsonc
+{
+  "ui": {
+    "afterExport": {
+      "title": "Model downloaded",     // optional; defaults to "Your file is on its way"
+      "body": "Slice it and print.",   // optional; defaults to a generic next-step line
+      "helpTab": "Printing"            // optional; must name an existing help.tabs[].label
+    }
+  }
+}
+```
+
+- **`title`**: overrides the panel's headline. Left unset, the panel reads "Your file is on its way"
+- **`body`**: overrides the panel's one-line next step. Rendered as the same Markdown subset as `help`/`fileImport.note`. Left unset, the panel gives a generic "check your downloads, then slice and print" line
+- **`helpTab`**: when set, the panel shows an "Open printing help" action that opens Help scrolled straight to the tab with this exact label (`HelpModal`'s `initialTab`, matched by [`help.tabs[].label`](#help-content-help)). **Validated at build time**: `gen-schema` fails the build if no tab in this config's `help` carries that label. Omit to hide the action
+
+The panel is dismissible (an ✕) and auto-hides itself after a few seconds; it never appears while a native share sheet is open — it's only ever shown once the export's share-or-download outcome has actually settled, and it replaces the export flow's one-time "install this app" toast on any deployment that configures it (the two never stack on the same export).
 
 ### PWA manifest
 
@@ -393,14 +480,15 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 ```jsonc
 {
   "notices": [
-    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
-    { "marker": "note",  "label": "notes",  "color": "#86a9ff" }
+    { "marker": "alert", "label": "alerts", "labelOne": "alert", "color": "#e0a458" },
+    { "marker": "note",  "label": "notes",  "labelOne": "note",  "color": "#86a9ff" }
   ]
 }
 ```
 
 - **`marker`**: required. The design-defined word, matched as `: <marker>:` inside an echo, case-insensitive. The first configured category that matches a line claims it
 - **`label`**: optional badge noun, such as `"alerts"`. Defaults to the `marker`
+- **`labelOne`**: optional singular form of `label`, such as `"alert"`. Used wherever a live count renders alongside the label whenever the count is exactly 1 — `label` alone can't pluralize itself, so without this a single pending notice reads as "1 alerts". Omit to keep `label` regardless of count
 - **`color`**: optional badge fill, as a plain CSS colour. For `#rgb`/`#rrggbb`, the badge text auto-switches between black and white to stay legible. Other colour forms keep the default badge text, so their contrast is your responsibility. Omit to use the default accent badge styling
 - **`attention`**: optional boolean, default `false`. Attention notices join OpenSCAD warnings, assertions, and missing fonts in the pre-download review dialog; **Download anyway** remains available
 

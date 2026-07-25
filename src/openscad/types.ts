@@ -53,6 +53,28 @@ export interface RenderResult {
   fatal?: boolean;
 }
 
+/**
+ * A throttled progress update posted by the render worker while it downloads
+ * a large bootstrap asset (currently only the ~10 MB WASM binary, on a Cache
+ * Storage miss — see worker.ts's cachedBufferWithProgress). Never posted on a
+ * cache hit (nothing to report progress on), and never once the worker's
+ * `{ type: "ready" }` message has fired for this worker instance — see
+ * runner.ts's `onProgress` doc.
+ */
+export interface WorkerProgress {
+  type: "progress";
+  /** Bytes downloaded so far. */
+  loaded: number;
+  /**
+   * Total bytes from the response's `Content-Length`, when present and the
+   * response isn't compressed in a way that makes that header unreliable
+   * (see worker.ts's `readWithProgress`); null when unknown, in which case a
+   * consumer should render an indeterminate progress indicator rather than a
+   * percentage.
+   */
+  total: number | null;
+}
+
 // ---- Parameter schema (produced by scripts/gen-schema.mjs) ----
 
 export interface EnumChoice {
@@ -129,6 +151,15 @@ export type Param = ParamBase &
          * renders it as a "Prepare SVG…" affordance instead of a plain text box.
          */
         svg?: SvgFieldMeta;
+        /**
+         * This string is the design's on-model editable text. Set by gen-schema
+         * from an explicit `// @editOnModel` annotation (valid only on a plain,
+         * non-font string param, at most one per design). The viewer lets the
+         * user edit it directly on the rendered mesh — a click/tap opens a
+         * floating inline text editor over the model — in addition to the panel's
+         * own text box. See src/lib/editOnModel.ts and ViewerEditOnModel.tsx.
+         */
+        editOnModel?: true;
       }
   );
 
@@ -155,10 +186,39 @@ export interface Design {
    *  (scad/<id>-doc.md), fetched on demand and rendered in the doc modal.
    *  Null/absent hides the "Design guide" affordance. */
   doc?: string | null;
+  /**
+   * Optional bundled-preset thumbnails (config's `designs[].presetImages`;
+   * see docs/config.md). Maps a bundled preset's EXACT name (as it appears in
+   * the sibling parameterSets file) to a served image URL — gen-schema fails
+   * the build if a key doesn't match a real bundled preset name. When set
+   * (non-empty), PresetPicker renders that design's bundled presets as a card
+   * grid (src/lib/presetCard.ts parses each name into overline/title/badge)
+   * instead of the plain compact list. Absent/undefined for the list view.
+   */
+  presetImages?: Record<string, string>;
   sections: string[];
   /** Section names that start collapsed (from a `// @collapsed` annotation). */
   collapsedSections?: string[];
   params: Param[];
+  /**
+   * Optional curated label overrides for a review summary (config's
+   * `designs[].reviewLabels`; see docs/config.md). Maps a declared
+   * parameter's name to the label its value is shown under in the summary
+   * — gen-schema fails the build if a key doesn't match one of this
+   * design's own params. Several params sharing the same label merge into
+   * ONE summary row, their formatted values joined by " / ". Absent -> the
+   * curated summary is empty. Never affects geometry.
+   */
+  reviewLabels?: Record<string, string>;
+  /**
+   * Optional short explanatory note for a review summary (config's
+   * `designs[].reviewNote`) — e.g. "Text prints in capitals even though you
+   * typed it in lowercase." A generic hook for a design whose output
+   * transforms a parameter's raw value in a way worth calling out; a
+   * deployment supplies the wording, ScadPub never infers it. Null/absent
+   * renders nothing. Never affects geometry.
+   */
+  reviewNote?: string | null;
 }
 
 /** One titled section of the in-app help, with a Markdown-subset body. */
@@ -274,6 +334,13 @@ export interface NoticeCategory {
   marker: string;
   /** Badge / notice noun (e.g. "alerts", "notes"). Defaults to the marker. */
   label: string;
+  /**
+   * Optional singular form of `label` (e.g. "alert" for `label: "alerts"`),
+   * used wherever a count renders alongside it whenever the live count is
+   * exactly 1 — `label` alone can't pluralize itself ("1 alerts" reads
+   * wrong). Omit to keep `label` regardless of count.
+   */
+  labelOne?: string;
   /** Optional badge fill colour (a plain CSS colour); falls back to the accent. */
   color?: string;
   /** Whether this category should be treated as requiring user attention. */
@@ -305,6 +372,13 @@ export interface PopupNotice {
    * the design picker so the user's obvious next step is to choose what to make.
    */
   button?: string;
+  /**
+   * Optional plain-text footnote, rendered small and muted at the bottom of
+   * the dialog, in every mode (including "picker"). For a short standing
+   * disclosure that doesn't belong in `body`'s main message, e.g. "Everything
+   * runs in your browser. Nothing is uploaded." Plain text, not Markdown.
+   */
+  footnote?: string;
 }
 
 /** Build-time UI behaviour overrides. None affect geometry (absent from renderHash). */
@@ -341,6 +415,12 @@ export interface UiConfig {
    * suppress it there too.
    */
   fullscreen?: boolean;
+  /**
+   * Whether the "Save image (PNG)" action is offered (default true — the button
+   * is shown). Set false to hide the Save-image (PNG) action entirely, in both
+   * the desktop and mobile secondary-action surfaces.
+   */
+  saveImage?: boolean;
   /** Label for the "Presets" tab/section (default "Presets"). */
   presetsLabel?: string;
   /** Label for the "Customize" (parameters) tab/section (default "Customize"). */
@@ -349,6 +429,28 @@ export interface UiConfig {
   gallery?: boolean;
   /** Start with `@advanced` parameters hidden behind a Show all settings action. */
   essentials?: boolean;
+  /**
+   * Optional inline success panel shown above the action dock after a
+   * successful export (see src/components/ExportSuccess.tsx). Absent -> the
+   * feature is off entirely — no panel is ever shown, on any export. All
+   * fields are optional even when the object is present; omitted `title`/
+   * `body` fall back to built-in copy. None of these fields affect geometry
+   * (absent from renderHash).
+   */
+  afterExport?: {
+    /** Overrides the panel's default headline ("Your file is on its way"). */
+    title?: string;
+    /** Overrides the panel's default next-step body text. Rendered as the
+     *  same Markdown subset as `help`/`fileImport.note`. */
+    body?: string;
+    /**
+     * Help-modal tab label to deep-link the panel's "Open printing help"
+     * action to (HelpModal's `initialTab`). Validated at build time against
+     * this config's `help` tabs — gen-schema fails the build if no tab
+     * carries this exact label. Omit to hide the action entirely.
+     */
+    helpTab?: string;
+  };
 }
 
 export interface Schema {
@@ -393,6 +495,14 @@ export interface Schema {
   lang?: string;
   /** Document / manifest text direction. Default "ltr". */
   dir?: "ltr" | "rtl" | "auto";
+  /**
+   * Optional per-deployment UI text overrides (config's `strings` key; see
+   * docs/config.md and src/lib/i18n.ts). Keyed by the same dot-namespaced
+   * keys (including plural `#one`/`#other` variants) as
+   * src/locales/en.json, and validated at build time against that catalogue's
+   * key set. Consulted first, ahead of the bundled English catalogue.
+   */
+  strings?: Record<string, string>;
   /** Optional help content shown in the Help modal. When null, a generic,
    *  project-agnostic default is used. */
   help: HelpContent | null;

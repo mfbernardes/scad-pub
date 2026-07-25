@@ -4,14 +4,14 @@
 // Both layouts float the same compact action cluster over the viewer bottom —
 // mobile no longer reserves a solid footer band. All state/logic stays in
 // App.tsx; this is a pure view extraction.
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Design, Schema } from "../openscad/types";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import type { Design, Schema, UiConfig, WorkerProgress } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
 import type { RenderMetrics } from "../lib/renderMetrics";
 import type { ViewerHandle, Dimensions } from "./Viewer";
 
-// Peek shows just the drag handle + the tab bar (Presets/Parameters/Files),
+// Peek shows just the drag handle + the tab bar (Presets/Parameters),
 // ending at the tab underline — no sliver of the tab's content.
 const PEEK_HEIGHT = 60;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
@@ -21,10 +21,18 @@ const EMPTY_LOG: string[] = [];
 // padding/border lands once.
 const ACTION_CLUSTER_CLASS =
   "action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation)";
+// The bottom-anchored dock wrapping the action cluster (and, when shown, the
+// after-export panel riding above it). Positioning (absolute/bottom/left/
+// transform, plus the mobile sheet-follow override) lives on `.action-dock`
+// in index.css; a plain flex column here means an ExportSuccess panel simply
+// pushes the cluster down from a fixed bottom edge — no height measurement
+// needed to stack the two.
+const ACTION_DOCK_CLASS = "action-dock flex flex-col items-center gap-2";
 
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
+import { ExportSuccess, type ExportSuccessState } from "./ExportSuccess";
 import { OutputToggle } from "./OutputToggle";
 import { BarActions } from "./BarActions";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
@@ -42,7 +50,6 @@ import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { parseComputedInfo } from "../lib/computedInfo";
 import {
   fontFaces,
-  familyOf,
   fontFamilyNames,
   mergeInstalledFonts,
   normalizeFamily,
@@ -56,8 +63,49 @@ import { usePanelState } from "../lib/usePanelState";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
 import { ns } from "../lib/appId";
 import { readLocal, writeLocal } from "../lib/safeStorage";
+import {
+  deriveAttention,
+  readinessState,
+  type NoticeAttentionInput,
+} from "../lib/readiness";
+import { friendlyRenderError } from "../lib/friendlyErrors";
+import { ReviewDialog } from "./ReviewDialog";
 
 const ADVANCED_SETTINGS_KEY = ns("settings.advanced");
+
+// The bottom-anchored dock: the ActionButtons cluster, with an optional
+// after-export panel riding above it (see ACTION_DOCK_CLASS's own doc). The
+// desktop and mobile layouts each mount this verbatim inside their own
+// positioning context (.app-shell__mobile / __desktop) — extracted so a tweak
+// to either half's markup only has to land once instead of twice in step.
+function ActionDock({
+  exportSuccess,
+  afterExport,
+  onDismissExportSuccess,
+  actionButtonsProps,
+}: {
+  exportSuccess: ExportSuccessState | null;
+  afterExport: UiConfig["afterExport"];
+  onDismissExportSuccess: () => void;
+  actionButtonsProps: ComponentProps<typeof ActionButtons>;
+}) {
+  return (
+    <div className={ACTION_DOCK_CLASS}>
+      {exportSuccess && (
+        <ExportSuccess
+          state={exportSuccess}
+          title={afterExport?.title}
+          body={afterExport?.body}
+          helpTab={afterExport?.helpTab}
+          onDismiss={onDismissExportSuccess}
+        />
+      )}
+      <div className={ACTION_CLUSTER_CLASS}>
+        <ActionButtons {...actionButtonsProps} />
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   schema: Schema;
@@ -83,6 +131,10 @@ interface Props {
   result: RenderResult | null;
   rendering: boolean;
   ready: boolean;
+  /** The render worker's bootstrap-download progress; null once ready (or
+   *  never set at all on a warm Cache Storage hit). Surfaced by ViewerStage's
+   *  loading overlay as a thin progress bar. */
+  loadProgress: WorkerProgress | null;
   autoRender: boolean;
   stalePreview: boolean;
   /** A successful render that still matches the live controls — the only
@@ -92,6 +144,11 @@ interface Props {
   themeMode: "light" | "dark" | "auto";
   /** Incremented by the intro popup's primary CTA to open the design picker. */
   openPickerSignal: number;
+  /** Non-null right after a successful export, when the config's
+   *  `ui.afterExport` opts into the panel — see ExportSuccess.tsx. Null the
+   *  rest of the time, including when `ui.afterExport` is unset. */
+  exportSuccess: ExportSuccessState | null;
+  onDismissExportSuccess: () => void;
 }
 
 export const AppShell = memo(function AppShell({
@@ -112,12 +169,15 @@ export const AppShell = memo(function AppShell({
   result,
   rendering,
   ready,
+  loadProgress,
   autoRender,
   stalePreview,
   exportable,
   theme,
   themeMode,
   openPickerSignal,
+  exportSuccess,
+  onDismissExportSuccess,
 }: Props) {
   const actions = useAppActions();
   const essentialsEnabled = schema.ui?.essentials === true;
@@ -175,20 +235,25 @@ export const AppShell = memo(function AppShell({
   // layout's DOM (with the same #param-search-input id) is committed, before
   // the browser paints — otherwise the switch would silently drop focus to
   // <body>.
+  // Bind the ref to a local so the focus/blur handlers mutate a value the
+  // React Compiler sees as a ref (`react-hooks/refs`, off here) rather than a
+  // property of the hook-returned `panelState` object, which its immutability
+  // rule forbids mutating.
+  const { searchFocusedRef } = panelState;
   const wasMobileRef = useRef(isMobile);
   useLayoutEffect(() => {
     if (wasMobileRef.current === isMobile) return;
     wasMobileRef.current = isMobile;
-    if (panelState.searchFocusedRef.current) {
+    if (searchFocusedRef.current) {
       document.getElementById(PARAM_SEARCH_INPUT_ID)?.focus();
     }
-  }, [isMobile, panelState.searchFocusedRef]);
+  }, [isMobile, searchFocusedRef]);
   const handleSearchFocus = useCallback(() => {
-    panelState.searchFocusedRef.current = true;
-  }, [panelState.searchFocusedRef]);
+    searchFocusedRef.current = true;
+  }, [searchFocusedRef]);
   const handleSearchBlur = useCallback(() => {
-    panelState.searchFocusedRef.current = false;
-  }, [panelState.searchFocusedRef]);
+    searchFocusedRef.current = false;
+  }, [searchFocusedRef]);
 
   // M16: at the Full sheet detent the sheet visually covers the mobile
   // background (top bar + viewer + floating controls), so treat that detent
@@ -217,6 +282,9 @@ export const AppShell = memo(function AppShell({
   // ruler button; the overlay + panel are only reachable through it, so they
   // stay hidden too.
   const showMeasure = ui.measure !== false;
+  // Whether the "Save image (PNG)" action is offered (default true). Off hides
+  // it in both secondary-action surfaces (desktop CommandBar and mobile ⋮ menu).
+  const showSaveImage = ui.saveImage !== false;
   // Whether the viewer offers the view picker (camera-angle menu).
   const showViewPicker = ui.viewPicker !== false;
   // Whether the viewer offers the "reset view" button.
@@ -225,16 +293,21 @@ export const AppShell = memo(function AppShell({
   const showZoom = ui.zoom === true;
   // Whether the viewer offers the fullscreen toggle (where it works at all).
   const showFullscreen = ui.fullscreen !== false;
+  // Optional after-export success panel (see ExportSuccess.tsx). Undefined
+  // when the config never set `ui.afterExport` — `exportSuccess` stays null
+  // forever in that case (App.tsx never sets it), so the panel just never mounts.
+  const afterExport = ui.afterExport;
 
   const log = result?.log ?? EMPTY_LOG;
   // Memoized so a config without `notices` doesn't hand a fresh `[]` to the
   // useMemo hooks below on every render.
   const notices = useMemo(() => schema.notices ?? [], [schema.notices]);
-  const fileImport = schema.fileImport ?? null;
-  const loadedFiles = useMemo(
-    () => Object.entries(userFiles).map(([name, bytes]) => ({ name, size: bytes.byteLength })),
-    [userFiles]
-  );
+  // Gates the toolbar's "Files" action (BarActions) — the actual FilesModal
+  // (import button + imported-file list) is hosted in App.tsx alongside
+  // Help/Licenses/DesignDoc, opened via AppActions' `showFiles`. Neither
+  // ParamPanel nor SheetTabs knows about file imports anymore now that Files
+  // is no longer a panel tab.
+  const hasFiles = schema.fileImport != null;
 
   // The set of font families the renderer can actually use: bundled families
   // (parsed at build time) plus the embedded families of any imported font.
@@ -270,17 +343,90 @@ export const AppShell = memo(function AppShell({
   // Rows from `echo("@info", label, unit, value)` — internally-calculated
   // values the design surfaced at render time (see lib/computedInfo.ts).
   const computedInfo = useMemo(() => parseComputedInfo(log), [log]);
-  const attentionIssues = useMemo(() => {
-    const issues = diagnostics.filter((d) => d.attention).map((d) => d.text);
-    for (const param of design.params) {
-      if ((param.type !== "string" && param.type !== "enum") || !param.isFont) continue;
-      const value = values[param.name];
-      const family = familyOf(String(value ?? ""));
-      if (family && availableFontFamilies.size && !availableFontFamilies.has(normalizeFamily(family)))
-        issues.push(`Font “${family}” is not loaded; the renderer may substitute another face.`);
+
+  // Production-readiness (src/lib/readiness.ts): a structured, typed list of
+  // real gaps between "rendered" and "ready to ship" — a font param whose
+  // selected family isn't loaded, or a flagged notice category with a pending
+  // notice — plus the overall state that drives the status strip/dock/review
+  // dialog. `badges` (already computed above for the Notices tab) gives each
+  // notice category's live pending count; joined here with the category's own
+  // config-declared `attention`/`labelOne` so deriveAttention can decide which
+  // ones matter without re-scanning the raw log itself.
+  const noticeAttentionInputs: NoticeAttentionInput[] = useMemo(
+    () =>
+      notices.map((n) => ({
+        marker: n.marker,
+        label: n.label,
+        labelOne: n.labelOne,
+        attention: n.attention === true,
+        count: badges.find((b) => b.key === `notice:${n.marker}`)?.count ?? 0,
+      })),
+    [notices, badges]
+  );
+  // Attention-flagged diagnostics that aren't already one of the notice
+  // categories above — see readiness.ts's `DeriveAttentionInputs.diagnostics`
+  // for why `level === "notice"` is excluded here.
+  //
+  // Only surfaced for a render that actually SUCCEEDED: a currently-FAILED
+  // render's own diagnostics (e.g. the very assert that failed it) are
+  // already explained by the Review dialog's friendly-failure card (see
+  // `failure` below) — stacking them as attention items too would just
+  // repeat the same message under a second heading. readinessState's own
+  // failed > attention precedence already keeps the overall readiness state
+  // correct either way, but the Review dialog renders `attention` cards
+  // unconditionally alongside a failure card, so the gate has to live here.
+  const diagnosticAttentionInputs: string[] = useMemo(
+    () =>
+      result?.ok ? diagnostics.filter((d) => d.attention && d.level !== "notice").map((d) => d.text) : [],
+    [diagnostics, result]
+  );
+  const attention = useMemo(
+    () =>
+      deriveAttention({
+        params: design.params,
+        values,
+        availableFontFamilies,
+        notices: noticeAttentionInputs,
+        diagnostics: diagnosticAttentionInputs,
+      }),
+    [design.params, values, availableFontFamilies, noticeAttentionInputs, diagnosticAttentionInputs]
+  );
+  // `result` is the only render outcome readiness cares about: null until a
+  // FIRST render has ever landed (readinessState's "building"), regardless of
+  // whether a later live edit is currently re-rendering over it — matching
+  // the viewer's own "Building your preview…" vs. "Updating…" distinction.
+  const readiness = useMemo(() => readinessState(result ? result.ok : null, attention), [result, attention]);
+  // A pending notice belongs to an `attention: true` category (or is one of
+  // OpenSCAD's own hardcoded warning/assert lines, always attention) — the
+  // ONLY thing that should colour the Messages bell/console amber. An
+  // informational note alone must never contradict a "Ready to download"
+  // status strip (see readiness.ts).
+  const hasNoticeAttention = useMemo(() => diagnostics.some((d) => d.attention), [diagnostics]);
+  // Friendly {title, body, technical} mapping of a failed render, shared by
+  // the Notices tab (OutputConsole) and the Review dialog so a failure reads
+  // identically wherever it surfaces. Null on a missing/successful result.
+  const failure = useMemo(() => friendlyRenderError(result), [result]);
+
+  // Review dialog: one instance, its content and footer driven entirely by the
+  // live `readiness`/`attention`/`failure` above — both entry points (the dock
+  // Download button and the status strip) open the identical dialog; the footer
+  // reflects the current review state, not how it was opened. See ReviewDialog's
+  // own doc.
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const openReview = useCallback(() => {
+    setReviewOpen(true);
+  }, []);
+  // The dock's Download click: a ready render downloads directly (subject to
+  // the same `exportable` safety gate exportModel itself re-checks); anything
+  // else (attention/failed/building) opens the review dialog instead of doing
+  // nothing or exporting something stale/broken.
+  const handleDownloadClick = useCallback(() => {
+    if (readiness === "ready") {
+      if (exportable) actions.exportModel();
+      return;
     }
-    return [...new Set(issues)];
-  }, [diagnostics, design, values, availableFontFamilies]);
+    openReview();
+  }, [readiness, exportable, actions, openReview]);
 
   const handleSavePng = useCallback(() => {
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
@@ -362,6 +508,14 @@ export const AppShell = memo(function AppShell({
 
   const closeOutput = useCallback(() => setOutputOpen(false), []);
 
+  // "View messages" (the review dialog's notice-attention cards) closes the
+  // dialog and opens the console — the same anchor-above-peek behaviour as
+  // the bell.
+  const openMessagesFromReview = useCallback(() => {
+    setReviewOpen(false);
+    openOutput();
+  }, [openOutput]);
+
   // Prop bundles shared verbatim by the two layout trees — each invocation
   // below adds only its layout-specific bits (viewer ref, active flag, …).
   const stageProps = {
@@ -369,6 +523,7 @@ export const AppShell = memo(function AppShell({
     result,
     ready,
     rendering,
+    loadProgress,
     autoRender,
     stalePreview,
     theme,
@@ -378,6 +533,7 @@ export const AppShell = memo(function AppShell({
     onMeasure: setMeasured,
     measured,
     renderedValues,
+    values,
     computedInfo,
   };
   const hudProps = {
@@ -392,12 +548,26 @@ export const AppShell = memo(function AppShell({
     view,
     onSelectView: handleSelectView,
   };
-  const outputProps = { log, diagnostics, badges, metrics: renderMetrics, open: outputOpen, onClose: closeOutput };
+  const outputProps = {
+    log,
+    diagnostics,
+    badges,
+    metrics: renderMetrics,
+    open: outputOpen,
+    onClose: closeOutput,
+    failure,
+  };
   const actionButtonsProps = {
     canExport: exportable,
     modelFormat: schema.format,
-    onSavePng: handleSavePng,
-    attentionIssues,
+    readiness,
+    attentionCount: attention.length,
+    onDownloadClick: handleDownloadClick,
+  };
+  const statusStripProps = {
+    readiness,
+    attentionCount: attention.length,
+    onOpen: openReview,
   };
   return (
     <div className="app-shell">
@@ -437,6 +607,7 @@ export const AppShell = memo(function AppShell({
                 viewerRef={mobileViewerRef}
                 active
                 reframeOnPreset={false}
+                mobile
               />
 
               {/* Mobile top bar — logo left, design centered, actions right
@@ -487,24 +658,34 @@ export const AppShell = memo(function AppShell({
                   <OutputToggle
                     outputOpen={outputOpen}
                     noticeCount={diagnostics.length}
+                    hasAttention={hasNoticeAttention}
                     onToggleOutput={toggleOutput}
                     status={{ rendering, ready, result, stale: stalePreview }}
                     className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
                   />
-                  <BarActions themeMode={themeMode} collapse />
+                  <BarActions
+                    themeMode={themeMode}
+                    collapse
+                    onSavePng={showSaveImage ? handleSavePng : undefined}
+                    canSavePng={exportable}
+                    hasFiles={hasFiles}
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Floating action cluster — the same compact card the desktop
-                floats over its viewer, riding just above the sheet's top edge
-                (it follows the sheet up to the half detent via
-                --sheet-follow-h) instead of a solid docked footer band that
-                would reserve a strip of the viewport. Identical markup +
-                buttons to the desktop cluster. */}
-            <div className={ACTION_CLUSTER_CLASS}>
-              <ActionButtons {...actionButtonsProps} />
-            </div>
+            {/* Floating action dock — an optional after-export panel stacked
+                above the same compact card the desktop floats over its
+                viewer, riding just above the sheet's top edge (it follows the
+                sheet up to the half detent via --sheet-follow-h) instead of a
+                solid docked footer band that would reserve a strip of the
+                viewport. Identical markup to the desktop dock. */}
+            <ActionDock
+              exportSuccess={exportSuccess}
+              afterExport={afterExport}
+              onDismissExportSuccess={onDismissExportSuccess}
+              actionButtonsProps={actionButtonsProps}
+            />
 
             <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
           </div>
@@ -520,7 +701,7 @@ export const AppShell = memo(function AppShell({
               type="button"
               className="output-console__scrim absolute inset-x-0 top-0 bottom-[calc(var(--safe-area-bottom)+var(--mobile-peek-height))] z-[31] bg-black/40"
               onClick={closeOutput}
-              aria-label="Close messages"
+              aria-label="Close Messages"
             />
           )}
           <OutputConsole
@@ -554,8 +735,6 @@ export const AppShell = memo(function AppShell({
                   presetName={presetName}
                   baseline={baseline}
                   changedParams={changedParams}
-                  fileImport={fileImport}
-                  loadedFiles={loadedFiles}
                   availableFontFamilies={availableFontFamilies}
                   fontSuggestion={fontSuggestion}
                   installedFonts={installedFonts}
@@ -572,6 +751,7 @@ export const AppShell = memo(function AppShell({
                   onSearchChange={panelState.setSearch}
                   onSearchFocus={handleSearchFocus}
                   onSearchBlur={handleSearchBlur}
+                  statusStrip={statusStripProps}
                 />
               </div>
             )}
@@ -592,13 +772,17 @@ export const AppShell = memo(function AppShell({
             stalePreview={stalePreview}
             outputOpen={outputOpen}
             noticeCount={diagnostics.length}
+            hasAttention={hasNoticeAttention}
             onToggleOutput={toggleOutput}
             openPickerSignal={openPickerSignal}
             pickerActive={!isMobile}
+            onSavePng={showSaveImage ? handleSavePng : undefined}
+            canSavePng={exportable}
+            hasFiles={hasFiles}
           />
 
           <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
-            {/* Docked panel: Presets / Parameters / Files tabs (mirrors mobile). */}
+            {/* Docked panel: Presets / Parameters tabs (mirrors mobile). */}
             <ParamPanel
               design={design}
               values={values}
@@ -609,8 +793,6 @@ export const AppShell = memo(function AppShell({
               presetName={presetName}
               baseline={baseline}
               changedParams={changedParams}
-              fileImport={fileImport}
-              loadedFiles={loadedFiles}
               availableFontFamilies={availableFontFamilies}
               fontSuggestion={fontSuggestion}
               installedFonts={installedFonts}
@@ -628,6 +810,7 @@ export const AppShell = memo(function AppShell({
               onSearchChange={panelState.setSearch}
               onSearchFocus={handleSearchFocus}
               onSearchBlur={handleSearchBlur}
+              statusStrip={statusStripProps}
             />
 
             {/* Canvas */}
@@ -635,10 +818,14 @@ export const AppShell = memo(function AppShell({
               <ViewerStage {...stageProps} viewerRef={desktopViewerRef} active>
                 {/* Floating controls live inside viewer-wrap so they hover over the
                     canvas — which shrinks when the output console docks below it —
-                    rather than overlapping the console's notices. */}
-                <div className={ACTION_CLUSTER_CLASS}>
-                  <ActionButtons {...actionButtonsProps} />
-                </div>
+                    rather than overlapping the console's notices. An optional
+                    after-export panel stacks above the dock (see ACTION_DOCK_CLASS). */}
+                <ActionDock
+                  exportSuccess={exportSuccess}
+                  afterExport={afterExport}
+                  onDismissExportSuccess={onDismissExportSuccess}
+                  actionButtonsProps={actionButtonsProps}
+                />
                 <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
               </ViewerStage>
 
@@ -648,6 +835,22 @@ export const AppShell = memo(function AppShell({
           </div>
         </div>
       )}
+
+      <ReviewDialog
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        design={design}
+        values={values}
+        renderedValues={renderedValues}
+        result={result}
+        failure={failure}
+        measured={measured}
+        attention={attention}
+        availableFontFamilies={availableFontFamilies}
+        fontSuggestion={fontSuggestion}
+        canExport={exportable}
+        onOpenMessages={openMessagesFromReview}
+      />
     </div>
   );
 });
