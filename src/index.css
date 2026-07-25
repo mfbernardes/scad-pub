@@ -480,8 +480,11 @@ button:disabled { cursor: default; }
   }
 }
 
-/* "Preview out of date" — top-centre over the viewer. */
-.stale-banner {
+/* "Preview out of date" (manual mode) / "Updating…" (auto mode) — top-centre
+   over the viewer. Share one slot: StaleBanner returns null while
+   autoRender is on and UpdatingChip only ever shows while it's on, so the
+   two are mutually exclusive — see UpdatingChip's own doc. */
+.stale-banner, .updating-chip {
   position: absolute;
   top: calc(0.75rem + env(safe-area-inset-top, 0px));
   left: 50%;
@@ -491,8 +494,34 @@ button:disabled { cursor: default; }
 
 /* Mobile: drop below the floating top bar (and any notch). */
 @media (max-width: 860px) {
-  .app-shell__mobile .stale-banner {
+  .app-shell__mobile .stale-banner, .app-shell__mobile .updating-chip {
     top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
+  }
+}
+
+/* One-time viewer gesture hint (ViewerGestureHint) — bottom-centre, riding
+   above the export dock. A flat offset (not a live measurement of the
+   dock's height, which would need a ResizeObserver + CSS var this small a
+   feature doesn't warrant) sized to comfortably clear a single-row dock:
+   the dock's own `bottom` (0.75rem + safe-area) plus ~3.25rem of headroom
+   for its button row. */
+.viewer-hint {
+  position: absolute;
+  bottom: calc(0.75rem + var(--safe-area-bottom) + 3.25rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+}
+
+/* Mobile: the dock rides the sheet's live top edge instead of a fixed
+   bottom offset — mirror that same relationship here. */
+@media (max-width: 860px) {
+  .app-shell__mobile .viewer-hint {
+    bottom: calc(var(--sheet-top) + 0.6rem + 3.25rem);
+    transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .app-shell__mobile[data-sheet-dragging="true"] .viewer-hint {
+    transition: none;
   }
 }
 
