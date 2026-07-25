@@ -53,6 +53,28 @@ export interface RenderResult {
   fatal?: boolean;
 }
 
+/**
+ * A throttled progress update posted by the render worker while it downloads
+ * a large bootstrap asset (currently only the ~10 MB WASM binary, on a Cache
+ * Storage miss — see worker.ts's cachedBufferWithProgress). Never posted on a
+ * cache hit (nothing to report progress on), and never once the worker's
+ * `{ type: "ready" }` message has fired for this worker instance — see
+ * runner.ts's `onProgress` doc.
+ */
+export interface WorkerProgress {
+  type: "progress";
+  /** Bytes downloaded so far. */
+  loaded: number;
+  /**
+   * Total bytes from the response's `Content-Length`, when present and the
+   * response isn't compressed in a way that makes that header unreliable
+   * (see worker.ts's `readWithProgress`); null when unknown, in which case a
+   * consumer should render an indeterminate progress indicator rather than a
+   * percentage.
+   */
+  total: number | null;
+}
+
 // ---- Parameter schema (produced by scripts/gen-schema.mjs) ----
 
 export interface EnumChoice {

@@ -131,6 +131,10 @@ interface Props {
   result: RenderResult | null;
   rendering: boolean;
   ready: boolean;
+  /** The render worker's bootstrap-download progress; null once ready (or
+   *  never set at all on a warm Cache Storage hit). Surfaced by ViewerStage's
+   *  loading overlay as a thin progress bar. */
+  loadProgress: WorkerProgress | null;
   autoRender: boolean;
   stalePreview: boolean;
   /** A successful render that still matches the live controls — the only
@@ -165,6 +169,7 @@ export const AppShell = memo(function AppShell({
   result,
   rendering,
   ready,
+  loadProgress,
   autoRender,
   stalePreview,
   exportable,
@@ -513,6 +518,7 @@ export const AppShell = memo(function AppShell({
     result,
     ready,
     rendering,
+    loadProgress,
     autoRender,
     stalePreview,
     theme,
