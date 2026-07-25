@@ -466,7 +466,11 @@ export default function App() {
         <DesignDocModal key={design.id} design={design} onClose={() => setShowDesignDoc(false)} />
       )}
       {showLicenses && (
-        <LicensesModal extra={schema.licenses} onClose={() => setShowLicenses(false)} />
+        <LicensesModal
+          version={schema.scadpubVersion}
+          extra={schema.licenses}
+          onClose={() => setShowLicenses(false)}
+        />
       )}
       {showFiles && (
         <FilesModal

@@ -172,6 +172,8 @@ export function validateSchema(raw: unknown): Schema {
         fail("a notice 'attention' must be a boolean");
     }
   }
+  if (s.scadpubVersion !== undefined && typeof s.scadpubVersion !== "string")
+    fail("'scadpubVersion' must be a string");
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
   if (s.lang !== undefined && typeof s.lang !== "string") fail("'lang' must be a string");
   if (s.strings !== undefined)

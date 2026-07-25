@@ -41,21 +41,26 @@ SOFTWARE.`;
 const mit = (copyright: string) =>
   `MIT License\n\n${copyright}\n\n${MIT_BODY}`;
 
+// ScadPub's own entry. Kept as a named const (rather than inline in LICENSES)
+// so licenseList() below can stamp the build's version onto exactly this one
+// without matching by name or position.
+const SCADPUB: SoftwareLicense = {
+  name: "ScadPub",
+  license: "MIT",
+  copyright: "Copyright (c) 2026 Murillo Bernardes",
+  url: "https://github.com/mfbernardes/scad-pub",
+  licenseUrl: "https://github.com/mfbernardes/scad-pub/blob/main/LICENSE",
+  sourceUrl: "https://github.com/mfbernardes/scad-pub",
+  text: mit("Copyright (c) 2026 Murillo Bernardes"),
+  note:
+    "This configurator itself. ScadPub publishes OpenSCAD models as static, " +
+    "browser-based configurators; its own source is MIT-licensed and available " +
+    "at the link above. The MIT license covers ScadPub's own code only — the " +
+    "bundled components listed below carry their own terms.",
+};
+
 export const LICENSES: SoftwareLicense[] = [
-  {
-    name: "ScadPub",
-    license: "MIT",
-    copyright: "Copyright (c) 2026 Murillo Bernardes",
-    url: "https://github.com/mfbernardes/scad-pub",
-    licenseUrl: "https://github.com/mfbernardes/scad-pub/blob/main/LICENSE",
-    sourceUrl: "https://github.com/mfbernardes/scad-pub",
-    text: mit("Copyright (c) 2026 Murillo Bernardes"),
-    note:
-      "This configurator itself. ScadPub publishes OpenSCAD models as static, " +
-      "browser-based configurators; its own source is MIT-licensed and available " +
-      "at the link above. The MIT license covers ScadPub's own code only — the " +
-      "bundled components listed below carry their own terms.",
-  },
+  SCADPUB,
   {
     name: "OpenSCAD (WebAssembly build)",
     version: "2026.06.12",
@@ -116,3 +121,15 @@ export const LICENSES: SoftwareLicense[] = [
       "for the app chrome — it is not available to the rendered designs.",
   },
 ];
+
+/**
+ * The built-in attributions, with ScadPub's own entry carrying the version this
+ * site was built from (`schema.scadpubVersion` — the build's `git describe`, see
+ * scripts/lib/version.mjs). A build with no resolvable version (a git-less tree
+ * and no override) passes undefined and the entry simply shows no version, as
+ * before. The returned array is otherwise the untouched LICENSES list.
+ */
+export function licenseList(version?: string): SoftwareLicense[] {
+  if (!version) return LICENSES;
+  return LICENSES.map((l) => (l === SCADPUB ? { ...l, version } : l));
+}

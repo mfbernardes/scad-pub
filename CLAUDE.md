@@ -37,6 +37,8 @@ The app never reads `.scad` files at runtime directly. Everything flows through 
 
 Because the form is generated from the same source OpenSCAD parses, the UI can never drift from the design. `generate()` is exported so `tests/gen-schema.test.mjs` drives it against `tests/fixtures/*.config.json`.
 
+`scadpubVersion` (in the schema) stamps which ScadPub built the site: `scripts/lib/version.mjs` runs `git describe --tags --always --dirty` against **ScadPub's own checkout** (not the cwd, so a consuming fork/submodule/sibling build still names ScadPub), with `$SCADPUB_VERSION` as an override for git-less trees. The licenses modal shows it on ScadPub's own entry; it is display-only and deliberately absent from `renderHash`. Absent when nothing resolves — never a build failure. See [docs/config.md](docs/config.md#scadpubs-own-version-stamp).
+
 `renderHash` (in the schema) is a content hash over every render-affecting input: mounted `.scad`, bundled fonts, render features, the WASM build, and `worker.ts` itself. It is folded into the render cache key so a deploy that changes any render input automatically invalidates persisted geometry.
 
 `src/generated/designs.json`, `public/scad/`, `public/wasm/`, the generated PWA assets (`public/manifest.webmanifest`, `public/icon.svg`, `public/icon-*.png`, `public/apple-splash-*.png`, `public/precache-manifest.json`), and `public/fonts/fonts.conf` are **gitignored / generated**. Never edit them by hand; change the config or sources and re-run. The bundled `.ttf` files under `public/fonts/` are tracked, and so is the hand-written `public/sw.js`.

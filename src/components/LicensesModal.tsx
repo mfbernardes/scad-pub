@@ -1,22 +1,26 @@
 // LicensesModal.tsx — open-source attribution notice. Lists the third-party
 // components shipped in this app with their license and source links, and the
 // reproducible license text where applicable, to satisfy their license terms.
-import { LICENSES } from "../lib/licenses";
+import { licenseList } from "../lib/licenses";
 import type { SoftwareLicense } from "../openscad/types";
 import { safeUrl } from "../lib/safeUrl";
 import { Modal, MODAL_BODY, MODAL_INTRO } from "./Modal";
 
 export function LicensesModal({
+  version,
   extra = [],
   onClose,
 }: {
+  /** ScadPub version this site was built from (`schema.scadpubVersion`), shown
+   *  on ScadPub's own entry. Undefined when the build couldn't determine one. */
+  version?: string;
   /** Consumer-configured components, appended after the built-in attributions
    *  (never replacing them). */
   extra?: SoftwareLicense[];
   onClose: () => void;
 }) {
   // Built-ins first, config additions appended: the list only ever grows.
-  const all = [...LICENSES, ...extra];
+  const all = [...licenseList(version), ...extra];
   return (
     <Modal title="Open-source licenses" onClose={onClose}>
       <p className={MODAL_INTRO}>

@@ -799,6 +799,52 @@ test("format is emitted to the schema and folded into renderHash", () => {
   assert.notEqual(a.renderHash, b.renderHash);
 });
 
+test("the ScadPub version stamp reaches the schema and stays out of renderHash", () => {
+  // The stamp identifies the ScadPub build behind a deployment (shown in the
+  // open-source licenses modal). It's display-only: folding it into renderHash
+  // would throw away every persisted render on each commit.
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const stamped = generate({
+    configPath: join(FIXTURES, "widget.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "scad"),
+    version: "v1.4.0-3-gab12cd6",
+  });
+  assert.equal(stamped.scadpubVersion, "v1.4.0-3-gab12cd6");
+  assert.equal(
+    JSON.parse(readFileSync(join(out, "schema", "designs.json"), "utf-8")).scadpubVersion,
+    "v1.4.0-3-gab12cd6"
+  );
+
+  const other = generate({
+    configPath: join(FIXTURES, "widget.config.json"),
+    outSchemaDir: join(out, "schema2"),
+    outScadDir: join(out, "scad2"),
+    version: "v2.0.0",
+  });
+  assert.equal(stamped.renderHash, other.renderHash);
+});
+
+test("a build with no resolvable version omits the stamp entirely", () => {
+  // What a git-less build tree (release tarball, vendored copy) with no
+  // $SCADPUB_VERSION override produces — passed as "" here since an `undefined`
+  // argument would just re-trigger generate()'s own default lookup. The key is
+  // absent rather than null/"", so the licenses modal shows no version line.
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const schema = generate({
+    configPath: join(FIXTURES, "widget.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "scad"),
+    version: "",
+  });
+  assert.equal("scadpubVersion" in schema, false);
+  assert.equal(
+    "scadpubVersion" in
+      JSON.parse(readFileSync(join(out, "schema", "designs.json"), "utf-8")),
+    false
+  );
+});
+
 test("renderHash is stable for an unchanged config (so a rebuild doesn't bust the cache)", () => {
   // The whole point of renderHash is to invalidate persisted geometry only when
   // a render input actually changes. A non-deterministic hash would needlessly

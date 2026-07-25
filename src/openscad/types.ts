@@ -486,6 +486,13 @@ export interface Schema {
     fontsConf?: string;
     fonts?: Record<string, string>;
   };
+  /**
+   * The ScadPub version this site was built with — `git describe` of the
+   * ScadPub checkout that ran the build (or the $SCADPUB_VERSION override); see
+   * scripts/lib/version.mjs. Displayed in the open-source licenses modal.
+   * Absent when the build tree carried no git metadata and no override.
+   */
+  scadpubVersion?: string;
   /** Page/header title (used as the document title and the header text). */
   title: string;
   /** Optional stable id; namespaces this configurator's browser storage so two
