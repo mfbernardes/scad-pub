@@ -360,6 +360,22 @@ function resolveDesignList(config, SOURCE) {
       throw new Error(`gen-schema: design '${id}' '${field}' must be a non-empty string`);
     return raw.trim();
   };
+  // Shared validator for a config `designs[]` field that must be an object
+  // mapping string keys to non-empty string values (presetImages, reviewLabels).
+  // The per-key cross-checks (real preset names / declared param names) happen
+  // later in buildDesigns; this only enforces the shape.
+  const checkStringMap = (raw, id, field) => {
+    if (raw === undefined || raw === null) return null;
+    if (typeof raw !== "object" || Array.isArray(raw))
+      throw new Error(`gen-schema: design '${id}' '${field}' must be an object`);
+    for (const [name, value] of Object.entries(raw)) {
+      if (typeof value !== "string" || !value.trim())
+        throw new Error(
+          `gen-schema: design '${id}' '${field}["${name}"]' must be a non-empty string`
+        );
+    }
+    return raw;
+  };
   if (Array.isArray(config.designs) && config.designs.length) {
     // Two designs sharing an id would clobber each other's generated
     // <id>-icon/<id>-doc output and collide in storage/URLs (#d=<id>).
@@ -384,6 +400,11 @@ function resolveDesignList(config, SOURCE) {
       iconSrc: checkDesignString(d.icon, d.id, "icon"),
       imageSrc: checkDesignString(d.image, d.id, "image"),
       docSrc: checkDesignString(d.doc, d.id, "doc"),
+      reviewLabelsSrc: checkStringMap(d.reviewLabels, d.id, "reviewLabels"),
+      // Plain deployment-authored text, like description — no annotation
+      // fallback, and no cross-reference against the design's own params
+      // (unlike reviewLabels), so it resolves fully here.
+      reviewNote: checkDesignString(d.reviewNote, d.id, "reviewNote"),
     }));
   }
   return readdirSync(SOURCE)
@@ -474,7 +495,36 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       copyFileSync(src, dest);
       doc = `scad/${name}`;
     }
-    return { ...d, description, icon, image, doc, presets, abs, sections, collapsedSections, params };
+    // `reviewLabels`: each key must name an actual DECLARED PARAM of this
+    // design — the same typo-protection stance the icon/doc annotation
+    // fallbacks already apply, just cross-referenced against `params` (only
+    // known now that parseParams has run).
+    let reviewLabels;
+    if (reviewLabelsSrc && Object.keys(reviewLabelsSrc).length) {
+      const paramNames = new Set(params.map((p) => p.name));
+      reviewLabels = {};
+      for (const [name, label] of Object.entries(reviewLabelsSrc)) {
+        if (!paramNames.has(name))
+          throw new Error(
+            `gen-schema: design '${d.id}' 'reviewLabels["${name}"]' does not match any declared parameter`
+          );
+        reviewLabels[name] = label;
+      }
+    }
+    return {
+      ...d,
+      description,
+      icon,
+      image,
+      doc,
+      presets,
+      abs,
+      sections,
+      collapsedSections,
+      params,
+      // Only present when the design configures at least one review label.
+      ...(reviewLabels ? { reviewLabels } : {}),
+    };
   });
 }
 

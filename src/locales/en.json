@@ -4,6 +4,10 @@
   "status.failed": "Preview failed",
   "status.reviewTitle": "Review this design before downloading",
 
+  "error.bootstrapFailed": "The 3D engine couldn't start — check your connection and try again.",
+  "error.renderFailed": "Preview could not be updated",
+  "error.generic": "That combination of settings didn't work",
+
   "review.title": "Review",
   "review.descriptionFailure": "The last render failed — see the details below.",
   "review.descriptionSummary": "A summary of what will be downloaded, and anything that still needs your attention.",

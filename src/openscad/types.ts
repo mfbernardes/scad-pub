@@ -159,6 +159,25 @@ export interface Design {
   /** Section names that start collapsed (from a `// @collapsed` annotation). */
   collapsedSections?: string[];
   params: Param[];
+  /**
+   * Optional curated label overrides for a review summary (config's
+   * `designs[].reviewLabels`; see docs/config.md). Maps a declared
+   * parameter's name to the label its value is shown under in the summary
+   * — gen-schema fails the build if a key doesn't match one of this
+   * design's own params. Several params sharing the same label merge into
+   * ONE summary row, their formatted values joined by " / ". Absent -> the
+   * curated summary is empty. Never affects geometry.
+   */
+  reviewLabels?: Record<string, string>;
+  /**
+   * Optional short explanatory note for a review summary (config's
+   * `designs[].reviewNote`) — e.g. "Text prints in capitals even though you
+   * typed it in lowercase." A generic hook for a design whose output
+   * transforms a parameter's raw value in a way worth calling out; a
+   * deployment supplies the wording, ScadPub never infers it. Null/absent
+   * renders nothing. Never affects geometry.
+   */
+  reviewNote?: string | null;
 }
 
 /** One titled section of the in-app help, with a Markdown-subset body. */
@@ -274,6 +293,13 @@ export interface NoticeCategory {
   marker: string;
   /** Badge / notice noun (e.g. "alerts", "notes"). Defaults to the marker. */
   label: string;
+  /**
+   * Optional singular form of `label` (e.g. "alert" for `label: "alerts"`),
+   * used wherever a count renders alongside it whenever the live count is
+   * exactly 1 — `label` alone can't pluralize itself ("1 alerts" reads
+   * wrong). Omit to keep `label` regardless of count.
+   */
+  labelOne?: string;
   /** Optional badge fill colour (a plain CSS colour); falls back to the accent. */
   color?: string;
   /** Whether this category should be treated as requiring user attention. */

@@ -400,6 +400,18 @@ async function checkExports({ page, check, ids, dir }) {
   check(isPng && (await stat(pngOut)).size > 0, `${await png.suggestedFilename()} (png=${isPng})`);
 }
 
+  // Opened from the strip on an attention design: the footer is keyed on the
+  // live review state, not on how the dialog was opened, so with issues pending
+  // it offers "Download anyway" / "Go back and fix" — identical to the dock
+  // entry point (checkExports above). Scope to the footer for the "Go back and
+  // fix" button so we assert the state-based footer, not the trigger.
+    (await infoFooter.getByRole("button", { name: "Download anyway" }).count()) === 1,
+    "status-opened dialog with issues offers the same Download anyway action as the dock"
+  check(
+    (await infoFooter.getByRole("button", { name: "Go back and fix" }).count()) === 1,
+    "status-opened dialog with issues offers Go back and fix"
+  );
+  await infoFooter.getByRole("button", { name: "Go back and fix" }).click();
 async function checkPreviewControls({ page, check }) {
   console.log("=== preview controls (share link + live preview) ===");
   check(
