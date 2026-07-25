@@ -35,6 +35,7 @@ import {
   parseLang,
   parseDir,
   parseRender,
+  parseStrings,
   renderFontsConf,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
@@ -296,6 +297,23 @@ test("defaultDesign must name a configured design", () => {
 
 test("duplicate design ids fail the build", () => {
   assert.throws(() => run("widget-dup-id.config.json"), /duplicate design id "widget"/);
+});
+
+test("strings: a key that exists in en.json overrides the built-in text", () => {
+  const { schema } = run("widget-strings.config.json");
+  assert.deepEqual(schema.strings, { "action.export": "Download now" });
+});
+
+test("a config with no 'strings' key yields an empty object", () => {
+  const { schema } = run("widget.config.json");
+  assert.deepEqual(schema.strings, {});
+});
+
+test("strings: an unknown key fails the build, pointing at the catalogue", () => {
+  assert.throws(
+    () => run("widget-strings-badkey.config.json"),
+    /unknown 'strings' key 'action.exprot'.*See src\/locales\/en\.json/s
+  );
 });
 
 test("per-design description + icon are parsed, copied and served", () => {
@@ -1177,6 +1195,25 @@ test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
   assert.throws(() => parseRender({ cache: 5 }), /'render\.cache' must be an object/);
   assert.throws(() => parseRender({ cache: { maxBytes: "lots" } }), /'render\.cache\.maxBytes' must be a non-negative number/);
   assert.throws(() => parseRender({ cache: { persistent: "yes" } }), /'render\.cache\.persistent' must be a boolean/);
+});
+
+test("parseStrings: absent -> {}, a known key overrides, an unknown key fails with a suggestion", () => {
+  const validKeys = ["action.export", "action.share", "review.title"];
+  assert.deepEqual(parseStrings(undefined, validKeys), {});
+  assert.deepEqual(parseStrings(null, validKeys), {});
+  assert.deepEqual(
+    parseStrings({ "action.export": "Download now" }, validKeys),
+    { "action.export": "Download now" }
+  );
+  assert.throws(() => parseStrings([], validKeys), /'strings' must be an object/);
+  assert.throws(
+    () => parseStrings({ "action.exprot": "x" }, validKeys),
+    /unknown 'strings' key 'action.exprot'\.\s*\n\s*See src\/locales\/en\.json/
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": 5 }, validKeys),
+    /'strings\.action\.export' must be a string/
+  );
 });
 
 test("parseUi: fullscreen defaults true and validates", () => {

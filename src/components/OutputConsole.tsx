@@ -10,6 +10,7 @@ import { cn } from "../lib/utils";
 import { CountBadges } from "./CountBadges";
 import { IconButton } from "./IconButton";
 import { X as XIcon } from "lucide-react";
+import { t } from "../lib/i18n";
 
 const ICON: Record<DiagnosticLevel, string> = { notice: "ⓘ", warning: "⚠", assert: "✗" };
 /* The ⓘ/⚠/✗ glyph colour per diagnostic level (config categories may override
@@ -42,10 +43,10 @@ export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose
     <div
       className={cn("output-console flex shrink-0 flex-col border-t bg-card", className)}
       role="region"
-      aria-label="Messages from the design"
+      aria-label={t("console.title")}
     >
       <Tabs value={tab} onValueChange={setTab} className="gap-0">
-        <div className="flex shrink-0 items-stretch border-b">
+            {t("console.title")}
           <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
             <TabsTrigger value="notices" className={cn(chipTabTrigger, "px-3")}>
               Notices

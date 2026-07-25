@@ -10,6 +10,22 @@ function fail(msg: string): never {
   throw new Error(`Invalid designs schema: ${msg}`);
 }
 
+/** Shared shape check for a field that must be a plain object mapping string
+ *  keys to string values (presetImages, reviewLabels, strings). The three call
+ *  sites differ only in wording and in whether an empty value is allowed, so
+ *  the messages are supplied by the caller verbatim. */
+function checkStringMap(
+  value: unknown,
+  objectMsg: string,
+  entryMsg: (key: string) => string,
+  nonEmpty: boolean
+): void {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(objectMsg);
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry !== "string" || (nonEmpty && !entry)) fail(entryMsg(key));
+  }
+}
+
 function checkParam(p: unknown, designId: string): void {
   const where = `design '${designId}'`;
   if (!p || typeof p !== "object") fail(`${where} has a non-object param`);
@@ -130,6 +146,13 @@ export function validateSchema(raw: unknown): Schema {
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
   if (s.lang !== undefined && typeof s.lang !== "string") fail("'lang' must be a string");
+  if (s.strings !== undefined)
+    checkStringMap(
+      s.strings,
+      "'strings' must be an object of key: string pairs",
+      (key) => `'strings.${key}' must be a string`,
+      false
+    );
   if (s.dir !== undefined && !["ltr", "rtl", "auto"].includes(s.dir as string))
     fail("'dir' must be \"ltr\", \"rtl\" or \"auto\"");
   if (s.defaultDesign != null) {

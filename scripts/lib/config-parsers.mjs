@@ -427,3 +427,32 @@ export function parseUi(raw) {
   }
   return out;
 }
+
+// Validate and normalise the optional `strings` config block: per-deployment
+// overrides of the built-in UI text catalogue (src/locales/en.json), keyed by
+// the same dot-namespaced keys (including plural `#category` variants, e.g.
+// "settings.showAllCount#other") that src/lib/i18n.ts's `t`/`tn` resolve.
+// Consulted first, ahead of the bundled English catalogue — see i18n.ts's
+// resolution order. Every key must already exist in the English catalogue;
+// `validKeys` is the caller's (gen-schema's) already-loaded key set so this
+// module stays free of file I/O. Fails the build with a clear message pointing
+// at the catalogue rather than silently accepting a key `t()` will never
+// resolve. Returns {} when unset.
+export function parseStrings(raw, validKeys) {
+  if (raw == null) return {};
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'strings' must be an object of key: string pairs");
+  const known = new Set(validKeys);
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!known.has(key))
+      throw new Error(
+        `gen-schema: unknown 'strings' key '${key}'.\n` +
+          `  See src/locales/en.json for the full list of valid keys.`
+      );
+    if (typeof value !== "string")
+      throw new Error(`gen-schema: 'strings.${key}' must be a string (got ${JSON.stringify(value)})`);
+    out[key] = value;
+  }
+  return out;
+}

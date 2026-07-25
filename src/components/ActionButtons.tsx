@@ -11,18 +11,7 @@
 // StaleBanner respectively — so this bar has a single, stable shape.
 import { useAppActions } from "../lib/appActions";
 import { Button } from "./ui/button";
-import { Download as DownloadIcon, Image as ImageIcon, Link2 as LinkIcon } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "./ui/alert-dialog";
+import { t, tn } from "../lib/i18n";
 
 interface Props {
   /** A successful render that still matches the live controls (see
@@ -38,6 +27,9 @@ interface Props {
 export function ActionButtons({ canExport, modelFormat, onSavePng, attentionIssues = [] }: Props) {
   const { exportModel, copyLink } = useAppActions();
   const fmt = modelFormat.toUpperCase();
+  const exportAria = t("dock.exportAria", { format: fmt });
+      ? t("dock.buildingReason")
+        ? t("dock.staleReason")
 
   return (
     <>
@@ -75,14 +67,13 @@ export function ActionButtons({ canExport, modelFormat, onSavePng, attentionIssu
           disabled={!canExport}
           aria-label={`Download ${fmt}`}
         >
-          <DownloadIcon size={16} /> Download {fmt}
+          <span className="action-export__label min-w-0 truncate">{t("action.export")}</span>
         </Button>
+          {tn("review.issueCount", attentionCount)}
       )}
-      <Button size="sm" variant="ghost" onClick={onSavePng} disabled={!canExport} aria-label="Save image">
-        <ImageIcon size={16} /> Image
-      </Button>
-      <Button size="sm" variant="ghost" onClick={copyLink} aria-label="Copy share link">
-        <LinkIcon size={16} /> Share
+        aria-label={NATIVE_SHARE ? t("action.share") : t("dock.copyLink")}
+        title={NATIVE_SHARE ? t("action.share") : t("dock.copyLink")}
+        <span className="action-btn-label min-w-0 truncate">{NATIVE_SHARE ? t("action.share") : t("dock.copyLink")}</span>
       </Button>
     </>
   );

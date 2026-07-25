@@ -74,6 +74,7 @@ These keys control branding, theme overrides, and interactive controls:
 - **`extraCss`**: optional raw-CSS escape hatch for advanced restyling. See [Custom CSS](#custom-css-extracss)
 - **`ui`**: see [UI behaviour and PWA](#ui-behaviour-and-pwa)
 - **`fileImport`**: see [Import file button](#import-file-fileimport)
+- **`strings`**: optional per-deployment overrides of the built-in UI text. See [Text overrides (`strings`)](#text-overrides-strings)
 
 ### In-app content
 
@@ -248,6 +249,24 @@ Use `extraCss` when the `colors` token map does not cover your spacing, fonts, b
 > **This is an unsupported, advanced escape hatch. Use `colors` first.** Unlike the token map, `extraCss` targets internal class names (`.param-panel`, `.param-group`, `.action-cluster`, …). Those are **not a stable API**: a future refactor can rename or restructure them and silently break your overrides. It is also **outside the accessibility guarantees**: you can hide focus rings, break contrast, or disturb layout. If you use it, pin the ScadPub version you build against and re-run `npm run smoke` after changes. Prefer `colors` for anything it can express.
 
 Load order, last wins: app bundle CSS -> `colors` `<style>` -> `extraCss` `<link>`.
+
+## Text overrides (`strings`)
+
+ScadPub's own chrome text — the status strip, the Review dialog, attention cards, the export dock, the output console and the share/export toasts — is generated from a small built-in catalogue (`src/locales/en.json`), resolved through `src/lib/i18n.ts`'s `t()`/`tn()`. The optional `strings` config key lets a deployment override any of those keys without a fork:
+
+```jsonc
+{
+  "strings": {
+    "action.export": "Download for printing",
+    "review.title": "Check before you print"
+  }
+}
+```
+
+- Each key must already exist in `src/locales/en.json` — an unknown key (typically a typo) fails the build, pointing you at that catalogue. There is no way to *add* a brand-new key this way, only override an existing one.
+- Each value is a plain string. Where the built-in text interpolates a variable (`{count}`, `{format}`, …), keep the same `{name}` placeholder(s) in your override — an override that drops a placeholder just renders literal text where the value would have gone.
+- A pluralized key is really **two** catalogue keys, suffixed `#one` and `#other` (English's only two [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) plural categories) — e.g. `review.issueCount#one` ("{count} issue to review") and `review.issueCount#other` ("{count} issues to review"). Override both together if you override either, so a count of exactly 1 doesn't fall back to the built-in English text while every other count uses yours.
+- `strings` never affects geometry, so it's absent from `renderHash`.
 
 ## Import file (`fileImport`)
 

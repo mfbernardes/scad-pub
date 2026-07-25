@@ -1,0 +1,49 @@
+{
+  "status.building": "Building preview…",
+  "status.ready": "Ready to download",
+  "status.failed": "Preview failed",
+  "status.reviewTitle": "Review this design before downloading",
+
+  "review.title": "Review",
+  "review.descriptionFailure": "The last render failed — see the details below.",
+  "review.descriptionSummary": "A summary of what will be downloaded, and anything that still needs your attention.",
+  "review.goBackAndFix": "Go back and fix",
+  "review.downloadAnyway": "Download anyway",
+  "review.issueCount#one": "{count} issue to review",
+  "review.issueCount#other": "{count} issues to review",
+
+  "common.close": "Close",
+
+  "action.export": "Download for 3D printing",
+  "action.share": "Share",
+
+  "dock.copyLink": "Copy link",
+  "dock.exportAria": "Download {format} for slicers and print services",
+  "dock.buildingReason": "Still building the preview…",
+  "dock.staleReason": "Preview out of date — render first",
+
+  "attention.fontFallbackLead": "Font not loaded",
+  "attention.substituteFont": "The preview uses a substitute font.",
+  "attention.importFont": "Import font…",
+  "attention.useBundledFont": "Use a bundled font",
+  "attention.noticePending": "{count} {label} pending",
+  "attention.viewMessages": "View messages",
+
+  "exportSuccess.title": "Your file is on its way",
+  "exportSuccess.body": "Check your browser's downloads, then slice and print when you're ready.",
+  "exportSuccess.openHelp": "Open printing help",
+  "exportSuccess.dismiss": "Dismiss",
+
+  "hint.rotateZoomMouse": "Drag to rotate · Scroll to zoom",
+  "hint.rotateZoomTouch": "Drag to rotate · Pinch to zoom",
+
+  "stale.updating": "Updating…",
+
+  "console.title": "Messages",
+  "console.rawOutput": "Raw output",
+
+  "settings.showAll": "Show all settings",
+  "settings.showAllCount#one": "Show all settings ({count} more)",
+  "settings.showAllCount#other": "Show all settings ({count} more)",
+  "settings.showEssential": "Show essential settings"
+}
