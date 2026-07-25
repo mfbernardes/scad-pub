@@ -5,7 +5,18 @@
 
   "source": "examples",
   "designs": [
-    { "id": "tag", "label": "Tag", "description": "Personalised name tag with text.", "icon": "examples/tag-icon.svg" },
+    {
+      "id": "tag",
+      "label": "Tag",
+      "description": "Personalised name tag with text.",
+      "icon": "examples/tag-icon.svg",
+      "reviewLabels": { "label": "Text", "font": "Typeface" },
+      "reviewNote": "The engraved or raised text keeps your capitalisation exactly as typed.",
+      "presetImages": {
+        "Large tag": "examples/tag-preset-large.png",
+        "No hole": "examples/tag-preset-nohole.png"
+      }
+    },
     { "id": "coin", "label": "Coin", "description": "Round coin with an embossed emblem.", "icon": "examples/coin-icon.svg" },
     { "id": "panel", "label": "Panel", "description": "An SVG extruded as a coloured relief panel." }
   ],
@@ -17,13 +28,14 @@
     "LiberationSans-Regular.ttf"
   ],
 
-  "ui": { "install": "off" },
+  "ui": { "install": "off", "afterExport": { "helpTab": "Printing" } },
   "fileImport": true,
 
   "popup": {
     "header": "Welcome to ScadPub",
     "body": "Configure an OpenSCAD design in your browser and export a ready-to-print model — everything runs locally.\n\nScadPub is open source: see the [project on GitHub](https://github.com/mfbernardes/scad-pub).",
-    "mode": "dismissible"
+    "mode": "dismissible",
+    "footnote": "Everything runs in your browser. Nothing is uploaded."
   },
   "help": {
     "intro": "Customize an OpenSCAD design in your browser and download a ready-to-print model — everything runs on your device.",
@@ -92,7 +104,7 @@
     ]
   },
   "notices": [
-    { "marker": "alert", "label": "alerts", "color": "#e0a458" },
-    { "marker": "note", "label": "notes", "color": "#86a9ff" }
+    { "marker": "alert", "label": "alerts", "labelOne": "alert", "color": "#e0a458", "attention": true },
+    { "marker": "note", "label": "notes", "labelOne": "note", "color": "#86a9ff" }
   ]
 }

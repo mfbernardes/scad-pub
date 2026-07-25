@@ -10,6 +10,22 @@ function fail(msg: string): never {
   throw new Error(`Invalid designs schema: ${msg}`);
 }
 
+/** Shared shape check for a field that must be a plain object mapping string
+ *  keys to string values (presetImages, reviewLabels, strings). The three call
+ *  sites differ only in wording and in whether an empty value is allowed, so
+ *  the messages are supplied by the caller verbatim. */
+function checkStringMap(
+  value: unknown,
+  objectMsg: string,
+  entryMsg: (key: string) => string,
+  nonEmpty: boolean
+): void {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(objectMsg);
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry !== "string" || (nonEmpty && !entry)) fail(entryMsg(key));
+  }
+}
+
 function checkParam(p: unknown, designId: string): void {
   const where = `design '${designId}'`;
   if (!p || typeof p !== "object") fail(`${where} has a non-object param`);
@@ -26,6 +42,14 @@ function checkParam(p: unknown, designId: string): void {
     fail(`${at} has a non-object info annotation`);
   if (param.advanced !== undefined && typeof param.advanced !== "boolean")
     fail(`${at} has a non-boolean advanced annotation`);
+  // `@editOnModel` is a string-only marker gen-schema only ever emits as `true`
+  // (and only on a plain, non-font string param). Reject any other shape so a
+  // hand-edited or drifted schema fails loudly rather than half-enabling the
+  // on-model editor.
+  if (param.editOnModel !== undefined) {
+    if (param.editOnModel !== true) fail(`${at} 'editOnModel' must be true`);
+    if (param.type !== "string") fail(`${at} has 'editOnModel' on a non-string param`);
+  }
 }
 
 function checkDesign(d: unknown): void {
@@ -48,12 +72,28 @@ function checkDesign(d: unknown): void {
     fail(`design '${id}' 'image' must be a string URL`);
   if (design.doc != null && typeof design.doc !== "string")
     fail(`design '${id}' 'doc' must be a string URL`);
+  if (design.presetImages != null)
+    checkStringMap(
+      design.presetImages,
+      `design '${id}' 'presetImages' must be an object`,
+      (name) => `design '${id}' 'presetImages["${name}"]' must be a non-empty string URL`,
+      true
+    );
   if (
     design.collapsedSections !== undefined &&
     (!Array.isArray(design.collapsedSections) ||
       !design.collapsedSections.every((s) => typeof s === "string"))
   )
     fail(`design '${id}' 'collapsedSections' must be an array of strings`);
+  if (design.reviewLabels != null)
+    checkStringMap(
+      design.reviewLabels,
+      `design '${id}' 'reviewLabels' must be an object`,
+      (name) => `design '${id}' 'reviewLabels["${name}"]' must be a non-empty string`,
+      true
+    );
+  if (design.reviewNote != null && typeof design.reviewNote !== "string")
+    fail(`design '${id}' 'reviewNote' must be a string`);
   for (const p of design.params as unknown[]) checkParam(p, id);
 }
 
@@ -112,6 +152,8 @@ export function validateSchema(raw: unknown): Schema {
       fail("'popup.mode' must be \"always\", \"once\", \"dismissible\" or \"picker\"");
     if (p.button !== undefined && (typeof p.button !== "string" || !p.button))
       fail("'popup.button', when set, must be a non-empty string");
+    if (p.footnote !== undefined && (typeof p.footnote !== "string" || !p.footnote))
+      fail("'popup.footnote', when set, must be a non-empty string");
   }
   if (s.notices !== undefined) {
     if (!Array.isArray(s.notices)) fail("'notices' must be an array");
@@ -122,6 +164,8 @@ export function validateSchema(raw: unknown): Schema {
         fail("a notice category is missing required string 'marker'");
       if (typeof e.label !== "string" || !e.label)
         fail("a notice category is missing required string 'label'");
+      if (e.labelOne !== undefined && typeof e.labelOne !== "string")
+        fail("a notice 'labelOne' must be a string");
       if (e.color !== undefined && typeof e.color !== "string")
         fail("a notice 'color' must be a string");
       if (e.attention !== undefined && typeof e.attention !== "boolean")
@@ -130,6 +174,13 @@ export function validateSchema(raw: unknown): Schema {
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
   if (s.lang !== undefined && typeof s.lang !== "string") fail("'lang' must be a string");
+  if (s.strings !== undefined)
+    checkStringMap(
+      s.strings,
+      "'strings' must be an object of key: string pairs",
+      (key) => `'strings.${key}' must be a string`,
+      false
+    );
   if (s.dir !== undefined && !["ltr", "rtl", "auto"].includes(s.dir as string))
     fail("'dir' must be \"ltr\", \"rtl\" or \"auto\"");
   if (s.defaultDesign != null) {

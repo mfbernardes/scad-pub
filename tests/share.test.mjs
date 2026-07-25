@@ -3,7 +3,7 @@
 // per-case (it's a configurable global in Node).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shareUrl, shareFile, shareFileOrFallback } from "../src/lib/share.ts";
+import { shareUrl, shareFile, shareFileOrFallback, canShareNatively } from "../src/lib/share.ts";
 
 const orig = Object.getOwnPropertyDescriptor(globalThis, "navigator");
 const origWin = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -130,6 +130,21 @@ test("shareFileOrFallback: cancelled → no fallback (user declined)", async () 
   );
   assert.equal(out, "cancelled");
   assert.equal(fell, false);
+});
+
+test("canShareNatively: true only on a touch device exposing navigator.share", () => {
+  assert.equal(withNavigator({ share: async () => {} }, () => canShareNatively()), true);
+});
+
+test("canShareNatively: false on desktop even with navigator.share", () => {
+  assert.equal(
+    withNavigator({ share: async () => {} }, () => canShareNatively(), { touch: false }),
+    false
+  );
+});
+
+test("canShareNatively: false on a touch device without navigator.share", () => {
+  assert.equal(withNavigator({}, () => canShareNatively()), false);
 });
 
 test("shareFileOrFallback: unsupported and failed both run the fallback", async () => {

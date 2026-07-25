@@ -56,6 +56,12 @@ const SVG_LAYERS_RE = /^layers=([A-Za-z_][A-Za-z0-9_]*)$/i;
 // `@filledBy <param>` directive: marks a parameter as populated by the wizard on
 // the named `@svg` field, so the UI can render it demoted. Invisible to OpenSCAD.
 const FILLEDBY_RE = /^@filledBy\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i;
+// `@editOnModel` directive: marks a parameter as the design's on-model editable
+// text — the string the app lets the user edit by clicking the rendered mesh
+// (see src/lib/editOnModel.ts). Valid ONLY on a plain `string` param (not a
+// font, not an enum), and at most one per design; both rules are enforced
+// below. Bare annotation, no arguments. Invisible to OpenSCAD.
+const EDITONMODEL_RE = /^@editOnModel\s*$/i;
 
 // ── M9: annotation grammar + cross-parameter validation ────────────────────
 // A doc-comment line starting with `@word` is treated as an annotation
@@ -64,7 +70,7 @@ const FILLEDBY_RE = /^@filledBy\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i;
 // that grammar — or starts with an unrecognised `@word` at all — fails the
 // build with the file and line, instead of silently degrading to plain doc
 // prose (a typo'd `@shwoIf` used to just become part of the help text).
-const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "advanced", "info", "svg", "filledby"]);
+const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "advanced", "info", "svg", "filledby", "editonmodel"]);
 const ANNOTATION_WORD_RE = /^@([A-Za-z-]+)\b/;
 
 // `@showIf` clause shapes accepted at both generate time (here) and runtime
@@ -307,6 +313,12 @@ export function parseParams(absPath) {
   // Set by an `// @filledBy <param>` line; consumed by the next parameter.
   let pendingFilledBy = null;
   let pendingFilledByLine = 0;
+  // Set by an `// @editOnModel` line; consumed by the next parameter.
+  let pendingEditOnModel = false;
+  let pendingEditOnModelLine = 0;
+  // Name of the param already marked `@editOnModel` in this design (at most one
+  // is allowed) — persists across the whole loop so a second one fails the build.
+  let editOnModelName = null;
   // Set by a `// @collapsed` line; consumed by the next section header.
   let pendingSectionCollapsed = false;
   const params = [];
@@ -327,6 +339,7 @@ export function parseParams(absPath) {
     pendingInfo = null;
     pendingSvg = null;
     pendingFilledBy = null;
+    pendingEditOnModel = false;
     pendingSectionCollapsed = false;
   };
   for (let i = 0; i < lines.length; i++) {
@@ -414,6 +427,33 @@ export function parseParams(absPath) {
         p.filledBy = pendingFilledBy;
         lineInfo.filledBy.set(name, pendingFilledByLine);
       }
+      // `@editOnModel`: only a plain string param (not a font, not an enum) may
+      // be the on-model editable text, and a design may declare it on at most
+      // one param. `isFont` is already resolved above, so the font check reads
+      // the final flag; an enum (or any non-string type) is caught by the type
+      // check. A second occurrence fails the build, naming the first owner.
+      if (pendingEditOnModel) {
+        if (p.type !== "string")
+          fail(
+            absPath,
+            pendingEditOnModelLine,
+            `@editOnModel on '${name}' must be a string parameter (got type ${p.type})`
+          );
+        if (p.isFont)
+          fail(
+            absPath,
+            pendingEditOnModelLine,
+            `@editOnModel on '${name}' cannot be a font parameter (a '@font' string is not editable on the model)`
+          );
+        if (editOnModelName)
+          fail(
+            absPath,
+            pendingEditOnModelLine,
+            `@editOnModel is already declared on '${editOnModelName}'; only one parameter per design may be @editOnModel`
+          );
+        p.editOnModel = true;
+        editOnModelName = name;
+      }
       if (pendingShowIf) lineInfo.showIf.set(name, pendingShowIfLine);
       params.push(p);
       reset();
@@ -435,7 +475,10 @@ export function parseParams(absPath) {
         pendingShowIf = expr;
         pendingShowIfLine = lineNo;
       } else if (FONT_ANNOT_RE.test(content)) pendingFont = true;
-      else if (ADVANCED_ANNOT_RE.test(content)) pendingAdvanced = true;
+      else if (EDITONMODEL_RE.test(content)) {
+        pendingEditOnModel = true;
+        pendingEditOnModelLine = lineNo;
+      } else if (ADVANCED_ANNOT_RE.test(content)) pendingAdvanced = true;
       else if (info) {
         // `@info`, `@info Label`, or `@info Label | unit` — split on a single
         // pipe; empty parts become null (label falls back to the param's own
@@ -474,7 +517,7 @@ export function parseParams(absPath) {
         fail(
           absPath,
           lineNo,
-          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @advanced, @info, @svg, @filledBy, @collapsed, @description, @icon, @image, @doc)`
+          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @advanced, @info, @svg, @filledBy, @editOnModel, @collapsed, @description, @icon, @image, @doc)`
         );
       } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {

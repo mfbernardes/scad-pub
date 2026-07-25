@@ -2,9 +2,19 @@
 // fullscreen. The fullscreen toggle is shown only where it actually works: not
 // in an installed PWA (already its own window), and not where the Fullscreen
 // API is unsupported (e.g. iOS Safari, which only fullscreens <video>).
+//
+// Every HUD button wraps a plain `IconButton` in a shadcn Tooltip (`asChild`,
+// so the Tooltip's ref/pointer/focus handlers land on IconButton's own
+// underlying `<button>`) — visible on hover AND keyboard focus, unlike
+// `title` alone, while `title` stays as a no-JS/assistive fallback.
+// IconButton now forwards its `ref` prop straight through to Button (React 19
+// "ref as a prop" — see IconButton.tsx's own doc), so `asChild` no longer
+// needs a hand-rolled Button call to get a working ref target.
+import type { ReactNode } from "react";
 import type { ViewerHandle } from "./Viewer";
 import { IconButton } from "./IconButton";
 import { ViewPicker, HUD_GLASS_BTN } from "./ViewPicker";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { cn } from "../lib/utils";
 import type { ViewName } from "./views";
 import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, Maximize as MaximizeIcon, Ruler as RulerIcon } from "lucide-react";
@@ -34,6 +44,34 @@ interface Props {
   onSelectView: (view: ViewName) => void;
 }
 
+// Every HUD button is an IconButton wrapped in the same left-anchored
+// hover/focus Tooltip, with the tooltip text mirroring the aria-label — this
+// composes that once so the five buttons below stay identical in output.
+function HudTooltipButton({
+  label,
+  onClick,
+  className,
+  pressed,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  className?: string;
+  pressed?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <IconButton label={label} className={className} pressed={pressed} onClick={onClick}>
+          {children}
+        </IconButton>
+      </TooltipTrigger>
+      <TooltipContent side="left">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, reset, zoom, fullscreen, view, onSelectView }: Props) {
   const standalone = useStandalone();
   const canFullscreen = fullscreen && !standalone && fullscreenSupported();
@@ -53,38 +91,41 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
 
   return (
     <div className="viewer-hud">
+      {/* ViewPicker (a separate component) renders its own trigger button,
+          wrapped in the same hover/focus Tooltip as every other HUD button
+          (nested around its Popover trigger — see ViewPicker's own doc). */}
       {viewPicker && <ViewPicker view={view} onSelect={onSelectView} />}
       {zoom && (
         <>
-          <IconButton label="Zoom in" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomIn()}>
+          <HudTooltipButton label="Zoom in" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomIn()}>
             <ZoomInIcon size={18} />
-          </IconButton>
-          <IconButton label="Zoom out" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomOut()}>
+          </HudTooltipButton>
+          <HudTooltipButton label="Zoom out" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomOut()}>
             <ZoomOutIcon size={18} />
-          </IconButton>
+          </HudTooltipButton>
         </>
       )}
       {reset && (
-        <IconButton label="Reset view" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.resetView()}>
+        <HudTooltipButton label="Reset view" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.resetView()}>
           <ResetIcon size={18} />
-        </IconButton>
+        </HudTooltipButton>
       )}
       {measure && (
-        <IconButton
+        <HudTooltipButton
           label={showDimensions ? "Hide dimensions" : "Show dimensions"}
           onClick={onToggleDimensions}
           pressed={showDimensions}
           className={cn(HUD_GLASS_BTN, showDimensions && "border-brand text-brand")}
         >
           <RulerIcon size={18} />
-        </IconButton>
+        </HudTooltipButton>
       )}
       {/* Fullscreen only where it works: a browser tab (not an installed PWA)
           on a browser that supports the Fullscreen API. */}
       {canFullscreen && (
-        <IconButton label="Toggle fullscreen" className={HUD_GLASS_BTN} onClick={toggleFullscreen}>
+        <HudTooltipButton label="Toggle fullscreen" className={HUD_GLASS_BTN} onClick={toggleFullscreen}>
           <MaximizeIcon size={18} />
-        </IconButton>
+        </HudTooltipButton>
       )}
     </div>
   );

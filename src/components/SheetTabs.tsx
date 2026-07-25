@@ -1,17 +1,20 @@
 // SheetTabs.tsx — segmented tabs (shadcn/ui Tabs) inside the mobile bottom sheet.
-// Parameters / Presets / Files. Prevents the stacked-sheet anti-pattern.
-import type { Design, FileImport } from "../openscad/types";
+// Parameters / Presets. Prevents the stacked-sheet anti-pattern. Files used to
+// be a third tab here; it's now FilesModal, opened from the mobile top bar's
+// "⋮" overflow (BarActions.tsx) — see ParamPanel.tsx's own doc for its desktop twin.
+import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
 import type { PanelTab } from "../lib/usePanelState";
+import { EssentialsToggle } from "./EssentialsToggle";
 import { ParamForm } from "./ParamForm";
-import { FileBar, type LoadedFile } from "./FileBar";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
 import { PanelFooter } from "./PanelFooter";
+import { StatusStrip, type StatusStripProps } from "./StatusStrip";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 
@@ -31,8 +34,6 @@ interface Props {
   baseline: Values;
   /** Names of params whose value differs from `baseline`. */
   changedParams: Set<string>;
-  fileImport: FileImport | null;
-  loadedFiles: LoadedFile[];
   /** Font families the renderer can use (normalised), for the missing-font hint. */
   availableFontFamilies?: Set<string>;
   /** A bundled family to offer as a one-click fallback for a missing font. */
@@ -57,6 +58,11 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
+  /** Readiness status strip, mounted above the tab row — see StatusStrip.tsx's
+   *  own doc for why that keeps it inside the sheet's always-visible peek
+   *  header (BottomSheet measures Peek from the sheet's top down to the tab
+   *  row's bottom edge). */
+  statusStrip: Omit<StatusStripProps, "className">;
 }
 
 export function SheetTabs({
@@ -69,8 +75,6 @@ export function SheetTabs({
   presetName,
   baseline,
   changedParams,
-  fileImport,
-  loadedFiles,
   availableFontFamilies,
   fontSuggestion,
   installedFonts,
@@ -87,21 +91,12 @@ export function SheetTabs({
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
+  statusStrip,
 }: Props) {
-  const {
-    change,
-    applyPreset,
-    selectedPresetChange,
-    presetsChange,
-    addFile,
-    removeFile,
-    clearFiles,
-  } = useAppActions();
-  const hasFiles = fileImport != null;
-  // Presets first on mobile, then Customize, then Files.
-  const tabs: Tab[] = ["presets", "params", ...(hasFiles ? (["files"] as Tab[]) : [])];
+  const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
+  // Presets first on mobile, then Customize.
+  const tabs: Tab[] = ["presets", "params"];
   const debouncedSearch = useDebounce(search, 150);
-
   const triggerClass = cn(chipTabTrigger, "flex-1");
 
   return (
@@ -110,10 +105,11 @@ export function SheetTabs({
       onValueChange={(v) => onTabChange(v as Tab)}
       className="sheet-tabs min-h-0 flex-1 gap-0"
     >
+      <StatusStrip {...statusStrip} className="shrink-0" />
       <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
         {tabs.map((t) => (
           <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
-            {t === "params" ? parametersLabel : t === "presets" ? presetsLabel : "Files"}
+            {t === "params" ? parametersLabel : presetsLabel}
           </TabsTrigger>
         ))}
       </TabsList>
@@ -133,20 +129,17 @@ export function SheetTabs({
             onFocus={onSearchFocus}
             onBlur={onSearchBlur}
           />
-          {design.params.some((p) => p.advanced) && (
-            <button
-              type="button"
-              className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
-              onClick={() => onShowAdvancedChange(!showAdvanced)}
-            >
-              {showAdvanced ? "Show essential settings" : "Show all settings"}
-            </button>
-          )}
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <EssentialsToggle
+            params={design.params}
+            values={values}
+            showAdvanced={showAdvanced}
+            onShowAdvancedChange={onShowAdvancedChange}
+          />
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
             <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
           {/* Auto-render is parameter-scoped, so it pins to the bottom of this
-              tab only — not on Presets/Files (mirrors the desktop panel). Reset
+              tab only — not on Presets (mirrors the desktop panel). Reset
               lives in PresetDiffBar above now (the unified restore control). */}
           <PanelFooter autoRender={autoRender} className="sheet-footer" />
         </TabsContent>
@@ -163,17 +156,6 @@ export function SheetTabs({
             inline
           />
         </TabsContent>
-        {hasFiles && (
-          <TabsContent value="files" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-            <FileBar
-              fileImport={fileImport}
-              loadedFiles={loadedFiles}
-              onAddFile={addFile}
-              onRemoveFile={removeFile}
-              onClearFiles={clearFiles}
-            />
-          </TabsContent>
-        )}
       </div>
     </Tabs>
   );

@@ -12,6 +12,15 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildDimensions, type DimensionsGroup } from "./dimensions";
 import { VIEW_DIRECTIONS, DEFAULT_VIEW, type ViewName } from "./views";
 import { toIndexedGeometry } from "@/lib/meshIndex";
+import { isModelClick } from "@/lib/editOnModel";
+import {
+  frameDistanceForBox,
+  cameraBasis,
+  insetHeightFraction,
+  insetTargetShift,
+  DEFAULT_FIT_FRACTION,
+  type Box3Like,
+} from "./framing";
 
 // The build-time model format (Vite define; see vite.config.ts). A literal, so
 // the unused branch below — and its loader import — drop out of the bundle.
@@ -107,8 +116,15 @@ export const Viewer = forwardRef<
     view?: ViewName;
     /** Reports the model's bounding-box size in mm (null when geometry clears). */
     onMeasure?: (size: Dimensions | null) => void;
+    /** When true (design has an `@editOnModel` param and a model is shown), a
+     *  click/tap on the mesh raycasts the model and reports the hit's
+     *  screen-space position via `onModelPick`; orbit/pan/zoom are unaffected. */
+    editable?: boolean;
+    /** Called when a plain click/tap lands on the model mesh, with the hit's
+     *  position (px) relative to the viewer's top-left. A miss does nothing. */
+    onModelPick?: (pos: { x: number; y: number }) => void;
   }
->(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, view = DEFAULT_VIEW, onMeasure }, ref) {
+>(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, view = DEFAULT_VIEW, onMeasure, editable = false, onModelPick }, ref) {
   // Latest selected view, read inside the [stl]-only reframe effect and the
   // imperative handle without re-running them.
   const viewRef = useRef(view);
@@ -116,6 +132,12 @@ export const Viewer = forwardRef<
   // Keep the latest onMeasure without re-running the [stl]-only geometry effect.
   const onMeasureRef = useRef(onMeasure);
   onMeasureRef.current = onMeasure;
+  // Latest on-model-edit props, read inside the one-time setup effect's pointer
+  // handlers (which have no deps) without re-running setup.
+  const editableRef = useRef(editable);
+  editableRef.current = editable;
+  const onModelPickRef = useRef(onModelPick);
+  onModelPickRef.current = onModelPick;
   const mountRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<THREE.Object3D | null>(null);
   // The design+preset whose geometry is currently framed. A new model from the
@@ -138,30 +160,81 @@ export const Viewer = forwardRef<
   const modelSizeRef = useRef<THREE.Vector3 | null>(null);
   // The live dimension-annotation overlay (see dimensions.ts), or null when off.
   const dimGroupRef = useRef<DimensionsGroup | null>(null);
-  // Bounding-sphere radius of the framed model, so "Reset view" can reproduce
-  // the default framing on demand. null until the first model is framed.
-  const frameRadiusRef = useRef<number | null>(null);
 
-  // Frame the orbit camera for a model of the given bounding-sphere radius, from
-  // the named standard view (default = the current one). The camera's up stays
-  // +Z for every view (set once at init), so OrbitControls keeps orbiting
-  // correctly; only the look-from direction changes.
-  function frameView(radius: number, name: ViewName = viewRef.current) {
+  // The export dock (`.action-dock`) floats over the canvas via CSS
+  // `position: absolute` — it does NOT shrink the canvas's own box the way
+  // the mobile bottom sheet does (`.app-shell__mobile-viewer`'s `bottom:
+  // var(--sheet-top)` already excludes the sheet from `mount`'s own
+  // clientHeight, so that side needs no extra handling here). So the dock is
+  // the one piece of floating chrome the camera fit has to account for
+  // itself: how many pixels of `mount`'s own bottom edge it covers, measured
+  // live from the DOM rather than duplicating its CSS geometry (gap/safe-area
+  // constants) here. Only one `.action-dock` is ever in the document at a
+  // time — AppShell mounts exactly one of the desktop/mobile layouts, never
+  // both (see AppShell.tsx's M7) — so a plain, unscoped query is safe.
+  function dockInsetPx(mount: HTMLElement): number {
+    const dock = document.querySelector<HTMLElement>(".action-dock");
+    if (!dock) return 0;
+    const mountBottom = mount.getBoundingClientRect().bottom;
+    const dockTop = dock.getBoundingClientRect().top;
+    return Math.max(0, mountBottom - dockTop);
+  }
+
+  // Frame the orbit camera for the current model (modelSizeRef), from the
+  // named standard view (default = the current one), fitting its actual
+  // bounding BOX (see framing.ts) rather than a bounding-sphere radius — a
+  // sphere over-estimates a flat/wide model's on-screen footprint, which
+  // used to leave e.g. flat plates reading much smaller than intended. The
+  // camera's up stays +Z for every view (set once at init), so OrbitControls
+  // keeps orbiting correctly; only the look-from direction changes.
+  function frameView(name: ViewName = viewRef.current) {
     const cam = camRef.current;
     const controls = controlsRef.current;
-    if (!cam || !controls) return;
-    if (name === "isometric") {
-      // The long-standing default three-quarter framing, kept pixel-exact.
-      const d = radius * 2.6;
-      cam.position.set(d * 0.6, -d, d * 0.7);
-    } else {
-      const [x, y, z] = VIEW_DIRECTIONS[name];
-      cam.position
-        .set(x, y, z)
-        .normalize()
-        .multiplyScalar(radius * 3.4);
+    const mount = mountRef.current;
+    const size = modelSizeRef.current;
+    if (!cam || !controls || !mount || !size) return;
+
+    // Reconstruct the model's world-space bounding box from its size, in the
+    // same two positioning modes the geometry-swap effect below applies
+    // (both centred at target (0,0,0) in X/Y): centred on all three axes by
+    // default, or — restOnGrid — resting its base on z=0 instead of being
+    // vertically centred. Cheaper than re-measuring a live THREE.Box3, and
+    // exactly reproduces that effect's own math (translation only, so `size`
+    // alone is enough to reconstruct it).
+    const halfX = size.x / 2;
+    const halfY = size.y / 2;
+    const box: Box3Like = __APP_REST_ON_GRID__
+      ? { min: new THREE.Vector3(-halfX, -halfY, 0), max: new THREE.Vector3(halfX, halfY, size.z) }
+      : { min: new THREE.Vector3(-halfX, -halfY, -size.z / 2), max: new THREE.Vector3(halfX, halfY, size.z / 2) };
+
+    const [dx, dy, dz] = VIEW_DIRECTIONS[name];
+    const direction = new THREE.Vector3(dx, dy, dz);
+    const target = new THREE.Vector3(0, 0, 0);
+
+    const w = mount.clientWidth || 1;
+    const h = mount.clientHeight || 1;
+    const aspect = w / h;
+
+    // Leave room for the export dock: shrink the height target to the
+    // USABLE strip above it, so the box-fit solve below asks for a distance
+    // that fits the model into that strip, not the full canvas.
+    const inset = dockInsetPx(mount);
+    const fit = { width: DEFAULT_FIT_FRACTION.width, height: insetHeightFraction(DEFAULT_FIT_FRACTION.height, h, inset) };
+
+    const distance = frameDistanceForBox(box, target, direction, aspect, cam.fov, fit);
+
+    // Shift the orbit target opposite the screen "up" direction by half the
+    // inset, in world units at this distance, so the (unmoved) model renders
+    // centred in the usable strip above the dock instead of the full canvas
+    // — see framing.ts's insetTargetShift for the sign/derivation.
+    const { dir, up } = cameraBasis(direction);
+    if (inset > 0) {
+      const shift = insetTargetShift(distance, cam.fov, h, inset);
+      target.addScaledVector(up, -shift);
     }
-    controls.target.set(0, 0, 0);
+
+    cam.position.copy(target).addScaledVector(dir, distance);
+    controls.target.copy(target);
     controls.update();
   }
 
@@ -224,11 +297,11 @@ export const Viewer = forwardRef<
       return r.domElement.toDataURL("image/png");
     },
     resetView() {
-      if (frameRadiusRef.current != null) frameView(frameRadiusRef.current);
+      if (modelSizeRef.current) frameView();
     },
     setView(name) {
       viewRef.current = name; // stick for the next new-model reframe
-      if (frameRadiusRef.current != null) frameView(frameRadiusRef.current, name);
+      if (modelSizeRef.current) frameView(name);
     },
     zoomIn() {
       dolly(0.8);
@@ -282,17 +355,95 @@ export const Viewer = forwardRef<
     rendererRef.current = renderer;
     mount.appendChild(renderer.domElement);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const key = new THREE.DirectionalLight(0xffffff, 0.8);
+    // A hemisphere light carries most of the fill so that near-white surfaces
+    // read close to their true colour instead of collapsing to grey. With an
+    // ambient-dominated rig a face turned away from the key light only sees the
+    // ambient term, so a near-white model colour (e.g. #F2EFE9) multiplied by a
+    // ~0.6 ambient came out a warm mid-grey. The hemisphere's near-white "sky"
+    // fill lifts upward-facing surfaces toward their real colour while its
+    // mid-grey "ground" keeps side/under faces darker, so the model still shows
+    // form (a visible light→shadow gradient) rather than flattening. Ambient is
+    // dropped and the two directionals trimmed so highlights and saturated
+    // colours don't clip. Positioned at +Z to match the OpenSCAD Z-up scene, so
+    // "sky" fill lands on top faces.
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 2.0);
+    hemi.position.set(0, 0, 1);
+    scene.add(hemi);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const key = new THREE.DirectionalLight(0xffffff, 0.5);
     key.position.set(1, -1, 2);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.4);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.25);
     fill.position.set(-1, 1, 0.5);
     scene.add(fill);
 
     const controls = new OrbitControls(cam, renderer.domElement);
     controls.enableDamping = true;
     controlsRef.current = controls;
+
+    // ── On-model text editing: click/tap the mesh to open the inline editor ──
+    // A plain click (a pointerdown→pointerup pair that moved under the
+    // click threshold, single pointer) raycasts the model — and ONLY the
+    // model, never the grid/floor — and reports the hit's screen position so
+    // ViewerStage can float the editor there. These listeners are purely
+    // observational (no preventDefault / stopPropagation), so OrbitControls'
+    // own orbit/pan/zoom on the same canvas is completely unaffected: a real
+    // drag moves the camera and, having moved past the threshold, never opens
+    // the editor. Only wired when `editableRef` is set (design has an
+    // `@editOnModel` param and a model is shown).
+    const canvasEl = renderer.domElement;
+    const raycaster = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    const activePointers = new Set<number>();
+    let downPt: { x: number; y: number } | null = null;
+    let multiTouch = false;
+
+    const onPointerDown = (e: PointerEvent) => {
+      activePointers.add(e.pointerId);
+      if (activePointers.size > 1) {
+        multiTouch = true; // a second finger landed — this is a pinch/rotate, not a tap
+        downPt = null;
+        return;
+      }
+      downPt = { x: e.clientX, y: e.clientY };
+    };
+    const clearPointer = (e: PointerEvent) => {
+      activePointers.delete(e.pointerId);
+      if (activePointers.size === 0) multiTouch = false;
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      const down = downPt;
+      const wasMulti = multiTouch;
+      clearPointer(e);
+      downPt = null;
+      const pick = onModelPickRef.current;
+      const model = modelRef.current;
+      if (!editableRef.current || !pick || !model) return;
+      if (!isModelClick({ down, up: { x: e.clientX, y: e.clientY }, multiTouch: wasMulti })) return;
+      const rect = canvasEl.getBoundingClientRect();
+      ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(ndc, cam);
+      if (raycaster.intersectObject(model, true).length === 0) return; // a miss does nothing
+      pick({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    };
+    // Hover affordance: point the cursor while genuinely over the model (only
+    // while editable and not mid-drag), so the on-model click is discoverable.
+    // A single-object raycast, and only on a plain hover move, so it's cheap.
+    const onPointerMove = (e: PointerEvent) => {
+      if (!editableRef.current || e.buttons !== 0) return;
+      const model = modelRef.current;
+      const rect = canvasEl.getBoundingClientRect();
+      ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(ndc, cam);
+      const over = !!model && raycaster.intersectObject(model, true).length > 0;
+      canvasEl.style.cursor = over ? "pointer" : "";
+    };
+    canvasEl.addEventListener("pointerdown", onPointerDown);
+    canvasEl.addEventListener("pointerup", onPointerUp);
+    canvasEl.addEventListener("pointercancel", clearPointer);
+    canvasEl.addEventListener("pointermove", onPointerMove);
 
     const io = new IntersectionObserver(
       ([entry]) => {
@@ -378,6 +529,10 @@ export const Viewer = forwardRef<
     return () => {
       cancelAnimationFrame(raf);
       controls.removeEventListener("change", requestRender);
+      canvasEl.removeEventListener("pointerdown", onPointerDown);
+      canvasEl.removeEventListener("pointerup", onPointerUp);
+      canvasEl.removeEventListener("pointercancel", clearPointer);
+      canvasEl.removeEventListener("pointermove", onPointerMove);
       ro.disconnect();
       io.disconnect();
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -446,6 +601,17 @@ export const Viewer = forwardRef<
     syncDimensions(showDimensions);
     requestRenderRef.current();
   }, [showDimensions]);
+
+  // Drop the on-model hover cursor the moment editing is no longer offered
+  // (render failed, or the design has no `@editOnModel` param), so a stale
+  // "pointer" cursor never lingers over an inert canvas. The pointermove
+  // handler above re-applies it while editable.
+  useEffect(() => {
+    if (!editable) {
+      const canvas = rendererRef.current?.domElement;
+      if (canvas) canvas.style.cursor = "";
+    }
+  }, [editable]);
 
   // Swap geometry when a new model arrives.
   useEffect(() => {
@@ -538,21 +704,18 @@ export const Viewer = forwardRef<
     syncDimensions(showDimensions); // refresh the overlay for the new bounds
     onMeasureRef.current?.({ x: size.x, y: size.y, z: size.z });
 
-    // Remember the model's size so "Reset view" can reproduce this framing even
-    // after the user has orbited or zoomed away.
-    const r = box.getBoundingSphere(new THREE.Sphere()).radius || 50;
-    frameRadiusRef.current = r;
-
     // Reframe when the design changed — and, on desktop (reframeOnPreset), when
     // the preset changed too — or on the first model. A re-render from the same
     // framing key (e.g. a parameter tweak, or a preset change on mobile) keeps
     // the user's current orbit/zoom so the view doesn't jump. designId/presetId
     // are read fresh here rather than via the dep array: a preset change doesn't
     // clear the old geometry, so reframing must wait for the new model to arrive
-    // (this effect) and use *its* bounds, not the stale ones.
+    // (this effect) and use *its* bounds, not the stale ones. frameView() reads
+    // modelSizeRef (just set above) to fit the model's actual bounding box —
+    // see framing.ts — rather than a bounding-sphere radius.
     const frameKey = reframeOnPreset ? `${designId}\n${presetId}` : designId;
     if (framedKeyRef.current !== frameKey) {
-      frameView(r); // moves the camera, which self-invalidates via controls' "change" event
+      frameView(); // moves the camera, which self-invalidates via controls' "change" event
       framedKeyRef.current = frameKey;
     } else {
       requestRenderRef.current(); // same framing (e.g. a param tweak) — camera didn't move, so invalidate explicitly

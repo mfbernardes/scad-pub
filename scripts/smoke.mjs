@@ -22,16 +22,18 @@ import {
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
   dismissWelcomePopup,
+  openDialog,
+  waitDialogClosed,
 } from "./lib/browser.mjs";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
 // means it may be shut — so click the Output bell when it's not already open.
-// The bell's label is "Open messages" while closed.
+// The bell's label is "Open Messages" while closed.
 async function openConsole(page) {
   if (await page.locator(".output-console").count()) return;
   // Desktop bell (the mobile top bar's twin is CSS-hidden at this viewport).
-  await page.locator('.command-bar__output[aria-label^="Open messages"]').click().catch(() => {});
+  await page.locator('.command-bar__output[aria-label^="Open Messages"]').click().catch(() => {});
   await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
 }
 
@@ -74,6 +76,12 @@ async function checkWelcomePopup({ page, check, schema }) {
     if (/\]\(/.test(schema.popup.body ?? "")) {
       check((await popup.getByRole("link").count()) > 0, "popup body renders its link");
     }
+    if (schema.popup.footnote) {
+      check(
+        (await popup.getByText(schema.popup.footnote, { exact: true }).count()) > 0,
+        "popup renders its configured footnote"
+      );
+    }
     // The primary button's label is config-driven (schema.popup.button), so read
     // it from the schema instead of hardcoding "OK".
     const buttonLabel = schema.popup.button ?? "OK";
@@ -82,7 +90,7 @@ async function checkWelcomePopup({ page, check, schema }) {
     const dontShow = popup.getByRole("checkbox");
     if (await dontShow.count()) await dontShow.check();
     await cta.click();
-    await popup.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+    await waitDialogClosed(page, schema.popup.header).catch(() => {});
     check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
     // The primary CTA also opens the design picker (when there's more than one
     // design) so the user's next step — choosing what to make — is obvious.
@@ -103,14 +111,18 @@ async function checkWelcomePopup({ page, check, schema }) {
   }
 }
 
-// Generic file import: the Files manager shows an "Import file" button when
+// Generic file import: the Files action (BarActions, a toolbar icon button —
+// it used to be a panel tab, now a modal) shows an "Import file" button when
 // the config sets `fileImport`. Uploading a file should surface it in the
 // file list and persist across a reload (IndexedDB).
 async function checkFileImport({ page, check, ids, schema }) {
   console.log("=== file import ===");
-  // On desktop the file manager is the panel's "Files" tab (Radix unmounts the
-  // inactive tab, so it must be activated — and re-activated after each reload).
-  const gotoFiles = () => page.getByRole("tab", { name: "Files" }).click().catch(() => {});
+  // FilesModal (a Dialog) doesn't persist across a reload, so it must be
+  // re-opened each time — exact match: a substring "Files" would also catch
+  // "Clear all imported files" once the modal is open.
+  const gotoFiles = () =>
+    page.getByRole("button", { name: "Files", exact: true }).first().click().catch(() => {});
+  const closeFiles = () => page.keyboard.press("Escape").catch(() => {});
   await gotoFiles();
   const importBtn = page.getByRole("button", { name: /Import file/i });
   if (await importBtn.count()) {
@@ -187,6 +199,10 @@ async function checkFileImport({ page, check, ids, schema }) {
         .count()) === 0,
       "cleared file stays cleared after reload"
     );
+    // Close it — later checks click other toolbar/panel controls, and an open
+    // dialog's overlay would intercept those clicks.
+    await closeFiles();
+    await waitDialogClosed(page, "Files").catch(() => {});
   } else {
     console.log("  (no fileImport in this config — skipped)");
   }
@@ -350,6 +366,38 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
   if (!presetTested) console.log("  (no bundled presets in this config — skipped)");
 }
 
+// Bundled-preset card grid (PresetPicker.tsx, config's `designs[].presetImages`
+// — see docs/config.md's "Bundled presets" note). Exercised on the first
+// design the schema configures any presetImages for (the dogfood config sets
+// two on "tag" — see scadpub.config.json); a config with none is skipped
+// rather than assumed.
+async function checkPresetCardGrid({ page, check, schema, presetsTabName, paramsTabName }) {
+  console.log("=== bundled-preset card grid (presetImages) ===");
+  const design = schema.designs.find((d) => d.presetImages && Object.keys(d.presetImages).length);
+  if (!design) {
+    console.log("  (no design configures presetImages in this config — skipped)");
+    return;
+  }
+  await selectDesign(page, design.id);
+  await page.getByRole("tab", { name: presetsTabName }).first().click().catch(() => {});
+  const cards = page.locator('[aria-label="Ready-made presets"] .preset-picker__card');
+  const expectedCount = Object.keys(design.presetImages).length;
+  await cards.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await cards.count()) === expectedCount, `preset card grid shows ${expectedCount} card(s) for "${design.id}"`);
+  check((await cards.locator("img").count()) >= 1, "at least one preset card renders its thumbnail image");
+  // Cards are still plain buttons: clicking one applies the preset, same as
+  // the list variant (checkBundledPresets already exercises apply/URL/reload
+  // — this just confirms the card path routes through the same handler).
+  const firstCardText = (await cards.first().textContent())?.trim() ?? "";
+  await cards.first().click();
+  await waitRendered(page, `${design.id} + preset card "${firstCardText}"`);
+  check(
+    (await page.locator('[aria-label="Ready-made presets"] .preset-picker__card[aria-pressed="true"]').count()) >= 1,
+    "clicking a preset card applies it (aria-pressed)"
+  );
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+}
+
 // Preset import: an OpenSCAD parameterSets file becomes a saved preset.
 async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabName }) {
   console.log("=== preset import (parameterSets round-trip) ===");
@@ -376,19 +424,35 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
 }
 
 // Export 3MF + PNG on the first design.
+//
+// The example "tag" design (ids[0]) carries an attention-flagged notice by
+// default (both an emblem and a label shown at once — see tag.scad's own
+// comment), so Download opens the Review dialog (ReviewDialog.tsx) armed with
+// "Download anyway" instead of exporting immediately (ActionButtons.tsx's
+// onDownloadClick). Arm the download listener BEFORE the click so the event
+// can never fire and go unheard while we're still deciding whether a dialog
+// showed up.
 async function checkExports({ page, check, ids, dir }) {
   await selectDesign(page, ids[0]);
-  console.log("=== export 3MF ===");
-  const [model] = await Promise.all([
-    page.waitForEvent("download"),
-    // ActionCluster uses aria-label="Export STL/3MF"; button text is just the format
-    page.click('[aria-label^="Download "]'),
-  ]);
+  console.log("=== export 3MF (with a pending attention issue) ===");
+  const downloadPromise = page.waitForEvent("download");
+  await page.click('[aria-label^="Download "]');
+  const reviewDialog = await openDialog(page, "Review", { timeout: 2000 }).catch(() => null);
+  const opened = reviewDialog !== null;
+  check(opened, "downloading with a pending attention issue opens the Review dialog");
+  if (opened) {
+    check(
+      (await reviewDialog.locator(".attention-card").count()) > 0,
+      "Review dialog shows an attention card"
+    );
+    await reviewDialog.getByRole("button", { name: "Download anyway" }).click();
+  }
+  const model = await downloadPromise;
   const modelOut = join(dir, await model.suggestedFilename());
   await model.saveAs(modelOut);
   check((await stat(modelOut)).size > 0, `${await model.suggestedFilename()} (${(await stat(modelOut)).size} bytes)`);
 
-  console.log("=== save PNG ===");
+  console.log("=== save PNG (relocated to the top-bar overflow) ===");
   const [png] = await Promise.all([
     page.waitForEvent("download"),
     page.click('[aria-label="Save image"]'),
@@ -400,10 +464,119 @@ async function checkExports({ page, check, ids, dir }) {
   check(isPng && (await stat(pngOut)).size > 0, `${await png.suggestedFilename()} (png=${isPng})`);
 }
 
+// The unified export dock (ActionButtons.tsx): exactly two buttons (Download
+// + Share), no separate Image button — Save-image moved to the top-bar
+// overflow (BarActions.tsx), exercised above by checkExports' PNG click.
+async function checkExportDock({ page, check }) {
+  console.log("=== export dock (two buttons, no Image button) ===");
+  const cluster = page.locator(".app-shell__desktop .action-cluster");
+  check((await cluster.locator('[data-slot="button"]').count()) === 2, "dock shows exactly two buttons");
+  check((await cluster.getByRole("button", { name: /^Image$/ }).count()) === 0, "no bare Image button in the dock");
+  check((await cluster.locator('[aria-label="Save image"]').count()) === 0, "Save image is not in the dock");
+}
+
+// Status strip (StatusStrip.tsx) + Review dialog (ReviewDialog.tsx): a
+// one-line readiness surface above the desktop panel's tabs that opens the
+// dialog. "tag" (ids[0]) carries a default attention issue; "panel" (a clean
+// SVG-extrusion design with no font/notice concerns) is clean once selected.
+async function checkStatusStripAndReview({ page, check, ids }) {
+  console.log("=== status strip + review dialog ===");
+  if (!ids.includes("panel")) {
+    console.log("  (no attention-free design in this config — skipped)");
+    return;
+  }
+  await selectDesign(page, ids[0]); // "tag" — attention by default
+  const strip = page.locator(".status-strip").first();
+  await strip.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(await strip.isVisible(), "status strip is visible on the attention design");
+  check(/issue/i.test((await strip.textContent()) ?? ""), "status strip names the pending issue(s)");
+
+  // Opened from the strip on an attention design: the footer is keyed on the
+  // live review state, not on how the dialog was opened, so with issues pending
+  // it offers "Download anyway" / "Go back and fix" — identical to the dock
+  // entry point (checkExports above). Scope to the footer for the "Go back and
+  // fix" button so we assert the state-based footer, not the trigger.
+  await strip.click();
+  const infoDialog = await openDialog(page, "Review");
+  const infoFooter = infoDialog.locator('[data-slot="dialog-footer"]');
+  check(
+    (await infoFooter.getByRole("button", { name: "Download anyway" }).count()) === 1,
+    "status-opened dialog with issues offers the same Download anyway action as the dock"
+  );
+  check(
+    (await infoFooter.getByRole("button", { name: "Go back and fix" }).count()) === 1,
+    "status-opened dialog with issues offers Go back and fix"
+  );
+  await infoFooter.getByRole("button", { name: "Go back and fix" }).click();
+  await waitDialogClosed(page, "Review").catch(() => {});
+
+  // A clean design's strip reads "Ready to download".
+  await selectDesign(page, "panel");
+  const cleanStrip = page.locator(".status-strip").first();
+  await cleanStrip.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(/ready to download/i.test((await cleanStrip.textContent()) ?? ""), "status strip reads Ready on a clean design");
+
+  // Back to the design the rest of the suite expects to be selected.
+  await selectDesign(page, ids[0]);
+}
+
+// After-export panel (ExportSuccess.tsx, ui.afterExport — the dogfood config
+// sets `helpTab: "Printing"`). Exercised by re-downloading the first design.
+async function checkAfterExport({ page, check, ids, schema }) {
+  if (!schema.ui?.afterExport) {
+    console.log("=== after-export panel === (ui.afterExport not configured — skipped)");
+    return;
+  }
+  console.log("=== after-export panel ===");
+  await selectDesign(page, ids[0]);
+  const downloadPromise = page.waitForEvent("download");
+  await page.click('[aria-label^="Download "]');
+  const reviewDialog = await openDialog(page, "Review", { timeout: 2000 }).catch(() => null);
+  if (reviewDialog) {
+    await reviewDialog.getByRole("button", { name: /Download/ }).click();
+  }
+  await downloadPromise;
+  const panel = page.locator(".export-success");
+  await panel.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await panel.count()) > 0, "after-export panel appears once the download settles");
+  if (schema.ui.afterExport.helpTab) {
+    const guideBtn = panel.getByRole("button", { name: "Open printing help" });
+    const guideVisible = await guideBtn
+      .waitFor({ state: "visible", timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    check(guideVisible, `after-export panel offers "Open printing help"`);
+    await guideBtn.click();
+    // NOT openDialog/waitDialogClosed here: Help's accessible NAME isn't stable
+    // across configs. Modal.tsx's `aria-label={label ?? title}` sets an
+    // `aria-label="Help"` attribute, but Radix's DialogContent also wires
+    // `aria-labelledby` to the rendered DialogTitle (the config's `help.title`,
+    // defaulting to "How to use this configurator") — and per the ARIA
+    // accessible-name algorithm, aria-labelledby wins over aria-label, so the
+    // dialog's actual accessible name is that title text, not "Help". Locate
+    // it structurally instead (any dialog containing the deep-linked tab),
+    // which is name-agnostic and was the original approach here.
+    const helpDialog = page.getByRole("dialog").filter({ has: page.getByRole("tab", { name: schema.ui.afterExport.helpTab }) });
+    const helpOpened = await helpDialog.first().waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false);
+    check(helpOpened, `"Open printing help" opens Help scrolled to "${schema.ui.afterExport.helpTab}"`);
+    check(
+      (await page.getByRole("tab", { name: schema.ui.afterExport.helpTab, selected: true }).count()) === 1,
+      `the "${schema.ui.afterExport.helpTab}" tab is the active one`
+    );
+    await page.keyboard.press("Escape");
+    await helpDialog.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  } else {
+    await panel.locator(".export-success__dismiss").click().catch(() => {});
+  }
+}
+
 async function checkPreviewControls({ page, check }) {
   console.log("=== preview controls (share link + live preview) ===");
+  // Headless Chromium never implements navigator.share, so canShareNatively()
+  // is always false here — the Share button always renders its clipboard-copy
+  // form (see ActionButtons.tsx's NATIVE_SHARE / share.ts's own doc).
   check(
-    (await page.locator('[aria-label="Copy share link"]').count()) >= 1,
+    (await page.locator('[aria-label="Copy link"]').count()) >= 1,
     "copy-link button present"
   );
   // Live preview (auto-render): a shadcn/ui Switch (role=switch) in the params footer.
@@ -456,7 +629,9 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   });
   await page.reload({ waitUntil: "load" });
   await waitRendered(page, "tag reloaded");
-  // Back to the Customize tab (the file-import test left the panel on Files).
+  // The reload above re-derives the panel's tab (Presets when the design ships
+  // bundled presets, else Customize) — land on Customize explicitly since the
+  // checks below drive parameter controls.
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
 
 
@@ -536,6 +711,123 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   );
 
   // Restore a clean, rendering state for the checks that follow.
+  await resetDefaults(page);
+  await waitRendered(page, "tag");
+}
+
+// On-model text editing ("type on the sign") — exercised on the example "tag"
+// design, whose `label` param is annotated `// @editOnModel`. Covers the pointer
+// path (click the mesh → floating editor → type → panel + render follow), the
+// keyboard/AT path (the pencil chip), Escape-reverts, and axe with the editor
+// open. Runs only when "tag" is present.
+async function checkEditOnModel({ page, check, ids, paramsTabName }) {
+  if (!ids.includes("tag")) return;
+  console.log("=== on-model text editing (@editOnModel, tag) ===");
+  await selectDesign(page, "tag");
+  await waitRendered(page, "tag (edit-on-model)");
+
+  // The always-visible pencil chip is the discoverable, keyboard-reachable
+  // affordance. Only the active (desktop) layout is mounted, so there's one.
+  const chip = page.locator(".viewer-edit-chip");
+  await chip.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+  check((await chip.count()) === 1, "the edit-on-model pencil chip is shown for @editOnModel");
+
+  const labelInput = () => paramRow(page, "label").locator('input[type="text"]');
+  const editor = page.locator(".model-text-editor");
+  const editorInput = editor.locator("input");
+
+  // Open the editor by clicking the rendered mesh. The tag plate fills most of
+  // the canvas, but try a few points around the centre in case the exact centre
+  // lands on a gap. A miss simply doesn't open the editor.
+  const canvas = page.locator(".app-shell__desktop .viewer canvas");
+  const box = await canvas.boundingBox();
+  const clickModel = async () => {
+    for (const [fx, fy] of [[0.5, 0.5], [0.5, 0.45], [0.5, 0.55], [0.45, 0.5], [0.55, 0.5]]) {
+      await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+      if (
+        await editor
+          .first()
+          .waitFor({ state: "visible", timeout: 1200 })
+          .then(() => true)
+          .catch(() => false)
+      )
+        return true;
+    }
+    return false;
+  };
+  check(await clickModel(), "clicking the model opens the inline text editor");
+
+  // Type a new value ON THE MODEL and confirm both the render re-runs and the
+  // panel's own text box follows — same change() the panel input calls.
+  const typed = "SMOKE-EDIT";
+  const statusBefore = (await renderStatusText(page)) ?? "";
+  await editorInput.fill(typed);
+  const rerendered = await page
+    .waitForFunction(
+      (prev) => {
+        const s = document.querySelector(".render-status")?.textContent || "";
+        return /\d+ ms/.test(s) && s !== prev;
+      },
+      statusBefore,
+      { timeout: 30000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(rerendered, "typing on the model re-runs the render");
+  await page.keyboard.press("Enter"); // Enter closes; value already applied
+  await editor.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  check((await labelInput().inputValue()) === typed, "the panel's text input shows the on-model edit");
+
+  // Keyboard path: focus the chip and open the editor from it (Enter). Focus
+  // must land in the input.
+  await chip.first().focus();
+  check(
+    await page.evaluate(() => document.activeElement?.classList.contains("viewer-edit-chip")),
+    "the pencil chip is keyboard-focusable"
+  );
+  await page.keyboard.press("Enter");
+  const kbOpened = await editor
+    .first()
+    .waitFor({ state: "visible", timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  check(kbOpened, "the pencil chip opens the editor (keyboard path)");
+  check(
+    await page.evaluate((id) => document.activeElement?.id === id, "model-text-editor-input"),
+    "focus lands in the editor input on open"
+  );
+
+  // Escape reverts to the value the editor had when it opened (still "typed").
+  await editorInput.fill("DISCARD-ME");
+  await page.keyboard.press("Escape");
+  await editor.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  check(
+    (await labelInput().inputValue()) === typed,
+    "Escape reverts the on-model edit to the value at open"
+  );
+
+  // Accessibility: no serious/critical axe violation with the editor open.
+  await chip.first().click();
+  await editor.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await page.addScriptTag({
+    path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
+  });
+  const axeRes = await page.evaluate(async () =>
+    window.axe.run(document, {
+      resultTypes: ["violations"],
+      runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
+    })
+  );
+  const serious = axeRes.violations.filter((v) => ["serious", "critical"].includes(v.impact));
+  for (const v of serious)
+    console.log(`  [${v.impact}] ${v.id}: ${v.help} -> ${v.nodes.map((n) => n.target.join(" ")).join("; ")}`);
+  check(serious.length === 0, `axe with the on-model editor open: ${serious.length} serious/critical`);
+  await page.keyboard.press("Escape");
+  await editor.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+
+  // Leave the design at its defaults for whatever runs next.
   await resetDefaults(page);
   await waitRendered(page, "tag");
 }
@@ -756,11 +1048,16 @@ async function main() {
     await checkAxe(ctx);
     await checkEveryDesignRenders(ctx);
     await checkBundledPresets(ctx);
+    await checkPresetCardGrid(ctx);
     await checkPresetImport(ctx);
     await checkExports(ctx);
+    await checkExportDock(ctx);
+    await checkStatusStripAndReview(ctx);
+    await checkAfterExport(ctx);
     await checkPreviewControls(ctx);
     await checkServiceWorker(ctx);
     await checkTagDesign(ctx);
+    await checkEditOnModel(ctx);
     await checkSignageDesign(ctx);
     await checkResponsiveLayout(ctx);
 

@@ -132,6 +132,31 @@ On the colours step, the wizard cautions when a drawing yields several regions t
 
 `@svg` composes with a co-located `// @showIf`, so a conditional SVG field still gets the affordance. Both annotations are invisible to OpenSCAD, which imports the file and, for the per-region path, selects regions by their `<g id>`.
 
+## On-model text editing (`// @editOnModel`)
+
+Mark one plain string parameter `// @editOnModel` to let the user edit its value **directly on the 3D model** — "type on the sign". In the viewer, a click or tap on the rendered mesh opens a small floating text box pre-filled with the current value; each keystroke updates the parameter exactly like the panel's own text box (same debounced auto-render). An always-visible **edit** pencil chip over the viewer gives the same editor a keyboard- and screen-reader-accessible path, and opens it centered.
+
+```scad
+/* [Text] */
+// Text to emboss on the tag.
+// @editOnModel
+label = "ScadPub";
+```
+
+Constraints, enforced at build time:
+
+- It is valid **only on a plain `string`** parameter — not a number/boolean, not a `// [..]` enum dropdown, and not a `// @font` string. Any of those fails the build with the file and line.
+- **At most one** parameter per design may carry it. A second one fails the build, naming the first.
+
+Behaviour:
+
+- The mesh click is a **click, not a drag**: a pointerdown→pointerup that moved only a few pixels, single-pointer. Orbit, pan, pinch and zoom gestures are completely unaffected and never open the editor. A click that misses the model (grid/empty space) does nothing.
+- The editor floats near where you clicked, clamped inside the viewer; on a phone it anchors toward the top so the on-screen keyboard can't cover it.
+- **Enter** or clicking away closes it (the value is already applied). **Escape** closes it *and* reverts to the value it had when you opened it.
+- The mesh click is offered only once a model is on screen (the last render succeeded). The pencil chip appears whenever the capability is active.
+
+This annotation is purely a UI affordance: the parameter is an ordinary Customizer string everywhere else (the panel, the desktop OpenSCAD Customizer, presets, the URL). A deployment adopts the feature by adding the one comment line to its design; nothing else changes.
+
 ## Viewer info (`// @info`)
 
 Mark a parameter with `// @info` to surface its value in the viewer's measurements panel, which appears while the **dimensions** overlay is toggled on (the ruler button). The panel always leads with the model's bounding box (`Dimensions  W × D × H mm`); annotated parameters follow beneath it. Each design chooses its own fields, so the panel is model-specific:
@@ -181,7 +206,7 @@ Arguments:
 | Position | Meaning |
 |---|---|
 | `"@info"` | Fixed literal tag. Required, must match exactly. |
-| Label (string) | Row label, e.g. `"Dot height"`. |
+| Label (string) | Row label, e.g. `"Rim height"`. |
 | Unit (string) | Appended after the value, e.g. `"mm"`. Use `""` for a unitless value. |
 | Value | Any OpenSCAD value: number, string, boolean, vector, or `undef`. |
 
@@ -191,3 +216,32 @@ Two checks help avoid confusing output:
 
 - Rows are **not** de-duplicated. If two branches both echo the same label unconditionally, you see two rows. Make sure only one branch echoes a given label per render.
 - A malformed call is silently ignored. If a row does not appear, double-check the argument count and the exact `"@info"` tag.
+
+## Curated review override (`echo("@review", …)`)
+
+A curated review row (`designs[].reviewLabels`, see [config.md](config.md#design-sources)) normally shows a parameter's raw stored value, formatted the same way as any other row. Some designs **transform** a value before it reaches the printed model — a lettering profile that uppercases free text, for instance: typed `"gate 12"`, printed `"GATE 12"`. Showing the raw typed value in the review row would misrepresent what's actually on the model.
+
+Echo the rendered value with a fixed 2-argument convention, naming the parameter it overrides:
+
+```scad
+/* [Text] */
+label = "gate 12";
+
+rendered_label = to_upper(label);
+echo("@review", "label", rendered_label);
+```
+
+This is a runtime mechanism, like the calculated-value `@info` echo above — no build-time component, nothing in `gen-schema.mjs` changes. The app scans the design's OpenSCAD output for `echo("@review", param, value)` calls after each render and, for any curated review row whose parameter has a matching override, shows that value in place of the parameter's own raw stored value. A parameter with no override behaves exactly as before. Pair this with `designs[].reviewNote` to explain the transform in words (e.g. "Text prints in capitals even though you typed it in lowercase").
+
+Arguments:
+
+| Position | Meaning |
+|---|---|
+| `"@review"` | Fixed literal tag. Required, must match exactly. |
+| Param name (string) | The **declared parameter's exact name** this override applies to — the same name used as a `reviewLabels` key. A name that doesn't match a param, or a param with no `reviewLabels` entry, is simply never looked up. |
+| Value | Typically a string — the whole point is showing the rendered TEXT. A quoted string has its quotes stripped; anything else is shown exactly as OpenSCAD printed it. There is no unit argument. |
+
+Two checks help avoid confusing output:
+
+- Overrides are keyed by param name and **last write wins**: a later echo for the same param overwrites an earlier one within the same render, matching `@info`'s own "current value" intent (unlike `@info`'s rows, which are never de-duplicated, since a param name is unique but a label is not).
+- A malformed call is silently ignored. If a row still shows the raw value, double-check the argument count and the exact `"@review"` tag, and that the param name matches a `reviewLabels` key exactly.

@@ -35,6 +35,7 @@ import {
   parseLang,
   parseDir,
   parseRender,
+  parseStrings,
   renderFontsConf,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
@@ -288,6 +289,7 @@ test("render tuning and defaultDesign pass through to the schema", () => {
   assert.equal(schema.defaultDesign, "collapsible");
   assert.deepEqual(schema.fileImport, { maxBytes: 1048576 });
   assert.equal(schema.ui.fullscreen, false);
+  assert.equal(schema.ui.saveImage, false);
 });
 
 test("defaultDesign must name a configured design", () => {
@@ -296,6 +298,69 @@ test("defaultDesign must name a configured design", () => {
 
 test("duplicate design ids fail the build", () => {
   assert.throws(() => run("widget-dup-id.config.json"), /duplicate design id "widget"/);
+});
+
+test("reviewLabels: keys matching declared params are resolved, plus a reviewNote string", () => {
+  const { schema } = run("widget-reviewlabels.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  assert.deepEqual(widget.reviewLabels, { label: "Text", FontSize: "Text", thickness: "Thickness" });
+  assert.equal(widget.reviewNote, "Text prints in capitals even though you typed it in lowercase.");
+});
+
+test("a design with no configured reviewLabels/reviewNote omits/nulls them", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].reviewLabels, undefined);
+  assert.equal(schema.designs[0].reviewNote ?? null, null);
+});
+
+test("reviewLabels: a key not matching any declared parameter fails the build", () => {
+  assert.throws(
+    () => run("widget-reviewlabels-badname.config.json"),
+    /'reviewLabels\["nope"\]' does not match any declared parameter/
+  );
+});
+
+test("reviewLabels: a blank value fails the build like the other design string fields", () => {
+  assert.throws(
+    () => run("widget-reviewlabels-badtype.config.json"),
+    /'reviewLabels\["label"\]' must be a non-empty string/
+  );
+});
+
+test("presetImages: a key matching a bundled preset name is resolved and copied", () => {
+  const { schema, out } = run("widget-presetimages.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  assert.deepEqual(widget.presetImages, { Tall: "scad/widget-preset-0.png" });
+  assert.ok(existsSync(join(out, "scad", "widget-preset-0.png")));
+});
+
+test("a design with no configured presetImages omits the field", () => {
+  const { schema } = run("widget.config.json");
+  assert.equal(schema.designs[0].presetImages, undefined);
+});
+
+test("presetImages: a key not matching any bundled preset name fails the build", () => {
+  assert.throws(
+    () => run("widget-presetimages-badname.config.json"),
+    /'presetImages\["Nope"\]' does not match any bundled preset name/
+  );
+});
+
+test("strings: a key that exists in en.json overrides the built-in text", () => {
+  const { schema } = run("widget-strings.config.json");
+  assert.deepEqual(schema.strings, { "action.export": "Download now" });
+});
+
+test("a config with no 'strings' key yields an empty object", () => {
+  const { schema } = run("widget.config.json");
+  assert.deepEqual(schema.strings, {});
+});
+
+test("strings: an unknown key fails the build, pointing at the catalogue", () => {
+  assert.throws(
+    () => run("widget-strings-badkey.config.json"),
+    /unknown 'strings' key 'action.exprot'.*See src\/locales\/en\.json/s
+  );
 });
 
 test("per-design description + icon are parsed, copied and served", () => {
@@ -858,6 +923,17 @@ test("notices: validates shape, marker, label and colour", () => {
   );
 });
 
+test("notices: labelOne is optional, trimmed, and validated like label", () => {
+  assert.deepEqual(parseNotices([{ marker: "alert", label: "alerts", labelOne: " alert " }]), [
+    { marker: "alert", label: "alerts", labelOne: "alert" },
+  ]);
+  assert.deepEqual(parseNotices([{ marker: "note" }]), [{ marker: "note", label: "note" }]);
+  assert.throws(
+    () => parseNotices([{ marker: "n", labelOne: "  " }]),
+    /'notices\[0\]\.labelOne' must be a non-empty string/
+  );
+});
+
 test("renderHash folds in the renderer source so flag changes invalidate it", () => {
   // With outPublicDir + rendererFiles, a change to the renderer's render
   // contract (e.g. an OpenSCAD flag in worker.ts) must change renderHash.
@@ -1037,6 +1113,13 @@ test("parseColors validates tokens and values", () => {
   assert.throws(() => parseColors({ dark: "#fff" }), /'colors\.dark' must be an object/);
 });
 
+test("colors: success/success-bg/warn-bg are accepted colour tokens", () => {
+  assert.deepEqual(
+    parseColors({ dark: { success: "#4ade80", "success-bg": "#142615", "warn-bg": "#332812" } }),
+    { dark: { success: "#4ade80", "success-bg": "#142615", "warn-bg": "#332812" } }
+  );
+});
+
 test("help: tabs pass through to the schema verbatim", () => {
   const { schema } = run("widget-help-tabs.config.json");
   assert.equal(schema.help.intro, "Shared intro shown above every tab.");
@@ -1179,11 +1262,100 @@ test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
   assert.throws(() => parseRender({ cache: { persistent: "yes" } }), /'render\.cache\.persistent' must be a boolean/);
 });
 
+test("parseStrings: absent -> {}, a known key overrides, an unknown key fails with a suggestion", () => {
+  const validKeys = ["action.export", "action.share", "review.title"];
+  assert.deepEqual(parseStrings(undefined, validKeys), {});
+  assert.deepEqual(parseStrings(null, validKeys), {});
+  assert.deepEqual(
+    parseStrings({ "action.export": "Download now" }, validKeys),
+    { "action.export": "Download now" }
+  );
+  assert.throws(() => parseStrings([], validKeys), /'strings' must be an object/);
+  assert.throws(
+    () => parseStrings({ "action.exprot": "x" }, validKeys),
+    /unknown 'strings' key 'action.exprot'\.\s*\n\s*See src\/locales\/en\.json/
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": 5 }, validKeys),
+    /'strings\.action\.export' must be a string/
+  );
+});
+
 test("parseUi: fullscreen defaults true and validates", () => {
   assert.equal(parseUi(undefined).fullscreen, true);
   assert.equal(parseUi({}).fullscreen, true);
   assert.equal(parseUi({ fullscreen: false }).fullscreen, false);
   assert.throws(() => parseUi({ fullscreen: "no" }), /'ui\.fullscreen' must be a boolean/);
+});
+
+test("parseUi: saveImage is absent by default, carried only when set, rejects non-booleans", () => {
+  // Default is "shown": the key is not defaulted onto the object, so the app's
+  // `ui.saveImage !== false` treats absent as true.
+  assert.equal(parseUi(undefined).saveImage, undefined);
+  assert.equal(parseUi({}).saveImage, undefined);
+  assert.equal(parseUi({ saveImage: false }).saveImage, false);
+  assert.equal(parseUi({ saveImage: true }).saveImage, true);
+  assert.throws(() => parseUi({ saveImage: "no" }), /'ui\.saveImage' must be a boolean/);
+  assert.throws(() => parseUi({ saveImage: 0 }), /'ui\.saveImage' must be a boolean/);
+});
+
+test("parseUi.afterExport is absent by default and accepts each valid field", () => {
+  assert.equal(parseUi(undefined).afterExport, undefined);
+  assert.equal(parseUi({}).afterExport, undefined);
+  assert.deepEqual(parseUi({ afterExport: { title: "Done" } }).afterExport, { title: "Done" });
+  assert.deepEqual(parseUi({ afterExport: { body: "Next steps" } }).afterExport, { body: "Next steps" });
+  assert.deepEqual(parseUi({ afterExport: { helpTab: "Printing" } }).afterExport, { helpTab: "Printing" });
+  assert.deepEqual(
+    parseUi({ afterExport: { title: " Done ", body: "Next", helpTab: "Printing" } }).afterExport,
+    { title: "Done", body: "Next", helpTab: "Printing" }
+  );
+});
+
+test("parseUi.afterExport rejects empty/wrong-typed fields, unknown keys and wrong shapes", () => {
+  assert.throws(
+    () => parseUi({ afterExport: { title: "" } }),
+    /'ui\.afterExport\.title' must be a non-empty string/
+  );
+  assert.throws(
+    () => parseUi({ afterExport: { helpTab: 3 } }),
+    /'ui\.afterExport\.helpTab' must be a non-empty string/
+  );
+  assert.throws(
+    () => parseUi({ afterExport: { subtitle: "x" } }),
+    /unknown 'ui\.afterExport' key 'subtitle'/
+  );
+  assert.throws(() => parseUi({ afterExport: "on" }), /'ui\.afterExport' must be an object/);
+  assert.throws(() => parseUi({ afterExport: [] }), /'ui\.afterExport' must be an object/);
+});
+
+test("parseUi.afterExport: null is treated the same as absent (no panel)", () => {
+  assert.equal(parseUi({ afterExport: null }).afterExport, undefined);
+});
+
+test("ui.afterExport.helpTab: build succeeds when it names a real help tab", () => {
+  const { schema } = run("widget-afterexport-ok.config.json");
+  assert.equal(schema.ui.afterExport.helpTab, "Printing");
+  assert.equal(schema.ui.afterExport.title, "Done");
+  assert.equal(schema.ui.afterExport.body, "Slice it.");
+});
+
+test("ui.afterExport.helpTab: build succeeds against the synthetic leading 'Overview' tab", () => {
+  const { schema } = run("widget-afterexport-overview.config.json");
+  assert.equal(schema.ui.afterExport.helpTab, "Overview");
+});
+
+test("ui.afterExport.helpTab: build fails when no help tab has that label", () => {
+  assert.throws(
+    () => run("widget-afterexport-bad.config.json"),
+    /'ui\.afterExport\.helpTab' is "Nope", but no 'help' tab has that label/
+  );
+});
+
+test("ui.afterExport.helpTab: build fails with a clear message when the config has no help tabs at all", () => {
+  assert.throws(
+    () => run("widget-afterexport-notabs.config.json"),
+    /'ui\.afterExport\.helpTab' is "Printing", but no 'help' tab has that label/
+  );
 });
 
 test("parsePopup: defaults, modes, links and errors", () => {
@@ -1210,7 +1382,13 @@ test("parsePopup: defaults, modes, links and errors", () => {
     { header: "H", body: "B", mode: "once", button: "Start designing" }
   );
   assert.equal("button" in parsePopup({ header: "H", body: "B" }), false);
-  // Wrong shapes / missing required fields / bad mode / blank button -> clear errors.
+  // An optional footnote passes through the same way; absent -> omitted.
+  assert.deepEqual(
+    parsePopup({ header: "H", body: "B", mode: "once", footnote: "Nothing is uploaded." }),
+    { header: "H", body: "B", mode: "once", footnote: "Nothing is uploaded." }
+  );
+  assert.equal("footnote" in parsePopup({ header: "H", body: "B" }), false);
+  // Wrong shapes / missing required fields / bad mode / blank button/footnote -> clear errors.
   assert.throws(() => parsePopup([]), /'popup' must be an object/);
   assert.throws(() => parsePopup({ body: "x" }), /'popup\.header' is required/);
   assert.throws(() => parsePopup({ header: "x" }), /'popup\.body' is required/);
@@ -1223,6 +1401,15 @@ test("parsePopup: defaults, modes, links and errors", () => {
     () => parsePopup({ header: "x", body: "y", button: "  " }),
     /'popup\.button', when set, must be a non-empty string/
   );
+  assert.throws(
+    () => parsePopup({ header: "x", body: "y", footnote: "  " }),
+    /'popup\.footnote', when set, must be a non-empty string/
+  );
+});
+
+test("popup.footnote: a full build carries it through to the generated schema", () => {
+  const { schema } = run("widget-popup.config.json");
+  assert.equal(schema.popup.footnote, "Everything runs in your browser. Nothing is uploaded.");
 });
 
 test("parseEnumHint ignores single-item and non-enum hints", () => {
@@ -1460,6 +1647,81 @@ test("the well-formed @svg/@filledBy fixture (existing test above) still passes 
         `// @filledBy svg_file\n` +
         `svg_layers = "";\n`
     )
+  );
+});
+
+// ── @editOnModel (on-model editable text) ──────────────────────────────────
+
+test("@editOnModel flags a plain string param and is consumed, not leaked", () => {
+  const params = paramsOf(
+    `/* [Text] */\n` +
+      `// Text to emboss on the tag.\n` +
+      `// @editOnModel\n` +
+      `label = "ScadPub";\n` +
+      `// A plain string with no annotation.\n` +
+      `note = "hi";\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.label.editOnModel, true);
+  assert.equal(byName.label.type, "string");
+  // The annotation line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.label.help.includes("@editOnModel"));
+  assert.equal(byName.label.description, "Text to emboss on the tag.");
+  // No annotation -> not flagged.
+  assert.equal(byName.note.editOnModel, undefined);
+});
+
+test("@editOnModel on a non-string parameter fails with file and line", () => {
+  // number
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @editOnModel\nsize = 5;\n`),
+    /f\.scad:2: @editOnModel on 'size' must be a string parameter \(got type number\)/
+  );
+  // boolean
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @editOnModel\nflag = true;\n`),
+    /f\.scad:2: @editOnModel on 'flag' must be a string parameter \(got type boolean\)/
+  );
+});
+
+test("@editOnModel on an enum (dropdown) parameter fails", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @editOnModel\nmode = "a"; // [a, b, c]\n`),
+    /f\.scad:2: @editOnModel on 'mode' must be a string parameter \(got type enum\)/
+  );
+});
+
+test("@editOnModel on a @font parameter fails (a font string isn't editable on the model)", () => {
+  assert.throws(
+    () =>
+      paramsOf(
+        `/* [S] */\n` +
+          `// @font\n` +
+          `// @editOnModel\n` +
+          `font = "Liberation Sans:style=Bold";\n`
+      ),
+    /f\.scad:3: @editOnModel on 'font' cannot be a font parameter/
+  );
+});
+
+test("@editOnModel declared on two params fails, naming the first owner", () => {
+  assert.throws(
+    () =>
+      paramsOf(
+        `/* [Text] */\n` +
+          `// @editOnModel\n` +
+          `label = "a";\n` +
+          `// @editOnModel\n` +
+          `subtitle = "b";\n`
+      ),
+    /f\.scad:4: @editOnModel is already declared on 'label'; only one parameter per design may be @editOnModel/
+  );
+});
+
+test("a bare @editOnModel with trailing text fails as a malformed annotation", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @editOnModel please\nlabel = "a";\n`),
+    /f\.scad:2: malformed @editOnModel annotation/
   );
 });
 

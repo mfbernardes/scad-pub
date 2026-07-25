@@ -4,9 +4,10 @@
 // dialog is always `open`.
 import type { ReactNode } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { isCoarsePointer } from "../lib/pointer";
 
 /** Scrollable dialog body (below the header / between header and actions). */
-export const MODAL_BODY = "modal-body min-h-0 overflow-y-auto px-4 pt-2 pb-4";
+export const MODAL_BODY = "modal-body min-h-0 overflow-y-auto overscroll-contain px-4 pt-2 pb-4";
 /** Muted lead-in paragraph between the header and the body. */
 export const MODAL_INTRO =
   "modal-intro mx-4 mt-[0.8rem] text-[0.85rem] text-muted-foreground [&_p]:m-0";
@@ -26,6 +27,12 @@ export function Modal({ title, label, onClose, children }: Props) {
         className="flex w-[min(680px,100%)] max-h-[min(80vh,760px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[680px]"
         aria-label={label ?? title}
         aria-describedby={undefined}
+        // On touch devices, don't let Radix pull focus to the first field on
+        // open (e.g. the picker's design-search input), which pops the mobile
+        // keyboard on a first-time visitor. Desktop behaviour is unchanged.
+        onOpenAutoFocus={(e) => {
+          if (isCoarsePointer()) e.preventDefault();
+        }}
       >
         <DialogHeader className="modal-head flex-row items-center justify-between border-b px-4 py-[0.8rem]">
           <DialogTitle>{title}</DialogTitle>

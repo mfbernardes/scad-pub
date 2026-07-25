@@ -7,8 +7,8 @@ import assert from "node:assert/strict";
 import { parseComputedInfo } from "../src/lib/computedInfo.ts";
 
 test("extracts a basic number value with a unit", () => {
-  const out = parseComputedInfo(['[out] ECHO: "@info", "Dot height", "mm", 0.48']);
-  assert.deepEqual(out, [{ label: "Dot height", unit: "mm", value: "0.48 mm" }]);
+  const out = parseComputedInfo(['[out] ECHO: "@info", "Rim height", "mm", 0.48']);
+  assert.deepEqual(out, [{ label: "Rim height", unit: "mm", value: "0.48 mm" }]);
 });
 
 test("an empty unit produces no trailing space", () => {

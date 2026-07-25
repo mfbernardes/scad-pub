@@ -10,7 +10,7 @@
 // signature + CACHE_VERSION), so hits survive reloads.
 import { CACHE_VERSION, MB, createStlCache } from "../lib/stlCache";
 import type { StlCacheStore, StoredStl } from "../lib/stlCache";
-import type { RenderRequest, RenderResult } from "./types";
+import type { RenderRequest, RenderResult, WorkerProgress } from "./types";
 import { detectMountCollisions } from "./renderArgs";
 
 // M10: a user file set that sanitizes to a colliding mount path (see
@@ -160,6 +160,13 @@ export class OpenSCADRunner {
   private readonly version: string;
   private readonly store?: StlCacheStore;
   private readonly onReady?: () => void;
+  // Forwards the worker's bootstrap-download progress (see worker.ts's
+  // cachedBufferWithProgress). Suppressed once `readyFired` is set (below) —
+  // a late/stale message from a respawned worker (spawn() resets bootstrap,
+  // which typically hits Cache Storage and posts nothing, but isn't
+  // guaranteed to) must never resurrect the pre-ready loading UI after the
+  // app has already moved on.
+  private readonly onProgress?: (p: WorkerProgress) => void;
   private readyFired = false;
   private workerFailed = false;
   // M10: the user-file signature last actually POSTED to the current worker
@@ -172,6 +179,9 @@ export class OpenSCADRunner {
   constructor(
     opts: {
       onReady?: () => void;
+      /** Forwarded the worker's bootstrap-download progress (see WorkerProgress).
+       *  Never called after onReady has fired once — see the field's own doc. */
+      onProgress?: (p: WorkerProgress) => void;
       cacheSize?: number;
       cacheBytes?: number;
       maxCacheEntryBytes?: number;
@@ -184,6 +194,7 @@ export class OpenSCADRunner {
     } = {}
   ) {
     this.onReady = opts.onReady;
+    this.onProgress = opts.onProgress;
     this.cacheOptions = defaultCacheOptions(opts);
     // Combine the manual cache-format version with the build's renderHash.
     this.version = `${CACHE_VERSION}:${opts.cacheVersion ?? ""}`;
@@ -265,7 +276,12 @@ export class OpenSCADRunner {
     };
     worker.onmessage = (e: MessageEvent) => {
       if (this.worker !== worker) return;
-      const data = e.data as RenderResult | { type: "ready" };
+      const data = e.data as RenderResult | { type: "ready" } | WorkerProgress;
+      if ("type" in data && data.type === "progress") {
+        // Suppressed once ready has fired — see onProgress's doc comment.
+        if (!this.readyFired) this.onProgress?.(data);
+        return;
+      }
       if ("type" in data && data.type === "ready") {
         // The renderer fires this once per worker; surface it only the first time.
         if (!this.readyFired) {

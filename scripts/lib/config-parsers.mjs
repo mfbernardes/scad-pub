@@ -21,6 +21,9 @@ export const COLOR_TOKENS = [
   "focus",
   "link",
   "warn",
+  "warn-bg",
+  "success",
+  "success-bg",
   "code-bg",
   "overlay",
   "viewer-bg",
@@ -289,8 +292,15 @@ export function parsePopup(raw) {
     throw new Error(
       "gen-schema: 'popup.button', when set, must be a non-empty string"
     );
+  // Optional plain-text footnote, shown small and muted at the bottom of the
+  // dialog in every mode. Same non-empty-when-present rule as `button`.
+  if (raw.footnote !== undefined && (typeof raw.footnote !== "string" || !raw.footnote.trim()))
+    throw new Error(
+      "gen-schema: 'popup.footnote', when set, must be a non-empty string"
+    );
   const out = { header: raw.header, body: raw.body, mode };
   if (raw.button !== undefined) out.button = raw.button;
+  if (raw.footnote !== undefined) out.footnote = raw.footnote;
   return out;
 }
 
@@ -298,10 +308,13 @@ export function parsePopup(raw) {
 // notice categories surfaced on the "OpenSCAD output" panel. A design echoes
 // `ECHO: "<context>: <marker>: <message>"` and each configured category turns
 // matching echoes into a friendly notice and a coloured count badge. Each entry
-// is { marker (required), label?, color? }:
+// is { marker (required), label?, labelOne?, color? }:
 //   - marker: the design-defined string matched as `: <marker>:` in an echo
 //     (e.g. "alert", "note"); case-insensitive.
 //   - label: the badge / notice noun (e.g. "alerts"); defaults to marker.
+//   - labelOne: optional singular form of `label` (e.g. "alert"), used
+//     wherever a count renders alongside it whenever the live count is
+//     exactly 1. Omit to keep `label` regardless of count.
 //   - color: an optional badge fill colour, validated as a plain CSS colour
 //     (same strictness as `colors`) so it can't break out of the inline style
 //     it gets interpolated into.
@@ -331,6 +344,13 @@ export function parseNotices(raw) {
     } else {
       out.label = entry.label.trim();
     }
+    if (entry.labelOne !== undefined && entry.labelOne !== null) {
+      if (typeof entry.labelOne !== "string" || !entry.labelOne.trim())
+        throw new Error(
+          `gen-schema: 'notices[${i}].labelOne' must be a non-empty string`
+        );
+      out.labelOne = entry.labelOne.trim();
+    }
     if (entry.color !== undefined && entry.color !== null) {
       if (typeof entry.color !== "string" || !COLOR_VALUE_RE.test(entry.color.trim()))
         throw new Error(
@@ -346,6 +366,35 @@ export function parseNotices(raw) {
     }
     return out;
   });
+}
+
+// The optional after-export success-panel config a config may set under
+// `ui.afterExport` (see src/components/ExportSuccess.tsx). Every field is a
+// plain non-empty string override; the app's own built-in copy applies to any
+// field left unset. Unlike the other `ui` keys, `helpTab` can't be validated
+// here — it names a tab in this same config's `help` block, parsed separately
+// in gen-schema's generate() — so that cross-field check happens there, once
+// both are available (search generate() for 'ui.afterExport.helpTab').
+const AFTER_EXPORT_KEYS = ["title", "body", "helpTab"];
+function parseAfterExport(raw) {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
+    throw new Error("gen-schema: 'ui.afterExport' must be an object");
+  for (const key of Object.keys(raw)) {
+    if (!AFTER_EXPORT_KEYS.includes(key))
+      throw new Error(
+        `gen-schema: unknown 'ui.afterExport' key '${key}'.\n` +
+          `  Valid keys: ${AFTER_EXPORT_KEYS.join(", ")}`
+      );
+  }
+  const out = {};
+  for (const key of AFTER_EXPORT_KEYS) {
+    if (raw[key] !== undefined) {
+      if (typeof raw[key] !== "string" || !raw[key].trim())
+        throw new Error(`gen-schema: 'ui.afterExport.${key}' must be a non-empty string`);
+      out[key] = raw[key].trim();
+    }
+  }
+  return out;
 }
 
 // Validate and normalise the optional `ui` config block: build-time UI behaviour
@@ -411,6 +460,14 @@ export function parseUi(raw) {
       throw new Error("gen-schema: 'ui.fullscreen' must be a boolean");
     out.fullscreen = raw.fullscreen;
   }
+  // Optional: hide the "Save image (PNG)" action. Defaults to shown, so it's
+  // carried onto `ui` only when the config sets it (the app treats absent as
+  // true — see AppShell's `showSaveImage`).
+  if (raw.saveImage !== undefined) {
+    if (typeof raw.saveImage !== "boolean")
+      throw new Error("gen-schema: 'ui.saveImage' must be a boolean");
+    out.saveImage = raw.saveImage;
+  }
   for (const key of ["gallery", "essentials"]) {
     if (raw[key] !== undefined) {
       if (typeof raw[key] !== "boolean")
@@ -424,6 +481,38 @@ export function parseUi(raw) {
         throw new Error(`gen-schema: 'ui.${key}' must be a non-empty string`);
       out[key] = raw[key].trim();
     }
+  }
+  if (raw.afterExport !== undefined && raw.afterExport !== null) {
+    out.afterExport = parseAfterExport(raw.afterExport);
+  }
+  return out;
+}
+
+// Validate and normalise the optional `strings` config block: per-deployment
+// overrides of the built-in UI text catalogue (src/locales/en.json), keyed by
+// the same dot-namespaced keys (including plural `#category` variants, e.g.
+// "settings.showAllCount#other") that src/lib/i18n.ts's `t`/`tn` resolve.
+// Consulted first, ahead of the bundled English catalogue — see i18n.ts's
+// resolution order. Every key must already exist in the English catalogue;
+// `validKeys` is the caller's (gen-schema's) already-loaded key set so this
+// module stays free of file I/O. Fails the build with a clear message pointing
+// at the catalogue rather than silently accepting a key `t()` will never
+// resolve. Returns {} when unset.
+export function parseStrings(raw, validKeys) {
+  if (raw == null) return {};
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("gen-schema: 'strings' must be an object of key: string pairs");
+  const known = new Set(validKeys);
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!known.has(key))
+      throw new Error(
+        `gen-schema: unknown 'strings' key '${key}'.\n` +
+          `  See src/locales/en.json for the full list of valid keys.`
+      );
+    if (typeof value !== "string")
+      throw new Error(`gen-schema: 'strings.${key}' must be a string (got ${JSON.stringify(value)})`);
+    out[key] = value;
   }
   return out;
 }

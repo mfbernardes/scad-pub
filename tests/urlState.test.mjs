@@ -89,12 +89,12 @@ test("only non-default values are encoded (defaults give a bare hash)", () => {
 });
 
 test("the selected preset round-trips in the hash and store", () => {
-  persistState(design, { text: "bye", n: 5, b: true }, "bundled:English (UEB)");
+  persistState(design, { text: "bye", n: 5, b: true }, "bundled:Large tag (Metric)");
   assert.match(globalThis.location.hash, /p=/);
-  assert.equal(readInitialState(schema).preset, "bundled:English (UEB)");
+  assert.equal(readInitialState(schema).preset, "bundled:Large tag (Metric)");
   // and from localStorage on a bare reload
   globalThis.location.hash = "";
-  assert.equal(readInitialState(schema).preset, "bundled:English (UEB)");
+  assert.equal(readInitialState(schema).preset, "bundled:Large tag (Metric)");
 });
 
 test("no preset selected -> empty preset, no p= in the hash", () => {
