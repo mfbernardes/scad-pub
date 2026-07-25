@@ -22,6 +22,8 @@ import {
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
   dismissWelcomePopup,
+  openDialog,
+  waitDialogClosed,
 } from "./lib/browser.mjs";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
@@ -82,7 +84,7 @@ async function checkWelcomePopup({ page, check, schema }) {
     const dontShow = popup.getByRole("checkbox");
     if (await dontShow.count()) await dontShow.check();
     await cta.click();
-    await popup.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+    await waitDialogClosed(page, schema.popup.header).catch(() => {});
     check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
     // The primary CTA also opens the design picker (when there's more than one
     // design) so the user's next step — choosing what to make — is obvious.
@@ -103,14 +105,18 @@ async function checkWelcomePopup({ page, check, schema }) {
   }
 }
 
-// Generic file import: the Files manager shows an "Import file" button when
+// Generic file import: the Files action (BarActions, a toolbar icon button —
+// it used to be a panel tab, now a modal) shows an "Import file" button when
 // the config sets `fileImport`. Uploading a file should surface it in the
 // file list and persist across a reload (IndexedDB).
 async function checkFileImport({ page, check, ids, schema }) {
   console.log("=== file import ===");
-  // On desktop the file manager is the panel's "Files" tab (Radix unmounts the
-  // inactive tab, so it must be activated — and re-activated after each reload).
-  const gotoFiles = () => page.getByRole("tab", { name: "Files" }).click().catch(() => {});
+  // FilesModal (a Dialog) doesn't persist across a reload, so it must be
+  // re-opened each time — exact match: a substring "Files" would also catch
+  // "Clear all imported files" once the modal is open.
+  const gotoFiles = () =>
+    page.getByRole("button", { name: "Files", exact: true }).first().click().catch(() => {});
+  const closeFiles = () => page.keyboard.press("Escape").catch(() => {});
   await gotoFiles();
   const importBtn = page.getByRole("button", { name: /Import file/i });
   if (await importBtn.count()) {
@@ -187,6 +193,10 @@ async function checkFileImport({ page, check, ids, schema }) {
         .count()) === 0,
       "cleared file stays cleared after reload"
     );
+    // Close it — later checks click other toolbar/panel controls, and an open
+    // dialog's overlay would intercept those clicks.
+    await closeFiles();
+    await waitDialogClosed(page, "Files").catch(() => {});
   } else {
     console.log("  (no fileImport in this config — skipped)");
   }
@@ -378,12 +388,8 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
 // Export 3MF + PNG on the first design.
 async function checkExports({ page, check, ids, dir }) {
   await selectDesign(page, ids[0]);
-  console.log("=== export 3MF ===");
-  const [model] = await Promise.all([
-    page.waitForEvent("download"),
-    // ActionCluster uses aria-label="Export STL/3MF"; button text is just the format
-    page.click('[aria-label^="Download "]'),
-  ]);
+  const reviewDialog = await openDialog(page, "Review", { timeout: 2000 }).catch(() => null);
+  const opened = reviewDialog !== null;
   const modelOut = join(dir, await model.suggestedFilename());
   await model.saveAs(modelOut);
   check((await stat(modelOut)).size > 0, `${await model.suggestedFilename()} (${(await stat(modelOut)).size} bytes)`);
@@ -405,6 +411,7 @@ async function checkExports({ page, check, ids, dir }) {
   // it offers "Download anyway" / "Go back and fix" — identical to the dock
   // entry point (checkExports above). Scope to the footer for the "Go back and
   // fix" button so we assert the state-based footer, not the trigger.
+  const infoDialog = await openDialog(page, "Review");
     (await infoFooter.getByRole("button", { name: "Download anyway" }).count()) === 1,
     "status-opened dialog with issues offers the same Download anyway action as the dock"
   check(
@@ -412,6 +419,18 @@ async function checkExports({ page, check, ids, dir }) {
     "status-opened dialog with issues offers Go back and fix"
   );
   await infoFooter.getByRole("button", { name: "Go back and fix" }).click();
+  await waitDialogClosed(page, "Review").catch(() => {});
+  const reviewDialog = await openDialog(page, "Review", { timeout: 2000 }).catch(() => null);
+  if (reviewDialog) {
+    // NOT openDialog/waitDialogClosed here: Help's accessible NAME isn't stable
+    // across configs. Modal.tsx's `aria-label={label ?? title}` sets an
+    // `aria-label="Help"` attribute, but Radix's DialogContent also wires
+    // `aria-labelledby` to the rendered DialogTitle (the config's `help.title`,
+    // defaulting to "How to use this configurator") — and per the ARIA
+    // accessible-name algorithm, aria-labelledby wins over aria-label, so the
+    // dialog's actual accessible name is that title text, not "Help". Locate
+    // it structurally instead (any dialog containing the deep-linked tab),
+    // which is name-agnostic and was the original approach here.
 async function checkPreviewControls({ page, check }) {
   console.log("=== preview controls (share link + live preview) ===");
   // Headless Chromium never implements navigator.share, so canShareNatively()
@@ -471,7 +490,9 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   });
   await page.reload({ waitUntil: "load" });
   await waitRendered(page, "tag reloaded");
-  // Back to the Customize tab (the file-import test left the panel on Files).
+  // The reload above re-derives the panel's tab (Presets when the design ships
+  // bundled presets, else Customize) — land on Customize explicitly since the
+  // checks below drive parameter controls.
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
 
 
