@@ -1,0 +1,12 @@
+{
+  "source": "src",
+  "features": [],
+  "fonts": [],
+  "popup": {
+    "header": "Welcome",
+    "body": "Configure a widget.",
+    "mode": "dismissible",
+    "footnote": "Everything runs in your browser. Nothing is uploaded."
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

@@ -292,8 +292,15 @@ export function parsePopup(raw) {
     throw new Error(
       "gen-schema: 'popup.button', when set, must be a non-empty string"
     );
+  // Optional plain-text footnote, shown small and muted at the bottom of the
+  // dialog in every mode. Same non-empty-when-present rule as `button`.
+  if (raw.footnote !== undefined && (typeof raw.footnote !== "string" || !raw.footnote.trim()))
+    throw new Error(
+      "gen-schema: 'popup.footnote', when set, must be a non-empty string"
+    );
   const out = { header: raw.header, body: raw.body, mode };
   if (raw.button !== undefined) out.button = raw.button;
+  if (raw.footnote !== undefined) out.footnote = raw.footnote;
   return out;
 }
 
