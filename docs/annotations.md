@@ -181,7 +181,7 @@ Arguments:
 | Position | Meaning |
 |---|---|
 | `"@info"` | Fixed literal tag. Required, must match exactly. |
-| Label (string) | Row label, e.g. `"Dot height"`. |
+| Label (string) | Row label, e.g. `"Rim height"`. |
 | Unit (string) | Appended after the value, e.g. `"mm"`. Use `""` for a unitless value. |
 | Value | Any OpenSCAD value: number, string, boolean, vector, or `undef`. |
 
