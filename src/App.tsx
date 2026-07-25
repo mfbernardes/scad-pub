@@ -55,6 +55,15 @@ const HEAVY_RENDER_MS = schema.render?.heavyMs ?? 6000;
 // falls through to the runner's own default when unset.
 const cacheConfig = schema.render?.cache;
 
+// Versions the build resolved for the open-source licenses modal: ScadPub's own
+// (git describe), the OpenSCAD WASM snapshot, and the bundled npm packages. All
+// schema data, so no attribution can name a version this build doesn't ship.
+const buildVersions = {
+  scadpub: schema.scadpubVersion,
+  openscad: schema.wasmVersion,
+  packages: schema.componentVersions,
+};
+
 const popup = schema.popup ?? null;
 const installMode = schema.ui?.install ?? "auto";
 const INSTALL_HINT_KEY = ns("install.hint.seen");
@@ -466,7 +475,11 @@ export default function App() {
         <DesignDocModal key={design.id} design={design} onClose={() => setShowDesignDoc(false)} />
       )}
       {showLicenses && (
-        <LicensesModal extra={schema.licenses} onClose={() => setShowLicenses(false)} />
+        <LicensesModal
+          versions={buildVersions}
+          extra={schema.licenses}
+          onClose={() => setShowLicenses(false)}
+        />
       )}
       {showFiles && (
         <FilesModal

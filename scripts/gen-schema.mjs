@@ -38,6 +38,8 @@ import { createDestinationRegistry, reconcileGenerated } from "./lib/destination
 import { sanitizeSvg } from "./lib/svg-sanitize.mjs";
 import { resolveWorkerDependencyClosure } from "./lib/worker-deps.mjs";
 import { generatePwaAssets } from "./lib/pwa-assets.mjs";
+import { scadpubVersion } from "./lib/version.mjs";
+import { componentVersions } from "./lib/dep-versions.mjs";
 import {
   COLOR_VALUE_RE,
   parseColors,
@@ -683,9 +685,24 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
  * @param {string} opts.configPath  Path to the configurator config JSON.
  * @param {string} opts.outSchemaDir  Where designs.json is written.
  * @param {string} opts.outScadDir  Where the copied .scad/presets are written.
+ * @param {string} [opts.version]  ScadPub version stamp for this build; defaults
+ *   to this checkout's `git describe` (see scripts/lib/version.mjs). Any falsy
+ *   value (no git metadata and no override, or an explicit "") leaves the stamp
+ *   out of the schema entirely.
+ * @param {Record<string,string>} [opts.components]  Installed versions of the
+ *   bundled npm packages for the licenses modal; defaults to reading this
+ *   checkout's node_modules (see scripts/lib/dep-versions.mjs).
  * @returns {object} the schema (also written to outSchemaDir/designs.json).
  */
-export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, rendererFiles }) {
+export function generate({
+  configPath,
+  outSchemaDir,
+  outScadDir,
+  outPublicDir,
+  rendererFiles,
+  version = scadpubVersion(),
+  components = componentVersions(),
+}) {
   const mustExist = makeMustExist(configPath);
   mustExist(configPath, "config file");
   const config = loadConfig(configPath);
@@ -908,6 +925,17 @@ export function generate({ configPath, outSchemaDir, outScadDir, outPublicDir, r
     // Names the render worker's binary Cache Storage entry (and the service
     // worker's warm-up target). Single-sourced from scripts/wasm-version.mjs.
     wasmVersion: WASM_VERSION,
+    // Which ScadPub built this site (`git describe` of the ScadPub checkout, or
+    // $SCADPUB_VERSION). Shown in the open-source licenses modal; omitted from
+    // the JSON entirely when the build tree carries no git metadata. Display
+    // only — deliberately NOT part of renderHash, since it can't affect geometry
+    // (a code change that can already hashes the renderer's own sources).
+    ...(version ? { scadpubVersion: version } : {}),
+    // Versions of the bundled third-party packages, read from the node_modules
+    // this build bundles from (scripts/lib/dep-versions.mjs). The licenses modal
+    // reads them instead of carrying literals that drift from the dependency.
+    // Display-only, like the stamp above — kept out of renderHash.
+    componentVersions: components,
     // H4: per-file digests for wasm/glue/fonts/fonts.conf — see BIN_ASSETS above.
     binAssets: BIN_ASSETS,
     title: TITLE,
@@ -1017,7 +1045,10 @@ function main() {
   console.log(
     `gen-schema: ${schema.designs.length} designs, ${schema.assets.length} ` +
       `dependency files, ${schema.features.length} feature(s) -> ` +
-      `src/generated/designs.json, public/scad/`
+      `src/generated/designs.json, public/scad/` +
+      // Surfaced here too so a deploy log records which ScadPub produced the
+      // bundle (and shows when the stamp is missing, e.g. a git-less tree).
+      ` [ScadPub ${schema.scadpubVersion ?? "version unknown"}]`
   );
 }
 

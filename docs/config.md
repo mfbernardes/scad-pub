@@ -576,3 +576,42 @@ The **ⓘ** button lists the third-party components ScadPub itself bundles, incl
 - `name`, `license`, `copyright`, `url`, and `licenseUrl` are required; the rest are optional. Unknown keys are ignored.
 - Provide `sourceUrl` for copyleft components, such as GPL components, so the corresponding-source requirement is met. Provide `text` to reproduce a permissive license inline.
 - A malformed entry fails the build with a clear message.
+
+### Where the built-in versions come from
+
+Every version shown in that modal is resolved at build time and carried in the generated schema. None is a literal in the source, so an attribution can't claim a version the app doesn't ship. There is no config key for any of them.
+
+| Entry | Version source | Schema field |
+| --- | --- | --- |
+| ScadPub | `git describe` of the building checkout (see below) | `scadpubVersion` |
+| OpenSCAD (WebAssembly build) | `PINNED_WASM_VERSION` in `scripts/wasm-version.mjs`, or `$OPENSCAD_VERSION` — the snapshot actually fetched | `wasmVersion` |
+| three.js, React & React-DOM, Atkinson Hyperlegible | the installed version in the `node_modules` the build bundles from (`scripts/lib/dep-versions.mjs`) | `componentVersions` |
+
+The npm versions are read from disk rather than imported from the packages themselves: `import { REVISION } from "three"` would pull three.js into the modal's eager chunk (the modal is statically imported) and undo the viewer's lazy-load split. A package that can't be resolved is left out and its entry simply shows no version.
+
+Adding a bundled component means adding its attribution in `src/lib/licenses.ts` and, if it's an npm package, its name to `BUNDLED_PACKAGES` in `scripts/lib/dep-versions.mjs`. Unit tests check that the two agree with `package.json` and with what's installed.
+
+### ScadPub's own version stamp
+
+ScadPub's entry carries the version of ScadPub the site was built with, so a deployed configurator identifies the infrastructure behind it. It is resolved by `scripts/lib/version.mjs` and written to the schema as `scadpubVersion`.
+
+It is read from the git metadata of **the ScadPub checkout that runs the build** — `git -C <scadpub dir> describe --tags --always --dirty` — not from the current working directory. A consumer project therefore gets the right answer whether it forks ScadPub, adds it as a submodule, or builds it from a sibling checkout with its own `SCADPUB_CONFIG`.
+
+| Checkout state | Stamp |
+| --- | --- |
+| On a tagged commit | `v1.4.0` |
+| Past the latest tag | `v1.4.0-3-gab12cd6` |
+| No tags reachable (a shallow CI clone) | `ab12cd6` |
+| Uncommitted changes | `…-dirty` suffix |
+| No git metadata at all | none — the modal shows no version line |
+
+Two notes for CI and packaging:
+
+- **Fetch tags.** `actions/checkout` defaults to a depth-1 clone with no tags, which yields the bare-commit form. Set `fetch-depth: 0` (as `.github/workflows/ci.yml` does) for the tag form.
+- **`SCADPUB_VERSION` overrides everything.** Set it when the build tree has no git metadata (a release tarball, a `docker COPY` of the sources) or when ScadPub is vendored as plain files into a repo whose tags describe the consumer's app rather than ScadPub:
+
+  ```bash
+  SCADPUB_VERSION=v1.4.0 npm run build
+  ```
+
+The stamp and `componentVersions` are display-only. Both are deliberately kept out of `renderHash`, so a new commit or a dependency bump doesn't invalidate persisted render geometry.
