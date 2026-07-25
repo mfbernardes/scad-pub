@@ -96,6 +96,19 @@ test("validates the optional ScadPub version stamp", () => {
   );
 });
 
+test("validates the bundled-package versions map", () => {
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), componentVersions: {} }));
+  assert.doesNotThrow(() =>
+    validateSchema({ ...validBase(), componentVersions: { three: "0.185.1" } })
+  );
+  for (const bad of [[], null, { three: 185 }]) {
+    assert.throws(
+      () => validateSchema({ ...validBase(), componentVersions: bad }),
+      /'componentVersions' must be an object of package: version strings/
+    );
+  }
+});
+
 test("validates the model format", () => {
   assert.doesNotThrow(() => validateSchema({ ...validBase(), format: "3mf" }));
   assert.doesNotThrow(() => validateSchema({ ...validBase(), format: "stl" }));

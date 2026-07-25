@@ -493,6 +493,14 @@ export interface Schema {
    * Absent when the build tree carried no git metadata and no override.
    */
   scadpubVersion?: string;
+  /**
+   * Installed versions of the bundled third-party packages, keyed by package
+   * name ("three", "react", …), read from the build's node_modules by
+   * scripts/lib/dep-versions.mjs. Feeds the open-source licenses modal so an
+   * attribution can't name a version the app doesn't ship. A package that
+   * couldn't be resolved is absent.
+   */
+  componentVersions?: Record<string, string>;
   /** Page/header title (used as the document title and the header text). */
   title: string;
   /** Optional stable id; namespaces this configurator's browser storage so two

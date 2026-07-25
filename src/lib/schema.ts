@@ -174,6 +174,16 @@ export function validateSchema(raw: unknown): Schema {
   }
   if (s.scadpubVersion !== undefined && typeof s.scadpubVersion !== "string")
     fail("'scadpubVersion' must be a string");
+  if (s.componentVersions !== undefined) {
+    const cv = s.componentVersions;
+    if (
+      !cv ||
+      typeof cv !== "object" ||
+      Array.isArray(cv) ||
+      !Object.values(cv as Record<string, unknown>).every((v) => typeof v === "string")
+    )
+      fail("'componentVersions' must be an object of package: version strings");
+  }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
   if (s.lang !== undefined && typeof s.lang !== "string") fail("'lang' must be a string");
   if (s.strings !== undefined)

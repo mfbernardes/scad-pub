@@ -39,6 +39,7 @@ import {
   renderFontsConf,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
+import { componentVersions } from "../scripts/lib/dep-versions.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "fixtures");
@@ -843,6 +844,29 @@ test("a build with no resolvable version omits the stamp entirely", () => {
       JSON.parse(readFileSync(join(out, "schema", "designs.json"), "utf-8")),
     false
   );
+});
+
+test("bundled package versions are read from the install and reach the schema", () => {
+  // The licenses modal reads these instead of carrying version literals, so the
+  // schema must carry whatever the build's node_modules actually hold.
+  const { schema } = run("widget.config.json");
+  assert.deepEqual(schema.componentVersions, componentVersions());
+  assert.match(schema.componentVersions.three, /^\d+\.\d+\.\d+/);
+
+  // Injectable, and — like the ScadPub stamp — display-only, so a dependency
+  // bump doesn't throw away every cached render.
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const withDeps = (components, dir) =>
+    generate({
+      configPath: join(FIXTURES, "widget.config.json"),
+      outSchemaDir: join(out, `schema-${dir}`),
+      outScadDir: join(out, `scad-${dir}`),
+      components,
+    });
+  const a = withDeps({ three: "0.185.1" }, "a");
+  const b = withDeps({ three: "0.190.0" }, "b");
+  assert.deepEqual(a.componentVersions, { three: "0.185.1" });
+  assert.equal(a.renderHash, b.renderHash);
 });
 
 test("renderHash is stable for an unchanged config (so a rebuild doesn't bust the cache)", () => {
