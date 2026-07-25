@@ -3,7 +3,7 @@
 // then hands the host a fixed SVG plus (when the field binds colours) a derived
 // layers string. The configurator's own 3D viewer is the preview — this dialog
 // only reports what it checked, fixed and derived.
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   check,
   isRenderableColor,
@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import { useScrollFocusedIntoView } from "../lib/useScrollFocusedIntoView";
 
 /** The wizard's plain-value output; the host applies it to the parameters. */
 export interface SvgWizardResult {
@@ -90,6 +91,11 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
     }
   }, [svgText]);
 
+  // The scroll area, so a focused field (step 3's editable region colours) is
+  // kept clear of the on-screen keyboard on touch devices.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollFocusedIntoView(scrollRef);
+
   const [step, setStep] = useState<Step>(1);
   // Populated when leaving the check step: the fixed/serialised SVG plus the
   // changes, residual findings and regions the wizard reports (`parsed.root` is
@@ -143,7 +149,7 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
         {parsed.error ? (
           <p className="svg-wizard__error text-sm text-destructive">{parsed.error}</p>
         ) : (
-          <div className="max-h-[55vh] overflow-y-auto pr-1">
+          <div ref={scrollRef} className="max-h-[55vh] overflow-y-auto overscroll-contain pr-1">
             {step === 1 && (
               <section className="flex flex-col gap-3">
                 <p className="text-sm text-muted-foreground">

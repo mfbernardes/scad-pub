@@ -194,7 +194,7 @@ export function PresetPicker({
       {/* Inline (mobile sheet): fill the tab height so the list grows and the
           "Save current as…" row pins to the bottom. */}
       <div
-        className={cn("overflow-y-auto px-1 pt-1 pb-2", inline ? "flex-1" : "max-h-72")}
+        className={cn("overflow-y-auto overscroll-contain px-1 pt-1 pb-2", inline ? "flex-1" : "max-h-72")}
         ref={sectionsRef}
         onKeyDown={onListKeyDown}
       >

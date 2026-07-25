@@ -135,6 +135,7 @@ export function SheetTabs({
             showAdvanced={showAdvanced}
             onShowAdvancedChange={onShowAdvancedChange}
           />
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
             <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
           {/* Auto-render is parameter-scoped, so it pins to the bottom of this

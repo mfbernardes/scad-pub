@@ -67,7 +67,7 @@ export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose
             <XIcon size={16} />
           </IconButton>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <TabsContent value="notices" className="mt-0">
             {diagnostics.length ? (
               <ul className="px-3 py-[0.4rem]" aria-live="polite">
@@ -89,7 +89,7 @@ export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose
             )}
           </TabsContent>
           <TabsContent value="log" className="mt-0">
-            <pre className="log m-0 max-h-44 overflow-auto whitespace-pre-wrap bg-code px-4 py-[0.6rem] font-mono text-xs leading-[1.4] text-muted-foreground">
+            <pre className="log m-0 max-h-44 overflow-auto overscroll-contain whitespace-pre-wrap bg-code px-4 py-[0.6rem] font-mono text-xs leading-[1.4] text-muted-foreground">
               {log.length ? log.join("\n") : "(no output yet)"}
             </pre>
           </TabsContent>

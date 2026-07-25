@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Design } from "../openscad/types";
 import { Check as CheckIcon, ChevronDown as ChevronDownIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { isCoarsePointer } from "../lib/pointer";
 import {
   Select,
   SelectContent,
@@ -60,10 +61,9 @@ export function DesignGallery({
     : designs;
   const grouped = groupDesigns(filtered);
   return (
-    <div className="design-gallery flex min-h-0 flex-col gap-3">
+    <div className="design-gallery flex min-h-0 flex-1 flex-col gap-3">
       {designs.length > 6 && (
         <input
-          autoFocus
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -72,7 +72,7 @@ export function DesignGallery({
           className="w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       )}
-      <div className="max-h-[65vh] overflow-y-auto pr-1">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
         {filtered.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">No designs match your search.</p>
         )}
@@ -160,7 +160,12 @@ export function DesignPicker({ designs, value, onChange, openSignal, active = tr
           <span className="truncate">{current?.label ?? value}</span>
           <ChevronDownIcon size={14} aria-hidden="true" />
         </button>
-        <DialogContent className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden p-4 sm:p-6">
+        <DialogContent
+          className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden p-4 sm:p-6"
+          onOpenAutoFocus={(e) => {
+            if (isCoarsePointer()) e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Choose a design</DialogTitle>
             <DialogDescription>Select what you want to configure.</DialogDescription>

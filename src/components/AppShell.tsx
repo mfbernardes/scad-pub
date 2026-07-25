@@ -235,20 +235,25 @@ export const AppShell = memo(function AppShell({
   // layout's DOM (with the same #param-search-input id) is committed, before
   // the browser paints — otherwise the switch would silently drop focus to
   // <body>.
+  // Bind the ref to a local so the focus/blur handlers mutate a value the
+  // React Compiler sees as a ref (`react-hooks/refs`, off here) rather than a
+  // property of the hook-returned `panelState` object, which its immutability
+  // rule forbids mutating.
+  const { searchFocusedRef } = panelState;
   const wasMobileRef = useRef(isMobile);
   useLayoutEffect(() => {
     if (wasMobileRef.current === isMobile) return;
     wasMobileRef.current = isMobile;
-    if (panelState.searchFocusedRef.current) {
+    if (searchFocusedRef.current) {
       document.getElementById(PARAM_SEARCH_INPUT_ID)?.focus();
     }
-  }, [isMobile, panelState.searchFocusedRef]);
+  }, [isMobile, searchFocusedRef]);
   const handleSearchFocus = useCallback(() => {
-    panelState.searchFocusedRef.current = true;
-  }, [panelState.searchFocusedRef]);
+    searchFocusedRef.current = true;
+  }, [searchFocusedRef]);
   const handleSearchBlur = useCallback(() => {
-    panelState.searchFocusedRef.current = false;
-  }, [panelState.searchFocusedRef]);
+    searchFocusedRef.current = false;
+  }, [searchFocusedRef]);
 
   // M16: at the Full sheet detent the sheet visually covers the mobile
   // background (top bar + viewer + floating controls), so treat that detent

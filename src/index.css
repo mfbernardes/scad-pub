@@ -420,6 +420,21 @@ button:disabled { cursor: default; }
   }
 }
 
+/* Touch targets: on coarse-pointer (touch) devices the tightly-stacked viewer
+   HUD column and the mobile top-bar icon cluster render 32px (size-8) icon
+   buttons that are mis-tap-prone. Raise their hit area to a comfortable ~44px
+   (WCAG 2.5.5) and widen the HUD gap. Glyph sizes are unchanged — only the
+   touch/hit area grows. Gated to (pointer: coarse) so desktop layout and
+   visual baselines are untouched. */
+@media (pointer: coarse) {
+  .viewer-hud { gap: 0.6rem; }
+  .viewer-hud .icon-btn,
+  .mobile-top-bar .icon-btn {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    FLOATING OVERLAY GEOMETRY — measurements panel, action cluster,
    stale banner. Decoration lives on the components; only the
@@ -639,6 +654,7 @@ button:disabled { cursor: default; }
 .sheet-content {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   min-height: 0;

@@ -197,6 +197,7 @@ function NumberControl({
       )}
       <Input
         type="number"
+        inputMode="decimal"
         name={param.name}
         autoComplete="off"
         className="w-20"
