@@ -64,6 +64,13 @@ function checkDesign(d: unknown): void {
     fail(`design '${id}' 'image' must be a string URL`);
   if (design.doc != null && typeof design.doc !== "string")
     fail(`design '${id}' 'doc' must be a string URL`);
+  if (design.presetImages != null)
+    checkStringMap(
+      design.presetImages,
+      `design '${id}' 'presetImages' must be an object`,
+      (name) => `design '${id}' 'presetImages["${name}"]' must be a non-empty string URL`,
+      true
+    );
   if (
     design.collapsedSections !== undefined &&
     (!Array.isArray(design.collapsedSections) ||

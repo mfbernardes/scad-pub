@@ -141,6 +141,14 @@ const parseStringArray = (raw, key) => {
   return raw;
 };
 
+// Dotted extension (incl. the leading dot) of a relative path, or "" when it
+// has none. `dot > 0` so a leading-dot "dotfile" with no real extension yields
+// "" rather than the whole basename.
+const extOf = (relPath) => {
+  const dot = relPath.lastIndexOf(".");
+  return dot > 0 ? relPath.slice(dot) : "";
+};
+
 // Load + sanity-check the config. Catches typo'd / stale top-level keys before
 // doing any work — a whole-key typo would otherwise be silently ignored (see
 // KNOWN_TOP_LEVEL_KEYS).
@@ -400,6 +408,7 @@ function resolveDesignList(config, SOURCE) {
       iconSrc: checkDesignString(d.icon, d.id, "icon"),
       imageSrc: checkDesignString(d.image, d.id, "image"),
       docSrc: checkDesignString(d.doc, d.id, "doc"),
+      presetImagesSrc: checkStringMap(d.presetImages, d.id, "presetImages"),
       reviewLabelsSrc: checkStringMap(d.reviewLabels, d.id, "reviewLabels"),
       // Plain deployment-authored text, like description — no annotation
       // fallback, and no cross-reference against the design's own params
@@ -412,14 +421,14 @@ function resolveDesignList(config, SOURCE) {
     .sort()
     .map((f) => {
       const id = f.replace(/\.scad$/, "");
-      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null, imageSrc: null, docSrc: null };
+      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null, imageSrc: null, docSrc: null, presetImagesSrc: null, reviewLabelsSrc: null, reviewNote: null };
     });
 }
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
 function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register }) {
-  return resolveDesignList(config, SOURCE).map(({ iconSrc, imageSrc, docSrc, ...d }) => {
+  return resolveDesignList(config, SOURCE).map(({ iconSrc, imageSrc, docSrc, presetImagesSrc, reviewLabelsSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
@@ -453,8 +462,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       // `// @icon` (unlike a config `icon`) resolves relative to the design's
       // own file, i.e. within SOURCE — so it must stay within SOURCE too.
       if (!iconSrc) checkContained(src, `design '${d.id}' icon '${iconRel}'`, relPosix(abs));
-      const dot = iconRel.lastIndexOf(".");
-      const ext = dot > 0 ? iconRel.slice(dot) : "";
+      const ext = extOf(iconRel);
       const name = `${d.id}-icon${ext}`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' icon`);
@@ -469,8 +477,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       const base = imageSrc ? CONFIG_DIR : dirname(abs);
       const src = mustExist(resolve(base, imageRel), `design '${d.id}' image '${imageRel}'`);
       if (!imageSrc) checkContained(src, `design '${d.id}' image '${imageRel}'`, relPosix(abs));
-      const dot = imageRel.lastIndexOf(".");
-      const ext = dot > 0 ? imageRel.slice(dot) : "";
+      const ext = extOf(imageRel);
       const name = `${d.id}-image${ext}`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' image`);
@@ -494,6 +501,39 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       register(dest, `design '${d.id}' doc`);
       copyFileSync(src, dest);
       doc = `scad/${name}`;
+    }
+    // Bundled-preset thumbnails (`designs[].presetImages`): each key must
+    // name an actual preset in the sibling parameterSets file — the same
+    // typo-protection stance as the rest of the config, so a stale/misspelled
+    // preset name fails the build instead of silently rendering a text-only
+    // card forever. Each value is a config-relative image path, resolved and
+    // copied into the served tree exactly like `icon`/`image`, under a
+    // deterministic `<id>-preset-<n>.<ext>` name (n = insertion order — the
+    // preset NAME itself, not the filename, is what the UI keys off of, so a
+    // stable index is enough for a reproducible build).
+    let presetImages;
+    if (presetImagesSrc && Object.keys(presetImagesSrc).length) {
+      const presetNames = presets.length
+        ? new Set(Object.keys(JSON.parse(readFileSync(presetAbs, "utf-8")).parameterSets ?? {}))
+        : new Set();
+      presetImages = {};
+      Object.entries(presetImagesSrc).forEach(([presetName, rel], i) => {
+        if (!presetNames.has(presetName))
+          throw new Error(
+            `gen-schema: design '${d.id}' 'presetImages["${presetName}"]' does not match any bundled ` +
+              `preset name in '${presetRel}'`
+          );
+        const src = mustExist(
+          resolve(CONFIG_DIR, rel),
+          `design '${d.id}' presetImages["${presetName}"] '${rel}'`
+        );
+        const ext = extOf(rel);
+        const outName = `${d.id}-preset-${i}${ext}`;
+        const dest = join(outScadDir, outName);
+        register(dest, `design '${d.id}' presetImages["${presetName}"]`);
+        copyBrowserFacing(src, dest);
+        presetImages[presetName] = `scad/${outName}`;
+      });
     }
     // `reviewLabels`: each key must name an actual DECLARED PARAM of this
     // design — the same typo-protection stance the icon/doc annotation
@@ -522,6 +562,8 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       sections,
       collapsedSections,
       params,
+      // Only present when the design configures at least one preset image.
+      ...(presetImages ? { presetImages } : {}),
       // Only present when the design configures at least one review label.
       ...(reviewLabels ? { reviewLabels } : {}),
     };
