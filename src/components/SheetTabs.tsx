@@ -8,6 +8,7 @@ import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
 import type { PanelTab } from "../lib/usePanelState";
+import { EssentialsToggle } from "./EssentialsToggle";
 import { ParamForm } from "./ParamForm";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
@@ -128,16 +129,12 @@ export function SheetTabs({
             onFocus={onSearchFocus}
             onBlur={onSearchBlur}
           />
-          {design.params.some((p) => p.advanced) && (
-            <button
-              type="button"
-              className="mx-3 mt-2 self-start text-sm font-semibold text-brand hover:underline"
-              onClick={() => onShowAdvancedChange(!showAdvanced)}
-            >
-              {showAdvanced ? "Show essential settings" : "Show all settings"}
-            </button>
-          )}
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <EssentialsToggle
+            params={design.params}
+            values={values}
+            showAdvanced={showAdvanced}
+            onShowAdvancedChange={onShowAdvancedChange}
+          />
             <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
           {/* Auto-render is parameter-scoped, so it pins to the bottom of this

@@ -46,14 +46,32 @@ interface Props {
 
 // Every HUD button is an IconButton wrapped in the same left-anchored
 // hover/focus Tooltip, with the tooltip text mirroring the aria-label — this
+// composes that once so the five buttons below stay identical in output.
+function HudTooltipButton({
+  label,
+  onClick,
+  className,
+  pressed,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
   className?: string;
+  pressed?: boolean;
+  children: ReactNode;
+}) {
+  return (
     <Tooltip>
       <TooltipTrigger asChild>
         <IconButton label={label} className={className} pressed={pressed} onClick={onClick}>
+          {children}
         </IconButton>
       </TooltipTrigger>
       <TooltipContent side="left">{label}</TooltipContent>
     </Tooltip>
+  );
+}
+
 export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, reset, zoom, fullscreen, view, onSelectView }: Props) {
   const standalone = useStandalone();
   const canFullscreen = fullscreen && !standalone && fullscreenSupported();
