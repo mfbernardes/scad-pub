@@ -355,11 +355,25 @@ export const Viewer = forwardRef<
     rendererRef.current = renderer;
     mount.appendChild(renderer.domElement);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const key = new THREE.DirectionalLight(0xffffff, 0.8);
+    // A hemisphere light carries most of the fill so that near-white surfaces
+    // read close to their true colour instead of collapsing to grey. With an
+    // ambient-dominated rig a face turned away from the key light only sees the
+    // ambient term, so a near-white model colour (e.g. #F2EFE9) multiplied by a
+    // ~0.6 ambient came out a warm mid-grey. The hemisphere's near-white "sky"
+    // fill lifts upward-facing surfaces toward their real colour while its
+    // mid-grey "ground" keeps side/under faces darker, so the model still shows
+    // form (a visible light→shadow gradient) rather than flattening. Ambient is
+    // dropped and the two directionals trimmed so highlights and saturated
+    // colours don't clip. Positioned at +Z to match the OpenSCAD Z-up scene, so
+    // "sky" fill lands on top faces.
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 2.0);
+    hemi.position.set(0, 0, 1);
+    scene.add(hemi);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const key = new THREE.DirectionalLight(0xffffff, 0.5);
     key.position.set(1, -1, 2);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.4);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.25);
     fill.position.set(-1, 1, 0.5);
     scene.add(fill);
 
