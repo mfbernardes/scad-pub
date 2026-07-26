@@ -317,8 +317,17 @@ export function BottomSheet({
     if (!sheet) return;
     returnFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // A menu/popover/select opened from a sheet control portals its content to
+    // <body> (outside `sheet`) so it isn't clipped by the sheet's `overflow:
+    // hidden` — but it is logically part of the sheet's modal surface. Treat any
+    // Radix popper content as inside the trap: without this the focusin redirect
+    // below yanks focus back into the sheet the instant the popover grabs it, and
+    // Radix (seeing focus leave its content) closes the layer again — so e.g. the
+    // "Jump to section" navigator could never open at the Full detent.
+    const inPopper = (node: Node | null) =>
+      node instanceof Element && !!node.closest("[data-radix-popper-content-wrapper]");
     const inTrap = (node: Node | null) =>
-      !!node && (sheet.contains(node) || node === scrimRef.current);
+      !!node && (sheet.contains(node) || node === scrimRef.current || inPopper(node));
     // DOM/tab order: the scrim (when present) precedes the sheet.
     // FOCUSABLE_SELECTOR alone isn't enough: Radix's inactive TabsContent
     // panels carry tabindex="0" (for programmatic/AT focus management) while
@@ -341,6 +350,10 @@ export function BottomSheet({
       if (!inTrap(e.target as Node)) focusFirst();
     };
     const onKeyDown = (e: KeyboardEvent) => {
+      // While a sheet-spawned popover/menu holds focus it owns Escape and Tab
+      // (Radix closes it on Escape, moves within it on Tab). Don't also collapse
+      // the sheet or wrap focus back into it — let the layer handle the key.
+      if (inPopper(document.activeElement)) return;
       if (e.key === "Escape") {
         setDetent("half");
         return;
