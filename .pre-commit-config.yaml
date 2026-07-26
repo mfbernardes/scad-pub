@@ -32,3 +32,10 @@ repos:
         entry: npm test
         pass_filenames: false
         files: \.(ts|tsx|mjs)$
+
+      - id: markdownlint
+        name: Markdown lint
+        language: system
+        entry: npx markdownlint-cli2
+        pass_filenames: true
+        files: \.md$

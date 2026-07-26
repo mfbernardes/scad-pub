@@ -1,0 +1,15 @@
+{
+  // https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+  "config": {
+    "default": true,
+    // Docs and README aren't hard-wrapped at 80 columns.
+    "MD013": false,
+    // THIRD-PARTY-LICENSES.md lists bare attribution/source URLs.
+    "MD034": false,
+    // Docs intentionally show syntax like `- ` inside code spans.
+    "MD038": false,
+    // Existing tables mix compact and padded pipe styles.
+    "MD060": false
+  },
+  "gitignore": true
+}
