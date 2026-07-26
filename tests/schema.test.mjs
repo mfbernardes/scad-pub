@@ -252,6 +252,24 @@ test("validates the optional notices' labelOne field", () => {
   assert.throws(() => validateSchema(bad), /a notice 'labelOne' must be a string/);
 });
 
+test("validates the optional notices' subsumedByFont field", () => {
+  const ok = validBase();
+  ok.notices = [{ marker: "alert", label: "alerts", subsumedByFont: true }];
+  assert.doesNotThrow(() => validateSchema(ok));
+  const bad = validBase();
+  bad.notices = [{ marker: "alert", label: "alerts", subsumedByFont: "yes" }];
+  assert.throws(() => validateSchema(bad), /a notice 'subsumedByFont' must be a boolean/);
+});
+
+test("validates the optional ui.grid field", () => {
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { grid: "off" } }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { grid: "on" } }));
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { grid: "sometimes" } }),
+    /'ui\.grid' must be "off" or "on"/
+  );
+});
+
 test("validates the optional appended licenses", () => {
   // null/absent/empty is fine.
   assert.doesNotThrow(() => validateSchema({ ...validBase(), licenses: [] }));
