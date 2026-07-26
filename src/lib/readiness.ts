@@ -77,6 +77,12 @@ export interface NoticeAttentionInput {
   labelOne?: string;
   attention: boolean;
   count: number;
+  /** Whether this category's notices are a SYMPTOM of a missing font rather
+   *  than their own independently-actionable issue (see
+   *  `NoticeCategory.subsumedByFont`). While a substitute font is active — and
+   *  it's unambiguous which font param that is — a pending notice here is
+   *  folded into the font-fallback item instead of listed separately. */
+  subsumedByFont?: boolean;
 }
 
 export interface DeriveAttentionInputs {
@@ -123,24 +129,48 @@ export interface DeriveAttentionInputs {
  * Order: font fallbacks first (in design param order), then diagnostics (in
  * log order), then flagged notices (in config order) — deterministic, no
  * randomness.
+ *
+ * A category flagged `subsumedByFont` is skipped entirely while a substitute
+ * font is in play: its notices only exist BECAUSE the family isn't loaded, so
+ * listing them beside the font-fallback item they're a symptom of would read
+ * as two separate problems. The fold only applies when it's unambiguous which
+ * font the notices are about — a design with several font params, several of
+ * them simultaneously missing, keeps the notice listed on its own.
  */
 export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] {
   const items: AttentionItem[] = [];
+  // `fontFallbackCount` is the visible missing fonts — each one gets its own
+  // attention card. `missingFontCount` is EVERY missing font, including
+  // `@showIf`-hidden ones: a hidden control's value is still sent to OpenSCAD,
+  // so a hidden missing font can be the real cause of a subsumable notice even
+  // though it shows no card. Ambiguity is judged on the latter — otherwise a
+  // notice caused by a second, hidden missing font would be folded away with no
+  // card left to carry it.
+  let fontFallbackCount = 0;
+  let missingFontCount = 0;
   for (const p of inputs.params) {
     if ((p.type !== "string" && p.type !== "enum") || !p.isFont) continue;
-    if (!isVisible(p, inputs.values)) continue;
     const value = String(inputs.values[p.name] ?? "");
     const family = familyOf(value);
     if (!family) continue; // a cleared control, not a missing font
     if (!inputs.availableFontFamilies.size) continue;
     if (inputs.availableFontFamilies.has(normalizeFamily(family))) continue;
+    missingFontCount++;
+    if (!isVisible(p, inputs.values)) continue; // counts toward ambiguity, but no card
     items.push({ kind: "font-fallback", param: p.name, family });
+    fontFallbackCount++;
   }
   for (const text of inputs.diagnostics ?? []) {
     items.push({ kind: "diagnostic", text });
   }
   for (const n of inputs.notices) {
     if (!n.attention || n.count <= 0) continue;
+    // Fold a symptom notice into the font-fallback item only when there's a
+    // visible fallback to fold into (fontFallbackCount > 0) AND exactly one
+    // font is missing overall (missingFontCount === 1), so it's unambiguous
+    // which font the notice is about. 2+ missing fonts — visible or hidden —
+    // leave it standing on its own.
+    if (n.subsumedByFont && fontFallbackCount > 0 && missingFontCount === 1) continue;
     const label = n.count === 1 && n.labelOne ? n.labelOne : n.label;
     items.push({ kind: "notice", marker: n.marker, label, count: n.count });
   }

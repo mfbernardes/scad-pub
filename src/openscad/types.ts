@@ -345,6 +345,17 @@ export interface NoticeCategory {
   color?: string;
   /** Whether this category should be treated as requiring user attention. */
   attention?: boolean;
+  /**
+   * Whether this category's notices are a SYMPTOM of a missing font rather
+   * than their own independently-actionable issue — e.g. a design that warns
+   * about text overflowing once Fontconfig substituted a different family.
+   * Only meaningful alongside `attention: true` (an unflagged category never
+   * reaches the attention list in the first place): while a substitute font
+   * is active, and it's unambiguous which font param that is, this category's
+   * pending notices are folded into the font-fallback item instead of listed
+   * separately. With no font missing they count exactly as normal.
+   */
+  subsumedByFont?: boolean;
 }
 
 /** How often the configurable `popup` notice is shown. */
@@ -415,6 +426,14 @@ export interface UiConfig {
    * suppress it there too.
    */
   fullscreen?: boolean;
+  /**
+   * Whether the viewer starts with its reference grid drawn (default "off").
+   * Unlike the flags above this does NOT gate a control: the HUD's grid
+   * toggle is always offered regardless. It only seeds that toggle's value on
+   * a visitor's first-ever load — once they've used the toggle, their
+   * persisted choice wins (see src/lib/viewerPrefs.ts).
+   */
+  grid?: "off" | "on";
   /**
    * Whether the "Save image (PNG)" action is offered (default true — the button
    * is shown). Set false to hide the Save-image (PNG) action entirely, in both

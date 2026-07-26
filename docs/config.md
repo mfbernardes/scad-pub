@@ -24,7 +24,7 @@ This representative config shows the major surfaces. The sections below define e
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
   "restOnGrid": false,            // rest the model's base on the z=0 grid instead of centring in Z; default false
-  "fileImport": true              // optional "Import file" button
+  "fileImport": true              // optional Files dialog (manages imported fonts/SVGs)
 }
 ```
 
@@ -110,7 +110,7 @@ These keys control branding, theme overrides, and interactive controls:
 - **`colors`**: optional per-theme Cascading Style Sheets (CSS) colour overrides. See [Theme and colour scheme](#theme-and-colour-scheme)
 - **`extraCss`**: optional raw-CSS escape hatch for advanced restyling. See [Custom CSS](#custom-css-extracss)
 - **`ui`**: see [UI behaviour and PWA](#ui-behaviour-and-pwa)
-- **`fileImport`**: see [Import file button](#import-file-fileimport)
+- **`fileImport`**: see [file import](#import-file-fileimport)
 - **`strings`**: optional per-deployment overrides of the built-in UI text. See [Text overrides (`strings`)](#text-overrides-strings)
 
 ### In-app content
@@ -312,35 +312,41 @@ ScadPub's own chrome text — the status strip, the Review dialog, attention car
 
 ## Import file (`fileImport`)
 
-Designs sometimes need a file the app cannot bundle, such as a license-restricted font, an SVG to `import()`, or a `surface()` data file. Setting `fileImport` adds a **Files** action to the toolbar (an icon in the desktop command bar's action cluster, a row in the mobile "⋮" menu) that opens the Files dialog, with an **Import file** button inside. You can supply those files at runtime, entirely client-side. Nothing is uploaded to a server.
+Designs sometimes need a file the app cannot bundle, such as a license-restricted font or an SVG to `import()`. Setting `fileImport` adds a **Files** action to the toolbar (an icon in the desktop command bar's action cluster, a row in the mobile "⋮" menu) that opens the **Files dialog** — the manager for files imported at runtime, entirely client-side, with nothing uploaded to a server. Only fonts and SVGs have an import route (see [How uploads reach OpenSCAD](#how-uploads-reach-openscad)); a `surface()`/`import()` data file that no `@font`/`@svg` parameter points at has no import affordance and must ship as a bundled [asset](#design-sources) instead.
+
+Importing is **contextual** — it happens at the control that needs the file, not through a generic button:
+
+- A **font** parameter (`// @font`) imports through the font dropdown's **Import font…** action (and an inline import hint when a chosen font isn't loaded).
+- An **SVG** parameter (`// @svg`) imports through its **Prepare SVG…** drop zone. If the value later names a drawing that isn't present (e.g. an imported SVG the user removed), the control shows an actionable "not imported" hint.
+
+The **Files dialog is a manager**, not an importer: it lists what those controls have imported (name, type, size), removes a single file via its row, and clears all. With nothing imported it shows an empty state pointing back at the controls.
 
 ```jsonc
 {
-  // Shorthand: enable with defaults (accepts any file type).
+  // Shorthand: enable with defaults.
   "fileImport": true
 
   // …or an options object:
   "fileImport": {
-    "accept": ".svg,.ttf,.otf",  // optional: file-picker filter (omit to accept any file)
-    "label": "Import file",      // optional: button label (default "Import file")
-    "note": "…",                 // optional: help text shown above the file list (Markdown)
-    "maxBytes": 5242880          // optional: reject uploads larger than this (bytes)
+    "note": "…"   // optional: guidance shown at the top of the Files dialog (Markdown)
   }
 }
 ```
 
-When **`maxBytes`** is set, an upload larger than the cap is rejected with a friendly toast (showing the file's size and the limit) and is never stored; omit it for no cap.
+`fileImport` gates whether the **Files** action exists at all — omit it (or set it to `null`/`false`) and no Files action is shown. Its optional **`note`** renders as guidance at the top of the Files dialog, in a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content.
 
-`note` is rendered as a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content.
+> The `accept`, `label`, and `maxBytes` fields are still accepted for backward compatibility but no longer drive a generic import button (each contextual control applies its own picker filter and size guard). They are vestigial and can be omitted.
 
 ### How uploads reach OpenSCAD
 
-ScadPub chooses the mounting behavior from the file extension, so one button covers both cases:
+ScadPub chooses the mounting behavior from the file extension:
 
 - **Fonts** (`.ttf`/`.otf`/`.ttc`) are mounted where the renderer's fontconfig can find them, so `text(font = "…")` can use them. They're matched by their **embedded family name**, not the filename, so a renamed file still resolves.
-- **Any other file** is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. The reference must match the uploaded file's name (use `note` to tell users which name to use).
+- An **imported SVG** (`.svg`) is mounted at the render filesystem **root**, so a design references it by name, e.g. `import("logo.svg")`. The reference must match the imported file's name.
 
-Uploaded files persist in IndexedDB and are re-applied on the next visit; the Files dialog lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no Files action is shown at all.
+> **Only fonts and SVGs can be imported**, because import is contextual — a `@font` parameter offers the font route and a `@svg` parameter offers the SVG route. A file a design reads through a bare `surface()`/`import()` with **no** such parameter pointing at it has no import route in the UI; ship it as a bundled [`asset`](#design-sources) instead. (Any imported file is still mounted at the render root, so the mounting itself is generic — it's the *import* affordance that is font-/SVG-only.)
+
+Imported files persist in IndexedDB and are re-applied on the next visit; the Files dialog lists what's currently loaded, with a **Clear all** button to remove them. Importing, removing, or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served.
 
 ## Fonts (`fonts`, `fontFallback`)
 
@@ -423,6 +429,7 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`reset`**: `true` by default, or `false`. Controls the "reset view" button. Mouse/touch orbit and zoom still work regardless
 - **`zoom`**: `false` by default, or `true`. Controls the zoom in/out buttons. Mouse-wheel and pinch zoom already work, so the buttons are off by default
 - **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
+- **`grid`**: `"off"` by default, or `"on"`. Seeds whether the viewer starts with its reference grid drawn. Unlike the keys above it does **not** hide a control — the viewer's grid toggle is always offered — and a visitor's own choice is remembered in the browser and wins on every later visit
 - **`saveImage`**: `true` by default, or `false`. Controls the "Save image (PNG)" action in the secondary-action surfaces (the desktop command bar and the mobile ⋮ overflow menu). Set `false` to hide the Save-image action entirely
 - **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
 - **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
@@ -491,6 +498,7 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 - **`labelOne`**: optional singular form of `label`, such as `"alert"`. Used wherever a live count renders alongside the label whenever the count is exactly 1 — `label` alone can't pluralize itself, so without this a single pending notice reads as "1 alerts". Omit to keep `label` regardless of count
 - **`color`**: optional badge fill, as a plain CSS colour. For `#rgb`/`#rrggbb`, the badge text auto-switches between black and white to stay legible. Other colour forms keep the default badge text, so their contrast is your responsibility. Omit to use the default accent badge styling
 - **`attention`**: optional boolean, default `false`. Attention notices join OpenSCAD warnings, assertions, and missing fonts in the pre-download review dialog; **Download anyway** remains available
+- **`subsumedByFont`**: optional boolean, default `false`. Only meaningful alongside `attention: true`. Marks a category whose notices are a *symptom* of a missing font rather than their own separate issue — for example a design that warns about text overflowing once a substitute family was used. While a font the design asked for isn't loaded, and it is unambiguous which font parameter that is (the design has one font parameter, or exactly one fell back), this category's pending notices are folded into the font item instead of being listed again beside it. With no font missing, they count exactly as normal
 
 Omit `notices`, or set it to `[]`, and no marker categories are recognised. Design echoes appear only in the raw log. The bundled example config (`scadpub.config.json`) opts in with `alert` and `note` categories. The example `tag` design echoes them in specific, parameter-driven situations so you can see the badges appear.
 

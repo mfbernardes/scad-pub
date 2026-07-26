@@ -67,15 +67,34 @@ export async function selectDesign(page, label, { mobile = false } = {}) {
     if (await trigger.count()) {
       await trigger.click();
       await page.getByRole("option", { name: label, exact: true }).click();
-      // Clear the cached "ok" state so a following waitRendered can't pass on
-      // the previous design's render.
-      await page
-        .waitForFunction(
-          () => !/\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
-          { timeout: 5000 }
-        )
-        .catch(() => {});
+    } else {
+      // Gallery picker (ui.gallery: true) has no select — the current design's
+      // name opens a card-grid dialog instead; each card is a button[data-design]
+      // whose heading is exactly the design label. Mirror the capture harness.
+      const openBtn = (mobile
+        ? page.locator(".mobile-top-bar__center")
+        : page.locator(".command-bar__design-picker")
+      ).getByRole("button", { name: "Choose a design" });
+      if (await openBtn.count()) {
+        await openBtn.first().click();
+        const dialog = page.locator('[role="dialog"]:visible').first();
+        await dialog.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+        await dialog
+          .locator("button[data-design]")
+          .filter({ has: page.getByText(label, { exact: true }) })
+          .first()
+          .click();
+        await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+      }
     }
+    // Clear the cached "ok" state so a following waitRendered can't pass on
+    // the previous design's render.
+    await page
+      .waitForFunction(
+        () => !/\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
+        { timeout: 5000 }
+      )
+      .catch(() => {});
   }
   // Every design renders once on first view; if a "Render now" button is present
   // (auto-render off + pending changes), click it to be safe.
@@ -93,9 +112,23 @@ export async function selectDesign(page, label, { mobile = false } = {}) {
 export async function dismissWelcomePopup(page) {
   const dialog = page.getByRole("dialog");
   if (!(await dialog.count())) return;
-  await dialog.locator(".notice-ok").click().catch(() => {});
-  await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
-  await page.keyboard.press("Escape").catch(() => {});
+  const okButton = dialog.locator(".notice-ok");
+  if (await okButton.count()) {
+    // Button-mode popup: the primary CTA dismisses it. That button also opens
+    // the design picker, so press Escape afterwards to leave the UI clean.
+    await okButton.click().catch(() => {});
+    await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+    await page.keyboard.press("Escape").catch(() => {});
+  } else {
+    // Picker-mode popup (popup.mode: "picker") has no CTA — it shows design
+    // cards and dismisses when one is chosen. Click the first card. The card
+    // lives in the popup's own portal, not inside `.bottom-sheet`, so this
+    // dismissal doesn't trip the first-visit swipe-up sheet hint (which only
+    // retires on a pointerdown within the sheet). No Escape is needed: the
+    // popup closes itself and nothing else is left open.
+    await dialog.locator("button[data-design]").first().click().catch(() => {});
+    await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  }
 }
 
 // Shared timeout for openDialog/waitDialogClosed below — every hand-rolled

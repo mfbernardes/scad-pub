@@ -170,6 +170,8 @@ export function validateSchema(raw: unknown): Schema {
         fail("a notice 'color' must be a string");
       if (e.attention !== undefined && typeof e.attention !== "boolean")
         fail("a notice 'attention' must be a boolean");
+      if (e.subsumedByFont !== undefined && typeof e.subsumedByFont !== "boolean")
+        fail("a notice 'subsumedByFont' must be a boolean");
     }
   }
   if (s.scadpubVersion !== undefined && typeof s.scadpubVersion !== "string")
@@ -261,6 +263,8 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.zoom' must be a boolean");
     if (ui.fullscreen !== undefined && typeof ui.fullscreen !== "boolean")
       fail("'ui.fullscreen' must be a boolean");
+    if (ui.grid !== undefined && !["off", "on"].includes(ui.grid as string))
+      fail("'ui.grid' must be \"off\" or \"on\"");
     for (const key of ["presetsLabel", "parametersLabel"] as const)
       if (ui[key] !== undefined && typeof ui[key] !== "string")
         fail(`'ui.${key}' must be a string`);

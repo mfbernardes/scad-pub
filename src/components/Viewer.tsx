@@ -114,6 +114,10 @@ export const Viewer = forwardRef<
     showDimensions?: boolean;
     /** The standard camera view to frame new models / Reset view with. */
     view?: ViewName;
+    /** Whether the reference grid is drawn (default off). The HUD's grid
+     *  toggle owns this; the config's `ui.grid` only seeds its first-ever
+     *  value — see src/lib/viewerPrefs.ts. */
+    showGrid?: boolean;
     /** Reports the model's bounding-box size in mm (null when geometry clears). */
     onMeasure?: (size: Dimensions | null) => void;
     /** When true (design has an `@editOnModel` param and a model is shown), a
@@ -124,11 +128,13 @@ export const Viewer = forwardRef<
      *  position (px) relative to the viewer's top-left. A miss does nothing. */
     onModelPick?: (pos: { x: number; y: number }) => void;
   }
->(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, view = DEFAULT_VIEW, onMeasure, editable = false, onModelPick }, ref) {
+>(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, view = DEFAULT_VIEW, showGrid = false, onMeasure, editable = false, onModelPick }, ref) {
   // Latest selected view, read inside the [stl]-only reframe effect and the
   // imperative handle without re-running them.
   const viewRef = useRef(view);
   viewRef.current = view;
+  // Latest grid visibility, read inside the [theme]-only effect (which rebuilds
+  // the grid for the new colours) without adding showGrid to its deps.
   // Keep the latest onMeasure without re-running the [stl]-only geometry effect.
   const onMeasureRef = useRef(onMeasure);
   onMeasureRef.current = onMeasure;
@@ -260,6 +266,32 @@ export const Viewer = forwardRef<
     if (__APP_REST_ON_GRID__) group.position.z = size.z / 2;
     scene.add(group);
     dimGroupRef.current = group;
+  }
+
+  // Rebuild the reference grid from the current theme, matching the `show`
+  // flag: removes any existing grid first (disposing its GPU resources), then
+  // adds a fresh one — coloured from --viewer-grid/-2 — when shown. Cheap line
+  // geometry, so a full rebuild on toggle/theme change is fine. Both the HUD's
+  // grid toggle and a live theme switch come through here.
+  function syncGrid(show: boolean) {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (gridRef.current) {
+      scene.remove(gridRef.current);
+      gridRef.current.geometry.dispose();
+      (gridRef.current.material as THREE.Material).dispose();
+      gridRef.current = null;
+    }
+    if (!show) return;
+    const grid = new THREE.GridHelper(
+      200,
+      20,
+      cssColor("--viewer-grid", "#565f6e"),
+      cssColor("--viewer-grid-2", "#20252e")
+    );
+    grid.rotateX(Math.PI / 2);
+    scene.add(grid);
+    gridRef.current = grid;
   }
 
   // Move the camera along its line of sight to the orbit target. factor < 1
@@ -567,20 +599,10 @@ export const Viewer = forwardRef<
     if (!scene) return;
     const raf = requestAnimationFrame(() => {
       scene.background = cssColor("--viewer-bg", "#0f1115");
-      if (gridRef.current) {
-        scene.remove(gridRef.current);
-        gridRef.current.geometry.dispose();
-        (gridRef.current.material as THREE.Material).dispose();
-      }
-      const grid = new THREE.GridHelper(
-        200,
-        20,
-        cssColor("--viewer-grid", "#565f6e"),
-        cssColor("--viewer-grid-2", "#20252e")
-      );
-      grid.rotateX(Math.PI / 2);
-      scene.add(grid);
-      gridRef.current = grid;
+      // Rebuilt (not just recoloured) so a live theme switch picks up the new
+      // --viewer-grid/-2 values. Read fresh from the closure, like
+      // showDimensions below; the [showGrid] effect handles plain toggles.
+      syncGrid(showGrid);
       // Recolour any uncoloured geometry so it follows a live theme switch; the
       // model's own explicit colours are left untouched.
       const model = cssColor("--viewer-model", "#6f93ff");
@@ -592,7 +614,8 @@ export const Viewer = forwardRef<
       requestRenderRef.current(); // theme change doesn't move the camera — invalidate explicitly
     });
     return () => cancelAnimationFrame(raf);
-    // showDimensions is read fresh on a theme change; its own effect handles toggles.
+    // showDimensions/showGrid are read fresh on a theme change; their own
+    // effects below handle plain toggles.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
@@ -601,6 +624,12 @@ export const Viewer = forwardRef<
     syncDimensions(showDimensions);
     requestRenderRef.current();
   }, [showDimensions]);
+
+  // Show/hide the reference grid on toggle (geometry stays put).
+  useEffect(() => {
+    syncGrid(showGrid);
+    requestRenderRef.current();
+  }, [showGrid]);
 
   // Drop the on-model hover cursor the moment editing is no longer offered
   // (render failed, or the design has no `@editOnModel` param), so a stale

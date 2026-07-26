@@ -82,130 +82,181 @@ async function checkWelcomePopup({ page, check, schema }) {
         "popup renders its configured footnote"
       );
     }
-    // The primary button's label is config-driven (schema.popup.button), so read
-    // it from the schema instead of hardcoding "OK".
-    const buttonLabel = schema.popup.button ?? "OK";
-    const cta = popup.getByRole("button", { name: buttonLabel, exact: true });
-    check((await cta.count()) > 0, `popup shows its configured button "${buttonLabel}"`);
-    const dontShow = popup.getByRole("checkbox");
-    if (await dontShow.count()) await dontShow.check();
-    await cta.click();
-    await waitDialogClosed(page, schema.popup.header).catch(() => {});
-    check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
-    // The primary CTA also opens the design picker (when there's more than one
-    // design) so the user's next step — choosing what to make — is obvious.
-    if (schema.designs.length > 1) {
-      const listbox = page.getByRole("listbox");
-      const opened = await listbox
-        .first()
-        .waitFor({ state: "visible", timeout: 3000 })
-        .then(() => true)
-        .catch(() => false);
-      check(opened, "primary CTA opens the design picker");
-      // Close it so it doesn't intercept the later checks' interactions.
-      await page.keyboard.press("Escape");
-      await listbox.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+    if (schema.popup.mode === "picker" && schema.designs.length > 1) {
+      // Picker mode embeds the design gallery directly and has NO primary CTA
+      // button — the visitor's next step (choosing what to make) IS the popup.
+      // Picking a card selects that design and dismisses the popup.
+      const card = popup.locator("button[data-design]").first();
+      check((await card.count()) > 0, "picker popup shows selectable design cards");
+      await card.click();
+      await waitDialogClosed(page, schema.popup.header).catch(() => {});
+      check((await page.getByRole("dialog").count()) === 0, "picking a design card dismisses the popup");
+    } else {
+      // Non-picker modes show a config-driven primary button (schema.popup.button)
+      // that dismisses the popup and, when there's more than one design, opens
+      // the design picker so the next step is obvious.
+      const buttonLabel = schema.popup.button ?? "OK";
+      const cta = popup.getByRole("button", { name: buttonLabel, exact: true });
+      check((await cta.count()) > 0, `popup shows its configured button "${buttonLabel}"`);
+      const dontShow = popup.getByRole("checkbox");
+      if (await dontShow.count()) await dontShow.check();
+      await cta.click();
+      await waitDialogClosed(page, schema.popup.header).catch(() => {});
+      check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
+      if (schema.designs.length > 1) {
+        const listbox = page.getByRole("listbox");
+        const opened = await listbox
+          .first()
+          .waitFor({ state: "visible", timeout: 3000 })
+          .then(() => true)
+          .catch(() => false);
+        check(opened, "primary CTA opens the design picker");
+        // Close it so it doesn't intercept the later checks' interactions.
+        await page.keyboard.press("Escape");
+        await listbox.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+      }
     }
   } else {
     console.log("  (no popup in this config — skipped)");
   }
 }
 
-// Generic file import: the Files action (BarActions, a toolbar icon button —
-// it used to be a panel tab, now a modal) shows an "Import file" button when
-// the config sets `fileImport`. Uploading a file should surface it in the
-// file list and persist across a reload (IndexedDB).
-async function checkFileImport({ page, check, ids, schema }) {
-  console.log("=== file import ===");
+// File import is CONTEXTUAL now: the Files action (BarActions, a toolbar icon
+// button opening the FilesModal) only MANAGES imported files — it lists them
+// (name, type, size), removes one via its row X, and clears all, plus an empty
+// state — and carries NO generic import button. Importing happens at the
+// control that needs the file. This check (a) confirms the management-only
+// dialog + empty state, then (b) drives a real import through a contextual
+// control — the tag design's `@font` param renders a FontSelect whose hidden
+// file input is the same addFile path as its in-dropdown "Import font…" — and
+// verifies the file surfaces in the list with its type/size, persists across a
+// reload (IndexedDB), removes via the row X, and clears via "Clear all".
+async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
+  console.log("=== file import (contextual) ===");
+  if (schema.fileImport == null) {
+    console.log("  (no fileImport in this config — skipped)");
+    return;
+  }
   // FilesModal (a Dialog) doesn't persist across a reload, so it must be
   // re-opened each time — exact match: a substring "Files" would also catch
   // "Clear all imported files" once the modal is open.
   const gotoFiles = () =>
     page.getByRole("button", { name: "Files", exact: true }).first().click().catch(() => {});
-  const closeFiles = () => page.keyboard.press("Escape").catch(() => {});
-  await gotoFiles();
-  const importBtn = page.getByRole("button", { name: /Import file/i });
-  if (await importBtn.count()) {
-    check(true, "import-file button present");
-    const input = page.locator('.file-manager input[type="file"]').last();
-    await input.setInputFiles({
-      name: "smoke-overlay.svg",
-      mimeType: "image/svg+xml",
-      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
-    });
-    const fileRow = page.locator(".file-manager__name", { hasText: "smoke-overlay.svg" });
-    await fileRow.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-    check((await fileRow.count()) > 0, "uploaded file appears in the file list");
-    await page.reload({ waitUntil: "load" });
-    await waitRendered(page, ids[0]);
-    await gotoFiles();
-    check(
-      (await page
-        .locator(".file-manager__name", { hasText: "smoke-overlay.svg" })
-        .count()) > 0,
-      "uploaded file persists across reload"
-    );
-    // Clear removes the file (and the persisted copy / render cache).
-    await page.getByRole("button", { name: /Clear all imported files/i }).click();
-    await page
-      .locator(".file-manager__name", { hasText: "smoke-overlay.svg" })
-      .waitFor({ state: "detached", timeout: 3000 })
-      .catch(() => {});
-    // The UI row is removed synchronously, but the persisted copy is cleared
-    // via a fire-and-forget IndexedDB transaction. Reloading the instant the
-    // row detaches can abort that still-uncommitted transaction (page unload
-    // cancels in-flight IDB txns), leaving the file on disk to be restored on
-    // the next load. Wait for the persisted store to actually be empty before
-    // reloading so this assertion tests the guarantee, not the race.
-    const dbName = schema?.id || "scadpub";
-    await page
-      .waitForFunction(
-        (name) =>
-          new Promise((resolve) => {
-            let req;
-            try {
-              req = indexedDB.open(name);
-            } catch {
-              return resolve(true); // storage unavailable — nothing persisted
-            }
-            req.onerror = () => resolve(true);
-            req.onsuccess = () => {
-              const db = req.result;
-              if (!db.objectStoreNames.contains("fonts")) {
-                db.close();
-                return resolve(true);
-              }
-              const countReq = db.transaction("fonts", "readonly").objectStore("fonts").count();
-              countReq.onsuccess = () => {
-                db.close();
-                resolve(countReq.result === 0);
-              };
-              countReq.onerror = () => {
-                db.close();
-                resolve(true);
-              };
-            };
-          }),
-        dbName,
-        { timeout: 5000 }
-      )
-      .catch(() => {});
-    await page.reload({ waitUntil: "load" });
-    await waitRendered(page, ids[0]);
-    await gotoFiles();
-    check(
-      (await page
-        .locator(".file-manager__name", { hasText: "smoke-overlay.svg" })
-        .count()) === 0,
-      "cleared file stays cleared after reload"
-    );
-    // Close it — later checks click other toolbar/panel controls, and an open
-    // dialog's overlay would intercept those clicks.
-    await closeFiles();
+  const closeFiles = async () => {
+    await page.keyboard.press("Escape").catch(() => {});
     await waitDialogClosed(page, "Files").catch(() => {});
-  } else {
-    console.log("  (no fileImport in this config — skipped)");
-  }
+  };
+
+  // (a) Management-only dialog: no generic import button, and with nothing
+  //     imported yet the empty state (guidance to the contextual controls) shows.
+  await gotoFiles();
+  check(
+    (await page.getByRole("button", { name: /Import file/i }).count()) === 0,
+    "Files dialog has no generic import button (import is contextual)"
+  );
+  check(
+    (await page.locator(".file-manager__empty").count()) > 0,
+    "Files dialog shows the empty state when nothing is imported"
+  );
+  await closeFiles();
+
+  // (b) Import through a contextual control: the tag design's `@font` param.
+  //     Real bundled TTF bytes so the family parses; a distinct filename marks
+  //     it as a user import rather than the bundled copy.
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  const fontInput = page.locator('.param[data-param="font"] input[type="file"]').last();
+  check((await fontInput.count()) > 0, "font control exposes a contextual import input");
+  const ttf = await readFile(
+    fileURLToPath(new URL("../public/fonts/LiberationSans-Regular.ttf", import.meta.url))
+  );
+  const importedName = "smoke-imported.ttf";
+  await fontInput.setInputFiles({ name: importedName, mimeType: "font/ttf", buffer: ttf });
+
+  const row = () => page.locator(".file-manager__name", { hasText: importedName });
+  await gotoFiles();
+  await row().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await row().count()) > 0, "imported file appears in the Files list");
+  // The row carries a type indicator (Font) and a formatted size.
+  const itemText = await page
+    .locator(".file-manager li", { has: row() })
+    .innerText()
+    .catch(() => "");
+  check(/Font/.test(itemText), "imported file shows its Font type indicator");
+  check(/\b(?:B|KB|MB)\b/.test(itemText), "imported file shows a formatted size");
+
+  // (c) Persist across a reload (IndexedDB).
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, ids[0]);
+  await gotoFiles();
+  check((await row().count()) > 0, "imported file persists across reload");
+
+  // (d) The row's own X removes just that file, and the empty state returns.
+  await page.getByRole("button", { name: new RegExp(`Remove ${importedName}`, "i") }).click();
+  await row().waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  check((await row().count()) === 0, "row remove deletes the file");
+  check(
+    (await page.locator(".file-manager__empty").count()) > 0,
+    "empty state returns after removing the last file"
+  );
+  await closeFiles();
+
+  // (e) Re-import, then "Clear all" empties the list and the persisted store.
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  await page
+    .locator('.param[data-param="font"] input[type="file"]')
+    .last()
+    .setInputFiles({ name: importedName, mimeType: "font/ttf", buffer: ttf });
+  await gotoFiles();
+  await row().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await page.getByRole("button", { name: /Clear all imported files/i }).click();
+  await row().waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  // The UI row is removed synchronously, but the persisted copy is cleared via a
+  // fire-and-forget IndexedDB transaction. Reloading the instant the row detaches
+  // can abort that still-uncommitted transaction (page unload cancels in-flight
+  // IDB txns), leaving the file on disk to be restored on the next load. Wait for
+  // the persisted store to actually be empty before reloading so this assertion
+  // tests the guarantee, not the race. The store name is "fonts" — its original
+  // purpose — kept stable so older builds' files still load (see idb.ts).
+  const dbName = schema?.id || "scadpub";
+  await page
+    .waitForFunction(
+      (name) =>
+        new Promise((resolve) => {
+          let req;
+          try {
+            req = indexedDB.open(name);
+          } catch {
+            return resolve(true); // storage unavailable — nothing persisted
+          }
+          req.onerror = () => resolve(true);
+          req.onsuccess = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains("fonts")) {
+              db.close();
+              return resolve(true);
+            }
+            const countReq = db.transaction("fonts", "readonly").objectStore("fonts").count();
+            countReq.onsuccess = () => {
+              db.close();
+              resolve(countReq.result === 0);
+            };
+            countReq.onerror = () => {
+              db.close();
+              resolve(true);
+            };
+          };
+        }),
+      dbName,
+      { timeout: 5000 }
+    )
+    .catch(() => {});
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, ids[0]);
+  await gotoFiles();
+  check((await row().count()) === 0, "cleared file stays cleared after reload");
+  // Close it — later checks click other toolbar/panel controls, and an open
+  // dialog's overlay would intercept those clicks.
+  await closeFiles();
 }
 
 async function checkThemeToggle({ page, check }) {
@@ -432,7 +483,7 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
 // onDownloadClick). Arm the download listener BEFORE the click so the event
 // can never fire and go unheard while we're still deciding whether a dialog
 // showed up.
-async function checkExports({ page, check, ids, dir }) {
+async function checkExports({ page, check, ids, dir, schema }) {
   await selectDesign(page, ids[0]);
   console.log("=== export 3MF (with a pending attention issue) ===");
   const downloadPromise = page.waitForEvent("download");
@@ -452,16 +503,26 @@ async function checkExports({ page, check, ids, dir }) {
   await model.saveAs(modelOut);
   check((await stat(modelOut)).size > 0, `${await model.suggestedFilename()} (${(await stat(modelOut)).size} bytes)`);
 
-  console.log("=== save PNG (relocated to the top-bar overflow) ===");
-  const [png] = await Promise.all([
-    page.waitForEvent("download"),
-    page.click('[aria-label="Save image"]'),
-  ]);
-  const pngOut = join(dir, await png.suggestedFilename());
-  await png.saveAs(pngOut);
-  const head = (await readFile(pngOut)).subarray(0, 4);
-  const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
-  check(isPng && (await stat(pngOut)).size > 0, `${await png.suggestedFilename()} (png=${isPng})`);
+  // Save PNG lives in the top-bar overflow — but a deployment can hide it with
+  // `ui.saveImage: false`, in which case there's nothing to click.
+  if (schema.ui?.saveImage === false) {
+    console.log("=== save PNG (disabled via ui.saveImage — skipped) ===");
+    check(
+      (await page.locator('[aria-label="Save image"]').count()) === 0,
+      "Save image action is absent when ui.saveImage is false"
+    );
+  } else {
+    console.log("=== save PNG (relocated to the top-bar overflow) ===");
+    const [png] = await Promise.all([
+      page.waitForEvent("download"),
+      page.click('[aria-label="Save image"]'),
+    ]);
+    const pngOut = join(dir, await png.suggestedFilename());
+    await png.saveAs(pngOut);
+    const head = (await readFile(pngOut)).subarray(0, 4);
+    const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
+    check(isPng && (await stat(pngOut)).size > 0, `${await png.suggestedFilename()} (png=${isPng})`);
+  }
 }
 
 // The unified export dock (ActionButtons.tsx): exactly two buttons (Download
@@ -832,12 +893,104 @@ async function checkEditOnModel({ page, check, ids, paramsTabName }) {
   await waitRendered(page, "tag");
 }
 
+// "Jump to section" navigator (SectionNavigator.tsx): a compact control above
+// the form on designs with >= 4 visible sections. Present on such a design,
+// absent on a simple one; selecting a section opens + scrolls + focuses it; and
+// a narrowing search shrinks (or removes) the option set. Located by the
+// trigger's accessible name and the option/section DOM hooks.
+async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }) {
+  console.log("=== section navigator (jump to section) ===");
+  const sectionCount = (id) => (schema.designs.find((d) => d.id === id)?.sections?.length ?? 0);
+  const navDesign = ids.find((id) => sectionCount(id) >= 4);
+  const simpleDesign = ids.find((id) => sectionCount(id) < 4);
+  if (!navDesign) {
+    console.log("  (no design with >= 4 sections in this config — skipped)");
+    return;
+  }
+
+  const trigger = page.getByRole("button", { name: "Jump to section", exact: true });
+  const gotoParams = () =>
+    page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+
+  // (a) Present on a multi-section design; absent on a simple one.
+  await selectDesign(page, navDesign);
+  await gotoParams();
+  await trigger.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await trigger.count()) >= 1, `navigator present on "${navDesign}" (>= 4 sections)`);
+  if (simpleDesign) {
+    await selectDesign(page, simpleDesign);
+    await gotoParams();
+    await page.locator(".param-form").first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    check((await trigger.count()) === 0, `navigator absent on simple "${simpleDesign}" design (< 4 sections)`);
+    await selectDesign(page, navDesign);
+    await gotoParams();
+    await trigger.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  }
+
+  // (b) Selecting a section opens it, scrolls it in, and focuses its summary.
+  //     Prefer a currently-collapsed section (a stronger test — it wasn't open);
+  //     fall back to the last section (which still re-scrolls/focuses).
+  await trigger.first().click();
+  const items = page.locator(".section-nav-item");
+  await items.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  const beforeCount = await items.count();
+  check(beforeCount >= 4, `navigator lists all ${beforeCount} visible sections`);
+  const target = await page.evaluate(() => {
+    const all = [...document.querySelectorAll("details.param-group")];
+    const closed = all.find((d) => !d.open);
+    return (closed ?? all[all.length - 1])?.getAttribute("data-section") ?? null;
+  });
+  check(target !== null, "a target section is resolvable");
+  await page.getByRole("button", { name: target, exact: true }).click();
+  const opened = await page
+    .waitForFunction(
+      (sec) => {
+        const d = document.querySelector(`details.param-group[data-section="${sec}"]`);
+        return !!d && d.open;
+      },
+      target,
+      { timeout: 3000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(opened, `selecting "${target}" opens its section`);
+  const focused = await page
+    .waitForFunction(
+      (sec) => document.activeElement === document.querySelector(`details.param-group[data-section="${sec}"] summary`),
+      target,
+      { timeout: 3000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(focused, `the opened section's <summary> holds DOM focus`);
+
+  // (c) A narrowing search shrinks the option set. Searching a single param's
+  //     exact name matches (at least) that one param, so sections without it
+  //     drop out — often below the threshold, which removes the navigator
+  //     entirely (a 0-option shrink). Either way the count must fall.
+  await trigger.first().click();
+  const before = await page.locator(".section-nav-item").count();
+  await page.keyboard.press("Escape");
+  const firstParam = await page.locator(".param[data-param]").first().getAttribute("data-param");
+  const search = page.locator("#param-search-input");
+  await search.fill(firstParam ?? "zzznomatch");
+  await page.waitForTimeout(400); // search debounce (150ms) + re-filter
+  let after = 0;
+  if ((await trigger.count()) >= 1) {
+    await trigger.first().click();
+    after = await page.locator(".section-nav-item").count();
+    await page.keyboard.press("Escape");
+  }
+  check(after < before, `a narrowing search shrinks the navigator (${before} -> ${after} sections)`);
+  await search.fill(""); // restore for whatever runs next
+}
+
 // @showIf arrow_style — exercised on a "signage" design when present. (No
 // notice expectation here: a well-tuned config renders its defaults
 // advisory-free; the notice/assert badge machinery is covered by "tag".)
 // Params are located by their stable `data-param` hook, which exists
 // regardless of ui.showVarName.
-async function checkSignageDesign({ page, check, ids }) {
+async function checkSignageDesign({ page, check, ids, schema }) {
   if (!ids.includes("signage")) return;
   console.log("=== signage: @showIf arrow_style ===");
   await selectDesign(page, "signage");
@@ -850,6 +1003,17 @@ async function checkSignageDesign({ page, check, ids }) {
   // right…), so a substring match would be ambiguous.
   await paramRow(page, "arrow").locator('[data-slot="select-trigger"]').click();
   await page.getByRole("option", { name: "Right", exact: true }).click();
+  // `@showIf arrow != none` is now satisfied, but a config can also mark
+  // arrow_style `@advanced`; under `ui.essentials` an advanced param stays
+  // hidden until "Show all settings" is on (that hiding is orthogonal to
+  // @showIf — see EssentialsToggle / lib/essentials.ts). Reveal it first so
+  // this check tests @showIf in isolation, whatever config drives the build.
+  const arrowStyleAdvanced = (schema?.designs ?? [])
+    .find((d) => d.id === "signage")
+    ?.params?.find((p) => p.name === "arrow_style")?.advanced === true;
+  if (schema?.ui?.essentials === true && arrowStyleAdvanced) {
+    await page.getByRole("button", { name: /show all settings/i }).first().click().catch(() => {});
+  }
   await arrowStyle.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   check((await arrowStyle.count()) > 0, "arrow_style shown when arrow = right");
   await waitRendered(page, "arrow");
@@ -866,7 +1030,7 @@ async function checkSignageDesign({ page, check, ids }) {
 //    (not `inert`); at Full it's `inert` and focus is trapped inside the
 //    sheet — Tab never lands on a covered background control — with Escape
 //    collapsing back out and focus returning to the sheet.
-async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
+async function checkResponsiveLayout({ browser, base, check, schema, paramsTabName }) {
   console.log("=== responsive layout: single mounted tree + state across a breakpoint change (M7) ===");
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -874,6 +1038,14 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
     isMobile: true,
     hasTouch: true,
   });
+  // The first-visit sheet policy (src/lib/sheetPolicy.ts) would boot this
+  // 390×844 (tall) context to the "half" detent, breaking the peek→half handle
+  // walk below. Seed the once-flag so this walk starts from a deterministic
+  // peek, as a returning visitor would. checkFirstVisitSheetPolicy covers the
+  // fresh-visit boot detents separately.
+  await context.addInitScript((key) => {
+    try { localStorage.setItem(key, "1"); } catch { /* storage unavailable */ }
+  }, `${schema?.id || "scadpub"}.sheet.introduced.v1`);
   const page = await context.newPage();
   try {
     await page.goto(base, { waitUntil: "load" });
@@ -898,6 +1070,39 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
     await page.getByRole("tab", { name: paramsTabName }).first().click();
     await page.waitForSelector(".param-form", { timeout: 3000 });
     check((await page.locator(".param-form").count()) === 1, "exactly one ParamForm is mounted");
+
+    // The section navigator's compact (mobile) variant must OPEN inside the
+    // sheet even at the FULL detent — where the sheet is modal and inerts the
+    // background. Its Radix popover portals to <body> (so the sheet's
+    // `overflow: hidden` can't clip it), and BottomSheet's focus trap has to
+    // accept that portaled content, or the focusin redirect dismisses the popover
+    // the instant it opens (the full-detent bug this guards). Only meaningful
+    // when the landed design has enough sections to show the control. Raise to
+    // full for the check, then drop back to half — the detent the round-trip
+    // assertions below expect.
+    const mobileNav = page.getByRole("button", { name: "Jump to section", exact: true });
+    if (await mobileNav.count()) {
+      await page.locator(".sheet-handle").click(); // half -> full
+      await page.waitForSelector(".bottom-sheet--full", { timeout: 3000 });
+      await mobileNav.first().click();
+      const list = page.locator(".section-nav-list");
+      const navOpened = await list
+        .first()
+        .waitFor({ state: "visible", timeout: 3000 })
+        .then(() => true)
+        .catch(() => false);
+      check(navOpened, "section navigator popover opens at the full (modal) detent");
+      // Choosing a section is an in-sheet action: it opens that section and
+      // leaves the sheet at full (it must not read as a dismiss/collapse).
+      await page.locator(".section-nav-item").first().click().catch(() => {});
+      await page.waitForTimeout(200);
+      check(
+        (await page.locator(".bottom-sheet--full").count()) === 1,
+        "choosing a section from the navigator keeps the sheet at full",
+      );
+      await page.keyboard.press("Escape"); // full -> half (no popover open now)
+      await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 }).catch(() => {});
+    }
 
     // Type into the search box and leave it focused.
     const mobileSearch = page.locator("#param-search-input");
@@ -1011,6 +1216,88 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
   }
 }
 
+// First-visit mobile sheet policy (src/lib/sheetPolicy.ts): a fresh (never
+// visited) mobile context boots the settings sheet to a viewport-driven detent
+// — "half" on a tall portrait, "peek" on a short portrait or landscape — and
+// shows the one-time "swipe up for settings" nudge ONLY when that resolves to
+// peek. Each sub-case uses its own fresh context so localStorage starts empty
+// (a genuine first visit); the app writes the introduced flag once it mounts,
+// so a reload in the same context is a returning visit.
+async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
+  console.log("=== first-visit mobile sheet policy (initial detent + swipe-up nudge) ===");
+  const introKey = `${schema?.id || "scadpub"}.sheet.introduced.v1`;
+
+  const firstVisit = async (width, height) => {
+    const context = await browser.newContext({
+      viewport: { width, height },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+    });
+    const page = await context.newPage();
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+    return { page, context };
+  };
+
+  // (a) Tall portrait → half, with no nudge (a half-open sheet advertises
+  //     itself), and the introduced flag persisted for later visits.
+  {
+    const { page, context } = await firstVisit(390, 844);
+    try {
+      await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 }).catch(() => {});
+      check((await page.locator(".bottom-sheet--half").count()) === 1, "tall portrait first visit boots the sheet to half");
+      check((await page.locator(".sheet-hint").count()) === 0, "no swipe-up nudge when the first visit opens to half");
+      check(
+        (await page.evaluate((k) => localStorage.getItem(k), introKey)) === "1",
+        "the first visit persists the introduced flag"
+      );
+    } finally {
+      await context.close();
+    }
+  }
+
+  // (b) Short portrait → peek, with the swipe-up nudge present and accessible;
+  //     a returning visit (same context) still peeks but shows no nudge.
+  {
+    const { page, context } = await firstVisit(390, 667);
+    try {
+      await page.waitForSelector(".bottom-sheet--peek", { timeout: 3000 }).catch(() => {});
+      check((await page.locator(".bottom-sheet--peek").count()) === 1, "short portrait first visit boots the sheet to peek");
+      const hint = page.locator(".sheet-hint");
+      await hint.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+      check((await hint.count()) === 1, "short portrait first-visit peek shows the swipe-up nudge");
+      // Actionable (not aria-hidden): it must expose an accessible name via its
+      // role="status" live region, not be hidden from assistive tech.
+      check(
+        (await page.getByRole("status").filter({ hasText: /settings/i }).count()) >= 1,
+        "the swipe-up nudge has an accessible name (role=status, not aria-hidden)"
+      );
+
+      await page.reload({ waitUntil: "load" });
+      await dismissWelcomePopup(page);
+      await waitRenderDone(page).catch(() => {});
+      await page.waitForSelector(".bottom-sheet--peek", { timeout: 3000 }).catch(() => {});
+      check((await page.locator(".bottom-sheet--peek").count()) === 1, "returning visit still starts at peek");
+      check((await page.locator(".sheet-hint").count()) === 0, "returning visit shows no swipe-up nudge");
+    } finally {
+      await context.close();
+    }
+  }
+
+  // (c) Landscape (short along its own axis) → peek, regardless of height.
+  {
+    const { page, context } = await firstVisit(844, 390);
+    try {
+      await page.waitForSelector(".bottom-sheet--peek", { timeout: 3000 }).catch(() => {});
+      check((await page.locator(".bottom-sheet--peek").count()) === 1, "landscape first visit boots the sheet to peek");
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
@@ -1059,7 +1346,9 @@ async function main() {
     await checkTagDesign(ctx);
     await checkEditOnModel(ctx);
     await checkSignageDesign(ctx);
+    await checkSectionNavigator(ctx);
     await checkResponsiveLayout(ctx);
+    await checkFirstVisitSheetPolicy(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);

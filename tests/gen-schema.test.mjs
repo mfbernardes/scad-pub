@@ -945,6 +945,15 @@ test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () =>
   assert.throws(() => parseUi({ zoom: 1 }), /'ui\.zoom' must be a boolean/);
 });
 
+test("ui.grid defaults to off, accepts on/off, rejects anything else", () => {
+  assert.equal(parseUi(undefined).grid, "off");
+  assert.equal(parseUi({}).grid, "off");
+  assert.equal(parseUi({ grid: "on" }).grid, "on");
+  assert.equal(parseUi({ grid: "off" }).grid, "off");
+  assert.throws(() => parseUi({ grid: "yes" }), /'ui\.grid' must be one of "off", "on"/);
+  assert.throws(() => parseUi({ grid: true }), /'ui\.grid' must be one of "off", "on"/);
+});
+
 test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
   assert.equal(parseUi(undefined).presetsLabel, "Presets");
   assert.equal(parseUi(undefined).parametersLabel, "Customize");
@@ -1001,6 +1010,23 @@ test("notices: labelOne is optional, trimmed, and validated like label", () => {
   assert.throws(
     () => parseNotices([{ marker: "n", labelOne: "  " }]),
     /'notices\[0\]\.labelOne' must be a non-empty string/
+  );
+});
+
+test("notices: subsumedByFont is optional and must be a boolean", () => {
+  assert.deepEqual(
+    parseNotices([{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true }]),
+    [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true }]
+  );
+  assert.deepEqual(parseNotices([{ marker: "alert", subsumedByFont: false }]), [
+    { marker: "alert", label: "alert", subsumedByFont: false },
+  ]);
+  // Omitted entirely -> absent from the emitted category (the app treats
+  // absent as false).
+  assert.deepEqual(parseNotices([{ marker: "alert" }]), [{ marker: "alert", label: "alert" }]);
+  assert.throws(
+    () => parseNotices([{ marker: "n", subsumedByFont: "yes" }]),
+    /'notices\[0\]\.subsumedByFont' must be a boolean/
   );
 });
 
