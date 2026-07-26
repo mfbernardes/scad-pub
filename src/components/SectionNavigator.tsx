@@ -47,7 +47,9 @@ export function SectionNavigator({ sections, onSelect, compact = false, classNam
           className={cn(
             "section-nav-trigger inline-flex cursor-pointer items-center gap-[0.4rem] rounded-(--radius-sm) border bg-muted text-foreground transition-[background-color,border-color,color,box-shadow] hover:border-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-brand data-[state=open]:text-brand",
             compact
-              ? "size-8 justify-center p-[0.35rem]"
+              ? // A comfortable touch target on mobile (>= 44px), not a cramped
+                // 32px icon: this is the sheet's one section-jump affordance.
+                "size-11 justify-center p-[0.5rem]"
               : "px-[0.6rem] py-[0.35rem] text-[0.85rem] font-semibold",
             className
           )}
