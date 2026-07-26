@@ -120,34 +120,36 @@ export function parseRestOnGrid(raw) {
 export const VIEWER_STYLES = ["plain", "studio"];
 
 // Validate the optional `viewer` config key — the 3D viewer's presentation,
-// fixed at build time. `style` picks the look: "plain" (the default) is the
-// classic CAD preview; "studio" adds image-based studio lighting, tone mapping,
-// and a soft contact shadow under the model for a product-shot look. `grid`
-// shows or hides the reference grid (default true). Display-only: neither
-// affects the exported bytes, so — like restOnGrid — it stays out of renderHash.
+// fixed at build time. Its only key is `style`, which picks the look: "plain"
+// (the default) is the classic CAD preview; "studio" adds image-based studio
+// lighting, tone mapping, and a soft contact shadow under the model for a
+// product-shot look. Display-only: it doesn't affect the exported bytes, so —
+// like restOnGrid — it stays out of renderHash.
+//
+// The reference grid is deliberately NOT configured here. It is a runtime
+// toggle the visitor owns, seeded once by `ui.grid` and persisted thereafter
+// (see parseUi and src/lib/viewerPrefs.ts); a build-time gate here would make
+// that toggle a no-op. A config still passing `viewer.grid` therefore fails as
+// an unknown key rather than being silently ignored.
 export function parseViewer(raw) {
-  const out = { style: "plain", grid: true };
+  const out = { style: "plain" };
   if (raw == null) return out;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error(
-      `config.viewer must be an object with optional 'style' and 'grid' keys (got ${JSON.stringify(raw)})`
+      `config.viewer must be an object with an optional 'style' key (got ${JSON.stringify(raw)})`
     );
   for (const key of Object.keys(raw))
-    if (key !== "style" && key !== "grid")
-      throw new Error(`config.viewer: unknown key '${key}' (valid keys: style, grid)`);
+    if (key !== "style")
+      throw new Error(
+        `config.viewer: unknown key '${key}' (valid keys: style)` +
+          (key === "grid" ? " — the reference grid is now seeded by 'ui.grid'" : "")
+      );
   if (raw.style != null) {
     if (!VIEWER_STYLES.includes(raw.style))
       throw new Error(
         `config.viewer.style must be one of ${VIEWER_STYLES.map((s) => `"${s}"`).join(", ")} (got ${JSON.stringify(raw.style)})`
       );
     out.style = raw.style;
-  }
-  if (raw.grid != null) {
-    if (typeof raw.grid !== "boolean")
-      throw new Error(
-        `config.viewer.grid must be a boolean (got ${JSON.stringify(raw.grid)})`
-      );
-    out.grid = raw.grid;
   }
   return out;
 }
@@ -400,6 +402,11 @@ export function parseNotices(raw) {
         throw new Error(`gen-schema: 'notices[${i}].attention' must be a boolean`);
       out.attention = entry.attention;
     }
+    if (entry.subsumedByFont !== undefined) {
+      if (typeof entry.subsumedByFont !== "boolean")
+        throw new Error(`gen-schema: 'notices[${i}].subsumedByFont' must be a boolean`);
+      out.subsumedByFont = entry.subsumedByFont;
+    }
     return out;
   });
 }
@@ -437,7 +444,7 @@ function parseAfterExport(raw) {
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, gallery: false, essentials: false, presetsLabel: "Presets", parametersLabel: "Customize" };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, grid: "off", gallery: false, essentials: false, presetsLabel: "Presets", parametersLabel: "Customize" };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -446,6 +453,7 @@ export function parseUi(raw) {
   const PANEL_DEFAULTS = ["open", "collapsed"];
   const OUTPUT_DEFAULTS = ["closed", "open"];
   const INSTALL_MODES = ["auto", "off"];
+  const GRID_MODES = ["off", "on"];
   if (raw.panelSide !== undefined) {
     if (!PANEL_SIDES.includes(raw.panelSide))
       throw new Error(`gen-schema: 'ui.panelSide' must be one of ${PANEL_SIDES.map((s) => `"${s}"`).join(", ")}`);
@@ -495,6 +503,14 @@ export function parseUi(raw) {
     if (typeof raw.fullscreen !== "boolean")
       throw new Error("gen-schema: 'ui.fullscreen' must be a boolean");
     out.fullscreen = raw.fullscreen;
+  }
+  // Unlike its neighbours this doesn't gate a button — the viewer's grid
+  // toggle is always offered. It only seeds that toggle's first-ever value;
+  // a visitor's own choice is persisted and wins from then on.
+  if (raw.grid !== undefined) {
+    if (!GRID_MODES.includes(raw.grid))
+      throw new Error(`gen-schema: 'ui.grid' must be one of ${GRID_MODES.map((s) => `"${s}"`).join(", ")}`);
+    out.grid = raw.grid;
   }
   // Optional: hide the "Save image (PNG)" action. Defaults to shown, so it's
   // carried onto `ui` only when the config sets it (the app treats absent as

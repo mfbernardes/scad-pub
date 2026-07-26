@@ -40,6 +40,10 @@
 
   "hint.rotateZoomMouse": "Drag to rotate · Scroll to zoom",
   "hint.rotateZoomTouch": "Drag to rotate · Pinch to zoom",
+  "hint.sheetSwipeUp": "Swipe up for settings",
+
+  "hud.showGrid": "Show grid",
+  "hud.hideGrid": "Hide grid",
 
   "editOnModel.open": "Edit text",
   "editOnModel.label": "Text",
@@ -50,7 +54,17 @@
   "console.rawOutput": "Raw output",
 
   "files.title": "Files",
+  "files.empty": "No files imported yet.",
+  "files.emptyFonts": "Fonts are imported from a font control.",
+  "files.emptySvgs": "SVGs are imported from an SVG drawing control.",
+  "files.typeFont": "Font",
+  "files.typeSvg": "SVG",
+  "files.typeOther": "File",
+  "files.remove": "Remove {name}",
+  "files.clearAll": "Clear all imported files",
+  "svg.missing": "“{name}” isn’t imported — prepare or import it again.",
 
+  "settings.jumpToSection": "Jump to section",
   "settings.showAll": "Show all settings",
   "settings.showAllCount#one": "Show all settings ({count} more)",
   "settings.showAllCount#other": "Show all settings ({count} more)",

@@ -56,6 +56,7 @@ import {
   type FontFaceInfo,
 } from "../lib/fonts";
 import { isFontFile } from "../openscad/renderArgs";
+import { svgPresent } from "../lib/svgFiles";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
 import { useSafeAreaBottom } from "../lib/useSafeAreaBottom";
@@ -63,6 +64,9 @@ import { usePanelState } from "../lib/usePanelState";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
 import { ns } from "../lib/appId";
 import { readLocal, writeLocal } from "../lib/safeStorage";
+import { GRID_PREF_KEY, initialGridVisible } from "../lib/viewerPrefs";
+import { SHEET_INTRODUCED_KEY, initialSheetDetent } from "../lib/sheetPolicy";
+import { SheetSwipeHint } from "./SheetSwipeHint";
 import {
   deriveAttention,
   readinessState,
@@ -205,6 +209,19 @@ export const AppShell = memo(function AppShell({
   // choice survives a desktop⇄mobile breakpoint switch.
   const [showDimensions, setShowDimensions] = useState(false);
   const toggleDimensions = useCallback(() => setShowDimensions((v) => !v), []);
+  // Whether the viewer draws its reference grid. Unlike the other HUD controls
+  // this isn't config-gated — the button is always offered; `ui.grid` only
+  // seeds the first-ever value, after which the visitor's own choice persists
+  // (see src/lib/viewerPrefs.ts). Shared across both layouts, like the
+  // dimension toggle above, so it survives a desktop⇄mobile breakpoint switch.
+  const [showGrid, setShowGrid] = useState(() => initialGridVisible(readLocal(GRID_PREF_KEY), schema));
+  const toggleGrid = useCallback(() => {
+    setShowGrid((v) => {
+      const next = !v;
+      writeLocal(GRID_PREF_KEY, next ? "on" : "off");
+      return next;
+    });
+  }, []);
   // The active camera view. Driving it as state (shared across layouts) keeps the
   // picker's highlight and a freshly-mounted Viewer in step; the imperative snap
   // below re-applies it on every pick, including the current one.
@@ -219,9 +236,39 @@ export const AppShell = memo(function AppShell({
   );
   const outputOpenRef = useRef(outputOpen);
   outputOpenRef.current = outputOpen;
+  // First-visit mobile bottom-sheet policy (src/lib/sheetPolicy.ts): on a mobile
+  // visitor's genuine first visit the settings sheet opens partway ("half" on a
+  // tall viewport, "peek" on a short/landscape one) so a new visitor sees the
+  // settings exist while the model stays meaningfully visible; every later visit
+  // starts at "peek". Desktop never uses the sheet, so it keeps the prior "peek"
+  // default, touches no storage, and shows no hint.
+  //
+  // Resolved once, on mount, in a single lazy pass held in a ref rather than two
+  // useState initializers, because the detent and the hint share one decision:
+  // the detent branch SETS the introduced flag, so a second initializer
+  // re-reading it could no longer tell this was a first visit. Deciding both
+  // together — before that write is observable to any later read — keeps them
+  // consistent, and the write itself is the once-per-browser guard (the flag
+  // exists ever after, so `firstVisitPeek` can only ever be true on this mount).
+  const initialSheet = useRef<{ detent: SheetDetent; firstVisitPeek: boolean } | null>(null);
+  if (initialSheet.current === null) {
+    if (!isMobile || readLocal(SHEET_INTRODUCED_KEY) !== null) {
+      initialSheet.current = { detent: "peek", firstVisitPeek: false };
+    } else {
+      const detent = initialSheetDetent(window.innerHeight, window.innerWidth > window.innerHeight);
+      writeLocal(SHEET_INTRODUCED_KEY, "1");
+      initialSheet.current = { detent, firstVisitPeek: detent === "peek" };
+    }
+  }
   // Sheet detent state (peek/half/full). On mobile the output overlay now covers
   // the sheet, so it no longer has to be positioned relative to the detent.
-  const [sheetDetent, setSheetDetent] = useState<SheetDetent>("peek");
+  const [sheetDetent, setSheetDetent] = useState<SheetDetent>(initialSheet.current.detent);
+  // Whether to show the one-time "Swipe up for settings" nudge — true only on a
+  // first-visit mount that resolved to peek (a half-open sheet needs no nudge).
+  // Dismissed on the first sheet interaction or a timeout (SheetSwipeHint), and
+  // permanently false thereafter for this session.
+  const [showSheetHint, setShowSheetHint] = useState(initialSheet.current.firstVisitPeek);
+  const dismissSheetHint = useCallback(() => setShowSheetHint(false), []);
 
   // Panel tab + search state (see M7): hoisted here — above the desktop/mobile
   // split below — so ONLY the active layout mounts (ParamPanel or SheetTabs,
@@ -336,6 +383,15 @@ export const AppShell = memo(function AppShell({
     return mergeInstalledFonts(schema.fontFaces ?? [], imported);
   }, [schema.fontFaces, userFiles]);
 
+  // The SVG drawings the renderer can resolve right now: the bundled assets
+  // (schema.assets) plus any imported `.svg`. An `@svg` control compares its
+  // filename value against this so removing an in-use drawing surfaces a
+  // missing-file hint at the control — the SVG mirror of the missing-font hint.
+  const availableSvgFiles = useMemo(
+    () => svgPresent([...(schema.assets ?? []), ...Object.keys(userFiles)]),
+    [schema.assets, userFiles]
+  );
+
   // Parse the log once here; the OutputConsole (Notices tab count chips) reads
   // this derived data instead of re-parsing it.
   const diagnostics = useMemo(() => parseDiagnostics(log, notices), [log, notices]);
@@ -359,6 +415,7 @@ export const AppShell = memo(function AppShell({
         label: n.label,
         labelOne: n.labelOne,
         attention: n.attention === true,
+        subsumedByFont: n.subsumedByFont === true,
         count: badges.find((b) => b.key === `notice:${n.marker}`)?.count ?? 0,
       })),
     [notices, badges]
@@ -457,7 +514,13 @@ export const AppShell = memo(function AppShell({
   // the two are never shown at once.
   const handleDetentChange = useCallback((d: SheetDetent) => {
     setSheetDetent(d);
-    if (d !== "peek") setOutputOpen(false);
+    if (d !== "peek") {
+      setOutputOpen(false);
+      // The visitor has opened the sheet, so the first-visit nudge has done its
+      // job — retire it for good. Without this a keyboard user who expands then
+      // collapses the sheet before the timeout would see the hint return.
+      setShowSheetHint(false);
+    }
   }, []);
 
   // Size the mobile viewer to follow the sheet's live height: write the sheet
@@ -529,18 +592,25 @@ export const AppShell = memo(function AppShell({
     theme,
     selectedPreset,
     showDimensions,
+    showGrid,
     view,
     onMeasure: setMeasured,
     measured,
     renderedValues,
     values,
     computedInfo,
+    // While the first-visit "swipe up for settings" nudge is up, suppress the
+    // viewer's own gesture hint so the two one-time chips never stack over the
+    // sheet's top edge (they share that slot). Only ever true on mobile.
+    suppressGestureHint: isMobile && showSheetHint,
   };
   const hudProps = {
     visible: !!result?.ok,
     measure: showMeasure,
     showDimensions,
     onToggleDimensions: toggleDimensions,
+    showGrid,
+    onToggleGrid: toggleGrid,
     viewPicker: showViewPicker,
     reset: showReset,
     zoom: showZoom,
@@ -738,6 +808,7 @@ export const AppShell = memo(function AppShell({
                   availableFontFamilies={availableFontFamilies}
                   fontSuggestion={fontSuggestion}
                   installedFonts={installedFonts}
+                  availableSvgFiles={availableSvgFiles}
                   onActivate={expand}
                   showVarName={showVarName}
                   autoRender={autoRender}
@@ -756,6 +827,13 @@ export const AppShell = memo(function AppShell({
               </div>
             )}
           </BottomSheet>
+
+          {/* One-time first-visit nudge: shown only while the sheet is still at
+              peek (raising it dismisses the hint), riding just above the sheet's
+              top edge. Actionable (not aria-hidden) — see SheetSwipeHint. */}
+          {showSheetHint && sheetDetent === "peek" && (
+            <SheetSwipeHint onDismiss={dismissSheetHint} />
+          )}
         </div>
       ) : (
         // ── Desktop layout ──
@@ -796,6 +874,7 @@ export const AppShell = memo(function AppShell({
               availableFontFamilies={availableFontFamilies}
               fontSuggestion={fontSuggestion}
               installedFonts={installedFonts}
+              availableSvgFiles={availableSvgFiles}
               panelSide={panelSide}
               panelDefaultOpen={panelDefaultOpen}
               showVarName={showVarName}

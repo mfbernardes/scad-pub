@@ -17,9 +17,10 @@ import { ViewPicker, HUD_GLASS_BTN } from "./ViewPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { cn } from "../lib/utils";
 import type { ViewName } from "./views";
-import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, Maximize as MaximizeIcon, Ruler as RulerIcon } from "lucide-react";
+import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, Maximize as MaximizeIcon, Ruler as RulerIcon, Grid3x3 as GridIcon } from "lucide-react";
 import { useStandalone } from "../lib/useStandalone";
 import { fullscreenSupported } from "../lib/fullscreen";
+import { t } from "../lib/i18n";
 
 interface Props {
   viewerRef: React.RefObject<ViewerHandle | null>;
@@ -30,6 +31,14 @@ interface Props {
   showDimensions: boolean;
   /** Toggle the dimension overlay on/off. */
   onToggleDimensions: () => void;
+  /** Whether the viewer's reference grid is currently drawn. Unlike the
+   *  measure/zoom/fullscreen flags above this is a live value, not a
+   *  visibility gate: the grid button is always offered, and the config's
+   *  `ui.grid` only seeds this state's first-ever value (see
+   *  src/lib/viewerPrefs.ts). */
+  showGrid: boolean;
+  /** Toggle the reference grid on/off. */
+  onToggleGrid: () => void;
   /** Whether the view picker (camera-angle menu) is offered (config ui.viewPicker). */
   viewPicker: boolean;
   /** Whether the "reset view" button is offered (config ui.reset). */
@@ -72,7 +81,7 @@ function HudTooltipButton({
   );
 }
 
-export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, viewPicker, reset, zoom, fullscreen, view, onSelectView }: Props) {
+export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggleDimensions, showGrid, onToggleGrid, viewPicker, reset, zoom, fullscreen, view, onSelectView }: Props) {
   const standalone = useStandalone();
   const canFullscreen = fullscreen && !standalone && fullscreenSupported();
   if (!visible) return null;
@@ -120,6 +129,18 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
           <RulerIcon size={18} />
         </HudTooltipButton>
       )}
+      {/* The reference grid sits beside the ruler — both are overlays drawn
+          around the model rather than camera controls. Always offered: the
+          config's `ui.grid` seeds this toggle's first-ever value, it doesn't
+          gate the button (see src/lib/viewerPrefs.ts). */}
+      <HudTooltipButton
+        label={showGrid ? t("hud.hideGrid") : t("hud.showGrid")}
+        onClick={onToggleGrid}
+        pressed={showGrid}
+        className={cn(HUD_GLASS_BTN, showGrid && "border-brand text-brand")}
+      >
+        <GridIcon size={18} />
+      </HudTooltipButton>
       {/* Fullscreen only where it works: a browser tab (not an installed PWA)
           on a browser that supports the Fullscreen API. */}
       {canFullscreen && (

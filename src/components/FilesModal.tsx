@@ -3,11 +3,10 @@
 // CommandBar's cluster on desktop, a row in the mobile "⋮" popover. Files used
 // to be a third panel tab (ParamPanel/SheetTabs) but felt out of place next to
 // Presets/Customize, so it moved to the same modal pattern as Help/Licenses/
-// DesignDoc (hosted in App.tsx, opened via AppActions' `showFiles`). Adapted
-// from a donor branch's ImportedFilesModal, but this repo has one workflow
-// (not a separate guided/tabs split with import moved inline elsewhere), so
-// the modal keeps FileBar's import button alongside the list rather than
-// splitting them across two surfaces.
+// DesignDoc (hosted in App.tsx, opened via AppActions' `showFiles`). Importing
+// is contextual — it happens at the control that needs the file (a font
+// control, an SVG drawing control) — so this modal is management-only: FileBar
+// lists what those controls imported, with per-file remove and "Clear all".
 import { Modal, MODAL_BODY } from "./Modal";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { cn } from "../lib/utils";
@@ -21,20 +20,18 @@ const FILES_BODY = cn(MODAL_BODY, "px-0 pt-0 pb-0");
 interface Props {
   fileImport: FileImport | null;
   loadedFiles: LoadedFile[];
-  onAddFile: (name: string, bytes: Uint8Array) => void;
   onRemoveFile: (name: string) => void;
   onClearFiles: () => void;
   onClose: () => void;
 }
 
-export function FilesModal({ fileImport, loadedFiles, onAddFile, onRemoveFile, onClearFiles, onClose }: Props) {
+export function FilesModal({ fileImport, loadedFiles, onRemoveFile, onClearFiles, onClose }: Props) {
   return (
     <Modal title={t("files.title")} onClose={onClose}>
       <div className={FILES_BODY}>
         <FileBar
           fileImport={fileImport}
           loadedFiles={loadedFiles}
-          onAddFile={onAddFile}
           onRemoveFile={onRemoveFile}
           onClearFiles={onClearFiles}
         />

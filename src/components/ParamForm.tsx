@@ -4,12 +4,12 @@
 // strings. Each control carries an aria-label (its description) for its name.
 // Every row also carries `data-param="<var>"` — the stable hook the smoke test
 // (and extraCss) target now that variable names are hidden from users by default.
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import { Info as InfoIcon, RotateCcw as RevertIcon, Upload as UploadIcon } from "lucide-react";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { displayValue } from "../lib/paramDiff";
-import { isVisible } from "../lib/visibility";
+import { visibleGroups } from "../lib/paramGroups";
 import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
 import { fontFallback } from "../lib/fontFallback";
 import { FontImportActions } from "./FontImportActions";
@@ -52,6 +52,13 @@ interface Props {
    */
   installedFonts?: InstalledFont[];
   /**
+   * SVG basenames the renderer can resolve right now (bundled assets ∪ imported
+   * `.svg`). When non-empty, an `@svg` control whose filename value isn't in it
+   * shows an actionable "not imported" hint — the SVG mirror of the missing-font
+   * hint. Omitted or empty → no SVG checking (we can't be authoritative).
+   */
+  availableSvgFiles?: Set<string>;
+  /**
    * Tier-2 preset-diff markers: the values a drifted param is compared against
    * (the selected preset, or design defaults — see App.tsx/PresetDiffBar) and
    * the set of param names currently drifted from it. Both optional so the
@@ -65,6 +72,22 @@ interface Props {
   presetName?: string | null;
   /** Whether parameters marked `@advanced` are included. */
   showAdvanced?: boolean;
+  /**
+   * Imperative handle (React-19 ref-as-prop) exposing `openSection`, so a
+   * sibling "Jump to section" navigator can open + scroll + focus a section
+   * without lifting the form's private open-state out of this component.
+   */
+  ref?: Ref<ParamFormHandle>;
+}
+
+/** The imperative surface a parent gets via `ref` (see Props.ref). */
+export interface ParamFormHandle {
+  /**
+   * Force `section` open, scroll its `<details>` to the top of the scroll
+   * area, and move focus to its `<summary>`. Re-scrolls even when the section
+   * is already open (it's a one-shot navigation action, not a toggle).
+   */
+  openSection: (section: string) => void;
 }
 
 // Inline, non-alarming hint shown under a `font` control when the selected
@@ -234,12 +257,14 @@ function Control({
   label,
   onChange,
   installedFonts,
+  availableSvgFiles,
 }: {
   param: Param;
   value: ParamValue;
   label: string;
   onChange: (v: ParamValue) => void;
   installedFonts?: InstalledFont[];
+  availableSvgFiles?: Set<string>;
 }) {
   // A font parameter (string or enum flagged `isFont`) becomes the friendly
   // FontSelect dropdown whenever we authoritatively know what's installed —
@@ -264,6 +289,7 @@ function Control({
         value={String(value ?? "")}
         label={label}
         onChange={onChange}
+        availableSvgFiles={availableSvgFiles}
       />
     );
   switch (param.type) {
@@ -347,34 +373,21 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, baseline, changedParams, presetName, showAdvanced = true }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true, ref }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
   // visible groups only when the design, values or query change — not on every
-  // unrelated render (e.g. a sibling re-render).
-  const groups = useMemo(() => {
-    return design.sections
-      .map((section) => ({
-        section,
-        // Hide parameters whose @showIf condition is currently false, and drop
-        // a section that ends up with no visible parameters.
-        params: design.params.filter(
-          (p) =>
-            p.section === section &&
-            (showAdvanced || !p.advanced) &&
-            isVisible(p, values) &&
-            // Match the variable name, the label, and the full help text, so a
-            // term that only appears in the detail (surfaced via the info
-            // popover) is still findable.
-            (!q ||
-              p.name.toLowerCase().includes(q) ||
-              p.description.toLowerCase().includes(q) ||
-              p.help.toLowerCase().includes(q))
-        ),
-      }))
-      .filter((g) => g.params.length > 0);
-  }, [design, values, q, showAdvanced]);
+  // unrelated render (e.g. a sibling re-render). The filter itself lives in
+  // lib/paramGroups.ts so the section navigator (ParamPanel/SheetTabs) shares
+  // exactly this computation and can never list a section the form doesn't show.
+  const groups = useMemo(
+    // `q` is `search` already lowercased; visibleGroups lowercases again
+    // (idempotent), so passing it keeps the memo deps honest without a
+    // case-only-change recompute.
+    () => visibleGroups(design, values, { search: q, showAdvanced }),
+    [design, values, q, showAdvanced]
+  );
 
   // Per-section open/closed state, controlled in React so a search can force a
   // folded group open without losing the user's manual fold/unfold of an
@@ -405,8 +418,41 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
     setOpenSections(initOpenSections(design, collapsedDefault));
   }
 
+  // Imperative "jump to a section" for the SectionNavigator. `openSection`
+  // forces the section open (leaving the search-forces-open logic untouched)
+  // and arms a scroll via a monotonically-increasing counter — bumped on every
+  // call so the effect fires even when the section was already open (identity
+  // of `openSections` wouldn't change then), giving the always-re-scroll a
+  // one-shot navigation deserves.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const pendingSectionRef = useRef<string | null>(null);
+  const [scrollTick, setScrollTick] = useState(0);
+  const openSection = useCallback((section: string) => {
+    pendingSectionRef.current = section;
+    setOpenSections((prev) => (prev[section] ? prev : { ...prev, [section]: true }));
+    setScrollTick((n) => n + 1);
+  }, []);
+  useImperativeHandle(ref, () => ({ openSection }), [openSection]);
+  useEffect(() => {
+    if (scrollTick === 0) return; // never on mount
+    const section = pendingSectionRef.current;
+    pendingSectionRef.current = null;
+    const root = rootRef.current;
+    if (!section || !root) return;
+    const el = root.querySelector<HTMLDetailsElement>(`[data-section="${CSS.escape(section)}"]`);
+    if (!el) return;
+    // rAF so the forced-open <details> has committed before we scroll/focus.
+    requestAnimationFrame(() => {
+      const reduce =
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      el.querySelector("summary")?.focus();
+    });
+  }, [scrollTick]);
+
   return (
-    <div className="param-form">
+    <div className="param-form" ref={rootRef}>
       {groups.length === 0 && (
         <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
           {q ? `Nothing matches “${search}”.` : "This design has nothing to customize."}
@@ -418,6 +464,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
           <details
             className="param-group mb-3 rounded-lg border bg-background/50 px-[0.8rem] open:pb-2"
             key={section}
+            data-section={section}
             open={q ? true : isOpen}
             onToggle={(e) => {
               // A search forces every matching group open without being a user
@@ -455,6 +502,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                   label={label}
                   onChange={(v) => onChange(p.name, v)}
                   installedFonts={installedFonts}
+                  availableSvgFiles={availableSvgFiles}
                 />
               );
               const body = (

@@ -19,7 +19,7 @@ function readSchema(): {
   dir?: "ltr" | "rtl" | "auto";
   format?: "3mf" | "stl";
   restOnGrid?: boolean;
-  viewer?: { style?: "plain" | "studio"; grid?: boolean };
+  viewer?: { style?: "plain" | "studio" };
   description?: string;
   themeColor?: string;
   themeColorLight?: string;
@@ -235,11 +235,12 @@ export default defineConfig(({ command }) => {
       // centres it on the origin in all three axes (false, the default). A
       // literal so the unused centring branch in the viewer drops out.
       __APP_REST_ON_GRID__: JSON.stringify(schema.restOnGrid ?? false),
-      // The viewer's presentation (config `viewer`). Literals so the unused
-      // style branch — and, for "plain", the studio-only environment/shadow
-      // modules — tree-shake out of the bundle.
+      // The viewer's presentation (config `viewer.style`). A literal so the
+      // unused style branch — and, for "plain", the studio-only
+      // environment/shadow modules — tree-shake out of the bundle. The
+      // reference grid is not a define: it's a runtime toggle seeded by
+      // `ui.grid` (src/lib/viewerPrefs.ts).
       __APP_VIEWER_STYLE__: JSON.stringify(schema.viewer?.style ?? "plain"),
-      __APP_VIEWER_GRID__: JSON.stringify(schema.viewer?.grid ?? true),
     },
     worker: { format: "es" },
     build: {

@@ -42,7 +42,7 @@ ScadPub packages the configurator, renderer, offline shell, and export flow into
 - **Notices & log**: OpenSCAD `echo` notices, warnings, and `assert` failures appear in a **Messages** console opened from the top-bar bell. The bell shows a count badge while notices are pending. See [docs/config.md](docs/config.md#notice-badges-notices).
 - **Share & export**: design, non-default parameters, and selected preset are encoded in the URL hash. Devices that support the Web Share API use the native share sheet. Other devices copy a link or download a colour-bearing 3MF or PNG.
 - **Live preview with brake**: the preview re-renders after a debounce. Designs flagged `heavy` start in manual mode. Any render slower than ~6 s pauses live updates for that design.
-- **Import file**: optional `fileImport` config adds an upload button for non-bundled files. Fonts are mounted for OpenSCAD, and SVG/data files can be referenced with `import()` or `surface()`. See [docs/config.md](docs/config.md#import-file-fileimport).
+- **Import files**: importing is contextual — fonts import from a design's font menu (**Import font…**), SVGs from the **Prepare SVG…** control. The optional `fileImport` config adds a **Files** dialog that only *manages* what's imported (list, remove, clear). Imported fonts are mounted for OpenSCAD by family name; imported SVGs are referenced with `import()`. See [docs/config.md](docs/config.md#import-file-fileimport).
 - **Help**: the `?` button shows a config-driven user guide with one or more tabs. See [docs/config.md](docs/config.md#help-content-help).
 - **Open-source notice**: the ⓘ button lists bundled third-party components with licenses and source links, including the ScadPub version the site was built from (`git describe` of the building checkout, so it also works when ScadPub is forked, submoduled, or built from a sibling directory). A deployment can append its own notices via config. See [docs/config.md](docs/config.md#open-source-notices-licenses).
 
@@ -51,7 +51,7 @@ ScadPub packages the configurator, renderer, offline shell, and export flow into
 ```text
 examples/           self-contained example design (default source)
   tag.scad          embossed text (font) + an extruded SVG emblem
-  emblem.svg        default emblem the tag imports (swap via "Import file")
+  emblem.svg        default emblem the tag imports (swap via the svg_file control's Prepare SVG…)
   tag.json          bundled presets for tag.scad
 public/
   wasm/             OpenSCAD WASM (fetched, gitignored): scripts/fetch-wasm.mjs
@@ -85,7 +85,7 @@ The OpenSCAD WASM is version-pinned in `scripts/wasm-version.mjs` (`PINNED_WASM_
 
 The configuration docs cover build-time options and OpenSCAD comment annotations:
 
-See **[docs/config.md](docs/config.md)** for the full `scadpub.config.json` reference, including theme tokens, title/logo variants, and the file-import button.
+See **[docs/config.md](docs/config.md)** for the full `scadpub.config.json` reference, including theme tokens, title/logo variants, and contextual file import.
 
 See **[docs/annotations.md](docs/annotations.md)** for the `@showIf` and `@collapsed` OpenSCAD annotations.
 

@@ -783,19 +783,31 @@ test("restOnGrid defaults to false, accepts booleans, and rejects anything else"
   assert.throws(() => parseRestOnGrid(1), /config\.restOnGrid must be a boolean/);
 });
 
-test("viewer defaults to plain style with grid, validates style/grid, rejects junk", () => {
-  assert.deepEqual(parseViewer(undefined), { style: "plain", grid: true });
-  assert.deepEqual(parseViewer(null), { style: "plain", grid: true });
-  assert.deepEqual(parseViewer({}), { style: "plain", grid: true });
-  assert.deepEqual(parseViewer({ style: "studio" }), { style: "studio", grid: true });
-  assert.deepEqual(parseViewer({ style: "plain" }), { style: "plain", grid: true });
-  assert.deepEqual(parseViewer({ style: "studio", grid: false }), { style: "studio", grid: false });
-  assert.deepEqual(parseViewer({ grid: false }), { style: "plain", grid: false });
+test("viewer defaults to the plain style, validates style, rejects junk", () => {
+  assert.deepEqual(parseViewer(undefined), { style: "plain" });
+  assert.deepEqual(parseViewer(null), { style: "plain" });
+  assert.deepEqual(parseViewer({}), { style: "plain" });
+  assert.deepEqual(parseViewer({ style: "studio" }), { style: "studio" });
+  assert.deepEqual(parseViewer({ style: "plain" }), { style: "plain" });
   assert.throws(() => parseViewer("studio"), /config\.viewer must be an object/);
   assert.throws(() => parseViewer(["studio"]), /config\.viewer must be an object/);
   assert.throws(() => parseViewer({ style: "toon" }), /config\.viewer\.style must be one of/);
-  assert.throws(() => parseViewer({ grid: "false" }), /config\.viewer\.grid must be a boolean/);
   assert.throws(() => parseViewer({ shadow: true }), /config\.viewer: unknown key 'shadow'/);
+});
+
+test("viewer.grid is rejected as unknown — the grid belongs to ui.grid", () => {
+  // The reference grid is a persisted runtime toggle seeded by `ui.grid`; a
+  // build-time gate here would silently make that toggle a no-op. So a config
+  // carrying the retired key must FAIL loudly rather than be ignored, and the
+  // message must point at its replacement.
+  assert.throws(
+    () => parseViewer({ grid: false }),
+    /config\.viewer: unknown key 'grid'.*ui\.grid/
+  );
+  assert.throws(
+    () => parseViewer({ style: "studio", grid: true }),
+    /config\.viewer: unknown key 'grid'/
+  );
 });
 
 test("restOnGrid is emitted to the schema and absent from renderHash (display-only)", () => {
@@ -961,6 +973,15 @@ test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () =>
   assert.throws(() => parseUi({ zoom: 1 }), /'ui\.zoom' must be a boolean/);
 });
 
+test("ui.grid defaults to off, accepts on/off, rejects anything else", () => {
+  assert.equal(parseUi(undefined).grid, "off");
+  assert.equal(parseUi({}).grid, "off");
+  assert.equal(parseUi({ grid: "on" }).grid, "on");
+  assert.equal(parseUi({ grid: "off" }).grid, "off");
+  assert.throws(() => parseUi({ grid: "yes" }), /'ui\.grid' must be one of "off", "on"/);
+  assert.throws(() => parseUi({ grid: true }), /'ui\.grid' must be one of "off", "on"/);
+});
+
 test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
   assert.equal(parseUi(undefined).presetsLabel, "Presets");
   assert.equal(parseUi(undefined).parametersLabel, "Customize");
@@ -1017,6 +1038,23 @@ test("notices: labelOne is optional, trimmed, and validated like label", () => {
   assert.throws(
     () => parseNotices([{ marker: "n", labelOne: "  " }]),
     /'notices\[0\]\.labelOne' must be a non-empty string/
+  );
+});
+
+test("notices: subsumedByFont is optional and must be a boolean", () => {
+  assert.deepEqual(
+    parseNotices([{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true }]),
+    [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true }]
+  );
+  assert.deepEqual(parseNotices([{ marker: "alert", subsumedByFont: false }]), [
+    { marker: "alert", label: "alert", subsumedByFont: false },
+  ]);
+  // Omitted entirely -> absent from the emitted category (the app treats
+  // absent as false).
+  assert.deepEqual(parseNotices([{ marker: "alert" }]), [{ marker: "alert", label: "alert" }]);
+  assert.throws(
+    () => parseNotices([{ marker: "n", subsumedByFont: "yes" }]),
+    /'notices\[0\]\.subsumedByFont' must be a boolean/
   );
 });
 

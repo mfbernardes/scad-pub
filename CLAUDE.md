@@ -45,6 +45,8 @@ The **licenses modal takes every version from build data**, never from a literal
 
 `src/generated/designs.json`, `public/scad/`, `public/wasm/`, the generated PWA assets (`public/manifest.webmanifest`, `public/icon.svg`, `public/icon-*.png`, `public/apple-splash-*.png`, `public/precache-manifest.json`), and `public/fonts/fonts.conf` are **gitignored / generated**. Never edit them by hand; change the config or sources and re-run. The bundled `.ttf` files under `public/fonts/` are tracked, and so is the hand-written `public/sw.js`.
 
+**Building against an external config leaves files behind.** `gen-schema` copies the active config's bundled fonts into `public/fonts/`, and since the `.ttf` files there are tracked rather than gitignored, a `SCADPUB_CONFIG=/path/to/other.json npm run build` drops that deployment's fonts into this working tree as untracked files that are easy to commit by accident. Always `git status` after building with a config other than `scadpub.config.json`, and delete anything the build added.
+
 ## Render architecture
 
 Two files, a strict client/worker split (`src/openscad/`):
@@ -58,6 +60,7 @@ The action callbacks (render, export, value/preset changes, file imports, theme,
 
 ## Follow repository conventions
 
+- **TypeScript 7 and 6 are installed side by side, via npm aliases.** TypeScript 7.0 is the native (Go) compiler and ships *no programmatic API* — that lands in 7.1 — so anything that `import`s from `typescript` (typescript-eslint, whose peer range is still `<6.1.0`) cannot run against it. Per the [TS 7.0 announcement](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0), `package.json` therefore carries `"@typescript/native": "npm:typescript@^7"` (provides the `tsc` binary that `npm run build` and the pre-commit hook use) and `"typescript": "npm:@typescript/typescript6@^6"` (provides the 6.x API typescript-eslint resolves, plus a `tsc6` binary). Do not "fix" the aliases back to a plain `typescript` dependency — a straight bump to 7.x breaks `npm run lint`. Revisit once typescript-eslint supports the 7.x API.
 - **Tests import TypeScript source directly.** `tests/register-ts.mjs` + `ts-resolve.mjs` register a Node loader hook that resolves the app's extensionless relative imports (e.g. `./scad`) to `.ts` and uses Node's built-in type-stripping. This is why app code uses extensionless relative imports and why `node:test` runs without a bundler.
 - **UI is shadcn/ui (Radix + Tailwind v4).** Primitives live in `src/components/ui/`, scaffolded via `components.json`; compose those instead of hand-rolling controls. Genuinely bespoke pieces, such as `BottomSheet` and the resizable `ParamPanel`, stay custom. Imports use the `@/` alias, wired in `vite.config.ts`, `tsconfig.json`, and `tests/ts-resolve.mjs`.
 - **Decoration lives on components as Tailwind utilities.** Use bridged tokens, never raw palette values, so config `colors` overrides keep working. `src/index.css` keeps only structural CSS in a `components` cascade layer below `utilities` (`@layer theme, base, components, utilities`). An `@theme inline` block bridges shadcn `--color-*` tokens onto the existing AA palette without redefining it.
