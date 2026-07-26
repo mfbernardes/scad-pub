@@ -42,7 +42,7 @@ arrow_style = "solid"; // [solid:Solid arrow, outline:Open (outline) arrow]
 Expression syntax:
 
 | Form | True when |
-|---|---|
+| --- | --- |
 | `name` | `name` is truthy |
 | `!name` | `name` is falsy |
 | `name == value` | `name` equals `value` |
@@ -174,7 +174,7 @@ text_size = 9; // [3:0.5:30]
 The text after `@info` is optional:
 
 | Form | Shows |
-|---|---|
+| --- | --- |
 | `// @info` | the parameter's own label (its first doc sentence) + value |
 | `// @info Label` | a custom `Label` + value |
 | `// @info Label \| mm` | a custom `Label` + value with the unit `mm` appended |
@@ -204,7 +204,7 @@ if (relevant)
 Arguments:
 
 | Position | Meaning |
-|---|---|
+| --- | --- |
 | `"@info"` | Fixed literal tag. Required, must match exactly. |
 | Label (string) | Row label, e.g. `"Rim height"`. |
 | Unit (string) | Appended after the value, e.g. `"mm"`. Use `""` for a unitless value. |
@@ -236,7 +236,7 @@ This is a runtime mechanism, like the calculated-value `@info` echo above — no
 Arguments:
 
 | Position | Meaning |
-|---|---|
+| --- | --- |
 | `"@review"` | Fixed literal tag. Required, must match exactly. |
 | Param name (string) | The **declared parameter's exact name** this override applies to — the same name used as a `reviewLabels` key. A name that doesn't match a param, or a param with no `reviewLabels` entry, is simply never looked up. |
 | Value | Typically a string — the whole point is showing the rendered TEXT. A quoted string has its quotes stripped; anything else is shown exactly as OpenSCAD printed it. There is no unit argument. |
