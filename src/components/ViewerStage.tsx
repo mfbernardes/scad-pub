@@ -56,6 +56,9 @@ interface Props {
   computedInfo: ComputedInfo[];
   /** Mobile layout: the on-model editor anchors toward the top (keyboard). */
   mobile?: boolean;
+  /** Suppress the one-time orbit/zoom gesture hint (e.g. while another one-time
+   *  chip — the first-visit sheet nudge — occupies the same over-sheet slot). */
+  suppressGestureHint?: boolean;
   children?: ReactNode;
 }
 
@@ -81,6 +84,7 @@ export function ViewerStage({
   values,
   computedInfo,
   mobile = false,
+  suppressGestureHint = false,
   children,
 }: Props) {
   const { render } = useAppActions();
@@ -170,7 +174,7 @@ export function ViewerStage({
           been shown, and only until the visitor interacts with the canvas or
           the timeout fades it (see ViewerGestureHint's own doc). Suppressed
           while the on-model editor is open (both sit bottom-/over-centre). */}
-      <ViewerGestureHint resultOk={!!result?.ok} suppressed={editOpen} />
+      <ViewerGestureHint resultOk={!!result?.ok} suppressed={editOpen || suppressGestureHint} />
 
       {/* Measurements panel — top-left; shown only while dimensions are on: the
           bounding-box headline plus any per-design @info values. Measured from

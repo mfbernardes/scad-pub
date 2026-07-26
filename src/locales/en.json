@@ -40,6 +40,7 @@
 
   "hint.rotateZoomMouse": "Drag to rotate · Scroll to zoom",
   "hint.rotateZoomTouch": "Drag to rotate · Pinch to zoom",
+  "hint.sheetSwipeUp": "Swipe up for settings",
 
   "hud.showGrid": "Show grid",
   "hud.hideGrid": "Hide grid",

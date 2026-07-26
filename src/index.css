@@ -540,6 +540,21 @@ button:disabled { cursor: default; }
   }
 }
 
+/* One-time "swipe up for settings" nudge (SheetSwipeHint) — mobile only, shown
+   on a first-visit peek. Centred just above the sheet's live top edge, in the
+   same over-sheet slot as the gesture hint (which AppShell suppresses while
+   this shows, so they never stack). Opacity easing rides on the component's own
+   `transition-opacity` utility. */
+@media (max-width: 860px) {
+  .app-shell__mobile .sheet-hint {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--sheet-top) + 0.6rem + 3.25rem);
+    z-index: 9;
+  }
+}
+
 /* On-model "edit text" chip (ViewerEditOnModel) — the always-visible affordance
    for the on-model text editor. Desktop: bottom-LEFT, the one corner clear of
    the centred dock/hint, the right-edge HUD, and the (opt-in, top-left)

@@ -866,7 +866,7 @@ async function checkSignageDesign({ page, check, ids }) {
 //    (not `inert`); at Full it's `inert` and focus is trapped inside the
 //    sheet — Tab never lands on a covered background control — with Escape
 //    collapsing back out and focus returning to the sheet.
-async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
+async function checkResponsiveLayout({ browser, base, check, schema, paramsTabName }) {
   console.log("=== responsive layout: single mounted tree + state across a breakpoint change (M7) ===");
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -874,6 +874,14 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
     isMobile: true,
     hasTouch: true,
   });
+  // The first-visit sheet policy (src/lib/sheetPolicy.ts) would boot this
+  // 390×844 (tall) context to the "half" detent, breaking the peek→half handle
+  // walk below. Seed the once-flag so this walk starts from a deterministic
+  // peek, as a returning visitor would. checkFirstVisitSheetPolicy covers the
+  // fresh-visit boot detents separately.
+  await context.addInitScript((key) => {
+    try { localStorage.setItem(key, "1"); } catch { /* storage unavailable */ }
+  }, `${schema?.id || "scadpub"}.sheet.introduced.v1`);
   const page = await context.newPage();
   try {
     await page.goto(base, { waitUntil: "load" });
@@ -1011,6 +1019,88 @@ async function checkResponsiveLayout({ browser, base, check, paramsTabName }) {
   }
 }
 
+// First-visit mobile sheet policy (src/lib/sheetPolicy.ts): a fresh (never
+// visited) mobile context boots the settings sheet to a viewport-driven detent
+// — "half" on a tall portrait, "peek" on a short portrait or landscape — and
+// shows the one-time "swipe up for settings" nudge ONLY when that resolves to
+// peek. Each sub-case uses its own fresh context so localStorage starts empty
+// (a genuine first visit); the app writes the introduced flag once it mounts,
+// so a reload in the same context is a returning visit.
+async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
+  console.log("=== first-visit mobile sheet policy (initial detent + swipe-up nudge) ===");
+  const introKey = `${schema?.id || "scadpub"}.sheet.introduced.v1`;
+
+  const firstVisit = async (width, height) => {
+    const context = await browser.newContext({
+      viewport: { width, height },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+    });
+    const page = await context.newPage();
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+    return { page, context };
+  };
+
+  // (a) Tall portrait → half, with no nudge (a half-open sheet advertises
+  //     itself), and the introduced flag persisted for later visits.
+  {
+    const { page, context } = await firstVisit(390, 844);
+    try {
+      await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 }).catch(() => {});
+      check((await page.locator(".bottom-sheet--half").count()) === 1, "tall portrait first visit boots the sheet to half");
+      check((await page.locator(".sheet-hint").count()) === 0, "no swipe-up nudge when the first visit opens to half");
+      check(
+        (await page.evaluate((k) => localStorage.getItem(k), introKey)) === "1",
+        "the first visit persists the introduced flag"
+      );
+    } finally {
+      await context.close();
+    }
+  }
+
+  // (b) Short portrait → peek, with the swipe-up nudge present and accessible;
+  //     a returning visit (same context) still peeks but shows no nudge.
+  {
+    const { page, context } = await firstVisit(390, 667);
+    try {
+      await page.waitForSelector(".bottom-sheet--peek", { timeout: 3000 }).catch(() => {});
+      check((await page.locator(".bottom-sheet--peek").count()) === 1, "short portrait first visit boots the sheet to peek");
+      const hint = page.locator(".sheet-hint");
+      await hint.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+      check((await hint.count()) === 1, "short portrait first-visit peek shows the swipe-up nudge");
+      // Actionable (not aria-hidden): it must expose an accessible name via its
+      // role="status" live region, not be hidden from assistive tech.
+      check(
+        (await page.getByRole("status").filter({ hasText: /settings/i }).count()) >= 1,
+        "the swipe-up nudge has an accessible name (role=status, not aria-hidden)"
+      );
+
+      await page.reload({ waitUntil: "load" });
+      await dismissWelcomePopup(page);
+      await waitRenderDone(page).catch(() => {});
+      await page.waitForSelector(".bottom-sheet--peek", { timeout: 3000 }).catch(() => {});
+      check((await page.locator(".bottom-sheet--peek").count()) === 1, "returning visit still starts at peek");
+      check((await page.locator(".sheet-hint").count()) === 0, "returning visit shows no swipe-up nudge");
+    } finally {
+      await context.close();
+    }
+  }
+
+  // (c) Landscape (short along its own axis) → peek, regardless of height.
+  {
+    const { page, context } = await firstVisit(844, 390);
+    try {
+      await page.waitForSelector(".bottom-sheet--peek", { timeout: 3000 }).catch(() => {});
+      check((await page.locator(".bottom-sheet--peek").count()) === 1, "landscape first visit boots the sheet to peek");
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 async function main() {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
@@ -1060,6 +1150,7 @@ async function main() {
     await checkEditOnModel(ctx);
     await checkSignageDesign(ctx);
     await checkResponsiveLayout(ctx);
+    await checkFirstVisitSheetPolicy(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);
