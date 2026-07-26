@@ -514,7 +514,13 @@ export const AppShell = memo(function AppShell({
   // the two are never shown at once.
   const handleDetentChange = useCallback((d: SheetDetent) => {
     setSheetDetent(d);
-    if (d !== "peek") setOutputOpen(false);
+    if (d !== "peek") {
+      setOutputOpen(false);
+      // The visitor has opened the sheet, so the first-visit nudge has done its
+      // job — retire it for good. Without this a keyboard user who expands then
+      // collapses the sheet before the timeout would see the hint return.
+      setShowSheetHint(false);
+    }
   }, []);
 
   // Size the mobile viewer to follow the sheet's live height: write the sheet
