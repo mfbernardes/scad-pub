@@ -406,7 +406,7 @@ function parseAfterExport(raw) {
 // overrides. None affect geometry (absent from renderHash). Applies defaults for
 // omitted keys. Returns the defaults object when the config omits `ui` entirely.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, gallery: false, essentials: false, presetsLabel: "Presets", parametersLabel: "Customize" };
+  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, grid: "off", gallery: false, essentials: false, presetsLabel: "Presets", parametersLabel: "Customize" };
   if (raw == null) return defaults;
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'ui' must be an object");
@@ -415,6 +415,7 @@ export function parseUi(raw) {
   const PANEL_DEFAULTS = ["open", "collapsed"];
   const OUTPUT_DEFAULTS = ["closed", "open"];
   const INSTALL_MODES = ["auto", "off"];
+  const GRID_MODES = ["off", "on"];
   if (raw.panelSide !== undefined) {
     if (!PANEL_SIDES.includes(raw.panelSide))
       throw new Error(`gen-schema: 'ui.panelSide' must be one of ${PANEL_SIDES.map((s) => `"${s}"`).join(", ")}`);
@@ -464,6 +465,14 @@ export function parseUi(raw) {
     if (typeof raw.fullscreen !== "boolean")
       throw new Error("gen-schema: 'ui.fullscreen' must be a boolean");
     out.fullscreen = raw.fullscreen;
+  }
+  // Unlike its neighbours this doesn't gate a button — the viewer's grid
+  // toggle is always offered. It only seeds that toggle's first-ever value;
+  // a visitor's own choice is persisted and wins from then on.
+  if (raw.grid !== undefined) {
+    if (!GRID_MODES.includes(raw.grid))
+      throw new Error(`gen-schema: 'ui.grid' must be one of ${GRID_MODES.map((s) => `"${s}"`).join(", ")}`);
+    out.grid = raw.grid;
   }
   // Optional: hide the "Save image (PNG)" action. Defaults to shown, so it's
   // carried onto `ui` only when the config sets it (the app treats absent as

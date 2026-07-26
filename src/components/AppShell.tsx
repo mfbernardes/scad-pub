@@ -63,6 +63,7 @@ import { usePanelState } from "../lib/usePanelState";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
 import { ns } from "../lib/appId";
 import { readLocal, writeLocal } from "../lib/safeStorage";
+import { GRID_PREF_KEY, initialGridVisible } from "../lib/viewerPrefs";
 import {
   deriveAttention,
   readinessState,
@@ -205,6 +206,19 @@ export const AppShell = memo(function AppShell({
   // choice survives a desktop⇄mobile breakpoint switch.
   const [showDimensions, setShowDimensions] = useState(false);
   const toggleDimensions = useCallback(() => setShowDimensions((v) => !v), []);
+  // Whether the viewer draws its reference grid. Unlike the other HUD controls
+  // this isn't config-gated — the button is always offered; `ui.grid` only
+  // seeds the first-ever value, after which the visitor's own choice persists
+  // (see src/lib/viewerPrefs.ts). Shared across both layouts, like the
+  // dimension toggle above, so it survives a desktop⇄mobile breakpoint switch.
+  const [showGrid, setShowGrid] = useState(() => initialGridVisible(readLocal(GRID_PREF_KEY), schema));
+  const toggleGrid = useCallback(() => {
+    setShowGrid((v) => {
+      const next = !v;
+      writeLocal(GRID_PREF_KEY, next ? "on" : "off");
+      return next;
+    });
+  }, []);
   // The active camera view. Driving it as state (shared across layouts) keeps the
   // picker's highlight and a freshly-mounted Viewer in step; the imperative snap
   // below re-applies it on every pick, including the current one.
@@ -530,6 +544,7 @@ export const AppShell = memo(function AppShell({
     theme,
     selectedPreset,
     showDimensions,
+    showGrid,
     view,
     onMeasure: setMeasured,
     measured,
@@ -542,6 +557,8 @@ export const AppShell = memo(function AppShell({
     measure: showMeasure,
     showDimensions,
     onToggleDimensions: toggleDimensions,
+    showGrid,
+    onToggleGrid: toggleGrid,
     viewPicker: showViewPicker,
     reset: showReset,
     zoom: showZoom,

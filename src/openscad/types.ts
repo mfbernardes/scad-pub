@@ -427,6 +427,14 @@ export interface UiConfig {
    */
   fullscreen?: boolean;
   /**
+   * Whether the viewer starts with its reference grid drawn (default "off").
+   * Unlike the flags above this does NOT gate a control: the HUD's grid
+   * toggle is always offered regardless. It only seeds that toggle's value on
+   * a visitor's first-ever load — once they've used the toggle, their
+   * persisted choice wins (see src/lib/viewerPrefs.ts).
+   */
+  grid?: "off" | "on";
+  /**
    * Whether the "Save image (PNG)" action is offered (default true — the button
    * is shown). Set false to hide the Save-image (PNG) action entirely, in both
    * the desktop and mobile secondary-action surfaces.

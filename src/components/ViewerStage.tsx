@@ -43,6 +43,8 @@ interface Props {
   selectedPreset: string;
   reframeOnPreset?: boolean;
   showDimensions: boolean;
+  /** Whether the viewer draws its reference grid (HUD toggle; see viewerPrefs). */
+  showGrid: boolean;
   view: ViewName;
   onMeasure: (d: Dimensions | null) => void;
   /** The active viewer's measured bounding box (mm). */
@@ -71,6 +73,7 @@ export function ViewerStage({
   selectedPreset,
   reframeOnPreset,
   showDimensions,
+  showGrid,
   view,
   onMeasure,
   measured,
@@ -123,6 +126,7 @@ export function ViewerStage({
               presetId={selectedPreset}
               reframeOnPreset={reframeOnPreset}
               showDimensions={showDimensions}
+              showGrid={showGrid}
               view={view}
               onMeasure={onMeasure}
               editable={editable}

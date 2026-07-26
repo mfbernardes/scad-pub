@@ -945,6 +945,15 @@ test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () =>
   assert.throws(() => parseUi({ zoom: 1 }), /'ui\.zoom' must be a boolean/);
 });
 
+test("ui.grid defaults to off, accepts on/off, rejects anything else", () => {
+  assert.equal(parseUi(undefined).grid, "off");
+  assert.equal(parseUi({}).grid, "off");
+  assert.equal(parseUi({ grid: "on" }).grid, "on");
+  assert.equal(parseUi({ grid: "off" }).grid, "off");
+  assert.throws(() => parseUi({ grid: "yes" }), /'ui\.grid' must be one of "off", "on"/);
+  assert.throws(() => parseUi({ grid: true }), /'ui\.grid' must be one of "off", "on"/);
+});
+
 test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
   assert.equal(parseUi(undefined).presetsLabel, "Presets");
   assert.equal(parseUi(undefined).parametersLabel, "Customize");

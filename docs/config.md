@@ -423,6 +423,7 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`reset`**: `true` by default, or `false`. Controls the "reset view" button. Mouse/touch orbit and zoom still work regardless
 - **`zoom`**: `false` by default, or `true`. Controls the zoom in/out buttons. Mouse-wheel and pinch zoom already work, so the buttons are off by default
 - **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
+- **`grid`**: `"off"` by default, or `"on"`. Seeds whether the viewer starts with its reference grid drawn. Unlike the keys above it does **not** hide a control — the viewer's grid toggle is always offered — and a visitor's own choice is remembered in the browser and wins on every later visit
 - **`saveImage`**: `true` by default, or `false`. Controls the "Save image (PNG)" action in the secondary-action surfaces (the desktop command bar and the mobile ⋮ overflow menu). Set `false` to hide the Save-image action entirely
 - **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
 - **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
