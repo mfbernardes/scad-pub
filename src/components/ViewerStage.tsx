@@ -19,6 +19,7 @@ import { Progress } from "./ui/progress";
 import { ViewerGestureHint } from "./ViewerGestureHint";
 import { ViewerEditOnModel } from "./ViewerEditOnModel";
 import { editOnModelParam, type Point } from "../lib/editOnModel";
+import { stageLoading } from "../lib/renderStatus";
 import { useAppActions } from "../lib/appActions";
 
 const Viewer = lazy(() =>
@@ -139,7 +140,7 @@ export function ViewerStage({
           )}
         </Suspense>
       </ErrorBoundary>
-      {(!ready || (rendering && !result)) && (
+      {stageLoading({ ready, rendering, result }) && (
         <div className="viewer-overlay pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-[0.8rem] bg-(--overlay) text-[0.9rem] text-muted-foreground">
           <Spinner className="size-9 text-muted-foreground" />
           <p>{ready ? "Building your preview…" : "Getting things ready…"}</p>
