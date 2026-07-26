@@ -82,29 +82,39 @@ async function checkWelcomePopup({ page, check, schema }) {
         "popup renders its configured footnote"
       );
     }
-    // The primary button's label is config-driven (schema.popup.button), so read
-    // it from the schema instead of hardcoding "OK".
-    const buttonLabel = schema.popup.button ?? "OK";
-    const cta = popup.getByRole("button", { name: buttonLabel, exact: true });
-    check((await cta.count()) > 0, `popup shows its configured button "${buttonLabel}"`);
-    const dontShow = popup.getByRole("checkbox");
-    if (await dontShow.count()) await dontShow.check();
-    await cta.click();
-    await waitDialogClosed(page, schema.popup.header).catch(() => {});
-    check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
-    // The primary CTA also opens the design picker (when there's more than one
-    // design) so the user's next step — choosing what to make — is obvious.
-    if (schema.designs.length > 1) {
-      const listbox = page.getByRole("listbox");
-      const opened = await listbox
-        .first()
-        .waitFor({ state: "visible", timeout: 3000 })
-        .then(() => true)
-        .catch(() => false);
-      check(opened, "primary CTA opens the design picker");
-      // Close it so it doesn't intercept the later checks' interactions.
-      await page.keyboard.press("Escape");
-      await listbox.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+    if (schema.popup.mode === "picker" && schema.designs.length > 1) {
+      // Picker mode embeds the design gallery directly and has NO primary CTA
+      // button — the visitor's next step (choosing what to make) IS the popup.
+      // Picking a card selects that design and dismisses the popup.
+      const card = popup.locator("button[data-design]").first();
+      check((await card.count()) > 0, "picker popup shows selectable design cards");
+      await card.click();
+      await waitDialogClosed(page, schema.popup.header).catch(() => {});
+      check((await page.getByRole("dialog").count()) === 0, "picking a design card dismisses the popup");
+    } else {
+      // Non-picker modes show a config-driven primary button (schema.popup.button)
+      // that dismisses the popup and, when there's more than one design, opens
+      // the design picker so the next step is obvious.
+      const buttonLabel = schema.popup.button ?? "OK";
+      const cta = popup.getByRole("button", { name: buttonLabel, exact: true });
+      check((await cta.count()) > 0, `popup shows its configured button "${buttonLabel}"`);
+      const dontShow = popup.getByRole("checkbox");
+      if (await dontShow.count()) await dontShow.check();
+      await cta.click();
+      await waitDialogClosed(page, schema.popup.header).catch(() => {});
+      check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
+      if (schema.designs.length > 1) {
+        const listbox = page.getByRole("listbox");
+        const opened = await listbox
+          .first()
+          .waitFor({ state: "visible", timeout: 3000 })
+          .then(() => true)
+          .catch(() => false);
+        check(opened, "primary CTA opens the design picker");
+        // Close it so it doesn't intercept the later checks' interactions.
+        await page.keyboard.press("Escape");
+        await listbox.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+      }
     }
   } else {
     console.log("  (no popup in this config — skipped)");
@@ -473,7 +483,7 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
 // onDownloadClick). Arm the download listener BEFORE the click so the event
 // can never fire and go unheard while we're still deciding whether a dialog
 // showed up.
-async function checkExports({ page, check, ids, dir }) {
+async function checkExports({ page, check, ids, dir, schema }) {
   await selectDesign(page, ids[0]);
   console.log("=== export 3MF (with a pending attention issue) ===");
   const downloadPromise = page.waitForEvent("download");
@@ -493,16 +503,26 @@ async function checkExports({ page, check, ids, dir }) {
   await model.saveAs(modelOut);
   check((await stat(modelOut)).size > 0, `${await model.suggestedFilename()} (${(await stat(modelOut)).size} bytes)`);
 
-  console.log("=== save PNG (relocated to the top-bar overflow) ===");
-  const [png] = await Promise.all([
-    page.waitForEvent("download"),
-    page.click('[aria-label="Save image"]'),
-  ]);
-  const pngOut = join(dir, await png.suggestedFilename());
-  await png.saveAs(pngOut);
-  const head = (await readFile(pngOut)).subarray(0, 4);
-  const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
-  check(isPng && (await stat(pngOut)).size > 0, `${await png.suggestedFilename()} (png=${isPng})`);
+  // Save PNG lives in the top-bar overflow — but a deployment can hide it with
+  // `ui.saveImage: false`, in which case there's nothing to click.
+  if (schema.ui?.saveImage === false) {
+    console.log("=== save PNG (disabled via ui.saveImage — skipped) ===");
+    check(
+      (await page.locator('[aria-label="Save image"]').count()) === 0,
+      "Save image action is absent when ui.saveImage is false"
+    );
+  } else {
+    console.log("=== save PNG (relocated to the top-bar overflow) ===");
+    const [png] = await Promise.all([
+      page.waitForEvent("download"),
+      page.click('[aria-label="Save image"]'),
+    ]);
+    const pngOut = join(dir, await png.suggestedFilename());
+    await png.saveAs(pngOut);
+    const head = (await readFile(pngOut)).subarray(0, 4);
+    const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
+    check(isPng && (await stat(pngOut)).size > 0, `${await png.suggestedFilename()} (png=${isPng})`);
+  }
 }
 
 // The unified export dock (ActionButtons.tsx): exactly two buttons (Download
@@ -970,7 +990,7 @@ async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }
 // advisory-free; the notice/assert badge machinery is covered by "tag".)
 // Params are located by their stable `data-param` hook, which exists
 // regardless of ui.showVarName.
-async function checkSignageDesign({ page, check, ids }) {
+async function checkSignageDesign({ page, check, ids, schema }) {
   if (!ids.includes("signage")) return;
   console.log("=== signage: @showIf arrow_style ===");
   await selectDesign(page, "signage");
@@ -983,6 +1003,17 @@ async function checkSignageDesign({ page, check, ids }) {
   // right…), so a substring match would be ambiguous.
   await paramRow(page, "arrow").locator('[data-slot="select-trigger"]').click();
   await page.getByRole("option", { name: "Right", exact: true }).click();
+  // `@showIf arrow != none` is now satisfied, but a config can also mark
+  // arrow_style `@advanced`; under `ui.essentials` an advanced param stays
+  // hidden until "Show all settings" is on (that hiding is orthogonal to
+  // @showIf — see EssentialsToggle / lib/essentials.ts). Reveal it first so
+  // this check tests @showIf in isolation, whatever config drives the build.
+  const arrowStyleAdvanced = (schema?.designs ?? [])
+    .find((d) => d.id === "signage")
+    ?.params?.find((p) => p.name === "arrow_style")?.advanced === true;
+  if (schema?.ui?.essentials === true && arrowStyleAdvanced) {
+    await page.getByRole("button", { name: /show all settings/i }).first().click().catch(() => {});
+  }
   await arrowStyle.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   check((await arrowStyle.count()) > 0, "arrow_style shown when arrow = right");
   await waitRendered(page, "arrow");
@@ -1039,6 +1070,24 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     await page.getByRole("tab", { name: paramsTabName }).first().click();
     await page.waitForSelector(".param-form", { timeout: 3000 });
     check((await page.locator(".param-form").count()) === 1, "exactly one ParamForm is mounted");
+
+    // The section navigator's compact (mobile) variant must actually OPEN inside
+    // the sheet — the sheet's drag is bound to the handle alone, so a tap on the
+    // trigger isn't swallowed. Only meaningful when the landed design has enough
+    // sections to show it (matches the desktop check's present/absent handling).
+    const mobileNav = page.getByRole("button", { name: "Jump to section", exact: true });
+    if (await mobileNav.count()) {
+      await mobileNav.first().click();
+      const list = page.locator(".section-nav-list");
+      const navOpened = await list
+        .first()
+        .waitFor({ state: "visible", timeout: 3000 })
+        .then(() => true)
+        .catch(() => false);
+      check(navOpened, "mobile section navigator popover opens inside the sheet");
+      await page.keyboard.press("Escape");
+      await list.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+    }
 
     // Type into the search box and leave it focused.
     const mobileSearch = page.locator("#param-search-input");
