@@ -1004,6 +1004,23 @@ test("notices: labelOne is optional, trimmed, and validated like label", () => {
   );
 });
 
+test("notices: subsumedByFont is optional and must be a boolean", () => {
+  assert.deepEqual(
+    parseNotices([{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true }]),
+    [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true }]
+  );
+  assert.deepEqual(parseNotices([{ marker: "alert", subsumedByFont: false }]), [
+    { marker: "alert", label: "alert", subsumedByFont: false },
+  ]);
+  // Omitted entirely -> absent from the emitted category (the app treats
+  // absent as false).
+  assert.deepEqual(parseNotices([{ marker: "alert" }]), [{ marker: "alert", label: "alert" }]);
+  assert.throws(
+    () => parseNotices([{ marker: "n", subsumedByFont: "yes" }]),
+    /'notices\[0\]\.subsumedByFont' must be a boolean/
+  );
+});
+
 test("renderHash folds in the renderer source so flag changes invalidate it", () => {
   // With outPublicDir + rendererFiles, a change to the renderer's render
   // contract (e.g. an OpenSCAD flag in worker.ts) must change renderHash.

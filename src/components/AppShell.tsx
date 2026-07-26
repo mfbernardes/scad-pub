@@ -359,6 +359,7 @@ export const AppShell = memo(function AppShell({
         label: n.label,
         labelOne: n.labelOne,
         attention: n.attention === true,
+        subsumedByFont: n.subsumedByFont === true,
         count: badges.find((b) => b.key === `notice:${n.marker}`)?.count ?? 0,
       })),
     [notices, badges]

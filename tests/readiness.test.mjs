@@ -200,6 +200,100 @@ test("deriveAttention: a flagged category with nothing pending (count 0) is not 
   assert.deepEqual(items, []);
 });
 
+// `subsumedByFont` (see NoticeCategory in src/openscad/types.ts): the
+// category's notices only exist BECAUSE a substitute font is in play, so
+// while one is they're folded into the font-fallback item rather than listed
+// beside it as a second, separate problem.
+test("deriveAttention: a subsumedByFont category is folded away while a font fell back", () => {
+  const items = deriveAttention({
+    params: [fontParam()],
+    values: { font: "No Such Font" },
+    availableFontFamilies: LOADED,
+    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 2 }],
+  });
+  assert.deepEqual(items, [{ kind: "font-fallback", param: "font", family: "No Such Font" }]);
+});
+
+test("deriveAttention: a subsumedByFont category counts normally when no font fell back", () => {
+  const items = deriveAttention({
+    params: [fontParam()],
+    values: { font: "Liberation Sans" },
+    availableFontFamilies: LOADED,
+    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 2 }],
+  });
+  assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alerts", count: 2 }]);
+});
+
+test("deriveAttention: a subsumedByFont category counts normally when the design declares no font param at all", () => {
+  const items = deriveAttention({
+    params: [],
+    values: {},
+    availableFontFamilies: LOADED,
+    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 1 }],
+  });
+  assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alerts", count: 1 }]);
+});
+
+test("deriveAttention: an unflagged (plain) category is unaffected by a font fallback", () => {
+  const items = deriveAttention({
+    params: [fontParam()],
+    values: { font: "No Such Font" },
+    availableFontFamilies: LOADED,
+    notices: [{ marker: "alert", label: "alerts", attention: true, count: 2 }],
+  });
+  assert.deepEqual(items, [
+    { kind: "font-fallback", param: "font", family: "No Such Font" },
+    { kind: "notice", marker: "alert", label: "alerts", count: 2 },
+  ]);
+});
+
+test("deriveAttention: subsumedByFont changes nothing for a category that isn't attention-flagged or has nothing pending", () => {
+  // Not attention-flagged: never surfaced either way, fallback or not.
+  assert.deepEqual(
+    deriveAttention({
+      params: [],
+      values: {},
+      availableFontFamilies: new Set(),
+      notices: [{ marker: "note", label: "notes", attention: false, subsumedByFont: true, count: 5 }],
+    }),
+    []
+  );
+  // Flagged but nothing pending: still nothing to fold or surface.
+  assert.deepEqual(
+    deriveAttention({
+      params: [fontParam()],
+      values: { font: "No Such Font" },
+      availableFontFamilies: LOADED,
+      notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 0 }],
+    }),
+    [{ kind: "font-fallback", param: "font", family: "No Such Font" }]
+  );
+});
+
+test("deriveAttention: a subsumedByFont category is NOT folded when two font params fell back at once (ambiguous)", () => {
+  const items = deriveAttention({
+    params: [fontParam(), fontParam({ name: "font2" })],
+    values: { font: "No Such Font", font2: "Also Missing" },
+    availableFontFamilies: LOADED,
+    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 2 }],
+  });
+  assert.deepEqual(items, [
+    { kind: "font-fallback", param: "font", family: "No Such Font" },
+    { kind: "font-fallback", param: "font2", family: "Also Missing" },
+    { kind: "notice", marker: "alert", label: "alerts", count: 2 },
+  ]);
+});
+
+test("deriveAttention: a subsumedByFont category IS folded when a multi-font design has exactly one fallback", () => {
+  const items = deriveAttention({
+    params: [fontParam(), fontParam({ name: "font2" })],
+    values: { font: "No Such Font", font2: "DejaVu Sans" },
+    availableFontFamilies: LOADED,
+    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 2 }],
+  });
+  assert.deepEqual(items, [{ kind: "font-fallback", param: "font", family: "No Such Font" }]);
+});
+
 test("deriveAttention: font fallbacks come before flagged notices, and notices keep config order", () => {
   const items = deriveAttention({
     params: [fontParam()],

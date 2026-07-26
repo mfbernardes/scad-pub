@@ -77,6 +77,12 @@ export interface NoticeAttentionInput {
   labelOne?: string;
   attention: boolean;
   count: number;
+  /** Whether this category's notices are a SYMPTOM of a missing font rather
+   *  than their own independently-actionable issue (see
+   *  `NoticeCategory.subsumedByFont`). While a substitute font is active — and
+   *  it's unambiguous which font param that is — a pending notice here is
+   *  folded into the font-fallback item instead of listed separately. */
+  subsumedByFont?: boolean;
 }
 
 export interface DeriveAttentionInputs {
@@ -123,9 +129,23 @@ export interface DeriveAttentionInputs {
  * Order: font fallbacks first (in design param order), then diagnostics (in
  * log order), then flagged notices (in config order) — deterministic, no
  * randomness.
+ *
+ * A category flagged `subsumedByFont` is skipped entirely while a substitute
+ * font is in play: its notices only exist BECAUSE the family isn't loaded, so
+ * listing them beside the font-fallback item they're a symptom of would read
+ * as two separate problems. The fold only applies when it's unambiguous which
+ * font the notices are about — a design with several font params, several of
+ * them simultaneously missing, keeps the notice listed on its own.
  */
 export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] {
   const items: AttentionItem[] = [];
+  // How many font params the design declares at all, and how many actually
+  // fell back this render. Counted separately from `items.length`, which also
+  // accumulates diagnostic items below.
+  const fontParamCount = inputs.params.filter(
+    (p) => (p.type === "string" || p.type === "enum") && p.isFont
+  ).length;
+  let fontFallbackCount = 0;
   for (const p of inputs.params) {
     if ((p.type !== "string" && p.type !== "enum") || !p.isFont) continue;
     if (!isVisible(p, inputs.values)) continue;
@@ -135,12 +155,18 @@ export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] 
     if (!inputs.availableFontFamilies.size) continue;
     if (inputs.availableFontFamilies.has(normalizeFamily(family))) continue;
     items.push({ kind: "font-fallback", param: p.name, family });
+    fontFallbackCount++;
   }
   for (const text of inputs.diagnostics ?? []) {
     items.push({ kind: "diagnostic", text });
   }
+  const hasFontFallback = fontFallbackCount > 0;
+  // Ambiguous when a multi-font design has 2+ fonts missing at once: the
+  // notices can't be attributed to one of them, so they stand on their own.
+  const unambiguousFontFallback = fontParamCount === 1 || fontFallbackCount === 1;
   for (const n of inputs.notices) {
     if (!n.attention || n.count <= 0) continue;
+    if (hasFontFallback && n.subsumedByFont && unambiguousFontFallback) continue;
     const label = n.count === 1 && n.labelOne ? n.labelOne : n.label;
     items.push({ kind: "notice", marker: n.marker, label, count: n.count });
   }

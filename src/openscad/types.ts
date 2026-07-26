@@ -345,6 +345,17 @@ export interface NoticeCategory {
   color?: string;
   /** Whether this category should be treated as requiring user attention. */
   attention?: boolean;
+  /**
+   * Whether this category's notices are a SYMPTOM of a missing font rather
+   * than their own independently-actionable issue — e.g. a design that warns
+   * about text overflowing once Fontconfig substituted a different family.
+   * Only meaningful alongside `attention: true` (an unflagged category never
+   * reaches the attention list in the first place): while a substitute font
+   * is active, and it's unambiguous which font param that is, this category's
+   * pending notices are folded into the font-fallback item instead of listed
+   * separately. With no font missing they count exactly as normal.
+   */
+  subsumedByFont?: boolean;
 }
 
 /** How often the configurable `popup` notice is shown. */

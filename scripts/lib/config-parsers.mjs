@@ -364,6 +364,11 @@ export function parseNotices(raw) {
         throw new Error(`gen-schema: 'notices[${i}].attention' must be a boolean`);
       out.attention = entry.attention;
     }
+    if (entry.subsumedByFont !== undefined) {
+      if (typeof entry.subsumedByFont !== "boolean")
+        throw new Error(`gen-schema: 'notices[${i}].subsumedByFont' must be a boolean`);
+      out.subsumedByFont = entry.subsumedByFont;
+    }
     return out;
   });
 }
