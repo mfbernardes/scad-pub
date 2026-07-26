@@ -111,101 +111,142 @@ async function checkWelcomePopup({ page, check, schema }) {
   }
 }
 
-// Generic file import: the Files action (BarActions, a toolbar icon button —
-// it used to be a panel tab, now a modal) shows an "Import file" button when
-// the config sets `fileImport`. Uploading a file should surface it in the
-// file list and persist across a reload (IndexedDB).
-async function checkFileImport({ page, check, ids, schema }) {
-  console.log("=== file import ===");
+// File import is CONTEXTUAL now: the Files action (BarActions, a toolbar icon
+// button opening the FilesModal) only MANAGES imported files — it lists them
+// (name, type, size), removes one via its row X, and clears all, plus an empty
+// state — and carries NO generic import button. Importing happens at the
+// control that needs the file. This check (a) confirms the management-only
+// dialog + empty state, then (b) drives a real import through a contextual
+// control — the tag design's `@font` param renders a FontSelect whose hidden
+// file input is the same addFile path as its in-dropdown "Import font…" — and
+// verifies the file surfaces in the list with its type/size, persists across a
+// reload (IndexedDB), removes via the row X, and clears via "Clear all".
+async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
+  console.log("=== file import (contextual) ===");
+  if (schema.fileImport == null) {
+    console.log("  (no fileImport in this config — skipped)");
+    return;
+  }
   // FilesModal (a Dialog) doesn't persist across a reload, so it must be
   // re-opened each time — exact match: a substring "Files" would also catch
   // "Clear all imported files" once the modal is open.
   const gotoFiles = () =>
     page.getByRole("button", { name: "Files", exact: true }).first().click().catch(() => {});
-  const closeFiles = () => page.keyboard.press("Escape").catch(() => {});
-  await gotoFiles();
-  const importBtn = page.getByRole("button", { name: /Import file/i });
-  if (await importBtn.count()) {
-    check(true, "import-file button present");
-    const input = page.locator('.file-manager input[type="file"]').last();
-    await input.setInputFiles({
-      name: "smoke-overlay.svg",
-      mimeType: "image/svg+xml",
-      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
-    });
-    const fileRow = page.locator(".file-manager__name", { hasText: "smoke-overlay.svg" });
-    await fileRow.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-    check((await fileRow.count()) > 0, "uploaded file appears in the file list");
-    await page.reload({ waitUntil: "load" });
-    await waitRendered(page, ids[0]);
-    await gotoFiles();
-    check(
-      (await page
-        .locator(".file-manager__name", { hasText: "smoke-overlay.svg" })
-        .count()) > 0,
-      "uploaded file persists across reload"
-    );
-    // Clear removes the file (and the persisted copy / render cache).
-    await page.getByRole("button", { name: /Clear all imported files/i }).click();
-    await page
-      .locator(".file-manager__name", { hasText: "smoke-overlay.svg" })
-      .waitFor({ state: "detached", timeout: 3000 })
-      .catch(() => {});
-    // The UI row is removed synchronously, but the persisted copy is cleared
-    // via a fire-and-forget IndexedDB transaction. Reloading the instant the
-    // row detaches can abort that still-uncommitted transaction (page unload
-    // cancels in-flight IDB txns), leaving the file on disk to be restored on
-    // the next load. Wait for the persisted store to actually be empty before
-    // reloading so this assertion tests the guarantee, not the race.
-    const dbName = schema?.id || "scadpub";
-    await page
-      .waitForFunction(
-        (name) =>
-          new Promise((resolve) => {
-            let req;
-            try {
-              req = indexedDB.open(name);
-            } catch {
-              return resolve(true); // storage unavailable — nothing persisted
-            }
-            req.onerror = () => resolve(true);
-            req.onsuccess = () => {
-              const db = req.result;
-              if (!db.objectStoreNames.contains("fonts")) {
-                db.close();
-                return resolve(true);
-              }
-              const countReq = db.transaction("fonts", "readonly").objectStore("fonts").count();
-              countReq.onsuccess = () => {
-                db.close();
-                resolve(countReq.result === 0);
-              };
-              countReq.onerror = () => {
-                db.close();
-                resolve(true);
-              };
-            };
-          }),
-        dbName,
-        { timeout: 5000 }
-      )
-      .catch(() => {});
-    await page.reload({ waitUntil: "load" });
-    await waitRendered(page, ids[0]);
-    await gotoFiles();
-    check(
-      (await page
-        .locator(".file-manager__name", { hasText: "smoke-overlay.svg" })
-        .count()) === 0,
-      "cleared file stays cleared after reload"
-    );
-    // Close it — later checks click other toolbar/panel controls, and an open
-    // dialog's overlay would intercept those clicks.
-    await closeFiles();
+  const closeFiles = async () => {
+    await page.keyboard.press("Escape").catch(() => {});
     await waitDialogClosed(page, "Files").catch(() => {});
-  } else {
-    console.log("  (no fileImport in this config — skipped)");
-  }
+  };
+
+  // (a) Management-only dialog: no generic import button, and with nothing
+  //     imported yet the empty state (guidance to the contextual controls) shows.
+  await gotoFiles();
+  check(
+    (await page.getByRole("button", { name: /Import file/i }).count()) === 0,
+    "Files dialog has no generic import button (import is contextual)"
+  );
+  check(
+    (await page.locator(".file-manager__empty").count()) > 0,
+    "Files dialog shows the empty state when nothing is imported"
+  );
+  await closeFiles();
+
+  // (b) Import through a contextual control: the tag design's `@font` param.
+  //     Real bundled TTF bytes so the family parses; a distinct filename marks
+  //     it as a user import rather than the bundled copy.
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  const fontInput = page.locator('.param[data-param="font"] input[type="file"]').last();
+  check((await fontInput.count()) > 0, "font control exposes a contextual import input");
+  const ttf = await readFile(
+    fileURLToPath(new URL("../public/fonts/LiberationSans-Regular.ttf", import.meta.url))
+  );
+  const importedName = "smoke-imported.ttf";
+  await fontInput.setInputFiles({ name: importedName, mimeType: "font/ttf", buffer: ttf });
+
+  const row = () => page.locator(".file-manager__name", { hasText: importedName });
+  await gotoFiles();
+  await row().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await row().count()) > 0, "imported file appears in the Files list");
+  // The row carries a type indicator (Font) and a formatted size.
+  const itemText = await page
+    .locator(".file-manager li", { has: row() })
+    .innerText()
+    .catch(() => "");
+  check(/Font/.test(itemText), "imported file shows its Font type indicator");
+  check(/\b(?:B|KB|MB)\b/.test(itemText), "imported file shows a formatted size");
+
+  // (c) Persist across a reload (IndexedDB).
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, ids[0]);
+  await gotoFiles();
+  check((await row().count()) > 0, "imported file persists across reload");
+
+  // (d) The row's own X removes just that file, and the empty state returns.
+  await page.getByRole("button", { name: new RegExp(`Remove ${importedName}`, "i") }).click();
+  await row().waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  check((await row().count()) === 0, "row remove deletes the file");
+  check(
+    (await page.locator(".file-manager__empty").count()) > 0,
+    "empty state returns after removing the last file"
+  );
+  await closeFiles();
+
+  // (e) Re-import, then "Clear all" empties the list and the persisted store.
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  await page
+    .locator('.param[data-param="font"] input[type="file"]')
+    .last()
+    .setInputFiles({ name: importedName, mimeType: "font/ttf", buffer: ttf });
+  await gotoFiles();
+  await row().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  await page.getByRole("button", { name: /Clear all imported files/i }).click();
+  await row().waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  // The UI row is removed synchronously, but the persisted copy is cleared via a
+  // fire-and-forget IndexedDB transaction. Reloading the instant the row detaches
+  // can abort that still-uncommitted transaction (page unload cancels in-flight
+  // IDB txns), leaving the file on disk to be restored on the next load. Wait for
+  // the persisted store to actually be empty before reloading so this assertion
+  // tests the guarantee, not the race. The store name is "fonts" — its original
+  // purpose — kept stable so older builds' files still load (see idb.ts).
+  const dbName = schema?.id || "scadpub";
+  await page
+    .waitForFunction(
+      (name) =>
+        new Promise((resolve) => {
+          let req;
+          try {
+            req = indexedDB.open(name);
+          } catch {
+            return resolve(true); // storage unavailable — nothing persisted
+          }
+          req.onerror = () => resolve(true);
+          req.onsuccess = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains("fonts")) {
+              db.close();
+              return resolve(true);
+            }
+            const countReq = db.transaction("fonts", "readonly").objectStore("fonts").count();
+            countReq.onsuccess = () => {
+              db.close();
+              resolve(countReq.result === 0);
+            };
+            countReq.onerror = () => {
+              db.close();
+              resolve(true);
+            };
+          };
+        }),
+      dbName,
+      { timeout: 5000 }
+    )
+    .catch(() => {});
+  await page.reload({ waitUntil: "load" });
+  await waitRendered(page, ids[0]);
+  await gotoFiles();
+  check((await row().count()) === 0, "cleared file stays cleared after reload");
+  // Close it — later checks click other toolbar/panel controls, and an open
+  // dialog's overlay would intercept those clicks.
+  await closeFiles();
 }
 
 async function checkThemeToggle({ page, check }) {

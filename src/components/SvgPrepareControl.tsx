@@ -8,6 +8,8 @@ import { lazy, Suspense, useState } from "react";
 import { Upload as UploadIcon, FileCode as FileCodeIcon } from "lucide-react";
 import type { SvgFieldMeta } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
+import { isSvgMissing } from "../lib/svgFiles";
+import { t } from "../lib/i18n";
 import { FileInput } from "./FileInput";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { Spinner } from "./ui/spinner";
@@ -41,6 +43,13 @@ interface Props {
   value: string;
   label: string;
   onChange: (v: string) => void;
+  /**
+   * SVG basenames the renderer can resolve right now (bundled assets ∪ imported
+   * `.svg`). When the current value names a file that isn't in it — e.g. an
+   * imported drawing the user later removed — an actionable "not imported" hint
+   * is shown, mirroring ParamForm's missing-font hint.
+   */
+  availableSvgFiles?: Set<string>;
 }
 
 /** Strip any directory part from a dropped file's name (it mounts at the FS root). */
@@ -62,11 +71,15 @@ function svgRejectionReason(file: File): string | null {
   return null;
 }
 
-export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) {
+export function SvgPrepareControl({ name, svg, value, label, onChange, availableSvgFiles }: Props) {
   const { change, addFile } = useAppActions();
   const [pending, setPending] = useState<{ text: string; fileName: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The value points at a drawing the renderer can't resolve (typically an
+  // imported SVG the user has since removed). The drop zone below is the fix —
+  // prepare/import it again — so the hint just names what's gone.
+  const missing = availableSvgFiles ? isSvgMissing(value, availableSvgFiles) : false;
 
   const loadFile = async (file: File) => {
     const reason = svgRejectionReason(file);
@@ -133,6 +146,15 @@ export function SvgPrepareControl({ name, svg, value, label, onChange }: Props) 
           </div>
         )}
       </FileInput>
+
+      {missing && (
+        <p
+          className="svg-prepare__missing mt-[0.1rem] rounded-(--radius-sm) border border-l-[3px] border-l-warn bg-muted px-[0.6rem] py-2 text-[0.82rem] leading-[1.4] text-foreground"
+          role="status"
+        >
+          {t("svg.missing", { name: value })}
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="text-[0.78rem] text-destructive">

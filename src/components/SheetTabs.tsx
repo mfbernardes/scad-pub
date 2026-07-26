@@ -40,6 +40,9 @@ interface Props {
   fontSuggestion?: string | null;
   /** Faces the renderer can use (bundled ∪ imported), for the font selector. */
   installedFonts?: InstalledFont[];
+  /** SVG basenames the renderer can resolve (bundled assets ∪ imports), for the
+   *  `@svg` control's missing-file hint. */
+  availableSvgFiles?: Set<string>;
   /** Called when a tab is tapped — used to raise a collapsed (peek) sheet. */
   onActivate?: () => void;
   /** Show the underlying OpenSCAD variable name beside each label (default true). */
@@ -78,6 +81,7 @@ export function SheetTabs({
   availableFontFamilies,
   fontSuggestion,
   installedFonts,
+  availableSvgFiles,
   onActivate,
   showVarName = false,
   autoRender,
@@ -136,7 +140,7 @@ export function SheetTabs({
             onShowAdvancedChange={onShowAdvancedChange}
           />
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
           {/* Auto-render is parameter-scoped, so it pins to the bottom of this
               tab only — not on Presets (mirrors the desktop panel). Reset

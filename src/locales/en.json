@@ -54,6 +54,15 @@
   "console.rawOutput": "Raw output",
 
   "files.title": "Files",
+  "files.empty": "No files imported yet.",
+  "files.emptyFonts": "Fonts are imported from a font control.",
+  "files.emptySvgs": "SVGs are imported from an SVG drawing control.",
+  "files.typeFont": "Font",
+  "files.typeSvg": "SVG",
+  "files.typeOther": "File",
+  "files.remove": "Remove {name}",
+  "files.clearAll": "Clear all imported files",
+  "svg.missing": "“{name}” isn’t imported — prepare or import it again.",
 
   "settings.showAll": "Show all settings",
   "settings.showAllCount#one": "Show all settings ({count} more)",

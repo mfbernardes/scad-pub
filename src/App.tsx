@@ -485,7 +485,6 @@ export default function App() {
         <FilesModal
           fileImport={schema.fileImport ?? null}
           loadedFiles={loadedFiles}
-          onAddFile={addFile}
           onRemoveFile={removeFile}
           onClearFiles={clearImportedFiles}
           onClose={() => setShowFiles(false)}

@@ -312,35 +312,39 @@ ScadPub's own chrome text — the status strip, the Review dialog, attention car
 
 ## Import file (`fileImport`)
 
-Designs sometimes need a file the app cannot bundle, such as a license-restricted font, an SVG to `import()`, or a `surface()` data file. Setting `fileImport` adds a **Files** action to the toolbar (an icon in the desktop command bar's action cluster, a row in the mobile "⋮" menu) that opens the Files dialog, with an **Import file** button inside. You can supply those files at runtime, entirely client-side. Nothing is uploaded to a server.
+Designs sometimes need a file the app cannot bundle, such as a license-restricted font, an SVG to `import()`, or a `surface()` data file. Setting `fileImport` adds a **Files** action to the toolbar (an icon in the desktop command bar's action cluster, a row in the mobile "⋮" menu) that opens the **Files dialog**. You can supply those files at runtime, entirely client-side. Nothing is uploaded to a server.
+
+Importing is **contextual** — it happens at the control that needs the file, not through a generic button:
+
+- A **font** parameter (`// @font`) imports through the font dropdown's **Import font…** action (and an inline import hint when a chosen font isn't loaded).
+- An **SVG** parameter (`// @svg`) imports through its **Prepare SVG…** drop zone. If the value later names a drawing that isn't present (e.g. an imported SVG the user removed), the control shows an actionable "not imported" hint.
+
+The **Files dialog is a manager**, not an importer: it lists what those controls have imported (name, type, size), removes a single file via its row, and clears all. With nothing imported it shows an empty state pointing back at the controls.
 
 ```jsonc
 {
-  // Shorthand: enable with defaults (accepts any file type).
+  // Shorthand: enable with defaults.
   "fileImport": true
 
   // …or an options object:
   "fileImport": {
-    "accept": ".svg,.ttf,.otf",  // optional: file-picker filter (omit to accept any file)
-    "label": "Import file",      // optional: button label (default "Import file")
-    "note": "…",                 // optional: help text shown above the file list (Markdown)
-    "maxBytes": 5242880          // optional: reject uploads larger than this (bytes)
+    "note": "…"   // optional: guidance shown at the top of the Files dialog (Markdown)
   }
 }
 ```
 
-When **`maxBytes`** is set, an upload larger than the cap is rejected with a friendly toast (showing the file's size and the limit) and is never stored; omit it for no cap.
+`fileImport` gates whether the **Files** action exists at all — omit it (or set it to `null`/`false`) and no Files action is shown. Its optional **`note`** renders as guidance at the top of the Files dialog, in a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content.
 
-`note` is rendered as a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content.
+> The `accept`, `label`, and `maxBytes` fields are still accepted for backward compatibility but no longer drive a generic import button (each contextual control applies its own picker filter and size guard). They are vestigial and can be omitted.
 
 ### How uploads reach OpenSCAD
 
-ScadPub chooses the mounting behavior from the file extension, so one button covers both cases:
+ScadPub chooses the mounting behavior from the file extension:
 
 - **Fonts** (`.ttf`/`.otf`/`.ttc`) are mounted where the renderer's fontconfig can find them, so `text(font = "…")` can use them. They're matched by their **embedded family name**, not the filename, so a renamed file still resolves.
-- **Any other file** is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. The reference must match the uploaded file's name (use `note` to tell users which name to use).
+- **Any other file** is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. The reference must match the uploaded file's name.
 
-Uploaded files persist in IndexedDB and are re-applied on the next visit; the Files dialog lists what's currently loaded, with a **Clear** button to remove them all. Importing or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served. Omit `fileImport` (or set it to `null`/`false`) and no Files action is shown at all.
+Imported files persist in IndexedDB and are re-applied on the next visit; the Files dialog lists what's currently loaded, with a **Clear all** button to remove them. Importing, removing, or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served.
 
 ## Fonts (`fonts`, `fontFallback`)
 

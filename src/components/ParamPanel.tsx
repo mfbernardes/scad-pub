@@ -60,6 +60,9 @@ interface Props {
   fontSuggestion?: string | null;
   /** Faces the renderer can use (bundled ∪ imported), for the font selector. */
   installedFonts?: InstalledFont[];
+  /** SVG basenames the renderer can resolve (bundled assets ∪ imports), for the
+   *  `@svg` control's missing-file hint. */
+  availableSvgFiles?: Set<string>;
   panelSide: "left" | "right";
   panelDefaultOpen: boolean;
   /** Show the underlying OpenSCAD variable name beside each label. */
@@ -95,6 +98,7 @@ export function ParamPanel({
   availableFontFamilies,
   fontSuggestion,
   installedFonts,
+  availableSvgFiles,
   panelSide,
   panelDefaultOpen,
   showVarName,
@@ -294,7 +298,7 @@ export function ParamPanel({
             onShowAdvancedChange={onShowAdvancedChange}
           />
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
         </TabsContent>
       </Tabs>

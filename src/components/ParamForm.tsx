@@ -52,6 +52,13 @@ interface Props {
    */
   installedFonts?: InstalledFont[];
   /**
+   * SVG basenames the renderer can resolve right now (bundled assets ∪ imported
+   * `.svg`). When non-empty, an `@svg` control whose filename value isn't in it
+   * shows an actionable "not imported" hint — the SVG mirror of the missing-font
+   * hint. Omitted or empty → no SVG checking (we can't be authoritative).
+   */
+  availableSvgFiles?: Set<string>;
+  /**
    * Tier-2 preset-diff markers: the values a drifted param is compared against
    * (the selected preset, or design defaults — see App.tsx/PresetDiffBar) and
    * the set of param names currently drifted from it. Both optional so the
@@ -234,12 +241,14 @@ function Control({
   label,
   onChange,
   installedFonts,
+  availableSvgFiles,
 }: {
   param: Param;
   value: ParamValue;
   label: string;
   onChange: (v: ParamValue) => void;
   installedFonts?: InstalledFont[];
+  availableSvgFiles?: Set<string>;
 }) {
   // A font parameter (string or enum flagged `isFont`) becomes the friendly
   // FontSelect dropdown whenever we authoritatively know what's installed —
@@ -264,6 +273,7 @@ function Control({
         value={String(value ?? "")}
         label={label}
         onChange={onChange}
+        availableSvgFiles={availableSvgFiles}
       />
     );
   switch (param.type) {
@@ -347,7 +357,7 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, baseline, changedParams, presetName, showAdvanced = true }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
@@ -455,6 +465,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                   label={label}
                   onChange={(v) => onChange(p.name, v)}
                   installedFonts={installedFonts}
+                  availableSvgFiles={availableSvgFiles}
                 />
               );
               const body = (

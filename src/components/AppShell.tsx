@@ -56,6 +56,7 @@ import {
   type FontFaceInfo,
 } from "../lib/fonts";
 import { isFontFile } from "../openscad/renderArgs";
+import { svgPresent } from "../lib/svgFiles";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
 import { useSafeAreaBottom } from "../lib/useSafeAreaBottom";
@@ -381,6 +382,15 @@ export const AppShell = memo(function AppShell({
     }
     return mergeInstalledFonts(schema.fontFaces ?? [], imported);
   }, [schema.fontFaces, userFiles]);
+
+  // The SVG drawings the renderer can resolve right now: the bundled assets
+  // (schema.assets) plus any imported `.svg`. An `@svg` control compares its
+  // filename value against this so removing an in-use drawing surfaces a
+  // missing-file hint at the control — the SVG mirror of the missing-font hint.
+  const availableSvgFiles = useMemo(
+    () => svgPresent([...(schema.assets ?? []), ...Object.keys(userFiles)]),
+    [schema.assets, userFiles]
+  );
 
   // Parse the log once here; the OutputConsole (Notices tab count chips) reads
   // this derived data instead of re-parsing it.
@@ -792,6 +802,7 @@ export const AppShell = memo(function AppShell({
                   availableFontFamilies={availableFontFamilies}
                   fontSuggestion={fontSuggestion}
                   installedFonts={installedFonts}
+                  availableSvgFiles={availableSvgFiles}
                   onActivate={expand}
                   showVarName={showVarName}
                   autoRender={autoRender}
@@ -857,6 +868,7 @@ export const AppShell = memo(function AppShell({
               availableFontFamilies={availableFontFamilies}
               fontSuggestion={fontSuggestion}
               installedFonts={installedFonts}
+              availableSvgFiles={availableSvgFiles}
               panelSide={panelSide}
               panelDefaultOpen={panelDefaultOpen}
               showVarName={showVarName}
