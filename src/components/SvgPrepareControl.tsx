@@ -50,6 +50,12 @@ interface Props {
    * is shown, mirroring ParamForm's missing-font hint.
    */
   availableSvgFiles?: Set<string>;
+  /**
+   * Current value of the parameter named by the field's `height=` binding — the
+   * relief height a region falls back to — so the wizard can show it. Null when
+   * the field binds none.
+   */
+  defaultHeight?: number | null;
 }
 
 /** Strip any directory part from a dropped file's name (it mounts at the FS root). */
@@ -71,7 +77,7 @@ function svgRejectionReason(file: File): string | null {
   return null;
 }
 
-export function SvgPrepareControl({ name, svg, value, label, onChange, availableSvgFiles }: Props) {
+export function SvgPrepareControl({ name, svg, value, label, onChange, availableSvgFiles, defaultHeight = null }: Props) {
   const { change, addFile } = useAppActions();
   const [pending, setPending] = useState<{ text: string; fileName: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -215,6 +221,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
               svgText={pending.text}
               fileName={pending.fileName}
               deriveColours={Boolean(svg.layers)}
+              defaultHeight={defaultHeight}
               onCancel={() => setPending(null)}
               onComplete={onComplete}
             />

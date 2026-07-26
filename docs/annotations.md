@@ -110,7 +110,10 @@ When the field binds colours, the wizard also reads the drawing's per-region col
 svg_file = "emblem.svg";
 ```
 
-Add `layers=<param>` to derive the drawing's colours and write the standard **layers string** into a second parameter. The value is a comma-separated `id:colour` list, with a bare-token shorthand such as `gray, c8b0000`. It is blank for a single-colour drawing.
+Add `layers=<param>` to derive the drawing's colours and write the standard **layers string** into a second parameter. It is blank for a single-colour drawing; otherwise it is a comma-separated list of:
+
+- `id:colour` region entries, with a bare-token shorthand such as `gray, c8b0000` when the id already names its colour, and an optional third field giving that region's own relief height in millimetres (`walls:gray:2.5`). A height is a **plain positive decimal** — no sign, no exponent — because a design's own parser is hand-written and typically hard-fails on anything else rather than falling back. The wizard blocks completion on a height outside that grammar, which the browser's number input would otherwise accept (`0`, `-2`, `1e3`);
+- one leading **canvas entry**, `<width>x<height>`, naming the drawing's `viewBox` size (`120x80, walls:gray`). A design that imports its regions uncentred — the only way to keep them registered with each other — cannot measure the drawing, so this is what lets it place the regions. It is omitted when the drawing declares no `viewBox`.
 
 Mark that target parameter `// @filledBy <svg-param>` so the UI renders it demoted behind an "Advanced" disclosure. It stays editable for power users, but the wizard is its normal writer.
 
@@ -124,11 +127,20 @@ svg_file = "plan.svg";
 svg_layers = "";
 ```
 
+Add `height=<param>` to name the **number parameter a region's height falls back to** — the design's own relief height. The wizard shows it as the placeholder in each region's height box, so a blank box reads as "raise this region by the design's relief height" with the actual number in view. Unlike `layers=`, it needs no reciprocal annotation: the wizard only reads it.
+
+```scad
+// @svg layers=svg_layers height=relief_height
+svg_file = "plan.svg";
+```
+
+Both options may appear in either order, and each at most once. Any other trailing text fails the build.
+
 The wizard grades what it finds by severity: **errors first, then warnings, then notes**. A residual **error**, such as no importable geometry, blocks completion. The *Use this SVG* button stays disabled until you resolve it.
 
 Warnings, such as dropped `<text>` or stroke-only outlines, are informational. The drawing still imports, minus what OpenSCAD cannot read. Before the wizard opens, a dropped file that is not an SVG, or one over 2 MB, is rejected inline.
 
-On the colours step, the wizard cautions when a drawing yields several regions that may import unreliably into slicers. It also marks any region colour it cannot preview, while still passing that colour to OpenSCAD verbatim.
+On the colours step, the wizard cautions when a drawing yields several regions that may import unreliably into slicers. It also marks any region colour it cannot preview, while still passing that colour to OpenSCAD verbatim. Each region additionally gets a **height** box; the layers string below stays the single source of truth, so a hand-edit of it is never overwritten by the boxes. A height the consuming design could not use marks its box and disables *Use this SVG*, so a bad value never reaches the renderer.
 
 `@svg` composes with a co-located `// @showIf`, so a conditional SVG field still gets the affordance. Both annotations are invisible to OpenSCAD, which imports the file and, for the per-region path, selects regions by their `<g id>`.
 

@@ -1636,12 +1636,12 @@ test("@svg marks a string field for the wizard and captures the layers binding",
   );
   const byName = Object.fromEntries(params.map((p) => [p.name, p]));
   // `@svg layers=<param>` captures the binding on a string param.
-  assert.deepEqual(byName.svg_file.svg, { layers: "parts_layers" });
+  assert.deepEqual(byName.svg_file.svg, { layers: "parts_layers", height: null });
   // The annotation line is consumed, not leaked into the help/label text.
   assert.ok(!byName.svg_file.help.includes("@svg"));
   assert.equal(byName.svg_file.description, "The drawing to extrude.");
   // Bare `@svg` (no binding) => layers is null.
-  assert.deepEqual(byName.icon_file.svg, { layers: null });
+  assert.deepEqual(byName.icon_file.svg, { layers: null, height: null });
   // `@filledBy` names the source @svg field and stays a normal (editable) param.
   assert.equal(byName.parts_layers.filledBy, "svg_file");
   assert.ok(!byName.parts_layers.help.includes("@filledBy"));
@@ -1681,6 +1681,42 @@ test("an unknown @svg option fails instead of being accepted as a bare annotatio
   assert.throws(
     () => paramsOf(`/* [S] */\n// @svg foo=bar\nsvg_file = "a.svg";\n`),
     /f\.scad:2: unknown @svg option 'foo=bar'/
+  );
+});
+
+test("@svg height= binds the number a region's relief height defaults to", () => {
+  const params = paramsOf(
+    `/* [Source] */\n` +
+      `// How far the relief stands proud.\n` +
+      `relief = 1.5;\n` +
+      `// The drawing to extrude.\n` +
+      `// @svg height=relief layers=parts_layers\n` +
+      `svg_file = "examples/plan.svg";\n` +
+      `// Colours per region, filled by the wizard.\n` +
+      `// @filledBy svg_file\n` +
+      `parts_layers = "";\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  // Both options are captured, in either order.
+  assert.deepEqual(byName.svg_file.svg, { layers: "parts_layers", height: "relief" });
+  assert.ok(!byName.svg_file.help.includes("@svg"));
+});
+
+test("@svg height= must name a real number parameter, and no option may repeat", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @svg height=nope\nsvg_file = "a.svg";\n`),
+    /@svg height=nope on 'svg_file' references unknown parameter 'nope'/
+  );
+  assert.throws(
+    () =>
+      paramsOf(
+        `/* [S] */\nlabel = "hi";\n// @svg height=label\nsvg_file = "a.svg";\n`
+      ),
+    /@svg height=label on 'svg_file' must reference a number parameter/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\nh = 1;\n// @svg height=h height=h\nsvg_file = "a.svg";\n`),
+    /f\.scad:3: @svg option 'height=' is given twice/
   );
 });
 

@@ -98,8 +98,58 @@ try {
   const layersVal = await page.locator('.param[data-param="svg_layers"] input').first().inputValue();
   check(/left:red/.test(layersVal) && /right:blue/.test(layersVal),
     `svg_layers derived from the drawing's colours (${layersVal})`);
+  // The drawing's canvas leads the string — without it the design can't centre
+  // the regions, which it imports uncentred to keep them registered.
+  check(/^60x40,/.test(layersVal), `svg_layers leads with the drawing's canvas (${layersVal})`);
   await waitRendered(page, { timeout: 60000 });
   check(true, "panel re-rendered with per-region colours");
+
+  // --- per-region heights: the wizard's height boxes edit the layers string ---
+  await page.locator('[data-svg-field="svg_file"]').first().locator('input[type="file"]')
+    .setInputFiles({ name: "regions2.svg", mimeType: "image/svg+xml", buffer: Buffer.from(MULTI_SVG) });
+  const d4 = page.getByRole("dialog");
+  await d4.waitFor({ state: "visible", timeout: 5000 });
+  await d4.getByRole("button", { name: /Fix & continue/i }).click();
+  await d4.getByRole("button", { name: /Next/i }).click(); // → colours step
+  const heightBox = d4.getByRole("spinbutton", { name: /Height of region left/i });
+  check(await heightBox.count() === 1, "each region has its own height box");
+  // The design's relief height is offered as the placeholder, so a blank box
+  // reads as "use that height" with the number in view.
+  check(await heightBox.getAttribute("placeholder") === "1.2",
+    "the height box shows the design's relief height as its placeholder");
+  await heightBox.fill("2.5");
+  const editedSpec = await d4.getByRole("textbox", { name: /Region colours and heights/i }).inputValue();
+  check(/left:red:2\.5/.test(editedSpec) && /right:blue(,|$)/.test(editedSpec),
+    `a typed height lands on its own region only (${editedSpec})`);
+  // A height the browser's number input accepts but a design's own parser does
+  // not (0, a negative, exponent syntax) blocks completion here instead of
+  // hard-failing the render.
+  const useBtn = d4.getByRole("button", { name: /Use this SVG/i });
+  for (const bad of ["0", "-1", "1e3"]) {
+    await heightBox.fill(bad);
+    check(await useBtn.isDisabled(), `a height of ${bad} blocks ‘Use this SVG’`);
+  }
+  check(/isn't usable/.test(await d4.textContent()), "the wizard says which height isn't usable");
+  await heightBox.fill("2.5");
+  check(!(await useBtn.isDisabled()), "fixing the height re-enables ‘Use this SVG’");
+  await useBtn.click();
+  await d4.waitFor({ state: "detached", timeout: 5000 });
+  await waitRendered(page, { timeout: 60000 });
+  check(true, "panel re-rendered with a per-region height");
+
+  // --- reverting the @svg field also reverts the layers it filled ------------
+  // The two are written together by the wizard: the layers string names regions
+  // that exist only in the drawing it prepared, so reverting the drawing alone
+  // would leave the design pointing at regions that aren't there.
+  const revert = page.locator('.param[data-param="svg_file"] .param-drift-revert').first();
+  check(await revert.count() === 1, "the drifted svg_file offers a revert control");
+  await revert.click();
+  await page.waitForTimeout(300);
+  const fileAfter = await page.locator('[data-svg-field="svg_file"]').first().textContent();
+  const layersAfter = await page.locator('.param[data-param="svg_layers"] input').first().inputValue();
+  check(/panel\.svg/.test(fileAfter), "reverting restores the design's own drawing");
+  check(!/left|right/.test(layersAfter),
+    `reverting clears the prepared drawing's regions too (${layersAfter})`);
 
   // --- error gate: a drawing with no importable geometry can't complete ---
   const TEXT_ONLY = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text x="1" y="6">hi</text></svg>`;
@@ -113,7 +163,7 @@ try {
   const d3 = page.getByRole("dialog");
   await d3.waitFor({ state: "visible", timeout: 5000 });
   await d3.getByRole("button", { name: /Fix & continue/i }).click();
-  check(/can't be imported/i.test(await d3.textContent()), "error step explains the drawing can't be imported");
+  check(/can't be used as-is/i.test(await d3.textContent()), "error step explains the drawing can't be used");
   check(await d3.getByRole("button", { name: /Use this SVG/i }).isDisabled(),
     "‘Use this SVG’ is disabled while an ERROR remains");
   await page.keyboard.press("Escape");

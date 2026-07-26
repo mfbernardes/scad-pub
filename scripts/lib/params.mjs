@@ -47,12 +47,13 @@ const DESCRIPTION_RE = /^\s*\/\/\s*@description\b\s*(.*)$/i;
 const ICON_RE = /^\s*\/\/\s*@icon\b\s*(.*)$/i;
 const IMAGE_RE = /^\s*\/\/\s*@image\b\s*(.*)$/i;
 const FILEDOC_RE = /^\s*\/\/\s*@doc\b\s*(.*)$/i;
-// `@svg [layers=<param>]` directive: marks a string parameter as an SVG file the
-// in-app wizard prepares (check / fix / import). The optional `layers=<param>`
-// binds the wizard's derived per-region colour string to a second parameter.
-// Invisible to OpenSCAD.
+// `@svg [layers=<param>] [height=<param>]` directive: marks a string parameter as
+// an SVG file the in-app wizard prepares (check / fix / import). The optional
+// `layers=<param>` binds the wizard's derived per-region string to a second
+// parameter; `height=<param>` names the number parameter that region heights
+// default to, so the wizard can show it. Invisible to OpenSCAD.
 const SVG_ANNOT_RE = /^@svg\b\s*(.*)$/i;
-const SVG_LAYERS_RE = /^layers=([A-Za-z_][A-Za-z0-9_]*)$/i;
+const SVG_OPTION_RE = /^(layers|height)=([A-Za-z_][A-Za-z0-9_]*)$/i;
 // `@filledBy <param>` directive: marks a parameter as populated by the wizard on
 // the named `@svg` field, so the UI can render it demoted. Invisible to OpenSCAD.
 const FILLEDBY_RE = /^@filledBy\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i;
@@ -170,6 +171,22 @@ function validateAnnotations(params, lineInfo, absPath) {
           absPath,
           line,
           `@svg layers=${target} on '${p.name}' has no reciprocal '// @filledBy ${p.name}' on '${target}'`
+        );
+    }
+
+    // `height=` only tells the wizard which number to offer as each region's
+    // default height, so it needs no reciprocal — just a real number parameter.
+    if (p.svg && p.svg.height != null) {
+      const line = lineInfo.svg.get(p.name);
+      const target = p.svg.height;
+      const targetParam = byName.get(target);
+      if (!targetParam)
+        fail(absPath, line, `@svg height=${target} on '${p.name}' references unknown parameter '${target}'`);
+      else if (targetParam.type !== "number")
+        fail(
+          absPath,
+          line,
+          `@svg height=${target} on '${p.name}' must reference a number parameter (got '${target}' of type ${targetParam.type})`
         );
     }
 
@@ -489,18 +506,25 @@ export function parseParams(absPath) {
         pendingFilledBy = filledBy[1];
         pendingFilledByLine = lineNo;
       } else if (svg) {
-        // `@svg` or `@svg layers=<param>` — capture the optional layers binding.
-        // M9: any other trailing text is an unknown @svg option, not a bare
-        // annotation — reject it instead of silently ignoring it.
+        // `@svg`, optionally followed by `layers=<param>` and/or `height=<param>`
+        // in either order. M9: any other trailing text is an unknown @svg option,
+        // not a bare annotation — reject it instead of silently ignoring it.
         const rest = svg[1].trim();
-        const layersMatch = rest.match(SVG_LAYERS_RE);
-        if (rest !== "" && !layersMatch)
-          fail(
-            absPath,
-            lineNo,
-            `unknown @svg option '${rest}' (expected bare '@svg' or '@svg layers=<param>')`
-          );
-        pendingSvg = { layers: layersMatch ? layersMatch[1] : null };
+        const options = { layers: null, height: null };
+        for (const token of rest.split(/\s+/).filter(Boolean)) {
+          const match = token.match(SVG_OPTION_RE);
+          if (!match)
+            fail(
+              absPath,
+              lineNo,
+              `unknown @svg option '${token}' (expected bare '@svg', '@svg layers=<param>' or '@svg height=<param>')`
+            );
+          const key = match[1].toLowerCase();
+          if (options[key] !== null)
+            fail(absPath, lineNo, `@svg option '${key}=' is given twice`);
+          options[key] = match[2];
+        }
+        pendingSvg = options;
         pendingSvgLine = lineNo;
       } else if (word) {
         // A `@word` that isn't one of the annotations above: either a

@@ -120,10 +120,12 @@ for (const file of ["background_rect.svg", "background_path.svg"]) {
 }
 
 // Colour derivation from named/painted regions (Tier B export).
+// Each string is led by the drawing's canvas entry (its viewBox size), which is
+// what lets a consuming design place the uncentred regions.
 const DERIVES = {
-  "multi_region.svg": "walls:gray, rooms:white",
-  "inkscape_layers.svg": "walls:gray, rooms:white",
-  "css_fills.svg": "wall:gray, room:white",
+  "multi_region.svg": "100x100, walls:gray, rooms:white",
+  "inkscape_layers.svg": "100x100, walls:gray, rooms:white",
+  "css_fills.svg": "100x100, wall:gray, room:white",
 };
 
 for (const [file, expected] of Object.entries(DERIVES)) {
