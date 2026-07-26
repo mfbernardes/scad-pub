@@ -52,21 +52,39 @@ export async function waitRendered(page, { timeout = 60000 } = {}) {
 
 /**
  * Switch to the design with the given picker label and kick off its render.
- * The picker is a shadcn/ui (Radix) Select with no native <option> elements, so
- * we click the trigger then the option by its visible text. Single-design
- * configs have no picker — the click is skipped. Pass `label: undefined` to
- * skip the picker entirely and just nudge the current design to render.
+ * Two picker shapes exist (DesignPicker.tsx): the default shadcn/ui (Radix)
+ * Select — no native <option> elements, so we click the trigger then the option
+ * by its visible text — and, under `ui.gallery`, a card dialog whose cards
+ * carry a stable `data-design="<id>"` hook. Pass the design's `id` so the
+ * gallery path can target its card (it falls back to matching the card's
+ * visible label). Single-design configs have no picker — the click is skipped.
+ * Pass `label: undefined` to skip the picker entirely and just nudge the
+ * current design to render.
  * Does not wait for completion — follow with waitRendered().
  */
-export async function selectDesign(page, label, { mobile = false } = {}) {
+export async function selectDesign(page, label, { mobile = false, id } = {}) {
   if (label !== undefined) {
-    const sel = mobile
-      ? '.mobile-top-bar__center [data-slot="select-trigger"]'
-      : '.command-bar__design-picker [data-slot="select-trigger"]';
-    const trigger = page.locator(sel);
+    const bar = mobile ? ".mobile-top-bar__center" : ".command-bar__design-picker";
+    const trigger = page.locator(`${bar} [data-slot="select-trigger"]`);
+    // `ui.gallery` swaps the Select for a button that opens the card dialog.
+    const galleryTrigger = page.locator(`${bar} button[aria-label="Choose a design"]`);
+    let switched = false;
     if (await trigger.count()) {
       await trigger.click();
       await page.getByRole("option", { name: label, exact: true }).click();
+      switched = true;
+    } else if (await galleryTrigger.count()) {
+      await galleryTrigger.first().click();
+      const gallery = page.locator(".design-gallery").last();
+      await gallery.waitFor({ state: "visible", timeout: 3000 });
+      const card = id
+        ? gallery.locator(`[data-design="${id}"]`)
+        : gallery.locator("[data-design]").filter({ has: page.getByText(label, { exact: true }) });
+      await card.first().click();
+      await gallery.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+      switched = true;
+    }
+    if (switched) {
       // Clear the cached "ok" state so a following waitRendered can't pass on
       // the previous design's render.
       await page
@@ -88,14 +106,21 @@ export async function selectDesign(page, label, { mobile = false } = {}) {
  *  so it must go before driving the UI. The primary button's label is
  *  config-driven (schema.popup.button), so target the stable `.notice-ok` hook
  *  instead of a fixed "OK" text. That button also opens the design picker, so
- *  press Escape afterwards to close it and leave the UI clean. No-op when no
- *  dialog is open. */
+ *  press Escape afterwards to close it and leave the UI clean.
+ *  `mode: "picker"` draws the design gallery and NO primary button (see
+ *  PopupModal.tsx) — there Escape is the dismissal (it remembers, same as
+ *  picking a card), so don't wait on a `.notice-ok` that will never exist.
+ *  No-op when no dialog is open. */
 export async function dismissWelcomePopup(page) {
   const dialog = page.getByRole("dialog");
   if (!(await dialog.count())) return;
-  await dialog.locator(".notice-ok").click().catch(() => {});
-  await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  if (await dialog.locator(".notice-ok").count()) {
+    await dialog.locator(".notice-ok").click().catch(() => {});
+    await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  }
+  // Closes the picker-mode popup, and the design picker the primary CTA opens.
   await page.keyboard.press("Escape").catch(() => {});
+  await dialog.first().waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
 }
 
 // Shared timeout for openDialog/waitDialogClosed below — every hand-rolled
