@@ -873,6 +873,98 @@ async function checkEditOnModel({ page, check, ids, paramsTabName }) {
   await waitRendered(page, "tag");
 }
 
+// "Jump to section" navigator (SectionNavigator.tsx): a compact control above
+// the form on designs with >= 4 visible sections. Present on such a design,
+// absent on a simple one; selecting a section opens + scrolls + focuses it; and
+// a narrowing search shrinks (or removes) the option set. Located by the
+// trigger's accessible name and the option/section DOM hooks.
+async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }) {
+  console.log("=== section navigator (jump to section) ===");
+  const sectionCount = (id) => (schema.designs.find((d) => d.id === id)?.sections?.length ?? 0);
+  const navDesign = ids.find((id) => sectionCount(id) >= 4);
+  const simpleDesign = ids.find((id) => sectionCount(id) < 4);
+  if (!navDesign) {
+    console.log("  (no design with >= 4 sections in this config — skipped)");
+    return;
+  }
+
+  const trigger = page.getByRole("button", { name: "Jump to section", exact: true });
+  const gotoParams = () =>
+    page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+
+  // (a) Present on a multi-section design; absent on a simple one.
+  await selectDesign(page, navDesign);
+  await gotoParams();
+  await trigger.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check((await trigger.count()) >= 1, `navigator present on "${navDesign}" (>= 4 sections)`);
+  if (simpleDesign) {
+    await selectDesign(page, simpleDesign);
+    await gotoParams();
+    await page.locator(".param-form").first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    check((await trigger.count()) === 0, `navigator absent on simple "${simpleDesign}" design (< 4 sections)`);
+    await selectDesign(page, navDesign);
+    await gotoParams();
+    await trigger.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  }
+
+  // (b) Selecting a section opens it, scrolls it in, and focuses its summary.
+  //     Prefer a currently-collapsed section (a stronger test — it wasn't open);
+  //     fall back to the last section (which still re-scrolls/focuses).
+  await trigger.first().click();
+  const items = page.locator(".section-nav-item");
+  await items.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  const beforeCount = await items.count();
+  check(beforeCount >= 4, `navigator lists all ${beforeCount} visible sections`);
+  const target = await page.evaluate(() => {
+    const all = [...document.querySelectorAll("details.param-group")];
+    const closed = all.find((d) => !d.open);
+    return (closed ?? all[all.length - 1])?.getAttribute("data-section") ?? null;
+  });
+  check(target !== null, "a target section is resolvable");
+  await page.getByRole("button", { name: target, exact: true }).click();
+  const opened = await page
+    .waitForFunction(
+      (sec) => {
+        const d = document.querySelector(`details.param-group[data-section="${sec}"]`);
+        return !!d && d.open;
+      },
+      target,
+      { timeout: 3000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(opened, `selecting "${target}" opens its section`);
+  const focused = await page
+    .waitForFunction(
+      (sec) => document.activeElement === document.querySelector(`details.param-group[data-section="${sec}"] summary`),
+      target,
+      { timeout: 3000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(focused, `the opened section's <summary> holds DOM focus`);
+
+  // (c) A narrowing search shrinks the option set. Searching a single param's
+  //     exact name matches (at least) that one param, so sections without it
+  //     drop out — often below the threshold, which removes the navigator
+  //     entirely (a 0-option shrink). Either way the count must fall.
+  await trigger.first().click();
+  const before = await page.locator(".section-nav-item").count();
+  await page.keyboard.press("Escape");
+  const firstParam = await page.locator(".param[data-param]").first().getAttribute("data-param");
+  const search = page.locator("#param-search-input");
+  await search.fill(firstParam ?? "zzznomatch");
+  await page.waitForTimeout(400); // search debounce (150ms) + re-filter
+  let after = 0;
+  if ((await trigger.count()) >= 1) {
+    await trigger.first().click();
+    after = await page.locator(".section-nav-item").count();
+    await page.keyboard.press("Escape");
+  }
+  check(after < before, `a narrowing search shrinks the navigator (${before} -> ${after} sections)`);
+  await search.fill(""); // restore for whatever runs next
+}
+
 // @showIf arrow_style — exercised on a "signage" design when present. (No
 // notice expectation here: a well-tuned config renders its defaults
 // advisory-free; the notice/assert badge machinery is covered by "tag".)
@@ -1190,6 +1282,7 @@ async function main() {
     await checkTagDesign(ctx);
     await checkEditOnModel(ctx);
     await checkSignageDesign(ctx);
+    await checkSectionNavigator(ctx);
     await checkResponsiveLayout(ctx);
     await checkFirstVisitSheetPolicy(ctx);
 

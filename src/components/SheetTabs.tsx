@@ -2,14 +2,17 @@
 // Parameters / Presets. Prevents the stacked-sheet anti-pattern. Files used to
 // be a third tab here; it's now FilesModal, opened from the mobile top bar's
 // "⋮" overflow (BarActions.tsx) — see ParamPanel.tsx's own doc for its desktop twin.
+import { useMemo, useRef } from "react";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
+import { visibleGroups } from "../lib/paramGroups";
 import type { PanelTab } from "../lib/usePanelState";
 import { EssentialsToggle } from "./EssentialsToggle";
-import { ParamForm } from "./ParamForm";
+import { ParamForm, type ParamFormHandle } from "./ParamForm";
+import { SectionNavigator } from "./SectionNavigator";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
@@ -102,6 +105,13 @@ export function SheetTabs({
   const tabs: Tab[] = ["presets", "params"];
   const debouncedSearch = useDebounce(search, 150);
   const triggerClass = cn(chipTabTrigger, "flex-1");
+  // See ParamPanel for the desktop twin: same visible-groups source so the
+  // navigator tracks the form's sections exactly.
+  const formRef = useRef<ParamFormHandle>(null);
+  const navSections = useMemo(
+    () => visibleGroups(design, values, { search: debouncedSearch, showAdvanced }).map((g) => g.section),
+    [design, values, debouncedSearch, showAdvanced]
+  );
 
   return (
     <Tabs
@@ -139,8 +149,14 @@ export function SheetTabs({
             showAdvanced={showAdvanced}
             onShowAdvancedChange={onShowAdvancedChange}
           />
+          <SectionNavigator
+            sections={navSections}
+            onSelect={(s) => formRef.current?.openSection(s)}
+            compact
+            className="mx-3 mt-2 self-start"
+          />
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
+            <ParamForm ref={formRef} design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
           {/* Auto-render is parameter-scoped, so it pins to the bottom of this
               tab only — not on Presets (mirrors the desktop panel). Reset

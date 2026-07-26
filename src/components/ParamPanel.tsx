@@ -5,18 +5,20 @@
 // Files used to be a third tab here; it's now FilesModal, opened from
 // BarActions (see CommandBar.tsx) — a design that imports files is no longer
 // special-cased in this component at all.
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
+import { visibleGroups } from "../lib/paramGroups";
 import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
 import { EssentialsToggle } from "./EssentialsToggle";
-import { ParamForm } from "./ParamForm";
+import { ParamForm, type ParamFormHandle } from "./ParamForm";
+import { SectionNavigator } from "./SectionNavigator";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
@@ -125,6 +127,15 @@ export function ParamPanel({
     return w >= MIN_WIDTH && w <= MAX_WIDTH ? w : DEFAULT_WIDTH;
   });
   const debouncedSearch = useDebounce(search, 150);
+  // Ref onto the form's imperative handle so the section navigator can jump.
+  const formRef = useRef<ParamFormHandle>(null);
+  // The navigator's section list — derived from the SAME visible-groups filter
+  // the form renders (same debounced search + showAdvanced + values), so it
+  // narrows in lockstep and a section that filters out drops from the menu too.
+  const navSections = useMemo(
+    () => visibleGroups(design, values, { search: debouncedSearch, showAdvanced }).map((g) => g.section),
+    [design, values, debouncedSearch, showAdvanced]
+  );
   const dragging = useRef(false);
   const startX = useRef(0);
   const startW = useRef(0);
@@ -297,8 +308,13 @@ export function ParamPanel({
             showAdvanced={showAdvanced}
             onShowAdvancedChange={onShowAdvancedChange}
           />
+          <SectionNavigator
+            sections={navSections}
+            onSelect={(s) => formRef.current?.openSection(s)}
+            className="mx-3 mt-2 self-start"
+          />
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
+            <ParamForm ref={formRef} design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
         </TabsContent>
       </Tabs>
