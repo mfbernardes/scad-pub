@@ -342,7 +342,9 @@ The **Files dialog is a manager**, not an importer: it lists what those controls
 ScadPub chooses the mounting behavior from the file extension:
 
 - **Fonts** (`.ttf`/`.otf`/`.ttc`) are mounted where the renderer's fontconfig can find them, so `text(font = "…")` can use them. They're matched by their **embedded family name**, not the filename, so a renamed file still resolves.
-- **Any other file** is mounted at the render filesystem **root**, so a design can reference it by name, e.g. `import("logo.svg")` or `surface("data.dat")`. The reference must match the uploaded file's name.
+- An **imported SVG** (`.svg`) is mounted at the render filesystem **root**, so a design references it by name, e.g. `import("logo.svg")`. The reference must match the imported file's name.
+
+> **Only fonts and SVGs can be imported**, because import is contextual — a `@font` parameter offers the font route and a `@svg` parameter offers the SVG route. A file a design reads through a bare `surface()`/`import()` with **no** such parameter pointing at it has no import route in the UI; ship it as a bundled [`asset`](#design-sources) instead. (Any imported file is still mounted at the render root, so the mounting itself is generic — it's the *import* affordance that is font-/SVG-only.)
 
 Imported files persist in IndexedDB and are re-applied on the next visit; the Files dialog lists what's currently loaded, with a **Clear all** button to remove them. Importing, removing, or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served.
 
