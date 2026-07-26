@@ -42,14 +42,14 @@ export const DEFAULT_HELP: HelpContent = {
         "- **Export**/**Import** move saved presets between devices as a file (the same format the desktop OpenSCAD Customizer uses).",
     },
     {
-      title: "6. Add files (fonts, logos…)",
+      title: "6. Import fonts and drawings",
       body:
-        "Some designs can use a file of yours — a font for lettering, or an image/logo. " +
-        "When an **Import file** button appears in the **Files** tab, use it to add one:\n\n" +
-        "- **Fonts** (`.ttf`/`.otf`) become available to the design's font setting — pick them by the font's name.\n" +
-        "- **Other files** are used by their file name, so keep the name the design asks for.\n" +
-        "- Files stay in this browser and come back on your next visit; **Clear** removes them.\n" +
-        "- Nothing is uploaded anywhere — files stay on your device.",
+        "Some designs use a file of yours — a font for lettering, or an SVG drawing. " +
+        "You add each one from the control that needs it, not from a separate upload screen:\n\n" +
+        "- **Fonts** (`.ttf`/`.otf`): choose **Import font…** in a design's font menu; the font then shows there by name for every design.\n" +
+        "- **Drawings** (`.svg`): use the drawing control's **Prepare SVG…** to bring one in.\n" +
+        "- The **Files** action (in the toolbar) is where you **manage** what you've imported — see each file's type and size, remove one, or clear all. You don't import from there.\n" +
+        "- Files stay in this browser and come back on your next visit; nothing is uploaded.",
     },
     {
       title: "7. Download & share",
