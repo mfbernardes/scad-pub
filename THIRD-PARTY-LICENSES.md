@@ -14,18 +14,18 @@ regardless of the licenses below.
 ## Bundled at runtime (redistributed in `dist/`)
 
 | Component | License | Source |
-|-----------|---------|--------|
-| **OpenSCAD-WASM** (`openscad.js`, `openscad.wasm`) | **GPL-2.0-or-later** (effective floor GPLv3 via CGAL) | https://github.com/openscad/openscad — official snapshots at https://files.openscad.org/snapshots/ |
-| React, react-dom, scheduler, loose-envify, js-tokens | MIT | https://github.com/facebook/react |
-| three.js | MIT | https://github.com/mrdoob/three.js |
-| Radix UI primitives (`@radix-ui/react-*`: dialog, alert-dialog, popover, select, tabs, slider, switch, checkbox, label, slot) | MIT | https://github.com/radix-ui/primitives |
-| lucide-react (icons) | ISC | https://github.com/lucide-icons/lucide |
-| sonner (toasts) | MIT | https://github.com/emilkowalski/sonner |
-| clsx | MIT | https://github.com/lukeed/clsx |
-| tailwind-merge | MIT | https://github.com/dcastil/tailwind-merge |
-| class-variance-authority | Apache-2.0 | https://github.com/joe-bell/cva |
-| Liberation fonts (Sans / Mono) | OFL-1.1 | https://github.com/liberationfonts/liberation-fonts |
-| Atkinson Hyperlegible (UI display typeface, via `@fontsource/atkinson-hyperlegible`) | OFL-1.1 | https://github.com/googlefonts/atkinson-hyperlegible |
+| ----------- | --------- | -------- |
+| **OpenSCAD-WASM** (`openscad.js`, `openscad.wasm`) | **GPL-2.0-or-later** (effective floor GPLv3 via CGAL) | <https://github.com/openscad/openscad> — official snapshots at <https://files.openscad.org/snapshots/> |
+| React, react-dom, scheduler, loose-envify, js-tokens | MIT | <https://github.com/facebook/react> |
+| three.js | MIT | <https://github.com/mrdoob/three.js> |
+| Radix UI primitives (`@radix-ui/react-*`: dialog, alert-dialog, popover, select, tabs, slider, switch, checkbox, label, slot) | MIT | <https://github.com/radix-ui/primitives> |
+| lucide-react (icons) | ISC | <https://github.com/lucide-icons/lucide> |
+| sonner (toasts) | MIT | <https://github.com/emilkowalski/sonner> |
+| clsx | MIT | <https://github.com/lukeed/clsx> |
+| tailwind-merge | MIT | <https://github.com/dcastil/tailwind-merge> |
+| class-variance-authority | Apache-2.0 | <https://github.com/joe-bell/cva> |
+| Liberation fonts (Sans / Mono) | OFL-1.1 | <https://github.com/liberationfonts/liberation-fonts> |
+| Atkinson Hyperlegible (UI display typeface, via `@fontsource/atkinson-hyperlegible`) | OFL-1.1 | <https://github.com/googlefonts/atkinson-hyperlegible> |
 
 ### The OpenSCAD-WASM (GPL) obligation
 

@@ -238,7 +238,7 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 ```
 
 | Token | Controls |
-|-------|----------|
+| ------- | ---------- |
 | `--bg` / `--panel` / `--panel-2` | app, panel, and inset backgrounds |
 | `--line` | borders and dividers |
 | `--text` / `--muted` | primary and secondary text |
