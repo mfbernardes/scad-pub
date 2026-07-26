@@ -7,6 +7,17 @@
 // only needs to fade on the first interaction with the sheet, or after a
 // timeout, and tell the parent to stop showing it.
 //
+// The timeout below starts on MOUNT, which is why AppShell defers mounting
+// until the visitor can actually act on the nudge — past the stage's
+// pre-first-render loading overlay (`stageLoading` in ViewerStage.tsx, the same
+// signal ViewerGestureHint arms on) and past the config's welcome popup. See
+// AppShell's `sheetHintArmed`. Mounted at first paint instead, the entire
+// once-per-browser nudge can expire behind "Getting things ready…" on any
+// device whose first-run boot — a cold ~10 MB engine download plus the first
+// render — outlasts FADE_TIMEOUT_MS, which a slow phone comfortably does. Keep
+// the two together: a longer timeout here would only move that boundary, not
+// remove it.
+//
 // Unlike the decorative ViewerGestureHint (aria-hidden — orbit gestures are
 // redundant for assistive tech), this hint is ACTIONABLE: it teaches an AT user
 // that a settings sheet exists and can be opened. So it stays in the a11y tree

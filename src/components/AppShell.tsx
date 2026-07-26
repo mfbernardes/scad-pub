@@ -39,6 +39,7 @@ import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
 import { BookOpen as GuideIcon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { ViewerStage } from "./ViewerStage";
+import { stageLoading } from "../lib/renderStatus";
 import { ViewerHUD } from "./ViewerHUD";
 import { DEFAULT_VIEW, type ViewName } from "./views";
 import { OutputConsole } from "./OutputConsole";
@@ -148,6 +149,11 @@ interface Props {
   themeMode: "light" | "dark" | "auto";
   /** Incremented by the intro popup's primary CTA to open the design picker. */
   openPickerSignal: number;
+  /** Whether the config's welcome popup (schema.popup) is currently up. It is
+   *  the one modal that opens unbidden on a first visit and covers the whole
+   *  app, so the first-visit sheet nudge holds until it's gone — see
+   *  `sheetHintArmed` below. */
+  introOpen: boolean;
   /** Non-null right after a successful export, when the config's
    *  `ui.afterExport` opts into the panel — see ExportSuccess.tsx. Null the
    *  rest of the time, including when `ui.afterExport` is unset. */
@@ -180,6 +186,7 @@ export const AppShell = memo(function AppShell({
   theme,
   themeMode,
   openPickerSignal,
+  introOpen,
   exportSuccess,
   onDismissExportSuccess,
 }: Props) {
@@ -269,6 +276,24 @@ export const AppShell = memo(function AppShell({
   // permanently false thereafter for this session.
   const [showSheetHint, setShowSheetHint] = useState(initialSheet.current.firstVisitPeek);
   const dismissSheetHint = useCallback(() => setShowSheetHint(false), []);
+  // …but not before there's anything to nudge the visitor TOWARDS. The nudge's
+  // fade timeout runs from the moment it mounts (SheetSwipeHint), so it must
+  // not mount while the visitor can't act on it — otherwise the whole
+  // once-per-browser nudge expires unseen and, since the introduced flag was
+  // written on mount, never comes back. Two ways that happens, both invisible
+  // on a fast machine and both certain on a slow phone:
+  //   • first-run boot — a cold ~10 MB engine download plus the first render
+  //     easily outlasts the timeout, leaving the nudge to fade behind the
+  //     "Getting things ready…" overlay. Same signal ViewerGestureHint arms on.
+  //   • the config's welcome popup — the one modal that opens by itself on a
+  //     first visit and covers everything, including this chip. A visitor who
+  //     reads it (or, in `popup.mode: "picker"`, browses the design cards) for
+  //     longer than the timeout would come out the other side to nothing.
+  // Not sticky: a later design switch re-raises the loading overlay, and it's
+  // better to re-show the still-undismissed nudge over the new model than to
+  // let it tick away over a spinner. Once the visitor touches the sheet (or it
+  // times out while genuinely visible) `showSheetHint` retires it for good.
+  const sheetHintArmed = !introOpen && !stageLoading({ ready, rendering, result });
 
   // Panel tab + search state (see M7): hoisted here — above the desktop/mobile
   // split below — so ONLY the active layout mounts (ParamPanel or SheetTabs,
@@ -599,9 +624,10 @@ export const AppShell = memo(function AppShell({
     renderedValues,
     values,
     computedInfo,
-    // While the first-visit "swipe up for settings" nudge is up, suppress the
-    // viewer's own gesture hint so the two one-time chips never stack over the
-    // sheet's top edge (they share that slot). Only ever true on mobile.
+    // While the first-visit "swipe up for settings" nudge is up — or still
+    // waiting to arm — suppress the viewer's own gesture hint so the two
+    // one-time chips never stack over the sheet's top edge (they share that
+    // slot) and the sheet nudge always goes first. Only ever true on mobile.
     suppressGestureHint: isMobile && showSheetHint,
   };
   const hudProps = {
@@ -828,10 +854,12 @@ export const AppShell = memo(function AppShell({
             )}
           </BottomSheet>
 
-          {/* One-time first-visit nudge: shown only while the sheet is still at
-              peek (raising it dismisses the hint), riding just above the sheet's
-              top edge. Actionable (not aria-hidden) — see SheetSwipeHint. */}
-          {showSheetHint && sheetDetent === "peek" && (
+          {/* One-time first-visit nudge: shown only once there's something to
+              nudge towards (sheetHintArmed — otherwise it fades behind the boot
+              overlay or the welcome popup) and while the sheet is still at peek
+              (raising it dismisses the hint), riding just above the sheet's top
+              edge. Actionable (not aria-hidden) — see SheetSwipeHint. */}
+          {showSheetHint && sheetDetent === "peek" && sheetHintArmed && (
             <SheetSwipeHint onDismiss={dismissSheetHint} />
           )}
         </div>

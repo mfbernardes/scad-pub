@@ -1275,6 +1275,12 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
 // peek. Each sub-case uses its own fresh context so localStorage starts empty
 // (a genuine first visit); the app writes the introduced flag once it mounts,
 // so a reload in the same context is a returning visit.
+//
+// `firstVisit` below waits out the first render on purpose: the nudge only
+// arms once the stage is past its pre-first-render loading overlay (AppShell's
+// `sheetHintArmed`), and its fade timeout runs from there — so sampling before
+// the render would find nothing, and sampling long after it would race the
+// fade. Don't drop the waitRenderDone.
 async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
   console.log("=== first-visit mobile sheet policy (initial detent + swipe-up nudge) ===");
   const introKey = `${schema?.id || "scadpub"}.sheet.introduced.v1`;

@@ -519,6 +519,7 @@ export default function App() {
           theme={theme}
           themeMode={themeMode}
           openPickerSignal={openPickerSignal}
+          introOpen={showPopup && !!popup}
           exportSuccess={exportSuccess}
           onDismissExportSuccess={dismissExportSuccess}
         />

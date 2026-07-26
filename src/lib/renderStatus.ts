@@ -25,6 +25,26 @@ export const STATE_STYLES: Record<RenderState, { pill?: string; dot: string; pul
   error: { pill: "text-[#f87171]", dot: "bg-[#f87171]" },
 };
 
+/**
+ * Whether the viewer stage is still behind its pre-first-render loading
+ * overlay: the engine is bootstrapping ("Getting things ready…"), or the very
+ * first render of this mount is running with nothing yet on the canvas
+ * ("Building your preview…"). In other words, nothing has EVER been shown.
+ *
+ * Deliberately not `!result?.ok`: a design left in manual mode (`heavy`) never
+ * renders on its own, yet its stage is up and usable, and a failed render is a
+ * state the visitor can see and act on too — neither is "still loading".
+ *
+ * Two consumers, one definition so they can't drift: ViewerStage draws the
+ * overlay from it, and AppShell arms the one-time first-visit sheet nudge on it
+ * (a chip teaching the visitor how to use the app has no business being up — or
+ * burning its fade timeout — while the app has nothing to show). See
+ * SheetSwipeHint.tsx.
+ */
+export function stageLoading({ ready, rendering, result }: RenderStatusInput): boolean {
+  return !ready || (rendering && !result);
+}
+
 /** Derive the render state + its human text from the raw flags. */
 export function deriveRenderStatus({ rendering, ready, result, stale = false }: RenderStatusInput): {
   state: RenderState;
