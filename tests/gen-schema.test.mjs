@@ -28,6 +28,7 @@ import {
   parsePopup,
   parseFormat,
   parseRestOnGrid,
+  parseViewer,
   parseNotices,
   parseUi,
   parseParams,
@@ -780,6 +781,21 @@ test("restOnGrid defaults to false, accepts booleans, and rejects anything else"
   assert.equal(parseRestOnGrid(false), false);
   assert.throws(() => parseRestOnGrid("true"), /config\.restOnGrid must be a boolean/);
   assert.throws(() => parseRestOnGrid(1), /config\.restOnGrid must be a boolean/);
+});
+
+test("viewer defaults to plain style with grid, validates style/grid, rejects junk", () => {
+  assert.deepEqual(parseViewer(undefined), { style: "plain", grid: true });
+  assert.deepEqual(parseViewer(null), { style: "plain", grid: true });
+  assert.deepEqual(parseViewer({}), { style: "plain", grid: true });
+  assert.deepEqual(parseViewer({ style: "studio" }), { style: "studio", grid: true });
+  assert.deepEqual(parseViewer({ style: "plain" }), { style: "plain", grid: true });
+  assert.deepEqual(parseViewer({ style: "studio", grid: false }), { style: "studio", grid: false });
+  assert.deepEqual(parseViewer({ grid: false }), { style: "plain", grid: false });
+  assert.throws(() => parseViewer("studio"), /config\.viewer must be an object/);
+  assert.throws(() => parseViewer(["studio"]), /config\.viewer must be an object/);
+  assert.throws(() => parseViewer({ style: "toon" }), /config\.viewer\.style must be one of/);
+  assert.throws(() => parseViewer({ grid: "false" }), /config\.viewer\.grid must be a boolean/);
+  assert.throws(() => parseViewer({ shadow: true }), /config\.viewer: unknown key 'shadow'/);
 });
 
 test("restOnGrid is emitted to the schema and absent from renderHash (display-only)", () => {

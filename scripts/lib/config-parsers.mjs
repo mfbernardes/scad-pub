@@ -116,6 +116,42 @@ export function parseRestOnGrid(raw) {
   return raw;
 }
 
+// The viewer presentation styles a config may pick via `viewer.style`.
+export const VIEWER_STYLES = ["plain", "studio"];
+
+// Validate the optional `viewer` config key — the 3D viewer's presentation,
+// fixed at build time. `style` picks the look: "plain" (the default) is the
+// classic CAD preview; "studio" adds image-based studio lighting, tone mapping,
+// and a soft contact shadow under the model for a product-shot look. `grid`
+// shows or hides the reference grid (default true). Display-only: neither
+// affects the exported bytes, so — like restOnGrid — it stays out of renderHash.
+export function parseViewer(raw) {
+  const out = { style: "plain", grid: true };
+  if (raw == null) return out;
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error(
+      `config.viewer must be an object with optional 'style' and 'grid' keys (got ${JSON.stringify(raw)})`
+    );
+  for (const key of Object.keys(raw))
+    if (key !== "style" && key !== "grid")
+      throw new Error(`config.viewer: unknown key '${key}' (valid keys: style, grid)`);
+  if (raw.style != null) {
+    if (!VIEWER_STYLES.includes(raw.style))
+      throw new Error(
+        `config.viewer.style must be one of ${VIEWER_STYLES.map((s) => `"${s}"`).join(", ")} (got ${JSON.stringify(raw.style)})`
+      );
+    out.style = raw.style;
+  }
+  if (raw.grid != null) {
+    if (typeof raw.grid !== "boolean")
+      throw new Error(
+        `config.viewer.grid must be a boolean (got ${JSON.stringify(raw.grid)})`
+      );
+    out.grid = raw.grid;
+  }
+  return out;
+}
+
 // Validate and normalise the optional `colors` config block into
 // { light?: {token: value}, dark?: {token: value} }. Unknown tokens and unsafe
 // values fail the build with a clear message (consistent with gen-schema's other
