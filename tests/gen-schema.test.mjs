@@ -28,6 +28,7 @@ import {
   parsePopup,
   parseFormat,
   parseRestOnGrid,
+  parseViewer,
   parseNotices,
   parseUi,
   parseParams,
@@ -780,6 +781,33 @@ test("restOnGrid defaults to false, accepts booleans, and rejects anything else"
   assert.equal(parseRestOnGrid(false), false);
   assert.throws(() => parseRestOnGrid("true"), /config\.restOnGrid must be a boolean/);
   assert.throws(() => parseRestOnGrid(1), /config\.restOnGrid must be a boolean/);
+});
+
+test("viewer defaults to the plain style, validates style, rejects junk", () => {
+  assert.deepEqual(parseViewer(undefined), { style: "plain" });
+  assert.deepEqual(parseViewer(null), { style: "plain" });
+  assert.deepEqual(parseViewer({}), { style: "plain" });
+  assert.deepEqual(parseViewer({ style: "studio" }), { style: "studio" });
+  assert.deepEqual(parseViewer({ style: "plain" }), { style: "plain" });
+  assert.throws(() => parseViewer("studio"), /config\.viewer must be an object/);
+  assert.throws(() => parseViewer(["studio"]), /config\.viewer must be an object/);
+  assert.throws(() => parseViewer({ style: "toon" }), /config\.viewer\.style must be one of/);
+  assert.throws(() => parseViewer({ shadow: true }), /config\.viewer: unknown key 'shadow'/);
+});
+
+test("viewer.grid is rejected as unknown — the grid belongs to ui.grid", () => {
+  // The reference grid is a persisted runtime toggle seeded by `ui.grid`; a
+  // build-time gate here would silently make that toggle a no-op. So a config
+  // carrying the retired key must FAIL loudly rather than be ignored, and the
+  // message must point at its replacement.
+  assert.throws(
+    () => parseViewer({ grid: false }),
+    /config\.viewer: unknown key 'grid'.*ui\.grid/
+  );
+  assert.throws(
+    () => parseViewer({ style: "studio", grid: true }),
+    /config\.viewer: unknown key 'grid'/
+  );
 });
 
 test("restOnGrid is emitted to the schema and absent from renderHash (display-only)", () => {

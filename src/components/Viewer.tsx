@@ -10,6 +10,7 @@ import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildDimensions, type DimensionsGroup } from "./dimensions";
+import { createContactShadow, shadowViewFade, type ContactShadow } from "./contactShadow";
 import { VIEW_DIRECTIONS, DEFAULT_VIEW, type ViewName } from "./views";
 import { toIndexedGeometry } from "@/lib/meshIndex";
 import { isModelClick } from "@/lib/editOnModel";
@@ -30,6 +31,17 @@ declare const __APP_FORMAT__: "3mf" | "stl";
 // true rests the model's base on the z=0 grid; false (the default) centres it
 // on the origin in all three axes. A literal, so the unused branch drops out.
 declare const __APP_REST_ON_GRID__: boolean;
+
+// The viewer presentation (a Vite define; see vite.config.ts / config
+// `viewer.style`). "plain" (the default) is the classic CAD preview; "studio"
+// adds image-based studio lighting, tone mapping, and a soft baked contact
+// shadow. A literal, so the unused style branch — and, for "plain", the
+// studio-only environment and contact-shadow modules — tree-shakes out of the
+// bundle, like the loaders above. The reference grid is deliberately NOT a
+// build-time choice: it is a runtime toggle the visitor owns (the `showGrid`
+// prop, seeded by config `ui.grid` — see src/lib/viewerPrefs.ts), and it is
+// drawn in both styles.
+declare const __APP_VIEWER_STYLE__: "plain" | "studio";
 
 // Axis-aligned bounding-box size of the rendered model, in millimetres (the
 // design's own units, kept 1:1 by the loaders). Reported via Viewer's onMeasure.
@@ -59,6 +71,20 @@ type ThemedMaterial = THREE.MeshStandardMaterial | THREE.MeshPhongMaterial;
 function cssColor(name: string, fallback: string): THREE.Color {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return new THREE.Color(v || fallback);
+}
+
+// Studio-style per-theme tuning, read from the live document theme (the same
+// source of truth the CSS variables key off) so scene setup and theme switches
+// always agree. Dimmer light and a heavier shadow read better against a dark
+// backdrop. NB this drives `scene.environmentIntensity`, not the materials'
+// `envMapIntensity`: with a scene-level environment three overwrites the
+// material value with the scene's (see WebGLRenderer's setProgram), so the
+// per-material knob is inert on this path.
+function studioEnvIntensity(): number {
+  return document.documentElement.dataset.theme === "dark" ? 0.92 : 1.1;
+}
+function studioShadowOpacity(): number {
+  return document.documentElement.dataset.theme === "dark" ? 0.62 : 0.42;
 }
 
 // OpenSCAD's *automatic* object colours — the ones it writes into the 3MF for
@@ -99,6 +125,73 @@ function retintAutoVertices(
   }
   if (matched) attr.needsUpdate = true;
   return matched;
+}
+
+// ── Studio environment ──────────────────────────────────────────────────────
+// A soft overhead field over a small uniform base — a softbox above a product,
+// which is what makes a top face read brighter than the vertical wall beside
+// it. Built as a back-facing sphere whose fragment radiance depends only on
+// elevation, then PMREM-filtered like any other environment scene, so it costs
+// one small render at startup and nothing per frame. Values are linear and may
+// exceed 1 (PMREM renders into a half-float target), and no colour is added:
+// a neutral field keeps the near-white plate white and the red relief unshifted.
+//
+// Authored Y-up (the equirect/scene convention three's environments use) and
+// mapped onto the Z-up world by scene.environmentRotation. The sign below is
+// the one that actually lands the bright pole on world +Z — three inverts and
+// re-flips the Euler on its way to the shader (see WebGLMaterials'
+// refreshTransformUniform), so it is not the sign the Euler alone suggests;
+// verify by eye, not by derivation, if this is ever changed.
+const ENV_ROTATION_X = Math.PI / 2;
+// Radiance of the overhead field and of the uniform base beneath it. Their
+// balance sets the top-vs-side ratio: the field reaches a vertical wall at
+// only ~0.27 of what it gives a top face, while the base reaches every
+// direction equally, so raising the base lifts the walls (and the undersides)
+// without touching the top by much.
+const ENV_OVERHEAD = 0.97;
+const ENV_BASE = 0.23;
+// Angular softness of the field's edge, as cosines of the angle from "up":
+// the radiance ramps from base to full between these. Wide and soft, so
+// curved geometry (Braille domes, letter bevels) shades smoothly.
+const ENV_EDGE0 = 0.1;
+const ENV_EDGE1 = 0.95;
+
+function studioEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 16, 12),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      uniforms: {
+        base: { value: ENV_BASE },
+        overhead: { value: ENV_OVERHEAD },
+        edge0: { value: ENV_EDGE0 },
+        edge1: { value: ENV_EDGE1 },
+      },
+      vertexShader: /* glsl */ `
+        varying vec3 vDir;
+        void main() {
+          vDir = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        varying vec3 vDir;
+        uniform float base, overhead, edge0, edge1;
+        void main() {
+          float up = normalize(vDir).y;
+          gl_FragColor = vec4(vec3(base + overhead * smoothstep(edge0, edge1, up)), 1.0);
+        }
+      `,
+    })
+  );
+  const scene = new THREE.Scene();
+  scene.add(sky);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const texture = pmrem.fromScene(scene).texture;
+  sky.geometry.dispose();
+  (sky.material as THREE.Material).dispose();
+  pmrem.dispose();
+  return texture;
 }
 
 export const Viewer = forwardRef<
@@ -161,6 +254,12 @@ export const Viewer = forwardRef<
   const controlsRef = useRef<OrbitControls | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const gridRef = useRef<THREE.GridHelper | null>(null);
+  // Studio style only: the baked contact shadow under the model.
+  const shadowRef = useRef<ContactShadow | null>(null);
+  // World z of the contact shadow's ground plane (0 when the model rests on the
+  // grid, -size.z/2 when it is centred). The camera-elevation fade is measured
+  // against this plane, not world zero.
+  const shadowGroundZRef = useRef(0);
   // The current model's bounding-box size (mm), so the dimension overlay can be
   // rebuilt on a toggle/theme change without re-parsing geometry. null when empty.
   const modelSizeRef = useRef<THREE.Vector3 | null>(null);
@@ -273,6 +372,13 @@ export const Viewer = forwardRef<
   // adds a fresh one — coloured from --viewer-grid/-2 — when shown. Cheap line
   // geometry, so a full rebuild on toggle/theme change is fine. Both the HUD's
   // grid toggle and a live theme switch come through here.
+  //
+  // The grid is a scene decoration, not part of the model, so the studio
+  // style's contact shadow must never see it: the bake's `hide` list carries
+  // gridRef.current (see the bake call in the [stl] effect), which is why
+  // toggling the grid needs no re-bake — the baked texture never contained it
+  // either way. Toggling only has to invalidate a frame, which the [showGrid]
+  // effect below does.
   function syncGrid(show: boolean) {
     const scene = sceneRef.current;
     if (!scene) return;
@@ -292,6 +398,20 @@ export const Viewer = forwardRef<
     grid.rotateX(Math.PI / 2);
     scene.add(grid);
     gridRef.current = grid;
+  }
+
+  // Studio style only: refresh the contact shadow's view fade from the current
+  // camera. Called immediately before every render (the invalidation-driven
+  // loop's renderNow, and snapshot()'s synchronous render) rather than from an
+  // rAF of its own, so the picture always matches the camera that produced it
+  // and an idle viewer still does no work at all. A few floats and, only when
+  // the factor actually moves, one material opacity write.
+  function syncShadowFade() {
+    if (__APP_VIEWER_STYLE__ !== "studio") return;
+    const shadow = shadowRef.current;
+    const cam = camRef.current;
+    if (!shadow || !cam) return;
+    shadow.setFade(shadowViewFade(cam.position, shadowGroundZRef.current));
   }
 
   // Move the camera along its line of sight to the orbit target. factor < 1
@@ -325,6 +445,7 @@ export const Viewer = forwardRef<
       // control returns to the browser — the UA only swaps/clears the default
       // framebuffer once the current task yields, so a same-task render then
       // toDataURL() is reliable without paying for a permanently preserved buffer.
+      syncShadowFade(); // same view state the on-screen frame would show
       r.render(s, c);
       return r.domElement.toDataURL("image/png");
     },
@@ -387,27 +508,69 @@ export const Viewer = forwardRef<
     rendererRef.current = renderer;
     mount.appendChild(renderer.domElement);
 
-    // A hemisphere light carries most of the fill so that near-white surfaces
-    // read close to their true colour instead of collapsing to grey. With an
-    // ambient-dominated rig a face turned away from the key light only sees the
-    // ambient term, so a near-white model colour (e.g. #F2EFE9) multiplied by a
-    // ~0.6 ambient came out a warm mid-grey. The hemisphere's near-white "sky"
-    // fill lifts upward-facing surfaces toward their real colour while its
-    // mid-grey "ground" keeps side/under faces darker, so the model still shows
-    // form (a visible light→shadow gradient) rather than flattening. Ambient is
-    // dropped and the two directionals trimmed so highlights and saturated
-    // colours don't clip. Positioned at +Z to match the OpenSCAD Z-up scene, so
-    // "sky" fill lands on top faces.
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 2.0);
-    hemi.position.set(0, 0, 1);
-    scene.add(hemi);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
-    const key = new THREE.DirectionalLight(0xffffff, 0.5);
-    key.position.set(1, -1, 2);
-    scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.25);
-    fill.position.set(-1, 1, 0.5);
-    scene.add(fill);
+    let envTexture: THREE.Texture | null = null;
+    if (__APP_VIEWER_STYLE__ === "studio") {
+      // Studio style: image-based lighting from a PMREM-filtered gradient sky
+      // (generated procedurally — nothing to download) with Khronos PBR
+      // Neutral tone mapping, which stays near-identity for mid-tones so the
+      // model's own colours and the themed background survive faithfully (ACES
+      // would hue-shift saturated colours). The environment is authored Y-up
+      // (see studioEnvironment) and rotated onto this Z-up world by
+      // environmentRotation.
+      //
+      // The rig is balanced for TOP-vs-SIDE separation, because that step in
+      // luminance is the whole reason a printed plate reads as a solid a few
+      // millimetres thick instead of a flat sticker. The meshes are
+      // flat-shaded, so the step draws a crisp line along every top edge.
+      // Getting it takes an environment that is genuinely top-biased (three's
+      // RoomEnvironment is not — it is an enclosed room whose walls carry most
+      // of its light, and measured against this scene its irradiance on a
+      // vertical wall is ~1.17x what a top face gets, which is exactly the
+      // sticker look) plus a modest key for direction. Totals put a top face
+      // at about full albedo — a near-white plate must read near-white, the
+      // same concern the plain rig's hemisphere solves below — and a vertical
+      // wall at roughly half of it.
+      renderer.toneMapping = THREE.NeutralToneMapping;
+      renderer.toneMappingExposure = 1.0;
+      envTexture = studioEnvironment(renderer);
+      scene.environment = envTexture;
+      scene.environmentIntensity = studioEnvIntensity();
+      scene.environmentRotation.set(ENV_ROTATION_X, 0, 0);
+      // A single key at ~55° elevation, off to the front-right. It is
+      // deliberately soft: the environment already separates top from side, so
+      // the key's job is only to break the symmetry — the two walls facing the
+      // camera pick up a little of it (in different amounts) while the two
+      // facing away get none, which is what turns the edge line into a
+      // readable box rather than a flat outline.
+      const key = new THREE.DirectionalLight(0xffffff, 0.5);
+      key.position.set(90, -120, 190);
+      scene.add(key);
+      const shadow = createContactShadow();
+      scene.add(shadow.group);
+      shadowRef.current = shadow;
+    } else {
+      // A hemisphere light carries most of the fill so that near-white surfaces
+      // read close to their true colour instead of collapsing to grey. With an
+      // ambient-dominated rig a face turned away from the key light only sees the
+      // ambient term, so a near-white model colour (e.g. #F2EFE9) multiplied by a
+      // ~0.6 ambient came out a warm mid-grey. The hemisphere's near-white "sky"
+      // fill lifts upward-facing surfaces toward their real colour while its
+      // mid-grey "ground" keeps side/under faces darker, so the model still shows
+      // form (a visible light→shadow gradient) rather than flattening. Ambient is
+      // dropped and the two directionals trimmed so highlights and saturated
+      // colours don't clip. Positioned at +Z to match the OpenSCAD Z-up scene, so
+      // "sky" fill lands on top faces.
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 2.0);
+      hemi.position.set(0, 0, 1);
+      scene.add(hemi);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+      const key = new THREE.DirectionalLight(0xffffff, 0.5);
+      key.position.set(1, -1, 2);
+      scene.add(key);
+      const fill = new THREE.DirectionalLight(0xffffff, 0.25);
+      fill.position.set(-1, 1, 0.5);
+      scene.add(fill);
+    }
 
     const controls = new OrbitControls(cam, renderer.domElement);
     controls.enableDamping = true;
@@ -504,6 +667,11 @@ export const Viewer = forwardRef<
 
     const renderNow = () => {
       if (!visibleRef.current || !pageVisibleRef.current) return;
+      // The contact shadow's strength depends on where the camera is, so it is
+      // refreshed here — on the renders that already happen (controls "change",
+      // damping tick, resize, explicit invalidation) — instead of a loop of its
+      // own. No camera movement, no work.
+      syncShadowFade();
       renderer.render(scene, cam);
       renderCountRef.current++;
       // Test/instrumentation hook (smoke/vis): lets a script assert idle
@@ -581,6 +749,12 @@ export const Viewer = forwardRef<
         gridRef.current.geometry.dispose();
         (gridRef.current.material as THREE.Material).dispose();
       }
+      // Studio-only GPU resources: the contact shadow's render targets and the
+      // PMREM environment texture (the model's materials are covered by
+      // disposeObject above).
+      shadowRef.current?.dispose();
+      shadowRef.current = null;
+      envTexture?.dispose();
       renderer.dispose();
       // Explicitly free the WebGL context itself — dispose() alone frees GPU
       // objects (geometries/materials/textures) but keeps the context alive
@@ -609,6 +783,11 @@ export const Viewer = forwardRef<
       for (const m of themedMaterialsRef.current) m.color.copy(model);
       for (const v of themedVertexRef.current)
         retintAutoVertices(v.attr, v.original, model);
+      if (__APP_VIEWER_STYLE__ === "studio") {
+        // Environment strength and shadow weight follow the theme too.
+        scene.environmentIntensity = studioEnvIntensity();
+        shadowRef.current?.setOpacity(studioShadowOpacity());
+      }
       // Re-tint the dimension overlay too (rebuilt with the new --viewer-dim).
       syncDimensions(showDimensions);
       requestRenderRef.current(); // theme change doesn't move the camera — invalidate explicitly
@@ -625,7 +804,10 @@ export const Viewer = forwardRef<
     requestRenderRef.current();
   }, [showDimensions]);
 
-  // Show/hide the reference grid on toggle (geometry stays put).
+  // Show/hide the reference grid on toggle (geometry stays put). Invalidating a
+  // frame is the whole cost: under the studio style the contact shadow is NOT
+  // re-baked here, because the bake excludes the grid by construction (see
+  // syncGrid), so the baked texture is identical either way.
   useEffect(() => {
     syncGrid(showGrid);
     requestRenderRef.current();
@@ -656,6 +838,7 @@ export const Viewer = forwardRef<
     if (!stl || stl.length === 0) {
       modelSizeRef.current = null;
       syncDimensions(false); // drop any overlay when geometry clears
+      shadowRef.current?.setVisible(false); // no model, no shadow
       onMeasureRef.current?.(null);
       requestRenderRef.current(); // redraw the now-empty scene
       return;
@@ -680,6 +863,12 @@ export const Viewer = forwardRef<
         metalness: 0.1,
         roughness: 0.7,
       });
+      if (__APP_VIEWER_STYLE__ === "studio") {
+        // Dielectric plastic under image-based lighting — the sheen comes
+        // from the environment, not a metallic tint.
+        mat.metalness = 0;
+        mat.roughness = 0.5;
+      }
       themedMaterials.push(mat);
       obj = new THREE.Mesh(geo, mat);
     } else {
@@ -695,6 +884,32 @@ export const Viewer = forwardRef<
         // the deduplicated buffer, and the ~6× smaller buffer avoids Safari's
         // large-non-indexed-buffer corruption (garbage spikes on big models).
         mesh.geometry = toIndexedGeometry(mesh.geometry);
+        if (__APP_VIEWER_STYLE__ === "studio") {
+          // Swap the loader's Phong material(s) for PBR standard ones so the
+          // studio environment lights the mesh, copying the shading-relevant
+          // fields. flatShading stays as the loader set it (these meshes carry
+          // no normal attribute — see meshIndex.ts — and computing vertex
+          // normals here would smooth across the crisp bevels of plates and
+          // dots, so normals keep deriving per-fragment).
+          const toStandard = (old: THREE.Material): THREE.Material => {
+            const src = old as THREE.MeshPhongMaterial;
+            const std = new THREE.MeshStandardMaterial({
+              color: src.color.clone(),
+              vertexColors: old.vertexColors,
+              flatShading: src.flatShading === true,
+              transparent: old.transparent,
+              opacity: old.opacity,
+              side: old.side,
+              metalness: 0,
+              roughness: 0.45,
+            });
+            old.dispose();
+            return std;
+          };
+          mesh.material = Array.isArray(mesh.material)
+            ? mesh.material.map(toStandard)
+            : toStandard(mesh.material);
+        }
         const attr = mesh.geometry.getAttribute("color") as
           | THREE.BufferAttribute
           | undefined;
@@ -732,6 +947,24 @@ export const Viewer = forwardRef<
     modelSizeRef.current = size.clone();
     syncDimensions(showDimensions); // refresh the overlay for the new bounds
     onMeasureRef.current?.({ x: size.x, y: size.y, z: size.z });
+
+    // Re-bake the contact shadow under the new geometry. Baking renders into
+    // the shadow's own targets only, so the on-screen frame (and the idle
+    // render counter) is untouched; the grid and overlays are hidden during
+    // the bake so only the model casts.
+    if (__APP_VIEWER_STYLE__ === "studio") {
+      const shadow = shadowRef.current;
+      const renderer = rendererRef.current;
+      if (shadow && renderer) {
+        const groundZ = __APP_REST_ON_GRID__ ? 0 : -size.z / 2;
+        shadowGroundZRef.current = groundZ;
+        shadow.setFootprint(size, groundZ);
+        shadow.setOpacity(studioShadowOpacity());
+        shadow.setVisible(true);
+        syncShadowFade(); // the ground plane may have moved under a still camera
+        shadow.bake(renderer, scene, [gridRef.current, dimGroupRef.current]);
+      }
+    }
 
     // Reframe when the design changed — and, on desktop (reframeOnPreset), when
     // the preset changed too — or on the first model. A re-render from the same

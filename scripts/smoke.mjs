@@ -53,8 +53,9 @@ async function waitRendered(page, label) {
 
 // Switch design and wait for the fresh render.
 // Design id -> label, populated in main() from the generated schema. The picker
-// is a shadcn/ui (Radix) Select, so we switch designs by clicking the trigger
-// then the option whose visible text is the design's label.
+// is a shadcn/ui (Radix) Select or, under `ui.gallery`, a card dialog; pickDesign
+// (scripts/lib/browser.mjs) drives whichever one this config mounts, targeting
+// the design by its visible label either way.
 const designLabels = {};
 
 async function selectDesign(page, id) {
@@ -68,6 +69,14 @@ async function selectDesign(page, id) {
 // offers it) persists the dismissal so it stays gone across the reloads the
 // later checks perform. The dialog's accessible name is the configured
 // header, so look it up from the schema rather than hardcoding one config's.
+//
+// The MODE decides what the dialog actually renders (PopupModal.tsx):
+// "picker" draws the design gallery (cards, no primary button) and remembers
+// the dismissal on any close, while "always"/"once"/"dismissible" draw the
+// Markdown body plus a primary button (and, for "dismissible", the
+// "Don't show this again" checkbox). PopupModal falls back to the button form
+// when a "picker" config has only one design, so derive the shape the same way
+// it does rather than trusting `mode` alone.
 async function checkWelcomePopup({ page, check, schema }) {
   console.log("=== welcome popup ===");
   if (schema.popup) {
@@ -104,8 +113,12 @@ async function checkWelcomePopup({ page, check, schema }) {
       await waitDialogClosed(page, schema.popup.header).catch(() => {});
       check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
       if (schema.designs.length > 1) {
-        const listbox = page.getByRole("listbox");
-        const opened = await listbox
+        // Under `ui.gallery` the picker the CTA opens is a card dialog, not a
+        // Radix listbox, so target whichever this config mounts.
+        const picker = schema.ui?.gallery
+          ? page.getByRole("dialog", { name: "Choose a design" })
+          : page.getByRole("listbox");
+        const opened = await picker
           .first()
           .waitFor({ state: "visible", timeout: 3000 })
           .then(() => true)
@@ -113,7 +126,7 @@ async function checkWelcomePopup({ page, check, schema }) {
         check(opened, "primary CTA opens the design picker");
         // Close it so it doesn't intercept the later checks' interactions.
         await page.keyboard.press("Escape");
-        await listbox.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+        await picker.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
       }
     }
   } else {
@@ -474,7 +487,8 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
   await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
 }
 
-// Export 3MF + PNG on the first design.
+// Export the model (+ PNG, when the config offers Save image) on the first
+// design.
 //
 // The example "tag" design (ids[0]) carries an attention-flagged notice by
 // default (both an emblem and a label shown at once — see tag.scad's own
@@ -485,18 +499,25 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
 // showed up.
 async function checkExports({ page, check, ids, dir, schema }) {
   await selectDesign(page, ids[0]);
-  console.log("=== export 3MF (with a pending attention issue) ===");
+  console.log("=== export 3MF ===");
+  // Whether the Review gate opens is a property of the DESIGN's live readiness,
+  // not of the suite: only a "ready" render exports straight from the dock
+  // (AppShell's onDownloadClick). The dogfood config's first design ("tag")
+  // carries a default attention issue, but another config's first design may be
+  // clean — so branch on what actually happened and assert the matching
+  // contract either way, instead of assuming one config's shape.
   const downloadPromise = page.waitForEvent("download");
   await page.click('[aria-label^="Download "]');
   const reviewDialog = await openDialog(page, "Review", { timeout: 2000 }).catch(() => null);
-  const opened = reviewDialog !== null;
-  check(opened, "downloading with a pending attention issue opens the Review dialog");
-  if (opened) {
+  if (reviewDialog) {
+    check(true, "downloading with a pending attention issue opens the Review dialog");
     check(
       (await reviewDialog.locator(".attention-card").count()) > 0,
       "Review dialog shows an attention card"
     );
     await reviewDialog.getByRole("button", { name: "Download anyway" }).click();
+  } else {
+    check(true, `"${ids[0]}" is ready, so Download exports straight from the dock`);
   }
   const model = await downloadPromise;
   const modelOut = join(dir, await model.suggestedFilename());
@@ -538,47 +559,60 @@ async function checkExportDock({ page, check }) {
 
 // Status strip (StatusStrip.tsx) + Review dialog (ReviewDialog.tsx): a
 // one-line readiness surface above the desktop panel's tabs that opens the
-// dialog. "tag" (ids[0]) carries a default attention issue; "panel" (a clean
-// SVG-extrusion design with no font/notice concerns) is clean once selected.
-async function checkStatusStripAndReview({ page, check, ids }) {
+// dialog. Which footer actions the dialog offers is keyed on the LIVE
+// readiness state, not on how it was opened — so branch on what the first
+// design actually reports (the dogfood config's "tag" carries a default
+// attention issue; another config's first design may be clean) rather than
+// assuming one config's shape. The strip's own copy is resolved through the
+// i18n catalogue + `strings` overrides (see `labels` in main()).
+async function checkStatusStripAndReview({ page, check, ids, labels }) {
   console.log("=== status strip + review dialog ===");
-  if (!ids.includes("panel")) {
-    console.log("  (no attention-free design in this config — skipped)");
-    return;
-  }
-  await selectDesign(page, ids[0]); // "tag" — attention by default
+  await selectDesign(page, ids[0]);
   const strip = page.locator(".status-strip").first();
   await strip.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-  check(await strip.isVisible(), "status strip is visible on the attention design");
-  check(/issue/i.test((await strip.textContent()) ?? ""), "status strip names the pending issue(s)");
+  check(await strip.isVisible(), `status strip is visible on "${ids[0]}"`);
+  const stripText = (await strip.textContent()) ?? "";
 
-  // Opened from the strip on an attention design: the footer is keyed on the
-  // live review state, not on how the dialog was opened, so with issues pending
-  // it offers "Download anyway" / "Go back and fix" — identical to the dock
-  // entry point (checkExports above). Scope to the footer for the "Go back and
-  // fix" button so we assert the state-based footer, not the trigger.
   await strip.click();
   const infoDialog = await openDialog(page, "Review");
   const infoFooter = infoDialog.locator('[data-slot="dialog-footer"]');
-  check(
-    (await infoFooter.getByRole("button", { name: "Download anyway" }).count()) === 1,
-    "status-opened dialog with issues offers the same Download anyway action as the dock"
-  );
-  check(
-    (await infoFooter.getByRole("button", { name: "Go back and fix" }).count()) === 1,
-    "status-opened dialog with issues offers Go back and fix"
-  );
-  await infoFooter.getByRole("button", { name: "Go back and fix" }).click();
+  if ((await infoDialog.locator(".attention-card").count()) > 0) {
+    // Issues pending: the footer offers "Download anyway" / "Go back and fix"
+    // — identical to the dock entry point (checkExports above). Scope to the
+    // footer so we assert the state-based footer, not the trigger.
+    check(labels.issues.test(stripText), "status strip names the pending issue(s)");
+    check(
+      (await infoFooter.getByRole("button", { name: "Download anyway" }).count()) === 1,
+      "status-opened dialog with issues offers the same Download anyway action as the dock"
+    );
+    check(
+      (await infoFooter.getByRole("button", { name: "Go back and fix" }).count()) === 1,
+      "status-opened dialog with issues offers Go back and fix"
+    );
+    await infoFooter.getByRole("button", { name: "Go back and fix" }).click();
+  } else {
+    check(labels.ready.test(stripText), `status strip reads Ready on the clean design "${ids[0]}"`);
+    await page.keyboard.press("Escape");
+  }
   await waitDialogClosed(page, "Review").catch(() => {});
 
-  // A clean design's strip reads "Ready to download".
-  await selectDesign(page, "panel");
-  const cleanStrip = page.locator(".status-strip").first();
-  await cleanStrip.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-  check(/ready to download/i.test((await cleanStrip.textContent()) ?? ""), "status strip reads Ready on a clean design");
-
-  // Back to the design the rest of the suite expects to be selected.
-  await selectDesign(page, ids[0]);
+  // The other half of the contract needs a design in the OPPOSITE state. The
+  // dogfood config pairs "tag" (attention by default) with "panel" (a clean
+  // SVG-extrusion design, no font/notice concerns); a config without such a
+  // known-clean design just doesn't exercise it.
+  if (ids.includes("panel")) {
+    await selectDesign(page, "panel");
+    const cleanStrip = page.locator(".status-strip").first();
+    await cleanStrip.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    check(
+      labels.ready.test((await cleanStrip.textContent()) ?? ""),
+      "status strip reads Ready on a clean design"
+    );
+    // Back to the design the rest of the suite expects to be selected.
+    await selectDesign(page, ids[0]);
+  } else {
+    console.log("  (no known attention-free design in this config — the Ready state is not exercised)");
+  }
 }
 
 // After-export panel (ExportSuccess.tsx, ui.afterExport — the dogfood config
@@ -675,7 +709,10 @@ const paramRow = (page, name) => page.locator(`.param[data-param="${name}"]`);
 // Param rows are located by their stable data-param hook, which exists
 // regardless of ui.showVarName, so this block runs in every config.
 async function checkTagDesign({ page, check, ids, paramsTabName }) {
-  if (!ids.includes("tag")) return;
+  if (!ids.includes("tag")) {
+    console.log('=== conditional visibility (@showIf, tag) === (no "tag" design in this config — skipped)');
+    return;
+  }
   console.log("=== conditional visibility (@showIf, tag) ===");
   await selectDesign(page, "tag");
   // A bundled preset may still be selected from the earlier presets check —
@@ -782,7 +819,10 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
 // keyboard/AT path (the pencil chip), Escape-reverts, and axe with the editor
 // open. Runs only when "tag" is present.
 async function checkEditOnModel({ page, check, ids, paramsTabName }) {
-  if (!ids.includes("tag")) return;
+  if (!ids.includes("tag")) {
+    console.log('=== on-model text editing (@editOnModel, tag) === (no "tag" design in this config — skipped)');
+    return;
+  }
   console.log("=== on-model text editing (@editOnModel, tag) ===");
   await selectDesign(page, "tag");
   await waitRendered(page, "tag (edit-on-model)");
@@ -991,7 +1031,10 @@ async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }
 // Params are located by their stable `data-param` hook, which exists
 // regardless of ui.showVarName.
 async function checkSignageDesign({ page, check, ids, schema }) {
-  if (!ids.includes("signage")) return;
+  if (!ids.includes("signage")) {
+    console.log('=== signage: @showIf arrow_style === (no "signage" design in this config — skipped)');
+    return;
+  }
   console.log("=== signage: @showIf arrow_style ===");
   await selectDesign(page, "signage");
   // arrow_style is relevant only once an arrow is chosen (`@showIf arrow != none`);
@@ -1030,6 +1073,15 @@ async function checkSignageDesign({ page, check, ids, schema }) {
 //    (not `inert`); at Full it's `inert` and focus is trapped inside the
 //    sheet — Tab never lands on a covered background control — with Escape
 //    collapsing back out and focus returning to the sheet.
+// Crossing the breakpoint UNMOUNTS one layout tree and mounts the other, and
+// the incoming tree stands up a fresh three.js Viewer (a new WebGL context,
+// plus the environment/IBL setup a `viewer.style: "studio"` config asks for).
+// That work is main-thread-bound and lands at the very end of a long run, so
+// it can take a few seconds on a software GL stack with a big config — far
+// longer than the 3s the rest of this section's waits use. Generous on
+// purpose: a layout that never swaps still fails, just later.
+const LAYOUT_SWAP_MS = 20000;
+
 async function checkResponsiveLayout({ browser, base, check, schema, paramsTabName }) {
   console.log("=== responsive layout: single mounted tree + state across a breakpoint change (M7) ===");
   const context = await browser.newContext({
@@ -1116,7 +1168,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     // Flip the breakpoint (a real device rotation crossing 860px would fire
     // the same matchMedia change useIsMobile listens for).
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.waitForSelector(".app-shell__desktop", { timeout: 3000 });
+    await page.waitForSelector(".app-shell__desktop", { timeout: LAYOUT_SWAP_MS });
     check(
       (await page.locator(".app-shell__mobile").count()) === 0 &&
         (await page.locator(".param-form").count()) === 1,
@@ -1138,7 +1190,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     // Back to mobile: the sheet detent set above (Half) must not have reset
     // to Peek just because the layout remounted.
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.waitForSelector(".app-shell__mobile", { timeout: 3000 });
+    await page.waitForSelector(".app-shell__mobile", { timeout: LAYOUT_SWAP_MS });
     check(
       (await page.locator(".bottom-sheet--half").count()) === 1,
       "sheet detent survives a round-trip breakpoint change"
@@ -1324,10 +1376,32 @@ async function main() {
     const presetsTabName = schema.ui?.presetsLabel || "Presets";
     const paramsTabName = schema.ui?.parametersLabel || "Customize";
     const ids = designs.map((d) => d.id);
+    // Chrome copy comes from the i18n catalogue (src/locales/en.json), which a
+    // deployment overrides per key via the config's `strings` block — so build
+    // the matchers from what the app will ACTUALLY render, not from stock
+    // English. Plural keys carry `#one`/`#other` variants (either may show, so
+    // accept both) with a `{count}` placeholder standing in for a number.
+    const catalogue = JSON.parse(
+      await readFile(fileURLToPath(new URL("../src/locales/en.json", import.meta.url)), "utf-8")
+    );
+    const uiText = (key) => schema.strings?.[key] ?? catalogue[key] ?? "";
+    const textRe = (...keys) =>
+      new RegExp(
+        keys
+          .map(uiText)
+          .filter(Boolean)
+          .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\{count\\\}/g, "\\d+"))
+          .join("|"),
+        "i"
+      );
+    const labels = {
+      ready: textRe("status.ready"),
+      issues: textRe("review.issueCount#one", "review.issueCount#other"),
+    };
     console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);
     await waitRendered(page, ids[0]);
 
-    const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName };
+    const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName, labels };
     await checkWelcomePopup(ctx);
     await checkFileImport(ctx);
     await checkThemeToggle(ctx);

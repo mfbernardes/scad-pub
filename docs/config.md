@@ -24,6 +24,7 @@ This representative config shows the major surfaces. The sections below define e
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
   "restOnGrid": false,            // rest the model's base on the z=0 grid instead of centring in Z; default false
+  "viewer": { "style": "plain" }, // viewer presentation: "plain" (default) or "studio"
   "fileImport": true              // optional Files dialog (manages imported fonts/SVGs)
 }
 ```
@@ -100,6 +101,7 @@ These keys affect render arguments, bundled fonts, and cache behavior:
 - **`features`**: applied to all designs as `--enable=<feature>`
 - **`format`**: the model format OpenSCAD exports and the viewer parses, fixed at build time. `"3mf"` is the default and carries per-object colour from each design's `color(...)` calls. `"stl"` is geometry-only. Changing it invalidates the render cache automatically
 - **`restOnGrid`**: how the viewer frames a loaded model, fixed at build time. `false` (the default) centres the model on the origin in all three axes, as it always has. `true` centres it in X/Y but rests its base on the `z=0` grid plane, which suits designs modelled with their base on `z=0` (as OpenSCAD designs typically are) where centring in Z would sink them half-way through the grid. Display-only: it does not change the exported file or the render cache
+- **`viewer`**: the 3D viewer's presentation, fixed at build time. Its only key is `style`, which picks the look: `"plain"` (the default) is the classic CAD preview with the flat light rig, while `"studio"` lights the model with an image-based studio environment, tone mapping, and a soft contact shadow under the model — a product-shot treatment that emphasises materials and relief. Display-only: it does not change the exported file or the render cache. The reference grid is **not** configured here — it is a runtime toggle the visitor owns, seeded by [`ui.grid`](#ui-behaviour-and-pwa). A `"studio"` deployment usually wants `"ui": { "grid": "off" }` so the model reads as a product against a clean backdrop rather than as a CAD part
 - **`fonts`** / **`fontFallback`**: see [Fonts](#fonts-fonts-fontfallback)
 - **`render`**: optional render tuning for the heavy-render threshold and cache sizing. See [Render tuning](#render-tuning-render)
 
@@ -257,7 +259,7 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--elevation` | drop shadow on raised surfaces (a `box-shadow`, not a colour) |
 | `--radius` / `--radius-sm` | corner radius, base and small (a length, not a colour) |
 | `--font-sans` / `--font-display` | UI font stacks: body text / the display voice (brand, headings, tabs, buttons). Unquoted family names only (e.g. `Georgia, serif`); set them under `dark` (the `:root` block) to apply to both themes |
-| `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid |
+| `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid (the grid renders only while the viewer's grid toggle is on — seeded by `ui.grid`, then the visitor's own choice) |
 | `--viewer-model` | rendered model material colour |
 
 `--accent` and `--accent-solid` are separate tokens because the same colour rarely passes WCAG AA both as small text on `--panel` and as a filled button background.

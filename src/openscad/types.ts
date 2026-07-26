@@ -9,6 +9,13 @@ export type ParamValue = number | string | boolean;
  */
 export type ModelFormat = "3mf" | "stl";
 
+/**
+ * The viewer's presentation, chosen at build time in the config. "plain" (the
+ * default) is the classic CAD preview; "studio" adds image-based studio
+ * lighting, tone mapping, and a soft contact shadow for a product-shot look.
+ */
+export type ViewerStyle = "plain" | "studio";
+
 export interface RenderRequest {
   id: number;
   design: string; // a design id, e.g. "nameplate"
@@ -567,6 +574,13 @@ export interface Schema {
    * all three axes. Build-time, display-only — it doesn't affect the export.
    */
   restOnGrid: boolean;
+  /**
+   * Build-time viewer presentation: `style` picks the look ("plain" default,
+   * "studio" for the product-shot treatment). Display-only — never affects the
+   * exported bytes or the render cache. The reference grid is NOT part of this:
+   * it's a runtime toggle seeded by `ui.grid` (see src/lib/viewerPrefs.ts).
+   */
+  viewer: { style: ViewerStyle };
   /** OpenSCAD experimental features to --enable for every render. */
   features: string[];
   /** Optional build-time render tuning (heavy-render threshold + cache sizing).

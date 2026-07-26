@@ -116,6 +116,44 @@ export function parseRestOnGrid(raw) {
   return raw;
 }
 
+// The viewer presentation styles a config may pick via `viewer.style`.
+export const VIEWER_STYLES = ["plain", "studio"];
+
+// Validate the optional `viewer` config key — the 3D viewer's presentation,
+// fixed at build time. Its only key is `style`, which picks the look: "plain"
+// (the default) is the classic CAD preview; "studio" adds image-based studio
+// lighting, tone mapping, and a soft contact shadow under the model for a
+// product-shot look. Display-only: it doesn't affect the exported bytes, so —
+// like restOnGrid — it stays out of renderHash.
+//
+// The reference grid is deliberately NOT configured here. It is a runtime
+// toggle the visitor owns, seeded once by `ui.grid` and persisted thereafter
+// (see parseUi and src/lib/viewerPrefs.ts); a build-time gate here would make
+// that toggle a no-op. A config still passing `viewer.grid` therefore fails as
+// an unknown key rather than being silently ignored.
+export function parseViewer(raw) {
+  const out = { style: "plain" };
+  if (raw == null) return out;
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error(
+      `config.viewer must be an object with an optional 'style' key (got ${JSON.stringify(raw)})`
+    );
+  for (const key of Object.keys(raw))
+    if (key !== "style")
+      throw new Error(
+        `config.viewer: unknown key '${key}' (valid keys: style)` +
+          (key === "grid" ? " — the reference grid is now seeded by 'ui.grid'" : "")
+      );
+  if (raw.style != null) {
+    if (!VIEWER_STYLES.includes(raw.style))
+      throw new Error(
+        `config.viewer.style must be one of ${VIEWER_STYLES.map((s) => `"${s}"`).join(", ")} (got ${JSON.stringify(raw.style)})`
+      );
+    out.style = raw.style;
+  }
+  return out;
+}
+
 // Validate and normalise the optional `colors` config block into
 // { light?: {token: value}, dark?: {token: value} }. Unknown tokens and unsafe
 // values fail the build with a clear message (consistent with gen-schema's other

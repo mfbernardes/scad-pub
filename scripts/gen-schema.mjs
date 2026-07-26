@@ -54,6 +54,7 @@ import {
   parseRender,
   parseStrings,
   parseUi,
+  parseViewer,
 } from "./lib/config-parsers.mjs";
 
 // Re-export the parsers/helpers the unit tests (tests/gen-schema.test.mjs)
@@ -72,6 +73,7 @@ export {
   parseRender,
   parseStrings,
   parseUi,
+  parseViewer,
 } from "./lib/config-parsers.mjs";
 export { parseFontFallback, renderFontsConf, fontFamilyNames } from "./lib/fonts.mjs";
 export { firstSentence, parseEnumHint, parseParams } from "./lib/params.mjs";
@@ -93,7 +95,7 @@ export const KNOWN_TOP_LEVEL_KEYS = new Set([
   // Rendering
   "features", "format", "restOnGrid", "fonts", "fontFallback", "render",
   // Appearance & UI behaviour
-  "logo", "colors", "extraCss", "ui", "fileImport",
+  "logo", "colors", "extraCss", "ui", "viewer", "fileImport",
   // In-app content
   "popup", "help", "notices", "licenses",
   // UI text overrides
@@ -740,6 +742,9 @@ export function generate({
   const FEATURES = parseStringArray(config.features, "features");
   const FORMAT = parseFormat(config.format);
   const REST_ON_GRID = parseRestOnGrid(config.restOnGrid);
+  // Optional viewer presentation (style + grid). Display-only, like restOnGrid,
+  // so it reaches the schema without touching renderHash.
+  const VIEWER = parseViewer(config.viewer);
   // Optional build-time render tuning (heavy-render threshold + cache sizing).
   // Validated; absent -> null -> the app keeps its built-in defaults.
   const RENDER = parseRender(config.render);
@@ -953,6 +958,7 @@ export function generate({
     logo,
     format: FORMAT,
     restOnGrid: REST_ON_GRID,
+    viewer: VIEWER,
     features: FEATURES,
     render: RENDER,
     fonts: FONTS,
