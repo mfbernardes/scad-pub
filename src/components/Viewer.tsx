@@ -135,8 +135,6 @@ export const Viewer = forwardRef<
   viewRef.current = view;
   // Latest grid visibility, read inside the [theme]-only effect (which rebuilds
   // the grid for the new colours) without adding showGrid to its deps.
-  const showGridRef = useRef(showGrid);
-  showGridRef.current = showGrid;
   // Keep the latest onMeasure without re-running the [stl]-only geometry effect.
   const onMeasureRef = useRef(onMeasure);
   onMeasureRef.current = onMeasure;
@@ -602,9 +600,9 @@ export const Viewer = forwardRef<
     const raf = requestAnimationFrame(() => {
       scene.background = cssColor("--viewer-bg", "#0f1115");
       // Rebuilt (not just recoloured) so a live theme switch picks up the new
-      // --viewer-grid/-2 values; syncGrid reads showGridRef so this effect
-      // itself doesn't need showGrid in its deps.
-      syncGrid(showGridRef.current);
+      // --viewer-grid/-2 values. Read fresh from the closure, like
+      // showDimensions below; the [showGrid] effect handles plain toggles.
+      syncGrid(showGrid);
       // Recolour any uncoloured geometry so it follows a live theme switch; the
       // model's own explicit colours are left untouched.
       const model = cssColor("--viewer-model", "#6f93ff");

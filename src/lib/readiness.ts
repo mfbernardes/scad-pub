@@ -163,13 +163,14 @@ export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] 
   for (const text of inputs.diagnostics ?? []) {
     items.push({ kind: "diagnostic", text });
   }
-  const hasFontFallback = fontFallbackCount > 0;
-  // Ambiguous when 2+ fonts are missing at once (visible or hidden): the
-  // notices can't be attributed to one of them, so they stand on their own.
-  const unambiguousFontFallback = missingFontCount === 1;
   for (const n of inputs.notices) {
     if (!n.attention || n.count <= 0) continue;
-    if (hasFontFallback && n.subsumedByFont && unambiguousFontFallback) continue;
+    // Fold a symptom notice into the font-fallback item only when there's a
+    // visible fallback to fold into (fontFallbackCount > 0) AND exactly one
+    // font is missing overall (missingFontCount === 1), so it's unambiguous
+    // which font the notice is about. 2+ missing fonts — visible or hidden —
+    // leave it standing on its own.
+    if (n.subsumedByFont && fontFallbackCount > 0 && missingFontCount === 1) continue;
     const label = n.count === 1 && n.labelOne ? n.labelOne : n.label;
     items.push({ kind: "notice", marker: n.marker, label, count: n.count });
   }
