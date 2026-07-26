@@ -139,21 +139,24 @@ export interface DeriveAttentionInputs {
  */
 export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] {
   const items: AttentionItem[] = [];
-  // How many font params the design declares at all, and how many actually
-  // fell back this render. Counted separately from `items.length`, which also
-  // accumulates diagnostic items below.
-  const fontParamCount = inputs.params.filter(
-    (p) => (p.type === "string" || p.type === "enum") && p.isFont
-  ).length;
+  // `fontFallbackCount` is the visible missing fonts — each one gets its own
+  // attention card. `missingFontCount` is EVERY missing font, including
+  // `@showIf`-hidden ones: a hidden control's value is still sent to OpenSCAD,
+  // so a hidden missing font can be the real cause of a subsumable notice even
+  // though it shows no card. Ambiguity is judged on the latter — otherwise a
+  // notice caused by a second, hidden missing font would be folded away with no
+  // card left to carry it.
   let fontFallbackCount = 0;
+  let missingFontCount = 0;
   for (const p of inputs.params) {
     if ((p.type !== "string" && p.type !== "enum") || !p.isFont) continue;
-    if (!isVisible(p, inputs.values)) continue;
     const value = String(inputs.values[p.name] ?? "");
     const family = familyOf(value);
     if (!family) continue; // a cleared control, not a missing font
     if (!inputs.availableFontFamilies.size) continue;
     if (inputs.availableFontFamilies.has(normalizeFamily(family))) continue;
+    missingFontCount++;
+    if (!isVisible(p, inputs.values)) continue; // counts toward ambiguity, but no card
     items.push({ kind: "font-fallback", param: p.name, family });
     fontFallbackCount++;
   }
@@ -161,9 +164,9 @@ export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] 
     items.push({ kind: "diagnostic", text });
   }
   const hasFontFallback = fontFallbackCount > 0;
-  // Ambiguous when a multi-font design has 2+ fonts missing at once: the
+  // Ambiguous when 2+ fonts are missing at once (visible or hidden): the
   // notices can't be attributed to one of them, so they stand on their own.
-  const unambiguousFontFallback = fontParamCount === 1 || fontFallbackCount === 1;
+  const unambiguousFontFallback = missingFontCount === 1;
   for (const n of inputs.notices) {
     if (!n.attention || n.count <= 0) continue;
     if (hasFontFallback && n.subsumedByFont && unambiguousFontFallback) continue;

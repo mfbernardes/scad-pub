@@ -294,6 +294,23 @@ test("deriveAttention: a subsumedByFont category IS folded when a multi-font des
   assert.deepEqual(items, [{ kind: "font-fallback", param: "font", family: "No Such Font" }]);
 });
 
+test("deriveAttention: a subsumedByFont category is NOT folded when a second, @showIf-hidden font is also missing", () => {
+  // The hidden font shows no fallback card, but its value still reaches
+  // OpenSCAD, so it can be the real cause of the notice. Two fonts are missing,
+  // so which one the notice is about is ambiguous — keep the notice listed, or
+  // it would vanish with no card left to carry it.
+  const items = deriveAttention({
+    params: [fontParam(), fontParam({ name: "font2", showIf: "show_text" })],
+    values: { font: "No Such Font", font2: "Also Missing", show_text: false },
+    availableFontFamilies: LOADED,
+    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 2 }],
+  });
+  assert.deepEqual(items, [
+    { kind: "font-fallback", param: "font", family: "No Such Font" },
+    { kind: "notice", marker: "alert", label: "alerts", count: 2 },
+  ]);
+});
+
 test("deriveAttention: font fallbacks come before flagged notices, and notices keep config order", () => {
   const items = deriveAttention({
     params: [fontParam()],
