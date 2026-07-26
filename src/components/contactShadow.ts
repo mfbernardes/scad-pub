@@ -7,6 +7,13 @@
 // example, adapted to this viewer's Z-up world. Baking only on geometry swap
 // keeps the per-frame cost at zero, so the invalidation-driven render loop
 // (and the smoke test's idle render-count check) is unaffected.
+//
+// Being a flat texture, the shadow only reads as a shadow while the camera
+// looks down onto the ground plane; orbiting under the model would otherwise
+// leave a dark blob hanging in space. So the viewer feeds it a camera-elevation
+// fade (setFade / shadowViewFade) alongside the theme's base strength
+// (setOpacity) — see applyOpacity below. The fade is recomputed only on the
+// renders that already happen, never on a timer.
 import * as THREE from "three";
 import { HorizontalBlurShader } from "three/examples/jsm/shaders/HorizontalBlurShader.js";
 import { VerticalBlurShader } from "three/examples/jsm/shaders/VerticalBlurShader.js";
@@ -28,14 +35,50 @@ const GROUND_OFFSET = 0.05;
 // the ground would otherwise have its base faces — the main shadow casters —
 // clipped away on the camera's near plane.
 const CAM_EPSILON = 0.1;
+// View-fade window, in degrees of camera elevation above the ground plane. A
+// baked shadow is only convincing while it is seen as marking on a floor: at a
+// grazing angle it foreshortens into a dark bar, and from below it is a blob
+// hanging in mid-air. So it fades out over this band and is gone at or below
+// the plane. The lower bound sits a touch above 0° so the shadow is already
+// invisible by the time the camera crosses the plane.
+const FADE_START_DEG = 4;
+const FADE_FULL_DEG = 22;
+
+/**
+ * The shadow's view-fade factor (0…1) for a camera at `camera` looking at a
+ * ground plane at z = `groundZ` under the shadow's centre (x = y = 0).
+ * Smoothstep over the camera's angular elevation above that plane, so the
+ * shadow is full-strength from any comfortably raised viewpoint, fades as the
+ * view grazes the plane, and is fully gone from below it. Pure math, exported
+ * for the viewer's per-render sync (and its tests).
+ */
+export function shadowViewFade(
+  camera: { x: number; y: number; z: number },
+  groundZ: number
+): number {
+  const dz = camera.z - groundZ;
+  const dist = Math.hypot(camera.x, camera.y, dz);
+  if (!(dist > 0)) return 0;
+  const sin = Math.min(1, Math.max(-1, dz / dist));
+  const deg = (Math.asin(sin) * 180) / Math.PI;
+  const t = (deg - FADE_START_DEG) / (FADE_FULL_DEG - FADE_START_DEG);
+  const c = Math.min(1, Math.max(0, t));
+  return c * c * (3 - 2 * c); // smoothstep
+}
 
 export interface ContactShadow {
   /** The ground-plane group; add to the scene once. */
   group: THREE.Group;
   /** Fit the shadow plane under a model's bounds (mm) with its base at groundZ. */
   setFootprint(size: { x: number; y: number; z: number }, groundZ: number): void;
-  /** Overall shadow strength (the display plane's opacity), e.g. per theme. */
+  /** Base shadow strength, e.g. per theme. Multiplied by the current fade. */
   setOpacity(opacity: number): void;
+  /**
+   * View-dependent multiplier on the base opacity (0…1, see shadowViewFade).
+   * Kept separate from setOpacity so the theme effect and the per-render view
+   * sync can each own their factor without overwriting the other's.
+   */
+  setFade(fade: number): void;
   /** Show/hide the shadow (hidden while no model is loaded). */
   setVisible(visible: boolean): void;
   /**
@@ -52,6 +95,14 @@ export interface ContactShadow {
 export function createContactShadow(): ContactShadow {
   const group = new THREE.Group();
   group.visible = false;
+
+  // The display opacity is the product of two independently-owned factors: the
+  // theme's base strength (setOpacity) and the camera-elevation fade
+  // (setFade). Held separately so neither caller clobbers the other — the
+  // theme effect and a geometry swap both re-assert the base while the view
+  // fade is being driven every render.
+  let baseOpacity = 0.42;
+  let viewFade = 1;
 
   const shadowTarget = new THREE.WebGLRenderTarget(RT_SIZE, RT_SIZE);
   shadowTarget.texture.generateMipmaps = false;
@@ -74,6 +125,13 @@ export function createContactShadow(): ContactShadow {
   const plane = new THREE.Mesh(planeGeo, planeMat);
   plane.renderOrder = 1;
   group.add(plane);
+
+  const applyOpacity = () => {
+    const eff = baseOpacity * viewFade;
+    planeMat.opacity = eff;
+    // Fully faded: skip the draw entirely rather than blending a no-op quad.
+    plane.visible = eff > 0.001;
+  };
 
   // Full-frustum quad the blur passes render through (shares the unit geometry;
   // scaled alongside the display plane so it always fills the shadow camera).
@@ -161,7 +219,14 @@ export function createContactShadow(): ContactShadow {
       shadowCam.updateProjectionMatrix();
     },
     setOpacity(opacity) {
-      planeMat.opacity = opacity;
+      baseOpacity = opacity;
+      applyOpacity();
+    },
+    setFade(fade) {
+      const next = Math.min(1, Math.max(0, fade));
+      if (next === viewFade) return; // no material churn while the camera idles
+      viewFade = next;
+      applyOpacity();
     },
     setVisible(visible) {
       group.visible = visible;
