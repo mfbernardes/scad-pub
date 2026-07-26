@@ -24,7 +24,7 @@ This representative config shows the major surfaces. The sections below define e
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
   "restOnGrid": false,            // rest the model's base on the z=0 grid instead of centring in Z; default false
-  "fileImport": true              // optional "Import file" button
+  "fileImport": true              // optional Files dialog (manages imported fonts/SVGs)
 }
 ```
 
@@ -110,7 +110,7 @@ These keys control branding, theme overrides, and interactive controls:
 - **`colors`**: optional per-theme Cascading Style Sheets (CSS) colour overrides. See [Theme and colour scheme](#theme-and-colour-scheme)
 - **`extraCss`**: optional raw-CSS escape hatch for advanced restyling. See [Custom CSS](#custom-css-extracss)
 - **`ui`**: see [UI behaviour and PWA](#ui-behaviour-and-pwa)
-- **`fileImport`**: see [Import file button](#import-file-fileimport)
+- **`fileImport`**: see [file import](#import-file-fileimport)
 - **`strings`**: optional per-deployment overrides of the built-in UI text. See [Text overrides (`strings`)](#text-overrides-strings)
 
 ### In-app content
@@ -312,7 +312,7 @@ ScadPub's own chrome text — the status strip, the Review dialog, attention car
 
 ## Import file (`fileImport`)
 
-Designs sometimes need a file the app cannot bundle, such as a license-restricted font, an SVG to `import()`, or a `surface()` data file. Setting `fileImport` adds a **Files** action to the toolbar (an icon in the desktop command bar's action cluster, a row in the mobile "⋮" menu) that opens the **Files dialog**. You can supply those files at runtime, entirely client-side. Nothing is uploaded to a server.
+Designs sometimes need a file the app cannot bundle, such as a license-restricted font or an SVG to `import()`. Setting `fileImport` adds a **Files** action to the toolbar (an icon in the desktop command bar's action cluster, a row in the mobile "⋮" menu) that opens the **Files dialog** — the manager for files imported at runtime, entirely client-side, with nothing uploaded to a server. Only fonts and SVGs have an import route (see [How uploads reach OpenSCAD](#how-uploads-reach-openscad)); a `surface()`/`import()` data file that no `@font`/`@svg` parameter points at has no import affordance and must ship as a bundled [asset](#design-sources) instead.
 
 Importing is **contextual** — it happens at the control that needs the file, not through a generic button:
 

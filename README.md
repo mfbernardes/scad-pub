@@ -51,7 +51,7 @@ ScadPub packages the configurator, renderer, offline shell, and export flow into
 ```text
 examples/           self-contained example design (default source)
   tag.scad          embossed text (font) + an extruded SVG emblem
-  emblem.svg        default emblem the tag imports (swap via "Import file")
+  emblem.svg        default emblem the tag imports (swap via the svg_file control's Prepare SVG…)
   tag.json          bundled presets for tag.scad
 public/
   wasm/             OpenSCAD WASM (fetched, gitignored): scripts/fetch-wasm.mjs
@@ -85,7 +85,7 @@ The OpenSCAD WASM is version-pinned in `scripts/wasm-version.mjs` (`PINNED_WASM_
 
 The configuration docs cover build-time options and OpenSCAD comment annotations:
 
-See **[docs/config.md](docs/config.md)** for the full `scadpub.config.json` reference, including theme tokens, title/logo variants, and the file-import button.
+See **[docs/config.md](docs/config.md)** for the full `scadpub.config.json` reference, including theme tokens, title/logo variants, and contextual file import.
 
 See **[docs/annotations.md](docs/annotations.md)** for the `@showIf` and `@collapsed` OpenSCAD annotations.
 
