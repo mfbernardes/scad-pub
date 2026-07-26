@@ -45,6 +45,8 @@ The **licenses modal takes every version from build data**, never from a literal
 
 `src/generated/designs.json`, `public/scad/`, `public/wasm/`, the generated PWA assets (`public/manifest.webmanifest`, `public/icon.svg`, `public/icon-*.png`, `public/apple-splash-*.png`, `public/precache-manifest.json`), and `public/fonts/fonts.conf` are **gitignored / generated**. Never edit them by hand; change the config or sources and re-run. The bundled `.ttf` files under `public/fonts/` are tracked, and so is the hand-written `public/sw.js`.
 
+**Building against an external config leaves files behind.** `gen-schema` copies the active config's bundled fonts into `public/fonts/`, and since the `.ttf` files there are tracked rather than gitignored, a `SCADPUB_CONFIG=/path/to/other.json npm run build` drops that deployment's fonts into this working tree as untracked files that are easy to commit by accident. Always `git status` after building with a config other than `scadpub.config.json`, and delete anything the build added.
+
 ## Render architecture
 
 Two files, a strict client/worker split (`src/openscad/`):
