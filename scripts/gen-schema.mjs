@@ -38,6 +38,7 @@ import { createDestinationRegistry, reconcileGenerated } from "./lib/destination
 import { sanitizeSvg } from "./lib/svg-sanitize.mjs";
 import { resolveFileField } from "./lib/prose-files.mjs";
 import { splitHelpMarkdown } from "./lib/help-file.mjs";
+import { slugifyPresetNames } from "./lib/preset-slug.mjs";
 import { resolveWorkerDependencyClosure } from "./lib/worker-deps.mjs";
 import { generatePwaAssets } from "./lib/pwa-assets.mjs";
 import { scadpubVersion } from "./lib/version.mjs";
@@ -98,6 +99,11 @@ export { splitHelpMarkdown } from "./lib/help-file.mjs";
 // description — rather than hand-maintained here; re-exported (not just used
 // internally) because tests/gen-schema.test.mjs imports it directly.
 export { KNOWN_TOP_LEVEL_KEYS };
+
+// Extensions tried, in order, for a `designs[].presets.images` DIRECTORY
+// entry's per-preset lookup (see buildDesigns) — the same three image types
+// the map form documents accepting (docs/config.md).
+const PRESET_IMAGE_EXTENSIONS = [".svg", ".png", ".webp"];
 
 // Path to the bundled English UI-text catalogue (src/locales/en.json),
 // resolved relative to this file rather than the config being built — it's
@@ -370,6 +376,20 @@ function resolveDesignList(config, SOURCE) {
     }
     return raw;
   };
+  // `designs[].presets.images` alone additionally accepts a plain STRING — a
+  // config-relative directory, looked up per-preset by slug in buildDesigns
+  // (scripts/lib/preset-slug.mjs) instead of naming every preset by hand. The
+  // map form's shape check (checkStringMap above) still applies to the object
+  // form; this only adds the string branch alongside it.
+  const checkPresetImages = (raw, id) => {
+    if (raw === undefined || raw === null) return null;
+    if (typeof raw === "string") {
+      if (!raw.trim())
+        throw new Error(`gen-schema: design '${id}' 'presets.images' must be a non-empty string or object`);
+      return { kind: "dir", dir: raw.trim() };
+    }
+    return { kind: "map", map: checkStringMap(raw, id, "presets.images") };
+  };
   if (Array.isArray(config.designs) && config.designs.length) {
     // Two designs sharing an id would clobber each other's generated
     // <id>-icon/<id>-doc output and collide in storage/URLs (#d=<id>).
@@ -414,7 +434,7 @@ function resolveDesignList(config, SOURCE) {
         heavy: d.heavy ?? false,
         // Optional dropdown grouping header (designs sharing a group cluster).
         group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
-        presetImagesSrc: checkStringMap(d.presets?.images, id, "presets.images"),
+        presetImagesSrc: checkPresetImages(d.presets?.images, id),
         reviewLabelsSrc: checkStringMap(d.reviewLabels, id, "reviewLabels"),
         // Plain deployment-authored text — no annotation fallback, and no
         // cross-reference against the design's own params (unlike
@@ -501,23 +521,30 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       copyFileSync(src, dest);
       doc = `scad/${name}`;
     }
-    // Bundled-preset thumbnails (`designs[].presets.images`): each key must
-    // name an actual preset in the sibling parameterSets file — the same
-    // typo-protection stance as the rest of the config, so a stale/misspelled
-    // preset name fails the build instead of silently rendering a text-only
-    // card forever. Each value is a config-relative image path, resolved and
-    // copied into the served tree exactly like `icon`/`image`, under a
-    // deterministic `<id>-preset-<n>.<ext>` name (n = insertion order — the
-    // preset NAME itself, not the filename, is what the UI keys off of, so a
-    // stable index is enough for a reproducible build).
+    // Bundled-preset thumbnails (`designs[].presets.images`), either form:
+    //   - MAP: each key must name an actual preset in the sibling
+    //     parameterSets file — the same typo-protection stance as the rest of
+    //     the config, so a stale/misspelled preset name fails the build
+    //     instead of silently rendering a text-only card forever. Each value
+    //     is a config-relative image path, copied under a deterministic
+    //     `<id>-preset-<n>.<ext>` name (n = insertion order — the preset NAME
+    //     itself, not the filename, is what the UI keys off of).
+    //   - DIRECTORY: every bundled preset's image is looked up by slugifying
+    //     its name (scripts/lib/preset-slug.mjs) and trying the supported
+    //     extensions in turn. A preset with no matching file simply has no
+    //     image — preset images are optional per preset either way — but the
+    //     directory itself must exist, and the match count is logged so a
+    //     wrong-but-existing directory (e.g. every name misspelled) is
+    //     visible in the build log rather than silently yielding zero images.
     let presetImages;
-    if (presetImagesSrc && Object.keys(presetImagesSrc).length) {
-      const presetNames = presets.length
-        ? new Set(Object.keys(JSON.parse(readFileSync(presetAbs, "utf-8")).parameterSets ?? {}))
-        : new Set();
+    const presetNames = presets.length
+      ? Object.keys(JSON.parse(readFileSync(presetAbs, "utf-8")).parameterSets ?? {})
+      : [];
+    if (presetImagesSrc?.kind === "map" && Object.keys(presetImagesSrc.map).length) {
+      const presetNameSet = new Set(presetNames);
       presetImages = {};
-      Object.entries(presetImagesSrc).forEach(([presetName, rel], i) => {
-        if (!presetNames.has(presetName))
+      Object.entries(presetImagesSrc.map).forEach(([presetName, rel], i) => {
+        if (!presetNameSet.has(presetName))
           throw new Error(
             `gen-schema: design '${d.id}' 'presets.images["${presetName}"]' does not match any bundled ` +
               `preset name in '${presetRel}'`
@@ -533,6 +560,35 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
         copyBrowserFacing(src, dest);
         presetImages[presetName] = `scad/${outName}`;
       });
+    } else if (presetImagesSrc?.kind === "dir") {
+      const dirRel = presetImagesSrc.dir;
+      const dirAbs = mustExist(resolve(CONFIG_DIR, dirRel), `design '${d.id}' presets.images directory '${dirRel}'`);
+      if (!statSync(dirAbs).isDirectory())
+        throw new Error(
+          `gen-schema: design '${d.id}' 'presets.images' '${dirRel}' is not a directory:\n  ${dirAbs}`
+        );
+      const slugs = slugifyPresetNames(presetNames);
+      const dirEntries = new Set(readdirSync(dirAbs));
+      presetImages = {};
+      let matched = 0;
+      for (const presetName of presetNames) {
+        const fileName = PRESET_IMAGE_EXTENSIONS.map((ext) => `${slugs.get(presetName)}${ext}`).find((f) =>
+          dirEntries.has(f)
+        );
+        if (!fileName) continue;
+        const ext = extOf(fileName);
+        const outName = `${d.id}-preset-${matched}${ext}`;
+        const dest = join(outScadDir, outName);
+        register(dest, `design '${d.id}' presets.images["${presetName}"]`);
+        copyBrowserFacing(join(dirAbs, fileName), dest);
+        presetImages[presetName] = `scad/${outName}`;
+        matched++;
+      }
+      console.log(
+        `gen-schema: design '${d.id}' presets.images: ${matched}/${presetNames.length} preset(s) ` +
+          `matched an image in '${dirRel}'`
+      );
+      if (!Object.keys(presetImages).length) presetImages = undefined;
     }
     // `reviewLabels`: each key must name an actual DECLARED PARAM of this
     // design — the same typo-protection stance the icon/doc annotation

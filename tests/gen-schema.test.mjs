@@ -376,6 +376,55 @@ test("presetImages: a key not matching any bundled preset name fails the build",
   );
 });
 
+test("presets.images directory form: each preset's image is found by slug, trying .svg/.png/.webp in turn", (t) => {
+  let logged = "";
+  t.mock.method(console, "log", (msg) => {
+    logged += msg + "\n";
+  });
+  const { schema, out } = run("widget-presetimages-dir.config.json");
+  const design = schema.designs.find((d) => d.id === "presetdir");
+  // "Salz (Deutsch)" has both a .svg and a .png in the directory — .svg wins
+  // (the documented extension priority).
+  assert.equal(design.presetImages["Salz (Deutsch)"], "scad/presetdir-preset-0.svg");
+  assert.ok(existsSync(join(out, "scad", "presetdir-preset-0.svg")));
+  assert.equal(design.presetImages["Office (English US)"], "scad/presetdir-preset-1.png");
+  // The two punctuation-only names slug identically; only the FIRST one
+  // (matching "...english-us.webp", no "-2" suffix) has a file in the
+  // directory, so only it gets an image.
+  assert.equal(
+    design.presetImages["Punctuation | English UEB: - : ; ' (English US)"],
+    "scad/presetdir-preset-2.webp"
+  );
+  assert.equal("Punctuation | English UEB: . , ? ! (English US)" in design.presetImages, false);
+  // "No Image Here" has no matching file in the directory at all — legitimate
+  // (preset images are optional per preset), not a build failure.
+  assert.equal("No Image Here" in design.presetImages, false);
+  // 3 of the 5 bundled presets matched an image — reported in the build log
+  // so a wrong-but-existing directory (e.g. every name misspelled) is visible.
+  assert.match(logged, /presets\.images: 3\/5 preset\(s\) matched an image in 'preset-images-dir'/);
+});
+
+test("presets.images directory form: a directory that doesn't exist fails the build", () => {
+  assert.throws(
+    () => run("widget-presetimages-dir-missing.config.json"),
+    /presets\.images directory 'no-such-preset-images-dir' not found/
+  );
+});
+
+test("presets.images directory form: a path that exists but isn't a directory fails the build", () => {
+  assert.throws(
+    () => run("widget-presetimages-dir-notadir.config.json"),
+    /'presets\.images' 'src\/presetdir\.scad' is not a directory/
+  );
+});
+
+test("presets.images: a blank string fails the build like the map form's blank values", () => {
+  assert.throws(
+    () => run("widget-presetimages-dir-blank.config.json"),
+    /'presets\.images' must be a non-empty string or object/
+  );
+});
+
 test("strings: a key that exists in en.json overrides the built-in text", () => {
   const { schema } = run("widget-strings.config.json");
   assert.deepEqual(schema.strings, { "action.export": "Download now" });

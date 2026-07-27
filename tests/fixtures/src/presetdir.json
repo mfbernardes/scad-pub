@@ -1,0 +1,10 @@
+{
+  "fileFormatVersion": "1",
+  "parameterSets": {
+    "Salz (Deutsch)": { "size": "10" },
+    "Office (English US)": { "size": "12" },
+    "Punctuation | English UEB: - : ; ' (English US)": { "size": "14" },
+    "Punctuation | English UEB: . , ? ! (English US)": { "size": "16" },
+    "No Image Here": { "size": "18" }
+  }
+}

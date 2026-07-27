@@ -151,8 +151,15 @@
             "type": "object",
             "properties": {
               "images": {
-                "description": "Bundled-preset-name -> thumbnail-image-path map. Every key must match a real bundled preset name (checked in buildDesigns, once parse results are available).",
-                "type": "object"
+                "description": "Bundled-preset thumbnails: either a preset-name -> image-path map (every key must match a real bundled preset name), or a single config-relative directory string (each preset's image looked up by slugifying its name — see docs/config.md). Preset images are optional per preset either way.",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object"
+                  }
+                ]
               }
             },
             "additionalProperties": false

@@ -305,10 +305,29 @@ const DESIGN_PRESETS_SPEC = {
   properties: {
     images: {
       type: "object",
+      // Two shapes, both `custom: true` (the cross-referenced VALUE — a real
+      // preset name, a file that actually exists — needs parse results only
+      // buildDesigns has, so this field's own shape check stays minimal):
+      //   - an object: preset-name -> thumbnail-image-path map (the original
+      //     form, and the escape hatch for a preset whose name and file
+      //     genuinely don't correspond mechanically);
+      //   - a string: a config-relative DIRECTORY. Each bundled preset's
+      //     image is looked up by slugifying its name (scripts/lib/preset-slug.mjs
+      //     — matching a maintainer's own thumbnail-rendering script byte for
+      //     byte) and trying '.svg'/'.png'/'.webp' in turn. A preset with no
+      //     matching file is fine (see "optional per preset" below); a
+      //     directory that doesn't exist fails the build.
+      // `acceptsString` tells gen-config-schema.mjs's nodeToSchema to emit an
+      // `anyOf` of `string`/`object` for this field specifically (distinct
+      // from the primitive-shorthand-plus-options-object `anyOf` fileImport/
+      // logo/pwa.themeColor use — see nodeToSchema's own comment — since this
+      // object form has no fixed key set to describe as `properties`).
+      acceptsString: true,
       custom: true,
       description:
-        "Bundled-preset-name -> thumbnail-image-path map. Every key must match a real bundled preset name " +
-        "(checked in buildDesigns, once parse results are available).",
+        "Bundled-preset thumbnails: either a preset-name -> image-path map (every key must match a real " +
+        "bundled preset name), or a single config-relative directory string (each preset's image looked up " +
+        "by slugifying its name — see docs/config.md). Preset images are optional per preset either way.",
     },
   },
 };

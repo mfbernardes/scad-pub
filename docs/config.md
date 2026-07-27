@@ -92,7 +92,7 @@ Each `designs[]` entry also accepts optional **`reviewLabels`** and **`reviewNot
 - **`reviewLabels`**: an object mapping a **declared parameter's exact name** to the label its value is shown under in a review summary. Every key must match one of that design's own params — a stale or misspelled name fails the build. Several params sharing the same label merge into one summary row, their formatted values joined by `" / "`. A design with no `reviewLabels` still shows the summary's overall bounding-box "Dimensions" row, just no curated section above it. A row's value can be overridden by an `echo("@review", param, value)` from the design itself — see [`echo("@review", …)`](annotations.md#curated-review-override-echoreview-) — when the printed model doesn't literally match the stored parameter value (e.g. an uppercasing transform)
 - **`reviewNote`**: an optional short string, a generic hook for a design whose printed output transforms a parameter's raw value in a way worth calling out (e.g. "Text prints in capitals even though you typed it in lowercase"). Plain text, not Markdown. Omit for no note
 
-Each `designs[]` entry also accepts an optional **`presets`** object — currently just an **`images`** field, bundled-preset thumbnails:
+Each `designs[]` entry also accepts an optional **`presets`** object — currently just an **`images`** field, bundled-preset thumbnails, in either of two forms:
 
 ```jsonc
 {
@@ -111,7 +111,29 @@ Each `designs[]` entry also accepts an optional **`presets`** object — current
 }
 ```
 
-- `presets.`**`images`**: an object mapping a **bundled preset's exact name** (as it appears as a key inside that design's sibling `<design>.json` parameterSets file — see "Bundled presets" above) to an image path, relative to the config file. Every key must match a real bundled preset name — a stale or misspelled name fails the build, and a design with no bundled presets at all can't configure `presets.images` either. Images may be SVG, PNG, or WebP. Preset images are **optional per preset**: in the in-app preset picker a bundled preset that has a configured image renders as a card (thumbnail + title, matching the visual design picker's card treatment), while a bundled preset without one renders as a compact list row — the same row style the "Saved by you" section uses. Under the single "Ready-made" heading the imaged presets show first as a card grid, then the imageless ones as list rows. A design with no `presets.images` at all keeps the plain compact list exactly. A preset's display name is split into an optional leading **overline** (`"Category | Title"`) and an optional trailing **badge** (`"Title (Language)"`) for the card — see `src/lib/presetCard.ts`; the stored preset name itself is never changed, only how it's parsed for display
+- `presets.`**`images`** (map form): an object mapping a **bundled preset's exact name** (as it appears as a key inside that design's sibling `<design>.json` parameterSets file — see "Bundled presets" above) to an image path, relative to the config file. Every key must match a real bundled preset name — a stale or misspelled name fails the build, and a design with no bundled presets at all can't configure `presets.images` either. Images may be SVG, PNG, or WebP.
+
+`presets.images` also accepts a plain **string** — a config-relative **directory** — as the escape from hand-listing every preset's image path, which just restates a mechanically-derivable mapping in a second file:
+
+```jsonc
+{
+  "designs": [
+    { "id": "tag", "label": "Tag", "presets": { "images": "branding/presets/tag" } }
+  ]
+}
+```
+
+In the directory form, each bundled preset's image is looked up by **slugifying its name** — lowercase, "×" becomes "x", every run of characters outside `[a-z0-9]` collapses to a single "-", leading/trailing "-" stripped, and a name that slugs the same as an earlier one gets a numeric suffix ("-2", "-3", …) in preset order — and trying `.svg`, `.png`, then `.webp` in that directory. This is the exact rule a maintainer's own thumbnail-rendering script can implement independently and still agree with `gen-schema` on every filename; `scripts/lib/preset-slug.mjs` is the one implementation both this doc and the build itself describe.
+
+Preset images are **optional per preset** in both forms: in the in-app preset picker a bundled preset that has a configured image renders as a card (thumbnail + title, matching the visual design picker's card treatment), while a bundled preset without one renders as a compact list row — the same row style the "Saved by you" section uses. Under the single "Ready-made" heading the imaged presets show first as a card grid, then the imageless ones as list rows. A design with no `presets.images` at all keeps the plain compact list exactly. A preset's display name is split into an optional leading **overline** (`"Category | Title"`) and an optional trailing **badge** (`"Title (Language)"`) for the card — see `src/lib/presetCard.ts`; the stored preset name itself is never changed, only how it's parsed for display.
+
+In the directory form specifically, a preset with no matching file in the directory is exactly as fine as an unlisted key in the map form — but the directory itself must exist, or the build fails with a clear error (an existing-but-wrong directory, e.g. every preset name misspelled relative to its filenames, would otherwise silently yield zero images). `gen-schema`'s build log reports how many of the design's bundled presets matched an image, so that failure mode is visible even though it isn't a build error:
+
+```text
+gen-schema: design 'tag' presets.images: 2/3 preset(s) matched an image in 'branding/presets/tag'
+```
+
+The map form remains the escape hatch for a preset whose name and image file genuinely don't correspond mechanically.
 
 ### Rendering
 
@@ -151,7 +173,7 @@ Config paths are not all relative to the same thing. `gen-schema` resolves each 
 
 | Base | Keys resolved against it |
 | --- | --- |
-| The **config file's own directory** | `source`, `logo`, `pwa.icon`, `pwa.iconMaskable`, `extraCss`, `designs[].presets.images` values, `popup.bodyFile`, `fileImport.noteFile`, `licenses[].textFile`, `help.file`, `help.tabs[].file` |
+| The **config file's own directory** | `source`, `logo`, `pwa.icon`, `pwa.iconMaskable`, `extraCss`, `designs[].presets.images` (the map form's values, or the directory itself in the string form), `popup.bodyFile`, `fileImport.noteFile`, `licenses[].textFile`, `help.file`, `help.tabs[].file` |
 | **`source`** (itself config-relative, see above) | `assets`, each `fonts` entry, `designs[].file` |
 | **The design's own `.scad` file** | the `// @icon`, `// @image`, and `// @doc` annotations |
 

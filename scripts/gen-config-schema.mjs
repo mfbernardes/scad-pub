@@ -69,6 +69,14 @@ function nodeToSchema(node) {
   if (node.type === "array")
     return { ...base, type: "array", items: node.items ? nodeToSchema(node.items) : {} };
 
+  // A field that accepts EITHER a plain string OR an object with no fixed key
+  // set (`designs[].presets.images`: a directory path, or a preset-name ->
+  // path map) — distinct from the primitive-shorthand-plus-options-object
+  // `anyOf` below, which describes a FIXED-shape options object alongside a
+  // primitive shorthand.
+  if (node.type === "object" && node.acceptsString)
+    return { ...base, anyOf: [{ type: "string" }, { type: "object" }] };
+
   const hasProperties = node.properties && typeof node.properties === "object";
 
   if (PRIMITIVE_TYPES.has(node.type) && hasProperties)
