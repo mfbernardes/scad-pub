@@ -146,7 +146,7 @@ On the colours step, the wizard cautions when a drawing yields several regions t
 
 ## On-model text editing (`// @editOnModel`)
 
-Mark one plain string parameter `// @editOnModel` to let the user edit its value **directly on the 3D model** — "type on the sign". In the viewer, a click or tap on the rendered mesh opens a small floating text box pre-filled with the current value; each keystroke updates the parameter exactly like the panel's own text box (same debounced auto-render). An always-visible **edit** pencil chip over the viewer gives the same editor a keyboard- and screen-reader-accessible path, and opens it centered.
+Mark one plain string parameter `// @editOnModel` to let the user edit its value **directly on the 3D model** — "type on the sign". In the viewer, a click or tap on the rendered mesh opens a small floating text box pre-filled with the current value; each keystroke updates the parameter exactly like the panel's own text box (same debounced auto-render). It is a **shortcut, not a second edit path**: the parameter's own text box in the panel stays the canonical control, so the editor carries no permanent affordance over the viewer — a pointer gesture on the mesh is the only way in.
 
 ```scad
 /* [Text] */
@@ -165,7 +165,8 @@ Behaviour:
 - The mesh click is a **click, not a drag**: a pointerdown→pointerup that moved only a few pixels, single-pointer. Orbit, pan, pinch and zoom gestures are completely unaffected and never open the editor. A click that misses the model (grid/empty space) does nothing.
 - The editor floats near where you clicked, clamped inside the viewer; on a phone it anchors toward the top so the on-screen keyboard can't cover it.
 - **Enter** or clicking away closes it (the value is already applied). **Escape** closes it *and* reverts to the value it had when you opened it.
-- The mesh click is offered only once a model is on screen (the last render succeeded). The pencil chip appears whenever the capability is active.
+- The mesh click is offered only once a model is on screen (the last render succeeded).
+- Because it is pointer-only, it never *replaces* the panel's text box — a keyboard or screen-reader user edits the same value there, exactly as for any other parameter.
 
 This annotation is purely a UI affordance: the parameter is an ordinary Customizer string everywhere else (the panel, the desktop OpenSCAD Customizer, presets, the URL). A deployment adopts the feature by adding the one comment line to its design; nothing else changes.
 
