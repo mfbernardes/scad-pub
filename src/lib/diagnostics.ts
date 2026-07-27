@@ -42,9 +42,11 @@ export interface BadgeCount {
   /** Optional fill colour; falls back to the default badge styling. */
   color?: string;
   /** Whether this category is flagged `attention: true` in config (always
-   *  true for the hardcoded "assert" badge) — decides whether the badge/bell
-   *  reads as amber-urgent or plain neutral (see docs/config.md's Notice
-   *  badges section). */
+   *  true for the hardcoded "assert" badge) — decides whether the console's
+   *  count chip reads as amber-urgent or plain neutral (see docs/config.md's
+   *  Notice badges section), and feeds readiness.ts's attention items. The
+   *  Messages bell itself never goes amber off the back of it: urgency is the
+   *  readiness pill's alone (see OutputToggle.tsx). */
   attention?: boolean;
 }
 

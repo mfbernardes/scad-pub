@@ -596,6 +596,23 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
     );
     await infoFooter.getByRole("button", { name: "Go back and fix" }).click();
     await waitDialogClosed(page, "Review").catch(() => {});
+    // One count on screen at a time. The bell tallies MESSAGES (log lines,
+    // informational ones included) and the pill tallies ISSUES (actionable
+    // items — a missing font has no log line, a `subsumedByFont` category
+    // folds into the font item), so the two numbers legitimately differ; side
+    // by side and unlabelled they read as one tally contradicting itself.
+    // While the pill is up it owns the count and the bell drops its badge,
+    // keeping the ringing glyph and the aria-label (see OutputToggle's
+    // `showCount`).
+    const bellLabel = (await page.locator(".command-bar__output").first().getAttribute("aria-label")) ?? "";
+    check(
+      /\(\d+ notices?\)/.test(bellLabel),
+      "the bell still reports its pending messages to assistive tech while the pill is up"
+    );
+    check(
+      (await page.locator(".output-toggle__count").count()) === 0,
+      "the bell shows no count badge while the status pill owns the count"
+    );
   } else {
     console.log(`  (the first design "${ids[0]}" is clean — no pill, as designed)`);
   }
@@ -612,6 +629,18 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
       (await page.locator(".status-strip").count()) === 0,
       "no status pill on a clean design (ready is silent — the Download button is the confirmation)"
     );
+    // With no pill to own it, the count comes back to the bell — the other
+    // half of the `showCount` contract. Only assertable when this design
+    // actually has pending messages; a silent design has nothing to count.
+    const cleanLabel = (await page.locator(".command-bar__output").first().getAttribute("aria-label")) ?? "";
+    if (/\(\d+ notices?\)/.test(cleanLabel)) {
+      check(
+        (await page.locator(".output-toggle__count").count()) === 1,
+        "with no pill, the bell carries its message count again"
+      );
+    } else {
+      console.log("  (the clean design has no pending messages — the bell's own count is not exercised)");
+    }
     // Back to the design the rest of the suite expects to be selected.
     await selectDesign(page, ids[0]);
   } else {

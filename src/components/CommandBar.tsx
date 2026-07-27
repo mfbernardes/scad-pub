@@ -26,9 +26,9 @@ interface Props {
   stalePreview: boolean;
   outputOpen: boolean;
   noticeCount: number;
-  /** Whether a pending notice belongs to an attention-flagged category (or is
-   *  a hardcoded warning/assert) — decides the bell's amber styling. */
-  hasAttention?: boolean;
+  /** Whether the bell may show `noticeCount` as a corner badge — false while the
+   *  readiness pill owns the on-screen count (see OutputToggle's `showCount`). */
+  showCount?: boolean;
   onToggleOutput: () => void;
   /** Bumped by the intro popup's CTA to open the design picker. */
   openPickerSignal: number;
@@ -54,7 +54,7 @@ export const CommandBar = memo(function CommandBar({
   stalePreview,
   outputOpen,
   noticeCount,
-  hasAttention = false,
+  showCount = true,
   onToggleOutput,
   openPickerSignal,
   pickerActive,
@@ -110,7 +110,7 @@ export const CommandBar = memo(function CommandBar({
         <OutputToggle
           outputOpen={outputOpen}
           noticeCount={noticeCount}
-          hasAttention={hasAttention}
+          showCount={showCount}
           onToggleOutput={onToggleOutput}
           status={{ rendering, ready, result, stale: stalePreview }}
           className={cn(ICON_BUTTON_CLASS, "command-bar__output")}
