@@ -1,76 +1,156 @@
 <!--
 meta.contentType: Reference
-content plan: give coding agents the commands, architecture map, and repository conventions they need before editing ScadPub.
+content plan: orient a coding agent in ScadPub — the commands, the one build-time invariant everything rests on, and the gotchas that reading the source will not reveal. Detail lives in docs/.
 -->
 
 # Work in ScadPub
 
-Use this guide when working with code in this repository. ScadPub renders OpenSCAD designs client-side via OpenSCAD-WASM as a static site. See [README.md](README.md) for the full project overview.
+ScadPub renders OpenSCAD designs client-side via OpenSCAD-WASM as a static site.
+[README.md](README.md) is the project overview, [docs/config.md](docs/config.md) the full
+config reference, [docs/annotations.md](docs/annotations.md) the annotation vocabulary. Read
+the source rather than trusting a summary here — this file covers what the source does not say
+out loud.
 
-## Run repository commands
+## Commands
 
 ```bash
 npm install
-npm run dev        # predev fetches pinned WASM + regenerates schema, then vite
-npm test           # node:test unit suite; requires Node >= 22
-npm run build      # gen-schema (via prebuild) + tsc -b + vite build -> dist/
-npm run smoke      # headless end-to-end check of the BUILT app (needs npm run build first)
-npm run vis        # visual regression vs tests/screenshots/ baselines
-npm run vis -- --update   # rewrite visual baselines
-npm run screens    # capture every view (desktop + mobile) of the BUILT app -> screenshots/scadpub-screenshots.zip
+npm run dev        # predev fetches pinned WASM + regenerates the schema, then vite
+npm test           # node:test unit suite; Node >= 22
+npm run build      # prebuild gen-schema + tsc -b + vite build -> dist/
+npm run smoke      # headless axe + end-to-end check of the BUILT app — build first
+npm run vis        # visual regression vs tests/screenshots/ (--update to rebaseline)
+npm run screens    # capture every desktop + mobile view of the BUILT app
 ```
 
-- **Single test:** `node --import ./tests/register-ts.mjs --test --test-name-pattern "<name>" "tests/<file>.test.mjs"`, or point the glob at one file.
-- **Smoke needs Chromium:** `npx playwright install chromium` (first time).
-- **Build for a subpath:** `BASE_PATH=/app/ npm run build` (GitHub Pages uses the `BASE_PATH` repo variable).
-- **Build a different config:** set `SCADPUB_CONFIG=/path/to/config.json` (read by `gen-schema.mjs`).
-- Pre-commit hooks (`.pre-commit-config.yaml`) run `tsc -b` and `npm test` on relevant file changes.
+- One test: `node --import ./tests/register-ts.mjs --test --test-name-pattern "<name>" tests/<file>.test.mjs`.
+- Chromium for smoke/vis/screens: `npx playwright install chromium` on first run.
+- `BASE_PATH=/app/ npm run build` targets a subpath (GitHub Pages sets it from a repo
+  variable); `SCADPUB_CONFIG=/path/to/config.json` builds a different deployment.
+- Pre-commit runs `tsc -b` and `npm test` on relevant changes.
 
-## The generation pipeline (read this first)
+## Everything renderable is generated at build time
 
-The app never reads `.scad` files at runtime directly. Everything flows through a build step. `scripts/gen-schema.mjs` is the heart of the project. Run automatically by the `predev`/`prebuild`/`pretest` npm hooks, it:
+`scripts/gen-schema.mjs` — run by the `predev`/`prebuild`/`pretest` hooks — reads
+`scadpub.config.json`, parses each design's OpenSCAD Customizer syntax into a typed parameter
+schema, copies each design's `.scad` dependency graph into `public/scad/` at its
+source-relative path, and writes `src/generated/designs.json` plus the PWA assets. The app
+never reads `.scad` at runtime, and the form cannot drift from the design because both come
+from the same parse. `generate()` is exported so `tests/gen-schema.test.mjs` can drive it
+against `tests/fixtures/*.config.json`.
 
-1. Reads `scadpub.config.json` (or `$SCADPUB_CONFIG`).
-2. Parses each design's OpenSCAD Customizer syntax (`SECTION_RE`/`PARAM_RE`, skipping `[Hidden]`) into a typed parameter schema.
-3. Gathers each design's shared `.scad` dependencies from the config's `assets` list, or by following the `use`/`include` graph when `assets` is omitted, and copies them into `public/scad/` while preserving relative paths.
-4. Writes `src/generated/designs.json` (the `Schema` in `src/openscad/types.ts`) and generates the PWA assets in `public/`: `manifest.webmanifest` (incl. `categories`, `shortcuts`, `launch_handler`), the icon (`icon.svg` plus rasterized `icon-{192,512,512-maskable,180}.png` and per-device `apple-splash-*.png` via the optional `@resvg/resvg-js`), and `precache-manifest.json` (the service-worker precache list). Config values interpolated into generated SVG/HTML (chrome colours, title, design ids) are validated/escaped first.
+What follows from that, before you edit anything:
 
-Because the form is generated from the same source OpenSCAD parses, the UI can never drift from the design. `generate()` is exported so `tests/gen-schema.test.mjs` drives it against `tests/fixtures/*.config.json`.
+- `src/generated/`, `public/scad/`, `public/wasm/`, the generated PWA assets
+  (`manifest.webmanifest`, `icon.svg`, `icon-*.png`, `apple-splash-*.png`,
+  `precache-manifest.json`) and `public/fonts/fonts.conf` are generated and gitignored. Change
+  the config or the sources and re-run. `public/sw.js` and the bundled `.ttf` files are
+  hand-maintained and tracked.
+- **Building against an external config leaves files behind.** `gen-schema` copies that
+  config's fonts into `public/fonts/`, where `.ttf` is tracked rather than ignored. After any
+  `SCADPUB_CONFIG=… npm run build`, run `git status` and delete what the build added, or
+  another deployment's font gets committed here.
+- `renderHash` covers every render-affecting input (mounted `.scad`, bundled fonts, render
+  features, the WASM build, `worker.ts` itself) and is folded into the render cache key, so a
+  deploy that changes a render input invalidates persisted geometry. `scadpubVersion` is
+  display-only and deliberately *outside* `renderHash`; `scripts/lib/version.mjs` resolves it
+  with `git describe` against ScadPub's own checkout — not the cwd — so a fork, submodule or
+  sibling build still names ScadPub. `$SCADPUB_VERSION` overrides it for git-less trees, and
+  resolving to nothing is not a build failure.
+- The licenses modal takes every version from build data (`componentVersions`, `wasmVersion`,
+  `scadpubVersion`), never a literal. A new bundled component needs an entry in
+  `src/lib/licenses.ts`; an npm package also needs its name in `BUNDLED_PACKAGES`, since
+  `scripts/lib/dep-versions.mjs` reads versions from `node_modules` rather than importing them
+  (which would drag three.js into the eager chunk).
 
-The **licenses modal takes every version from build data**, never from a literal: `componentVersions` (installed versions of the bundled npm packages, read from `node_modules` by `scripts/lib/dep-versions.mjs` — importing them from the packages would drag three.js into the eager chunk), `wasmVersion`, and `scadpubVersion`. Adding a bundled component means adding its entry in `src/lib/licenses.ts` plus, for an npm package, its name in `BUNDLED_PACKAGES`.
+## Render path
 
-`scadpubVersion` (in the schema) stamps which ScadPub built the site: `scripts/lib/version.mjs` runs `git describe --tags --always --dirty` against **ScadPub's own checkout** (not the cwd, so a consuming fork/submodule/sibling build still names ScadPub), with `$SCADPUB_VERSION` as an override for git-less trees. The licenses modal shows it on ScadPub's own entry; it is display-only and deliberately absent from `renderHash`. Absent when nothing resolves — never a build failure. See [docs/config.md](docs/config.md#scadpubs-own-version-stamp).
+`src/openscad/worker.ts` runs OpenSCAD-WASM off the main thread — `callMain` is synchronous
+and CPU-bound — and instantiates a **fresh module per render**, because Emscripten exit state
+is not reusable. It mounts sources at their source-relative paths so each design's
+`use`/`include` resolves as in the source tree, path-strips untrusted user-font filenames, and
+keeps the large version-pinned binaries in a versioned Cache Storage entry (`BIN_CACHE`) while
+re-fetching the small, build-volatile `.scad` sources per worker.
 
-`renderHash` (in the schema) is a content hash over every render-affecting input: mounted `.scad`, bundled fonts, render features, the WASM build, and `worker.ts` itself. It is folded into the render cache key so a deploy that changes any render input automatically invalidates persisted geometry.
+`runner.ts` is the main-thread client. `callMain` cannot be interrupted, so latest-wins
+cancellation terminates and respawns the worker and the superseded promise rejects with
+`SupersededError`. Results share an L1 in-memory LRU over an optional L2 IndexedDB
+(`stlCache.ts`) on one content-stable key.
 
-`src/generated/designs.json`, `public/scad/`, `public/wasm/`, the generated PWA assets (`public/manifest.webmanifest`, `public/icon.svg`, `public/icon-*.png`, `public/apple-splash-*.png`, `public/precache-manifest.json`), and `public/fonts/fonts.conf` are **gitignored / generated**. Never edit them by hand; change the config or sources and re-run. The bundled `.ttf` files under `public/fonts/` are tracked, and so is the hand-written `public/sw.js`.
+The WASM is single-threaded: no `SharedArrayBuffer`, no COOP/COEP. `dist/` is a plain static
+bundle; serve `.wasm` as `application/wasm`.
 
-**Building against an external config leaves files behind.** `gen-schema` copies the active config's bundled fonts into `public/fonts/`, and since the `.ttf` files there are tracked rather than gitignored, a `SCADPUB_CONFIG=/path/to/other.json npm run build` drops that deployment's fonts into this working tree as untracked files that are easy to commit by accident. Always `git status` after building with a config other than `scadpub.config.json`, and delete anything the build added.
+## App structure
 
-## Render architecture
+State lives in `App.tsx` — debounced auto-render, the heavy-render brake (renders past
+`HEAVY_RENDER_MS` auto-pause live updates, and `heavy` designs start manual), export, presets,
+fonts, URL state, theme, PWA notices. `AppShell.tsx` is a pure view extraction choosing the
+docked `ParamPanel` or the mobile `BottomSheet`; only the active layout mounts a `Viewer`,
+lazy-loaded to keep three.js out of the initial chunk.
 
-Two files, a strict client/worker split (`src/openscad/`):
+Action callbacks reach the panels through the `AppActions` context (`src/lib/appActions.ts`)
+instead of prop drilling; the provider's value is ref-backed and stable, so a consumer never
+re-renders when a callback's identity changes yet always invokes `App`'s latest
+implementation. Data and genuinely local glue (the PNG snapshot handler that needs the viewer
+ref) still flow as props. `src/lib/readiness.ts` derives the state `StatusStrip` surfaces as a
+pill in the export dock — one presentation for both layouts, above the Download button, mounted
+only for `attention`/`failed` — and that `ReviewDialog` explains; Download routes through that
+dialog rather than exporting anything short of `ready`.
 
-- **`worker.ts`**: runs OpenSCAD-WASM off the main thread (`callMain` is synchronous and CPU-bound). It fetches WASM and fonts once; large, version-pinned binaries go in a versioned Cache Storage entry, `BIN_CACHE`. It fetches `.scad` sources on first use per worker (not persisted in Cache Storage), since they are small and build-volatile. It instantiates a **fresh module per render** because Emscripten exit state is not reusable. It mounts files into the WASM FS at their source-relative paths so each design's `use`/`include` resolves as in the source tree. Untrusted user-font filenames are path-stripped before mounting.
-- **`runner.ts`**: main-thread client. Latest-wins behavior cancels an in-flight render by terminating and respawning the worker because `callMain` cannot be interrupted. The superseded promise rejects with `SupersededError`. The runner has a **two-tier cache**: L1 in-memory LRU in front of optional L2 IndexedDB (`stlCache.ts`), sharing one content-stable key.
+## Conventions
 
-`App.tsx` orchestrates debounced auto-render, the "heavy render" brake, export, presets, fonts, URL state, theme, and the PWA install/offline notices. Renders slower than `HEAVY_RENDER_MS` (about 6 s) auto-pause live updates; designs flagged `heavy` start in manual mode. `AppShell.tsx` owns the responsive layout as a pure view extraction: desktop docked `ParamPanel` or mobile `BottomSheet`. All state stays in `App.tsx`. Only the active layout mounts a `Viewer` (`useIsMobile`), which is lazy-loaded to keep three.js out of the initial JS chunk. `src/lib/readiness.ts` derives a `ReadinessState` (`building`/`failed`/`attention`/`ready`) from the latest render plus any unresolved font/notice gaps; `StatusStrip` surfaces it as a pill in the export dock — one presentation for both layouts, above the Download button, mounted only for `attention`/`failed` — and opens `ReviewDialog` (the curated `reviewLabels`/`reviewNote` summary, honouring any `echo("@review", …)` override, plus attention cards), which the export dock's Download button also routes through instead of exporting anything short of "ready".
+- **TypeScript 7 and 6 are installed side by side via npm aliases.** TS 7.0 is the native (Go)
+  compiler and ships no programmatic API until 7.1, so anything that imports from `typescript`
+  — typescript-eslint, peer range still `<6.1.0` — cannot run against it. `package.json`
+  therefore carries `"@typescript/native": "npm:typescript@^7"` (the `tsc` that build and
+  pre-commit use) and `"typescript": "npm:@typescript/typescript6@^6"` (the 6.x API lint
+  resolves, plus a `tsc6` binary). Do not "fix" this back to a plain `typescript` dependency; a
+  straight bump to 7.x breaks `npm run lint`. Revisit when typescript-eslint supports the 7.x
+  API.
+- **Tests import TypeScript source directly.** `tests/register-ts.mjs` + `ts-resolve.mjs`
+  register a loader hook that resolves extensionless relative imports (`./scad`) to `.ts` under
+  Node's built-in type-stripping. That is why app code writes extensionless imports and why
+  `node:test` runs with no bundler.
+- **UI is shadcn/ui (Radix + Tailwind v4).** Compose the primitives in `src/components/ui/`
+  rather than hand-rolling controls; genuinely bespoke pieces like `BottomSheet` and the
+  resizable `ParamPanel` stay custom. Imports use the `@/` alias, wired in `vite.config.ts`,
+  `tsconfig.json` and `tests/ts-resolve.mjs`.
+- **Decoration goes on components as Tailwind utilities**, using the bridged tokens rather than
+  raw palette values so config `colors` overrides keep working. `src/index.css` keeps only
+  structural CSS, in a `components` layer below `utilities`, with an `@theme inline` block
+  bridging the shadcn `--color-*` tokens onto the existing AA palette.
+- **Keep the script hook classes** — `.status-pill`, `.param-group`, `.file-manager__name`,
+  `.output-console__close`, `.brand-logo` and friends. No stylesheet rule targets them; the
+  smoke/vis/capture scripts and the `extraCss` escape hatch do.
+- **UI text goes through the i18n catalogue.** ScadPub's chrome copy lives in
+  `src/locales/en.json` and is read via `t()`/`tn()` in `src/lib/i18n.ts`, so a deployment can
+  override any key through the config's `strings` block (validated at build time). Add the key
+  to the catalogue before referencing it; `tests/i18nCoverage.test.mjs` also fails on a
+  catalogue key nothing in `src/` uses. It is a subset, not a translation layer — older panels
+  still carry plain English.
+- **Font availability is decided in the app, not in OpenSCAD.** `gen-schema` reads each bundled
+  font's family and face from its `name` table and flags font params `isFont`; those render as
+  `FontSelect`, which unions bundled with imported fonts and preserves stored value strings so
+  merely listing never dirties a value. Not-loaded suggestions stay selectable in a marked
+  group with an in-dropdown Import action. `fontFallback` pins a weak last-resort family in
+  `fonts.conf` so an imported font cannot become Fontconfig's global default.
+- **The config `id` namespaces all browser storage** (localStorage, IndexedDB, preset cache) so
+  several deployments coexist on one origin. `vite.config.ts` reads `designs.json` to inject
+  title, description, per-scheme `theme-color`, the Apple web-app title and the splash `<link>`s
+  into `index.html`, and exposes `__APP_ID__`/`__APP_THEME_COLOR__` as compile-time constants.
+- **Annotations** — `// @showIf`, `// @collapsed`, `// @advanced`, `// @font`, `// @info`,
+  `// @svg`, `// @filledBy`, `// @editOnModel`, the file-level `// @description`/`@icon`/
+  `@image`/`@doc`, and the runtime-only `echo("@info", …)` / `echo("@review", …)` — are parsed
+  by `gen-schema` and invisible to desktop OpenSCAD. [docs/annotations.md](docs/annotations.md)
+  is the reference; a new one lands in the parser and that doc together.
 
-The action callbacks (render, export, value/preset changes, file imports, theme, …) flow through the `AppActions` context (`src/lib/appActions.ts`) instead of being drilled prop-by-prop through `AppShell`. `App` builds the bundle, `<AppActionsProvider>` wraps the shell, and the panels (`CommandBar`, `ParamPanel`, `ActionCluster`, `SheetTabs`) read what they need via `useAppActions()`. The provider hands out a **stable** context value backed by a ref, so a consumer never re-renders when a callback's identity changes yet always invokes `App`'s latest implementation. Data and genuinely local glue, such as the PNG-snapshot handler that needs the viewer ref, still flow as props.
+## Verify UI work by looking at it
 
-## Follow repository conventions
+Type-checks and unit tests say nothing about visual behaviour. After any visual or interactive
+change, run `npm run build && npm run smoke`, then `npm run vis`, and attach a screenshot or
+diff image before calling the task done.
 
-- **TypeScript 7 and 6 are installed side by side, via npm aliases.** TypeScript 7.0 is the native (Go) compiler and ships *no programmatic API* — that lands in 7.1 — so anything that `import`s from `typescript` (typescript-eslint, whose peer range is still `<6.1.0`) cannot run against it. Per the [TS 7.0 announcement](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0), `package.json` therefore carries `"@typescript/native": "npm:typescript@^7"` (provides the `tsc` binary that `npm run build` and the pre-commit hook use) and `"typescript": "npm:@typescript/typescript6@^6"` (provides the 6.x API typescript-eslint resolves, plus a `tsc6` binary). Do not "fix" the aliases back to a plain `typescript` dependency — a straight bump to 7.x breaks `npm run lint`. Revisit once typescript-eslint supports the 7.x API.
-- **Tests import TypeScript source directly.** `tests/register-ts.mjs` + `ts-resolve.mjs` register a Node loader hook that resolves the app's extensionless relative imports (e.g. `./scad`) to `.ts` and uses Node's built-in type-stripping. This is why app code uses extensionless relative imports and why `node:test` runs without a bundler.
-- **UI is shadcn/ui (Radix + Tailwind v4).** Primitives live in `src/components/ui/`, scaffolded via `components.json`; compose those instead of hand-rolling controls. Genuinely bespoke pieces, such as `BottomSheet` and the resizable `ParamPanel`, stay custom. Imports use the `@/` alias, wired in `vite.config.ts`, `tsconfig.json`, and `tests/ts-resolve.mjs`.
-- **Decoration lives on components as Tailwind utilities.** Use bridged tokens, never raw palette values, so config `colors` overrides keep working. `src/index.css` keeps only structural CSS in a `components` cascade layer below `utilities` (`@layer theme, base, components, utilities`). An `@theme inline` block bridges shadcn `--color-*` tokens onto the existing AA palette without redefining it.
-- **Keep script hook classes.** Several literal class names (`.status-pill`, `.param-group`, `.file-manager__name`, `.output-console__close`, `.brand-logo`, …) are inert hooks for the smoke/vis/capture scripts and the `extraCss` escape hatch. Keep them on the elements even though no stylesheet rule targets them.
-- **Config-driven chrome.** `vite.config.ts` reads `designs.json` to inject title/description, per-scheme `theme-color`, the Apple web-app title, and the generated iOS splash `<link>`s into `index.html`, and exposes `__APP_ID__`/`__APP_THEME_COLOR__` as compile-time constants. The `id` field namespaces all browser storage (localStorage, IndexedDB, preset cache) so multiple configs can coexist on one origin.
-- **Review & export config.** A `designs[]` entry's `reviewLabels`/`reviewNote` curate `ReviewDialog`'s summary rows; a `notices[]` category's `labelOne` singularizes its live pending count. `ui.afterExport` shows a compact panel after a successful export; `ui.saveImage: false` hides the Save-image (PNG) action; `popup.footnote` adds a small muted line to the welcome popup in every mode. See [docs/config.md](docs/config.md).
-- **UI text goes through the i18n catalogue.** ScadPub's own chrome copy lives in `src/locales/en.json`, keyed by dot-namespaced names, and is read via `src/lib/i18n.ts`'s `t(key, vars?)` / `tn(key, count, vars?)` (the plural form resolves the `#one`/`#other` variants; the `#` suffixes are never typed at a call site). A deployment overrides any key through the config's `strings` block, validated at build time against the catalogue (`scripts/lib/config-parsers.mjs`'s `parseStrings`) — see [docs/config.md](docs/config.md)'s "Text overrides". The catalogue is a subset, not a full translation layer: older panels still carry plain English. Add a key to `en.json` before referencing it — `tests/i18nCoverage.test.mjs` fails on a catalogue key nothing in `src/` references.
-- **Always run live tests and show screenshots for UI changes.** After any visual or interactive change: run `npm run build && npm run smoke`, then `npm run vis`. Attach a screenshot or diff image before reporting the task done. Type-checking and unit tests verify code correctness, not visual behaviour.
-- **Accessibility is a hard requirement.** WCAG 2.1 AA; the smoke test fails on any serious/critical axe-core violation. All colours are CSS custom properties in `src/index.css` (separate `--accent` vs `--accent-solid` because one colour rarely passes AA both as small text and as a button fill). After colour changes, run `npm run vis -- --update` and `npm run smoke`.
-- **OpenSCAD annotations** are parsed by `gen-schema` and invisible to OpenSCAD/desktop Customizer. The supported annotations are `// @showIf <expr>`, `// @collapsed`, `// @font`, `// @advanced`, `// @info [Label | unit]`, `// @svg [layers=<param>] [height=<param>]`, `// @filledBy <param>`, `// @editOnModel` (marks the one plain-string param the user can edit by clicking the rendered mesh — see `src/lib/editOnModel.ts` + `ViewerEditOnModel.tsx`; build error if used on a non-string/enum/`@font` param or on more than one param), and file-level `// @description` / `// @icon` / `// @image` / `// @doc`. Two further conventions are runtime-only `echo(...)` calls (no `gen-schema` involvement): `echo("@info", label, unit, value)` for a computed value the static parser can't see, and `echo("@review", param, value)` to override what a curated review row shows when the printed model transforms a parameter's raw value (e.g. uppercasing). See [docs/annotations.md](docs/annotations.md) for behavior and examples.
-- **Font availability is decided in the app, not OpenSCAD.** `gen-schema` records each bundled font's embedded family (`schema.fontFamilies`) and face (`schema.fontFaces`, `{ family, style }`), both read from the `name` table. It flags font params (string or enum) as `isFont`. `AppShell` unions bundled fonts with imported fonts from `src/lib/fonts.ts`, and every `isFont` param renders as `FontSelect`.
-- **FontSelect preserves stored values.** `src/lib/fontChoices.ts` builds the grouped list while preserving stored/enum value strings so listing never dirties a value. Not-loaded design suggestions stay selectable in a marked group with an in-dropdown Import action. `ParamForm` also shows an inline import/fallback hint when the selected `font` value's family is not loaded. The optional `fontFallback` config key pins a weak last-resort family in `fonts.conf` so an imported font cannot become Fontconfig's global default.
-- The WASM is single-threaded and needs no `SharedArrayBuffer`/COOP/COEP. `dist/` is a plain static bundle. Serve `.wasm` as `application/wasm`.
+Accessibility is a hard requirement: WCAG 2.1 AA, and smoke fails on any serious or critical
+axe-core violation. Colours are CSS custom properties in `src/index.css` — `--accent` and
+`--accent-solid` are separate because one colour rarely passes AA both as small text and as a
+button fill. After a colour change, run `npm run vis -- --update` and `npm run smoke`.
