@@ -28,7 +28,7 @@ interface Props {
   noticeCount: number;
   /** Whether the bell may show `noticeCount` as a corner badge — false while the
    *  readiness pill owns the on-screen count (see OutputToggle's `showCount`). */
-  showCount?: boolean;
+  showCount: boolean;
   onToggleOutput: () => void;
   /** Bumped by the intro popup's CTA to open the design picker. */
   openPickerSignal: number;
@@ -54,7 +54,7 @@ export const CommandBar = memo(function CommandBar({
   stalePreview,
   outputOpen,
   noticeCount,
-  showCount = true,
+  showCount,
   onToggleOutput,
   openPickerSignal,
   pickerActive,

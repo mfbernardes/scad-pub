@@ -643,11 +643,9 @@ export const AppShell = memo(function AppShell({
   // confirmation — and "building" is already narrated by the viewer's own
   // loading overlay, so a pill in either state would be noise over the model.
   //
-  // It also gates the Messages bell's numeric badge (`showCount` below): the
-  // pill counts actionable items and the bell counts log lines, so the two are
-  // legitimately different numbers — but side by side, unlabelled, they read as
-  // one tally contradicting itself. While the pill is up it owns the count; the
-  // bell keeps its ringing glyph, its status dot and its aria-label.
+  // It also gates the Messages bell's numeric badge (`showCount` below), so the
+  // pill's issue count is never on screen beside the bell's message count — see
+  // OutputToggle.tsx for why those two tallies legitimately differ.
   const hasStatusPill = readiness === "attention" || readiness === "failed";
 
   // Prop bundles shared verbatim by the two layout trees — each invocation

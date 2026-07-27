@@ -37,6 +37,33 @@ async function openConsole(page) {
   await page.waitForSelector(".output-console", { timeout: 3000 }).catch(() => {});
 }
 
+// How many messages the Output bell currently has pending, read from its
+// `data-notice-count` hook rather than the "(N notices)" in its aria-label —
+// the count has to be readable whether or not the badge is rendering it (see
+// OutputToggle's `showCount`), and a hook doesn't break when the copy changes.
+async function bellNoticeCount(page) {
+  const attr = await page.locator(".command-bar__output").first().getAttribute("data-notice-count");
+  return Number(attr ?? 0);
+}
+
+// The bell's count badge shows exactly when there are messages to count AND no
+// readiness pill is up to own the count instead — see OutputToggle.tsx for why
+// the bell's message tally and the pill's issue tally legitimately differ.
+// Asserted as a biconditional so it says something in every config and every
+// readiness state, rather than skipping when a state doesn't match one shape:
+// an attention state can carry no messages at all (a font fallback echoes
+// nothing), and a clean design can carry several.
+async function checkBellCount(page, check, where) {
+  const messages = await bellNoticeCount(page);
+  const pillUp = (await page.locator(".status-strip").count()) > 0;
+  const badges = await page.locator(".output-toggle__count").count();
+  check(
+    badges === (messages > 0 && !pillUp ? 1 : 0),
+    `the bell's count badge shows exactly when messages are pending and no pill owns the count ` +
+      `(${where}: ${messages} message(s), pill ${pillUp ? "up" : "absent"})`
+  );
+}
+
 // "Reset to defaults" confirms via an AlertDialog only when the params differ
 // from the defaults — click the button, then the dialog's Reset if it appears.
 async function resetDefaults(page) {
@@ -596,23 +623,19 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
     );
     await infoFooter.getByRole("button", { name: "Go back and fix" }).click();
     await waitDialogClosed(page, "Review").catch(() => {});
-    // One count on screen at a time. The bell tallies MESSAGES (log lines,
-    // informational ones included) and the pill tallies ISSUES (actionable
-    // items — a missing font has no log line, a `subsumedByFont` category
-    // folds into the font item), so the two numbers legitimately differ; side
-    // by side and unlabelled they read as one tally contradicting itself.
-    // While the pill is up it owns the count and the bell drops its badge,
-    // keeping the ringing glyph and the aria-label (see OutputToggle's
-    // `showCount`).
-    const bellLabel = (await page.locator(".command-bar__output").first().getAttribute("aria-label")) ?? "";
-    check(
-      /\(\d+ notices?\)/.test(bellLabel),
-      "the bell still reports its pending messages to assistive tech while the pill is up"
-    );
-    check(
-      (await page.locator(".output-toggle__count").count()) === 0,
-      "the bell shows no count badge while the status pill owns the count"
-    );
+    // With a pill up, the pill owns the count and the bell drops its badge.
+    await checkBellCount(page, check, ids[0]);
+    // Nothing is hidden by that: pending messages stay reported to assistive
+    // tech. Only assertable when this design actually has some.
+    if ((await bellNoticeCount(page)) > 0) {
+      const bellLabel = (await page.locator(".command-bar__output").first().getAttribute("aria-label")) ?? "";
+      check(
+        /\(\d+ notices?\)/.test(bellLabel),
+        "the bell still reports its pending messages to assistive tech while the pill is up"
+      );
+    } else {
+      console.log("  (this design's attention state carries no messages — the bell's label is not exercised)");
+    }
   } else {
     console.log(`  (the first design "${ids[0]}" is clean — no pill, as designed)`);
   }
@@ -629,18 +652,9 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
       (await page.locator(".status-strip").count()) === 0,
       "no status pill on a clean design (ready is silent — the Download button is the confirmation)"
     );
-    // With no pill to own it, the count comes back to the bell — the other
-    // half of the `showCount` contract. Only assertable when this design
-    // actually has pending messages; a silent design has nothing to count.
-    const cleanLabel = (await page.locator(".command-bar__output").first().getAttribute("aria-label")) ?? "";
-    if (/\(\d+ notices?\)/.test(cleanLabel)) {
-      check(
-        (await page.locator(".output-toggle__count").count()) === 1,
-        "with no pill, the bell carries its message count again"
-      );
-    } else {
-      console.log("  (the clean design has no pending messages — the bell's own count is not exercised)");
-    }
+    // …and with no pill to own it, the count comes back to the bell — the other
+    // half of the `showCount` contract, same biconditional.
+    await checkBellCount(page, check, "panel");
     // Back to the design the rest of the suite expects to be selected.
     await selectDesign(page, ids[0]);
   } else {

@@ -1,7 +1,8 @@
 // OutputToggle.tsx — the "Output console" bell: an icon-only, ringing bell that
 // toggles the notices/log console. Rides in the top bar of both layouts (desktop
-// CommandBar + mobile top bar). A pending-message count shows as a corner badge;
-// absent that, it doubles as the render-status indicator (a corner status dot).
+// CommandBar + mobile top bar). A pending-message count shows as a corner badge
+// unless `showCount` says otherwise; absent that badge, the corner doubles as
+// the render-status indicator (a status dot).
 //
 // The bell counts MESSAGES, never issues, and it never claims urgency: the
 // readiness pill (StatusStrip, driven by src/lib/readiness.ts) is the single
@@ -25,13 +26,11 @@ interface Props {
    *  > 0 and `showCount` is true. */
   noticeCount?: number;
   /**
-   * Whether the corner may carry the numeric count. False while the readiness
-   * pill is on screen (AppShell's `hasStatusPill` — the `attention`/`failed`
-   * states), so only one count is ever visible and the pill's issue count can't
-   * be read against a message count that means something else. The ringing
-   * glyph and the aria-label still report that messages are pending, so
-   * suppressing the number hides no information, it just stops two different
-   * tallies from competing.
+   * Whether the corner may carry the numeric count. Callers set it false while
+   * the readiness pill is on screen (AppShell's `hasStatusPill`) so only one
+   * count is visible at a time — see the file comment for why the two tallies
+   * differ. The ringing glyph, `data-notice-count` and the aria-label still
+   * report that messages are pending, so the number is all that's suppressed.
    */
   showCount?: boolean;
   onToggleOutput: () => void;
@@ -39,7 +38,8 @@ interface Props {
    * When provided, the bell doubles as the render-status indicator: a small
    * status-coloured dot rides its corner (red failed / pulsing while working or
    * stale), so a separate StatusPill isn't needed. The pending-notice count,
-   * when it is both present and shown, takes the corner instead.
+   * when it is both present and shown, takes the corner instead — which means
+   * suppressing the count can REVEAL a dot the badge was covering.
    */
   status?: RenderStatusInput;
   className?: string;
@@ -54,6 +54,7 @@ export function OutputToggle({
   className,
 }: Props) {
   const hasNotices = noticeCount > 0;
+  const showBadge = hasNotices && showCount;
   // A bell (ringing when notices are pending) reads far more clearly to a maker
   // than a bare glyph — and it keeps saying "there's something in here" even
   // when the count itself is suppressed.
@@ -81,9 +82,14 @@ export function OutputToggle({
       }`}
       aria-pressed={outputOpen}
       title="Messages"
+      // How many messages are pending, independent of whether the badge is
+      // currently rendering them — the stable hook the smoke suite reads to
+      // know which half of the `showCount` contract applies, so the check
+      // doesn't hang off the aria-label's English copy.
+      data-notice-count={noticeCount}
     >
       <BellGlyph size={16} />
-      {hasNotices && showCount ? (
+      {showBadge ? (
         <span
           // The same neutral "secondary" treatment Badge's own variant uses
           // elsewhere — a message count is not a verdict, so it never wears
