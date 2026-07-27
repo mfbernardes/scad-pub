@@ -74,23 +74,7 @@ Each `designs[]` entry also accepts an optional **`group`** field — a header s
 
 - **`group`**: an optional string. Designs sharing the same `group` value cluster under a header showing that string — a `<SelectGroup>`/`<SelectLabel>` pair in the compact dropdown, an `<h3>` section heading in the `ui.gallery` card grid (`src/components/DesignPicker.tsx`) — and the value is also matched by the gallery's search box, alongside `label`/`description`. Clustering follows `designs` array order and merges only **consecutive** entries: a run starts where a `group` value first appears and keeps absorbing later designs only while they repeat that exact value back-to-back; a design with a different (or absent) `group` breaks the run, so reusing the same group string further down the array — with something else in between — opens a second, separately headed section rather than joining the first. Omit `group`, or set it `null`, and that design renders in a headerless run; a config where no design sets `group` renders as a flat list with no headers at all
 
-Each `designs[]` entry also accepts optional **`reviewLabels`** and **`reviewNote`** fields, feeding a curated review summary (`src/lib/reviewSummary.ts`):
-
-```jsonc
-{
-  "designs": [
-    {
-      "id": "tag",
-      "label": "Tag",
-      "reviewLabels": { "label": "Text", "font": "Typeface" },
-      "reviewNote": "Text prints in capitals even though you typed it in lowercase."
-    }
-  ]
-}
-```
-
-- **`reviewLabels`**: an object mapping a **declared parameter's exact name** to the label its value is shown under in a review summary. Every key must match one of that design's own params — a stale or misspelled name fails the build. Several params sharing the same label merge into one summary row, their formatted values joined by `" / "`. A design with no `reviewLabels` still shows the summary's overall bounding-box "Dimensions" row, just no curated section above it. A row's value can be overridden by an `echo("@review", param, value)` from the design itself — see [`echo("@review", …)`](annotations.md#curated-review-override-echoreview-) — when the printed model doesn't literally match the stored parameter value (e.g. an uppercasing transform)
-- **`reviewNote`**: an optional short string, a generic hook for a design whose printed output transforms a parameter's raw value in a way worth calling out (e.g. "Text prints in capitals even though you typed it in lowercase"). Plain text, not Markdown. Omit for no note
+A curated review summary's row labels and its note also come only from the design's own `.scad` file — a parameter's own `// @review "<label>"` comment and the design's file-level `// @reviewNote "<text>"` (see [annotations.md](annotations.md#curated-review-label--review)). There is no config-level `review` field: no way to override a parameter's label or the note from the config, and no way to add a label to a parameter the design didn't annotate. A row's value can still be overridden by an `echo("@review", param, value)` from the design itself — see [`echo("@review", …)`](annotations.md#curated-review-override-echoreview-) — when the printed model doesn't literally match the stored parameter value (e.g. an uppercasing transform).
 
 Each `designs[]` entry also accepts an optional **`presets`** object — currently just an **`images`** field, bundled-preset thumbnails, in either of two forms:
 

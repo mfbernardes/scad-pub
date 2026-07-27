@@ -347,23 +347,10 @@ function copyLogoAssets(config, CONFIG_DIR, outScadDir, mustExist, register) {
 
 // The design list from the config, or auto-discovered root .scad files.
 function resolveDesignList(config, SOURCE) {
-  // An optional per-design non-empty string field: `reviewNote`. Absent ->
-  // null. (`description`/`icon`/`image`/`doc` no longer have a config-level
-  // field at all — a design's own annotations are their sole source now,
-  // see docs/annotations.md — so there's nothing left here to check for
-  // them. `presets` below reuses applyGroupSpec against its own
-  // config-spec.mjs node instead of a bespoke check.)
-  const checkDesignString = (raw, id, field) => {
-    if (raw === undefined || raw === null) return null;
-    if (typeof raw !== "string" || !raw.trim())
-      throw new Error(`gen-schema: design '${id}' '${field}' must be a non-empty string`);
-    return raw.trim();
-  };
-  // Shared validator for a config `designs[].presets.images` /
-  // `designs[].reviewLabels` field: an object mapping string keys to
-  // non-empty string values. The per-key cross-checks (real preset names /
-  // declared param names) happen later in buildDesigns, once parse results
-  // are available; this only enforces the shape.
+  // Shared validator for a config `designs[].presets.images` map entry: an
+  // object mapping string keys to non-empty string values. The per-key
+  // cross-check (real bundled preset names) happens later in buildDesigns,
+  // once parse results are available; this only enforces the shape.
   const checkStringMap = (raw, id, field) => {
     if (raw === undefined || raw === null) return null;
     if (typeof raw !== "object" || Array.isArray(raw))
@@ -402,20 +389,19 @@ function resolveDesignList(config, SOURCE) {
     }
     return config.designs.map((d) => {
       const id = checkId(d.id);
-      // A designs[] entry's own keys (id/label/file/heavy/group/presets/
-      // reviewLabels/reviewNote) never got the same unknown-key rejection
-      // every other nested group has — a stale or mistyped key (a flat
-      // 'description'/'icon'/'image'/'doc', now that a design's own
-      // annotations are their sole source — see docs/annotations.md) was
-      // silently dropped instead of failing the build. Reuse the exact same
-      // error (`unknownNestedKeyError`, the one `applyGroupSpec` itself
-      // raises for 'presets' below) against the spec's own
-      // `designs.items.properties`, so this can't drift into a second
-      // hand-written key list. `id` is checked above, first, by `checkId`,
-      // so a design with a missing or malformed id still gets checkId's own
-      // clear error rather than being pre-empted by this one; by the time
-      // this runs `id` is always a validated string, so the message below
-      // always names a real design.
+      // A designs[] entry's own keys (id/label/file/heavy/group/presets)
+      // never got the same unknown-key rejection every other nested group
+      // has — a stale or mistyped key (a flat 'icon', or a leftover
+      // 'description'/'media'/'review' from before a design's own metadata
+      // became the sole source — see docs/annotations.md) was silently
+      // dropped instead of failing the build. Reuse the exact same error
+      // (`unknownNestedKeyError`, the one `applyGroupSpec` itself raises for
+      // 'presets' below) against the spec's own `designs.items.properties`,
+      // so this can't drift into a second hand-written key list. `id` is
+      // checked above, first, by `checkId`, so a design with a missing or
+      // malformed id still gets checkId's own clear error rather than being
+      // pre-empted by this one; by the time this runs `id` is always a
+      // validated string, so the message below always names a real design.
       for (const key of Object.keys(d))
         if (!(key in CONFIG_SPEC.designs.items.properties))
           throw unknownNestedKeyError(`designs[${id}]`, CONFIG_SPEC.designs.items, key);
@@ -424,7 +410,7 @@ function resolveDesignList(config, SOURCE) {
       // DESIGN_PRESETS_SPEC comment. `presets.images` is `custom: true` (its
       // value needs a cross-reference against parse results only
       // buildDesigns has), so this only validates the surrounding object's
-      // shape/unknown keys; `checkStringMap` below does the per-key check.
+      // shape/unknown keys; `checkPresetImages` below does the per-key check.
       applyGroupSpec(d.presets ?? {}, CONFIG_SPEC.designs.items.properties.presets, `designs[${id}].presets`);
       return {
         id,
@@ -435,11 +421,6 @@ function resolveDesignList(config, SOURCE) {
         // Optional dropdown grouping header (designs sharing a group cluster).
         group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
         presetImagesSrc: checkPresetImages(d.presets?.images, id),
-        reviewLabelsSrc: checkStringMap(d.reviewLabels, id, "reviewLabels"),
-        // Plain deployment-authored text — no annotation fallback, and no
-        // cross-reference against the design's own params (unlike
-        // reviewLabels), so it resolves fully here.
-        reviewNote: checkDesignString(d.reviewNote, id, "reviewNote"),
       };
     });
   }
@@ -448,14 +429,14 @@ function resolveDesignList(config, SOURCE) {
     .sort()
     .map((f) => {
       const id = f.replace(/\.scad$/, "");
-      return { id, label: humanize(id), file: f, heavy: false, group: null, presetImagesSrc: null, reviewLabelsSrc: null, reviewNote: null };
+      return { id, label: humanize(id), file: f, heavy: false, group: null, presetImagesSrc: null };
     });
 }
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
 function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register }) {
-  return resolveDesignList(config, SOURCE).map(({ presetImagesSrc, reviewLabelsSrc, ...d }) => {
+  return resolveDesignList(config, SOURCE).map(({ presetImagesSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
@@ -476,12 +457,12 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     }
     // Description/icon/image/doc come ONLY from the design's own annotations
     // now — `// @description`/`// @icon`/`// @image`/`// @doc` (see
-    // docs/annotations.md); there is no config-level override. Each path
-    // resolves relative to the design's own .scad file, i.e. within SOURCE,
-    // so each is also checked to stay contained in it. Copy icon/image into
-    // the served tree under a deterministic `<id>-icon.<ext>` / `<id>-image.<ext>`
-    // name so distinct designs never clobber each other; the id charset is
-    // already URL-safe.
+    // docs/annotations.md); there is no config-level override left. Each
+    // path resolves relative to the design's own .scad file, i.e. within
+    // SOURCE, so each is also checked to stay contained in it. Copy icon/
+    // image into the served tree under a deterministic `<id>-icon.<ext>` /
+    // `<id>-image.<ext>` name so distinct designs never clobber each other;
+    // the id charset is already URL-safe.
     const description = meta.description;
     let icon = null;
     if (meta.icon) {
@@ -590,22 +571,24 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       );
       if (!Object.keys(presetImages).length) presetImages = undefined;
     }
-    // `reviewLabels`: each key must name an actual DECLARED PARAM of this
-    // design — the same typo-protection stance the icon/doc annotation
-    // fallbacks already apply, just cross-referenced against `params` (only
-    // known now that parseParams has run).
-    let reviewLabels;
-    if (reviewLabelsSrc && Object.keys(reviewLabelsSrc).length) {
-      const paramNames = new Set(params.map((p) => p.name));
-      reviewLabels = {};
-      for (const [name, label] of Object.entries(reviewLabelsSrc)) {
-        if (!paramNames.has(name))
-          throw new Error(
-            `gen-schema: design '${d.id}' 'reviewLabels["${name}"]' does not match any declared parameter`
-          );
-        reviewLabels[name] = label;
-      }
+    // `reviewLabels`: each declared parameter's own `// @review "<label>"`
+    // annotation (see scripts/lib/params.mjs and docs/annotations.md) — the
+    // sole source now, with no config-level override left. A label can only
+    // ever be declared on a real parameter in the first place, so there's no
+    // separate cross-reference to run here (contrast the old config
+    // `review.labels`, which needed one against `params`).
+    const reviewLabels = {};
+    for (const p of params) {
+      if (p.reviewLabel) reviewLabels[p.name] = p.reviewLabel;
     }
+    // `reviewNote`: the design's own file-level `// @reviewNote "<text>"`
+    // annotation — the sole source now, with no config-level override left.
+    const reviewNote = meta.reviewNote ?? null;
+    // Strip the transient `reviewLabel` annotation flag off each param before
+    // it reaches designs.json: it's already folded into `reviewLabels` above,
+    // and src/openscad/types.ts's ParamBase carries no such field (that file
+    // must never be edited — see this repo's CLAUDE.md).
+    const cleanParams = params.map(({ reviewLabel, ...rest }) => rest);
     return {
       ...d,
       description,
@@ -616,11 +599,12 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       abs,
       sections,
       collapsedSections,
-      params,
+      params: cleanParams,
+      reviewNote,
       // Only present when the design configures at least one preset image.
       ...(presetImages ? { presetImages } : {}),
-      // Only present when the design configures at least one review label.
-      ...(reviewLabels ? { reviewLabels } : {}),
+      // Only present when at least one parameter carries a `// @review` annotation.
+      ...(Object.keys(reviewLabels).length ? { reviewLabels } : {}),
     };
   });
 }

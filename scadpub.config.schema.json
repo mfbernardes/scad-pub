@@ -163,14 +163,6 @@
               }
             },
             "additionalProperties": false
-          },
-          "reviewLabels": {
-            "description": "Declared-param-name -> review-summary-label map.",
-            "type": "object"
-          },
-          "reviewNote": {
-            "description": "Short callout shown in the review summary.",
-            "type": "string"
           }
         },
         "additionalProperties": true

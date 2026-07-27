@@ -309,52 +309,51 @@ test("duplicate design ids fail the build", () => {
 test("a designs[] entry with an unrecognised key fails the build, naming the design and the valid keys", () => {
   assert.throws(
     () => run("widget-designs-unknownkey.config.json"),
-    /'designs\[widget\]': unknown key 'shadow'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets, reviewLabels, reviewNote/
+    /'designs\[widget\]': unknown key 'shadow'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets/
   );
 });
 
 test("a designs[] entry's stale flat 'icon' fails the build instead of being silently dropped", () => {
   assert.throws(
     () => run("widget-designs-stale-icon.config.json"),
-    /'designs\[widget\]': unknown key 'icon'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets, reviewLabels, reviewNote/
+    /'designs\[widget\]': unknown key 'icon'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets/
   );
 });
 
-test("a designs[] entry's removed 'description' key fails the build like any other unrecognised key", () => {
-  // A design's picker description/icon/image/doc come only from its own .scad
-  // annotations now — there is no config-level field for any of them, so a
-  // config still setting 'description' fails the ordinary unknown-key check.
+test("a designs[] entry's removed 'description'/'media'/'review' keys fail the build like any other unrecognised key", () => {
+  // Design metadata (description/icon/image/doc/review labels/note) comes only
+  // from the design's own .scad annotations now — these config-level fields
+  // were removed entirely, not just deprecated, so they fail the ordinary
+  // unknown-key check like any stale key.
   assert.throws(
     () => run("widget-designs-stale-description.config.json"),
-    /'designs\[widget\]': unknown key 'description'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets, reviewLabels, reviewNote/
+    /'designs\[widget\]': unknown key 'description'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets/
+  );
+  assert.throws(
+    () => run("widget-designs-stale-media.config.json"),
+    /'designs\[widget\]': unknown key 'media'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets/
+  );
+  assert.throws(
+    () => run("widget-designs-stale-review.config.json"),
+    /'designs\[widget\]': unknown key 'review'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets/
   );
 });
 
-test("reviewLabels: keys matching declared params are resolved, plus a reviewNote string", () => {
-  const { schema } = run("widget-reviewlabels.config.json");
-  const widget = schema.designs.find((d) => d.id === "widget");
-  assert.deepEqual(widget.reviewLabels, { label: "Text", FontSize: "Text", thickness: "Thickness" });
-  assert.equal(widget.reviewNote, "Text prints in capitals even though you typed it in lowercase.");
-});
-
-test("a design with no configured reviewLabels/reviewNote omits/nulls them", () => {
+test("a design with no @review/@reviewNote annotations omits/nulls reviewLabels/reviewNote", () => {
   const { schema } = run("widget.config.json");
   assert.equal(schema.designs[0].reviewLabels, undefined);
   assert.equal(schema.designs[0].reviewNote ?? null, null);
 });
 
-test("reviewLabels: a key not matching any declared parameter fails the build", () => {
-  assert.throws(
-    () => run("widget-reviewlabels-badname.config.json"),
-    /'reviewLabels\["nope"\]' does not match any declared parameter/
-  );
-});
-
-test("reviewLabels: a blank value fails the build like the other design string fields", () => {
-  assert.throws(
-    () => run("widget-reviewlabels-badtype.config.json"),
-    /'reviewLabels\["label"\]' must be a non-empty string/
-  );
+test("reviewLabels/reviewNote: a design's own @review/@reviewNote annotations are the sole source", () => {
+  const { schema } = run("widget-review-annot.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  assert.deepEqual(widget.reviewLabels, { label: "Text", thickness: "Thickness" });
+  assert.equal(widget.reviewNote, "Prints exactly as typed.");
+  // The transient annotation flag never reaches a param's own object — it's
+  // folded into reviewLabels above and stripped (src/openscad/types.ts's
+  // ParamBase carries no such field).
+  for (const p of widget.params) assert.equal(p.reviewLabel, undefined);
 });
 
 test("presetImages: a key matching a bundled preset name is resolved and copied", () => {
@@ -500,10 +499,17 @@ test("parseParams captures file-level @description / @icon / @doc metadata", () 
     icon: "assets/emblem.svg",
     image: null,
     doc: "collapsible-doc.md",
+    reviewNote: null,
   });
   // A design file with no such annotations reports nulls.
   const plain = parseParams(join(FIXTURES, "mini.scad"));
-  assert.deepEqual(plain.meta, { description: null, icon: null, image: null, doc: null });
+  assert.deepEqual(plain.meta, {
+    description: null,
+    icon: null,
+    image: null,
+    doc: null,
+    reviewNote: null,
+  });
 });
 
 test("lang/dir + per-design shortcut icons + screenshot fields reach the manifest", () => {
@@ -519,8 +525,8 @@ test("lang/dir + per-design shortcut icons + screenshot fields reach the manifes
   );
   assert.equal(manifest.lang, "pt-BR");
   assert.equal(manifest.dir, "rtl");
-  // Two designs -> auto-derived shortcuts, each carrying its design's own
-  // `// @icon` annotation.
+  // Two designs -> auto-derived shortcuts, each carrying its design's icon —
+  // each design's own `// @icon` annotation.
   const widgetShortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
   assert.deepEqual(widgetShortcut.icons, [
     { src: "scad/widget-icon.svg", sizes: "any", type: "image/svg+xml" },
@@ -1801,6 +1807,20 @@ function paramsOf(scad) {
   }
 }
 
+// Same as paramsOf, but returns the FULL parseParams() result — needed for
+// file-level metadata (`@description`/`@icon`/`@reviewNote`/…) assertions,
+// which live on `.meta` rather than `.params`.
+function parseOf(scad) {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-font-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(file, scad);
+  try {
+    return parseParams(file);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 test("only a string or enum param with an explicit @font is flagged isFont", () => {
   const params = paramsOf(
     `/* [Main] */\n` +
@@ -1860,6 +1880,37 @@ test("@info marks a param for the viewer panel, with optional label + unit", () 
   assert.deepEqual(byName.dia.info, { label: "Diameter", unit: null });
   // No annotation -> no info field.
   assert.equal(byName.width.info, undefined);
+});
+
+test("@review sets a parameter's review-summary label; the quoted label is required", () => {
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Engraved text.\n` +
+      `// @review "Text"\n` +
+      `label = "hi";\n` +
+      `// Plain param, no annotation.\n` +
+      `width = 10;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.label.reviewLabel, "Text");
+  // The annotation line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.label.help.includes("@review"));
+  assert.equal(byName.label.description, "Engraved text.");
+  // No annotation -> no reviewLabel field.
+  assert.equal(byName.width.reviewLabel, undefined);
+});
+
+test("@reviewNote sets a design's review-summary note; first occurrence wins, blank is ignored", () => {
+  const { meta } = parseOf(
+    `// @reviewNote "First note."\n` +
+      `// @reviewNote "Second note (ignored)."\n` +
+      `/* [Main] */\n` +
+      `label = "hi";\n`
+  );
+  assert.equal(meta.reviewNote, "First note.");
+
+  const blank = parseOf(`// @reviewNote ""\n/* [Main] */\nlabel = "hi";\n`);
+  assert.equal(blank.meta.reviewNote, null);
 });
 
 test("@svg marks a string field for the wizard and captures the layers binding", () => {
@@ -1967,6 +2018,31 @@ test("a malformed @filledBy (no target) fails with file and line", () => {
   assert.throws(
     () => paramsOf(`/* [S] */\n// @filledBy\nlayers_param = "";\n`),
     /f\.scad:2: malformed @filledBy annotation/
+  );
+});
+
+test("a malformed @review (no quoted label, or unquoted text) fails with file and line", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @review\nfoo = 1;\n`),
+    /f\.scad:2: malformed @review annotation/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @review Text\nfoo = 1;\n`),
+    /f\.scad:2: malformed @review annotation/
+  );
+});
+
+test("@review with a blank quoted label fails with file and line", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @review ""\nfoo = 1;\n`),
+    /f\.scad:2: @review annotation must have a non-empty quoted label/
+  );
+});
+
+test("a malformed @reviewNote (missing quotes) fails with file and line", () => {
+  assert.throws(
+    () => parseOf(`// @reviewNote no quotes here\n/* [S] */\nfoo = 1;\n`),
+    /f\.scad:1: malformed @reviewNote annotation/
   );
 });
 

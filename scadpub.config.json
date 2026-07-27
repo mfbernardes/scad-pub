@@ -9,8 +9,6 @@
     {
       "id": "tag",
       "label": "Tag",
-      "reviewLabels": { "label": "Text", "font": "Typeface" },
-      "reviewNote": "The engraved or raised text keeps your capitalisation exactly as typed.",
       "presets": {
         "images": {
           "Large tag": "examples/tag-preset-large.png",

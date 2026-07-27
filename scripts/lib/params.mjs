@@ -1,8 +1,8 @@
 // params.mjs — parse OpenSCAD's Customizer syntax (the `// [Section]` headers,
 // `name = default; // [hint]` parameter lines, and the doc comments above them,
-// plus ScadPub's `@showIf` / `@font` / `@info` / `@collapsed` annotations) into
-// the typed parameter schema the UI is generated from. Skips the [Hidden]
-// section, exactly as OpenSCAD's own Customizer does.
+// plus ScadPub's `@showIf` / `@font` / `@info` / `@review` / `@collapsed`
+// annotations) into the typed parameter schema the UI is generated from.
+// Skips the [Hidden] section, exactly as OpenSCAD's own Customizer does.
 import { readFileSync } from "node:fs";
 
 // A section header must be the WHOLE line (leading/trailing whitespace only) —
@@ -35,18 +35,41 @@ const ADVANCED_ANNOT_RE = /^@advanced\s*$/i;
 // viewer's dimension info panel. The optional text is a custom label, and an
 // optional `| unit` suffix is appended to the value. Invisible to OpenSCAD.
 const INFO_RE = /^@info\b\s*(.*)$/i;
+// `@review "<label>"` directive: sets this parameter's label in the curated
+// pre-download review summary (designs[].reviewLabels — see docs/config.md
+// and docs/annotations.md). Unlike `@info`'s label, which is optional free
+// text, `@review`'s quoted label is REQUIRED: a review row always needs
+// something to show, with no description-based fallback to fall back to
+// (an `@info` row without a custom label falls back to the parameter's own
+// description; a review row has nothing equivalent). This annotation is the
+// sole source of a row's label — see gen-schema.mjs's buildDesigns.
+// Invisible to OpenSCAD.
+const REVIEW_RE = /^@review\s+"([^"]*)"\s*$/i;
 // `// @collapsed` on its own line, marking the NEXT section folded by default.
 const COLLAPSE_RE = /^\s*\/\/\s*@collapsed?\s*$/i;
 // File-level design metadata, read anywhere in the file (typically a header
 // comment, so it works even before the first section). `@description` is the
-// design's picker sub-label; `@icon` is a path to its thumbnail; `@doc` is a
-// path to the design's own user-documentation Markdown file. All three resolve
-// relative to the design's own .scad file, are ScadPub-only fallbacks — a
-// config `designs[]` entry still overrides them — and invisible to OpenSCAD.
+// design's picker sub-label; `@icon` is a path to its thumbnail; `@image` is
+// larger gallery card artwork; `@doc` is a path to the design's own
+// user-documentation Markdown file. All four resolve relative to the design's
+// own .scad file, are the SOLE source of this metadata (no config-level
+// override exists — see docs/annotations.md), and are invisible to OpenSCAD.
 const DESCRIPTION_RE = /^\s*\/\/\s*@description\b\s*(.*)$/i;
 const ICON_RE = /^\s*\/\/\s*@icon\b\s*(.*)$/i;
 const IMAGE_RE = /^\s*\/\/\s*@image\b\s*(.*)$/i;
 const FILEDOC_RE = /^\s*\/\/\s*@doc\b\s*(.*)$/i;
+// File-level `// @reviewNote "<text>"`: this design's review-summary note
+// (`designs[].reviewNote` — see docs/config.md and docs/annotations.md). Same
+// file-level idiom as the four above (first occurrence wins; the sole
+// source, no config-level override), but — like `@review` above — takes a
+// REQUIRED quoted string rather than bare trailing text: the keyword present
+// with anything other than a `"…"` string fails the build, unlike its
+// unquoted meta siblings, which merely treat unparsed trailing text as part
+// of the path/label they capture.
+// Matched in two passes: the bare keyword (so a malformed shape is
+// detected at all) and the full quoted form (so a well-formed one is read).
+const REVIEWNOTE_KEYWORD_RE = /^\s*\/\/\s*@reviewNote\b/i;
+const REVIEWNOTE_RE = /^\s*\/\/\s*@reviewNote\s+"([^"]*)"\s*$/i;
 // `@svg [layers=<param>] [height=<param>]` directive: marks a string parameter as
 // an SVG file the in-app wizard prepares (check / fix / import). The optional
 // `layers=<param>` binds the wizard's derived per-region string to a second
@@ -71,7 +94,7 @@ const EDITONMODEL_RE = /^@editOnModel\s*$/i;
 // that grammar — or starts with an unrecognised `@word` at all — fails the
 // build with the file and line, instead of silently degrading to plain doc
 // prose (a typo'd `@shwoIf` used to just become part of the help text).
-const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "advanced", "info", "svg", "filledby", "editonmodel"]);
+const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "advanced", "info", "review", "svg", "filledby", "editonmodel"]);
 const ANNOTATION_WORD_RE = /^@([A-Za-z-]+)\b/;
 
 // `@showIf` clause shapes accepted at both generate time (here) and runtime
@@ -324,6 +347,8 @@ export function parseParams(absPath) {
   let sectionAdvanced = false;
   // Set by an `// @info [Label | unit]` line; consumed by the next parameter.
   let pendingInfo = null;
+  // Set by an `// @review "<label>"` line; consumed by the next parameter.
+  let pendingReview = null;
   // Set by an `// @svg [layers=<param>]` line; consumed by the next parameter.
   let pendingSvg = null;
   let pendingSvgLine = 0;
@@ -344,7 +369,7 @@ export function parseParams(absPath) {
   // File-level design metadata (`// @description` / `// @icon`); first non-empty
   // wins. Populated regardless of section, so a header comment above the first
   // `/* [Section] */` is honoured.
-  const meta = { description: null, icon: null, image: null, doc: null };
+  const meta = { description: null, icon: null, image: null, doc: null, reviewNote: null };
   // The line each param's @showIf/@svg/@filledBy annotation was declared on,
   // keyed by param name — fed into validateAnnotations below for diagnostics.
   const lineInfo = { showIf: new Map(), svg: new Map(), filledBy: new Map() };
@@ -354,6 +379,7 @@ export function parseParams(absPath) {
     pendingFont = false;
     pendingAdvanced = false;
     pendingInfo = null;
+    pendingReview = null;
     pendingSvg = null;
     pendingFilledBy = null;
     pendingEditOnModel = false;
@@ -390,6 +416,17 @@ export function parseParams(absPath) {
       if (meta.doc === null && docmeta[1].trim()) meta.doc = docmeta[1].trim();
       continue;
     }
+    // `@reviewNote` is checked in two passes (see its regexes' comment): the
+    // bare keyword first, so a shape that isn't a well-formed quoted string
+    // fails the build instead of silently falling through to be read as
+    // ordinary doc prose or an unrelated section/param line.
+    if (REVIEWNOTE_KEYWORD_RE.test(line)) {
+      const notemeta = line.match(REVIEWNOTE_RE);
+      if (!notemeta)
+        fail(absPath, lineNo, `malformed @reviewNote annotation: expected // @reviewNote "<text>"`);
+      if (meta.reviewNote === null && notemeta[1].trim()) meta.reviewNote = notemeta[1].trim();
+      continue;
+    }
     const sm = line.match(SECTION_RE);
     if (sm) {
       section = sm[1];
@@ -424,6 +461,12 @@ export function parseParams(absPath) {
       if (pendingAdvanced || sectionAdvanced) p.advanced = true;
       // Surface this param's value in the viewer info panel (see `// @info`).
       if (pendingInfo) p.info = pendingInfo;
+      // This param's review-summary label (see `// @review`). Transient:
+      // gen-schema.mjs's buildDesigns folds it into the design's own
+      // `reviewLabels` map and strips it back off before the param reaches
+      // designs.json — src/openscad/types.ts's ParamBase carries no such
+      // field, and that file must never be edited (see this repo's CLAUDE.md).
+      if (pendingReview) p.reviewLabel = pendingReview;
       // Mark a string SVG field for the in-app wizard (see `// @svg`), and a
       // wizard-populated target for demoted rendering (see `// @filledBy`).
       // M9: a type mismatch (the annotation on a non-string param) fails the
@@ -483,6 +526,7 @@ export function parseParams(absPath) {
       // label/help; it drives conditional visibility in the UI instead.
       const showIf = content.match(SHOWIF_RE);
       const info = content.match(INFO_RE);
+      const review = content.match(REVIEW_RE);
       const svg = content.match(SVG_ANNOT_RE);
       const filledBy = content.match(FILLEDBY_RE);
       const word = content.match(ANNOTATION_WORD_RE);
@@ -502,6 +546,14 @@ export function parseParams(absPath) {
         // description in the UI).
         const [label, unit] = info[1].split("|").map((s) => s.trim());
         pendingInfo = { label: label || null, unit: unit || null };
+      } else if (review) {
+        // The quoted label is required (see REVIEW_RE's own comment) — a
+        // blank one (`@review ""`) is always a mistake, unlike a file-level
+        // `@reviewNote`/`@description`, which silently ignore blank text as
+        // "not set".
+        const label = review[1].trim();
+        if (!label) fail(absPath, lineNo, `@review annotation must have a non-empty quoted label`);
+        pendingReview = label;
       } else if (filledBy) {
         pendingFilledBy = filledBy[1];
         pendingFilledByLine = lineNo;
@@ -541,7 +593,7 @@ export function parseParams(absPath) {
         fail(
           absPath,
           lineNo,
-          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @advanced, @info, @svg, @filledBy, @editOnModel, @collapsed, @description, @icon, @image, @doc)`
+          `unknown annotation '@${word[1]}' (expected one of: @showIf, @font, @advanced, @info, @review, @svg, @filledBy, @editOnModel, @collapsed, @description, @icon, @image, @doc, @reviewNote)`
         );
       } else pendingDoc.push(dm[1]);
     } else if (line.trim() === "") {

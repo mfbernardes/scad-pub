@@ -231,7 +231,45 @@ Two checks help avoid confusing output:
 - Rows are **not** de-duplicated. If two branches both echo the same label unconditionally, you see two rows. Make sure only one branch echoes a given label per render.
 - A malformed call is silently ignored. If a row does not appear, double-check the argument count and the exact `"@info"` tag.
 
+## Curated review label (`// @review`)
+
+Mark a parameter `// @review "<label>"` to set the label its value is shown under in the pre-download review summary (`designs[].reviewLabels`; see [config.md](config.md#design-sources)). It labels the parameter it sits on — there's no name argument, unlike `// @filledBy` — so the label lives beside the parameter it documents instead of a separate config block that would have to re-state the parameter's own name back to itself:
+
+```scad
+/* [Text] */
+// Text to emboss on the tag.
+// @review "Text"
+label = "ScadPub";
+
+// Font family/style.
+// @font
+// @review "Typeface"
+font = "Liberation Sans:style=Bold";
+```
+
+The quoted label is required: bare `// @review`, with no label, fails the build the same way a malformed `@showIf` does — and so does a label that's present but blank (`@review ""`). Several parameters may set the same label; their values merge into a single review row, joined by `" / "` (`src/lib/reviewSummary.ts`). A parameter with no `// @review` annotation contributes no row. There is no config-level way to add or override a label: a design's own annotations are the only source.
+
+Adding `// @review` to a design's `.scad` file changes that file's bytes and therefore its `renderHash` (see [Everything renderable is generated at build time](../CLAUDE.md) — `renderHash` hashes the mounted `.scad`, comments included). A deployment that adopts the annotation on an already-shipped design invalidates every cached render for it, exactly like any other edit to a mounted `.scad` file.
+
+## Curated review note (`// @reviewNote`)
+
+Set a design's review-summary note from its own `.scad` file — the same file-level idiom as `// @description`/`@icon`/`@image`/`@doc` above, put anywhere in the file (a header comment is the natural home):
+
+```scad
+// @reviewNote "Text prints in capitals even though you typed it in lowercase."
+
+/* [Text] */
+label = "gate 12";
+```
+
+- First occurrence in the file wins; a blank quoted string (`""`) is ignored, same as the other file-level annotations.
+- Unlike those, the quoted-string form is required here: `// @reviewNote` followed by anything other than a `"…"` string fails the build. There is no config-level override: a design's own `// @reviewNote` is the only source.
+
+Like `// @review` above, adding this line to a design's `.scad` file changes its `renderHash` for any deployment building against it.
+
 ## Curated review override (`echo("@review", …)`)
+
+Not to be confused with the build-time `// @review "<label>"` comment annotation above, which sets a row's *label*: this is a runtime `echo()` that overrides a row's *value*.
 
 A curated review row (`designs[].reviewLabels`, see [config.md](config.md#design-sources)) normally shows a parameter's raw stored value, formatted the same way as any other row. Some designs **transform** a value before it reaches the printed model — a lettering profile that uppercases free text, for instance: typed `"gate 12"`, printed `"GATE 12"`. Showing the raw typed value in the review row would misrepresent what's actually on the model.
 

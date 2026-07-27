@@ -18,9 +18,8 @@
 //
 // What this file does NOT own: path existence, cross-field checks
 // (`defaultDesign` naming a real design, `ui.afterExport.helpTab` naming a
-// real help tab, `designs[].reviewLabels` keys naming real params,
-// `designs[].presets.images` keys naming real presets), colour-value safety
-// beyond "is this shape a plain object of strings", the
+// real help tab, `designs[].presets.images` keys naming real presets),
+// colour-value safety beyond "is this shape a plain object of strings", the
 // `strings`-against-i18n-catalogue check, or anything that needs file I/O to
 // answer. Those all stay exactly where they live today (gen-schema.mjs's
 // generate(), and the bespoke parsers in config-parsers.mjs) — this spec only
@@ -276,16 +275,18 @@ const PWA_SPEC = {
 };
 
 // ── `designs[].presets` — nested under `designs.items` below. A `designs[]`
-// entry used to carry `description`/`icon`/`image`/`doc` as flat fields, each
-// falling back to a same-named annotation in the design's own .scad file when
-// the config omitted it. Those four are GONE from the config surface — a
-// design's picker description, thumbnail icon, gallery card art, and user-doc
-// come ONLY from its own `// @description`/`// @icon`/`// @image`/`// @doc`
-// annotations now (see docs/annotations.md); there is no config-level value
-// to fall back FROM any more. `presets` is the one nested group this reorg
-// still introduces, because `presets.images` itself carries two forms — see
-// its own comment below — and has no annotation counterpart at all (a
-// bundled-preset thumbnail isn't something a .scad file could name).
+// entry used to also carry `media` (three config-relative asset paths —
+// picker icon, gallery card art, a Markdown user-doc) and `review` (a
+// review-summary label map + note), each falling back to a same-named
+// annotation in the design's own .scad file when the config omitted it. Both
+// groups are GONE: a design's own metadata now lives ONLY in its .scad file
+// — `// @description`/`// @icon`/`// @image`/`// @doc` and a parameter's own
+// `// @review "<label>"` / the design's `// @reviewNote "<text>"` (see
+// docs/annotations.md) are the sole source, with no config-level override or
+// escape hatch left. `presets` is the one remaining nested group, because
+// `presets.images` itself carries two forms — see its own comment below —
+// and has no annotation counterpart at all (a bundled-preset thumbnail isn't
+// something a .scad file could name).
 //
 // `presets` is an ordinary applyGroupSpec-driven node (like `ui`/`viewer`),
 // NOT `custom: true` itself — a config setting `designs[].presets.nope` gets
@@ -391,17 +392,13 @@ export const CONFIG_SPEC = {
         file: { type: "string", description: "Path to the .scad file, relative to 'source'; defaults to '<id>.scad'." },
         heavy: { type: "boolean", default: false, description: "Start this design in manual-render mode." },
         group: { type: "string", description: "Dropdown/gallery grouping header; consecutive same-value designs cluster." },
-        // No `description`/`icon`/`image`/`doc` here: a design's picker
-        // description, thumbnail icon, gallery card art, and user-doc come
-        // ONLY from its own `// @description`/`// @icon`/`// @image`/
-        // `// @doc` annotations now (see docs/annotations.md).
+        // No `description`/`media`/`review` here: a design's picker
+        // description, icon, gallery image, doc, and curated review
+        // label/note come ONLY from its own .scad annotations now
+        // (`// @description`, `// @icon`, `// @image`, `// @doc`,
+        // `// @review "<label>"`, `// @reviewNote "<text>"` — see
+        // docs/annotations.md). There is no config-level override left.
         presets: DESIGN_PRESETS_SPEC,
-        reviewLabels: {
-          type: "object",
-          custom: true,
-          description: "Declared-param-name -> review-summary-label map.",
-        },
-        reviewNote: { type: "string", description: "Short callout shown in the review summary." },
       },
     },
   },

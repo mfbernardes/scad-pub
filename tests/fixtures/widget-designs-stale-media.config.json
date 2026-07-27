@@ -1,0 +1,5 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "designs": [{ "id": "widget", "label": "Widget", "media": { "icon": "logo.svg" } }]
+}
