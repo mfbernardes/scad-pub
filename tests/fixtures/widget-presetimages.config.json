@@ -5,7 +5,7 @@
     {
       "id": "widget",
       "label": "Widget",
-      "presetImages": { "Tall": "design-icon.png" }
+      "presets": { "images": { "Tall": "design-icon.png" } }
     }
   ]
 }

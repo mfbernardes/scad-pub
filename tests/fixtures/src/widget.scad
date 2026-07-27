@@ -1,8 +1,8 @@
 use <lib/core.scad>
 
-// File-level metadata the config DOES override (config wins), so its presence
-// here must not change widget's resolved description/icon.
-// @description Annotation description that should lose to the config.
+// File-level metadata: a design's own annotations are the sole source of its
+// picker description/icon now (no config-level override exists).
+// @description A little widget.
 // @icon assets/emblem.svg
 
 /* [Main] */

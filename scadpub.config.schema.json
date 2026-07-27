@@ -146,25 +146,16 @@
             "description": "Dropdown/gallery grouping header; consecutive same-value designs cluster.",
             "type": "string"
           },
-          "description": {
-            "description": "Picker description line; falls back to the design's // @description.",
-            "type": "string"
-          },
-          "icon": {
-            "description": "Picker icon path (config-relative); falls back to the design's // @icon.",
-            "type": "string"
-          },
-          "image": {
-            "description": "Larger ui.gallery card artwork; falls back to the design's // @image.",
-            "type": "string"
-          },
-          "doc": {
-            "description": "Path to a Markdown user-doc file; falls back to the design's // @doc.",
-            "type": "string"
-          },
-          "presetImages": {
-            "description": "Bundled-preset-name -> thumbnail-image-path map.",
-            "type": "object"
+          "presets": {
+            "description": "This design's bundled-preset presentation.",
+            "type": "object",
+            "properties": {
+              "images": {
+                "description": "Bundled-preset-name -> thumbnail-image-path map. Every key must match a real bundled preset name (checked in buildDesigns, once parse results are available).",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false
           },
           "reviewLabels": {
             "description": "Declared-param-name -> review-summary-label map.",

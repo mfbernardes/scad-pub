@@ -7,6 +7,9 @@
 //   • import() extrudes an SVG (a default emblem.svg is bundled; upload your own
 //     SVG and set `svg_file` to its filename to swap it).
 
+// @description Personalised name tag with text.
+// @icon tag-icon.svg
+
 /* [Tag] */
 // Width of the tag (mm).
 width = 90; // [10:1:160]

@@ -41,6 +41,7 @@ import { generatePwaAssets } from "./lib/pwa-assets.mjs";
 import { scadpubVersion } from "./lib/version.mjs";
 import { componentVersions } from "./lib/dep-versions.mjs";
 import {
+  applyGroupSpec,
   parseColors,
   parseDir,
   parseFileImport,
@@ -55,8 +56,9 @@ import {
   parseStrings,
   parseUi,
   parseViewer,
+  unknownNestedKeyError,
 } from "./lib/config-parsers.mjs";
-import { KNOWN_TOP_LEVEL_KEYS } from "./lib/config-spec.mjs";
+import { KNOWN_TOP_LEVEL_KEYS, CONFIG_SPEC } from "./lib/config-spec.mjs";
 
 // Re-export the parsers/helpers the unit tests (tests/gen-schema.test.mjs)
 // import from this entry, so the module split is invisible to the test suite.
@@ -335,20 +337,23 @@ function copyLogoAssets(config, CONFIG_DIR, outScadDir, mustExist, register) {
 
 // The design list from the config, or auto-discovered root .scad files.
 function resolveDesignList(config, SOURCE) {
-  // An optional per-design non-empty string field: the picker `description`, or
-  // the `icon` path (config-relative, like `logo`, copied into the served tree
-  // by buildDesigns and used for the manifest shortcut + picker thumbnail).
-  // Absent -> null.
+  // An optional per-design non-empty string field: `reviewNote`. Absent ->
+  // null. (`description`/`icon`/`image`/`doc` no longer have a config-level
+  // field at all — a design's own annotations are their sole source now,
+  // see docs/annotations.md — so there's nothing left here to check for
+  // them. `presets` below reuses applyGroupSpec against its own
+  // config-spec.mjs node instead of a bespoke check.)
   const checkDesignString = (raw, id, field) => {
     if (raw === undefined || raw === null) return null;
     if (typeof raw !== "string" || !raw.trim())
       throw new Error(`gen-schema: design '${id}' '${field}' must be a non-empty string`);
     return raw.trim();
   };
-  // Shared validator for a config `designs[]` field that must be an object
-  // mapping string keys to non-empty string values (presetImages, reviewLabels).
-  // The per-key cross-checks (real preset names / declared param names) happen
-  // later in buildDesigns; this only enforces the shape.
+  // Shared validator for a config `designs[].presets.images` /
+  // `designs[].reviewLabels` field: an object mapping string keys to
+  // non-empty string values. The per-key cross-checks (real preset names /
+  // declared param names) happen later in buildDesigns, once parse results
+  // are available; this only enforces the shape.
   const checkStringMap = (raw, id, field) => {
     if (raw === undefined || raw === null) return null;
     if (typeof raw !== "object" || Array.isArray(raw))
@@ -371,41 +376,62 @@ function resolveDesignList(config, SOURCE) {
         throw new Error(`gen-schema: duplicate design id ${JSON.stringify(id)} in 'designs'`);
       seenIds.add(id);
     }
-    return config.designs.map((d) => ({
-      id: checkId(d.id),
-      label: d.label ?? humanize(d.id),
-      file: d.file ?? `${d.id}.scad`,
-      // Heavy designs skip the debounced auto-render (the user renders on demand).
-      heavy: d.heavy ?? false,
-      // Optional dropdown grouping header (designs sharing a group cluster).
-      group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
-      // Optional picker description + icon + user-doc (icon/doc are config-
-      // relative paths, resolved/copied to served URLs once outScadDir exists).
-      description: checkDesignString(d.description, d.id, "description"),
-      iconSrc: checkDesignString(d.icon, d.id, "icon"),
-      imageSrc: checkDesignString(d.image, d.id, "image"),
-      docSrc: checkDesignString(d.doc, d.id, "doc"),
-      presetImagesSrc: checkStringMap(d.presetImages, d.id, "presetImages"),
-      reviewLabelsSrc: checkStringMap(d.reviewLabels, d.id, "reviewLabels"),
-      // Plain deployment-authored text, like description — no annotation
-      // fallback, and no cross-reference against the design's own params
-      // (unlike reviewLabels), so it resolves fully here.
-      reviewNote: checkDesignString(d.reviewNote, d.id, "reviewNote"),
-    }));
+    return config.designs.map((d) => {
+      const id = checkId(d.id);
+      // A designs[] entry's own keys (id/label/file/heavy/group/presets/
+      // reviewLabels/reviewNote) never got the same unknown-key rejection
+      // every other nested group has — a stale or mistyped key (a flat
+      // 'description'/'icon'/'image'/'doc', now that a design's own
+      // annotations are their sole source — see docs/annotations.md) was
+      // silently dropped instead of failing the build. Reuse the exact same
+      // error (`unknownNestedKeyError`, the one `applyGroupSpec` itself
+      // raises for 'presets' below) against the spec's own
+      // `designs.items.properties`, so this can't drift into a second
+      // hand-written key list. `id` is checked above, first, by `checkId`,
+      // so a design with a missing or malformed id still gets checkId's own
+      // clear error rather than being pre-empted by this one; by the time
+      // this runs `id` is always a validated string, so the message below
+      // always names a real design.
+      for (const key of Object.keys(d))
+        if (!(key in CONFIG_SPEC.designs.items.properties))
+          throw unknownNestedKeyError(`designs[${id}]`, CONFIG_SPEC.designs.items, key);
+      // Preset-image presentation, nested under `presets`. `applyGroupSpec`
+      // gives it unknown-key rejection for free — see config-spec.mjs's
+      // DESIGN_PRESETS_SPEC comment. `presets.images` is `custom: true` (its
+      // value needs a cross-reference against parse results only
+      // buildDesigns has), so this only validates the surrounding object's
+      // shape/unknown keys; `checkStringMap` below does the per-key check.
+      applyGroupSpec(d.presets ?? {}, CONFIG_SPEC.designs.items.properties.presets, `designs[${id}].presets`);
+      return {
+        id,
+        label: d.label ?? humanize(d.id),
+        file: d.file ?? `${d.id}.scad`,
+        // Heavy designs skip the debounced auto-render (the user renders on demand).
+        heavy: d.heavy ?? false,
+        // Optional dropdown grouping header (designs sharing a group cluster).
+        group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
+        presetImagesSrc: checkStringMap(d.presets?.images, id, "presets.images"),
+        reviewLabelsSrc: checkStringMap(d.reviewLabels, id, "reviewLabels"),
+        // Plain deployment-authored text — no annotation fallback, and no
+        // cross-reference against the design's own params (unlike
+        // reviewLabels), so it resolves fully here.
+        reviewNote: checkDesignString(d.reviewNote, id, "reviewNote"),
+      };
+    });
   }
   return readdirSync(SOURCE)
     .filter((f) => f.endsWith(".scad"))
     .sort()
     .map((f) => {
       const id = f.replace(/\.scad$/, "");
-      return { id, label: humanize(id), file: f, heavy: false, group: null, description: null, iconSrc: null, imageSrc: null, docSrc: null, presetImagesSrc: null, reviewLabelsSrc: null, reviewNote: null };
+      return { id, label: humanize(id), file: f, heavy: false, group: null, presetImagesSrc: null, reviewLabelsSrc: null, reviewNote: null };
     });
 }
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
 function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register }) {
-  return resolveDesignList(config, SOURCE).map(({ iconSrc, imageSrc, docSrc, presetImagesSrc, reviewLabelsSrc, ...d }) => {
+  return resolveDesignList(config, SOURCE).map(({ presetImagesSrc, reviewLabelsSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
@@ -424,62 +450,54 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       checkContained(presetAbs, `design '${d.id}' parameterSets file '${presetRel}'`, `design '${d.id}'`);
       copyAsset(presetRel);
     }
-    // Description + icon each fall back to the design's own `// @description` /
-    // `// @icon` annotation when the config `designs[]` entry omits them (config
-    // wins). A config icon is config-relative (like logo); a `// @icon` path is
-    // relative to the design's own .scad file. Copy into the served tree under a
-    // deterministic `<id>-icon.<ext>` name so distinct designs never clobber each
-    // other; the id charset is already URL-safe.
-    const description = d.description ?? meta.description;
+    // Description/icon/image/doc come ONLY from the design's own annotations
+    // now — `// @description`/`// @icon`/`// @image`/`// @doc` (see
+    // docs/annotations.md); there is no config-level override. Each path
+    // resolves relative to the design's own .scad file, i.e. within SOURCE,
+    // so each is also checked to stay contained in it. Copy icon/image into
+    // the served tree under a deterministic `<id>-icon.<ext>` / `<id>-image.<ext>`
+    // name so distinct designs never clobber each other; the id charset is
+    // already URL-safe.
+    const description = meta.description;
     let icon = null;
-    const iconRel = iconSrc ?? meta.icon;
-    if (iconRel) {
-      const base = iconSrc ? CONFIG_DIR : dirname(abs);
-      const src = mustExist(resolve(base, iconRel), `design '${d.id}' icon '${iconRel}'`);
-      // `// @icon` (unlike a config `icon`) resolves relative to the design's
-      // own file, i.e. within SOURCE — so it must stay within SOURCE too.
-      if (!iconSrc) checkContained(src, `design '${d.id}' icon '${iconRel}'`, relPosix(abs));
-      const ext = extOf(iconRel);
+    if (meta.icon) {
+      const src = mustExist(resolve(dirname(abs), meta.icon), `design '${d.id}' icon '${meta.icon}'`);
+      checkContained(src, `design '${d.id}' icon '${meta.icon}'`, relPosix(abs));
+      const ext = extOf(meta.icon);
       const name = `${d.id}-icon${ext}`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' icon`);
       copyBrowserFacing(src, dest);
       icon = `scad/${name}`;
     }
-    // Larger card artwork for the optional visual picker. Config paths are
-    // relative to the config; annotation paths are relative to the design.
+    // Larger card artwork for the optional visual picker.
     let image = null;
-    const imageRel = imageSrc ?? meta.image;
-    if (imageRel) {
-      const base = imageSrc ? CONFIG_DIR : dirname(abs);
-      const src = mustExist(resolve(base, imageRel), `design '${d.id}' image '${imageRel}'`);
-      if (!imageSrc) checkContained(src, `design '${d.id}' image '${imageRel}'`, relPosix(abs));
-      const ext = extOf(imageRel);
+    if (meta.image) {
+      const src = mustExist(resolve(dirname(abs), meta.image), `design '${d.id}' image '${meta.image}'`);
+      checkContained(src, `design '${d.id}' image '${meta.image}'`, relPosix(abs));
+      const ext = extOf(meta.image);
       const name = `${d.id}-image${ext}`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' image`);
       copyBrowserFacing(src, dest);
       image = `scad/${name}`;
     }
-    // User documentation, same fallback + base rules as icon: config `doc` wins
-    // (config-relative) over a `// @doc` annotation (relative to the .scad). The
-    // Markdown file is copied verbatim under a deterministic `<id>-doc.md` name;
-    // its served URL is fetched on demand and rendered by the doc modal. Pure
-    // prose, so it's excluded from renderHash (it can't affect geometry).
+    // User documentation, same base/containment rule as icon/image. The
+    // Markdown file is copied verbatim under a deterministic `<id>-doc.md`
+    // name; its served URL is fetched on demand and rendered by the doc
+    // modal. Pure prose, so it's excluded from renderHash (it can't affect
+    // geometry).
     let doc = null;
-    const docRel = docSrc ?? meta.doc;
-    if (docRel) {
-      const base = docSrc ? CONFIG_DIR : dirname(abs);
-      const src = mustExist(resolve(base, docRel), `design '${d.id}' doc '${docRel}'`);
-      // Same containment rule as icon: only the annotation-based (SOURCE-relative) path is checked.
-      if (!docSrc) checkContained(src, `design '${d.id}' doc '${docRel}'`, relPosix(abs));
+    if (meta.doc) {
+      const src = mustExist(resolve(dirname(abs), meta.doc), `design '${d.id}' doc '${meta.doc}'`);
+      checkContained(src, `design '${d.id}' doc '${meta.doc}'`, relPosix(abs));
       const name = `${d.id}-doc.md`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' doc`);
       copyFileSync(src, dest);
       doc = `scad/${name}`;
     }
-    // Bundled-preset thumbnails (`designs[].presetImages`): each key must
+    // Bundled-preset thumbnails (`designs[].presets.images`): each key must
     // name an actual preset in the sibling parameterSets file — the same
     // typo-protection stance as the rest of the config, so a stale/misspelled
     // preset name fails the build instead of silently rendering a text-only
@@ -497,17 +515,17 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       Object.entries(presetImagesSrc).forEach(([presetName, rel], i) => {
         if (!presetNames.has(presetName))
           throw new Error(
-            `gen-schema: design '${d.id}' 'presetImages["${presetName}"]' does not match any bundled ` +
+            `gen-schema: design '${d.id}' 'presets.images["${presetName}"]' does not match any bundled ` +
               `preset name in '${presetRel}'`
           );
         const src = mustExist(
           resolve(CONFIG_DIR, rel),
-          `design '${d.id}' presetImages["${presetName}"] '${rel}'`
+          `design '${d.id}' presets.images["${presetName}"] '${rel}'`
         );
         const ext = extOf(rel);
         const outName = `${d.id}-preset-${i}${ext}`;
         const dest = join(outScadDir, outName);
-        register(dest, `design '${d.id}' presetImages["${presetName}"]`);
+        register(dest, `design '${d.id}' presets.images["${presetName}"]`);
         copyBrowserFacing(src, dest);
         presetImages[presetName] = `scad/${outName}`;
       });

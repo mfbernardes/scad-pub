@@ -20,7 +20,7 @@ This representative config shows the major surfaces. The sections below define e
   },
   "source": "examples",           // directory of .scad designs (relative to this file)
   "designs": [
-    { "id": "tag", "label": "Tag", "heavy": false, "description": "A name tag.", "icon": "branding/tag.svg" }
+    { "id": "tag", "label": "Tag", "heavy": false }
   ],                              // omit to auto-discover *.scad in source; presets auto-detected as <id>.json
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
   "render": {
@@ -56,9 +56,9 @@ These keys tell `gen-schema` which `.scad` files and assets to bundle:
 - **`assets`**: files or directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.
 
-Each `designs[]` entry also accepts optional `description`, `icon`, `image`, and `doc` fields. `description` is the short line shown under the label in the design picker. `icon` is a path relative to the config file, shown in the compact picker and used as the design's manifest shortcut icon. `image` is larger card artwork for `ui.gallery` and falls back to the icon. These assets may be SVG, PNG, or WebP. `doc` is a path (also config-relative) to a Markdown file of user documentation; when present, the app shows a button that opens it in a modal.
+A `designs[]` entry's own keys get the same unknown-key check as the top level: an unrecognised key fails the build, naming the offending design's `id` and listing the keys an entry accepts. (A missing or malformed `id` is itself checked first, so that failure is reported on its own rather than as a confusing unknown-key error.)
 
-All four fall back to the design's own `// @description` / `// @icon` / `// @image` / `// @doc` annotations when omitted here. A config value still wins.
+A design's picker sub-label, thumbnail icon, gallery card art, and user-doc all come from the design's **own `.scad` file** — `// @description`, `// @icon`, `// @image`, `// @doc` (see [annotations.md](annotations.md#design-metadata--description--icon--image--doc)) — never from the config. There is no `designs[]` field for any of them: a design's own metadata lives in the design, full stop.
 
 Each `designs[]` entry also accepts an optional **`group`** field — a header string the picker clusters designs under:
 
@@ -92,7 +92,7 @@ Each `designs[]` entry also accepts optional **`reviewLabels`** and **`reviewNot
 - **`reviewLabels`**: an object mapping a **declared parameter's exact name** to the label its value is shown under in a review summary. Every key must match one of that design's own params — a stale or misspelled name fails the build. Several params sharing the same label merge into one summary row, their formatted values joined by `" / "`. A design with no `reviewLabels` still shows the summary's overall bounding-box "Dimensions" row, just no curated section above it. A row's value can be overridden by an `echo("@review", param, value)` from the design itself — see [`echo("@review", …)`](annotations.md#curated-review-override-echoreview-) — when the printed model doesn't literally match the stored parameter value (e.g. an uppercasing transform)
 - **`reviewNote`**: an optional short string, a generic hook for a design whose printed output transforms a parameter's raw value in a way worth calling out (e.g. "Text prints in capitals even though you typed it in lowercase"). Plain text, not Markdown. Omit for no note
 
-Each `designs[]` entry also accepts an optional **`presetImages`** field — bundled-preset thumbnails:
+Each `designs[]` entry also accepts an optional **`presets`** object — currently just an **`images`** field, bundled-preset thumbnails:
 
 ```jsonc
 {
@@ -100,16 +100,18 @@ Each `designs[]` entry also accepts an optional **`presetImages`** field — bun
     {
       "id": "tag",
       "label": "Tag",
-      "presetImages": {
-        "Large tag": "examples/tag-preset-large.png",
-        "No hole": "examples/tag-preset-nohole.png"
+      "presets": {
+        "images": {
+          "Large tag": "examples/tag-preset-large.png",
+          "No hole": "examples/tag-preset-nohole.png"
+        }
       }
     }
   ]
 }
 ```
 
-- **`presetImages`**: an object mapping a **bundled preset's exact name** (as it appears as a key inside that design's sibling `<design>.json` parameterSets file — see "Bundled presets" above) to an image path, relative to the config file (like `icon`/`image`/`doc`). Every key must match a real bundled preset name — a stale or misspelled name fails the build, and a design with no bundled presets at all can't configure `presetImages` either. Images may be SVG, PNG, or WebP. Preset images are **optional per preset**: in the in-app preset picker a bundled preset that has a configured image renders as a card (thumbnail + title, matching the visual design picker's card treatment), while a bundled preset without one renders as a compact list row — the same row style the "Saved by you" section uses. Under the single "Ready-made" heading the imaged presets show first as a card grid, then the imageless ones as list rows. A design with no `presetImages` at all keeps the plain compact list exactly. A preset's display name is split into an optional leading **overline** (`"Category | Title"`) and an optional trailing **badge** (`"Title (Language)"`) for the card — see `src/lib/presetCard.ts`; the stored preset name itself is never changed, only how it's parsed for display
+- `presets.`**`images`**: an object mapping a **bundled preset's exact name** (as it appears as a key inside that design's sibling `<design>.json` parameterSets file — see "Bundled presets" above) to an image path, relative to the config file. Every key must match a real bundled preset name — a stale or misspelled name fails the build, and a design with no bundled presets at all can't configure `presets.images` either. Images may be SVG, PNG, or WebP. Preset images are **optional per preset**: in the in-app preset picker a bundled preset that has a configured image renders as a card (thumbnail + title, matching the visual design picker's card treatment), while a bundled preset without one renders as a compact list row — the same row style the "Saved by you" section uses. Under the single "Ready-made" heading the imaged presets show first as a card grid, then the imageless ones as list rows. A design with no `presets.images` at all keeps the plain compact list exactly. A preset's display name is split into an optional leading **overline** (`"Category | Title"`) and an optional trailing **badge** (`"Title (Language)"`) for the card — see `src/lib/presetCard.ts`; the stored preset name itself is never changed, only how it's parsed for display
 
 ### Rendering
 
@@ -149,13 +151,11 @@ Config paths are not all relative to the same thing. `gen-schema` resolves each 
 
 | Base | Keys resolved against it |
 | --- | --- |
-| The **config file's own directory** | `source`, `logo`, `pwa.icon`, `pwa.iconMaskable`, `extraCss`, `designs[].icon`, `designs[].image`, `designs[].doc`, `designs[].presetImages` values |
+| The **config file's own directory** | `source`, `logo`, `pwa.icon`, `pwa.iconMaskable`, `extraCss`, `designs[].presets.images` values |
 | **`source`** (itself config-relative, see above) | `assets`, each `fonts` entry, `designs[].file` |
 | **The design's own `.scad` file** | the `// @icon`, `// @image`, and `// @doc` annotations |
 
-A path resolved against the design's own file must additionally stay inside `source` — `gen-schema`'s `checkContained` check rejects a `// @icon`/`// @image`/`// @doc` (or a `use`/`include` target, or a symlink resolving outside it) that escapes upward with a build-time error. A config-relative path (`logo`, `icon`, `designs[].icon`, …) is not checked against `source` at all: the config author who controls the config file's directory is assumed to also control what it points at.
-
-The surprising part is that a `designs[]` entry's `icon`/`image`/`doc` and its design's own `// @icon`/`// @image`/`// @doc` annotation are **fallbacks for the same field, resolved from different bases**: the config value (when present) is read relative to the config file, while the annotation (used only when the config field is omitted) is read relative to the `.scad` file that carries it. Moving a design deeper into `source` without touching the config can silently change what its `// @icon` annotation resolves to, even though a config-supplied `icon` path would have been unaffected.
+A path resolved against the design's own file must additionally stay inside `source` — `gen-schema`'s `checkContained` check rejects a `// @icon`/`// @image`/`// @doc` (or a `use`/`include` target, or a symlink resolving outside it) that escapes upward with a build-time error. A config-relative path (`logo`, `pwa.icon`, …) is not checked against `source` at all: the config author who controls the config file's directory is assumed to also control what it points at.
 
 ## SVG asset trust model
 

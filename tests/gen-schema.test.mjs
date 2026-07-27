@@ -305,6 +305,30 @@ test("duplicate design ids fail the build", () => {
   assert.throws(() => run("widget-dup-id.config.json"), /duplicate design id "widget"/);
 });
 
+test("a designs[] entry with an unrecognised key fails the build, naming the design and the valid keys", () => {
+  assert.throws(
+    () => run("widget-designs-unknownkey.config.json"),
+    /'designs\[widget\]': unknown key 'shadow'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets, reviewLabels, reviewNote/
+  );
+});
+
+test("a designs[] entry's stale flat 'icon' fails the build instead of being silently dropped", () => {
+  assert.throws(
+    () => run("widget-designs-stale-icon.config.json"),
+    /'designs\[widget\]': unknown key 'icon'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets, reviewLabels, reviewNote/
+  );
+});
+
+test("a designs[] entry's removed 'description' key fails the build like any other unrecognised key", () => {
+  // A design's picker description/icon/image/doc come only from its own .scad
+  // annotations now — there is no config-level field for any of them, so a
+  // config still setting 'description' fails the ordinary unknown-key check.
+  assert.throws(
+    () => run("widget-designs-stale-description.config.json"),
+    /'designs\[widget\]': unknown key 'description'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets, reviewLabels, reviewNote/
+  );
+});
+
 test("reviewLabels: keys matching declared params are resolved, plus a reviewNote string", () => {
   const { schema } = run("widget-reviewlabels.config.json");
   const widget = schema.designs.find((d) => d.id === "widget");
@@ -347,7 +371,7 @@ test("a design with no configured presetImages omits the field", () => {
 test("presetImages: a key not matching any bundled preset name fails the build", () => {
   assert.throws(
     () => run("widget-presetimages-badname.config.json"),
-    /'presetImages\["Nope"\]' does not match any bundled preset name/
+    /'presets\.images\["Nope"\]' does not match any bundled preset name/
   );
 });
 
@@ -368,23 +392,22 @@ test("strings: an unknown key fails the build, pointing at the catalogue", () =>
   );
 });
 
-test("per-design description + icon are parsed, copied and served", () => {
+test("per-design description + icon come from the design's own annotations", () => {
   const { schema, out } = run("widget-designmeta.config.json");
   const widget = schema.designs.find((d) => d.id === "widget");
   const collapsible = schema.designs.find((d) => d.id === "collapsible");
-  // Config `designs[]` values win over the design's own annotations.
+  // widget's `// @description` / `// @icon` annotations (the icon path is
+  // resolved relative to the design file and copied under <id>-icon.<ext>).
   assert.equal(widget.description, "A little widget.");
   assert.equal(widget.icon, "scad/widget-icon.svg");
   assert.ok(existsSync(join(out, "scad", "widget-icon.svg")));
-  // collapsible sets no config description/icon, so it falls back to the
-  // `// @description` / `// @icon` annotations in its .scad (the icon path is
-  // resolved relative to the design file and copied under <id>-icon.<ext>).
+  // collapsible's own `// @description` / `// @icon` annotations.
   assert.equal(collapsible.description, "A collapsible gadget.");
   assert.equal(collapsible.icon, "scad/collapsible-icon.svg");
   assert.ok(existsSync(join(out, "scad", "collapsible-icon.svg")));
 });
 
-test("per-design @doc is resolved, copied and served (config + annotation paths)", () => {
+test("per-design @doc is resolved, copied and served (annotation paths)", () => {
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   const schema = generate({
     configPath: join(FIXTURES, "widget-designmeta.config.json"),
@@ -394,11 +417,10 @@ test("per-design @doc is resolved, copied and served (config + annotation paths)
   });
   const widget = schema.designs.find((d) => d.id === "widget");
   const collapsible = schema.designs.find((d) => d.id === "collapsible");
-  // widget's doc comes from the config `designs[].doc` (config-relative path).
+  // Both designs' docs come from their own `// @doc` annotation (resolved
+  // relative to the design file), copied under <id>-doc.md.
   assert.equal(widget.doc, "scad/widget-doc.md");
   assert.ok(existsSync(join(out, "public", "scad", "widget-doc.md")));
-  // collapsible sets no config doc, so it falls back to its `// @doc`
-  // annotation (resolved relative to the design file), copied under <id>-doc.md.
   assert.equal(collapsible.doc, "scad/collapsible-doc.md");
   assert.ok(existsSync(join(out, "public", "scad", "collapsible-doc.md")));
   // Both docs are precached for offline use.
@@ -409,7 +431,7 @@ test("per-design @doc is resolved, copied and served (config + annotation paths)
   assert.ok(precache.shell.includes("scad/collapsible-doc.md"));
 });
 
-test("a design with no @doc / config doc has doc null and no button target", () => {
+test("a design with no @doc annotation has doc null and no button target", () => {
   const { schema } = run("widget.config.json");
   assert.equal(schema.designs[0].doc ?? null, null);
 });
@@ -447,8 +469,8 @@ test("lang/dir + per-design shortcut icons + screenshot fields reach the manifes
   );
   assert.equal(manifest.lang, "pt-BR");
   assert.equal(manifest.dir, "rtl");
-  // Two designs -> auto-derived shortcuts, each carrying its design's icon —
-  // widget's from the config, collapsible's from its `// @icon` annotation.
+  // Two designs -> auto-derived shortcuts, each carrying its design's own
+  // `// @icon` annotation.
   const widgetShortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
   assert.deepEqual(widgetShortcut.icons, [
     { src: "scad/widget-icon.svg", sizes: "any", type: "image/svg+xml" },

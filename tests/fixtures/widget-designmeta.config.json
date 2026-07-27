@@ -14,7 +14,7 @@
     ]
   },
   "designs": [
-    { "id": "widget", "label": "Widget", "description": "A little widget.", "icon": "logo.svg", "doc": "widget-doc.md" },
+    { "id": "widget", "label": "Widget", "file": "widget-meta.scad" },
     { "id": "collapsible", "label": "Collapsible" }
   ]
 }

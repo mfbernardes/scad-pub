@@ -10,19 +10,22 @@
 //      `viewer`, `render`, `fileImport` and `popup` nodes' `properties` to
 //      replace what used to be five near-identical stretches of
 //      "check a boolean / check an enum / assign a default" if-blocks.
+//      gen-schema.mjs's `resolveDesignList` reuses the same function per
+//      `designs[]` entry against its `presets` sub-node.
 //   3. scripts/gen-config-schema.mjs turns the whole tree into a real JSON
 //      Schema, and tests/config-spec.test.mjs cross-checks it against
 //      docs/config.md so a key can't drift out of one without the other.
 //
 // What this file does NOT own: path existence, cross-field checks
 // (`defaultDesign` naming a real design, `ui.afterExport.helpTab` naming a
-// real help tab, `reviewLabels` keys naming real params, `presetImages` keys
-// naming real presets), colour-value safety beyond "is this shape a plain
-// object of strings", the `strings`-against-i18n-catalogue check, or anything
-// that needs file I/O to answer. Those all stay exactly where they live today
-// (gen-schema.mjs's generate(), and the bespoke parsers in config-parsers.mjs)
-// — this spec only describes STRUCTURE: names, nesting, JSON types, enums,
-// static defaults, and which nested keys are recognised at all.
+// real help tab, `designs[].reviewLabels` keys naming real params,
+// `designs[].presets.images` keys naming real presets), colour-value safety
+// beyond "is this shape a plain object of strings", the
+// `strings`-against-i18n-catalogue check, or anything that needs file I/O to
+// answer. Those all stay exactly where they live today (gen-schema.mjs's
+// generate(), and the bespoke parsers in config-parsers.mjs) — this spec only
+// describes STRUCTURE: names, nesting, JSON types, enums, static defaults,
+// and which nested keys are recognised at all.
 //
 // A handful of top-level keys (`colors`, `licenses`, `notices`, `strings`,
 // `help`, `designs`, `categories`, `screenshots`, `shortcuts`) carry real
@@ -251,6 +254,44 @@ const PWA_SPEC = {
   },
 };
 
+// ── `designs[].presets` — nested under `designs.items` below. A `designs[]`
+// entry used to carry `description`/`icon`/`image`/`doc` as flat fields, each
+// falling back to a same-named annotation in the design's own .scad file when
+// the config omitted it. Those four are GONE from the config surface — a
+// design's picker description, thumbnail icon, gallery card art, and user-doc
+// come ONLY from its own `// @description`/`// @icon`/`// @image`/`// @doc`
+// annotations now (see docs/annotations.md); there is no config-level value
+// to fall back FROM any more. `presets` is the one nested group this reorg
+// still introduces, because `presets.images` itself carries two forms — see
+// its own comment below — and has no annotation counterpart at all (a
+// bundled-preset thumbnail isn't something a .scad file could name).
+//
+// `presets` is an ordinary applyGroupSpec-driven node (like `ui`/`viewer`),
+// NOT `custom: true` itself — a config setting `designs[].presets.nope` gets
+// the same unknown-key rejection `ui`'s nested keys do (unlike `designs`
+// itself, and `designs[].presets.images` below, which stays `custom: true`:
+// the FIELD is closed and mechanical, its cross-referenced VALUE needs parse
+// results only buildDesigns has). `resolveDesignList`/`buildDesigns`
+// (scripts/gen-schema.mjs) call `applyGroupSpec` directly against this node
+// per design entry — the design item as a WHOLE stays hand-rolled (id/label/
+// file defaulting, duplicate-id detection are cross-field logic no spec can
+// express), but this one sub-group is exactly the "check a string / reject
+// an unknown key" shape `applyGroupSpec` already generalizes, so re-deriving
+// that by hand a second time would be the wrong kind of bespoke.
+const DESIGN_PRESETS_SPEC = {
+  type: "object",
+  description: "This design's bundled-preset presentation.",
+  properties: {
+    images: {
+      type: "object",
+      custom: true,
+      description:
+        "Bundled-preset-name -> thumbnail-image-path map. Every key must match a real bundled preset name " +
+        "(checked in buildDesigns, once parse results are available).",
+    },
+  },
+};
+
 // The CSS custom-property tokens `colors.<theme>.*` may set (see
 // src/index.css). Registered here so gen-config-schema.mjs and the
 // docs-coverage test see them; config-parsers.mjs imports and re-exports this
@@ -310,15 +351,11 @@ export const CONFIG_SPEC = {
         file: { type: "string", description: "Path to the .scad file, relative to 'source'; defaults to '<id>.scad'." },
         heavy: { type: "boolean", default: false, description: "Start this design in manual-render mode." },
         group: { type: "string", description: "Dropdown/gallery grouping header; consecutive same-value designs cluster." },
-        description: { type: "string", description: "Picker description line; falls back to the design's // @description." },
-        icon: { type: "string", description: "Picker icon path (config-relative); falls back to the design's // @icon." },
-        image: { type: "string", description: "Larger ui.gallery card artwork; falls back to the design's // @image." },
-        doc: { type: "string", description: "Path to a Markdown user-doc file; falls back to the design's // @doc." },
-        presetImages: {
-          type: "object",
-          custom: true,
-          description: "Bundled-preset-name -> thumbnail-image-path map.",
-        },
+        // No `description`/`icon`/`image`/`doc` here: a design's picker
+        // description, thumbnail icon, gallery card art, and user-doc come
+        // ONLY from its own `// @description`/`// @icon`/`// @image`/
+        // `// @doc` annotations now (see docs/annotations.md).
+        presets: DESIGN_PRESETS_SPEC,
         reviewLabels: {
           type: "object",
           custom: true,

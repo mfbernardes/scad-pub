@@ -2,8 +2,6 @@
   "title": "Widget Studio",
   "source": "src",
   "assets": ["lib"],
-  "designs": [
-    { "id": "widget", "label": "Widget", "doc": "no-such-doc.md" }
-  ],
+  "designs": [{ "id": "widget", "label": "Widget", "file": "widget-baddoc.scad" }],
   "render": { "features": ["textmetrics"], "fonts": ["Foo.ttf"] }
 }

@@ -3,6 +3,9 @@
 // engraved text, and an optional hanging hole — a different parameter set
 // from the rectangular tag so the design switcher feels meaningful.
 
+// @description Round coin with an embossed emblem.
+// @icon coin-icon.svg
+
 /* [Coin] */
 // Diameter of the coin (mm).
 diameter = 50; // [20:1:100]

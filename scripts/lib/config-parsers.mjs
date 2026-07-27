@@ -49,8 +49,14 @@ function stringFieldError(path, field) {
 }
 
 // The error a nested object's unrecognised key throws, built entirely from
-// the spec node so the "valid keys" list can never go stale.
-function unknownNestedKeyError(path, node, key) {
+// the spec node so the "valid keys" list can never go stale. Exported so a
+// caller that can't route a whole object through `applyGroupSpec` — a
+// `designs[]` entry itself, whose id/label/file/heavy/group/reviewLabels/
+// reviewNote fields stay hand-checked in gen-schema.mjs's resolveDesignList
+// rather than spec-driven — can still raise the exact same error shape for its own
+// unrecognised keys, against `CONFIG_SPEC.designs.items` (see that node's
+// `properties`).
+export function unknownNestedKeyError(path, node, key) {
   return new Error(
     `${messagePrefix(path)}: unknown key '${key}'.\n` +
       `  Valid keys: ${Object.keys(node.properties).join(", ")}`

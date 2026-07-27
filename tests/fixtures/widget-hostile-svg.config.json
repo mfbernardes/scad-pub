@@ -3,8 +3,6 @@
   "source": "hostile-src",
   "logo": "hostile.svg",
   "assets": ["hostile-assets/hostile-render.svg"],
-  "designs": [
-    { "id": "widget", "label": "Widget", "icon": "hostile.svg" }
-  ],
+  "designs": [{ "id": "widget", "label": "Widget" }],
   "pwa": { "icon": "hostile.svg" }
 }
