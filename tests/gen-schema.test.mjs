@@ -34,7 +34,10 @@ import {
   parseFontFallback,
   parseLang,
   parseDir,
+  parsePwa,
+  parsePwaThemeColor,
   parseRender,
+  parseStringArray,
   parseStrings,
   renderFontsConf,
 } from "../scripts/gen-schema.mjs";
@@ -678,9 +681,10 @@ test("config shortcuts are validated and folded into the manifest", () => {
 });
 
 test("rejects a PWA colour that isn't a safe CSS colour string", () => {
-  // themeColor/themeColorLight/backgroundColor are interpolated into generated
+  // pwa.themeColor/pwa.backgroundColor are interpolated into generated
   // SVG/HTML, so they must pass the same COLOR_VALUE_RE as every other colour.
-  assert.throws(() => run("widget-bad-color.config.json"), /'themeColor' must be a CSS colour/);
+  // The fixture still sets the legacy top-level `themeColor` (-> pwa.themeColor.dark).
+  assert.throws(() => run("widget-bad-color.config.json"), /'pwa\.themeColor\.dark' must be a CSS colour/);
 });
 
 test("rejects a design id with unsafe characters", () => {
@@ -996,7 +1000,7 @@ test("ui: an explicit null is equivalent to omitting the key, for every field ki
   // hand-written JSON config has no comments to delete a line with, so an
   // explicit null is how an author says "leave this alone", not a typo.
   assert.equal(parseUi({ showVarName: null }).showVarName, false); // boolean
-  assert.equal(parseUi({ install: null }).install, "auto"); // enum
+  assert.equal(parsePwa({ install: null }).install, "auto"); // enum (pwa.install, moved from ui.install)
   assert.equal(parseUi({ presetsLabel: null }).presetsLabel, "Presets"); // string
   assert.equal(parseUi({ saveImage: null }).saveImage, undefined); // no-default boolean
 });
@@ -1167,7 +1171,7 @@ test("renderHash is unaffected by presentation-only config fields (title/help/no
   const plain = gen({ title: "Plain Title" });
   const dressedUp = gen({
     title: "A Whole Different Title",
-    themeColor: "#123456",
+    pwa: { themeColor: "#123456" },
     help: "<p>Different help copy entirely.</p>",
     notices: [{ marker: "note", label: "A note", color: "#3b82f6" }],
     ui: { presetsLabel: "Styles", parametersLabel: "Options" },
@@ -1405,6 +1409,14 @@ test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
   assert.equal(parseRender(undefined), null);
   assert.equal(parseRender(null), null);
   assert.equal(parseRender({}), null); // no recognised keys -> null (all defaults)
+  // `features`/`format`/`fonts`/`fontFallback` are recognised nested keys (so
+  // they don't fail the unknown-key check below) but are `custom: true` —
+  // parseRender ignores them entirely; gen-schema.mjs reads them straight off
+  // `config.render` itself (see the 'config-driven features, fonts' test and
+  // 'format is emitted to the schema' test, further down, for the real
+  // end-to-end behaviour). A render block containing ONLY one of these still
+  // collapses to null, same as an empty `{}`.
+  assert.equal(parseRender({ format: "stl", features: ["textmetrics"] }), null);
   assert.deepEqual(parseRender({ heavyMs: 8000 }), { heavyMs: 8000 });
   assert.deepEqual(
     parseRender({ heavyMs: 3000, cache: { maxEntries: 4, maxBytes: 1024, maxEntryBytes: 512, persistent: false } }),
@@ -1426,7 +1438,7 @@ test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
   );
   assert.throws(
     () => parseRender({ oops: 1 }),
-    /'render': unknown key 'oops'\.\s*\n\s*Valid keys: heavyMs, cache/
+    /'render': unknown key 'oops'\.\s*\n\s*Valid keys: features, format, fonts, fontFallback, heavyMs, cache/
   );
 });
 
@@ -1942,6 +1954,38 @@ test("parseFontFallback accepts a trimmed string or null; rejects empty", () => 
   assert.throws(() => parseFontFallback(42), /'fontFallback' must be a non-empty string/);
 });
 
+test("parseStringArray: absent -> [], every entry must be a non-empty string", () => {
+  assert.deepEqual(parseStringArray(undefined, "features"), []);
+  assert.deepEqual(parseStringArray(["a", "b"], "features"), ["a", "b"]);
+  assert.throws(() => parseStringArray("a", "features"), /'features' must be an array of non-empty strings/);
+  assert.throws(() => parseStringArray([""], "features"), /'features' must be an array of non-empty strings/);
+  assert.throws(() => parseStringArray([1], "categories"), /'categories' must be an array of non-empty strings/);
+});
+
+test("parsePwaThemeColor: string shorthand sets both themes; object form defaults each side independently", () => {
+  assert.deepEqual(parsePwaThemeColor(undefined), { light: "#ffffff", dark: "#1f2229" });
+  assert.deepEqual(parsePwaThemeColor(null), { light: "#ffffff", dark: "#1f2229" });
+  assert.deepEqual(parsePwaThemeColor("#123456"), { light: "#123456", dark: "#123456" });
+  assert.deepEqual(parsePwaThemeColor({ dark: "#000000" }), { light: "#ffffff", dark: "#000000" });
+  assert.deepEqual(parsePwaThemeColor({ light: "#f0f0f0", dark: "#000000" }), { light: "#f0f0f0", dark: "#000000" });
+  assert.throws(
+    () => parsePwaThemeColor("#fff;}<script>"),
+    /'pwa\.themeColor' must be a CSS colour string/
+  );
+  assert.throws(
+    () => parsePwaThemeColor({ dark: "#fff;}<script>" }),
+    /'pwa\.themeColor\.dark' must be a CSS colour string/
+  );
+  assert.throws(
+    () => parsePwaThemeColor({ bogus: "#000000" }),
+    /'pwa\.themeColor': unknown key 'bogus'\.\s*\n\s*Valid keys: light, dark/
+  );
+  assert.throws(
+    () => parsePwaThemeColor(5),
+    /'pwa\.themeColor' must be a CSS colour string, or an object with optional 'light'\/'dark' colour strings/
+  );
+});
+
 test("renderFontsConf emits the base dirs, and a weak fallback only when set", () => {
   const base = renderFontsConf(null);
   assert.ok(base.includes("<dir>/fonts</dir>"));
@@ -1970,8 +2014,7 @@ test("a real build records the bundled fonts' embedded families + writes fonts.c
     JSON.stringify({
       title: "T",
       source: ".",
-      fonts: ["Face.ttf"],
-      fontFallback: "Liberation Sans",
+      render: { fonts: ["Face.ttf"], fontFallback: "Liberation Sans" },
       designs: [{ id: "d", label: "D" }],
     })
   );
@@ -2246,8 +2289,8 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
     JSON.stringify({
       title: "T",
       source: "src",
-      fonts: ["Face.ttf"],
-      screenshots: [{ src: "shot.png", sizes: "1x1", form_factor: "narrow" }],
+      render: { fonts: ["Face.ttf"] },
+      pwa: { screenshots: [{ src: "shot.png", sizes: "1x1", form_factor: "narrow" }] },
       designs: [{ id: "d", label: "D" }],
     })
   );
@@ -2383,7 +2426,12 @@ test("changing a font then failing a later step leaves the prior font bytes and 
   const good = join(root, "good.config.json");
   writeFileSync(
     good,
-    JSON.stringify({ title: "T", source: "src", fonts: ["Face.ttf"], fontFallback: "Alpha", designs: [{ id: "d", label: "D" }] })
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      render: { fonts: ["Face.ttf"], fontFallback: "Alpha" },
+      designs: [{ id: "d", label: "D" }],
+    })
   );
   generate({ ...base, configPath: good });
   const fontDest = join(outPublicDir, "fonts", "Face.ttf");
@@ -2399,7 +2447,13 @@ test("changing a font then failing a later step leaves the prior font bytes and 
   const bad = join(root, "bad.config.json");
   writeFileSync(
     bad,
-    JSON.stringify({ title: "T", source: "src", fonts: ["Face.ttf"], fontFallback: "Beta", icon: "bad.svg", designs: [{ id: "d", label: "D" }] })
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      render: { fonts: ["Face.ttf"], fontFallback: "Beta" },
+      pwa: { icon: "bad.svg" },
+      designs: [{ id: "d", label: "D" }],
+    })
   );
   assert.throws(() => generate({ ...base, configPath: bad }), /icon rasterization failed/);
 

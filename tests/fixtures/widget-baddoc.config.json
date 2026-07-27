@@ -2,9 +2,8 @@
   "title": "Widget Studio",
   "source": "src",
   "assets": ["lib"],
-  "features": ["textmetrics"],
-  "fonts": ["Foo.ttf"],
   "designs": [
     { "id": "widget", "label": "Widget", "doc": "no-such-doc.md" }
-  ]
+  ],
+  "render": { "features": ["textmetrics"], "fonts": ["Foo.ttf"] }
 }

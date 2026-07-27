@@ -1,7 +1,6 @@
 {
   "source": "src",
-  "features": [],
-  "fonts": [],
+  "render": { "features": [], "fonts": [] },
   "ui": { "afterExport": { "title": "Done", "body": "Slice it.", "helpTab": "Printing" } },
   "help": {
     "tabs": [

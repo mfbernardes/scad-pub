@@ -1,7 +1,6 @@
 {
   "source": "src",
-  "features": [],
-  "fonts": [],
   "extraCss": "extra.css",
-  "designs": [{ "id": "widget", "label": "Widget" }]
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
 }

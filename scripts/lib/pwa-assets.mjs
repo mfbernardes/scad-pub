@@ -34,10 +34,20 @@ try {
 /**
  * Write the PWA icon set + manifest into outPublicDir and return the iOS splash
  * descriptors. Mirrors the logic that used to live inline in generate().
+ *
+ * Takes the ALREADY-PARSED `pwa` object (scripts/lib/config-parsers.mjs's
+ * parsePwa — the config's `pwa` block, defaults resolved) rather than the
+ * raw config: this is the one place in `scripts/`
+ * outside the parse layer that used to reach into `config.icon`/
+ * `.iconMaskable`/`.screenshots`/`.shortcuts` directly, which meant it had to
+ * know the config's raw shape (and would have needed teaching about `pwa.*`
+ * nesting a second time here, on top of config-parsers.mjs, if it still read
+ * the raw object). Reading the parsed form instead means the parse layer is
+ * the only code that ever needs to know scadpub.config.json's actual shape.
  * @returns {{ appleSplash: { href: string, media: string }[] }}
  */
 export function generatePwaAssets({
-  config,
+  pwa,
   CONFIG_DIR,
   outPublicDir,
   TITLE,
@@ -97,13 +107,13 @@ export function generatePwaAssets({
   // either. The whole icon set (svg + PNGs) commits together or not at all.
   let iconSvg;
   let iconSvgLabel;
-  if (config.icon) {
+  if (pwa.icon) {
     const raw = readFileSync(
-      mustExist(resolve(CONFIG_DIR, config.icon), `icon '${config.icon}'`),
+      mustExist(resolve(CONFIG_DIR, pwa.icon), `icon '${pwa.icon}'`),
       "utf-8"
     );
     iconSvg = sanitizeSvg(raw).text;
-    iconSvgLabel = "config 'icon'";
+    iconSvgLabel = "pwa 'icon'";
   } else {
     // Neutral default icon when the config supplies none.
     iconSvg =
@@ -123,9 +133,9 @@ export function generatePwaAssets({
   // Maskable icon: separate source (safe-zone padded) or fall back to the
   // main icon. The maskable PNG is rendered from this SVG.
   let maskableSvg = iconSvg;
-  if (config.iconMaskable) {
+  if (pwa.iconMaskable) {
     maskableSvg = readFileSync(
-      mustExist(resolve(CONFIG_DIR, config.iconMaskable), `iconMaskable '${config.iconMaskable}'`),
+      mustExist(resolve(CONFIG_DIR, pwa.iconMaskable), `iconMaskable '${pwa.iconMaskable}'`),
       "utf-8"
     );
   }
@@ -174,7 +184,7 @@ export function generatePwaAssets({
     } catch (err) {
       throw new Error(
         `gen-schema: icon rasterization failed (${err.message})\n` +
-          `  (check config 'icon' / 'iconMaskable' — both must be valid SVG)`,
+          `  (check 'pwa.icon' / 'pwa.iconMaskable' — both must be valid SVG)`,
         { cause: err }
       );
     }
@@ -232,9 +242,11 @@ export function generatePwaAssets({
 
   // Manifest screenshot entries (optional — enables rich Android install UI).
   // `label` (accessibility) and `platform` are passed through when present.
+  // A malformed individual entry (missing src/sizes/form_factor) is dropped
+  // rather than failing the build, unchanged from before this reorg.
   const screenshots = [];
-  if (Array.isArray(config.screenshots)) {
-    for (const shot of config.screenshots) {
+  if (Array.isArray(pwa.screenshots)) {
+    for (const shot of pwa.screenshots) {
       if (shot.src && shot.sizes && shot.form_factor) {
         const abs = mustExist(resolve(CONFIG_DIR, shot.src), `screenshot '${shot.src}'`);
         const name = abs.split(/[\\/]/).pop();
@@ -299,8 +311,8 @@ export function generatePwaAssets({
   // derived shortcut carries the design's own icon (if any); author entries may
   // supply their own `icons` array ([{ src, sizes?, type? }]).
   let shortcuts = [];
-  if (Array.isArray(config.shortcuts)) {
-    shortcuts = config.shortcuts
+  if (Array.isArray(pwa.shortcuts)) {
+    shortcuts = pwa.shortcuts
       .filter((sc) => sc && typeof sc.name === "string" && typeof sc.url === "string")
       .map((sc) => ({
         name: sc.name,

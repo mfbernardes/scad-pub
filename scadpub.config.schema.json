@@ -13,10 +13,6 @@
       "default": "ScadPub",
       "type": "string"
     },
-    "shortName": {
-      "description": "Short PWA name; defaults to 'title'.",
-      "type": "string"
-    },
     "id": {
       "description": "Namespaces localStorage, IndexedDB and the preset cache (charset [A-Za-z0-9._-]+).",
       "default": "scadpub",
@@ -42,49 +38,81 @@
         "auto"
       ]
     },
-    "icon": {
-      "description": "PWA/favicon icon path, relative to the config file.",
-      "type": "string"
-    },
-    "iconMaskable": {
-      "description": "Separate SVG for the maskable icon; defaults to 'icon'.",
-      "type": "string"
-    },
-    "themeColor": {
-      "description": "Dark-scheme browser-chrome / PWA colour.",
-      "default": "#1f2229",
-      "type": "string"
-    },
-    "themeColorLight": {
-      "description": "Light-scheme <meta name=theme-color>.",
-      "default": "#ffffff",
-      "type": "string"
-    },
-    "backgroundColor": {
-      "description": "PWA manifest background colour.",
-      "default": "#15171c",
-      "type": "string"
-    },
-    "categories": {
-      "description": "Manifest categories array.",
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "screenshots": {
-      "description": "Richer Android install-UI screenshots: [{ src, sizes, form_factor, label?, platform? }].",
-      "type": "array",
-      "items": {
-        "type": "object"
-      }
-    },
-    "shortcuts": {
-      "description": "App shortcuts for Android long-press / desktop jump lists: [{ name, short_name?, url, icons? }].",
-      "type": "array",
-      "items": {
-        "type": "object"
-      }
+    "pwa": {
+      "description": "Manifest-only PWA chrome (install metadata, icons, theming) that feeds manifest.webmanifest and the icon rasterizer at build time. Not mirrored into designs.json — the app itself never reads a 'pwa' object.",
+      "type": "object",
+      "properties": {
+        "shortName": {
+          "description": "Short PWA name; defaults to 'title'.",
+          "type": "string"
+        },
+        "icon": {
+          "description": "PWA/favicon icon path, relative to the config file.",
+          "type": "string"
+        },
+        "iconMaskable": {
+          "description": "Separate SVG for the maskable icon; defaults to 'icon'.",
+          "type": "string"
+        },
+        "themeColor": {
+          "description": "Per-theme PWA/browser-chrome colour: a string for both themes, or { light, dark } (either may be omitted, defaulting independently: light '#ffffff', dark '#1f2229'). Same shape as 'logo'.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "light": {
+                  "description": "Light-scheme <meta name=theme-color>. Default '#ffffff'.",
+                  "type": "string"
+                },
+                "dark": {
+                  "description": "Dark-scheme browser-chrome / PWA colour. Default '#1f2229'.",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "backgroundColor": {
+          "description": "PWA manifest background colour.",
+          "default": "#15171c",
+          "type": "color"
+        },
+        "categories": {
+          "description": "Manifest categories array.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "screenshots": {
+          "description": "Richer Android install-UI screenshots: [{ src, sizes, form_factor, label?, platform? }].",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "shortcuts": {
+          "description": "App shortcuts for Android long-press / desktop jump lists: [{ name, short_name?, url, icons? }].",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "install": {
+          "description": "PWA install affordance; 'off' hides it entirely.",
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "off"
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "source": {
       "description": "Directory of Customizer-style .scad designs, relative to the config file.",
@@ -161,39 +189,39 @@
         "type": "string"
       }
     },
-    "features": {
-      "description": "OpenSCAD --enable=<feature> flags applied to every render.",
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "format": {
-      "description": "Export/preview model format.",
-      "default": "3mf",
-      "type": "string",
-      "enum": [
-        "3mf",
-        "stl"
-      ]
-    },
-    "fonts": {
-      "description": "Bundled font files (public/fonts basenames or 'source'-relative paths).",
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "fontFallback": {
-      "description": "A bundled family pinned as fontconfig's last-resort default.",
-      "type": "string"
-    },
     "render": {
-      "description": "Build-time render tuning: heavy-render threshold + cache sizing.",
+      "description": "Rendering: OpenSCAD flags/format/fonts (render inputs — folded into renderHash) plus build-time heavy-render-threshold/cache tuning ('heavyMs'/'cache' — display/perf only, absent from renderHash).",
       "type": "object",
       "properties": {
+        "features": {
+          "description": "OpenSCAD --enable=<feature> flags applied to every render. Folded into renderHash.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "format": {
+          "description": "Export/preview model format. Folded into renderHash.",
+          "default": "3mf",
+          "type": "string",
+          "enum": [
+            "3mf",
+            "stl"
+          ]
+        },
+        "fonts": {
+          "description": "Bundled font files (public/fonts basenames or 'source'-relative paths). Folded into renderHash.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fontFallback": {
+          "description": "A bundled family pinned as fontconfig's last-resort default. Folded into renderHash.",
+          "type": "string"
+        },
         "heavyMs": {
-          "description": "Auto-pause threshold (ms) for a slow live render.",
+          "description": "Auto-pause threshold (ms) for a slow live render. NOT in renderHash.",
           "type": "number"
         },
         "cache": {
@@ -470,15 +498,6 @@
           "enum": [
             "closed",
             "open"
-          ]
-        },
-        "install": {
-          "description": "PWA install affordance; 'off' hides it entirely.",
-          "default": "auto",
-          "type": "string",
-          "enum": [
-            "auto",
-            "off"
           ]
         },
         "showVarName": {

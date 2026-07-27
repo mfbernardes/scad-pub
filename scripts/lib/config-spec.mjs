@@ -54,7 +54,15 @@
 // genuinely different bounds); `required` (validate even when entirely
 // absent — only `popup.header`/`popup.body`); `custom` (object/array nodes
 // whose runtime validation lives in a bespoke parser instead, per the file-top
-// comment); `collapseEmptyToNull` (an empty `{}` disappears entirely for a
+// comment — and, since this commit, also a plain leaf FIELD nested inside an
+// otherwise applyGroupSpec-driven group, e.g. `render.features`/`render.fonts`
+// or `pwa.screenshots`/`pwa.categories`/`pwa.themeColor`: `applyGroupSpec`
+// still accepts the key as recognised — so it can't be rejected as unknown —
+// but skips it entirely otherwise, neither defaulting nor validating nor
+// including it in its own return value, because the bespoke code that reads
+// it (parseStringArray, parseFormat, parseFontFallback, parsePwaThemeColor,
+// generatePwaAssets) reads the RAW config object directly instead);
+// `collapseEmptyToNull` (an empty `{}` disappears entirely for a
 // pure tuning knob like `render`/`render.cache` — contrast `ui.afterExport`,
 // where the key's mere presence, even empty, is itself the "show the panel"
 // toggle); `alwaysPresent` (the opposite problem: a nested group whose OWN
@@ -89,6 +97,19 @@ const str = (extra = {}) => ({
 const num = (numberKind, extra = {}) => ({
   type: "number",
   numberKind,
+  ...extra,
+});
+
+// A CSS-colour-valued scalar field (hex / rgb() / hsl() / named — the same
+// COLOR_VALUE_RE strictness every colour input in this config uses). Exists
+// as its own field kind (rather than folding colour-shaped strings into
+// plain `str()`) because `pwa.backgroundColor` and `pwa.themeColor`'s own
+// `light`/`dark` children are genuinely generic scalar fields once `pwa` is
+// applyGroupSpec-driven — see validateFieldValue's "color" case in
+// ./config-parsers.mjs, which owns COLOR_VALUE_RE.
+const color = (defaultValue, extra = {}) => ({
+  type: "color",
+  default: defaultValue,
   ...extra,
 });
 
@@ -144,6 +165,77 @@ const RENDER_CACHE_SPEC = {
   },
 };
 
+// ── `pwa.themeColor` — nested under `pwa` below. Same SHAPE as `logo` (a
+// plain string used for both themes, or a { light, dark } object with either
+// side optional) — but NOT the same fallback rule: `logo`'s object form has a
+// missing side fall back to the OTHER side (better to show one logo image on
+// both themes than none), while a missing light/dark colour here resolves to
+// its OWN independent built-in default (see parsePwaThemeColor in
+// ./config-parsers.mjs) — light and dark chrome colours are genuinely
+// different colours, not interchangeable the way a single logo asset is.
+// `custom: true` because the string-or-object shape and the per-theme
+// defaulting are bespoke (parsePwaThemeColor), like `logo` itself.
+const PWA_THEME_COLOR_SPEC = {
+  type: "string",
+  custom: true,
+  description:
+    "Per-theme PWA/browser-chrome colour: a string for both themes, or { light, dark } (either may be " +
+    "omitted, defaulting independently: light '#ffffff', dark '#1f2229'). Same shape as 'logo'.",
+  properties: {
+    light: { type: "string", description: "Light-scheme <meta name=theme-color>. Default '#ffffff'." },
+    dark: { type: "string", description: "Dark-scheme browser-chrome / PWA colour. Default '#1f2229'." },
+  },
+};
+
+// ── `pwa` — manifest-only PWA chrome: install metadata, icons and theming
+// that feed manifest.webmanifest and the icon rasterizer
+// (scripts/lib/pwa-assets.mjs). Unlike `viewer` (which the app itself reads
+// at runtime, and which designs.json therefore mirrors as its own nested
+// `viewer` object), NOTHING under `pwa` has a runtime reader — see
+// gen-schema.mjs's schema-assembly comment for the resulting rule: mirror the
+// config's grouping in designs.json when the app shares the concept, keep
+// designs.json's existing flat shape when it doesn't. `icon`/`iconMaskable`/
+// `shortName` are plain scalars (applyGroupSpec-driven, unremarkable);
+// `categories`/`screenshots`/`shortcuts` are `custom: true` — the same
+// bespoke, lenient-to-malformed-entries validation these already had at the
+// top level (see parsePwa in ./config-parsers.mjs and generatePwaAssets);
+// `install` is a real behaviour toggle the app DOES read — see
+// gen-schema.mjs's UI assembly for how its value lands at `schema.ui.install`.
+const PWA_SPEC = {
+  type: "object",
+  description:
+    "Manifest-only PWA chrome (install metadata, icons, theming) that feeds manifest.webmanifest and the " +
+    "icon rasterizer at build time. Not mirrored into designs.json — the app itself never reads a 'pwa' object.",
+  properties: {
+    shortName: str({ description: "Short PWA name; defaults to 'title'." }),
+    icon: str({ description: "PWA/favicon icon path, relative to the config file." }),
+    iconMaskable: str({ description: "Separate SVG for the maskable icon; defaults to 'icon'." }),
+    themeColor: PWA_THEME_COLOR_SPEC,
+    backgroundColor: color("#15171c", { description: "PWA manifest background colour." }),
+    categories: {
+      type: "array",
+      items: { type: "string" },
+      custom: true,
+      description: "Manifest categories array.",
+    },
+    screenshots: {
+      type: "array",
+      items: { type: "object", custom: true },
+      custom: true,
+      description: "Richer Android install-UI screenshots: [{ src, sizes, form_factor, label?, platform? }].",
+    },
+    shortcuts: {
+      type: "array",
+      items: { type: "object", custom: true },
+      custom: true,
+      description: "App shortcuts for Android long-press / desktop jump lists: [{ name, short_name?, url, icons? }].",
+    },
+    install: enumField(["auto", "off"], "auto", {
+      description: "PWA install affordance; 'off' hides it entirely.",
+    }),
+  },
+};
+
 // The CSS custom-property tokens `colors.<theme>.*` may set (see
 // src/index.css). Registered here so gen-config-schema.mjs and the
 // docs-coverage test see them; config-parsers.mjs imports and re-exports this
@@ -165,9 +257,13 @@ export const CONFIG_SPEC = {
     description: "Optional pointer to a JSON Schema for editor tooling; not read by gen-schema itself.",
   },
 
-  // — App identity & PWA chrome —
+  // — App identity —
+  // (title/id/description/lang/dir stay here even though several are ALSO
+  // manifest inputs: they're document chrome and storage namespacing first,
+  // read by the running app itself — see PWA_THEME_COLOR_SPEC's neighbour
+  // `pwa` node below for the keys that are manifest/icon-rasterizer INPUTS
+  // ONLY, with no runtime reader.)
   title: { type: "string", default: "ScadPub", description: "Browser tab title and header text." },
-  shortName: { type: "string", description: "Short PWA name; defaults to 'title'." },
   id: {
     type: "string",
     default: "scadpub",
@@ -180,24 +276,9 @@ export const CONFIG_SPEC = {
   },
   lang: { type: "string", default: "en", description: "Document/manifest language, a BCP-47 tag." },
   dir: { type: "enum", values: ["ltr", "rtl", "auto"], default: "ltr", description: "Document/manifest text direction." },
-  icon: { type: "string", description: "PWA/favicon icon path, relative to the config file." },
-  iconMaskable: { type: "string", description: "Separate SVG for the maskable icon; defaults to 'icon'." },
-  themeColor: { type: "string", default: "#1f2229", description: "Dark-scheme browser-chrome / PWA colour." },
-  themeColorLight: { type: "string", default: "#ffffff", description: "Light-scheme <meta name=theme-color>." },
-  backgroundColor: { type: "string", default: "#15171c", description: "PWA manifest background colour." },
-  categories: { type: "array", items: { type: "string" }, custom: true, description: "Manifest categories array." },
-  screenshots: {
-    type: "array",
-    items: { type: "object", custom: true },
-    custom: true,
-    description: "Richer Android install-UI screenshots: [{ src, sizes, form_factor, label?, platform? }].",
-  },
-  shortcuts: {
-    type: "array",
-    items: { type: "object", custom: true },
-    custom: true,
-    description: "App shortcuts for Android long-press / desktop jump lists: [{ name, short_name?, url, icons? }].",
-  },
+
+  // — PWA (manifest-only; see PWA_THEME_COLOR_SPEC + the `pwa` node below) —
+  pwa: PWA_SPEC,
 
   // — Design sources —
   source: { type: "string", default: ".", description: "Directory of Customizer-style .scad designs, relative to the config file." },
@@ -236,17 +317,55 @@ export const CONFIG_SPEC = {
   assets: { type: "array", items: { type: "string" }, description: "Files/directories/globs to bundle verbatim; omit to follow use/include." },
 
   // — Rendering —
-  features: { type: "array", items: { type: "string" }, description: "OpenSCAD --enable=<feature> flags applied to every render." },
-  format: { type: "enum", values: ["3mf", "stl"], default: "3mf", description: "Export/preview model format." },
-  fonts: { type: "array", items: { type: "string" }, description: "Bundled font files (public/fonts basenames or 'source'-relative paths)." },
-  fontFallback: { type: "string", description: "A bundled family pinned as fontconfig's last-resort default." },
+  // `render` used to be documented as wholly absent from renderHash; that's
+  // no longer true once `features`/`format`/`fonts`/`fontFallback` live here
+  // too — they're genuine render inputs and ARE hashed (an --enable flag, the
+  // export format, and bundled glyph outlines all change the rendered
+  // bytes). `heavyMs`/`cache` stay display/perf-only and stay OUT of
+  // renderHash, same as before. The four render-input fields are `custom:
+  // true` (see the file-top comment): applyGroupSpec recognises the key so
+  // it isn't rejected as unknown, but skips producing/validating it — this
+  // group's real return value (parseRender's result, schema.render) still
+  // holds only `heavyMs`/`cache`, exactly as before this move, while
+  // `parseStringArray`/`parseFormat`/`parseFontFallback` (unchanged, bespoke,
+  // individually unit-tested) read `config.render.features` etc. directly and
+  // feed the schema's separate flat `features`/`format`/`fonts`/`fontFallback`
+  // keys — see gen-schema.mjs's schema assembly and its comment on why
+  // designs.json does NOT gain a nested `render.features` etc. to match.
   render: {
     type: "object",
-    description: "Build-time render tuning: heavy-render threshold + cache sizing.",
+    description:
+      "Rendering: OpenSCAD flags/format/fonts (render inputs — folded into renderHash) plus build-time " +
+      "heavy-render-threshold/cache tuning ('heavyMs'/'cache' — display/perf only, absent from renderHash).",
     // Pure tuning: an empty `{}` collapses to nothing (see the file-top comment).
+    // (Only heavyMs/cache participate in this collapse — see above.)
     collapseEmptyToNull: true,
     properties: {
-      heavyMs: num("nonNegative", { description: "Auto-pause threshold (ms) for a slow live render." }),
+      features: {
+        type: "array",
+        items: { type: "string" },
+        custom: true,
+        description: "OpenSCAD --enable=<feature> flags applied to every render. Folded into renderHash.",
+      },
+      format: {
+        type: "enum",
+        values: ["3mf", "stl"],
+        default: "3mf",
+        custom: true,
+        description: "Export/preview model format. Folded into renderHash.",
+      },
+      fonts: {
+        type: "array",
+        items: { type: "string" },
+        custom: true,
+        description: "Bundled font files (public/fonts basenames or 'source'-relative paths). Folded into renderHash.",
+      },
+      fontFallback: {
+        type: "string",
+        custom: true,
+        description: "A bundled family pinned as fontconfig's last-resort default. Folded into renderHash.",
+      },
+      heavyMs: num("nonNegative", { description: "Auto-pause threshold (ms) for a slow live render. NOT in renderHash." }),
       cache: RENDER_CACHE_SPEC,
     },
   },
@@ -278,7 +397,9 @@ export const CONFIG_SPEC = {
       panelSide: enumField(["left", "right"], "left", { description: "Which edge the desktop parameter panel docks against." }),
       panelDefault: enumField(["open", "collapsed"], "open", { description: "First-load desktop panel state." }),
       outputDefault: enumField(["closed", "open"], "closed", { description: "Whether the OpenSCAD output console starts open." }),
-      install: enumField(["auto", "off"], "auto", { description: "PWA install affordance; 'off' hides it entirely." }),
+      // `install` moved to `pwa.install` (a PWA/manifest concern, not a panel
+      // default) — but its value still lands at `schema.ui.install`, since
+      // that's what the app itself reads (App.tsx); see gen-schema.mjs.
       showVarName: bool(false, { description: "Show the OpenSCAD variable name beside each parameter label." }),
       // No `default` key: present only when the config sets it, matching
       // `parseUi(undefined).saveImage === undefined` (unlike the toggles

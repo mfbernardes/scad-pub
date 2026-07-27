@@ -41,7 +41,6 @@ import { generatePwaAssets } from "./lib/pwa-assets.mjs";
 import { scadpubVersion } from "./lib/version.mjs";
 import { componentVersions } from "./lib/dep-versions.mjs";
 import {
-  COLOR_VALUE_RE,
   parseColors,
   parseDir,
   parseFileImport,
@@ -50,7 +49,9 @@ import {
   parseLicenses,
   parseNotices,
   parsePopup,
+  parsePwa,
   parseRender,
+  parseStringArray,
   parseStrings,
   parseUi,
   parseViewer,
@@ -69,7 +70,10 @@ export {
   parseLicenses,
   parseNotices,
   parsePopup,
+  parsePwa,
+  parsePwaThemeColor,
   parseRender,
+  parseStringArray,
   parseStrings,
   parseUi,
   parseViewer,
@@ -119,18 +123,6 @@ const checkId = (id, what = "design id") => {
   return id;
 };
 
-// A top-level array-of-strings config key (categories, features): absent ->
-// [], otherwise every entry must be a non-empty string. Used for keys that
-// are interpolated verbatim into generated output (the manifest, `--enable`
-// render flags), so a stray non-string would otherwise surface as a cryptic
-// downstream failure instead of a clear config error.
-const parseStringArray = (raw, key) => {
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string" || !v.trim()))
-    throw new Error(`gen-schema: '${key}' must be an array of non-empty strings (got ${JSON.stringify(raw)})`);
-  return raw;
-};
-
 // Dotted extension (incl. the leading dot) of a relative path, or "" when it
 // has none. `dot > 0` so a leading-dot "dotfile" with no real extension yields
 // "" rather than the whole basename.
@@ -154,11 +146,17 @@ function loadConfig(configPath) {
   return config;
 }
 
-// ── App identity & PWA chrome ───────────────────────────────────────────────
-// (icon/iconMaskable/screenshots/shortcuts are consumed by generatePwaAssets.)
+// ── App identity ────────────────────────────────────────────────────────────
+// title/id/description/lang/dir only — document chrome and storage
+// namespacing, read by the running app itself. Everything that's a
+// manifest/icon-rasterizer INPUT ONLY (shortName, icon, iconMaskable,
+// themeColor/themeColorLight, backgroundColor, categories, screenshots,
+// shortcuts, install) now lives under the config's `pwa` block — see
+// parsePwa (scripts/lib/config-parsers.mjs) and CONFIG_SPEC.pwa's comment —
+// and is computed separately, below, so it can feed both `generatePwaAssets`
+// and (unchanged) designs.json's own flat `themeColor`/`themeColorLight` keys.
 function parseIdentity(config) {
   const TITLE = config.title ?? "ScadPub";
-  const SHORT_NAME = config.shortName ?? TITLE;
   const ID = checkId(config.id ?? "scadpub", "config 'id'");
   const DESCRIPTION =
     config.description ?? "Configure and export designs in your browser.";
@@ -167,22 +165,7 @@ function parseIdentity(config) {
   // into the generated <html lang dir> attributes and the manifest.
   const LANG = parseLang(config.lang);
   const DIR = parseDir(config.dir);
-  // PWA / browser chrome colours (default to the dark palette's chrome).
-  // Validated like every other colour input (COLOR_VALUE_RE) so they stay safe
-  // when interpolated into generated SVG/HTML attributes.
-  const THEME_COLOR = config.themeColor ?? "#1f2229";
-  const THEME_COLOR_LIGHT = config.themeColorLight ?? "#ffffff";
-  const BG_COLOR = config.backgroundColor ?? "#15171c";
-  for (const [key, val] of [
-    ["themeColor", THEME_COLOR],
-    ["themeColorLight", THEME_COLOR_LIGHT],
-    ["backgroundColor", BG_COLOR],
-  ]) {
-    if (typeof val !== "string" || !COLOR_VALUE_RE.test(val.trim()))
-      throw new Error(`gen-schema: '${key}' must be a CSS colour string (got ${JSON.stringify(val)})`);
-  }
-  const CATEGORIES = parseStringArray(config.categories, "categories");
-  return { TITLE, SHORT_NAME, ID, DESCRIPTION, LANG, DIR, THEME_COLOR, THEME_COLOR_LIGHT, BG_COLOR, CATEGORIES };
+  return { TITLE, ID, DESCRIPTION, LANG, DIR };
 }
 
 // ── Rendering: bundled fonts ────────────────────────────────────────────────
@@ -191,9 +174,12 @@ function parseIdentity(config) {
 // app) or a path into the source tree (a design repo bundling its own font),
 // which we copy into public/fonts so it is served like the rest. Also writes
 // the fontconfig config the renderer mounts — optionally pinning a weak
-// last-resort fallback family (config.fontFallback) so an imported font can't
-// hijack Fontconfig's global default; generated into the served tree (and
-// hashed into renderHash) so the matching rules stay config-driven.
+// last-resort fallback family (config.render.fontFallback) so an imported font
+// can't hijack Fontconfig's global default; generated into the served tree
+// (and hashed into renderHash) so the matching rules stay config-driven.
+// `fonts`/`fontFallback` moved under `render` (from the top level) since this
+// commit — both are genuine render inputs, so they stay part of renderHash
+// exactly as before; only where they're READ from the config changed.
 // `register`/`checkContained` are the H5/H6 helpers from createAssetTools:
 // a source-tree font is checked against SOURCE containment (a font path is a
 // source-owned path, like a design or asset) and its destination is
@@ -216,7 +202,7 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
   // already-present public/fonts fallback) so hashing works before the copy.
   const fontWrites = [];
   const fontPaths = {};
-  const FONTS = (config.fonts ?? []).map((entry) => {
+  const FONTS = (config.render?.fonts ?? []).map((entry) => {
     const name = String(entry).split(/[\\/]/).pop();
     const srcAbs = resolve(SOURCE, entry);
     if (outPublicDir) {
@@ -244,7 +230,7 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
     }
     return name;
   });
-  const FONT_FALLBACK = parseFontFallback(config.fontFallback);
+  const FONT_FALLBACK = parseFontFallback(config.render?.fontFallback);
   const fontsConf = outPublicDir ? renderFontsConf(FONT_FALLBACK) : null;
   // The bundled fonts' real embedded family names, so the app can decide font
   // availability by family rather than filename — plus their face descriptions
@@ -665,6 +651,18 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
   );
 }
 
+// designs.json vs. scadpub.config.json shape: mirror the config's grouping
+// here when the app shares the concept (as `viewer` does — see
+// src/openscad/types.ts's Schema comment); keep this file's existing flat
+// shape when it doesn't. `render.features`/`.format`/`.fonts`/`.fontFallback`
+// land as this schema's own flat `features`/`format`/`fonts`/`fontFallback`
+// (the app already reads those flat; only `render.heavyMs`/`.cache` nest,
+// under `render`, since that pairing IS its own build-time-tuning concept).
+// `pwa` (shortName/icon/iconMaskable/backgroundColor/categories/screenshots/
+// shortcuts/themeColor/install) doesn't appear here at all — every one of its
+// keys is a manifest.webmanifest / icon-rasterizer input with no runtime
+// reader, so there is no app-facing "pwa" concept to mirror it into.
+
 /**
  * Build the configurator schema and copy the needed .scad/preset files.
  * The heavy lifting lives in the section helpers above (and scripts/lib/);
@@ -697,8 +695,7 @@ export function generate({
   // Everything in the config is resolved relative to the config file's directory.
   const CONFIG_DIR = dirname(configPath);
 
-  const { TITLE, SHORT_NAME, ID, DESCRIPTION, LANG, DIR, THEME_COLOR, THEME_COLOR_LIGHT, BG_COLOR, CATEGORIES } =
-    parseIdentity(config);
+  const { TITLE, ID, DESCRIPTION, LANG, DIR } = parseIdentity(config);
 
   // ── Design sources ────────────────────────────────────────────────────────
   // `source` defaults to "." (designs live beside the config); set it to point
@@ -725,14 +722,22 @@ export function generate({
   const fontCopies = [];
 
   // ── Rendering ─────────────────────────────────────────────────────────────
-  const FEATURES = parseStringArray(config.features, "features");
-  const FORMAT = parseFormat(config.format);
+  // `features`/`format`/`fonts`/`fontFallback` now live under `render` (moved
+  // in from the top level) — they're genuine render inputs, so they stay
+  // folded into renderHash below exactly as before; only their config PATH
+  // moved. `render.heavyMs`/`render.cache` are display/perf tuning and stay
+  // OUT of renderHash — see CONFIG_SPEC.render's comment and RENDER below.
+  const FEATURES = parseStringArray(config.render?.features, "features");
+  const FORMAT = parseFormat(config.render?.format);
   // The 3D viewer's presentation, framing (restOnGrid) and per-control
   // visibility — all display-only, so VIEWER reaches the schema without
   // touching renderHash.
   const VIEWER = parseViewer(config.viewer);
-  // Optional build-time render tuning (heavy-render threshold + cache sizing).
-  // Validated; absent -> null -> the app keeps its built-in defaults.
+  // Optional build-time render tuning (heavy-render threshold + cache
+  // sizing) — NOT features/format/fonts/fontFallback, which parseRender
+  // deliberately ignores (see its own comment); those are computed above/
+  // below instead. Validated; absent -> null -> the app keeps its built-in
+  // defaults.
   const RENDER = parseRender(config.render);
   const { FONTS, FONT_FAMILIES, FONT_FACES, fontPaths, fontsConf, fontWrites } = bundleFonts(
     config,
@@ -751,8 +756,21 @@ export function generate({
   // tokens; emitted by vite.config.ts as a <style> block so a consumer project
   // can restyle the app entirely from its config. Absent -> null.
   const COLORS = parseColors(config.colors);
-  // Build-time UI behaviour config (panel side, default state, etc.).
-  const UI = parseUi(config.ui);
+  // Build-time UI behaviour config (panel side, default state, etc.). `install`
+  // moved to `pwa.install` (see PWA below) — it's spliced back onto UI just
+  // below so `schema.ui.install` still carries it, unmoved: App.tsx reads
+  // `schema.ui?.install`, and this reorg only moves the CONFIG surface, not
+  // designs.json's shape (see gen-schema.mjs's schema-assembly comment).
+  const UI = { ...parseUi(config.ui) };
+  // Manifest-only PWA chrome (install metadata, icons, theming) — see
+  // CONFIG_SPEC.pwa's comment for why none of this is mirrored into
+  // designs.json as its own "pwa" object. Always resolves (like parseUi/
+  // parseViewer), defaults throughout when `config.pwa` is entirely absent.
+  const PWA = parsePwa(config.pwa);
+  UI.install = PWA.install;
+  // `shortName` moved to `pwa.shortName`, still falling back to `title` —
+  // matches designs.json's existing flat `shortName` field exactly.
+  const SHORT_NAME = PWA.shortName ?? TITLE;
   // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
   // Absent -> null -> no import button.
   const FILE_IMPORT = parseFileImport(config.fileImport);
@@ -867,7 +885,7 @@ export function generate({
   let pwaWritten = [];
   if (outPublicDir) {
     ({ appleSplash, iconFiles, written: pwaWritten } = generatePwaAssets({
-      config,
+      pwa: PWA,
       CONFIG_DIR,
       outPublicDir,
       TITLE,
@@ -876,9 +894,9 @@ export function generate({
       ID,
       LANG,
       DIR,
-      THEME_COLOR,
-      BG_COLOR,
-      CATEGORIES,
+      THEME_COLOR: PWA.themeColor.dark,
+      BG_COLOR: PWA.backgroundColor,
+      CATEGORIES: PWA.categories,
       designs,
       mustExist,
       register: registry.register,
@@ -936,8 +954,13 @@ export function generate({
     lang: LANG,
     dir: DIR,
     strings: STRINGS,
-    themeColor: THEME_COLOR,
-    themeColorLight: THEME_COLOR_LIGHT,
+    // `pwa.themeColor.{dark,light}` in the config, still flat here — see the
+    // module-level comment above generate() (and CONFIG_SPEC.pwa's own) for
+    // why designs.json doesn't grow a nested "pwa" object to match: nothing
+    // under `pwa` has a runtime reader, so this stays shaped for consumption
+    // (vite.config.ts's meta-tag injection) rather than mirroring the config.
+    themeColor: PWA.themeColor.dark,
+    themeColorLight: PWA.themeColor.light,
     appleSplash,
     colors: COLORS,
     extraCss,

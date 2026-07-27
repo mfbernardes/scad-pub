@@ -5,12 +5,6 @@
   "assets": [
     "lib"
   ],
-  "features": [
-    "textmetrics"
-  ],
-  "fonts": [
-    "Foo.ttf"
-  ],
   "fileImport": {
     "accept": ".ttf,.otf",
     "label": "Import Foo font"
@@ -22,5 +16,5 @@
       "heavy": true
     }
   ],
-  "format": "stl"
+  "render": { "features": ["textmetrics"], "format": "stl", "fonts": ["Foo.ttf"] }
 }

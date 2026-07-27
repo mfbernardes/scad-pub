@@ -23,13 +23,16 @@
   ],
   "assets": ["emblem.svg", "panel.svg"],
 
-  "features": [],
-  "fonts": [
-    "LiberationSans-Bold.ttf",
-    "LiberationSans-Regular.ttf"
-  ],
+  "render": {
+    "features": [],
+    "fonts": [
+      "LiberationSans-Bold.ttf",
+      "LiberationSans-Regular.ttf"
+    ]
+  },
 
-  "ui": { "install": "off", "afterExport": { "helpTab": "Printing" } },
+  "pwa": { "install": "off" },
+  "ui": { "afterExport": { "helpTab": "Printing" } },
   "fileImport": true,
 
   "popup": {

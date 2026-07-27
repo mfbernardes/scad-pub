@@ -14,15 +14,19 @@ This representative config shows the major surfaces. The sections below define e
   "title": "ScadPub",             // page/header title
   "id": "scadpub",                // namespaces browser storage (default "scadpub")
   "description": "Configure …",   // page <meta> + PWA description
-  "icon": "branding/icon.svg",    // PWA/favicon icon
-  "themeColor": "#1f2229",        // browser-chrome / PWA colour
+  "pwa": {
+    "icon": "branding/icon.svg",    // PWA/favicon icon
+    "themeColor": "#1f2229"         // browser-chrome / PWA colour (both themes; or { light, dark })
+  },
   "source": "examples",           // directory of .scad designs (relative to this file)
   "designs": [
     { "id": "tag", "label": "Tag", "heavy": false, "description": "A name tag.", "icon": "branding/tag.svg" }
   ],                              // omit to auto-discover *.scad in source; presets auto-detected as <id>.json
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
-  "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
-  "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
+  "render": {
+    "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
+    "format": "3mf"                 // export/preview format: "3mf" (colour) or "stl"; default "3mf"
+  },
   "viewer": { "style": "plain" }, // viewer presentation, framing, and controls — see Viewer
   "fileImport": true              // optional Files dialog (manages imported fonts/SVGs)
 }
@@ -34,13 +38,13 @@ The top-level keys map to app identity, design discovery, rendering, appearance,
 
 ### App identity and PWA
 
-These keys set the document chrome and the Progressive Web App (PWA) manifest:
+These keys set the document chrome and, through the `pwa` block, the Progressive Web App (PWA) manifest:
 
 - **`title`** / **`logo`**: see [Title and logo](#title-and-logo)
 - **`id`**: namespaces localStorage, IndexedDB, and preset cache. Defaults to `"scadpub"`
-- **`description`** / **`shortName`** / **`icon`** / **`themeColor`** / **`backgroundColor`**: `<meta>` and PWA manifest fields. `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg`
+- **`description`**: `<meta>` description and PWA manifest description
 - **`lang`** / **`dir`**: document and manifest language (a BCP-47 tag, default `"en"`) and text direction (`"ltr"` by default, `"rtl"`, or `"auto"`). ScadPub emits them onto `<html lang dir>` and into the manifest
-- **`themeColorLight`** / **`categories`** / **`iconMaskable`** / **`screenshots`** / **`shortcuts`**: see [UI behaviour and PWA](#ui-behaviour-and-pwa)
+- **`pwa`**: manifest-only fields (`shortName`, `icon`, `iconMaskable`, `themeColor`, `backgroundColor`, `categories`, `screenshots`, `shortcuts`, `install`) — see [PWA manifest (`pwa`)](#pwa-manifest-pwa). `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg` from it
 
 ### Design sources
 
@@ -109,13 +113,14 @@ Each `designs[]` entry also accepts an optional **`presetImages`** field — bun
 
 ### Rendering
 
-These keys affect render arguments, bundled fonts, and cache behavior:
+The `render` object gathers everything that affects render arguments, bundled fonts, and cache behavior. Two genuinely different kinds of field live in it, and that distinction matters for `renderHash` — the content hash folded into the persisted render-cache key:
 
-- **`features`**: applied to all designs as `--enable=<feature>`
-- **`format`**: the model format OpenSCAD exports and the viewer parses, fixed at build time. `"3mf"` is the default and carries per-object colour from each design's `color(...)` calls. `"stl"` is geometry-only. Changing it invalidates the render cache automatically
+- `render.features` / `render.format` / `render.fonts` / `render.fontFallback` (**`features`**/**`format`**/**`fonts`**/**`fontFallback`**): real render inputs — an OpenSCAD `--enable` flag, the export format, and the bundled glyph outlines all change the rendered bytes. Changing any of them **invalidates every persisted render** (`renderHash` moves)
+- `render.heavyMs` / `render.cache` (**`heavyMs`**/**`cache`**): build-time tuning only — the heavy-render auto-pause threshold and the runner's cache sizing. Neither affects geometry, so neither is part of `renderHash`
+
+See [Render tuning (`render`)](#render-tuning-render) for the full field reference, and [Fonts](#fonts-renderfonts-renderfontfallback) for `render.fonts`/`render.fontFallback` specifically.
+
 - **`viewer`**: the 3D viewer's presentation, framing, and per-control visibility, all fixed at build time and none of it affecting the exported file or the render cache. See [Viewer](#viewer-viewer)
-- **`fonts`** / **`fontFallback`**: see [Fonts](#fonts-fonts-fontfallback)
-- **`render`**: optional render tuning for the heavy-render threshold and cache sizing. See [Render tuning](#render-tuning-render)
 
 ### Appearance and UI behaviour
 
@@ -144,7 +149,7 @@ Config paths are not all relative to the same thing. `gen-schema` resolves each 
 
 | Base | Keys resolved against it |
 | --- | --- |
-| The **config file's own directory** | `source`, `logo`, `icon`, `iconMaskable`, `extraCss`, `designs[].icon`, `designs[].image`, `designs[].doc`, `designs[].presetImages` values |
+| The **config file's own directory** | `source`, `logo`, `pwa.icon`, `pwa.iconMaskable`, `extraCss`, `designs[].icon`, `designs[].image`, `designs[].doc`, `designs[].presetImages` values |
 | **`source`** (itself config-relative, see above) | `assets`, each `fonts` entry, `designs[].file` |
 | **The design's own `.scad` file** | the `// @icon`, `// @image`, and `// @doc` annotations |
 
@@ -377,9 +382,9 @@ ScadPub chooses the mounting behavior from the file extension:
 
 Imported files persist in IndexedDB and are re-applied on the next visit; the Files dialog lists what's currently loaded, with a **Clear all** button to remove them. Importing, removing, or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served.
 
-## Fonts (`fonts`, `fontFallback`)
+## Fonts (`render.fonts`, `render.fontFallback`)
 
-`fonts` lists the font files the renderer bundles and mounts. Each entry is either a basename already in `public/fonts/` or a path into `source` to copy in. ScadPub reads each embedded family and style name at build time, so the app knows the authoritative available set and can name each face the way you know it.
+`render.fonts` lists the font files the renderer bundles and mounts. Each entry is either a basename already in `public/fonts/` or a path into `source` to copy in. ScadPub reads each embedded family and style name at build time, so the app knows the authoritative available set and can name each face the way you know it. Bundled fonts are genuine render inputs — the glyph outlines drive `text()` geometry — so `render.fonts` and `render.fontFallback` are folded into `renderHash`: swapping a font invalidates persisted renders automatically.
 
 A string or enum dropdown parameter annotated `// @font` renders as a **font dropdown**. See [Font selectors](annotations.md#font-selectors--font). The dropdown lists every face the renderer can use, including bundled fonts and imported fonts. Friendly names come from the font file, such as "Liberation Sans Bold", never the raw Fontconfig `Family:style=Style` string.
 
@@ -387,23 +392,33 @@ Imported faces are labelled, and the menu includes an **Import font…** action 
 
 ```jsonc
 {
-  // Bundle the fallback face too. fontFallback must name a family you bundle.
-  "fonts": ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf", "LiberationMono-Regular.ttf"],
-  "fontFallback": "Liberation Mono"  // optional, see below
+  "render": {
+    // Bundle the fallback face too. fontFallback must name a family you bundle.
+    "fonts": ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf", "LiberationMono-Regular.ttf"],
+    "fontFallback": "Liberation Mono"  // optional, see below
+  }
 }
 ```
 
-**`fontFallback`** is optional and pins a deterministic last-resort family in the generated `fonts.conf`. Without it, Fontconfig can pick an imported font as the global default for any unmatched family. That makes OpenSCAD's own substitution unpredictable. Set `fontFallback` to a **bundled** family that you **don't** offer as a selectable lettering choice, such as a monospace face. Any absent family falls back to it. Omit it for the default behavior with no fallback rule.
+`render.`**`fontFallback`** is optional and pins a deterministic last-resort family in the generated `fonts.conf`. Without it, Fontconfig can pick an imported font as the global default for any unmatched family. That makes OpenSCAD's own substitution unpredictable. Set `render.fontFallback` to a **bundled** family that you **don't** offer as a selectable lettering choice, such as a monospace face. Any absent family falls back to it. Omit it for the default behavior with no fallback rule.
 
 ## Render tuning (`render`)
 
-An optional build-time object that tunes rendering behaviour. Every field is optional; the app keeps its built-in default for any you omit. None affect geometry, so `render` is absent from `renderHash` (changing it doesn't invalidate cached renders).
+`render` is a build-time object with two halves that behave differently with respect to `renderHash` (the content hash folded into the persisted render-cache key):
+
+- **Render inputs** — `features`, `format`, `fonts`, `fontFallback` — documented in [Rendering](#rendering), [Fonts](#fonts-renderfonts-renderfontfallback), and the representative config's `format` line. These genuinely change the rendered bytes, so they're folded into `renderHash`: changing any of them invalidates every persisted render.
+- **Tuning-only fields** — `heavyMs`, `cache` — covered below. Every field here is optional; the app keeps its built-in default for any you omit. Neither affects geometry, so neither is part of `renderHash` (changing them doesn't invalidate cached renders).
 
 ```jsonc
 {
   "render": {
-    "heavyMs": 6000,       // auto-pause threshold (ms); default ≈ 6000
-    "cache": {
+    "features": ["textmetrics"],  // OpenSCAD --enable flags for every render (renderHash input)
+    "format": "3mf",               // export/preview format: "3mf" (colour) or "stl"; default "3mf" (renderHash input)
+    "fonts": ["LiberationSans-Regular.ttf"],  // bundled font files (renderHash input)
+    "fontFallback": "Liberation Mono",         // optional last-resort family (renderHash input)
+
+    "heavyMs": 6000,       // auto-pause threshold (ms); default ≈ 6000 — NOT a renderHash input
+    "cache": {              // NOT a renderHash input
       "maxEntries": 16,    // in-memory (L1) slot count; default 16
       "maxBytes": 67108864,    // in-memory (L1) total budget; default derived from device memory
       "maxEntryBytes": 33554432,  // largest single render that may be cached
@@ -486,7 +501,6 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`panelSide`**: `"left"` by default, or `"right"`. Controls which edge the desktop parameter panel docks against
 - **`panelDefault`**: `"open"` by default, or `"collapsed"`. Sets the first-load desktop panel state. The later browser choice persists
 - **`outputDefault`**: `"closed"` by default, or `"open"`. Controls whether the OpenSCAD output console starts open
-- **`install`**: `"auto"` by default, or `"off"`. When `"off"`, no PWA install affordance appears, even on browsers that support it
 - **`showVarName`**: `false` by default, or `true`. Shows the underlying OpenSCAD variable name beside each parameter label. Hidden by default because it is developer detail; set `true` for a technical audience. Every parameter row always carries a `data-param="<var>"` attribute for smoke tests and `extraCss`
 - **`saveImage`**: `true` by default, or `false`. Controls the "Save image (PNG)" action in the secondary-action surfaces (the desktop command bar and the mobile ⋮ overflow menu). Set `false` to hide the Save-image action entirely
 - **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
@@ -517,17 +531,40 @@ The optional `ui.afterExport` object turns on a compact, non-modal panel (`src/c
 
 The panel is dismissible (an ✕) and auto-hides itself after a few seconds; it never appears while a native share sheet is open — it's only ever shown once the export's share-or-download outcome has actually settled, and it replaces the export flow's one-time "install this app" toast on any deployment that configures it (the two never stack on the same export).
 
-### PWA manifest
+### PWA manifest (`pwa`)
+
+The optional `pwa` object gathers every manifest-only, icon-rasterizer-only field: install metadata, icons, and theming that feed `public/manifest.webmanifest` and the generated icon set. Nothing in it affects geometry, so none of it is part of `renderHash`.
 
 `gen-schema` writes `public/manifest.webmanifest`. It always includes a `launch_handler` so an already-open install is reused rather than re-launched. When the optional `@resvg/resvg-js` rasterizer is installed, `gen-schema` also rasterizes the `icon` SVG to PNGs and generates per-device iOS launch images. Without it, the PNGs fall back to the SVG and the iOS splash images are skipped.
 
-These keys feed the manifest:
+```jsonc
+{
+  "pwa": {
+    "shortName": "Widget",           // optional; defaults to "title"
+    "icon": "branding/icon.svg",     // PWA/favicon icon, relative to the config file
+    "iconMaskable": "branding/icon-maskable.svg",  // optional; defaults to "icon"
+    "themeColor": {                  // a string (both themes), or { light, dark }
+      "light": "#ffffff",             // default "#ffffff"
+      "dark": "#1f2229"                // default "#1f2229"
+    },
+    "backgroundColor": "#15171c",    // PWA manifest background colour; default "#15171c"
+    "categories": ["utilities"],     // optional manifest categories
+    "screenshots": [ /* … */ ],       // optional, see below
+    "shortcuts": [ /* … */ ],          // optional, see below
+    "install": "auto"                 // "auto" (default) or "off"
+  }
+}
+```
 
-- **`themeColorLight`**: light-scheme `<meta name="theme-color">`, default `"#ffffff"`. The dark value comes from `themeColor`
-- **`categories`**: optional array of [manifest categories](https://developer.mozilla.org/docs/Web/Manifest/categories)
+- **`shortName`**: short PWA name. Optional; defaults to `title`
+- **`icon`**: PWA/favicon icon, a path relative to the config file
 - **`iconMaskable`**: optional separate SVG for the maskable icon. Defaults to `icon`
+- **`themeColor`**: browser-chrome / PWA colour, **per theme**. Same shape as [`logo`](#title-and-logo): a plain string sets both themes, or supply an object with either/both of `light`/`dark`. Unlike `logo`, an omitted side does **not** fall back to the other — `light` and `dark` each default independently (`"#ffffff"` / `"#1f2229"`), since they're genuinely different colours rather than one asset shared across themes. `light` feeds `<meta name="theme-color">` in the light scheme; `dark` feeds the PWA manifest's `theme_color` and the default icon's fill when no `icon` is configured
+- **`backgroundColor`**: PWA manifest background colour, default `"#15171c"`
+- **`categories`**: optional array of [manifest categories](https://developer.mozilla.org/docs/Web/Manifest/categories)
 - **`screenshots`**: optional `[{ src, sizes, form_factor, label?, platform? }]` for the richer Android install UI. `form_factor` is `"wide"` or `"narrow"`. `label` is the accessible caption. `platform` targets a store listing. `label` and `platform` are passed through to the manifest when present
 - **`shortcuts`**: optional `[{ name, short_name?, url, icons? }]` app shortcuts for Android long-press and desktop jump lists. `icons`, an array of `{ src, sizes?, type? }`, is passed through when supplied. If omitted and the config has more than one design, ScadPub derives a shortcut per design
+- **`install`**: `"auto"` by default, or `"off"`. When `"off"`, no PWA install affordance appears, even on browsers that support it
 
 ## Notice badges (`notices`)
 

@@ -88,6 +88,14 @@ function validateFieldValue(value, field, path) {
       if (typeof value !== "string" || !value.trim()) throw stringFieldError(path, field);
       return value.trim();
     }
+    case "color": {
+      // Same strictness as every other colour input in this config
+      // (COLOR_VALUE_RE, defined below) — safe to interpolate into generated
+      // SVG/HTML attributes and the manifest.
+      if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
+        throw new Error(`${prefix} must be a CSS colour string (got ${JSON.stringify(value)})`);
+      return value.trim();
+    }
     case "object":
       // `?? {}` covers both an explicit `null`/absent value on a `required`
       // or `alwaysPresent` field (see applyGroupSpec below) — those bypass
@@ -113,9 +121,22 @@ export function applyGroupSpec(raw, node, path) {
   for (const key of Object.keys(raw))
     if (!(key in node.properties)) throw unknownNestedKeyError(path, node, key);
   const out = {};
-  for (const [key, field] of Object.entries(node.properties))
-    if ("default" in field) out[key] = field.default;
   for (const [key, field] of Object.entries(node.properties)) {
+    // A `custom: true` FIELD (as opposed to a custom top-level node — see
+    // config-spec.mjs's file-top comment) is recognised here just enough to
+    // pass the unknown-key check above; it is otherwise entirely the bespoke
+    // reader's problem (parseStringArray/parseFormat/parseFontFallback/
+    // parsePwaThemeColor/generatePwaAssets, reading the RAW config object
+    // directly) — so it never gets a default pre-populated, never reaches
+    // validateFieldValue, and never appears in this function's own return
+    // value. This is what keeps e.g. parseRender's result (schema.render)
+    // carrying only heavyMs/cache even though render.features/format/fonts/
+    // fontFallback are now valid nested keys.
+    if (field.custom) continue;
+    if ("default" in field) out[key] = field.default;
+  }
+  for (const [key, field] of Object.entries(node.properties)) {
+    if (field.custom) continue;
     const value = raw[key];
     const missing = value === undefined || value === null;
     // `alwaysPresent` (see config-spec.mjs's file-top comment) is
@@ -303,17 +324,110 @@ export function parseFileImport(fileImport) {
   return applyGroupSpec(raw, CONFIG_SPEC.fileImport, "fileImport");
 }
 
-// Validate and normalise the optional `render` config block: build-time render
-// tuning. `heavyMs` sets the auto-pause threshold (a live render slower than
-// this pauses auto-render for the design); `cache` tunes the runner's two-tier
-// render cache (`maxEntries` L1 slot count, `maxBytes` total L1 budget,
+// Validate and normalise the optional `render` config block. `heavyMs` sets
+// the auto-pause threshold (a live render slower than this pauses
+// auto-render for the design); `cache` tunes the runner's two-tier render
+// cache (`maxEntries` L1 slot count, `maxBytes` total L1 budget,
 // `maxEntryBytes` largest cacheable render, `persistent` the L2 IndexedDB
 // store). Every key is optional — the app keeps its built-in default for any
-// omitted value. None affect geometry, so `render` is absent from renderHash.
-// Returns null when unset; fails the build with a clear message on a bad shape.
+// omitted value. Neither affects geometry, so `heavyMs`/`cache` are absent
+// from renderHash. Returns null when unset; fails the build with a clear
+// message on a bad shape.
+//
+// `render` ALSO carries `features`/`format`/`fonts`/`fontFallback` now (moved
+// in from the top level) — genuine render inputs that ARE folded into
+// renderHash — but this function doesn't touch them: they're `custom: true`
+// in CONFIG_SPEC.render (see that file's comment), so `applyGroupSpec` merely
+// recognises the keys and otherwise ignores them. gen-schema.mjs reads
+// `config.render.features`/`.format`/`.fonts`/`.fontFallback` directly with
+// the same bespoke, individually unit-tested parsers
+// (parseStringArray/parseFormat/parseFontFallback) this file already
+// exported, unchanged apart from where they now read from.
 export function parseRender(raw) {
   if (raw == null) return null;
   return applyGroupSpec(raw, CONFIG_SPEC.render, "render");
+}
+
+// A top-level (or, since this reorg, `render`/`pwa`-nested) array-of-strings
+// field (`render.features`, `pwa.categories`): absent -> [], otherwise every
+// entry must be a non-empty string. Used for values interpolated verbatim
+// into generated output (the manifest, `--enable` render flags), so a stray
+// non-string would otherwise surface as a cryptic downstream failure instead
+// of a clear config error. `key` is the bare name used in the error message
+// (not a dotted path — these predate, and stay independent of, the
+// dotted-path convention `applyGroupSpec`-driven fields use).
+export function parseStringArray(raw, key) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string" || !v.trim()))
+    throw new Error(`gen-schema: '${key}' must be an array of non-empty strings (got ${JSON.stringify(raw)})`);
+  return raw;
+}
+
+// Independent built-in defaults for pwa.themeColor's two sides — identical to
+// the pre-reorg top-level themeColor/themeColorLight defaults, so an
+// unconfigured deployment's chrome colours don't change.
+const PWA_THEME_COLOR_DEFAULTS = { light: "#ffffff", dark: "#1f2229" };
+
+function validateThemeColorValue(value, path) {
+  if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
+    throw new Error(`${messagePrefix(path)} must be a CSS colour string (got ${JSON.stringify(value)})`);
+  return value.trim();
+}
+
+// Validate and normalise the optional `pwa.themeColor` config field: same
+// shape as `logo` — a plain string used for both themes, or a { light, dark }
+// object with either side optional — but each side defaults INDEPENDENTLY
+// (see PWA_THEME_COLOR_DEFAULTS) rather than falling back to the other side
+// the way `logo`'s object form does, since light/dark chrome colours are
+// genuinely different colours, not interchangeable assets.
+export function parsePwaThemeColor(raw) {
+  if (raw == null) return { ...PWA_THEME_COLOR_DEFAULTS };
+  if (typeof raw === "string") {
+    const v = validateThemeColorValue(raw, "pwa.themeColor");
+    return { light: v, dark: v };
+  }
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error(
+      "gen-schema: 'pwa.themeColor' must be a CSS colour string, or an object with optional 'light'/'dark' colour strings"
+    );
+  for (const key of Object.keys(raw))
+    if (key !== "light" && key !== "dark")
+      throw new Error(`gen-schema: 'pwa.themeColor': unknown key '${key}'.\n  Valid keys: light, dark`);
+  return {
+    light: raw.light != null ? validateThemeColorValue(raw.light, "pwa.themeColor.light") : PWA_THEME_COLOR_DEFAULTS.light,
+    dark: raw.dark != null ? validateThemeColorValue(raw.dark, "pwa.themeColor.dark") : PWA_THEME_COLOR_DEFAULTS.dark,
+  };
+}
+
+// Validate and normalise the optional `pwa` config block: manifest-only PWA
+// chrome (install metadata, icons, theming) that feeds manifest.webmanifest
+// and the icon rasterizer (scripts/lib/pwa-assets.mjs) — see CONFIG_SPEC.pwa's
+// comment for why none of it is mirrored into designs.json. `shortName`/
+// `icon`/`iconMaskable`/`backgroundColor`/`install` are ordinary
+// applyGroupSpec-driven fields; `themeColor` is bespoke (parsePwaThemeColor,
+// above); `categories` reuses parseStringArray (unchanged message, matching
+// its pre-reorg top-level behaviour); `screenshots`/`shortcuts` are passed
+// through UNVALIDATED here, on purpose — pwa-assets.mjs already tolerates (and
+// silently drops) a malformed entry rather than failing the build, a bit of
+// leniency that predates this reorg and that this function must not turn into
+// a hard failure.
+export function parsePwa(raw) {
+  const src = raw ?? {};
+  const out = applyGroupSpec(src, CONFIG_SPEC.pwa, "pwa");
+  return {
+    ...out,
+    categories: parseStringArray(src.categories, "categories"),
+    // Passed through EXACTLY as configured (including `undefined` when
+    // absent) rather than normalised to `[]`: generatePwaAssets tells "author
+    // configured no shortcuts at all" (falls back to deriving one per
+    // design) apart from "author configured an explicitly empty list" (no
+    // shortcuts, no derived fallback either) by checking `Array.isArray`, and
+    // defaulting an absent value to `[]` here would collapse that
+    // distinction.
+    screenshots: Array.isArray(src.screenshots) ? src.screenshots : undefined,
+    shortcuts: Array.isArray(src.shortcuts) ? src.shortcuts : undefined,
+    themeColor: parsePwaThemeColor(src.themeColor),
+  };
 }
 
 // Validate and normalise the optional `popup` config block: a notice dialog

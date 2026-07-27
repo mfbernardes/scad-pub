@@ -3,10 +3,9 @@
   "logo": "logo.svg",
   "source": "src",
   "assets": ["lib"],
-  "features": ["textmetrics"],
-  "fonts": ["Foo.ttf"],
   "fileImport": { "accept": ".ttf,.otf", "label": "Import Foo font" },
   "designs": [
     { "id": "widget", "label": "Widget", "heavy": true, "group": "Gadgets" }
-  ]
+  ],
+  "render": { "features": ["textmetrics"], "fonts": ["Foo.ttf"] }
 }

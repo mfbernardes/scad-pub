@@ -1,8 +1,6 @@
 {
   "title": "Widget Studio",
   "source": "src",
-  "fonts": ["NoSuchFont.ttf"],
-  "designs": [
-    { "id": "widget", "label": "Widget" }
-  ]
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "fonts": ["NoSuchFont.ttf"] }
 }

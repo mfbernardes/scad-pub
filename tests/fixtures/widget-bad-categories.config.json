@@ -1,8 +1,6 @@
 {
   "title": "Widget Studio",
   "source": "src",
-  "categories": ["design", 5],
-  "designs": [
-    { "id": "widget", "label": "Widget" }
-  ]
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "pwa": { "categories": ["design", 5] }
 }
