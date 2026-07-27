@@ -12,6 +12,7 @@ import { displayValue } from "../lib/paramDiff";
 import { visibleGroups } from "../lib/paramGroups";
 import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
 import { fontFallback } from "../lib/fontFallback";
+import { EssentialsToggle } from "./EssentialsToggle";
 import { FontImportActions } from "./FontImportActions";
 import { FontSelect } from "./FontSelect";
 import { SvgPrepareControl } from "./SvgPrepareControl";
@@ -72,6 +73,13 @@ interface Props {
   presetName?: string | null;
   /** Whether parameters marked `@advanced` are included. */
   showAdvanced?: boolean;
+  /**
+   * Flip `showAdvanced`. Present → the form closes with the EssentialsToggle
+   * row (see its own doc for why it belongs at the END of the form rather
+   * than above it); omitted → no toggle, for a caller that offers no way to
+   * reveal advanced params at all.
+   */
+  onShowAdvancedChange?: (show: boolean) => void;
   /**
    * Imperative handle (React-19 ref-as-prop) exposing `openSection`, so a
    * sibling "Jump to section" navigator can open + scroll + focus a section
@@ -398,7 +406,7 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true, ref }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true, onShowAdvancedChange, ref }: Props) {
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
@@ -476,8 +484,12 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
     });
   }, [scrollTick]);
 
+  // pt-3 here rather than padding-top on the scroll port above: the port's
+  // padding box is what a sticky group header pins to, so padding there would
+  // strand every pinned header that far down and let rows scroll through the
+  // gap. As the form's own padding it scrolls away, like content should.
   return (
-    <div className="param-form" ref={rootRef}>
+    <div className="param-form pt-3" ref={rootRef}>
       {groups.length === 0 && (
         <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
           {q ? `Nothing matches “${search}”.` : "This design has nothing to customize."}
@@ -610,6 +622,20 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
           </details>
         );
       })}
+      {/* The form's closing row: the way to the `@advanced` params, at the
+          point the visitor has run out of essential ones (see
+          EssentialsToggle's own doc). Rendered outside the groups.map so it
+          survives an empty `groups` — a search that matches only advanced
+          params shows "Nothing matches", and this is exactly the control that
+          resolves that. */}
+      {onShowAdvancedChange && (
+        <EssentialsToggle
+          params={design.params}
+          values={values}
+          showAdvanced={showAdvanced}
+          onShowAdvancedChange={onShowAdvancedChange}
+        />
+      )}
     </div>
   );
 });

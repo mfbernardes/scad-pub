@@ -5,31 +5,29 @@
 //
 // Vertical budget is the constraint here that the docked desktop panel doesn't
 // have: the sheet's Half detent is ~52vh (BottomSheet's HALF_VH_RATIO), so on a
-// phone every fixed row above the form costs a visible parameter. Two
+// phone every fixed row above the form costs a visible parameter. Three
 // deliberate differences from ParamPanel keep that budget for the form:
-//   • search + essentials toggle + section navigator share ONE toolbar row
-//     rather than stacking three;
+//   • the toolbar is the search field ALONE. ParamPanel stacks three rows
+//     (search, essentials, jump); here essentials moved into the form's own
+//     closing row (EssentialsToggle) and the section navigator is desktop-only,
+//     its orientation job taken over by sticky `.param-group` headers;
 //   • that toolbar SCROLLS with the form instead of pinning above it, so it
-//     costs nothing once the visitor has scrolled.
-// Two rows that used to live here moved out of the sheet entirely: readiness
-// (StatusStrip) is a pill in the export dock now, above the Download button it
-// warns about (see AppShell's ActionDock), and Live preview (auto-render) is in
-// the top bar's "⋮" overflow (BarActions), where the app's other rarely-toggled
-// chrome already is.
+//     costs nothing once the visitor has scrolled;
+//   • no PanelFooter — Live preview (auto-render) rides the top bar's "⋮"
+//     overflow (BarActions) instead.
+// Readiness also left: it's a pill in the export dock now, above the Download
+// button it warns about (see AppShell's ActionDock) — and on this layout only
+// for an outright failure, since Download itself carries the attention dot.
 //
 // `data-sheet-peek-end` on the tab row marks where the sheet's peek header ends
 // — BottomSheet measures the Peek height down to that element's bottom edge.
-import { useMemo, useRef } from "react";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
-import { visibleGroups } from "../lib/paramGroups";
 import type { PanelTab } from "../lib/usePanelState";
-import { EssentialsToggle } from "./EssentialsToggle";
-import { ParamForm, type ParamFormHandle } from "./ParamForm";
-import { SectionNavigator } from "./SectionNavigator";
+import { ParamForm } from "./ParamForm";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
@@ -112,13 +110,6 @@ export function SheetTabs({
   const tabs: Tab[] = ["presets", "params"];
   const debouncedSearch = useDebounce(search, 150);
   const triggerClass = cn(chipTabTrigger, "flex-1");
-  // See ParamPanel for the desktop twin: same visible-groups source so the
-  // navigator tracks the form's sections exactly.
-  const formRef = useRef<ParamFormHandle>(null);
-  const navSections = useMemo(
-    () => visibleGroups(design, values, { search: debouncedSearch, showAdvanced }).map((g) => g.section),
-    [design, values, debouncedSearch, showAdvanced]
-  );
 
   return (
     <Tabs
@@ -146,13 +137,26 @@ export function SheetTabs({
             presetName={presetName}
             changedParams={changedParams}
           />
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
-            {/* One form toolbar — search, essentials, jump — INSIDE the scroll
-                container, so it hands its ~44px back to the form as soon as
-                the visitor scrolls. All three are "find the setting I want"
-                controls; stacked as separate pinned rows they used to eat most
-                of a Half-detent sheet. */}
-            <div className="sheet-toolbar mb-2 flex items-center gap-2">
+          {/* No padding-top on the scroll port: a sticky group header pins to
+              the port's padding box, so any padding here would strand it that
+              far down and let rows scroll through the gap above it. The top gap
+              is `.param-form`'s own `pt-3` (and the toolbar's `mt-2`), both of
+              which scroll away as content should. Same reason ParamPanel's
+              scroller drops its `p-3` top. */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2">
+            {/* The form toolbar is now just the search field, full width, and
+                still INSIDE the scroll container so it hands its ~44px back to
+                the form as soon as the visitor scrolls. Its two former
+                neighbours both left for somewhere they read better:
+                  • essentials ("+N more") is a MODE, not a find-the-setting
+                    control — it's the closing row of the form itself now (see
+                    EssentialsToggle);
+                  • the section navigator is desktop-only. Sticky group headers
+                    (`.param-group > summary` in index.css) keep the visitor
+                    oriented while scrolling and let them fold the group they're
+                    in from wherever they are, which is most of what the jump
+                    menu was for — and unlike the menu it costs no standing row. */}
+            <div className="sheet-toolbar mt-2">
               <ParamSearch
                 value={search}
                 onChange={onSearchChange}
@@ -160,22 +164,9 @@ export function SheetTabs({
                 onFocus={onSearchFocus}
                 onBlur={onSearchBlur}
                 compact
-                className="flex-1"
-              />
-              <EssentialsToggle
-                params={design.params}
-                values={values}
-                showAdvanced={showAdvanced}
-                onShowAdvancedChange={onShowAdvancedChange}
-                compact
-              />
-              <SectionNavigator
-                sections={navSections}
-                onSelect={(s) => formRef.current?.openSection(s)}
-                compact
               />
             </div>
-            <ParamForm ref={formRef} design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} />
           </div>
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">

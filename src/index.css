@@ -671,11 +671,54 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   PARAM FORM — the collapsible-group disclosure marker
+   PARAM FORM — sticky group headers + the collapsible-group marker
    (The rest of the form is utility-styled in ParamForm.tsx; the ▸ marker's
    ::before/rotate pair stays here — the utility-variant spelling is
    unreadable, and reduced-motion also targets it below.)
    ═══════════════════════════════════════════════════════════════ */
+
+/* A group's header pins to the top of the scroll port while you are anywhere
+   inside that group, so the form always says which section you are reading —
+   and the header stays tappable, so you can fold the group you're in from
+   wherever you've scrolled to instead of hunting back up for it. That is what
+   replaced the section navigator on the mobile sheet (see SheetTabs); the
+   docked desktop panel keeps the navigator as well, and sticky headers help it
+   just the same.
+
+   Sticky within the <details>, not the scroll container, so a header only
+   holds the top for as long as its own group is on screen and the next group's
+   header pushes it out — the standard sticky-list behaviour.
+
+   The background is required, not decoration: without it the form's rows would
+   scroll visibly THROUGH the pinned text. It has to be OPAQUE and it has to
+   land on the same colour `.param-group` already shows, which is that group's
+   `bg-background/50` composited over the panel/sheet surface — both of which
+   are `--panel`. So: paint `--panel`, then the same 50% `--bg` layer on top.
+   Reproducing the composite rather than picking one token is what keeps the
+   pinned header from flashing a different shade than the group it belongs to.
+
+   The negative inline margins + matching padding let the fill span the group's
+   full width, which its own `px-[0.8rem]` would otherwise inset. */
+.param-group > summary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin-inline: -0.8rem;
+  padding-inline: 1rem;
+  background-color: var(--panel);
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--bg) 50%, transparent),
+    color-mix(in srgb, var(--bg) 50%, transparent)
+  );
+  border-radius: inherit;
+}
+
+/* A hairline under an OPEN group's header. At rest it's an ordinary divider
+   between the title and its controls; while the header is pinned it's what
+   makes rows passing underneath read as layered rather than as text clipped
+   mid-glyph. Open-only: a closed group is a single row and would just be
+   wearing an underline for nothing. */
+.param-group[open] > summary { border-bottom: 1px solid var(--line); }
 
 .param-group > summary::-webkit-details-marker { display: none; }
 .param-group > summary::before {
