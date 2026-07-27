@@ -10,6 +10,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_SPEC } from "../scripts/lib/config-spec.mjs";
 import { buildConfigSchema } from "../scripts/gen-config-schema.mjs";
+import {
+  POPUP_MODES,
+  TEXT_DIRECTIONS,
+  FORMATS,
+  PANEL_SIDES,
+  PANEL_DEFAULTS,
+  OUTPUT_DEFAULTS,
+  VIEWER_STYLES,
+  VIEWER_GRID_DEFAULTS,
+} from "../src/lib/schema.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
@@ -107,4 +117,34 @@ test("every config-spec.mjs key is documented in docs/config.md, and vice versa"
     "docs/config.md bold-codes a key config-spec.mjs doesn't know about " +
       "(stale documentation, or config-spec.mjs is missing this key)"
   );
+});
+
+// src/lib/schema.ts re-types several CONFIG_SPEC enums by hand as
+// string-literal arrays for validateSchema's own runtime checks against
+// designs.json (which carries the resolved value, not the spec node). Each
+// pair below is the same enum's data-side (CONFIG_SPEC) and app-side
+// (src/lib/schema.ts) declaration; asserting they're equal is the drift guard
+// a third value could otherwise slip past every other test and only fail at
+// runtime in the browser.
+const ENUM_CROSS_CHECKS = [
+  ["popup.mode", POPUP_MODES, CONFIG_SPEC.popup.properties.mode.values],
+  ["dir", TEXT_DIRECTIONS, CONFIG_SPEC.dir.values],
+  ["render.format", FORMATS, CONFIG_SPEC.render.properties.format.values],
+  ["ui.panelSide", PANEL_SIDES, CONFIG_SPEC.ui.properties.panelSide.values],
+  ["ui.panelDefault", PANEL_DEFAULTS, CONFIG_SPEC.ui.properties.panelDefault.values],
+  ["ui.outputDefault", OUTPUT_DEFAULTS, CONFIG_SPEC.ui.properties.outputDefault.values],
+  ["viewer.style", VIEWER_STYLES, CONFIG_SPEC.viewer.properties.style.values],
+  ["viewer.grid", VIEWER_GRID_DEFAULTS, CONFIG_SPEC.viewer.properties.grid.values],
+];
+
+test("src/lib/schema.ts's hand-typed enum lists match config-spec.mjs", () => {
+  for (const [key, schemaTs, configSpec] of ENUM_CROSS_CHECKS) {
+    assert.deepEqual(
+      schemaTs,
+      configSpec,
+      `'${key}': src/lib/schema.ts's enum list has drifted from CONFIG_SPEC's ` +
+        `(config-spec.mjs is the source of truth — update src/lib/schema.ts's ` +
+        `matching const to match)`
+    );
+  }
 });

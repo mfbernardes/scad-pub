@@ -33,6 +33,21 @@ import type { Schema, Design, Param } from "../openscad/types";
 
 const PARAM_TYPES = ["number", "boolean", "enum", "string"];
 
+// Enum value lists mirrored from scripts/lib/config-spec.mjs's own CONFIG_SPEC
+// (the single declarative source for each of these), since designs.json
+// carries the resolved value, not the spec node, and this runtime check has
+// no other way to know what's valid. Exported so tests/config-spec.test.mjs
+// can cross-check each pair against CONFIG_SPEC directly rather than trusting
+// two hand-typed lists to stay in sync — see that test for the drift guard.
+export const POPUP_MODES = ["always", "once", "dismissible", "picker"];
+export const TEXT_DIRECTIONS = ["ltr", "rtl", "auto"];
+export const FORMATS = ["3mf", "stl"];
+export const PANEL_SIDES = ["left", "right"];
+export const PANEL_DEFAULTS = ["open", "collapsed"];
+export const OUTPUT_DEFAULTS = ["closed", "open"];
+export const VIEWER_STYLES = ["plain", "studio"];
+export const VIEWER_GRID_DEFAULTS = ["off", "on"];
+
 function fail(msg: string): never {
   throw new Error(`Invalid designs schema: ${msg}`);
 }
@@ -171,7 +186,7 @@ export function validateSchema(raw: unknown): Schema {
       if (typeof p[key] !== "string" || !p[key])
         fail(`'popup.${key}' must be a non-empty string`);
     }
-    if (!["always", "once", "dismissible", "picker"].includes(p.mode as string))
+    if (!POPUP_MODES.includes(p.mode as string))
       fail("'popup.mode' must be \"always\", \"once\", \"dismissible\" or \"picker\"");
     if (p.button !== undefined && (typeof p.button !== "string" || !p.button))
       fail("'popup.button', when set, must be a non-empty string");
@@ -220,7 +235,7 @@ export function validateSchema(raw: unknown): Schema {
       (key) => `'strings.${key}' must be a string`,
       false
     );
-  if (s.dir !== undefined && !["ltr", "rtl", "auto"].includes(s.dir as string))
+  if (s.dir !== undefined && !TEXT_DIRECTIONS.includes(s.dir as string))
     fail("'dir' must be \"ltr\", \"rtl\" or \"auto\"");
   if (s.defaultDesign != null) {
     if (typeof s.defaultDesign !== "string") fail("'defaultDesign' must be a string");
@@ -244,7 +259,7 @@ export function validateSchema(raw: unknown): Schema {
         fail("'render.cache.persistent' must be a boolean");
     }
   }
-  if (s.format !== "3mf" && s.format !== "stl")
+  if (!FORMATS.includes(s.format as string))
     fail("'format' must be \"3mf\" or \"stl\"");
   if (s.colors != null) {
     const c = s.colors as Record<string, unknown>;
@@ -265,11 +280,11 @@ export function validateSchema(raw: unknown): Schema {
   if (s.ui != null) {
     if (typeof s.ui !== "object" || Array.isArray(s.ui)) fail("'ui' must be an object or null");
     const ui = s.ui as Record<string, unknown>;
-    if (ui.panelSide !== undefined && !["left", "right"].includes(ui.panelSide as string))
+    if (ui.panelSide !== undefined && !PANEL_SIDES.includes(ui.panelSide as string))
       fail("'ui.panelSide' must be \"left\" or \"right\"");
-    if (ui.panelDefault !== undefined && !["open", "collapsed"].includes(ui.panelDefault as string))
+    if (ui.panelDefault !== undefined && !PANEL_DEFAULTS.includes(ui.panelDefault as string))
       fail("'ui.panelDefault' must be \"open\" or \"collapsed\"");
-    if (ui.outputDefault !== undefined && !["closed", "open"].includes(ui.outputDefault as string))
+    if (ui.outputDefault !== undefined && !OUTPUT_DEFAULTS.includes(ui.outputDefault as string))
       fail("'ui.outputDefault' must be \"closed\" or \"open\"");
     if (ui.install !== undefined && !["auto", "off"].includes(ui.install as string))
       fail("'ui.install' must be \"auto\" or \"off\"");
@@ -286,11 +301,11 @@ export function validateSchema(raw: unknown): Schema {
     fail("'viewer' must be an object");
   {
     const v = s.viewer as Record<string, unknown>;
-    if (v.style !== "plain" && v.style !== "studio")
+    if (!VIEWER_STYLES.includes(v.style as string))
       fail("'viewer.style' must be \"plain\" or \"studio\"");
     if (v.restOnGrid !== undefined && typeof v.restOnGrid !== "boolean")
       fail("'viewer.restOnGrid' must be a boolean");
-    if (v.grid !== undefined && !["off", "on"].includes(v.grid as string))
+    if (v.grid !== undefined && !VIEWER_GRID_DEFAULTS.includes(v.grid as string))
       fail("'viewer.grid' must be \"off\" or \"on\"");
     if (v.controls != null) {
       if (typeof v.controls !== "object" || Array.isArray(v.controls))
