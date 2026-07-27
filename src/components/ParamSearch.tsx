@@ -4,8 +4,9 @@
 // the value and its debounce (fed to ParamForm's `search`).
 //
 // Two presentations: a full-width bordered ROW (desktop, docked panel) and a
-// `compact` bordered FIELD that sits on the mobile sheet's one form toolbar
-// beside the essentials toggle and the section navigator — see SheetTabs.
+// `compact` bordered FIELD for the mobile sheet's form toolbar — which it now
+// has entirely to itself, the essentials toggle having moved into the form's
+// closing row and the section navigator being desktop-only (see SheetTabs).
 import { IconButton } from "./IconButton";
 import { Search as SearchIcon, X as XIcon } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -34,8 +35,8 @@ export function ParamSearch({ value, onChange, onClear, onFocus, onBlur, compact
       className={cn(
         "param-search flex items-center gap-[0.4rem] text-muted-foreground",
         compact
-          ? // Matches the section navigator's 44px touch target so the whole
-            // toolbar row is one comfortable band.
+          ? // A 44px touch target — the toolbar's whole height budget now that
+            // this is the only control on it.
             "h-11 min-w-0 rounded-(--radius-sm) border bg-muted px-[0.6rem]"
           : "shrink-0 border-b px-[0.6rem] py-[0.35rem]",
         className

@@ -1,5 +1,6 @@
 // essentials.ts — pure derivation behind the "Show all settings"/"Show
-// essential settings" toggle (ParamPanel.tsx, SheetTabs.tsx). Params marked
+// essential settings" toggle (EssentialsToggle.tsx, rendered at the end of
+// ParamForm in both layouts). Params marked
 // `// @advanced` (see docs/annotations.md) are hidden while the toggle reads
 // "Show essential settings"; the count this module derives tells the visitor
 // how many are currently behind it — "Show all settings (12 more)" — instead
@@ -24,18 +25,18 @@ export function hiddenAdvancedCount(params: Param[], values: Values): number {
 }
 
 /**
- * The essentials toggle's REVEAL-side label, shared by ParamPanel (desktop)
- * and SheetTabs (mobile) through EssentialsToggle.tsx: "Show all settings
- * (N more)" when `@advanced` params are currently hidden, the plain "Show all
- * settings" when the count is zero. The hide side's label
+ * The essentials toggle's REVEAL-side label (EssentialsToggle.tsx): "Show all
+ * settings (N more)" when `@advanced` params are currently hidden, the plain
+ * "Show all settings" when the count is zero. The hide side's label
  * (`settings.showEssential`) stays in the caller since it's unconditional.
  *
- * `compact` picks the short wording the mobile toolbar chip shows ("+N more"
- * / "All settings") — same states, same count, in the width a toolbar row can
- * spare. The long form stays the chip's accessible name.
+ * One wording, both layouts. The abbreviated variant ("+N more" / "All
+ * settings") existed only for the mobile toolbar chip; the toggle is a
+ * full-width row at the end of the form now, which has room for the sentence
+ * that actually says what the control does.
  */
-export function essentialsToggleLabel(params: Param[], values: Values, compact = false): string {
+export function essentialsToggleLabel(params: Param[], values: Values): string {
   const hiddenCount = hiddenAdvancedCount(params, values);
-  if (hiddenCount === 0) return compact ? t("settings.showAllShort") : t("settings.showAll");
-  return tn(compact ? "settings.showAllCountShort" : "settings.showAllCount", hiddenCount);
+  if (hiddenCount === 0) return t("settings.showAll");
+  return tn("settings.showAllCount", hiddenCount);
 }

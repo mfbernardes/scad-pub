@@ -93,9 +93,11 @@ instead of prop drilling; the provider's value is ref-backed and stable, so a co
 re-renders when a callback's identity changes yet always invokes `App`'s latest
 implementation. Data and genuinely local glue (the PNG snapshot handler that needs the viewer
 ref) still flow as props. `src/lib/readiness.ts` derives the state `StatusStrip` surfaces as a
-pill in the export dock — one presentation for both layouts, above the Download button, mounted
-only for `attention`/`failed` — and that `ReviewDialog` explains; Download routes through that
-dialog rather than exporting anything short of `ready`.
+pill in the export dock, above the Download button, and that `ReviewDialog` explains; Download
+routes through that dialog rather than exporting anything short of `ready`. The pill mounts for
+`failed` on both layouts but for `attention` on desktop only — mobile leaves that state to the
+amber dot `ActionButtons` already puts on Download, rather than spending a stacked row over the
+model to say it twice.
 
 ## Conventions
 

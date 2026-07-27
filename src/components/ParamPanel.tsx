@@ -19,7 +19,6 @@ import { visibleGroups } from "../lib/paramGroups";
 import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
-import { EssentialsToggle } from "./EssentialsToggle";
 import { ParamForm, type ParamFormHandle } from "./ParamForm";
 import { SectionNavigator } from "./SectionNavigator";
 import { PresetPicker } from "./PresetPicker";
@@ -299,19 +298,20 @@ export function ParamPanel({
             onFocus={onSearchFocus}
             onBlur={onSearchBlur}
           />
-          <EssentialsToggle
-            params={design.params}
-            values={values}
-            showAdvanced={showAdvanced}
-            onShowAdvancedChange={onShowAdvancedChange}
-          />
+          {/* Essentials is no longer a row of its own here — it's the closing
+              row of the form itself now, in both layouts (see
+              EssentialsToggle). The section navigator stays: this panel is
+              tall and resizable, so a standing jump control costs it nothing
+              the way it cost the mobile sheet. */}
           <SectionNavigator
             sections={navSections}
             onSelect={(s) => formRef.current?.openSection(s)}
             className="mx-3 mt-2 self-start"
           />
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <ParamForm ref={formRef} design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
+          {/* No padding-top — see SheetTabs' scroller: it would strand the
+              sticky group headers below the port edge. */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+            <ParamForm ref={formRef} design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} />
           </div>
         </TabsContent>
       </Tabs>

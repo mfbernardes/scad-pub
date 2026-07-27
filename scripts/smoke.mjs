@@ -1168,37 +1168,52 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     await page.waitForSelector(".param-form", { timeout: 3000 });
     check((await page.locator(".param-form").count()) === 1, "exactly one ParamForm is mounted");
 
-    // The section navigator's compact (mobile) variant must OPEN inside the
-    // sheet even at the FULL detent — where the sheet is modal and inerts the
-    // background. Its Radix popover portals to <body> (so the sheet's
-    // `overflow: hidden` can't clip it), and BottomSheet's focus trap has to
-    // accept that portaled content, or the focusin redirect dismisses the popover
-    // the instant it opens (the full-detent bug this guards). Only meaningful
-    // when the landed design has enough sections to show the control. Raise to
-    // full for the check, then drop back to half — the detent the round-trip
-    // assertions below expect.
-    const mobileNav = page.getByRole("button", { name: "Jump to section", exact: true });
-    if (await mobileNav.count()) {
-      await page.locator(".sheet-handle").click(); // half -> full
-      await page.waitForSelector(".bottom-sheet--full", { timeout: 3000 });
-      await mobileNav.first().click();
-      const list = page.locator(".section-nav-list");
-      const navOpened = await list
-        .first()
-        .waitFor({ state: "visible", timeout: 3000 })
-        .then(() => true)
-        .catch(() => false);
-      check(navOpened, "section navigator popover opens at the full (modal) detent");
-      // Choosing a section is an in-sheet action: it opens that section and
-      // leaves the sheet at full (it must not read as a dismiss/collapse).
-      await page.locator(".section-nav-item").first().click().catch(() => {});
-      await page.waitForTimeout(200);
+    // The sheet's form toolbar is the search field ALONE. Its two former
+    // neighbours are gone from this layout by design: the "+N more" essentials
+    // chip is the form's own closing row now, and the section navigator is
+    // desktop-only (both still exist — see the desktop checks above and the
+    // end-of-form check below — they just don't stand a row here anymore).
+    // This is the sheet's vertical budget, so guard it against creeping back.
+    const toolbarControls = await page
+      .locator(".sheet-toolbar")
+      .getByRole("button")
+      .count();
+    check(
+      (await page.locator(".sheet-toolbar #param-search-input").count()) === 1,
+      "the sheet toolbar holds the search field",
+    );
+    check(
+      (await page.getByRole("button", { name: "Jump to section", exact: true }).count()) === 0,
+      "no section navigator on the mobile sheet",
+    );
+    // The search field's own clear button is a legitimate inhabitant; it only
+    // exists while the box has text, which it doesn't yet at this point.
+    check(toolbarControls === 0, `the sheet toolbar carries no extra controls (${toolbarControls})`);
+
+    // Sticky group headers are what took over the navigator's orientation job,
+    // so assert the actual computed behaviour rather than the class — a
+    // `position: static` regression here would silently leave the mobile form
+    // with no way to tell which section you're reading.
+    const summaryPosition = await page
+      .locator(".param-group > summary")
+      .first()
+      .evaluate((el) => getComputedStyle(el).position)
+      .catch(() => null);
+    check(summaryPosition === "sticky", `param-group headers are sticky (${summaryPosition})`);
+
+    // Essentials lives at the END of the form now — after the last group, not
+    // in a row above it. Only present when the design actually has `@advanced`
+    // params (EssentialsToggle renders nothing otherwise).
+    const essentials = page.locator(".param-form .essentials-toggle");
+    if (await essentials.count()) {
+      const isLast = await page
+        .locator(".param-form > *:last-child")
+        .evaluate((el) => el.classList.contains("essentials-toggle"));
+      check(isLast, "the essentials toggle is the form's last row");
       check(
-        (await page.locator(".bottom-sheet--full").count()) === 1,
-        "choosing a section from the navigator keeps the sheet at full",
+        await essentials.first().isVisible(),
+        "the essentials toggle is reachable inside the sheet",
       );
-      await page.keyboard.press("Escape"); // full -> half (no popover open now)
-      await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 }).catch(() => {});
     }
 
     // Type into the search box and leave it focused.

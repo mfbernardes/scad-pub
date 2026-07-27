@@ -645,16 +645,32 @@ export const AppShell = memo(function AppShell({
     openOutput();
   }, [openOutput]);
 
-  // Whether the dock shows its readiness pill (StatusStrip), shared verbatim
-  // by both layouts: only the two states that want a look at the Review dialog.
-  // "ready" needs no announcement — the Download button right below it is the
-  // confirmation — and "building" is already narrated by the viewer's own
-  // loading overlay, so a pill in either state would be noise over the model.
+  // Whether the dock shows its readiness pill (StatusStrip). "ready" needs no
+  // announcement — the Download button right below it is the confirmation —
+  // and "building" is already narrated by the viewer's own loading overlay, so
+  // a pill in either state would be noise over the model. That leaves the two
+  // states that want a look at the Review dialog, and mobile takes only one of
+  // them:
+  //
+  //   • "failed" pills on both layouts. A failure needs words; there is no
+  //     other surface that says the model did not come out.
+  //   • "attention" pills on DESKTOP ONLY. On mobile the pill was a second
+  //     visual for a signal the dock already carries — ActionButtons puts an
+  //     amber dot on Download itself (plus an sr-only issue count via
+  //     `aria-describedby`), and clicking Download in that state opens this
+  //     very dialog rather than exporting. Saying it twice cost a whole
+  //     stacked row over the model, on the layout with no room to spare; the
+  //     desktop dock floats in open canvas, so it keeps the fuller wording.
+  //
+  // Only one layout tree is ever mounted (see the split below), so deriving
+  // this from `isMobile` yields exactly one answer per render.
   //
   // It also gates the Messages bell's numeric badge (`showCount` below), so the
   // pill's issue count is never on screen beside the bell's message count — see
-  // OutputToggle.tsx for why those two tallies legitimately differ.
-  const hasStatusPill = readiness === "attention" || readiness === "failed";
+  // OutputToggle.tsx for why those two tallies legitimately differ. Dropping
+  // the mobile attention pill hands that corner back to the bell's own count,
+  // which is the contract working as intended: one tally on screen, not none.
+  const hasStatusPill = readiness === "failed" || (!isMobile && readiness === "attention");
 
   // Prop bundles shared verbatim by the two layout trees — each invocation
   // below adds only its layout-specific bits (viewer ref, active flag, …).
