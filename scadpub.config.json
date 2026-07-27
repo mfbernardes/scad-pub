@@ -50,7 +50,7 @@
           },
           {
             "title": "2. Make it yours",
-            "body": "The **Customize** tab lists what you can change, grouped into sections.\n\n- Drag a slider (or type a number), pick from a dropdown, type text, or flip a switch.\n- Tap the small **ⓘ** next to a label for a fuller explanation.\n- Click a **section header** to fold or unfold it; some start folded.\n- Some settings only appear when another one makes them relevant.\n- **Find a setting…** narrows the list as you type, and **Jump to section** (the list button beside it) skips straight to one.\n- Once you've changed something, a strip at the **top** of the tab counts your changes and offers **Reset to defaults** — or, with a preset applied, **Revert** to it."
+            "body": "The **Customize** tab lists what you can change, grouped into sections.\n\n- Drag a slider (or type a number), pick from a dropdown, type text, or flip a switch.\n- Tap the small **ⓘ** next to a label for a fuller explanation.\n- Click a **section header** to fold or unfold it; some start folded.\n- Some settings only appear when another one makes them relevant.\n- **Find a setting…** narrows the list as you type. A long form also offers **Jump to section** (the list button beside it) to skip straight to one.\n- Once you've changed something, a strip at the **top** of the tab counts your changes and offers **Reset to defaults** — or, with a preset applied, **Revert** to it."
           },
           {
             "title": "3. Look around the preview",
@@ -70,7 +70,7 @@
           },
           {
             "title": "7. Download & share",
-            "body": "The two buttons over the preview:\n\n- **Download for 3D printing** — get the printable mesh (with colours) for your slicer.\n- **Share** (**Copy link** where your browser can't share directly) — a link that reopens this exact design, settings and preset.\n\n**Save image**, for a picture of the preview, is in the top bar — or the **⋮** menu on a phone.\n\nIf anything needs a look before you download, a coloured pill appears just above those buttons (“1 issue to review”). Tap it — or Download — to open **Review**, which summarises what you're about to get and what's unresolved. You can always choose **Download anyway**."
+            "body": "The two buttons over the preview:\n\n- **Download for 3D printing** — get the printable mesh (with colours) for your slicer.\n- **Share** (**Copy link** where your browser can't share directly) — a link that reopens this exact design, settings and preset.\n\n**Save image**, for a picture of the preview, is in the top bar — or the **⋮** menu on a phone.\n\nIf anything needs a look before you download, a coloured pill appears just above those buttons (“1 issue to review”). Tap it — or Download — to open **Review**, which summarises what you're about to get and what's unresolved. Once the model has rendered you can still choose **Download anyway**; while a render has failed, that stays unavailable."
           },
           {
             "title": "8. Appearance & info",

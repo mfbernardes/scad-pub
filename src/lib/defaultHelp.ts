@@ -35,7 +35,7 @@ export const DEFAULT_HELP: HelpContent = {
         "- Tap the small **ⓘ** next to a label for a fuller explanation.\n" +
         "- Click a **section header** to fold or unfold it; some start folded.\n" +
         "- Some settings only appear when another one makes them relevant.\n" +
-        "- **Find a setting…** narrows the list as you type, and **Jump to section** (the list button beside it) skips straight to one.\n" +
+        "- **Find a setting…** narrows the list as you type. A long form also offers **Jump to section** (the list button beside it) to skip straight to one.\n" +
         "- Some designs keep their advanced settings out of the way at first. If you see **Show all settings** — shortened to **+N more** on a phone — that reveals them, and the same control puts them back.\n" +
         "- Once you've changed something, a strip at the **top** of the tab counts your changes and offers **Reset to defaults** (or, with a preset applied, **Revert** to it).",
     },
@@ -76,7 +76,7 @@ export const DEFAULT_HELP: HelpContent = {
         "**Save image**, for a picture of the preview, is in the top bar — or the **⋮** menu on a phone.\n\n" +
         "If anything needs a look before you download, a coloured pill appears just above those buttons (“1 issue to review”). " +
         "Tap it — or Download — to open **Review**, which summarises what you're about to get and what's unresolved. " +
-        "You can always choose **Download anyway**.",
+        "Once the model has rendered you can still choose **Download anyway**; while a render has failed, that stays unavailable.",
     },
     {
       title: "8. Appearance & info",

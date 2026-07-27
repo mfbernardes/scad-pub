@@ -49,6 +49,20 @@ async function shot(page, dir, name) {
   console.log(`  ✅ ${name}.png`);
 }
 
+/** Wait for a dialog the next shot is *supposed* to contain, and FAIL if it
+ *  never opened. A capture script is allowed to skip things a config doesn't
+ *  have, but "the trigger selector stopped matching" must not read the same as
+ *  "captured fine" — that shipped a help screenshot with no dialog in it for
+ *  who knows how long. Anything genuinely optional stays guarded by `count()`
+ *  before it gets here (see the Files dialog above). */
+async function requireDialog(page, name) {
+  const opened = await page
+    .waitForSelector('[role="dialog"]', { timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!opened) throw new Error(`capture "${name}": no dialog opened — the trigger selector no longer matches`);
+}
+
 async function selectDesign(page, kind, label) {
   await pickDesign(page, label, { mobile: kind === "mobile" });
   await waitRendered(page);
@@ -180,20 +194,29 @@ async function captureViewport(context, base, kind, theme) {
   }
 
   // Help + About dialogs.
+  //
+  // `exact: true` matters on BOTH counts here. Playwright matches an accessible
+  // name by SUBSTRING by default, and ParamForm gives every parameter's ⓘ the
+  // name `Help for <label>` — so a loose "Help" matched a parameter's info
+  // button first (DOM order puts the form ahead of the overflow menu) and this
+  // captured a tooltip instead of the dialog. The desktop trigger, meanwhile,
+  // was looked up by "Help & keyboard shortcuts", which is IconButton's `title`
+  // — its accessible name is the `aria-label`, plain "Help", so that lookup
+  // matched nothing at all. Both failures were silent: the `.catch()` swallowed
+  // them and the shot was taken regardless. Hence `requireDialog` below.
   const helpName = kind === "mobile" ? "10-help" : "07-help";
   const aboutName = kind === "mobile" ? "11-about-licenses" : "08-about-licenses";
   await openOverflow();
-  await page.getByRole("button", { name: kind === "mobile" ? "Help" : "Help & keyboard shortcuts" })
-    .first().click().catch(() => {});
-  await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
+  await page.getByRole("button", { name: "Help", exact: true }).first().click().catch(() => {});
+  await requireDialog(page, helpName);
   await sleep(300);
   await shot(page, dir, helpName);
   await closeDialog(page);
 
   await openOverflow();
-  await page.getByRole("button", { name: "Open-source licenses" })
+  await page.getByRole("button", { name: "Open-source licenses", exact: true })
     .first().click().catch(() => {});
-  await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
+  await requireDialog(page, aboutName);
   await sleep(300);
   await shot(page, dir, aboutName);
   await closeDialog(page);
