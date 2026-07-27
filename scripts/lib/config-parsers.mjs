@@ -3,46 +3,116 @@
 // shared "safe interpolation of untrusted config values" helpers. Every parser
 // fails the build with a clear message on a bad shape (gen-schema's fail-fast
 // convention) and returns a normalised value (or a null/[]/defaults) otherwise.
+//
+// `ui`, `viewer`, `render` and `fileImport`, plus the scalar fields of
+// `popup`, used to each hand-write the same "check a boolean / check an enum /
+// assign a default" shape once per field (15 times over, for `ui` alone).
+// They're now driven by `applyGroupSpec` below, walking the field tables in
+// ./config-spec.mjs — see that file's file-top comment for the exact
+// per-field flag vocabulary (`skipOn`, `gotSuffix`, `wording`, ...) it takes
+// to reproduce each field's historical wording and null-handling exactly.
+// `parseColors`, `parseLicenses`, `parseNotices` and `parseStrings` are NOT
+// driven by it: they carry real bespoke logic (cross-checks, defaulting rules
+// that don't fit the shared shape) that isn't worth forcing into the same
+// mould, and config-spec.mjs only registers their keys for unknown-key
+// rejection and schema emission.
+import { CONFIG_SPEC, COLOR_TOKENS } from "./config-spec.mjs";
+export { COLOR_TOKENS };
 
-// The CSS custom-property tokens a consumer config may override via `colors`
-// (see src/index.css), listed without the leading `--`. Overriding a token
-// outside this set is almost always a typo, so we fail the build rather than
-// silently emit a no-op rule.
-export const COLOR_TOKENS = [
-  "bg",
-  "panel",
-  "panel-2",
-  "line",
-  "text",
-  "muted",
-  "accent",
-  "accent-solid",
-  "on-accent",
-  "focus",
-  "link",
-  "warn",
-  "warn-bg",
-  "success",
-  "success-bg",
-  "code-bg",
-  "overlay",
-  "viewer-bg",
-  "viewer-grid",
-  "viewer-grid-2",
-  "viewer-model",
-  "viewer-dim",
-  // Shape / glass design tokens (non-colour values allowed)
-  "radius",
-  "radius-sm",
-  "glass-bg",
-  "glass-border",
-  "elevation",
-  // Font stacks — unquoted family names only (the value filter forbids quotes),
-  // e.g. "Georgia, serif". Set them under `dark` (the `:root` block) to apply
-  // to both themes; the light theme doesn't redeclare them.
-  "font-sans",
-  "font-display",
-];
+// `prefix(path)` renders the leading part of a validation-error message.
+// Every collapsed group uses the "gen-schema: '<path>' ..." convention except
+// `viewer`, which predates it and reads "config.<path> ..." with no quotes —
+// config-spec.mjs's `messageStyle: "dotted"` selects that for viewer only.
+function messagePrefix(path, messageStyle) {
+  return messageStyle === "dotted" ? `config.${path}` : `gen-schema: '${path}'`;
+}
+
+function defaultRootTypeError(path, messageStyle) {
+  return `${messagePrefix(path, messageStyle)} must be an object`;
+}
+
+// The four string-field message shapes config-spec.mjs's `wording` picks
+// between (see its file-top comment) — every combination gen-schema's
+// hand-written parsers used across `popup`, `ui`, `ui.afterExport` and
+// `fileImport` before this refactor.
+function stringFieldError(path, field, messageStyle) {
+  const prefix = messagePrefix(path, messageStyle);
+  if (field.wording === "required") return new Error(`${prefix} is required and must be a non-empty string`);
+  if (field.wording === "whenSet") return new Error(`${prefix}, when set, must be a non-empty string`);
+  return new Error(field.nonBlank ? `${prefix} must be a non-empty string` : `${prefix} must be a string`);
+}
+
+// Validate a single already-present (non-skipped) field value against its
+// config-spec.mjs descriptor, returning the normalised value to store (or
+// throwing gen-schema's fail-fast Error). `type: "object"` recurses into
+// applyGroupSpec for a nested group (render.cache, ui.afterExport).
+function validateFieldValue(value, field, path, messageStyle) {
+  const prefix = messagePrefix(path, messageStyle);
+  switch (field.type) {
+    case "boolean":
+      if (typeof value !== "boolean") throw new Error(`${prefix} must be a boolean`);
+      return value;
+    case "enum": {
+      if (!field.values.includes(value))
+        throw new Error(
+          `${prefix} must be one of ${field.values.map((v) => `"${v}"`).join(", ")}` +
+            (field.gotSuffix ? ` (got ${JSON.stringify(value)})` : "")
+        );
+      return value;
+    }
+    case "number": {
+      const positive = field.numberKind === "positive";
+      const ok = typeof value === "number" && Number.isFinite(value) && (positive ? value > 0 : value >= 0);
+      if (!ok) throw new Error(`${prefix} must be a ${positive ? "positive" : "non-negative"} number`);
+      return value;
+    }
+    case "string": {
+      if (typeof value !== "string" || (field.nonBlank && !value.trim()))
+        throw stringFieldError(path, field, messageStyle);
+      return field.trimStore ? value.trim() : value;
+    }
+    case "object":
+      return applyGroupSpec(value, field, path);
+    default:
+      throw new Error(`config-spec: unsupported field type '${field.type}' at '${path}'`);
+  }
+}
+
+// Walk one nested config object (ui, viewer, render, render.cache, popup, the
+// object form of fileImport, ui.afterExport) against its config-spec.mjs
+// node, reproducing that group's exact historical validation: shape check,
+// then (for the groups that reject one) unknown-key rejection, then each
+// field in declaration order. See config-spec.mjs's file-top comment for what
+// each node/field flag means.
+export function applyGroupSpec(raw, node, path) {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    const err = node.rootTypeError;
+    throw new Error(
+      typeof err === "function" ? err(raw) : err ?? defaultRootTypeError(path, node.messageStyle)
+    );
+  }
+  if (node.unknownKeys === "reject") {
+    for (const key of Object.keys(raw))
+      if (!(key in node.properties)) throw new Error(node.unknownKeyError(key));
+  }
+  const out = {};
+  for (const [key, field] of Object.entries(node.properties))
+    if ("default" in field) out[key] = field.default;
+  for (const [key, field] of Object.entries(node.properties)) {
+    const value = raw[key];
+    const missing = field.skipOn === "nullish" ? value === undefined || value === null : value === undefined;
+    if (!field.required && missing) continue;
+    const result = validateFieldValue(value, field, `${path}.${key}`, node.messageStyle);
+    // A nested object field (render.cache) that collapses an empty result to
+    // `null` is omitted from its parent entirely, matching e.g.
+    // `parseRender({ cache: { maxEntries: null } })` -> `null`, not
+    // `{ cache: {} }`.
+    if (result === null) continue;
+    out[key] = result;
+  }
+  if (node.collapseEmptyToNull && Object.keys(out).length === 0) return null;
+  return out;
+}
 
 // A deliberately strict CSS-colour value: hex, rgb()/rgba()/hsl()/hsla(), or a
 // named colour. Forbids `;`, `{`, `}` and comment markers so a value can't break
@@ -116,9 +186,6 @@ export function parseRestOnGrid(raw) {
   return raw;
 }
 
-// The viewer presentation styles a config may pick via `viewer.style`.
-export const VIEWER_STYLES = ["plain", "studio"];
-
 // Validate the optional `viewer` config key — the 3D viewer's presentation,
 // fixed at build time. Its only key is `style`, which picks the look: "plain"
 // (the default) is the classic CAD preview; "studio" adds image-based studio
@@ -132,26 +199,7 @@ export const VIEWER_STYLES = ["plain", "studio"];
 // that toggle a no-op. A config still passing `viewer.grid` therefore fails as
 // an unknown key rather than being silently ignored.
 export function parseViewer(raw) {
-  const out = { style: "plain" };
-  if (raw == null) return out;
-  if (typeof raw !== "object" || Array.isArray(raw))
-    throw new Error(
-      `config.viewer must be an object with an optional 'style' key (got ${JSON.stringify(raw)})`
-    );
-  for (const key of Object.keys(raw))
-    if (key !== "style")
-      throw new Error(
-        `config.viewer: unknown key '${key}' (valid keys: style)` +
-          (key === "grid" ? " — the reference grid is now seeded by 'ui.grid'" : "")
-      );
-  if (raw.style != null) {
-    if (!VIEWER_STYLES.includes(raw.style))
-      throw new Error(
-        `config.viewer.style must be one of ${VIEWER_STYLES.map((s) => `"${s}"`).join(", ")} (got ${JSON.stringify(raw.style)})`
-      );
-    out.style = raw.style;
-  }
-  return out;
+  return applyGroupSpec(raw ?? {}, CONFIG_SPEC.viewer, "viewer");
 }
 
 // Validate and normalise the optional `colors` config block into
@@ -237,23 +285,7 @@ export function parseFileImport(fileImport) {
   const raw = fileImport;
   if (raw == null || raw === false) return null;
   if (raw === true) return {};
-  if (typeof raw !== "object" || Array.isArray(raw))
-    throw new Error("gen-schema: 'fileImport' must be true, an options object, or null");
-  const out = {};
-  for (const key of ["accept", "label", "note"]) {
-    if (raw[key] === undefined || raw[key] === null) continue;
-    if (typeof raw[key] !== "string")
-      throw new Error(`gen-schema: 'fileImport.${key}' must be a string`);
-    out[key] = raw[key];
-  }
-  // Optional upload size cap (bytes). The app rejects a larger file with a
-  // friendly message instead of persisting it to IndexedDB. Must be positive.
-  if (raw.maxBytes !== undefined && raw.maxBytes !== null) {
-    if (typeof raw.maxBytes !== "number" || !Number.isFinite(raw.maxBytes) || raw.maxBytes <= 0)
-      throw new Error("gen-schema: 'fileImport.maxBytes' must be a positive number");
-    out.maxBytes = raw.maxBytes;
-  }
-  return out;
+  return applyGroupSpec(raw, CONFIG_SPEC.fileImport, "fileImport");
 }
 
 // Validate and normalise the optional `render` config block: build-time render
@@ -266,80 +298,20 @@ export function parseFileImport(fileImport) {
 // Returns null when unset; fails the build with a clear message on a bad shape.
 export function parseRender(raw) {
   if (raw == null) return null;
-  if (typeof raw !== "object" || Array.isArray(raw))
-    throw new Error("gen-schema: 'render' must be an object");
-  const posNum = (v, key) => {
-    if (typeof v !== "number" || !Number.isFinite(v) || v < 0)
-      throw new Error(`gen-schema: 'render.${key}' must be a non-negative number`);
-    return v;
-  };
-  const out = {};
-  if (raw.heavyMs !== undefined && raw.heavyMs !== null)
-    out.heavyMs = posNum(raw.heavyMs, "heavyMs");
-  if (raw.cache !== undefined && raw.cache !== null) {
-    if (typeof raw.cache !== "object" || Array.isArray(raw.cache))
-      throw new Error("gen-schema: 'render.cache' must be an object");
-    const cache = {};
-    for (const key of ["maxEntries", "maxBytes", "maxEntryBytes"]) {
-      if (raw.cache[key] !== undefined && raw.cache[key] !== null)
-        cache[key] = posNum(raw.cache[key], `cache.${key}`);
-    }
-    if (raw.cache.persistent !== undefined && raw.cache.persistent !== null) {
-      if (typeof raw.cache.persistent !== "boolean")
-        throw new Error("gen-schema: 'render.cache.persistent' must be a boolean");
-      cache.persistent = raw.cache.persistent;
-    }
-    if (Object.keys(cache).length) out.cache = cache;
-  }
-  return Object.keys(out).length ? out : null;
+  return applyGroupSpec(raw, CONFIG_SPEC.render, "render");
 }
-
-// The display policies a `popup` may choose: shown on every visit ("always"),
-// only the first visit ("once"), or every visit until the user opts out with a
-// "Don't show this again" checkbox ("dismissible").
-export const POPUP_MODES = ["always", "once", "dismissible", "picker"];
 
 // Validate and normalise the optional `popup` config block: a notice dialog
 // shown over the app on load. `header` (dialog title) and `body` (a
 // Markdown-subset string — bold/code/links/lists, same renderer as `help`) are
-// required; `mode` (one of POPUP_MODES) chooses how often it appears and
-// defaults to "once". Purely informational, so it's absent from renderHash.
-// Returns null when not configured; fails the build with a clear message on a
-// bad shape (consistent with gen-schema's other fail-fast checks).
+// required; `mode` (one of CONFIG_SPEC.popup.properties.mode.values) chooses
+// how often it appears and defaults to "once". Purely informational, so it's
+// absent from renderHash. Returns null when not configured; fails the build
+// with a clear message on a bad shape (consistent with gen-schema's other
+// fail-fast checks).
 export function parsePopup(raw) {
   if (raw == null) return null;
-  if (typeof raw !== "object" || Array.isArray(raw))
-    throw new Error(
-      "gen-schema: 'popup' must be an object with 'header', 'body' and an optional 'mode'"
-    );
-  for (const key of ["header", "body"]) {
-    if (typeof raw[key] !== "string" || !raw[key].trim())
-      throw new Error(
-        `gen-schema: 'popup.${key}' is required and must be a non-empty string`
-      );
-  }
-  const mode = raw.mode ?? "once";
-  if (!POPUP_MODES.includes(mode))
-    throw new Error(
-      `gen-schema: 'popup.mode' must be one of ${POPUP_MODES.map((m) => `"${m}"`).join(", ")} ` +
-        `(got ${JSON.stringify(raw.mode)})`
-    );
-  // Optional label for the primary button (the app defaults to "OK"). A blank
-  // string would render an empty button, so require non-empty when present.
-  if (raw.button !== undefined && (typeof raw.button !== "string" || !raw.button.trim()))
-    throw new Error(
-      "gen-schema: 'popup.button', when set, must be a non-empty string"
-    );
-  // Optional plain-text footnote, shown small and muted at the bottom of the
-  // dialog in every mode. Same non-empty-when-present rule as `button`.
-  if (raw.footnote !== undefined && (typeof raw.footnote !== "string" || !raw.footnote.trim()))
-    throw new Error(
-      "gen-schema: 'popup.footnote', when set, must be a non-empty string"
-    );
-  const out = { header: raw.header, body: raw.body, mode };
-  if (raw.button !== undefined) out.button = raw.button;
-  if (raw.footnote !== undefined) out.footnote = raw.footnote;
-  return out;
+  return applyGroupSpec(raw, CONFIG_SPEC.popup, "popup");
 }
 
 // Validate and normalise the optional `notices` config block: the design-defined
@@ -411,133 +383,15 @@ export function parseNotices(raw) {
   });
 }
 
-// The optional after-export success-panel config a config may set under
-// `ui.afterExport` (see src/components/ExportSuccess.tsx). Every field is a
-// plain non-empty string override; the app's own built-in copy applies to any
-// field left unset. Unlike the other `ui` keys, `helpTab` can't be validated
-// here — it names a tab in this same config's `help` block, parsed separately
-// in gen-schema's generate() — so that cross-field check happens there, once
-// both are available (search generate() for 'ui.afterExport.helpTab').
-const AFTER_EXPORT_KEYS = ["title", "body", "helpTab"];
-function parseAfterExport(raw) {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
-    throw new Error("gen-schema: 'ui.afterExport' must be an object");
-  for (const key of Object.keys(raw)) {
-    if (!AFTER_EXPORT_KEYS.includes(key))
-      throw new Error(
-        `gen-schema: unknown 'ui.afterExport' key '${key}'.\n` +
-          `  Valid keys: ${AFTER_EXPORT_KEYS.join(", ")}`
-      );
-  }
-  const out = {};
-  for (const key of AFTER_EXPORT_KEYS) {
-    if (raw[key] !== undefined) {
-      if (typeof raw[key] !== "string" || !raw[key].trim())
-        throw new Error(`gen-schema: 'ui.afterExport.${key}' must be a non-empty string`);
-      out[key] = raw[key].trim();
-    }
-  }
-  return out;
-}
-
-// Validate and normalise the optional `ui` config block: build-time UI behaviour
-// overrides. None affect geometry (absent from renderHash). Applies defaults for
-// omitted keys. Returns the defaults object when the config omits `ui` entirely.
+// Validate and normalise the optional `ui` config block: build-time UI
+// behaviour overrides (panel/output defaults, viewer controls, labels, and
+// the nested `afterExport` panel — `helpTab`'s cross-check against a real
+// `help.tabs[].label` can't happen here, since `help` isn't available yet; it
+// stays a cross-field check in gen-schema.mjs's generate(), search that file
+// for 'ui.afterExport.helpTab'). None of it affects geometry (absent from
+// renderHash). Returns CONFIG_SPEC.ui's defaults object when `ui` is omitted.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, grid: "off", gallery: false, essentials: false, presetsLabel: "Presets", parametersLabel: "Customize" };
-  if (raw == null) return defaults;
-  if (typeof raw !== "object" || Array.isArray(raw))
-    throw new Error("gen-schema: 'ui' must be an object");
-  const out = { ...defaults };
-  const PANEL_SIDES = ["left", "right"];
-  const PANEL_DEFAULTS = ["open", "collapsed"];
-  const OUTPUT_DEFAULTS = ["closed", "open"];
-  const INSTALL_MODES = ["auto", "off"];
-  const GRID_MODES = ["off", "on"];
-  if (raw.panelSide !== undefined) {
-    if (!PANEL_SIDES.includes(raw.panelSide))
-      throw new Error(`gen-schema: 'ui.panelSide' must be one of ${PANEL_SIDES.map((s) => `"${s}"`).join(", ")}`);
-    out.panelSide = raw.panelSide;
-  }
-  if (raw.panelDefault !== undefined) {
-    if (!PANEL_DEFAULTS.includes(raw.panelDefault))
-      throw new Error(`gen-schema: 'ui.panelDefault' must be one of ${PANEL_DEFAULTS.map((s) => `"${s}"`).join(", ")}`);
-    out.panelDefault = raw.panelDefault;
-  }
-  if (raw.outputDefault !== undefined) {
-    if (!OUTPUT_DEFAULTS.includes(raw.outputDefault))
-      throw new Error(`gen-schema: 'ui.outputDefault' must be one of ${OUTPUT_DEFAULTS.map((s) => `"${s}"`).join(", ")}`);
-    out.outputDefault = raw.outputDefault;
-  }
-  if (raw.install !== undefined) {
-    if (!INSTALL_MODES.includes(raw.install))
-      throw new Error(`gen-schema: 'ui.install' must be one of ${INSTALL_MODES.map((s) => `"${s}"`).join(", ")}`);
-    out.install = raw.install;
-  }
-  if (raw.showVarName !== undefined) {
-    if (typeof raw.showVarName !== "boolean")
-      throw new Error("gen-schema: 'ui.showVarName' must be a boolean");
-    out.showVarName = raw.showVarName;
-  }
-  if (raw.measure !== undefined) {
-    if (typeof raw.measure !== "boolean")
-      throw new Error("gen-schema: 'ui.measure' must be a boolean");
-    out.measure = raw.measure;
-  }
-  if (raw.viewPicker !== undefined) {
-    if (typeof raw.viewPicker !== "boolean")
-      throw new Error("gen-schema: 'ui.viewPicker' must be a boolean");
-    out.viewPicker = raw.viewPicker;
-  }
-  if (raw.reset !== undefined) {
-    if (typeof raw.reset !== "boolean")
-      throw new Error("gen-schema: 'ui.reset' must be a boolean");
-    out.reset = raw.reset;
-  }
-  if (raw.zoom !== undefined) {
-    if (typeof raw.zoom !== "boolean")
-      throw new Error("gen-schema: 'ui.zoom' must be a boolean");
-    out.zoom = raw.zoom;
-  }
-  if (raw.fullscreen !== undefined) {
-    if (typeof raw.fullscreen !== "boolean")
-      throw new Error("gen-schema: 'ui.fullscreen' must be a boolean");
-    out.fullscreen = raw.fullscreen;
-  }
-  // Unlike its neighbours this doesn't gate a button — the viewer's grid
-  // toggle is always offered. It only seeds that toggle's first-ever value;
-  // a visitor's own choice is persisted and wins from then on.
-  if (raw.grid !== undefined) {
-    if (!GRID_MODES.includes(raw.grid))
-      throw new Error(`gen-schema: 'ui.grid' must be one of ${GRID_MODES.map((s) => `"${s}"`).join(", ")}`);
-    out.grid = raw.grid;
-  }
-  // Optional: hide the "Save image (PNG)" action. Defaults to shown, so it's
-  // carried onto `ui` only when the config sets it (the app treats absent as
-  // true — see AppShell's `showSaveImage`).
-  if (raw.saveImage !== undefined) {
-    if (typeof raw.saveImage !== "boolean")
-      throw new Error("gen-schema: 'ui.saveImage' must be a boolean");
-    out.saveImage = raw.saveImage;
-  }
-  for (const key of ["gallery", "essentials"]) {
-    if (raw[key] !== undefined) {
-      if (typeof raw[key] !== "boolean")
-        throw new Error(`gen-schema: 'ui.${key}' must be a boolean`);
-      out[key] = raw[key];
-    }
-  }
-  for (const key of ["presetsLabel", "parametersLabel"]) {
-    if (raw[key] !== undefined) {
-      if (typeof raw[key] !== "string" || !raw[key].trim())
-        throw new Error(`gen-schema: 'ui.${key}' must be a non-empty string`);
-      out[key] = raw[key].trim();
-    }
-  }
-  if (raw.afterExport !== undefined && raw.afterExport !== null) {
-    out.afterExport = parseAfterExport(raw.afterExport);
-  }
-  return out;
+  return applyGroupSpec(raw ?? {}, CONFIG_SPEC.ui, "ui");
 }
 
 // Validate and normalise the optional `strings` config block: per-deployment

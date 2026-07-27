@@ -1,4 +1,5 @@
 {
+  "$schema": "./scadpub.config.schema.json",
   "title": "ScadPub",
   "id": "scadpub",
   "description": "ScadPub publishes OpenSCAD models as static browser-based configurators.",

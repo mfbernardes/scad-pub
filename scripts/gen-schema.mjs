@@ -56,6 +56,7 @@ import {
   parseUi,
   parseViewer,
 } from "./lib/config-parsers.mjs";
+import { KNOWN_TOP_LEVEL_KEYS } from "./lib/config-spec.mjs";
 
 // Re-export the parsers/helpers the unit tests (tests/gen-schema.test.mjs)
 // import from this entry, so the module split is invisible to the test suite.
@@ -84,23 +85,10 @@ export { firstSentence, parseEnumHint, parseParams } from "./lib/params.mjs";
 // convention for unknown *nested* keys (colour tokens, license fields) — an
 // unrecognised top-level key fails the build. `$schema` is allowed so a config
 // can point at a JSON Schema for editor tooling without tripping the check.
-export const KNOWN_TOP_LEVEL_KEYS = new Set([
-  "$schema",
-  // App identity & PWA chrome
-  "title", "shortName", "id", "description", "lang", "dir",
-  "icon", "iconMaskable", "themeColor", "themeColorLight", "backgroundColor",
-  "categories", "screenshots", "shortcuts",
-  // Design sources
-  "source", "designs", "defaultDesign", "assets",
-  // Rendering
-  "features", "format", "restOnGrid", "fonts", "fontFallback", "render",
-  // Appearance & UI behaviour
-  "logo", "colors", "extraCss", "ui", "viewer", "fileImport",
-  // In-app content
-  "popup", "help", "notices", "licenses",
-  // UI text overrides
-  "strings",
-]);
+// Derived from scripts/lib/config-spec.mjs — the single declarative surface
+// description — rather than hand-maintained here; re-exported (not just used
+// internally) because tests/gen-schema.test.mjs imports it directly.
+export { KNOWN_TOP_LEVEL_KEYS };
 
 // Path to the bundled English UI-text catalogue (src/locales/en.json),
 // resolved relative to this file rather than the config being built — it's

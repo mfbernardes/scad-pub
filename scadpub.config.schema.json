@@ -1,0 +1,750 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScadPub configuration",
+  "description": "scadpub.config.json. Generated from scripts/lib/config-spec.mjs by scripts/gen-config-schema.mjs — see docs/config.md for the full human reference.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "Optional pointer to a JSON Schema for editor tooling; not read by gen-schema itself.",
+      "type": "string"
+    },
+    "title": {
+      "description": "Browser tab title and header text.",
+      "default": "ScadPub",
+      "type": "string"
+    },
+    "shortName": {
+      "description": "Short PWA name; defaults to 'title'.",
+      "type": "string"
+    },
+    "id": {
+      "description": "Namespaces localStorage, IndexedDB and the preset cache (charset [A-Za-z0-9._-]+).",
+      "default": "scadpub",
+      "type": "string"
+    },
+    "description": {
+      "description": "Page <meta> description and PWA description.",
+      "default": "Configure and export designs in your browser.",
+      "type": "string"
+    },
+    "lang": {
+      "description": "Document/manifest language, a BCP-47 tag.",
+      "default": "en",
+      "type": "string"
+    },
+    "dir": {
+      "description": "Document/manifest text direction.",
+      "default": "ltr",
+      "type": "string",
+      "enum": [
+        "ltr",
+        "rtl",
+        "auto"
+      ]
+    },
+    "icon": {
+      "description": "PWA/favicon icon path, relative to the config file.",
+      "type": "string"
+    },
+    "iconMaskable": {
+      "description": "Separate SVG for the maskable icon; defaults to 'icon'.",
+      "type": "string"
+    },
+    "themeColor": {
+      "description": "Dark-scheme browser-chrome / PWA colour.",
+      "default": "#1f2229",
+      "type": "string"
+    },
+    "themeColorLight": {
+      "description": "Light-scheme <meta name=theme-color>.",
+      "default": "#ffffff",
+      "type": "string"
+    },
+    "backgroundColor": {
+      "description": "PWA manifest background colour.",
+      "default": "#15171c",
+      "type": "string"
+    },
+    "categories": {
+      "description": "Manifest categories array.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "screenshots": {
+      "description": "Richer Android install-UI screenshots: [{ src, sizes, form_factor, label?, platform? }].",
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "shortcuts": {
+      "description": "App shortcuts for Android long-press / desktop jump lists: [{ name, short_name?, url, icons? }].",
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "source": {
+      "description": "Directory of Customizer-style .scad designs, relative to the config file.",
+      "default": ".",
+      "type": "string"
+    },
+    "designs": {
+      "description": "Explicit design list; omit to auto-discover *.scad in 'source'.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Design id (charset [A-Za-z0-9._-]+); used in URLs, storage, filenames.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Picker label; defaults to a humanized id.",
+            "type": "string"
+          },
+          "file": {
+            "description": "Path to the .scad file, relative to 'source'; defaults to '<id>.scad'.",
+            "type": "string"
+          },
+          "heavy": {
+            "description": "Start this design in manual-render mode.",
+            "default": false,
+            "type": "boolean"
+          },
+          "group": {
+            "description": "Dropdown/gallery grouping header; consecutive same-value designs cluster.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Picker description line; falls back to the design's // @description.",
+            "type": "string"
+          },
+          "icon": {
+            "description": "Picker icon path (config-relative); falls back to the design's // @icon.",
+            "type": "string"
+          },
+          "image": {
+            "description": "Larger ui.gallery card artwork; falls back to the design's // @image.",
+            "type": "string"
+          },
+          "doc": {
+            "description": "Path to a Markdown user-doc file; falls back to the design's // @doc.",
+            "type": "string"
+          },
+          "presetImages": {
+            "description": "Bundled-preset-name -> thumbnail-image-path map.",
+            "type": "object"
+          },
+          "reviewLabels": {
+            "description": "Declared-param-name -> review-summary-label map.",
+            "type": "object"
+          },
+          "reviewNote": {
+            "description": "Short callout shown in the review summary.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "defaultDesign": {
+      "description": "Design id shown on a visit with no #d= deep link; must name a configured design.",
+      "type": "string"
+    },
+    "assets": {
+      "description": "Files/directories/globs to bundle verbatim; omit to follow use/include.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "features": {
+      "description": "OpenSCAD --enable=<feature> flags applied to every render.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "format": {
+      "description": "Export/preview model format.",
+      "default": "3mf",
+      "type": "string",
+      "enum": [
+        "3mf",
+        "stl"
+      ]
+    },
+    "restOnGrid": {
+      "description": "Rest the model's base on z=0 instead of centring in Z (display-only).",
+      "default": false,
+      "type": "boolean"
+    },
+    "fonts": {
+      "description": "Bundled font files (public/fonts basenames or 'source'-relative paths).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "fontFallback": {
+      "description": "A bundled family pinned as fontconfig's last-resort default.",
+      "type": "string"
+    },
+    "render": {
+      "description": "Build-time render tuning: heavy-render threshold + cache sizing.",
+      "type": "object",
+      "properties": {
+        "heavyMs": {
+          "description": "Auto-pause threshold (ms) for a slow live render.",
+          "type": "number"
+        },
+        "cache": {
+          "description": "Sizes the runner's two-tier render cache.",
+          "type": "object",
+          "properties": {
+            "maxEntries": {
+              "description": "In-memory (L1) slot count.",
+              "type": "number"
+            },
+            "maxBytes": {
+              "description": "In-memory (L1) total byte budget.",
+              "type": "number"
+            },
+            "maxEntryBytes": {
+              "description": "Largest single render worth caching.",
+              "type": "number"
+            },
+            "persistent": {
+              "description": "Persist renders to IndexedDB (L2).",
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "logo": {
+      "description": "Header logo: a path, or { light, dark } per-theme paths (config-relative).",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "light": {
+              "description": "Logo path used in the light theme.",
+              "type": "string"
+            },
+            "dark": {
+              "description": "Logo path used in the dark theme.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "colors": {
+      "description": "Optional per-theme CSS colour/design-token overrides.",
+      "type": "object",
+      "properties": {
+        "light": {
+          "type": "object",
+          "properties": {
+            "bg": {
+              "type": "string"
+            },
+            "panel": {
+              "type": "string"
+            },
+            "panel-2": {
+              "type": "string"
+            },
+            "line": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "muted": {
+              "type": "string"
+            },
+            "accent": {
+              "type": "string"
+            },
+            "accent-solid": {
+              "type": "string"
+            },
+            "on-accent": {
+              "type": "string"
+            },
+            "focus": {
+              "type": "string"
+            },
+            "link": {
+              "type": "string"
+            },
+            "warn": {
+              "type": "string"
+            },
+            "warn-bg": {
+              "type": "string"
+            },
+            "success": {
+              "type": "string"
+            },
+            "success-bg": {
+              "type": "string"
+            },
+            "code-bg": {
+              "type": "string"
+            },
+            "overlay": {
+              "type": "string"
+            },
+            "viewer-bg": {
+              "type": "string"
+            },
+            "viewer-grid": {
+              "type": "string"
+            },
+            "viewer-grid-2": {
+              "type": "string"
+            },
+            "viewer-model": {
+              "type": "string"
+            },
+            "viewer-dim": {
+              "type": "string"
+            },
+            "radius": {
+              "type": "string"
+            },
+            "radius-sm": {
+              "type": "string"
+            },
+            "glass-bg": {
+              "type": "string"
+            },
+            "glass-border": {
+              "type": "string"
+            },
+            "elevation": {
+              "type": "string"
+            },
+            "font-sans": {
+              "type": "string"
+            },
+            "font-display": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "dark": {
+          "type": "object",
+          "properties": {
+            "bg": {
+              "type": "string"
+            },
+            "panel": {
+              "type": "string"
+            },
+            "panel-2": {
+              "type": "string"
+            },
+            "line": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "muted": {
+              "type": "string"
+            },
+            "accent": {
+              "type": "string"
+            },
+            "accent-solid": {
+              "type": "string"
+            },
+            "on-accent": {
+              "type": "string"
+            },
+            "focus": {
+              "type": "string"
+            },
+            "link": {
+              "type": "string"
+            },
+            "warn": {
+              "type": "string"
+            },
+            "warn-bg": {
+              "type": "string"
+            },
+            "success": {
+              "type": "string"
+            },
+            "success-bg": {
+              "type": "string"
+            },
+            "code-bg": {
+              "type": "string"
+            },
+            "overlay": {
+              "type": "string"
+            },
+            "viewer-bg": {
+              "type": "string"
+            },
+            "viewer-grid": {
+              "type": "string"
+            },
+            "viewer-grid-2": {
+              "type": "string"
+            },
+            "viewer-model": {
+              "type": "string"
+            },
+            "viewer-dim": {
+              "type": "string"
+            },
+            "radius": {
+              "type": "string"
+            },
+            "radius-sm": {
+              "type": "string"
+            },
+            "glass-bg": {
+              "type": "string"
+            },
+            "glass-border": {
+              "type": "string"
+            },
+            "elevation": {
+              "type": "string"
+            },
+            "font-sans": {
+              "type": "string"
+            },
+            "font-display": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "extraCss": {
+      "description": "Raw-CSS stylesheet path (config-relative), loaded after the app's own styles.",
+      "type": "string"
+    },
+    "ui": {
+      "description": "Build-time UI behaviour: panel/output defaults, viewer controls, labels.",
+      "type": "object",
+      "properties": {
+        "panelSide": {
+          "description": "Which edge the desktop parameter panel docks against.",
+          "default": "left",
+          "type": "string",
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "panelDefault": {
+          "description": "First-load desktop panel state.",
+          "default": "open",
+          "type": "string",
+          "enum": [
+            "open",
+            "collapsed"
+          ]
+        },
+        "outputDefault": {
+          "description": "Whether the OpenSCAD output console starts open.",
+          "default": "closed",
+          "type": "string",
+          "enum": [
+            "closed",
+            "open"
+          ]
+        },
+        "install": {
+          "description": "PWA install affordance; 'off' hides it entirely.",
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "off"
+          ]
+        },
+        "showVarName": {
+          "description": "Show the OpenSCAD variable name beside each parameter label.",
+          "default": false,
+          "type": "boolean"
+        },
+        "measure": {
+          "description": "Show the viewer's measure (ruler) toggle.",
+          "default": true,
+          "type": "boolean"
+        },
+        "viewPicker": {
+          "description": "Show the camera-angle cube button.",
+          "default": true,
+          "type": "boolean"
+        },
+        "reset": {
+          "description": "Show the 'reset view' button.",
+          "default": true,
+          "type": "boolean"
+        },
+        "zoom": {
+          "description": "Show explicit zoom in/out buttons.",
+          "default": false,
+          "type": "boolean"
+        },
+        "fullscreen": {
+          "description": "Show the fullscreen toggle (browser tabs only).",
+          "default": true,
+          "type": "boolean"
+        },
+        "grid": {
+          "description": "Seeds the viewer's reference-grid toggle on first visit.",
+          "default": "off",
+          "type": "string",
+          "enum": [
+            "off",
+            "on"
+          ]
+        },
+        "saveImage": {
+          "description": "Show the 'Save image (PNG)' action.",
+          "type": "boolean"
+        },
+        "gallery": {
+          "description": "Replace the compact design dropdown with a searchable card grid.",
+          "default": false,
+          "type": "boolean"
+        },
+        "essentials": {
+          "description": "Start with // @advanced parameters hidden behind 'Show all settings'.",
+          "default": false,
+          "type": "boolean"
+        },
+        "presetsLabel": {
+          "description": "Label for the Presets tab/section.",
+          "default": "Presets",
+          "type": "string"
+        },
+        "parametersLabel": {
+          "description": "Label for the parameters tab/section.",
+          "default": "Customize",
+          "type": "string"
+        },
+        "afterExport": {
+          "description": "Turns on the after-export success panel; every field optional.",
+          "type": "object",
+          "properties": {
+            "title": {
+              "description": "Overrides the panel headline.",
+              "type": "string"
+            },
+            "body": {
+              "description": "Overrides the panel's one-line next step (Markdown subset).",
+              "type": "string"
+            },
+            "helpTab": {
+              "description": "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "viewer": {
+      "description": "The 3D viewer's presentation, fixed at build time.",
+      "type": "object",
+      "properties": {
+        "style": {
+          "description": "'plain' is the classic CAD preview; 'studio' adds image-based lighting and a contact shadow.",
+          "default": "plain",
+          "type": "string",
+          "enum": [
+            "plain",
+            "studio"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "fileImport": {
+      "description": "Enables the Files dialog. true for defaults, or an options object; omit/false/null for no Files action.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "accept": {
+              "description": "Deprecated/vestigial; kept for backward compatibility.",
+              "type": "string"
+            },
+            "label": {
+              "description": "Deprecated/vestigial; kept for backward compatibility.",
+              "type": "string"
+            },
+            "note": {
+              "description": "Markdown-subset guidance shown atop the Files dialog.",
+              "type": "string"
+            },
+            "maxBytes": {
+              "description": "Deprecated/vestigial upload size cap; kept for backward compatibility.",
+              "type": "number"
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "popup": {
+      "description": "One-off notice dialog shown over the app on load.",
+      "type": "object",
+      "properties": {
+        "header": {
+          "description": "Dialog title.",
+          "type": "string"
+        },
+        "body": {
+          "description": "Dialog message (Markdown subset).",
+          "type": "string"
+        },
+        "mode": {
+          "description": "Popup frequency.",
+          "default": "once",
+          "type": "string",
+          "enum": [
+            "always",
+            "once",
+            "dismissible",
+            "picker"
+          ]
+        },
+        "button": {
+          "description": "Primary-button label; overrides the default 'OK'.",
+          "type": "string"
+        },
+        "footnote": {
+          "description": "Short plain-text line shown small and muted at the bottom.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "header",
+        "body"
+      ],
+      "additionalProperties": true
+    },
+    "help": {
+      "description": "Help dialog content: 'sections' for a single pane, or 'tabs' for a tabbed guide. Passed through verbatim.",
+      "type": "object"
+    },
+    "notices": {
+      "description": "Design-defined notice categories surfaced on the OpenSCAD output panel.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "marker": {
+            "description": "Design-defined word matched as ': <marker>:' inside an echo (case-insensitive).",
+            "type": "string"
+          },
+          "label": {
+            "description": "Badge/notice noun; defaults to 'marker'.",
+            "type": "string"
+          },
+          "labelOne": {
+            "description": "Singular form of 'label', used when the live count is exactly 1.",
+            "type": "string"
+          },
+          "color": {
+            "description": "Badge fill colour, a plain CSS colour.",
+            "type": "string"
+          },
+          "attention": {
+            "description": "Join the pre-download review dialog's attention items.",
+            "default": false,
+            "type": "boolean"
+          },
+          "subsumedByFont": {
+            "description": "Fold into a missing-font item instead of listing separately.",
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "licenses": {
+      "description": "Extra third-party software/license notices, appended to the built-in attributions.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Component name.",
+            "type": "string"
+          },
+          "license": {
+            "description": "SPDX identifier.",
+            "type": "string"
+          },
+          "copyright": {
+            "description": "Copyright line.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Project homepage.",
+            "type": "string"
+          },
+          "licenseUrl": {
+            "description": "Where the license text lives.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Component version.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Full license text, shown in a details panel.",
+            "type": "string"
+          },
+          "sourceUrl": {
+            "description": "Corresponding-source link (required by copyleft licenses).",
+            "type": "string"
+          },
+          "note": {
+            "description": "One-line description.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "strings": {
+      "description": "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys.",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}
