@@ -80,9 +80,17 @@ const FilesModal = lazy(loadFilesModal);
 // `lazy()`, which is where a real failure belongs (see ErrorBoundary in
 // main.tsx); swallowing it here must not mask that.
 function warmModalChunks(): void {
-  for (const load of [loadHelpModal, loadFilesModal, loadDesignDocModal, loadLicensesModal]) {
-    load().catch(() => {});
-  }
+  // DesignDocModal is only reachable when some design carries a `doc` (both its
+  // triggers are gated on it), so a config without docs never warms that chunk.
+  // Typed as unknown-returning: each loader resolves a differently-propped
+  // component, and only the fetch matters here.
+  const loaders: Array<() => Promise<unknown>> = [
+    loadHelpModal,
+    loadFilesModal,
+    loadLicensesModal,
+  ];
+  if (schema.designs.some((d) => d.doc)) loaders.push(loadDesignDocModal);
+  for (const load of loaders) load().catch(() => {});
 }
 
 const schema = validateSchema(schemaJson);

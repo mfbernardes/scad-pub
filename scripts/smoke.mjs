@@ -186,7 +186,7 @@ async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
   // in closeFiles below can run against a dialog that hasn't appeared yet.
   const gotoFiles = async () => {
     await page.getByRole("button", { name: "Files", exact: true }).first().click().catch(() => {});
-    await page.locator(".file-manager").waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+    await openDialog(page, "Files").catch(() => {});
   };
   const closeFiles = async () => {
     await page.keyboard.press("Escape").catch(() => {});

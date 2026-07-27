@@ -28,6 +28,12 @@ const ACTION_CLUSTER_CLASS =
 // pushes the cluster down from a fixed bottom edge — no height measurement
 // needed to stack the two.
 const ACTION_DOCK_CLASS = "action-dock flex flex-col items-center gap-2";
+// Off-screen until focused, shared verbatim by the two skip links below so a
+// tweak to the focused position/chrome lands once. `.skip-link` carries no
+// stylesheet rule — it's a script hook (see CLAUDE.md), so the decoration
+// lives here.
+const SKIP_LINK_CLASS =
+  "skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2";
 
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
@@ -725,16 +731,10 @@ export const AppShell = memo(function AppShell({
           mounted below (see M7 — a breakpoint change swaps the whole tree), so
           each href always matches the one target that actually exists:
           #params(-mobile), and #main-content on the mounted branch's root. */}
-      <a
-        className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
-        href="#main-content"
-      >
+      <a className={SKIP_LINK_CLASS} href="#main-content">
         Skip to main content
       </a>
-      <a
-        className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
-        href={isMobile ? "#params-mobile" : "#params"}
-      >
+      <a className={SKIP_LINK_CLASS} href={isMobile ? "#params-mobile" : "#params"}>
         Skip to parameters
       </a>
 
@@ -747,12 +747,15 @@ export const AppShell = memo(function AppShell({
 
           Each branch's root IS the page's <main> landmark (and carries
           #main-content + the pageHeading <h1>) rather than a shared wrapper
-          around the split: .app-shell is a plain block whose children set
-          their own height:100% against it, so an extra box in that chain
-          would have to re-declare the height, and every absolute-positioned
-          overlay below anchors to .app-shell__mobile/__desktop. Since exactly
-          one branch is ever mounted, the duplicated id and heading resolve to
-          one of each in the live tree. */}
+          around the split. .app-shell is a plain block, not flex, so both
+          roots resolve their own height:100% against it and any box spliced
+          in between would have to re-declare that height to avoid collapsing
+          them. That's the only real cost of a wrapper — the overlays below
+          anchor to these roots' own `position: relative`, which a wrapper
+          would not disturb — but with two otherwise entirely different trees
+          it buys back only three lines. Since exactly one branch is ever
+          mounted, the duplicated id and heading resolve to one of each in the
+          live tree. */}
       {isMobile ? (
         // ── Mobile layout ──
         // --sheet-follow-h (set live by handleSheetFollow) sizes the viewer so

@@ -3,9 +3,10 @@
 // app shell are service-worker cached).
 import { useSyncExternalStore } from "react";
 
-// Module-scope so useSyncExternalStore gets a referentially stable subscribe/
-// getSnapshot/getServerSnapshot across renders — inline callbacks would make it
-// tear down and re-add the listeners on every render of every consumer.
+// Module scope so useSyncExternalStore sees stable callbacks: a fresh closure
+// per render would tear down and re-add both listeners on every render of
+// every consumer. Not shared with the matchMedia-backed hooks — this subscribes
+// to window events, a different mechanism.
 function subscribe(onChange: () => void): () => void {
   window.addEventListener("online", onChange);
   window.addEventListener("offline", onChange);
@@ -15,13 +16,8 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
-function getSnapshot(): boolean {
-  return navigator.onLine;
-}
-
-function getServerSnapshot(): boolean {
-  return true;
-}
+const getSnapshot = (): boolean => navigator.onLine;
+const getServerSnapshot = (): boolean => true;
 
 export function useOnline(): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);

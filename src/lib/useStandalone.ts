@@ -2,6 +2,7 @@
 // via the standalone display-mode or iOS Safari's navigator.standalone. Used to
 // hide affordances that only make sense in a browser tab (e.g. fullscreen).
 import { useSyncExternalStore } from "react";
+import { subscribeMatchMedia } from "./matchMedia";
 
 const QUERY = "(display-mode: standalone)";
 
@@ -12,18 +13,9 @@ function isStandalone(): boolean {
   );
 }
 
-// Module-scope so useSyncExternalStore gets a referentially stable subscribe/
-// getSnapshot/getServerSnapshot across renders — inline callbacks would make it
-// tear down and re-add the listener on every render of every consumer.
-function subscribe(onChange: () => void): () => void {
-  const mq = window.matchMedia(QUERY);
-  mq.addEventListener("change", onChange);
-  return () => mq.removeEventListener("change", onChange);
-}
-
-function getServerSnapshot(): boolean {
-  return false;
-}
+// Module scope keeps these referentially stable — see subscribeMatchMedia.
+const subscribe = subscribeMatchMedia(QUERY);
+const getServerSnapshot = (): boolean => false;
 
 export function useStandalone(): boolean {
   return useSyncExternalStore(subscribe, isStandalone, getServerSnapshot);
