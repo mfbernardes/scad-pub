@@ -68,6 +68,14 @@
   "files.clearAll": "Clear all imported files",
   "svg.missing": "“{name}” isn’t imported — prepare or import it again.",
 
+  "presetDiff.changesFrom#one": "{count} change from",
+  "presetDiff.changesFrom#other": "{count} changes from",
+  "presetDiff.defaults": "defaults",
+  "presetDiff.region": "Changes from {name}",
+  "presetDiff.revert": "Revert",
+  "presetDiff.revertTo": "Revert to {name}",
+  "presetDiff.reset": "Reset",
+
   "settings.jumpToSection": "Jump to section",
   "settings.showAll": "Show all settings",
   "settings.showAllCount#one": "Show all settings ({count} more)",
