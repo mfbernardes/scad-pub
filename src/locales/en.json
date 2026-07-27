@@ -7,6 +7,10 @@
   "error.bootstrapFailed": "The 3D engine couldn't start — check your connection and try again.",
   "error.renderFailed": "Preview could not be updated",
   "error.generic": "That combination of settings didn't work",
+  "error.modalTitle": "Couldn't load this dialog",
+  "error.modalLoadFailed": "This dialog couldn't be loaded — check your connection, then reload to try again.",
+  "error.modalLoadFailedReason": "Reloading is the fix: a failed load like this is cached for the rest of this visit, so retrying without reloading won't re-fetch it.",
+  "error.reload": "Reload",
 
   "review.title": "Review",
   "review.descriptionFailure": "The last render failed — see the details below.",

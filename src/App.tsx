@@ -33,10 +33,14 @@ import { useAppNotices } from "./lib/useAppNotices";
 import { ns } from "./lib/appId";
 import { readLocal, writeLocal } from "./lib/safeStorage";
 import { toast } from "sonner";
+import { t } from "./lib/i18n";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/ui/sonner";
 import { PopupModal } from "./components/PopupModal";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { Modal, MODAL_BODY } from "./components/Modal";
+import { Button } from "./components/ui/button";
 import { shouldShowPopup, rememberPopup } from "./lib/popup";
 import type { ExportSuccessState } from "./components/ExportSuccess";
 
@@ -77,8 +81,9 @@ const FilesModal = lazy(loadFilesModal);
 // scripts/smoke.mjs's gotoFiles().
 //
 // A rejected warm-up is ignored on purpose — the click path re-requests through
-// `lazy()`, which is where a real failure belongs (see ErrorBoundary in
-// main.tsx); swallowing it here must not mask that.
+// `lazy()`, which is where a real failure belongs (see the ErrorBoundary
+// wrapping the modal group in the JSX below); swallowing it here must not
+// mask that.
 function warmModalChunks(): void {
   // DesignDocModal is only reachable when some design carries a `doc` (both its
   // triggers are gated on it), so a config without docs never warms that chunk.
@@ -475,6 +480,16 @@ export default function App() {
   const showDesignDocModal = useCallback(() => setShowDesignDoc(true), []);
   const showLicensesModal = useCallback(() => setShowLicenses(true), []);
   const showFilesModal = useCallback(() => setShowFiles(true), []);
+  // Fallback for the lazy modal group's ErrorBoundary (below, in the JSX):
+  // closes all four `showX` flags at once, since leaving any of them true
+  // would immediately re-throw the same chunk-load failure on the next
+  // render. Also wired as the fallback dialog's own Close button.
+  const closeAllModals = useCallback(() => {
+    setShowHelp(false);
+    setShowDesignDoc(false);
+    setShowLicenses(false);
+    setShowFiles(false);
+  }, []);
 
   // The app-level action bundle, read via useAppActions() by the panels. Rebuilt
   // each render; the provider keeps a stable identity so consumers don't churn.
@@ -524,40 +539,82 @@ export default function App() {
       )}
       {/* Each of these four is lazy-loaded (see the module-scope `lazy()` calls
           above), so a single Suspense boundary covers the group — a pending
-          chunk load suspends only this fragment, never AppShell or Toaster. */}
-      <Suspense fallback={null}>
-        {showHelp && (
-          <HelpModal
-            help={schema.help}
-            onClose={() => setShowHelp(false)}
-            canInstall={canInstall && installMode !== "off"}
-            onInstall={promptInstall}
-            initialTab={helpInitialTab}
-          />
-        )}
-        {showDesignDoc && design.doc && (
-          // Keyed on design.id so a design switch while the modal is open remounts
-          // it fresh (idle -> loading state) instead of needing to reset state
-          // imperatively inside the fetch effect.
-          <DesignDocModal key={design.id} design={design} onClose={() => setShowDesignDoc(false)} />
-        )}
-        {showLicenses && (
-          <LicensesModal
-            versions={buildVersions}
-            extra={schema.licenses}
-            onClose={() => setShowLicenses(false)}
-          />
-        )}
-        {showFiles && (
-          <FilesModal
-            fileImport={schema.fileImport ?? null}
-            loadedFiles={loadedFiles}
-            onRemoveFile={removeFile}
-            onClearFiles={clearImportedFiles}
-            onClose={() => setShowFiles(false)}
-          />
-        )}
-      </Suspense>
+          chunk load suspends only this fragment, never AppShell or Toaster.
+          The ErrorBoundary contains a failed chunk load (offline, an
+          ad-blocked chunk URL, a stale hash after a deploy) to this fragment
+          too, instead of letting `lazy()`'s throw reach the root boundary in
+          main.tsx and replace the whole session over one optional dialog.
+          `resetKey` is the four `showX` flags joined: any open/close changes
+          the string, so dismissing a failure (which closes every modal, see
+          closeAllModals) clears the boundary before the next open can retry.
+
+          `fallback={null}` on the Suspense is deliberate, not a placeholder
+          waiting for a spinner: `lazy()` suspends for one render pass even
+          when warmModalChunks() already fetched the chunk (see above), so ANY
+          visible fallback here would flash on every single modal open. */}
+      <ErrorBoundary
+        resetKey={`${showHelp}|${showDesignDoc}|${showLicenses}|${showFiles}`}
+        fallback={
+          <Modal title={t("error.modalTitle")} onClose={closeAllModals}>
+            <div className={`${MODAL_BODY} flex flex-col gap-3`} role="alert">
+              <p className="m-0 text-[0.9rem] text-foreground">{t("error.modalLoadFailed")}</p>
+              <p className="m-0 text-[0.85rem] text-muted-foreground">
+                {t("error.modalLoadFailedReason")}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  // The browser caches a rejected dynamic import for the
+                  // document's lifetime, so an in-place retry can't re-fetch
+                  // the chunk (see SvgPrepareControl.tsx's wizard fallback for
+                  // the same reasoning) — only a full reload re-requests it.
+                  onClick={() => window.location.reload()}
+                >
+                  {t("error.reload")}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={closeAllModals}>
+                  {t("common.close")}
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        }
+      >
+        <Suspense fallback={null}>
+          {showHelp && (
+            <HelpModal
+              help={schema.help}
+              onClose={() => setShowHelp(false)}
+              canInstall={canInstall && installMode !== "off"}
+              onInstall={promptInstall}
+              initialTab={helpInitialTab}
+            />
+          )}
+          {showDesignDoc && design.doc && (
+            // Keyed on design.id so a design switch while the modal is open remounts
+            // it fresh (idle -> loading state) instead of needing to reset state
+            // imperatively inside the fetch effect.
+            <DesignDocModal key={design.id} design={design} onClose={() => setShowDesignDoc(false)} />
+          )}
+          {showLicenses && (
+            <LicensesModal
+              versions={buildVersions}
+              extra={schema.licenses}
+              onClose={() => setShowLicenses(false)}
+            />
+          )}
+          {showFiles && (
+            <FilesModal
+              fileImport={schema.fileImport ?? null}
+              loadedFiles={loadedFiles}
+              onRemoveFile={removeFile}
+              onClearFiles={clearImportedFiles}
+              onClose={() => setShowFiles(false)}
+            />
+          )}
+        </Suspense>
+      </ErrorBoundary>
 
       <Toaster theme={theme} />
 
