@@ -1336,6 +1336,19 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
         (await page.getByRole("status").filter({ hasText: /settings/i }).count()) >= 1,
         "the swipe-up nudge has an accessible name (role=status, not aria-hidden)"
       );
+      // …and it must be VISIBLE, not just mounted: the nudge shares its
+      // over-sheet slot with the export dock, which outranks it (z-10 vs z-9)
+      // and grows with what it holds — a readiness pill, an after-export panel.
+      // The dogfood config's first design carries a default attention issue, so
+      // this first visit has a pill up, which is exactly the case that used to
+      // cover an 8-second, once-per-browser nudge. Geometry, not counts: both
+      // elements exist either way. See `--action-dock-h` in index.css.
+      const nudgeBox = await hint.first().boundingBox();
+      const dockBox = await page.locator(".action-dock").first().boundingBox();
+      check(
+        !!nudgeBox && !!dockBox && nudgeBox.y + nudgeBox.height <= dockBox.y + 1,
+        "the swipe-up nudge clears the export dock instead of being covered by it"
+      );
 
       await page.reload({ waitUntil: "load" });
       await dismissWelcomePopup(page);

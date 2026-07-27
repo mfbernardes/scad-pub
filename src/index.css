@@ -515,14 +515,19 @@ button:disabled { cursor: default; }
 }
 
 /* One-time viewer gesture hint (ViewerGestureHint) — bottom-centre, riding
-   above the export dock. A flat offset (not a live measurement of the
-   dock's height, which would need a ResizeObserver + CSS var this small a
-   feature doesn't warrant) sized to comfortably clear a single-row dock:
-   the dock's own `bottom` (0.75rem + safe-area) plus ~3.25rem of headroom
-   for its button row. */
+   above the export dock: the dock's own `bottom` (0.75rem + safe-area) plus
+   its height.
+
+   --action-dock-h is the dock's MEASURED height, published by AppShell (see
+   its handleDockHeight). It used to be a flat ~3.25rem — "tall enough for the
+   button row" — but the dock is a flex column that grows with what it holds
+   (the readiness pill, the after-export panel) and it outranks this chip
+   (z-10 vs z-9), so anything taller than that guess simply covered the chip.
+   The fallback keeps the old constant for the frame before the first
+   measurement lands. */
 .viewer-hint {
   position: absolute;
-  bottom: calc(0.75rem + var(--safe-area-bottom) + 3.25rem);
+  bottom: calc(0.75rem + var(--safe-area-bottom) + var(--action-dock-h, 3.25rem));
   left: 50%;
   transform: translateX(-50%);
   z-index: 9;
@@ -532,7 +537,7 @@ button:disabled { cursor: default; }
    bottom offset — mirror that same relationship here. */
 @media (max-width: 860px) {
   .app-shell__mobile .viewer-hint {
-    bottom: calc(var(--sheet-top) + 0.6rem + 3.25rem);
+    bottom: calc(var(--sheet-top) + 0.6rem + var(--action-dock-h, 3.25rem));
     transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
   .app-shell__mobile[data-sheet-dragging="true"] .viewer-hint {
@@ -543,14 +548,17 @@ button:disabled { cursor: default; }
 /* One-time "swipe up for settings" nudge (SheetSwipeHint) — mobile only, shown
    on a first-visit peek. Centred just above the sheet's live top edge, in the
    same over-sheet slot as the gesture hint (which AppShell suppresses while
-   this shows, so they never stack). Opacity easing rides on the component's own
-   `transition-opacity` utility. */
+   this shows, so they never stack) and clearing the dock by the same measured
+   --action-dock-h — the readiness pill would otherwise cover this nudge, and
+   it is a once-per-browser cue on an 8s timer, so covering it loses it for
+   good. Opacity easing rides on the component's own `transition-opacity`
+   utility. */
 @media (max-width: 860px) {
   .app-shell__mobile .sheet-hint {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    bottom: calc(var(--sheet-top) + 0.6rem + 3.25rem);
+    bottom: calc(var(--sheet-top) + 0.6rem + var(--action-dock-h, 3.25rem));
     z-index: 9;
   }
 }

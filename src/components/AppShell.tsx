@@ -90,6 +90,7 @@ function ActionDock({
   onDismissExportSuccess,
   actionButtonsProps,
   statusPill,
+  onHeightChange,
 }: {
   exportSuccess: ExportSuccessState | null;
   afterExport: UiConfig["afterExport"];
@@ -99,9 +100,27 @@ function ActionDock({
    *  Undefined in the states that shouldn't announce anything — see
    *  `dockStatusPill` below. */
   statusPill?: Omit<StatusStripProps, "className">;
+  /** Reports the dock's live height (px) whenever it changes — see the
+   *  `--action-dock-h` effect in AppShell for what reads it. */
+  onHeightChange?: (heightPx: number) => void;
 }) {
+  // The dock is a flex column whose height depends on what it currently holds
+  // (cluster alone, + readiness pill, + after-export panel), and the chips that
+  // sit above it have to clear whatever that is — so measure rather than let
+  // them guess. See the CSS note on `--action-dock-h`.
+  const dockRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = dockRef.current;
+    if (!el || !onHeightChange) return;
+    const measure = () => onHeightChange(Math.ceil(el.getBoundingClientRect().height));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onHeightChange]);
+
   return (
-    <div className={ACTION_DOCK_CLASS}>
+    <div className={ACTION_DOCK_CLASS} ref={dockRef}>
       {exportSuccess && (
         <ExportSuccess
           state={exportSuccess}
@@ -577,6 +596,19 @@ export const AppShell = memo(function AppShell({
     el.style.setProperty("--mobile-peek-height", `${Math.round(heightPx)}px`);
   }, []);
 
+  // Mirror the export dock's measured height into --action-dock-h, the offset
+  // the over-viewer chips (ViewerGestureHint, SheetSwipeHint) stack themselves
+  // by. The dock is a flex column that grows with what it holds — the readiness
+  // pill, the after-export panel — and it outranks both chips (z-10 vs z-9), so
+  // a static "height of the button cluster" guess meant anything taller than
+  // the cluster simply covered them. Written on the shell root (rather than a
+  // per-layout one) because both layouts' chips read it and only one layout is
+  // ever mounted. See `.viewer-hint` / `.sheet-hint` in index.css.
+  const shellRef = useRef<HTMLDivElement>(null);
+  const handleDockHeight = useCallback((heightPx: number) => {
+    shellRef.current?.style.setProperty("--action-dock-h", `${Math.round(heightPx)}px`);
+  }, []);
+
   // Info-level notices (config-driven `notices`) are surfaced passively by the
   // dot/count on the Output toggle. A warning or assert is different — the model
   // came out wrong in a way worth seeing — so the console auto-opens the first
@@ -642,11 +674,7 @@ export const AppShell = memo(function AppShell({
     // waiting to arm — suppress the viewer's own gesture hint so the two
     // one-time chips never stack over the sheet's top edge (they share that
     // slot) and the sheet nudge always goes first. Only ever true on mobile.
-    // The gesture hint sits in the same bottom-centre slot the dock's readiness
-    // pill takes (`.viewer-hint` is offset just above `.action-dock`), so the
-    // pill suppresses it exactly as the sheet nudge does — hidden, not
-    // dismissed, so it can still teach the gesture once the pill clears.
-    suppressGestureHint: (isMobile && showSheetHint) || hasStatusPill,
+    suppressGestureHint: isMobile && showSheetHint,
   };
   const hudProps = {
     visible: !!result?.ok,
@@ -682,7 +710,7 @@ export const AppShell = memo(function AppShell({
     ? { readiness, attentionCount: attention.length, onOpen: openReview }
     : undefined;
   return (
-    <div className="app-shell">
+    <div className="app-shell" ref={shellRef}>
       {/* Skip link: off-screen until focused. Only the active layout is
           mounted below (see M7 — a breakpoint change swaps the whole tree),
           so the href always matches the one #params(-mobile) target that
@@ -804,6 +832,7 @@ export const AppShell = memo(function AppShell({
               onDismissExportSuccess={onDismissExportSuccess}
               actionButtonsProps={actionButtonsProps}
               statusPill={dockStatusPill}
+              onHeightChange={handleDockHeight}
             />
 
             <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
@@ -954,6 +983,7 @@ export const AppShell = memo(function AppShell({
                   onDismissExportSuccess={onDismissExportSuccess}
                   actionButtonsProps={actionButtonsProps}
                   statusPill={dockStatusPill}
+                  onHeightChange={handleDockHeight}
                 />
                 <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
               </ViewerStage>
