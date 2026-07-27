@@ -1,7 +1,20 @@
 // OutputToggle.tsx — the "Output console" bell: an icon-only, ringing bell that
 // toggles the notices/log console. Rides in the top bar of both layouts (desktop
-// CommandBar + mobile top bar). A pending-notice count shows as a corner badge;
-// absent that, it doubles as the render-status indicator (a corner status dot).
+// CommandBar + mobile top bar). A pending-message count shows as a corner badge
+// unless `showCount` says otherwise; absent that badge, the corner doubles as
+// the render-status indicator (a status dot).
+//
+// The bell counts MESSAGES, never issues, and it never claims urgency: the
+// readiness pill (StatusStrip, driven by src/lib/readiness.ts) is the single
+// owner of "something needs your attention", because it is the surface that
+// gates Download and opens the dialog explaining it. The two tallies are not
+// the same number and never were — the bell counts log lines (informational
+// notices included, one per line), while the pill counts actionable items
+// (a missing font has no log line at all; a `subsumedByFont` category folds
+// into the font item; a category with five pending lines is one item). Showing
+// both at once invited the reading that one of them was lying, so the caller
+// hides this count while the pill is up (`showCount`), and the amber the bell
+// used to wear for an attention-flagged notice is gone entirely.
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";
@@ -9,23 +22,24 @@ import { Bell as BellIcon, BellRing as BellRingIcon } from "lucide-react";
 
 interface Props {
   outputOpen: boolean;
-  /** How many notices/warnings are pending — shown as a corner count badge when > 0. */
+  /** How many notices/warnings are pending — shown as a corner count badge when
+   *  > 0 and `showCount` is true. */
   noticeCount?: number;
   /**
-   * Whether at least one of those pending notices belongs to an
-   * `attention: true` category (or is one of OpenSCAD's own hardcoded
-   * warning/assert lines, always attention-worthy) — the ONLY thing that
-   * colours the bell/badge amber. A purely informational notice count still
-   * shows (so nothing pending goes unnoticed) but stays neutral, so the bell
-   * never contradicts a "Ready to download" status strip (see src/lib/readiness.ts).
+   * Whether the corner may carry the numeric count. Callers set it false while
+   * the readiness pill is on screen (AppShell's `hasStatusPill`) so only one
+   * count is visible at a time — see the file comment for why the two tallies
+   * differ. The ringing glyph, `data-notice-count` and the aria-label still
+   * report that messages are pending, so the number is all that's suppressed.
    */
-  hasAttention?: boolean;
+  showCount?: boolean;
   onToggleOutput: () => void;
   /**
    * When provided, the bell doubles as the render-status indicator: a small
    * status-coloured dot rides its corner (red failed / pulsing while working or
    * stale), so a separate StatusPill isn't needed. The pending-notice count,
-   * when there is one, takes the corner instead.
+   * when it is both present and shown, takes the corner instead — which means
+   * suppressing the count can REVEAL a dot the badge was covering.
    */
   status?: RenderStatusInput;
   className?: string;
@@ -34,14 +48,16 @@ interface Props {
 export function OutputToggle({
   outputOpen,
   noticeCount = 0,
-  hasAttention = false,
+  showCount = true,
   onToggleOutput,
   status,
   className,
 }: Props) {
   const hasNotices = noticeCount > 0;
+  const showBadge = hasNotices && showCount;
   // A bell (ringing when notices are pending) reads far more clearly to a maker
-  // than a bare glyph — and a real count badge beats a dot.
+  // than a bare glyph — and it keeps saying "there's something in here" even
+  // when the count itself is suppressed.
   const BellGlyph = hasNotices ? BellRingIcon : BellIcon;
 
   // Render-status dot (only when asked to double as the status indicator).
@@ -59,37 +75,29 @@ export function OutputToggle({
     <Button
       size="icon"
       variant="outline"
-      className={cn(
-        "relative",
-        outputOpen && "border-brand text-brand",
-        hasAttention && "text-warn",
-        className
-      )}
+      className={cn("relative", outputOpen && "border-brand text-brand", className)}
       onClick={onToggleOutput}
       aria-label={`${outputOpen ? "Close" : "Open"} Messages${
         hasNotices ? ` (${noticeCount} notice${noticeCount === 1 ? "" : "s"})` : ""
       }`}
       aria-pressed={outputOpen}
       title="Messages"
+      // How many messages are pending, independent of whether the badge is
+      // currently rendering them — the stable hook the smoke suite reads to
+      // know which half of the `showCount` contract applies, so the check
+      // doesn't hang off the aria-label's English copy.
+      data-notice-count={noticeCount}
     >
       <BellGlyph size={16} />
-      {hasNotices ? (
+      {showBadge ? (
         <span
-          // --warn flips luminance between themes (light amber on dark, deep
-          // amber-brown on light), so its legible text colour flips too —
-          // dark-theme text pairs with --background (near-black, close to the
-          // badge's own dark surfaces); light-theme text uses --on-accent
-          // (white), both bridged config-overridable tokens rather than raw
-          // hex, so a config colour override keeps the badge legible. A
-          // purely informational count (no attention-flagged notice pending)
-          // stays on the same neutral "secondary" treatment Badge's own
-          // variant uses elsewhere, instead of amber.
-          className={cn(
-            "pointer-events-none absolute top-[2px] right-[2px] inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full px-[0.3rem] text-[0.7rem] font-bold leading-none tabular-nums shadow-[0_0_0_2px_var(--panel)]",
-            hasAttention
-              ? "bg-warn text-background [[data-theme=light]_&]:text-primary-foreground"
-              : "bg-secondary text-secondary-foreground"
-          )}
+          // The same neutral "secondary" treatment Badge's own variant uses
+          // elsewhere — a message count is not a verdict, so it never wears
+          // --warn. Urgency belongs to the readiness pill alone (see the file
+          // comment above), which keeps the bell from ever contradicting it.
+          // `.output-toggle__count` is a stable hook class for the smoke suite
+          // (see CLAUDE.md's script-hook convention) — no stylesheet targets it.
+          className="output-toggle__count pointer-events-none absolute top-[2px] right-[2px] inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-secondary px-[0.3rem] text-[0.7rem] font-bold leading-none tabular-nums text-secondary-foreground shadow-[0_0_0_2px_var(--panel)]"
           aria-hidden="true"
         >
           {noticeCount}

@@ -504,12 +504,6 @@ export const AppShell = memo(function AppShell({
   // whether a later live edit is currently re-rendering over it — matching
   // the viewer's own "Building your preview…" vs. "Updating…" distinction.
   const readiness = useMemo(() => readinessState(result ? result.ok : null, attention), [result, attention]);
-  // A pending notice belongs to an `attention: true` category (or is one of
-  // OpenSCAD's own hardcoded warning/assert lines, always attention) — the
-  // ONLY thing that should colour the Messages bell/console amber. An
-  // informational note alone must never contradict a "Ready to download"
-  // status strip (see readiness.ts).
-  const hasNoticeAttention = useMemo(() => diagnostics.some((d) => d.attention), [diagnostics]);
   // Friendly {title, body, technical} mapping of a failed render, shared by
   // the Notices tab (OutputConsole) and the Review dialog so a failure reads
   // identically wherever it surfaces. Null on a missing/successful result.
@@ -648,6 +642,10 @@ export const AppShell = memo(function AppShell({
   // "ready" needs no announcement — the Download button right below it is the
   // confirmation — and "building" is already narrated by the viewer's own
   // loading overlay, so a pill in either state would be noise over the model.
+  //
+  // It also gates the Messages bell's numeric badge (`showCount` below), so the
+  // pill's issue count is never on screen beside the bell's message count — see
+  // OutputToggle.tsx for why those two tallies legitimately differ.
   const hasStatusPill = readiness === "attention" || readiness === "failed";
 
   // Prop bundles shared verbatim by the two layout trees — each invocation
@@ -798,7 +796,7 @@ export const AppShell = memo(function AppShell({
                   <OutputToggle
                     outputOpen={outputOpen}
                     noticeCount={diagnostics.length}
-                    hasAttention={hasNoticeAttention}
+                    showCount={!hasStatusPill}
                     onToggleOutput={toggleOutput}
                     status={{ rendering, ready, result, stale: stalePreview }}
                     className={cn(ICON_BUTTON_CLASS, "mobile-top-bar__output")}
@@ -928,7 +926,7 @@ export const AppShell = memo(function AppShell({
             stalePreview={stalePreview}
             outputOpen={outputOpen}
             noticeCount={diagnostics.length}
-            hasAttention={hasNoticeAttention}
+            showCount={!hasStatusPill}
             onToggleOutput={toggleOutput}
             openPickerSignal={openPickerSignal}
             pickerActive={!isMobile}
