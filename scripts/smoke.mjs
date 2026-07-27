@@ -557,30 +557,35 @@ async function checkExportDock({ page, check }) {
   check((await cluster.locator('[aria-label="Save image"]').count()) === 0, "Save image is not in the dock");
 }
 
-// Status strip (StatusStrip.tsx) + Review dialog (ReviewDialog.tsx): a
-// one-line readiness surface above the desktop panel's tabs that opens the
-// dialog. Which footer actions the dialog offers is keyed on the LIVE
-// readiness state, not on how it was opened — so branch on what the first
-// design actually reports (the dogfood config's "tag" carries a default
-// attention issue; another config's first design may be clean) rather than
-// assuming one config's shape. The strip's own copy is resolved through the
-// i18n catalogue + `strings` overrides (see `labels` in main()).
+// Status pill (StatusStrip.tsx) + Review dialog (ReviewDialog.tsx): the
+// readiness surface in the export dock — above the Download button, same
+// component in both layouts — that opens the dialog. It is mounted ONLY for
+// the attention/failed states (a ready model needs no announcement; see
+// StatusStrip's own doc), so "present" and "absent" are both assertions here.
+// Which footer actions the dialog offers is keyed on the LIVE readiness state,
+// not on how it was opened — so branch on what the first design actually
+// reports (the dogfood config's "tag" carries a default attention issue;
+// another config's first design may be clean) rather than assuming one
+// config's shape. The pill's own copy is resolved through the i18n catalogue +
+// `strings` overrides (see `labels` in main()).
 async function checkStatusStripAndReview({ page, check, ids, labels }) {
-  console.log("=== status strip + review dialog ===");
+  console.log("=== status pill + review dialog ===");
   await selectDesign(page, ids[0]);
-  const strip = page.locator(".status-strip").first();
-  await strip.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-  check(await strip.isVisible(), `status strip is visible on "${ids[0]}"`);
-  const stripText = (await strip.textContent()) ?? "";
-
-  await strip.click();
-  const infoDialog = await openDialog(page, "Review");
-  const infoFooter = infoDialog.locator('[data-slot="dialog-footer"]');
-  if ((await infoDialog.locator(".attention-card").count()) > 0) {
+  const pill = page.locator(".status-strip").first();
+  await pill.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  if (await pill.count()) {
+    const pillText = (await pill.textContent()) ?? "";
+    await pill.click();
+    const infoDialog = await openDialog(page, "Review");
+    const infoFooter = infoDialog.locator('[data-slot="dialog-footer"]');
     // Issues pending: the footer offers "Download anyway" / "Go back and fix"
     // — identical to the dock entry point (checkExports above). Scope to the
     // footer so we assert the state-based footer, not the trigger.
-    check(labels.issues.test(stripText), "status strip names the pending issue(s)");
+    check(labels.issues.test(pillText), "status pill names the pending issue(s)");
+    check(
+      (await infoDialog.locator(".attention-card").count()) > 0,
+      "a mounted status pill means the dialog has something to review"
+    );
     check(
       (await infoFooter.getByRole("button", { name: "Download anyway" }).count()) === 1,
       "status-opened dialog with issues offers the same Download anyway action as the dock"
@@ -590,23 +595,22 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
       "status-opened dialog with issues offers Go back and fix"
     );
     await infoFooter.getByRole("button", { name: "Go back and fix" }).click();
+    await waitDialogClosed(page, "Review").catch(() => {});
   } else {
-    check(labels.ready.test(stripText), `status strip reads Ready on the clean design "${ids[0]}"`);
-    await page.keyboard.press("Escape");
+    console.log(`  (the first design "${ids[0]}" is clean — no pill, as designed)`);
   }
-  await waitDialogClosed(page, "Review").catch(() => {});
 
   // The other half of the contract needs a design in the OPPOSITE state. The
   // dogfood config pairs "tag" (attention by default) with "panel" (a clean
   // SVG-extrusion design, no font/notice concerns); a config without such a
-  // known-clean design just doesn't exercise it.
+  // known-clean design just doesn't exercise it. A clean design must show NO
+  // pill at all — the ready state is deliberately silent.
   if (ids.includes("panel")) {
     await selectDesign(page, "panel");
-    const cleanStrip = page.locator(".status-strip").first();
-    await cleanStrip.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(300);
     check(
-      labels.ready.test((await cleanStrip.textContent()) ?? ""),
-      "status strip reads Ready on a clean design"
+      (await page.locator(".status-strip").count()) === 0,
+      "no status pill on a clean design (ready is silent — the Download button is the confirmation)"
     );
     // Back to the design the rest of the suite expects to be selected.
     await selectDesign(page, ids[0]);
@@ -1401,7 +1405,6 @@ async function main() {
         "i"
       );
     const labels = {
-      ready: textRe("status.ready"),
       issues: textRe("review.issueCount#one", "review.issueCount#other"),
     };
     console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);

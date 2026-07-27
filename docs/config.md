@@ -295,7 +295,7 @@ Load order, last wins: app bundle CSS -> `colors` `<style>` -> `extraCss` `<link
 
 ## Text overrides (`strings`)
 
-ScadPub's own chrome text — the status strip, the Review dialog, attention cards, the export dock, the output console and the share/export toasts — is generated from a small built-in catalogue (`src/locales/en.json`), resolved through `src/lib/i18n.ts`'s `t()`/`tn()`. The optional `strings` config key lets a deployment override any of those keys without a fork:
+ScadPub's own chrome text — the readiness pill, the Review dialog, attention cards, the export dock, the output console and the share/export toasts — is generated from a small built-in catalogue (`src/locales/en.json`), resolved through `src/lib/i18n.ts`'s `t()`/`tn()`. The optional `strings` config key lets a deployment override any of those keys without a fork:
 
 ```jsonc
 {

@@ -1,22 +1,25 @@
-// StatusStrip.tsx — readiness surface (src/lib/readiness.ts's ReadinessState),
-// a button that opens the Review dialog (ReviewDialog.tsx). Two presentations,
-// chosen by `variant` (the caller knows its layout):
-//   • "row" (desktop): a one-line strip at the top of the docked ParamPanel,
-//     above its tabs. Always mounted, in every readiness state.
-//   • "pill" (mobile): a raised chip in the export dock, stacked directly above
-//     the Download button (AppShell's ActionDock). The mobile sheet has no room
-//     to spend on status — its Half detent is ~52vh — and the dock is where the
-//     decision this warns about actually gets made, so the warning rides there
-//     instead: over the viewer, visible at every sheet detent, following the
-//     sheet up exactly like the button it sits on.
-// The pill is deliberately NOT mounted in every state: a ready model needs no
-// announcement (the enabled Download button is the confirmation) and a first
-// build is already narrated by the viewer's own loading overlay — so the caller
-// only mounts it for `attention`/`failed`, the two states that actually want a
-// look at the Review dialog.
+// StatusStrip.tsx — the readiness surface (src/lib/readiness.ts's
+// ReadinessState): a raised pill in the export dock (AppShell's ActionDock),
+// stacked directly above the Download button, that opens the Review dialog
+// (ReviewDialog.tsx).
+//
+// One presentation, both layouts. It used to be a full-width row at the top of
+// the docked desktop panel and a chip on the mobile sheet's tab row; the dock
+// is where the decision it gates actually gets made, so it lives there for
+// desktop and mobile alike — over the viewer, out of the panel/sheet entirely,
+// and still visible when the desktop panel is collapsed to its rail (which used
+// to drop readiness altogether, since the row lived inside the panel).
+//
+// The caller mounts it only for `attention`/`failed` — the two states that want
+// a look at the Review dialog. A ready model needs no announcement (the enabled
+// Download button is the confirmation), and a first build is already narrated by
+// the viewer's own loading overlay, so a pill in either state would be noise
+// over the model. The other two states are still spelled out below because
+// `readiness` can hold them and the label must stay exhaustive.
+//
 // `.status-strip` is a stable hook class for the smoke/vis scripts (see
 // CLAUDE.md's script-hook convention) — kept even though no stylesheet rule
-// targets it, and kept on BOTH presentations.
+// targets it.
 import {
   CircleCheck as ReadyIcon,
   TriangleAlert as AttentionIcon,
@@ -32,8 +35,6 @@ export interface StatusStripProps {
   /** attention.length — only meaningful (and only read) in the "attention" state. */
   attentionCount: number;
   onOpen: () => void;
-  /** Presentation: full-width panel row (default) or raised dock pill. */
-  variant?: "row" | "pill";
   className?: string;
 }
 
@@ -46,19 +47,13 @@ const ICON: Record<ReadinessState, typeof ReadyIcon> = {
 
 // Warn/success/destructive tokens only — never a bespoke colour — so a
 // deployment's `colors` override (which retargets these same tokens) keeps
-// the strip in step with the rest of the app's status language.
-const TONE: Record<ReadinessState, string> = {
-  building: "text-muted-foreground",
-  ready: "text-success bg-success-bg",
-  attention: "text-warn bg-warn-bg",
-  failed: "text-destructive bg-destructive/10",
-};
-
-// The pill floats over the 3D viewer, so every state needs an OPAQUE fill —
-// the row's translucent `bg-destructive/10` would take its contrast from
+// the pill in step with the rest of the app's status language.
+//
+// Every fill is OPAQUE: the pill floats over the 3D viewer, so a translucent
+// tint (the old row used `bg-destructive/10`) would take its contrast from
 // whatever the model happens to be showing behind it. `--glass-bg` is the same
 // surface the dock's own card uses, so a failed pill reads as part of the dock.
-const TONE_PILL: Record<ReadinessState, string> = {
+const TONE: Record<ReadinessState, string> = {
   building: "text-muted-foreground bg-(--glass-bg)",
   ready: "text-success bg-success-bg",
   attention: "text-warn bg-warn-bg",
@@ -78,24 +73,14 @@ function label(readiness: ReadinessState, attentionCount: number): string {
   }
 }
 
-export function StatusStrip({
-  readiness,
-  attentionCount,
-  onOpen,
-  variant = "row",
-  className,
-}: StatusStripProps) {
+export function StatusStrip({ readiness, attentionCount, onOpen, className }: StatusStripProps) {
   const Icon = ICON[readiness];
-  const pill = variant === "pill";
   return (
     <button
       type="button"
       className={cn(
-        "status-strip cursor-pointer items-center font-medium",
-        pill
-          ? "status-strip--pill inline-flex max-w-full gap-[0.4rem] rounded-full border border-(color:--glass-border) px-[0.7rem] py-[0.3rem] text-[0.8rem] shadow-(--elevation)"
-          : "flex w-full gap-2 border-b px-3 py-[0.4rem] text-left text-[0.82rem]",
-        (pill ? TONE_PILL : TONE)[readiness],
+        "status-strip inline-flex max-w-full cursor-pointer items-center gap-[0.4rem] rounded-full border border-(color:--glass-border) px-[0.7rem] py-[0.3rem] text-[0.8rem] font-medium shadow-(--elevation)",
+        TONE[readiness],
         className
       )}
       onClick={onOpen}
@@ -107,9 +92,7 @@ export function StatusStrip({
         aria-hidden="true"
         className={cn("shrink-0", readiness === "building" && "animate-spin motion-reduce:animate-none")}
       />
-      <span className={cn("min-w-0 truncate", !pill && "flex-1")}>
-        {label(readiness, attentionCount)}
-      </span>
+      <span className="min-w-0 truncate">{label(readiness, attentionCount)}</span>
     </button>
   );
 }

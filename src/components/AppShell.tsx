@@ -95,10 +95,10 @@ function ActionDock({
   afterExport: UiConfig["afterExport"];
   onDismissExportSuccess: () => void;
   actionButtonsProps: ComponentProps<typeof ActionButtons>;
-  /** Mobile only: the readiness pill, stacked directly above the cluster (see
-   *  StatusStrip's "pill" variant). Omitted on desktop, where the docked
-   *  panel's own status row already carries readiness. */
-  statusPill?: Omit<StatusStripProps, "variant" | "className">;
+  /** The readiness pill, stacked directly above the cluster (StatusStrip).
+   *  Undefined in the states that shouldn't announce anything — see
+   *  `dockStatusPill` below. */
+  statusPill?: Omit<StatusStripProps, "className">;
 }) {
   return (
     <div className={ACTION_DOCK_CLASS}>
@@ -111,7 +111,7 @@ function ActionDock({
           onDismiss={onDismissExportSuccess}
         />
       )}
-      {statusPill && <StatusStrip {...statusPill} variant="pill" />}
+      {statusPill && <StatusStrip {...statusPill} />}
       <div className={ACTION_CLUSTER_CLASS}>
         <ActionButtons {...actionButtonsProps} />
       </div>
@@ -611,6 +611,13 @@ export const AppShell = memo(function AppShell({
     openOutput();
   }, [openOutput]);
 
+  // Whether the dock shows its readiness pill (StatusStrip), shared verbatim
+  // by both layouts: only the two states that want a look at the Review dialog.
+  // "ready" needs no announcement — the Download button right below it is the
+  // confirmation — and "building" is already narrated by the viewer's own
+  // loading overlay, so a pill in either state would be noise over the model.
+  const hasStatusPill = readiness === "attention" || readiness === "failed";
+
   // Prop bundles shared verbatim by the two layout trees — each invocation
   // below adds only its layout-specific bits (viewer ref, active flag, …).
   const stageProps = {
@@ -635,7 +642,11 @@ export const AppShell = memo(function AppShell({
     // waiting to arm — suppress the viewer's own gesture hint so the two
     // one-time chips never stack over the sheet's top edge (they share that
     // slot) and the sheet nudge always goes first. Only ever true on mobile.
-    suppressGestureHint: isMobile && showSheetHint,
+    // The gesture hint sits in the same bottom-centre slot the dock's readiness
+    // pill takes (`.viewer-hint` is offset just above `.action-dock`), so the
+    // pill suppresses it exactly as the sheet nudge does — hidden, not
+    // dismissed, so it can still teach the gesture once the pill clears.
+    suppressGestureHint: (isMobile && showSheetHint) || hasStatusPill,
   };
   const hudProps = {
     visible: !!result?.ok,
@@ -667,18 +678,9 @@ export const AppShell = memo(function AppShell({
     attentionCount: attention.length,
     onDownloadClick: handleDownloadClick,
   };
-  const statusStripProps = {
-    readiness,
-    attentionCount: attention.length,
-    onOpen: openReview,
-  };
-  // The mobile dock's readiness pill (StatusStrip's "pill" variant): mounted
-  // only for the two states that want a look at the Review dialog. "ready"
-  // needs no announcement — the Download button right below it is the
-  // confirmation — and "building" is already narrated by the viewer's own
-  // loading overlay, so a pill in either state would be noise over the model.
-  const dockStatusPill =
-    readiness === "attention" || readiness === "failed" ? statusStripProps : undefined;
+  const dockStatusPill = hasStatusPill
+    ? { readiness, attentionCount: attention.length, onOpen: openReview }
+    : undefined;
   return (
     <div className="app-shell">
       {/* Skip link: off-screen until focused. Only the active layout is
@@ -936,7 +938,6 @@ export const AppShell = memo(function AppShell({
               onSearchChange={panelState.setSearch}
               onSearchFocus={handleSearchFocus}
               onSearchBlur={handleSearchBlur}
-              statusStrip={statusStripProps}
             />
 
             {/* Canvas */}
@@ -944,13 +945,15 @@ export const AppShell = memo(function AppShell({
               <ViewerStage {...stageProps} viewerRef={desktopViewerRef} active>
                 {/* Floating controls live inside viewer-wrap so they hover over the
                     canvas — which shrinks when the output console docks below it —
-                    rather than overlapping the console's notices. An optional
-                    after-export panel stacks above the dock (see ACTION_DOCK_CLASS). */}
+                    rather than overlapping the console's notices. The readiness
+                    pill and an optional after-export panel stack above the dock
+                    (see ACTION_DOCK_CLASS), exactly as they do on mobile. */}
                 <ActionDock
                   exportSuccess={exportSuccess}
                   afterExport={afterExport}
                   onDismissExportSuccess={onDismissExportSuccess}
                   actionButtonsProps={actionButtonsProps}
+                  statusPill={dockStatusPill}
                 />
                 <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
               </ViewerStage>
