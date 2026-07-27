@@ -23,8 +23,7 @@ This representative config shows the major surfaces. The sections below define e
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
   "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
   "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
-  "restOnGrid": false,            // rest the model's base on the z=0 grid instead of centring in Z; default false
-  "viewer": { "style": "plain" }, // viewer presentation: "plain" (default) or "studio"
+  "viewer": { "style": "plain" }, // viewer presentation, framing, and controls — see Viewer
   "fileImport": true              // optional Files dialog (manages imported fonts/SVGs)
 }
 ```
@@ -114,8 +113,7 @@ These keys affect render arguments, bundled fonts, and cache behavior:
 
 - **`features`**: applied to all designs as `--enable=<feature>`
 - **`format`**: the model format OpenSCAD exports and the viewer parses, fixed at build time. `"3mf"` is the default and carries per-object colour from each design's `color(...)` calls. `"stl"` is geometry-only. Changing it invalidates the render cache automatically
-- **`restOnGrid`**: how the viewer frames a loaded model, fixed at build time. `false` (the default) centres the model on the origin in all three axes, as it always has. `true` centres it in X/Y but rests its base on the `z=0` grid plane, which suits designs modelled with their base on `z=0` (as OpenSCAD designs typically are) where centring in Z would sink them half-way through the grid. Display-only: it does not change the exported file or the render cache
-- **`viewer`**: the 3D viewer's presentation, fixed at build time. Its only key is `style`, which picks the look: `"plain"` (the default) is the classic CAD preview with the flat light rig, while `"studio"` lights the model with an image-based studio environment, tone mapping, and a soft contact shadow under the model — a product-shot treatment that emphasises materials and relief. Display-only: it does not change the exported file or the render cache. The reference grid is **not** configured here — it is a runtime toggle the visitor owns, seeded by [`ui.grid`](#ui-behaviour-and-pwa). A `"studio"` deployment usually wants `"ui": { "grid": "off" }` so the model reads as a product against a clean backdrop rather than as a CAD part
+- **`viewer`**: the 3D viewer's presentation, framing, and per-control visibility, all fixed at build time and none of it affecting the exported file or the render cache. See [Viewer](#viewer-viewer)
 - **`fonts`** / **`fontFallback`**: see [Fonts](#fonts-fonts-fontfallback)
 - **`render`**: optional render tuning for the heavy-render threshold and cache sizing. See [Render tuning](#render-tuning-render)
 
@@ -287,9 +285,9 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--elevation` | drop shadow on raised surfaces (a `box-shadow`, not a colour) |
 | `--radius` / `--radius-sm` | corner radius, base and small (a length, not a colour) |
 | `--font-sans` / `--font-display` | UI font stacks: body text / the display voice (brand, headings, tabs, buttons). Unquoted family names only (e.g. `Georgia, serif`); set them under `dark` (the `:root` block) to apply to both themes |
-| `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid (the grid renders only while the viewer's grid toggle is on — seeded by `ui.grid`, then the visitor's own choice) |
+| `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid (the grid renders only while the viewer's grid toggle is on — seeded by [`viewer.grid`](#viewer-viewer), then the visitor's own choice) |
 | `--viewer-model` | rendered model material colour |
-| `--viewer-dim` | dimension-overlay colour: the W x D x H measurement lines/labels the viewer's measure tool draws (seeded by [`ui.measure`](#ui-options)) |
+| `--viewer-dim` | dimension-overlay colour: the W x D x H measurement lines/labels the viewer's measure tool draws (seeded by [`viewer.controls.measure`](#viewer-viewer)) |
 
 `--accent` and `--accent-solid` are separate tokens because the same colour rarely passes WCAG AA both as small text on `--panel` and as a filled button background.
 
@@ -418,6 +416,39 @@ An optional build-time object that tunes rendering behaviour. Every field is opt
 - **`heavyMs`**: when a live auto-render pass takes longer than this, auto-render pauses for that design and you render on demand with **Render now**. Designs flagged `"heavy": true` start paused regardless. Raise it for a fast machine, lower it to pause sooner.
 - **`cache`**: sizes the runner's two-tier render cache. `maxEntries` and `maxBytes` bound the in-memory L1 cache. `maxEntryBytes` caps the largest single render worth caching. `persistent` toggles the IndexedDB L2 store. Set it to `false` to render fresh each session or for privacy-sensitive deployments.
 
+## Viewer (`viewer`)
+
+An optional build-time object gathering every display-only concern the 3D viewer owns:
+presentation, framing, and per-control visibility. None of it affects the exported bytes or
+the render cache, so `viewer` is absent from `renderHash`.
+
+```jsonc
+{
+  "viewer": {
+    "style": "plain",       // "plain" (default) is the classic CAD preview; "studio" is a product-shot look
+    "restOnGrid": false,     // rest the model's base on the z=0 grid instead of centring in Z; default false
+    "grid": "off",           // seeds the reference-grid toggle's first-ever value; default "off"
+    "controls": {
+      "measure": true,       // the ruler/measure toggle; default true
+      "viewPicker": true,    // the camera-angle cube button; default true
+      "reset": true,         // the "reset view" button; default true
+      "zoom": false,         // explicit zoom in/out buttons; default false
+      "fullscreen": true     // the fullscreen toggle (browser tabs only); default true
+    }
+  }
+}
+```
+
+- **`style`**: picks the look. `"plain"` (the default) is the classic CAD preview with the flat light rig. `"studio"` lights the model with an image-based studio environment, tone mapping, and a soft contact shadow under the model — a product-shot treatment that emphasises materials and relief. A `"studio"` deployment usually wants `"viewer": { "grid": "off" }` so the model reads as a product against a clean backdrop rather than as a CAD part
+- **`restOnGrid`**: how the viewer frames a loaded model. `false` (the default) centres the model on the origin in all three axes, as it always has. `true` centres it in X/Y but rests its base on the `z=0` grid plane, which suits designs modelled with their base on `z=0` (as OpenSCAD designs typically are) where centring in Z would sink them half-way through the grid
+- **`grid`**: `"off"` by default, or `"on"`. Seeds whether the viewer starts with its reference grid drawn. Unlike `controls` below, this is **not** a control-visibility flag — the grid toggle is always offered regardless of this value. It only seeds that toggle's first-ever value; a visitor's own later choice is remembered in the browser and wins on every subsequent visit. That's exactly why it sits directly on `viewer` rather than inside `controls`
+- **`controls`**: visibility of the individual viewer HUD buttons. Every field is optional and independent; none hides the 3D canvas itself, only the named button:
+  - **`measure`**: `true` by default, or `false`. Controls the viewer measure toggle, the ruler button that draws the W x D x H overlay and shows the measurements/`@info` panel. Set `false` to hide the button entirely
+  - **`viewPicker`**: `true` by default, or `false`. Controls the cube button whose menu snaps the camera to standard angles. Set `false` to hide it
+  - **`reset`**: `true` by default, or `false`. Controls the "reset view" button. Mouse/touch orbit and zoom still work regardless
+  - **`zoom`**: `false` by default, or `true`. Controls the zoom in/out buttons. Mouse-wheel and pinch zoom already work, so the buttons are off by default
+  - **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
+
 ## Popup notice (`popup`)
 
 Show a one-off notice dialog over the app on load. Use it for a welcome message, a usage caveat, a docs link, or a required font/license link. It is a build-time setting; all copy is config-driven, so the app stays project-agnostic. Omit `popup` and nothing is shown.
@@ -450,19 +481,13 @@ The remembered state is namespaced by the configurator's `id` and keyed by the p
 
 ### UI options
 
-The optional `ui` object is validated as a unit, and defaults apply when it is absent. None of these fields affect geometry, so they never invalidate the render cache.
+The optional `ui` object is validated as a unit, and defaults apply when it is absent. None of these fields affect geometry, so they never invalidate the render cache. The viewer's own presentation, framing, and per-control visibility (`style`, `restOnGrid`, `grid`, `controls.*`) live under [`viewer`](#viewer-viewer), not here.
 
 - **`panelSide`**: `"left"` by default, or `"right"`. Controls which edge the desktop parameter panel docks against
 - **`panelDefault`**: `"open"` by default, or `"collapsed"`. Sets the first-load desktop panel state. The later browser choice persists
 - **`outputDefault`**: `"closed"` by default, or `"open"`. Controls whether the OpenSCAD output console starts open
 - **`install`**: `"auto"` by default, or `"off"`. When `"off"`, no PWA install affordance appears, even on browsers that support it
 - **`showVarName`**: `false` by default, or `true`. Shows the underlying OpenSCAD variable name beside each parameter label. Hidden by default because it is developer detail; set `true` for a technical audience. Every parameter row always carries a `data-param="<var>"` attribute for smoke tests and `extraCss`
-- **`measure`**: `true` by default, or `false`. Controls the viewer measure toggle, the ruler button that draws the W x D x H overlay and shows the measurements/`@info` panel. Set `false` to hide the button entirely
-- **`viewPicker`**: `true` by default, or `false`. Controls the cube button whose menu snaps the camera to standard angles. Set `false` to hide it
-- **`reset`**: `true` by default, or `false`. Controls the "reset view" button. Mouse/touch orbit and zoom still work regardless
-- **`zoom`**: `false` by default, or `true`. Controls the zoom in/out buttons. Mouse-wheel and pinch zoom already work, so the buttons are off by default
-- **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
-- **`grid`**: `"off"` by default, or `"on"`. Seeds whether the viewer starts with its reference grid drawn. Unlike the keys above it does **not** hide a control — the viewer's grid toggle is always offered — and a visitor's own choice is remembered in the browser and wins on every later visit
 - **`saveImage`**: `true` by default, or `false`. Controls the "Save image (PNG)" action in the secondary-action surfaces (the desktop command bar and the mobile ⋮ overflow menu). Set `false` to hide the Save-image action entirely
 - **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
 - **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button

@@ -46,7 +46,6 @@ import {
   parseDir,
   parseFileImport,
   parseFormat,
-  parseRestOnGrid,
   parseLang,
   parseLicenses,
   parseNotices,
@@ -66,7 +65,6 @@ export {
   parseDir,
   parseFileImport,
   parseFormat,
-  parseRestOnGrid,
   parseLang,
   parseLicenses,
   parseNotices,
@@ -729,9 +727,9 @@ export function generate({
   // ── Rendering ─────────────────────────────────────────────────────────────
   const FEATURES = parseStringArray(config.features, "features");
   const FORMAT = parseFormat(config.format);
-  const REST_ON_GRID = parseRestOnGrid(config.restOnGrid);
-  // Optional viewer presentation (style + grid). Display-only, like restOnGrid,
-  // so it reaches the schema without touching renderHash.
+  // The 3D viewer's presentation, framing (restOnGrid) and per-control
+  // visibility — all display-only, so VIEWER reaches the schema without
+  // touching renderHash.
   const VIEWER = parseViewer(config.viewer);
   // Optional build-time render tuning (heavy-render threshold + cache sizing).
   // Validated; absent -> null -> the app keeps its built-in defaults.
@@ -945,7 +943,6 @@ export function generate({
     extraCss,
     logo,
     format: FORMAT,
-    restOnGrid: REST_ON_GRID,
     viewer: VIEWER,
     features: FEATURES,
     render: RENDER,

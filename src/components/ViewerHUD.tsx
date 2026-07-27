@@ -25,7 +25,7 @@ import { t } from "../lib/i18n";
 interface Props {
   viewerRef: React.RefObject<ViewerHandle | null>;
   visible: boolean;
-  /** Whether the measure (dimensions) toggle button is offered (config ui.measure). */
+  /** Whether the measure (dimensions) toggle button is offered (config viewer.controls.measure). */
   measure: boolean;
   /** Whether the bounding-box dimension overlay is currently shown. */
   showDimensions: boolean;
@@ -34,18 +34,18 @@ interface Props {
   /** Whether the viewer's reference grid is currently drawn. Unlike the
    *  measure/zoom/fullscreen flags above this is a live value, not a
    *  visibility gate: the grid button is always offered, and the config's
-   *  `ui.grid` only seeds this state's first-ever value (see
+   *  `viewer.grid` only seeds this state's first-ever value (see
    *  src/lib/viewerPrefs.ts). */
   showGrid: boolean;
   /** Toggle the reference grid on/off. */
   onToggleGrid: () => void;
-  /** Whether the view picker (camera-angle menu) is offered (config ui.viewPicker). */
+  /** Whether the view picker (camera-angle menu) is offered (config viewer.controls.viewPicker). */
   viewPicker: boolean;
-  /** Whether the "reset view" button is offered (config ui.reset). */
+  /** Whether the "reset view" button is offered (config viewer.controls.reset). */
   reset: boolean;
-  /** Whether the zoom in/out buttons are offered (config ui.zoom). */
+  /** Whether the zoom in/out buttons are offered (config viewer.controls.zoom). */
   zoom: boolean;
-  /** Whether the fullscreen toggle is offered (config ui.fullscreen). */
+  /** Whether the fullscreen toggle is offered (config viewer.controls.fullscreen). */
   fullscreen: boolean;
   /** The active camera view (checkmarked in the view picker). */
   view: ViewName;
@@ -131,8 +131,8 @@ export function ViewerHUD({ viewerRef, visible, measure, showDimensions, onToggl
       )}
       {/* The reference grid sits beside the ruler — both are overlays drawn
           around the model rather than camera controls. Always offered: the
-          config's `ui.grid` seeds this toggle's first-ever value, it doesn't
-          gate the button (see src/lib/viewerPrefs.ts). */}
+          config's `viewer.grid` seeds this toggle's first-ever value, it
+          doesn't gate the button (see src/lib/viewerPrefs.ts). */}
       <HudTooltipButton
         label={showGrid ? t("hud.hideGrid") : t("hud.showGrid")}
         onClick={onToggleGrid}

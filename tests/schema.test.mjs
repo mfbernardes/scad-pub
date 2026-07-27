@@ -60,6 +60,7 @@ const validBase = () => ({
   title: "T",
   logo: null,
   format: "3mf",
+  viewer: { style: "plain" },
   features: [],
   fonts: [],
   assets: [],
@@ -116,6 +117,48 @@ test("validates the model format", () => {
   delete noFormat.format;
   assert.throws(() => validateSchema(noFormat), /'format' must be/);
   assert.throws(() => validateSchema({ ...validBase(), format: "obj" }), /'format' must be/);
+});
+
+test("validates the viewer object (style, restOnGrid, grid, controls) — required, unlike ui", () => {
+  const noViewer = validBase();
+  delete noViewer.viewer;
+  assert.throws(() => validateSchema(noViewer), /'viewer' must be an object/);
+  assert.throws(() => validateSchema({ ...validBase(), viewer: [] }), /'viewer' must be an object/);
+  assert.throws(
+    () => validateSchema({ ...validBase(), viewer: { style: "toon" } }),
+    /'viewer\.style' must be/
+  );
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      viewer: {
+        style: "studio",
+        restOnGrid: true,
+        grid: "on",
+        controls: { measure: false, viewPicker: false, reset: false, zoom: true, fullscreen: false },
+      },
+    })
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), viewer: { style: "plain", restOnGrid: "yes" } }),
+    /'viewer\.restOnGrid' must be a boolean/
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), viewer: { style: "plain", grid: "sometimes" } }),
+    /'viewer\.grid' must be "off" or "on"/
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), viewer: { style: "plain", controls: [] } }),
+    /'viewer\.controls' must be an object/
+  );
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        viewer: { style: "plain", controls: { measure: "no" } },
+      }),
+    /'viewer\.controls\.measure' must be a boolean/
+  );
 });
 
 test("validates the optional per-design collapsedSections", () => {
@@ -259,15 +302,6 @@ test("validates the optional notices' subsumedByFont field", () => {
   const bad = validBase();
   bad.notices = [{ marker: "alert", label: "alerts", subsumedByFont: "yes" }];
   assert.throws(() => validateSchema(bad), /a notice 'subsumedByFont' must be a boolean/);
-});
-
-test("validates the optional ui.grid field", () => {
-  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { grid: "off" } }));
-  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { grid: "on" } }));
-  assert.throws(
-    () => validateSchema({ ...validBase(), ui: { grid: "sometimes" } }),
-    /'ui\.grid' must be "off" or "on"/
-  );
 });
 
 test("validates the optional appended licenses", () => {

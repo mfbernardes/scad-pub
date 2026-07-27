@@ -16,6 +16,58 @@ export type ModelFormat = "3mf" | "stl";
  */
 export type ViewerStyle = "plain" | "studio";
 
+/**
+ * Visibility of the individual viewer HUD control buttons (config
+ * `viewer.controls.*`). Every field is independent; none hides the 3D canvas
+ * itself, only the named button.
+ */
+export interface ViewerControls {
+  /**
+   * Whether the viewer's measure (dimensions) toggle is offered (default true).
+   * Set false to hide the ruler button — and with it the W×D×H overlay and the
+   * measurements/@info panel, which are only reachable through that toggle.
+   */
+  measure?: boolean;
+  /** Whether the viewer's view picker (camera-angle menu) is offered (default true). */
+  viewPicker?: boolean;
+  /** Whether the viewer's "reset view" button is offered (default true). */
+  reset?: boolean;
+  /** Whether the viewer's zoom in/out buttons are offered (default false). */
+  zoom?: boolean;
+  /**
+   * Whether the viewer's fullscreen toggle is offered (default true). Only ever
+   * shown in a browser tab that supports the Fullscreen API anyway; set false to
+   * suppress it there too.
+   */
+  fullscreen?: boolean;
+}
+
+/**
+ * Build-time viewer configuration (config `viewer`): presentation, framing,
+ * and per-control visibility. None of it affects the exported bytes or the
+ * render cache (absent from renderHash).
+ */
+export interface ViewerConfig {
+  /** "plain" (default) is the classic CAD preview; "studio" is the product-shot look. */
+  style: ViewerStyle;
+  /**
+   * When true, the viewer rests a loaded model's base on the z=0 grid (centred
+   * in X/Y only); when false (the default) it centres the model on the origin
+   * in all three axes.
+   */
+  restOnGrid?: boolean;
+  /**
+   * Whether the viewer starts with its reference grid drawn (default "off").
+   * Unlike `controls` below this does NOT gate a control: the HUD's grid
+   * toggle is always offered regardless. It only seeds that toggle's value on
+   * a visitor's first-ever load — once they've used the toggle, their
+   * persisted choice wins (see src/lib/viewerPrefs.ts).
+   */
+  grid?: "off" | "on";
+  /** Visibility of the individual viewer HUD control buttons. */
+  controls?: ViewerControls;
+}
+
 export interface RenderRequest {
   id: number;
   design: string; // a design id, e.g. "nameplate"
@@ -402,6 +454,14 @@ export interface PopupNotice {
   footnote?: string;
 }
 
+// Rule this commit establishes: `designs.json` (the `Schema` below, and the
+// types describing it) is the APP-FACING artifact and is free to differ from
+// scadpub.config.json's own surface where the app's needs genuinely differ —
+// but where both express the same grouping (as `viewer` now does on both
+// sides: style/restOnGrid/grid/controls.*), they mirror each other rather
+// than drifting into two different shapes for one idea. See scripts/lib/
+// config-spec.mjs for the config side of that same grouping.
+
 /** Build-time UI behaviour overrides. None affect geometry (absent from renderHash). */
 export interface UiConfig {
   /** Which edge the parameter panel docks to on desktop (default "left"). */
@@ -418,32 +478,6 @@ export interface UiConfig {
    * visually-secondary monospace text when enabled.
    */
   showVarName?: boolean;
-  /**
-   * Whether the viewer's measure (dimensions) toggle is offered (default true).
-   * Set false to hide the ruler button — and with it the W×D×H overlay and the
-   * measurements/@info panel, which are only reachable through that toggle.
-   */
-  measure?: boolean;
-  /** Whether the viewer's view picker (camera-angle menu) is offered (default true). */
-  viewPicker?: boolean;
-  /** Whether the viewer's "reset view" button is offered (default true). */
-  reset?: boolean;
-  /** Whether the viewer's zoom in/out buttons are offered (default false). */
-  zoom?: boolean;
-  /**
-   * Whether the viewer's fullscreen toggle is offered (default true). Only ever
-   * shown in a browser tab that supports the Fullscreen API anyway; set false to
-   * suppress it there too.
-   */
-  fullscreen?: boolean;
-  /**
-   * Whether the viewer starts with its reference grid drawn (default "off").
-   * Unlike the flags above this does NOT gate a control: the HUD's grid
-   * toggle is always offered regardless. It only seeds that toggle's value on
-   * a visitor's first-ever load — once they've used the toggle, their
-   * persisted choice wins (see src/lib/viewerPrefs.ts).
-   */
-  grid?: "off" | "on";
   /**
    * Whether the "Save image (PNG)" action is offered (default true — the button
    * is shown). Set false to hide the Save-image (PNG) action entirely, in both
@@ -572,18 +606,11 @@ export interface Schema {
   /** Model format OpenSCAD exports and the viewer parses (build-time; default "3mf"). */
   format: ModelFormat;
   /**
-   * When true, the viewer rests a loaded model's base on the z=0 grid (centred
-   * in X/Y only); when false (the default) it centres the model on the origin in
-   * all three axes. Build-time, display-only — it doesn't affect the export.
+   * The 3D viewer's presentation, framing, and per-control visibility — see
+   * `ViewerConfig`. Display-only in every field: none of it affects the
+   * exported bytes or the render cache.
    */
-  restOnGrid: boolean;
-  /**
-   * Build-time viewer presentation: `style` picks the look ("plain" default,
-   * "studio" for the product-shot treatment). Display-only — never affects the
-   * exported bytes or the render cache. The reference grid is NOT part of this:
-   * it's a runtime toggle seeded by `ui.grid` (see src/lib/viewerPrefs.ts).
-   */
-  viewer: { style: ViewerStyle };
+  viewer: ViewerConfig;
   /** OpenSCAD experimental features to --enable for every render. */
   features: string[];
   /** Optional build-time render tuning (heavy-render threshold + cache sizing).

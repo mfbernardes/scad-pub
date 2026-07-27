@@ -177,11 +177,6 @@
         "stl"
       ]
     },
-    "restOnGrid": {
-      "description": "Rest the model's base on z=0 instead of centring in Z (display-only).",
-      "default": false,
-      "type": "boolean"
-    },
     "fonts": {
       "description": "Bundled font files (public/fonts basenames or 'source'-relative paths).",
       "type": "array",
@@ -447,7 +442,7 @@
       "type": "string"
     },
     "ui": {
-      "description": "Build-time UI behaviour: panel/output defaults, viewer controls, labels.",
+      "description": "Build-time UI behaviour: panel/output defaults and labels.",
       "type": "object",
       "properties": {
         "panelSide": {
@@ -490,40 +485,6 @@
           "description": "Show the OpenSCAD variable name beside each parameter label.",
           "default": false,
           "type": "boolean"
-        },
-        "measure": {
-          "description": "Show the viewer's measure (ruler) toggle.",
-          "default": true,
-          "type": "boolean"
-        },
-        "viewPicker": {
-          "description": "Show the camera-angle cube button.",
-          "default": true,
-          "type": "boolean"
-        },
-        "reset": {
-          "description": "Show the 'reset view' button.",
-          "default": true,
-          "type": "boolean"
-        },
-        "zoom": {
-          "description": "Show explicit zoom in/out buttons.",
-          "default": false,
-          "type": "boolean"
-        },
-        "fullscreen": {
-          "description": "Show the fullscreen toggle (browser tabs only).",
-          "default": true,
-          "type": "boolean"
-        },
-        "grid": {
-          "description": "Seeds the viewer's reference-grid toggle on first visit.",
-          "default": "off",
-          "type": "string",
-          "enum": [
-            "off",
-            "on"
-          ]
         },
         "saveImage": {
           "description": "Show the 'Save image (PNG)' action.",
@@ -572,7 +533,7 @@
       "additionalProperties": false
     },
     "viewer": {
-      "description": "The 3D viewer's presentation, fixed at build time.",
+      "description": "The 3D viewer's presentation, framing, and per-control visibility, fixed at build time.",
       "type": "object",
       "properties": {
         "style": {
@@ -583,6 +544,52 @@
             "plain",
             "studio"
           ]
+        },
+        "restOnGrid": {
+          "description": "Rest the model's base on the z=0 grid instead of centring in Z (display-only).",
+          "default": false,
+          "type": "boolean"
+        },
+        "grid": {
+          "description": "Seeds the viewer's reference-grid toggle's first-ever value. The toggle itself is always offered — this is not a visibility flag, unlike 'controls' below — and a visitor's own later choice persists and wins on every subsequent visit.",
+          "default": "off",
+          "type": "string",
+          "enum": [
+            "off",
+            "on"
+          ]
+        },
+        "controls": {
+          "description": "Visibility of the individual viewer HUD control buttons. None of these hide the 3D canvas itself.",
+          "type": "object",
+          "properties": {
+            "measure": {
+              "description": "Show the viewer's measure (ruler) toggle.",
+              "default": true,
+              "type": "boolean"
+            },
+            "viewPicker": {
+              "description": "Show the camera-angle cube button.",
+              "default": true,
+              "type": "boolean"
+            },
+            "reset": {
+              "description": "Show the 'reset view' button.",
+              "default": true,
+              "type": "boolean"
+            },
+            "zoom": {
+              "description": "Show explicit zoom in/out buttons.",
+              "default": false,
+              "type": "boolean"
+            },
+            "fullscreen": {
+              "description": "Show the fullscreen toggle (browser tabs only).",
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

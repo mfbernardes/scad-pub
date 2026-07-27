@@ -27,7 +27,6 @@ import {
   parseFileImport,
   parsePopup,
   parseFormat,
-  parseRestOnGrid,
   parseViewer,
   parseNotices,
   parseUi,
@@ -290,7 +289,7 @@ test("render tuning and defaultDesign pass through to the schema", () => {
   assert.deepEqual(schema.render, { heavyMs: 9000, cache: { maxEntries: 4, persistent: false } });
   assert.equal(schema.defaultDesign, "collapsible");
   assert.deepEqual(schema.fileImport, { maxBytes: 1048576 });
-  assert.equal(schema.ui.fullscreen, false);
+  assert.equal(schema.viewer.controls.fullscreen, false);
   assert.equal(schema.ui.saveImage, false);
 });
 
@@ -774,24 +773,26 @@ test("format defaults to 3mf, accepts stl, and rejects anything else", () => {
   assert.throws(() => parseFormat("STL"), /config\.format must be/);
 });
 
-test("restOnGrid defaults to false, accepts booleans, and rejects anything else", () => {
-  assert.equal(parseRestOnGrid(undefined), false);
-  assert.equal(parseRestOnGrid(null), false);
-  assert.equal(parseRestOnGrid(true), true);
-  assert.equal(parseRestOnGrid(false), false);
-  assert.throws(() => parseRestOnGrid("true"), /config\.restOnGrid must be a boolean/);
-  assert.throws(() => parseRestOnGrid(1), /config\.restOnGrid must be a boolean/);
-});
+// `viewer` gathers every display-only viewer concern in one place: the
+// presentation style, restOnGrid framing, the grid toggle's seed value, and
+// per-control visibility (viewer.controls.*) — see this commit's message for
+// why these used to be split across the top level and `ui`.
+const VIEWER_DEFAULTS = {
+  style: "plain",
+  restOnGrid: false,
+  grid: "off",
+  controls: { measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true },
+};
 
-test("viewer defaults to the plain style, validates style, rejects junk", () => {
-  assert.deepEqual(parseViewer(undefined), { style: "plain" });
-  assert.deepEqual(parseViewer(null), { style: "plain" });
-  assert.deepEqual(parseViewer({}), { style: "plain" });
+test("viewer defaults every field (style, restOnGrid, grid, controls), validates style, rejects junk", () => {
+  assert.deepEqual(parseViewer(undefined), VIEWER_DEFAULTS);
+  assert.deepEqual(parseViewer(null), VIEWER_DEFAULTS);
+  assert.deepEqual(parseViewer({}), VIEWER_DEFAULTS);
   // An explicit null on a recognised key is "not set" too, same as omitting
   // the whole block (normalization: null == omitted, everywhere).
-  assert.deepEqual(parseViewer({ style: null }), { style: "plain" });
-  assert.deepEqual(parseViewer({ style: "studio" }), { style: "studio" });
-  assert.deepEqual(parseViewer({ style: "plain" }), { style: "plain" });
+  assert.deepEqual(parseViewer({ style: null }), VIEWER_DEFAULTS);
+  assert.deepEqual(parseViewer({ style: "studio" }), { ...VIEWER_DEFAULTS, style: "studio" });
+  assert.deepEqual(parseViewer({ style: "plain" }), VIEWER_DEFAULTS);
   // Every message now uses the one "gen-schema: '<path>' ..." prefix — viewer
   // used to read "config.<path> ..." with no quotes, an accident of predating
   // the newer convention rather than a meaningful distinction.
@@ -799,29 +800,59 @@ test("viewer defaults to the plain style, validates style, rejects junk", () => 
   assert.throws(() => parseViewer(["studio"]), /gen-schema: 'viewer' must be an object/);
   // Enum errors always say what they got now (used to be viewer/popup only).
   assert.throws(() => parseViewer({ style: "toon" }), /'viewer\.style' must be one of .* \(got "toon"\)/);
-  assert.throws(() => parseViewer({ shadow: true }), /'viewer': unknown key 'shadow'.*Valid keys: style/s);
-});
-
-test("viewer.grid is rejected as unknown — the grid belongs to ui.grid", () => {
-  // The reference grid is a persisted runtime toggle seeded by `ui.grid`; a
-  // build-time gate here would silently make that toggle a no-op. So a config
-  // carrying the retired key must FAIL loudly rather than be ignored, and the
-  // message must point at its replacement.
   assert.throws(
-    () => parseViewer({ grid: false }),
-    /'viewer': unknown key 'grid'.*ui\.grid/s
-  );
-  assert.throws(
-    () => parseViewer({ style: "studio", grid: true }),
-    /'viewer': unknown key 'grid'/
+    () => parseViewer({ shadow: true }),
+    /'viewer': unknown key 'shadow'.*Valid keys: style, restOnGrid, grid, controls/s
   );
 });
 
-test("restOnGrid is emitted to the schema and absent from renderHash (display-only)", () => {
-  // restOnGrid only changes how the viewer frames the model, not the exported
-  // bytes, so it must reach the schema without disturbing renderHash.
-  const a = run("widget.config.json").schema; // default -> false
-  assert.equal(a.restOnGrid, false);
+test("viewer.restOnGrid defaults to false, accepts booleans, and rejects anything else", () => {
+  assert.equal(parseViewer(undefined).restOnGrid, false);
+  assert.equal(parseViewer({ restOnGrid: true }).restOnGrid, true);
+  assert.equal(parseViewer({ restOnGrid: false }).restOnGrid, false);
+  assert.throws(() => parseViewer({ restOnGrid: "true" }), /'viewer\.restOnGrid' must be a boolean/);
+  assert.throws(() => parseViewer({ restOnGrid: 1 }), /'viewer\.restOnGrid' must be a boolean/);
+});
+
+test("viewer.grid defaults to off, accepts on/off, rejects anything else", () => {
+  assert.equal(parseViewer(undefined).grid, "off");
+  assert.equal(parseViewer({ grid: "on" }).grid, "on");
+  assert.equal(parseViewer({ grid: "off" }).grid, "off");
+  assert.throws(() => parseViewer({ grid: "yes" }), /'viewer\.grid' must be one of "off", "on"/);
+  assert.throws(() => parseViewer({ grid: true }), /'viewer\.grid' must be one of "off", "on"/);
+});
+
+test("viewer.controls.* each default independently and reject non-booleans", () => {
+  assert.deepEqual(parseViewer(undefined).controls, VIEWER_DEFAULTS.controls);
+  // Every default is always present, even when the config never mentions
+  // `viewer` (or `viewer.controls`) at all — matching the flat `ui.*`
+  // booleans these fields replace, which were always present too.
+  assert.deepEqual(parseViewer({}).controls, VIEWER_DEFAULTS.controls);
+  assert.deepEqual(parseViewer({ controls: {} }).controls, VIEWER_DEFAULTS.controls);
+  assert.equal(parseViewer({ controls: { measure: false } }).controls.measure, false);
+  assert.equal(parseViewer({ controls: { viewPicker: false } }).controls.viewPicker, false);
+  assert.equal(parseViewer({ controls: { reset: false } }).controls.reset, false);
+  assert.equal(parseViewer({ controls: { zoom: true } }).controls.zoom, true);
+  assert.equal(parseViewer({ controls: { fullscreen: false } }).controls.fullscreen, false);
+  assert.throws(
+    () => parseViewer({ controls: { measure: "no" } }),
+    /'viewer\.controls\.measure' must be a boolean/
+  );
+  assert.throws(
+    () => parseViewer({ controls: { zoom: 1 } }),
+    /'viewer\.controls\.zoom' must be a boolean/
+  );
+  assert.throws(
+    () => parseViewer({ controls: { shadow: true } }),
+    /'viewer\.controls': unknown key 'shadow'/
+  );
+});
+
+test("viewer is emitted to the schema and absent from renderHash (display-only)", () => {
+  // Nothing under `viewer` changes the exported bytes, so it must reach the
+  // schema without disturbing renderHash.
+  const a = run("widget.config.json").schema; // defaults throughout
+  assert.deepEqual(a.viewer, VIEWER_DEFAULTS);
 });
 
 test("format is emitted to the schema and folded into renderHash", () => {
@@ -947,48 +978,6 @@ test("ui.showVarName defaults to false, accepts a boolean, rejects non-booleans"
   assert.throws(() => parseUi({ showVarName: 1 }), /'ui\.showVarName' must be a boolean/);
 });
 
-test("ui.measure defaults to true, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseUi(undefined).measure, true);
-  assert.equal(parseUi({}).measure, true);
-  assert.equal(parseUi({ measure: true }).measure, true);
-  assert.equal(parseUi({ measure: false }).measure, false);
-  assert.throws(() => parseUi({ measure: "no" }), /'ui\.measure' must be a boolean/);
-  assert.throws(() => parseUi({ measure: 0 }), /'ui\.measure' must be a boolean/);
-});
-
-test("ui.viewPicker defaults to true, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseUi(undefined).viewPicker, true);
-  assert.equal(parseUi({}).viewPicker, true);
-  assert.equal(parseUi({ viewPicker: false }).viewPicker, false);
-  assert.throws(() => parseUi({ viewPicker: "no" }), /'ui\.viewPicker' must be a boolean/);
-  assert.throws(() => parseUi({ viewPicker: 1 }), /'ui\.viewPicker' must be a boolean/);
-});
-
-test("ui.reset defaults to true, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseUi(undefined).reset, true);
-  assert.equal(parseUi({}).reset, true);
-  assert.equal(parseUi({ reset: false }).reset, false);
-  assert.throws(() => parseUi({ reset: "no" }), /'ui\.reset' must be a boolean/);
-  assert.throws(() => parseUi({ reset: 1 }), /'ui\.reset' must be a boolean/);
-});
-
-test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseUi(undefined).zoom, false);
-  assert.equal(parseUi({}).zoom, false);
-  assert.equal(parseUi({ zoom: true }).zoom, true);
-  assert.throws(() => parseUi({ zoom: "no" }), /'ui\.zoom' must be a boolean/);
-  assert.throws(() => parseUi({ zoom: 1 }), /'ui\.zoom' must be a boolean/);
-});
-
-test("ui.grid defaults to off, accepts on/off, rejects anything else", () => {
-  assert.equal(parseUi(undefined).grid, "off");
-  assert.equal(parseUi({}).grid, "off");
-  assert.equal(parseUi({ grid: "on" }).grid, "on");
-  assert.equal(parseUi({ grid: "off" }).grid, "off");
-  assert.throws(() => parseUi({ grid: "yes" }), /'ui\.grid' must be one of "off", "on"/);
-  assert.throws(() => parseUi({ grid: true }), /'ui\.grid' must be one of "off", "on"/);
-});
-
 test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
   assert.equal(parseUi(undefined).presetsLabel, "Presets");
   assert.equal(parseUi(undefined).parametersLabel, "Customize");
@@ -1007,7 +996,7 @@ test("ui: an explicit null is equivalent to omitting the key, for every field ki
   // hand-written JSON config has no comments to delete a line with, so an
   // explicit null is how an author says "leave this alone", not a typo.
   assert.equal(parseUi({ showVarName: null }).showVarName, false); // boolean
-  assert.equal(parseUi({ grid: null }).grid, "off"); // enum
+  assert.equal(parseUi({ install: null }).install, "auto"); // enum
   assert.equal(parseUi({ presetsLabel: null }).presetsLabel, "Presets"); // string
   assert.equal(parseUi({ saveImage: null }).saveImage, undefined); // no-default boolean
 });
@@ -1458,13 +1447,6 @@ test("parseStrings: absent -> {}, a known key overrides, an unknown key fails wi
     () => parseStrings({ "action.export": 5 }, validKeys),
     /'strings\.action\.export' must be a string/
   );
-});
-
-test("parseUi: fullscreen defaults true and validates", () => {
-  assert.equal(parseUi(undefined).fullscreen, true);
-  assert.equal(parseUi({}).fullscreen, true);
-  assert.equal(parseUi({ fullscreen: false }).fullscreen, false);
-  assert.throws(() => parseUi({ fullscreen: "no" }), /'ui\.fullscreen' must be a boolean/);
 });
 
 test("parseUi: saveImage is absent by default, carried only when set, rejects non-booleans", () => {

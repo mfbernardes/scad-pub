@@ -2,6 +2,11 @@
 // by scripts/gen-schema.mjs and imported as a typed JSON blob; validating its
 // shape on load turns generator/type drift into a clear, immediate error instead
 // of a confusing failure deep inside a render.
+//
+// Rule this file follows (see src/openscad/types.ts for the full statement):
+// designs.json is the app-facing artifact and may differ from the config
+// surface where the app's needs differ, but where both express the same
+// grouping — as `viewer` now does on both sides — they mirror each other.
 import type { Schema, Design, Param } from "../openscad/types";
 
 const PARAM_TYPES = ["number", "boolean", "enum", "string"];
@@ -253,21 +258,31 @@ export function validateSchema(raw: unknown): Schema {
     for (const key of ["gallery", "essentials"] as const)
       if (ui[key] !== undefined && typeof ui[key] !== "boolean")
         fail(`'ui.${key}' must be a boolean`);
-    if (ui.measure !== undefined && typeof ui.measure !== "boolean")
-      fail("'ui.measure' must be a boolean");
-    if (ui.viewPicker !== undefined && typeof ui.viewPicker !== "boolean")
-      fail("'ui.viewPicker' must be a boolean");
-    if (ui.reset !== undefined && typeof ui.reset !== "boolean")
-      fail("'ui.reset' must be a boolean");
-    if (ui.zoom !== undefined && typeof ui.zoom !== "boolean")
-      fail("'ui.zoom' must be a boolean");
-    if (ui.fullscreen !== undefined && typeof ui.fullscreen !== "boolean")
-      fail("'ui.fullscreen' must be a boolean");
-    if (ui.grid !== undefined && !["off", "on"].includes(ui.grid as string))
-      fail("'ui.grid' must be \"off\" or \"on\"");
     for (const key of ["presetsLabel", "parametersLabel"] as const)
       if (ui[key] !== undefined && typeof ui[key] !== "string")
         fail(`'ui.${key}' must be a string`);
+  }
+  // The 3D viewer's presentation, framing, and per-control visibility. Unlike
+  // `ui` above this is required (see the Schema/ViewerConfig types) — every
+  // config produces one, since parseViewer always returns an object.
+  if (typeof s.viewer !== "object" || s.viewer === null || Array.isArray(s.viewer))
+    fail("'viewer' must be an object");
+  {
+    const v = s.viewer as Record<string, unknown>;
+    if (v.style !== "plain" && v.style !== "studio")
+      fail("'viewer.style' must be \"plain\" or \"studio\"");
+    if (v.restOnGrid !== undefined && typeof v.restOnGrid !== "boolean")
+      fail("'viewer.restOnGrid' must be a boolean");
+    if (v.grid !== undefined && !["off", "on"].includes(v.grid as string))
+      fail("'viewer.grid' must be \"off\" or \"on\"");
+    if (v.controls != null) {
+      if (typeof v.controls !== "object" || Array.isArray(v.controls))
+        fail("'viewer.controls' must be an object");
+      const c = v.controls as Record<string, unknown>;
+      for (const key of ["measure", "viewPicker", "reset", "zoom", "fullscreen"] as const)
+        if (c[key] !== undefined && typeof c[key] !== "boolean")
+          fail(`'viewer.controls.${key}' must be a boolean`);
+    }
   }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;

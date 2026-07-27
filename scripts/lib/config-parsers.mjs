@@ -49,15 +49,11 @@ function stringFieldError(path, field) {
 }
 
 // The error a nested object's unrecognised key throws, built entirely from
-// the spec node so the "valid keys" list can never go stale. `node.hints`
-// (see config-spec.mjs) optionally appends a migration note for a
-// specifically-named retired key (only `viewer.grid` uses this today).
+// the spec node so the "valid keys" list can never go stale.
 function unknownNestedKeyError(path, node, key) {
-  const hint = node.hints?.[key];
   return new Error(
     `${messagePrefix(path)}: unknown key '${key}'.\n` +
-      `  Valid keys: ${Object.keys(node.properties).join(", ")}` +
-      (hint ? `\n  (${hint})` : "")
+      `  Valid keys: ${Object.keys(node.properties).join(", ")}`
   );
 }
 
@@ -93,7 +89,12 @@ function validateFieldValue(value, field, path) {
       return value.trim();
     }
     case "object":
-      return applyGroupSpec(value, field, path);
+      // `?? {}` covers both an explicit `null`/absent value on a `required`
+      // or `alwaysPresent` field (see applyGroupSpec below) — those bypass
+      // the ordinary "missing -> skip" path specifically so a nested group's
+      // own defaults still resolve, and need something object-shaped to
+      // recurse into.
+      return applyGroupSpec(value ?? {}, field, path);
     default:
       throw new Error(`config-spec: unsupported field type '${field.type}' at '${path}'`);
   }
@@ -117,7 +118,13 @@ export function applyGroupSpec(raw, node, path) {
   for (const [key, field] of Object.entries(node.properties)) {
     const value = raw[key];
     const missing = value === undefined || value === null;
-    if (!field.required && missing) continue;
+    // `alwaysPresent` (see config-spec.mjs's file-top comment) is
+    // `required`'s sibling for a nested object field whose OWN properties
+    // carry defaults (`viewer.controls`): it must resolve even when the
+    // parent omits it entirely, so those defaults still populate — contrast
+    // an ordinary optional nested group (`render.cache`, `ui.afterExport`),
+    // which stays entirely absent unless the config sets it.
+    if (!field.required && !field.alwaysPresent && missing) continue;
     const result = validateFieldValue(value, field, `${path}.${key}`);
     // A nested object field (render.cache) that collapses an empty result to
     // `null` is omitted from its parent entirely, matching e.g.
@@ -188,32 +195,24 @@ export function parseFormat(raw) {
   return raw;
 }
 
-// Validate the optional `restOnGrid` config key. When true the viewer rests a
-// loaded model's base on the z=0 grid (X/Y centred); when false (the default)
-// it centres the model on the origin in all three axes, as it always has. This
-// only affects how the viewer frames the geometry, not the exported bytes, so
-// it stays out of renderHash.
-export function parseRestOnGrid(raw) {
-  if (raw == null) return false;
-  if (typeof raw !== "boolean")
-    throw new Error(
-      `config.restOnGrid must be a boolean (got ${JSON.stringify(raw)})`
-    );
-  return raw;
-}
-
-// Validate the optional `viewer` config key — the 3D viewer's presentation,
-// fixed at build time. Its only key is `style`, which picks the look: "plain"
-// (the default) is the classic CAD preview; "studio" adds image-based studio
-// lighting, tone mapping, and a soft contact shadow under the model for a
-// product-shot look. Display-only: it doesn't affect the exported bytes, so —
-// like restOnGrid — it stays out of renderHash.
-//
-// The reference grid is deliberately NOT configured here. It is a runtime
-// toggle the visitor owns, seeded once by `ui.grid` and persisted thereafter
-// (see parseUi and src/lib/viewerPrefs.ts); a build-time gate here would make
-// that toggle a no-op. A config still passing `viewer.grid` therefore fails as
-// an unknown key rather than being silently ignored.
+// Validate the optional `viewer` config key — everything display-only the 3D
+// viewer owns, fixed at build time and absent from renderHash (none of it
+// affects the exported bytes):
+//   - `style` picks the look: "plain" (the default) is the classic CAD
+//     preview; "studio" adds image-based studio lighting, tone mapping, and a
+//     soft contact shadow under the model for a product-shot look.
+//   - `restOnGrid`: when true, the viewer rests a loaded model's base on the
+//     z=0 grid (X/Y centred); when false (the default) it centres the model
+//     on the origin in all three axes, as it always has.
+//   - `grid` seeds the viewer's reference-grid toggle's first-ever value.
+//     Unlike `controls` below this is NOT a control-visibility flag — the
+//     grid toggle is always offered regardless, and a visitor's own later
+//     choice (persisted client-side, see src/lib/viewerPrefs.ts) wins on
+//     every subsequent visit. That's exactly why it lives directly on
+//     `viewer` rather than inside `controls`.
+//   - `controls.{measure,viewPicker,reset,zoom,fullscreen}`: each shows or
+//     hides one HUD button; every default matches the flat `ui.*` booleans
+//     these replace.
 export function parseViewer(raw) {
   return applyGroupSpec(raw ?? {}, CONFIG_SPEC.viewer, "viewer");
 }
@@ -400,12 +399,14 @@ export function parseNotices(raw) {
 }
 
 // Validate and normalise the optional `ui` config block: build-time UI
-// behaviour overrides (panel/output defaults, viewer controls, labels, and
-// the nested `afterExport` panel — `helpTab`'s cross-check against a real
+// behaviour overrides (panel/output defaults, labels, and the nested
+// `afterExport` panel — `helpTab`'s cross-check against a real
 // `help.tabs[].label` can't happen here, since `help` isn't available yet; it
 // stays a cross-field check in gen-schema.mjs's generate(), search that file
-// for 'ui.afterExport.helpTab'). None of it affects geometry (absent from
-// renderHash). Returns CONFIG_SPEC.ui's defaults object when `ui` is omitted.
+// for 'ui.afterExport.helpTab'). The viewer's own controls live under
+// `viewer.controls` now (see parseViewer) — not here. None of it affects
+// geometry (absent from renderHash). Returns CONFIG_SPEC.ui's defaults object
+// when `ui` is omitted.
 export function parseUi(raw) {
   return applyGroupSpec(raw ?? {}, CONFIG_SPEC.ui, "ui");
 }

@@ -57,12 +57,14 @@
 // comment); `collapseEmptyToNull` (an empty `{}` disappears entirely for a
 // pure tuning knob like `render`/`render.cache` — contrast `ui.afterExport`,
 // where the key's mere presence, even empty, is itself the "show the panel"
-// toggle); `rootTypeError` (a plain-string override describing a field's
-// actual accepted shapes — `fileImport` is `true`/an object/`null`, `popup`
-// needs `header`+`body` — genuinely more useful than the generic message);
-// and `hints` (`{ [retiredKey]: "..." }`, appended to that key's unknown-key
-// error — only `viewer` uses it, to point a config still carrying the
-// retired `viewer.grid` at its replacement `ui.grid`).
+// toggle); `alwaysPresent` (the opposite problem: a nested group whose OWN
+// fields carry defaults that must resolve even when the config omits the
+// group entirely — only `viewer.controls` uses it today, since it replaces
+// what used to be flat `ui.*` booleans that were always present with a
+// built-in default; see `applyGroupSpec` in ./config-parsers.mjs); and
+// `rootTypeError` (a plain-string override describing a field's actual
+// accepted shapes — `fileImport` is `true`/an object/`null`, `popup` needs
+// `header`+`body` — genuinely more useful than the generic message).
 
 // ── Small factories for the repeated field shapes (still plain data — these
 // just save re-typing the same few keys 30 times over). ────────────────────
@@ -103,6 +105,24 @@ const AFTER_EXPORT_SPEC = {
     helpTab: str({
       description: "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
     }),
+  },
+};
+
+// ── `viewer.controls` — nested under `viewer` below. `alwaysPresent: true`
+// (see the file-top comment) is what makes its five booleans behave like the
+// flat `ui.*` booleans they replace: always resolved to their default even
+// when the config sets neither `viewer` nor `viewer.controls` at all, rather
+// than silently absent the way `render.cache`/`ui.afterExport` are when unset.
+const VIEWER_CONTROLS_SPEC = {
+  type: "object",
+  alwaysPresent: true,
+  description: "Visibility of the individual viewer HUD control buttons. None of these hide the 3D canvas itself.",
+  properties: {
+    measure: bool(true, { description: "Show the viewer's measure (ruler) toggle." }),
+    viewPicker: bool(true, { description: "Show the camera-angle cube button." }),
+    reset: bool(true, { description: "Show the 'reset view' button." }),
+    zoom: bool(false, { description: "Show explicit zoom in/out buttons." }),
+    fullscreen: bool(true, { description: "Show the fullscreen toggle (browser tabs only)." }),
   },
 };
 
@@ -218,7 +238,6 @@ export const CONFIG_SPEC = {
   // — Rendering —
   features: { type: "array", items: { type: "string" }, description: "OpenSCAD --enable=<feature> flags applied to every render." },
   format: { type: "enum", values: ["3mf", "stl"], default: "3mf", description: "Export/preview model format." },
-  restOnGrid: { type: "boolean", default: false, description: "Rest the model's base on z=0 instead of centring in Z (display-only)." },
   fonts: { type: "array", items: { type: "string" }, description: "Bundled font files (public/fonts basenames or 'source'-relative paths)." },
   fontFallback: { type: "string", description: "A bundled family pinned as fontconfig's last-resort default." },
   render: {
@@ -254,19 +273,13 @@ export const CONFIG_SPEC = {
   extraCss: { type: "string", description: "Raw-CSS stylesheet path (config-relative), loaded after the app's own styles." },
   ui: {
     type: "object",
-    description: "Build-time UI behaviour: panel/output defaults, viewer controls, labels.",
+    description: "Build-time UI behaviour: panel/output defaults and labels.",
     properties: {
       panelSide: enumField(["left", "right"], "left", { description: "Which edge the desktop parameter panel docks against." }),
       panelDefault: enumField(["open", "collapsed"], "open", { description: "First-load desktop panel state." }),
       outputDefault: enumField(["closed", "open"], "closed", { description: "Whether the OpenSCAD output console starts open." }),
       install: enumField(["auto", "off"], "auto", { description: "PWA install affordance; 'off' hides it entirely." }),
       showVarName: bool(false, { description: "Show the OpenSCAD variable name beside each parameter label." }),
-      measure: bool(true, { description: "Show the viewer's measure (ruler) toggle." }),
-      viewPicker: bool(true, { description: "Show the camera-angle cube button." }),
-      reset: bool(true, { description: "Show the 'reset view' button." }),
-      zoom: bool(false, { description: "Show explicit zoom in/out buttons." }),
-      fullscreen: bool(true, { description: "Show the fullscreen toggle (browser tabs only)." }),
-      grid: enumField(["off", "on"], "off", { description: "Seeds the viewer's reference-grid toggle on first visit." }),
       // No `default` key: present only when the config sets it, matching
       // `parseUi(undefined).saveImage === undefined` (unlike the toggles
       // above, which always carry a built-in default).
@@ -278,18 +291,36 @@ export const CONFIG_SPEC = {
       afterExport: AFTER_EXPORT_SPEC,
     },
   },
+  // Everything display-only the 3D viewer owns, gathered in one place rather
+  // than spread across the top level (`restOnGrid`) and `ui` (`grid`, and the
+  // five per-control booleans) — see this commit's message for why that
+  // spread was the wrong boundary. None of it affects the exported bytes or
+  // the render cache.
   viewer: {
     type: "object",
-    description: "The 3D viewer's presentation, fixed at build time.",
-    rootTypeError: "gen-schema: 'viewer' must be an object with an optional 'style' key",
-    // `viewer.grid` was retired in favour of `ui.grid` (see parseViewer's own
-    // doc comment); a config still carrying it must fail loudly rather than
-    // silently no-op, and the error should say where it moved.
-    hints: { grid: "the reference grid is now seeded by 'ui.grid', not 'viewer.grid'" },
+    description: "The 3D viewer's presentation, framing, and per-control visibility, fixed at build time.",
+    rootTypeError:
+      "gen-schema: 'viewer' must be an object with optional 'style', 'restOnGrid', 'grid' and 'controls' keys",
     properties: {
       style: enumField(["plain", "studio"], "plain", {
         description: "'plain' is the classic CAD preview; 'studio' adds image-based lighting and a contact shadow.",
       }),
+      restOnGrid: bool(false, {
+        description: "Rest the model's base on the z=0 grid instead of centring in Z (display-only).",
+      }),
+      // NOT a control-visibility flag like its `controls` neighbours below —
+      // the grid toggle is always offered regardless of this value. It only
+      // seeds that toggle's first-ever value; a visitor's own later choice
+      // persists and wins forever after (see src/lib/viewerPrefs.ts). That
+      // distinction is exactly why this sits directly on `viewer` rather than
+      // inside `viewer.controls`.
+      grid: enumField(["off", "on"], "off", {
+        description:
+          "Seeds the viewer's reference-grid toggle's first-ever value. The toggle itself is always offered — " +
+          "this is not a visibility flag, unlike 'controls' below — and a visitor's own later choice persists " +
+          "and wins on every subsequent visit.",
+      }),
+      controls: VIEWER_CONTROLS_SPEC,
     },
   },
   fileImport: {

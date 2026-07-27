@@ -6,7 +6,8 @@
   "defaultDesign": "collapsible",
   "render": { "heavyMs": 9000, "cache": { "maxEntries": 4, "persistent": false } },
   "fileImport": { "maxBytes": 1048576 },
-  "ui": { "fullscreen": false, "saveImage": false },
+  "ui": { "saveImage": false },
+  "viewer": { "controls": { "fullscreen": false } },
   "screenshots": [
     { "src": "logo.svg", "sizes": "390x844", "form_factor": "narrow", "label": "Home screen", "platform": "android" }
   ],
