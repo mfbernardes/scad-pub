@@ -868,9 +868,11 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
 
 // On-model text editing ("type on the sign") — exercised on the example "tag"
 // design, whose `label` param is annotated `// @editOnModel`. Covers the pointer
-// path (click the mesh → floating editor → type → panel + render follow), the
-// keyboard/AT path (the pencil chip), Escape-reverts, and axe with the editor
-// open. Runs only when "tag" is present.
+// path (click the mesh → floating editor → type → panel + render follow),
+// Escape-reverts, and axe with the editor open. The feature is deliberately
+// pointer-only and carries no permanent affordance over the viewer (the panel's
+// own text box is the canonical, keyboard-reachable path), which the first check
+// pins. Runs only when "tag" is present.
 async function checkEditOnModel({ page, check, ids, paramsTabName }) {
   if (!ids.includes("tag")) {
     console.log('=== on-model text editing (@editOnModel, tag) === (no "tag" design in this config — skipped)');
@@ -880,11 +882,13 @@ async function checkEditOnModel({ page, check, ids, paramsTabName }) {
   await selectDesign(page, "tag");
   await waitRendered(page, "tag (edit-on-model)");
 
-  // The always-visible pencil chip is the discoverable, keyboard-reachable
-  // affordance. Only the active (desktop) layout is mounted, so there's one.
-  const chip = page.locator(".viewer-edit-chip");
-  await chip.first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
-  check((await chip.count()) === 1, "the edit-on-model pencil chip is shown for @editOnModel");
+  // Nothing floats over the viewer for this feature until the model is clicked:
+  // the retired pencil chip sat top-left on mobile, over the measurements panel.
+  check(
+    (await page.locator(".viewer-edit-chip").count()) === 0 &&
+      (await page.locator(".model-text-editor").count()) === 0,
+    "on-model editing adds no permanent affordance over the viewer"
+  );
 
   const labelInput = () => paramRow(page, "label").locator('input[type="text"]');
   const editor = page.locator(".model-text-editor");
@@ -933,20 +937,9 @@ async function checkEditOnModel({ page, check, ids, paramsTabName }) {
   await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
   check((await labelInput().inputValue()) === typed, "the panel's text input shows the on-model edit");
 
-  // Keyboard path: focus the chip and open the editor from it (Enter). Focus
-  // must land in the input.
-  await chip.first().focus();
-  check(
-    await page.evaluate(() => document.activeElement?.classList.contains("viewer-edit-chip")),
-    "the pencil chip is keyboard-focusable"
-  );
-  await page.keyboard.press("Enter");
-  const kbOpened = await editor
-    .first()
-    .waitFor({ state: "visible", timeout: 3000 })
-    .then(() => true)
-    .catch(() => false);
-  check(kbOpened, "the pencil chip opens the editor (keyboard path)");
+  // Reopen from the mesh — focus must land in the input, so typing needs no
+  // second click.
+  check(await clickModel(), "clicking the model reopens the editor");
   check(
     await page.evaluate((id) => document.activeElement?.id === id, "model-text-editor-input"),
     "focus lands in the editor input on open"
@@ -963,8 +956,7 @@ async function checkEditOnModel({ page, check, ids, paramsTabName }) {
   );
 
   // Accessibility: no serious/critical axe violation with the editor open.
-  await chip.first().click();
-  await editor.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+  check(await clickModel(), "the editor opens for the accessibility pass");
   await page.addScriptTag({
     path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
   });

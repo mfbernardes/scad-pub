@@ -1,22 +1,24 @@
-// ViewerEditOnModel.tsx — the on-model text-editing surface floated over the
-// viewer: an always-visible "edit" pencil chip (the keyboard/AT path) plus the
-// floating inline text editor that a click/tap on the mesh — or the chip —
-// opens. It's mounted by ViewerStage only for a design that declares an
+// ViewerEditOnModel.tsx — the floating inline text editor a click/tap on the
+// rendered mesh opens: direct on-model editing for a design that declares an
 // `@editOnModel` string param (see src/lib/editOnModel.ts + docs/annotations.md).
 //
-// State (open/anchor) lives in ViewerStage so it can wire the Viewer's mesh
-// pick and suppress the one-time gesture hint while editing; this component owns
-// the editor's clamped positioning and focus handling. Each keystroke calls the
-// same AppActions `change(param, value)` the panel's text box does — identical
+// It is deliberately a *shortcut only*. The canonical way to change the value is
+// the same param's text box in the Customize panel, which is always present and
+// fully keyboard-reachable; this is the "type on the sign" convenience over the
+// model, opened by a pointer gesture and by nothing else. There is no chip or
+// other permanent affordance over the viewer — one used to sit at the viewer's
+// top-left on mobile, where it covered the measurements panel, and the panel's
+// own text box already carries the accessible path.
+//
+// State (open/anchor) lives in ViewerStage so it can wire the Viewer's mesh pick
+// and suppress the one-time gesture hint while editing; this component owns the
+// card's clamped positioning and focus handling. Each keystroke calls the same
+// AppActions `change(param, value)` the panel's text box does — identical
 // debounced auto-render, StaleBanner, everything — so there's no special render
 // path here.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Pencil as EditIcon } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Param } from "../openscad/types";
-import { IconButton } from "./IconButton";
-import { HUD_GLASS_BTN } from "./ViewPicker";
 import { Input } from "./ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { useAppActions } from "../lib/appActions";
 import { clampEditorPosition, type Point } from "../lib/editOnModel";
 import { t } from "../lib/i18n";
@@ -32,103 +34,25 @@ interface Props {
   param: Param;
   /** The param's current live value (prefilled into the editor on open). */
   value: string;
-  /** Whether a model is shown (last render succeeded) — gates the chip. */
-  ready: boolean;
-  /** Whether the editor is open. */
-  open: boolean;
-  /** Where the mesh click landed (px, viewer-relative), or null for the chip
-   *  (centered / top-anchored). */
+  /** Where the mesh click landed (px, viewer-relative). */
   anchor: Point | null;
   /** Mobile layout: pin the editor toward the top, clear of the keyboard. */
   mobile: boolean;
   /** The `.viewer-wrap` element, measured to clamp the editor within bounds. */
   wrapRef: React.RefObject<HTMLDivElement | null>;
-  /** Open the editor centered (the chip's action). */
-  onOpenCentered: () => void;
   /** Close the editor. */
   onClose: () => void;
 }
 
-export function ViewerEditOnModel({
-  param,
-  value,
-  ready,
-  open,
-  anchor,
-  mobile,
-  wrapRef,
-  onOpenCentered,
-  onClose,
-}: Props) {
-  const chipRef = useRef<HTMLButtonElement>(null);
-
-  // Close, optionally returning focus to the chip (the keyboard path: Enter /
-  // Escape). A blur-close (clicking elsewhere) leaves focus where the click
-  // put it. rAF so the chip is back in the DOM after the editor unmounts.
-  const handleClose = useCallback(
-    (restoreFocus: boolean) => {
-      onClose();
-      if (restoreFocus) requestAnimationFrame(() => chipRef.current?.focus());
-    },
-    [onClose]
-  );
-
-  const label = t("editOnModel.open");
-  return (
-    <>
-      {ready && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <IconButton
-              ref={chipRef}
-              label={label}
-              className={`viewer-edit-chip ${HUD_GLASS_BTN}`}
-              onClick={onOpenCentered}
-            >
-              <EditIcon size={16} />
-            </IconButton>
-          </TooltipTrigger>
-          <TooltipContent side="right">{label}</TooltipContent>
-        </Tooltip>
-      )}
-      {open && (
-        <ModelTextEditor
-          key={param.name}
-          param={param}
-          initialValue={value}
-          anchor={anchor}
-          mobile={mobile}
-          wrapRef={wrapRef}
-          onClose={handleClose}
-        />
-      )}
-    </>
-  );
-}
-
-function ModelTextEditor({
-  param,
-  initialValue,
-  anchor,
-  mobile,
-  wrapRef,
-  onClose,
-}: {
-  param: Param;
-  initialValue: string;
-  anchor: Point | null;
-  mobile: boolean;
-  wrapRef: React.RefObject<HTMLDivElement | null>;
-  onClose: (restoreFocus: boolean) => void;
-}) {
+export function ViewerEditOnModel({ param, value, anchor, mobile, wrapRef, onClose }: Props) {
   const { change } = useAppActions();
   // Local text keeps the input from resetting when change() re-renders the
   // whole app (the panel's own string box works the same way).
-  const [text, setText] = useState(initialValue);
+  const [text, setText] = useState(value);
   // The value at open time, for Escape's single-shot revert.
-  const initialRef = useRef(initialValue);
+  const initialRef = useRef(value);
   // First close wins: Enter/Escape close, then the input's own unmount fires a
-  // blur that must not re-run onClose (and clobber the focus-restore choice).
+  // blur that must not re-run onClose.
   const closedRef = useRef(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -154,16 +78,19 @@ function ModelTextEditor({
     card.style.top = `${pos.top}px`;
   }, [anchor, mobile, wrapRef]);
 
-  const finish = (restoreFocus: boolean) => {
+  // Closing doesn't restore focus anywhere: the editor is only ever opened by a
+  // pointer gesture on the mesh, so there is no originating control to return
+  // to (and the viewer wrap isn't focusable).
+  const finish = () => {
     if (closedRef.current) return;
     closedRef.current = true;
-    onClose(restoreFocus);
+    onClose();
   };
   const revertAndClose = () => {
     if (closedRef.current) return;
     change(param.name, initialRef.current); // single change() back to the value at open
     closedRef.current = true;
-    onClose(true);
+    onClose();
   };
 
   const label = param.description || t("editOnModel.label");
@@ -192,14 +119,14 @@ function ModelTextEditor({
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            finish(true);
+            finish();
           } else if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
             revertAndClose();
           }
         }}
-        onBlur={() => finish(false)}
+        onBlur={finish}
       />
     </div>
   );

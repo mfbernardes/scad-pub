@@ -93,9 +93,12 @@ export function ViewerStage({
   // ── On-model text editing ("type on the sign") ───────────────────────────
   // Active when the design declares an `@editOnModel` string param; the mesh
   // click is offered only once a model is shown (ready = last render ok), like
-  // the HUD/gesture hint. The editor's open/anchor state lives here so it can
-  // both receive the Viewer's mesh pick AND suppress the one-time gesture hint
-  // while the editor is up (they'd otherwise overlap bottom-centre).
+  // the HUD/gesture hint. That click is the *only* way in — the shortcut carries
+  // no permanent affordance over the viewer, because the same param's text box
+  // in the panel is the canonical (and keyboard-reachable) edit path. The
+  // editor's open/anchor state lives here so it can both receive the Viewer's
+  // mesh pick AND suppress the one-time gesture hint while the editor is up
+  // (they'd otherwise overlap bottom-centre).
   const editParam = useMemo(() => editOnModelParam(design), [design]);
   const modelReady = !!result?.ok;
   const editable = !!editParam && modelReady;
@@ -104,10 +107,6 @@ export function ViewerStage({
   const [editAnchor, setEditAnchor] = useState<Point | null>(null);
   const openEditAt = useCallback((pos: Point) => {
     setEditAnchor(pos);
-    setEditOpen(true);
-  }, []);
-  const openEditCentered = useCallback(() => {
-    setEditAnchor(null);
     setEditOpen(true);
   }, []);
   const closeEdit = useCallback(() => setEditOpen(false), []);
@@ -190,20 +189,19 @@ export function ViewerStage({
         />
       )}
 
-      {/* On-model text editing: the always-visible pencil chip (keyboard/AT
-          path) plus the floating editor a mesh click or the chip opens. Only
-          mounted for a design that declares an `@editOnModel` param — a
-          design change can drop that param while the editor is open. */}
-      {editParam ? (
+      {/* On-model text editing: the floating editor a mesh click opens. Mounted
+          only while open, and only for a design that declares an `@editOnModel`
+          param — a design change can drop that param while the editor is up.
+          Keyed by the param so switching designs never carries the previous
+          design's draft text over. */}
+      {editParam && editOpen ? (
         <ViewerEditOnModel
+          key={editParam.name}
           param={editParam}
           value={editValue}
-          ready={modelReady}
-          open={editOpen}
           anchor={editAnchor}
           mobile={mobile}
           wrapRef={wrapRef}
-          onOpenCentered={openEditCentered}
           onClose={closeEdit}
         />
       ) : null}

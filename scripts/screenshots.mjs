@@ -57,9 +57,9 @@ async function shoot(page, base, theme) {
   await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});
   await page.waitForSelector(".param-form", { timeout: 30000 });
   // Wait for the render to actually finish before shooting, so the render-gated
-  // viewer chrome that ISN'T masked — the status strip, the on-model edit chip
-  // (.viewer-edit-chip), the HUD — is deterministically present rather than
-  // sometimes caught mid-build. The canvas + loading overlay themselves stay
+  // viewer chrome that ISN'T masked — the status strip, the HUD — is
+  // deterministically present rather than sometimes caught mid-build. The
+  // canvas + loading overlay themselves stay
   // masked (MASK_CSS); this only pins the surrounding chrome's state.
   await waitRendered(page).catch(() => {});
   await page.addStyleTag({ content: MASK_CSS });
