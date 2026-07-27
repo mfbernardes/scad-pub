@@ -116,13 +116,16 @@ export interface ParamBase {
 }
 
 /**
- * `@svg [layers=<param>]`: this string parameter is an SVG file prepared by the
- * in-app wizard. `layers` names a second parameter that receives the derived
- * per-region colour string (null when the field carries no `layers=` binding, so
- * the colour step is skipped entirely).
+ * `@svg [layers=<param>] [height=<param>]`: this string parameter is an SVG file
+ * prepared by the in-app wizard. `layers` names a second parameter that receives
+ * the derived per-region string (null when the field carries no `layers=`
+ * binding, so the colour step is skipped entirely). `height` names the number
+ * parameter a region's relief height falls back to, so the wizard can show that
+ * default alongside the per-region height fields (null when unbound).
  */
 export interface SvgFieldMeta {
   layers: string | null;
+  height: string | null;
 }
 
 export type Param = ParamBase &

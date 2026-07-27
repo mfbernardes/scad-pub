@@ -154,8 +154,30 @@ function missingFont(
   return available.has(normalizeFamily(familyOf(v))) ? null : v;
 }
 
+/** A parameter value as a finite number, or null when it holds anything else. */
+function asFiniteNumber(value: ParamValue | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function committedNumber(param: Extract<Param, { type: "number" }>, value: ParamValue): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : param.default;
+  return asFiniteNumber(value) ?? param.default;
+}
+
+/**
+ * Revert one parameter to the baseline — and, for an `@svg` field, its bound
+ * `layers=` parameter with it. The two are written together by the SVG wizard
+ * (the layers string names regions that exist only in the drawing it prepared),
+ * so reverting the drawing alone would leave the regions of a drawing that is no
+ * longer selected behind, and the design would fail to build.
+ */
+function revertToBaseline(
+  param: Param,
+  baseline: Values,
+  onChange: (name: string, value: ParamValue) => void,
+): void {
+  onChange(param.name, baseline[param.name]);
+  const bound = param.type === "string" ? param.svg?.layers : null;
+  if (bound && bound in baseline) onChange(bound, baseline[bound]);
 }
 
 function finiteDraft(raw: string): number | null {
@@ -258,6 +280,7 @@ function Control({
   onChange,
   installedFonts,
   availableSvgFiles,
+  svgDefaultHeight,
 }: {
   param: Param;
   value: ParamValue;
@@ -265,6 +288,7 @@ function Control({
   onChange: (v: ParamValue) => void;
   installedFonts?: InstalledFont[];
   availableSvgFiles?: Set<string>;
+  svgDefaultHeight?: number | null;
 }) {
   // A font parameter (string or enum flagged `isFont`) becomes the friendly
   // FontSelect dropdown whenever we authoritatively know what's installed —
@@ -290,6 +314,7 @@ function Control({
         label={label}
         onChange={onChange}
         availableSvgFiles={availableSvgFiles}
+        defaultHeight={svgDefaultHeight}
       />
     );
   switch (param.type) {
@@ -503,6 +528,11 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                   onChange={(v) => onChange(p.name, v)}
                   installedFonts={installedFonts}
                   availableSvgFiles={availableSvgFiles}
+                  svgDefaultHeight={
+                    p.type === "string" && p.svg?.height
+                      ? asFiniteNumber(values[p.svg.height])
+                      : null
+                  }
                 />
               );
               const body = (
@@ -539,7 +569,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                         className="param-drift-revert -m-[3px] inline-flex shrink-0 cursor-pointer items-center rounded-[4px] border-none bg-transparent p-[3px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1"
                         aria-label={`Revert ${label} to ${presetName ?? "default"}`}
                         title={`Revert to ${presetName ?? "default"}`}
-                        onClick={() => onChange(p.name, baseline[p.name])}
+                        onClick={() => revertToBaseline(p, baseline, onChange)}
                       >
                         <RevertIcon size={12} aria-hidden="true" />
                       </button>

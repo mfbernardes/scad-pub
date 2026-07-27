@@ -30,11 +30,18 @@ export { groupByColor } from "./groupByColor";
 export type { GroupByColorResult } from "./groupByColor";
 export {
   parseLayersArg,
+  parseLayerSpec,
+  formatLayerSpec,
+  isCanvasEntry,
+  canvasEntry,
+  isUsableHeight,
+  unusableHeightRegions,
   groupIndex,
   deriveRegions,
   formatLayers,
   effectiveFill,
 } from "./regions";
+export type { LayerEntry } from "./regions";
 export { contentBbox, parseViewBox, gFormat } from "./geometry";
 export type { Point, Bbox } from "./geometry";
 export type { Finding, Level, Region } from "./types";
@@ -42,7 +49,7 @@ export type { Finding, Level, Region } from "./types";
 import { check } from "./check";
 import { applyFixes } from "./fixes";
 import { groupByColor } from "./groupByColor";
-import { deriveRegions, formatLayers, parseLayersArg } from "./regions";
+import { canvasEntry, deriveRegions, formatLayers, parseLayersArg } from "./regions";
 import type { Finding, Region } from "./types";
 
 /** Above this many colour regions a multi-colour export tends to import
@@ -54,7 +61,7 @@ export const MAX_RELIABLE_REGIONS = 8;
  *  colour degrades to a blank string (no per-region split). */
 export function deriveLayers(root: Element): string {
   const regions = deriveRegions(root);
-  return regions.length >= 2 ? formatLayers(regions) : "";
+  return regions.length >= 2 ? formatLayers(regions, canvasEntry(root)) : "";
 }
 
 export interface Analysis {
@@ -74,7 +81,7 @@ export function analyze(root: Element, layersArg = ""): Analysis {
   return {
     findings,
     regions,
-    derivedLayers: regions.length >= 2 ? formatLayers(regions) : "",
+    derivedLayers: regions.length >= 2 ? formatLayers(regions, canvasEntry(root)) : "",
     hasErrors: findings.some((f) => f.level === "ERROR"),
     hasWarnings: findings.some((f) => f.level === "WARN"),
   };
@@ -142,7 +149,7 @@ export function prepareSvg(root: Element, opts: PrepareOptions): PrepareResult {
   if (opts.deriveColours) {
     changes.push(...autoGroupByColor(root));
     regions = deriveRegions(root);
-    layers = regions.length >= 2 ? formatLayers(regions) : "";
+    layers = regions.length >= 2 ? formatLayers(regions, canvasEntry(root)) : "";
   }
   const findings = check(root, layers ? parseLayersArg(layers) : []);
   return { svg: serializeSvg(root), layers, findings, regions, changes };

@@ -6,9 +6,12 @@
 import { useMemo, useRef, useState } from "react";
 import {
   check,
+  formatLayerSpec,
   isRenderableColor,
   MAX_RELIABLE_REGIONS,
+  parseLayerSpec,
   parseSvg,
+  unusableHeightRegions,
   prepareSvg,
   type Finding,
   type Region,
@@ -41,6 +44,13 @@ interface Props {
   fileName: string;
   /** True iff the field carries a `layers=` binding (derive per-region colours). */
   deriveColours: boolean;
+  /**
+   * The design's own relief height (from the field's `height=` binding), shown as
+   * the placeholder each per-region height falls back to. Null when the field
+   * binds none, in which case the heights are still editable, just without a
+   * number to show.
+   */
+  defaultHeight?: number | null;
   onCancel: () => void;
   onComplete: (result: SvgWizardResult) => void;
 }
@@ -80,7 +90,14 @@ type Step = 1 | 2 | 3;
 
 const STEP_NAMES: Record<Step, string> = { 1: "Check", 2: "Fix", 3: "Colours" };
 
-export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComplete }: Props) {
+export function SvgWizard({
+  svgText,
+  fileName,
+  deriveColours,
+  defaultHeight = null,
+  onCancel,
+  onComplete,
+}: Props) {
   // Parse once. A parse failure is a terminal state with a retry via cancel.
   const parsed = useMemo(() => {
     try {
@@ -122,8 +139,18 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
     setStep(2);
   };
 
+  // The layers string stays the single source of truth: the per-region height
+  // fields read their value out of it and write an edited one back, so a
+  // hand-edit of the string below is never silently overwritten.
+  const spec = parseLayerSpec(layers);
+  // A height a design's own parser can't use is caught here rather than at
+  // render time: the number input happily accepts 0, -2 and 1e3, and a design
+  // typically hard-fails on those instead of falling back to its relief height.
+  const badHeights = new Set(deriveColours ? unusableHeightRegions(layers) : []);
+  const blockedByHeight = badHeights.size > 0;
+
   const finish = () => {
-    if (blockedByError) return;
+    if (blockedByError || blockedByHeight) return;
     onComplete({
       svg: fixed!.svg,
       layers: deriveColours ? layers.trim() : null,
@@ -133,6 +160,15 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
   const close = (open: boolean) => {
     if (!open) onCancel();
   };
+
+  const heightOf = (id: string) => spec.entries.find((e) => e.id === id)?.height ?? "";
+  const setHeight = (id: string, height: string) =>
+    setLayers(
+      formatLayerSpec(
+        spec.canvas,
+        spec.entries.map((e) => (e.id === id ? { ...e, height: height.trim() } : e)),
+      ),
+    );
 
   return (
     <Dialog open onOpenChange={close}>
@@ -199,13 +235,13 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                   <>
                     <p className="text-sm text-muted-foreground">
                       Found {fixed.regions.length} colour regions. Each keeps its own
-                      colour on export:
+                      colour on export, and can stand at its own height:
                     </p>
                     <ul className="flex flex-col gap-1 text-sm">
                       {fixed.regions.map((r) => {
                         const showable = isRenderableColor(r.color);
                         return (
-                          <li key={r.id} className="flex items-center gap-2">
+                          <li key={r.id} className="svg-wizard__region flex items-center gap-2">
                             {showable ? (
                               <span
                                 className="inline-block size-3 shrink-0 rounded-[3px] border"
@@ -220,15 +256,37 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                                 ?
                               </span>
                             )}
-                            <code className="font-mono text-[0.8rem]">{r.id}</code>
-                            <span className="text-muted-foreground">
+                            <code className="min-w-0 truncate font-mono text-[0.8rem]">{r.id}</code>
+                            <span className="min-w-0 truncate text-muted-foreground">
                               {r.color}
                               {r.count > 0 && ` · ${r.count} shape(s)`}
+                            </span>
+                            <span className="ml-auto flex shrink-0 items-center gap-1">
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.1}
+                                inputMode="decimal"
+                                className={`h-7 w-20 text-right ${
+                                  badHeights.has(r.id) ? "border-destructive" : ""
+                                }`}
+                                value={heightOf(r.id)}
+                                placeholder={defaultHeight === null ? "" : String(defaultHeight)}
+                                aria-label={`Height of region ${r.id} in millimetres`}
+                                aria-invalid={badHeights.has(r.id) || undefined}
+                                onChange={(e) => setHeight(r.id, e.target.value)}
+                              />
+                              <span className="text-muted-foreground">mm</span>
                             </span>
                           </li>
                         );
                       })}
                     </ul>
+                    <p className="text-[0.78rem] text-muted-foreground">
+                      {defaultHeight === null
+                        ? "Leave a height blank to raise that region by the design's relief height."
+                        : `Leave a height blank to raise that region by the design's relief height (${defaultHeight} mm).`}
+                    </p>
                     {fixed.regions.some((r) => !isRenderableColor(r.color)) && (
                       <p className="text-[0.78rem] text-muted-foreground">
                         Colours marked <span aria-hidden="true">?</span> can't be
@@ -244,11 +302,11 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                     )}
                     <label className="flex flex-col gap-1 text-sm">
                       <span className="text-muted-foreground">
-                        Region colours (editable):
+                        Region colours and heights (editable):
                       </span>
                       <Input
                         value={layers}
-                        aria-label="Region colours"
+                        aria-label="Region colours and heights"
                         onChange={(e) => setLayers(e.target.value)}
                       />
                     </label>
@@ -260,6 +318,16 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                   </p>
                 )}
               </section>
+            )}
+
+            {blockedByHeight && !blockedByError && (
+              <p className="svg-wizard__height-error mt-3 text-sm font-medium text-destructive">
+                {badHeights.size === 1
+                  ? `The height for “${[...badHeights][0]}” isn't usable — `
+                  : `The heights for ${[...badHeights].map((id) => `“${id}”`).join(", ")} aren't usable — `}
+                enter a plain positive number of millimetres (like 2 or 1.5), or leave
+                it blank to use the design's relief height.
+              </p>
             )}
 
             {blockedByError && (
@@ -292,7 +360,7 @@ export function SvgWizard({ svgText, fileName, deriveColours, onCancel, onComple
                   {step === 1 ? "Fix & continue" : "Next"}
                 </Button>
               ) : (
-                <Button onClick={finish} disabled={blockedByError}>
+                <Button onClick={finish} disabled={blockedByError || blockedByHeight}>
                   Use this SVG
                 </Button>
               )}
