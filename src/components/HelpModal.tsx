@@ -127,7 +127,7 @@ export function HelpModal({
     : null;
 
   return (
-    <Modal title={content.title ?? "How to use this configurator"} label="Help" onClose={onClose}>
+    <Modal title={content.title ?? "How to use this configurator"} onClose={onClose}>
       {content.intro && (
         <div className={MODAL_INTRO}>
           <Markdown body={content.intro} />

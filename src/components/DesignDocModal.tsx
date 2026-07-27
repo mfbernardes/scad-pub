@@ -60,7 +60,7 @@ export function DesignDocModal({
   }, [design.doc]);
 
   return (
-    <Modal title={`About the ${design.label}`} label={`${design.label} guide`} onClose={onClose}>
+    <Modal title={`About the ${design.label}`} onClose={onClose}>
       <div className={DOC_BODY} tabIndex={0}>
         {error ? (
           <p className="text-[0.88rem] text-muted-foreground">

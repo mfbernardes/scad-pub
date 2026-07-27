@@ -54,13 +54,35 @@ async function shot(page, dir, name) {
  *  have, but "the trigger selector stopped matching" must not read the same as
  *  "captured fine" — that shipped a help screenshot with no dialog in it for
  *  who knows how long. Anything genuinely optional stays guarded by `count()`
- *  before it gets here (see the Files dialog above). */
-async function requireDialog(page, name) {
+ *  before it gets here (see the Files dialog below).
+ *
+ *  Waits on `[data-slot="dialog-content"]`, NOT `[role="dialog"]`: Radix gives
+ *  its Popover content that role too, so on mobile — where these triggers live
+ *  inside the "⋮" overflow — the popover we just opened satisfies a bare
+ *  role wait all by itself. A missed trigger click would then leave the
+ *  popover up and "pass" instantly, capturing the overflow menu instead of the
+ *  dialog: the same false pass in a new costume.
+ *
+ *  `expectedName` additionally pins WHICH dialog opened. A dialog's accessible
+ *  name is its visible TITLE — Radix points `aria-labelledby` at the
+ *  DialogTitle, which beats Modal's own `aria-label` — so only pass a title a
+ *  config cannot rewrite. "Open-source licenses" is hardcoded in
+ *  LicensesModal; the Help title (`help.title`) and the Files title (an i18n
+ *  key) are both overridable, so those get the structural check alone. */
+async function requireDialog(page, name, expectedName) {
   const opened = await page
-    .waitForSelector('[role="dialog"]', { timeout: 5000 })
+    .waitForSelector('[data-slot="dialog-content"]', { state: "visible", timeout: 5000 })
     .then(() => true)
     .catch(() => false);
   if (!opened) throw new Error(`capture "${name}": no dialog opened — the trigger selector no longer matches`);
+  if (!expectedName) return;
+  const match = await page
+    .getByRole("dialog", { name: expectedName, exact: true })
+    .first()
+    .waitFor({ state: "visible", timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!match) throw new Error(`capture "${name}": a dialog opened, but not "${expectedName}"`);
 }
 
 async function selectDesign(page, kind, label) {
@@ -184,7 +206,9 @@ async function captureViewport(context, base, kind, theme) {
   const filesBtn = page.getByRole("button", { name: "Files", exact: true }).first();
   if (await filesBtn.count()) {
     await filesBtn.click().catch(() => {});
-    await page.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
+    // No expected name: the Files title comes from the i18n catalogue, so a
+    // `strings` override may rename it — the structural check still holds.
+    await requireDialog(page, filesName);
     await sleep(300);
     await shot(page, dir, filesName);
     await closeDialog(page);
@@ -208,7 +232,7 @@ async function captureViewport(context, base, kind, theme) {
   const aboutName = kind === "mobile" ? "11-about-licenses" : "08-about-licenses";
   await openOverflow();
   await page.getByRole("button", { name: "Help", exact: true }).first().click().catch(() => {});
-  await requireDialog(page, helpName);
+  await requireDialog(page, helpName); // no name: `help.title` is config-overridable
   await sleep(300);
   await shot(page, dir, helpName);
   await closeDialog(page);
@@ -216,7 +240,7 @@ async function captureViewport(context, base, kind, theme) {
   await openOverflow();
   await page.getByRole("button", { name: "Open-source licenses", exact: true })
     .first().click().catch(() => {});
-  await requireDialog(page, aboutName);
+  await requireDialog(page, aboutName, "Open-source licenses");
   await sleep(300);
   await shot(page, dir, aboutName);
   await closeDialog(page);
