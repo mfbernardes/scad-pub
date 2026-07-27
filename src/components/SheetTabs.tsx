@@ -5,20 +5,20 @@
 //
 // Vertical budget is the constraint here that the docked desktop panel doesn't
 // have: the sheet's Half detent is ~52vh (BottomSheet's HALF_VH_RATIO), so on a
-// phone every fixed row above the form costs a visible parameter. Three
+// phone every fixed row above the form costs a visible parameter. Two
 // deliberate differences from ParamPanel keep that budget for the form:
-//   • readiness rides ON the tab row as a compact chip (StatusStrip's `compact`)
-//     instead of a full-width strip above it. The row is marked
-//     `data-sheet-peek-end` so BottomSheet measures the peek height down to its
-//     bottom edge — the chip stays in the always-visible peek header, and the
-//     measured peek height doesn't move as readiness changes.
 //   • search + essentials toggle + section navigator share ONE toolbar row
-//     rather than stacking three.
+//     rather than stacking three;
 //   • that toolbar SCROLLS with the form instead of pinning above it, so it
 //     costs nothing once the visitor has scrolled.
-// Live preview (auto-render) used to pin to the bottom of this tab; on mobile
-// it now lives in the top bar's "⋮" overflow (BarActions), which is where the
-// app's other rarely-toggled chrome already is.
+// Two rows that used to live here moved out of the sheet entirely: readiness
+// (StatusStrip) is a pill in the export dock now, above the Download button it
+// warns about (see AppShell's ActionDock), and Live preview (auto-render) is in
+// the top bar's "⋮" overflow (BarActions), where the app's other rarely-toggled
+// chrome already is.
+//
+// `data-sheet-peek-end` on the tab row marks where the sheet's peek header ends
+// — BottomSheet measures the Peek height down to that element's bottom edge.
 import { useMemo, useRef } from "react";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
@@ -33,7 +33,6 @@ import { SectionNavigator } from "./SectionNavigator";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
-import { StatusStrip, type StatusStripProps } from "./StatusStrip";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 
@@ -79,11 +78,6 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
-  /** Readiness status, rendered as a compact chip on the tab row — see
-   *  StatusStrip.tsx's own doc for why that keeps it inside the sheet's
-   *  always-visible peek header (BottomSheet measures Peek from the sheet's
-   *  top down to the `data-sheet-peek-end` row's bottom edge). */
-  statusStrip: Omit<StatusStripProps, "className" | "compact">;
 }
 
 export function SheetTabs({
@@ -112,7 +106,6 @@ export function SheetTabs({
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
-  statusStrip,
 }: Props) {
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
   // Presets first on mobile, then Customize.
@@ -133,23 +126,17 @@ export function SheetTabs({
       onValueChange={(v) => onTabChange(v as Tab)}
       className="sheet-tabs min-h-0 flex-1 gap-0"
     >
-      {/* The peek header: everything down to this row's bottom edge is what
-          BottomSheet measures as the Peek height (it looks for the marker
-          attribute below), so the readiness chip is visible at every detent
-          without costing a row of its own. */}
-      <div
-        className="sheet-peek-header flex shrink-0 items-stretch border-b"
+      <TabsList
+        className="w-full shrink-0 rounded-none border-b bg-transparent p-0"
+        aria-label="Panel sections"
         data-sheet-peek-end
       >
-        <TabsList className="min-w-0 flex-1 rounded-none border-0 bg-transparent p-0" aria-label="Panel sections">
-          {tabs.map((t) => (
-            <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
-              {t === "params" ? parametersLabel : presetsLabel}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        <StatusStrip {...statusStrip} compact className="mr-2 self-center" />
-      </div>
+        {tabs.map((t) => (
+          <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
+            {t === "params" ? parametersLabel : presetsLabel}
+          </TabsTrigger>
+        ))}
+      </TabsList>
       <div className="flex min-h-0 flex-1 flex-col">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetDiffBar

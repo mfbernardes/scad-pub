@@ -1,16 +1,19 @@
 // StatusStrip.tsx — readiness surface (src/lib/readiness.ts's ReadinessState),
 // a button that opens the Review dialog (ReviewDialog.tsx). Two presentations,
-// chosen by `compact` (the caller knows its layout):
-//   • full row (desktop): a one-line strip at the top of the docked ParamPanel,
-//     above its tabs.
-//   • compact chip (mobile): icon + short label, mounted ON the sheet's tab row
-//     (SheetTabs) rather than taking a whole row above it — the sheet's Half
-//     detent is ~385px tall, so a full-width status row there costs a parameter.
-//     It stays inside the peek header either way: BottomSheet measures the peek
-//     height down to the row marked `data-sheet-peek-end`, which wraps the tabs
-//     AND this chip (see BottomSheet's own layout-effect doc). Keeping the chip
-//     in the row — rather than hiding it while "ready" — also keeps the measured
-//     peek height constant as readiness changes.
+// chosen by `variant` (the caller knows its layout):
+//   • "row" (desktop): a one-line strip at the top of the docked ParamPanel,
+//     above its tabs. Always mounted, in every readiness state.
+//   • "pill" (mobile): a raised chip in the export dock, stacked directly above
+//     the Download button (AppShell's ActionDock). The mobile sheet has no room
+//     to spend on status — its Half detent is ~52vh — and the dock is where the
+//     decision this warns about actually gets made, so the warning rides there
+//     instead: over the viewer, visible at every sheet detent, following the
+//     sheet up exactly like the button it sits on.
+// The pill is deliberately NOT mounted in every state: a ready model needs no
+// announcement (the enabled Download button is the confirmation) and a first
+// build is already narrated by the viewer's own loading overlay — so the caller
+// only mounts it for `attention`/`failed`, the two states that actually want a
+// look at the Review dialog.
 // `.status-strip` is a stable hook class for the smoke/vis scripts (see
 // CLAUDE.md's script-hook convention) — kept even though no stylesheet rule
 // targets it, and kept on BOTH presentations.
@@ -29,8 +32,8 @@ export interface StatusStripProps {
   /** attention.length — only meaningful (and only read) in the "attention" state. */
   attentionCount: number;
   onOpen: () => void;
-  /** Render the compact chip (mobile tab row) instead of the full-width row. */
-  compact?: boolean;
+  /** Presentation: full-width panel row (default) or raised dock pill. */
+  variant?: "row" | "pill";
   className?: string;
 }
 
@@ -51,6 +54,17 @@ const TONE: Record<ReadinessState, string> = {
   failed: "text-destructive bg-destructive/10",
 };
 
+// The pill floats over the 3D viewer, so every state needs an OPAQUE fill —
+// the row's translucent `bg-destructive/10` would take its contrast from
+// whatever the model happens to be showing behind it. `--glass-bg` is the same
+// surface the dock's own card uses, so a failed pill reads as part of the dock.
+const TONE_PILL: Record<ReadinessState, string> = {
+  building: "text-muted-foreground bg-(--glass-bg)",
+  ready: "text-success bg-success-bg",
+  attention: "text-warn bg-warn-bg",
+  failed: "text-destructive bg-(--glass-bg)",
+};
+
 function label(readiness: ReadinessState, attentionCount: number): string {
   switch (readiness) {
     case "building":
@@ -64,45 +78,28 @@ function label(readiness: ReadinessState, attentionCount: number): string {
   }
 }
 
-// The chip's own wording — the same states in the width a tab row can spare.
-// The full sentence above stays the chip's accessible name (`aria-label`), so
-// nothing is lost to a screen reader by shortening the visible text.
-function shortLabel(readiness: ReadinessState, attentionCount: number): string {
-  switch (readiness) {
-    case "building":
-      return t("status.buildingShort");
-    case "ready":
-      return t("status.readyShort");
-    case "attention":
-      return tn("review.issueCountShort", attentionCount);
-    case "failed":
-      return t("status.failedShort");
-  }
-}
-
 export function StatusStrip({
   readiness,
   attentionCount,
   onOpen,
-  compact = false,
+  variant = "row",
   className,
 }: StatusStripProps) {
   const Icon = ICON[readiness];
-  const full = label(readiness, attentionCount);
+  const pill = variant === "pill";
   return (
     <button
       type="button"
       className={cn(
         "status-strip cursor-pointer items-center font-medium",
-        compact
-          ? "status-strip--compact inline-flex shrink-0 gap-[0.3rem] rounded-(--radius-sm) px-[0.45rem] py-[0.25rem] text-[0.78rem] whitespace-nowrap"
+        pill
+          ? "status-strip--pill inline-flex max-w-full gap-[0.4rem] rounded-full border border-(color:--glass-border) px-[0.7rem] py-[0.3rem] text-[0.8rem] shadow-(--elevation)"
           : "flex w-full gap-2 border-b px-3 py-[0.4rem] text-left text-[0.82rem]",
-        TONE[readiness],
+        (pill ? TONE_PILL : TONE)[readiness],
         className
       )}
       onClick={onOpen}
       aria-haspopup="dialog"
-      aria-label={compact ? full : undefined}
       title={t("status.reviewTitle")}
     >
       <Icon
@@ -110,11 +107,9 @@ export function StatusStrip({
         aria-hidden="true"
         className={cn("shrink-0", readiness === "building" && "animate-spin motion-reduce:animate-none")}
       />
-      {compact ? (
-        <span aria-hidden="true">{shortLabel(readiness, attentionCount)}</span>
-      ) : (
-        <span className="min-w-0 flex-1 truncate">{full}</span>
-      )}
+      <span className={cn("min-w-0 truncate", !pill && "flex-1")}>
+        {label(readiness, attentionCount)}
+      </span>
     </button>
   );
 }

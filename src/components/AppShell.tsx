@@ -75,6 +75,7 @@ import {
 } from "../lib/readiness";
 import { friendlyRenderError } from "../lib/friendlyErrors";
 import { ReviewDialog } from "./ReviewDialog";
+import { StatusStrip, type StatusStripProps } from "./StatusStrip";
 
 const ADVANCED_SETTINGS_KEY = ns("settings.advanced");
 
@@ -88,11 +89,16 @@ function ActionDock({
   afterExport,
   onDismissExportSuccess,
   actionButtonsProps,
+  statusPill,
 }: {
   exportSuccess: ExportSuccessState | null;
   afterExport: UiConfig["afterExport"];
   onDismissExportSuccess: () => void;
   actionButtonsProps: ComponentProps<typeof ActionButtons>;
+  /** Mobile only: the readiness pill, stacked directly above the cluster (see
+   *  StatusStrip's "pill" variant). Omitted on desktop, where the docked
+   *  panel's own status row already carries readiness. */
+  statusPill?: Omit<StatusStripProps, "variant" | "className">;
 }) {
   return (
     <div className={ACTION_DOCK_CLASS}>
@@ -105,6 +111,7 @@ function ActionDock({
           onDismiss={onDismissExportSuccess}
         />
       )}
+      {statusPill && <StatusStrip {...statusPill} variant="pill" />}
       <div className={ACTION_CLUSTER_CLASS}>
         <ActionButtons {...actionButtonsProps} />
       </div>
@@ -665,6 +672,13 @@ export const AppShell = memo(function AppShell({
     attentionCount: attention.length,
     onOpen: openReview,
   };
+  // The mobile dock's readiness pill (StatusStrip's "pill" variant): mounted
+  // only for the two states that want a look at the Review dialog. "ready"
+  // needs no announcement — the Download button right below it is the
+  // confirmation — and "building" is already narrated by the viewer's own
+  // loading overlay, so a pill in either state would be noise over the model.
+  const dockStatusPill =
+    readiness === "attention" || readiness === "failed" ? statusStripProps : undefined;
   return (
     <div className="app-shell">
       {/* Skip link: off-screen until focused. Only the active layout is
@@ -773,17 +787,21 @@ export const AppShell = memo(function AppShell({
               </div>
             </div>
 
-            {/* Floating action dock — an optional after-export panel stacked
-                above the same compact card the desktop floats over its
-                viewer, riding just above the sheet's top edge (it follows the
-                sheet up to the half detent via --sheet-follow-h) instead of a
-                solid docked footer band that would reserve a strip of the
-                viewport. Identical markup to the desktop dock. */}
+            {/* Floating action dock — the readiness pill and an optional
+                after-export panel stacked above the same compact card the
+                desktop floats over its viewer, riding just above the sheet's
+                top edge (it follows the sheet up to the half detent via
+                --sheet-follow-h) instead of a solid docked footer band that
+                would reserve a strip of the viewport. The pill is the mobile
+                half of the readiness surface: the sheet has no room for a
+                status row, and this puts the warning against the Download
+                button it gates. */}
             <ActionDock
               exportSuccess={exportSuccess}
               afterExport={afterExport}
               onDismissExportSuccess={onDismissExportSuccess}
               actionButtonsProps={actionButtonsProps}
+              statusPill={dockStatusPill}
             />
 
             <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
@@ -850,7 +868,6 @@ export const AppShell = memo(function AppShell({
                   onSearchChange={panelState.setSearch}
                   onSearchFocus={handleSearchFocus}
                   onSearchBlur={handleSearchBlur}
-                  statusStrip={statusStripProps}
                 />
               </div>
             )}
