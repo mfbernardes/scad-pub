@@ -601,14 +601,6 @@
         {
           "type": "object",
           "properties": {
-            "accept": {
-              "description": "Deprecated/vestigial; kept for backward compatibility.",
-              "type": "string"
-            },
-            "label": {
-              "description": "Deprecated/vestigial; kept for backward compatibility.",
-              "type": "string"
-            },
             "note": {
               "description": "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'.",
               "type": "string"
@@ -616,10 +608,6 @@
             "noteFile": {
               "description": "Config-relative Markdown file whose contents become 'note' at build time. Mutually exclusive with 'note' (setting both fails the build, naming both).",
               "type": "string"
-            },
-            "maxBytes": {
-              "description": "Deprecated/vestigial upload size cap; kept for backward compatibility.",
-              "type": "number"
             }
           },
           "additionalProperties": false

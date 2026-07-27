@@ -247,11 +247,8 @@ test("config-driven features, fonts; presets auto-detected by sibling name", () 
   const { schema, out } = run("widget.config.json");
   assert.deepEqual(schema.features, ["textmetrics"]);
   assert.deepEqual(schema.fonts, ["Foo.ttf"]);
-  // The fixture configures the generic file-import button directly.
-  assert.deepEqual(schema.fileImport, {
-    accept: ".ttf,.otf",
-    label: "Import Foo font",
-  });
+  // The fixture enables the generic file-import button with defaults.
+  assert.deepEqual(schema.fileImport, {});
   // src/widget.json sits next to src/widget.scad, so it's bundled automatically.
   assert.deepEqual(schema.designs[0].presets, ["widget.json"]);
   assert.equal(schema.designs[0].heavy, true); // per-design heavy flag passes through
@@ -293,7 +290,7 @@ test("render tuning and defaultDesign pass through to the schema", () => {
   const { schema } = run("widget-designmeta.config.json");
   assert.deepEqual(schema.render, { heavyMs: 9000, cache: { maxEntries: 4, persistent: false } });
   assert.equal(schema.defaultDesign, "collapsible");
-  assert.deepEqual(schema.fileImport, { maxBytes: 1048576 });
+  assert.deepEqual(schema.fileImport, { note: "Upload a font or an SVG." });
   assert.equal(schema.viewer.controls.fullscreen, false);
   assert.equal(schema.ui.saveImage, false);
 });
@@ -1521,39 +1518,34 @@ test("parseFileImport: true/object, defaults and errors", () => {
   assert.equal(parseFileImport(false), null);
   // true -> defaults (an empty options object).
   assert.deepEqual(parseFileImport(true), {});
-  // Object form: known string fields pass through; nulls/undefined dropped.
-  assert.deepEqual(
-    parseFileImport({ accept: ".svg", label: "Add SVG", note: undefined }),
-    { accept: ".svg", label: "Add SVG" }
-  );
-  // maxBytes: a positive number passes through; bad values fail.
-  assert.deepEqual(parseFileImport({ maxBytes: 1024 }), { maxBytes: 1024 });
-  assert.deepEqual(parseFileImport({ accept: ".ttf", maxBytes: null }), { accept: ".ttf" });
-  assert.throws(() => parseFileImport({ maxBytes: 0 }), /'fileImport\.maxBytes' must be a positive number/);
-  assert.throws(() => parseFileImport({ maxBytes: -5 }), /'fileImport\.maxBytes' must be a positive number/);
-  assert.throws(() => parseFileImport({ maxBytes: "big" }), /'fileImport\.maxBytes' must be a positive number/);
+  // Object form: known string field passes through; undefined is dropped.
+  assert.deepEqual(parseFileImport({ note: "Add a font.", noteFile: undefined }), {
+    note: "Add a font.",
+  });
   // Wrong shapes -> clear errors.
   assert.throws(() => parseFileImport([]), /'fileImport' must be true/);
-  // `accept`/`label`/`note` are deprecated/vestigial but still strings, so
-  // the one string policy applies to them too: a non-string is rejected with
-  // the "when set" wording (they're optional, not `required`) — this used to
-  // read "must be a string" (no "non-empty") because these three fields
-  // opted out of the blank-rejection every other string field already had.
   assert.throws(
-    () => parseFileImport({ accept: 5 }),
-    /'fileImport\.accept', when set, must be a non-empty string/
+    () => parseFileImport({ note: 5 }),
+    /'fileImport\.note', when set, must be a non-empty string/
   );
-  // Blank/whitespace-only used to be accepted (nonBlank: false) and stored
-  // verbatim; now every string field rejects blank and trims what it keeps.
+  // Blank/whitespace-only is rejected; what's kept is trimmed.
   assert.throws(
-    () => parseFileImport({ accept: "   " }),
-    /'fileImport\.accept', when set, must be a non-empty string/
+    () => parseFileImport({ note: "   " }),
+    /'fileImport\.note', when set, must be a non-empty string/
   );
-  assert.deepEqual(parseFileImport({ accept: "  .svg  " }), { accept: ".svg" });
-  // Unknown key -> rejected (newly enforced — used to be silently ignored).
+  assert.deepEqual(parseFileImport({ note: "  Add a font.  " }), { note: "Add a font." });
+  // `accept`/`label`/`maxBytes` are gone, not merely deprecated: they no
+  // longer drove any generic import button (each contextual control applies
+  // its own picker filter and size guard — see docs/config.md's Import file
+  // section), so a config still setting one fails the ordinary unknown-key
+  // check exactly like any other typo.
+  assert.throws(
+    () => parseFileImport({ accept: ".svg" }),
+    /'fileImport': unknown key 'accept'\.\s*\n\s*Valid keys: note, noteFile/
+  );
   assert.throws(
     () => parseFileImport({ oops: true }),
-    /'fileImport': unknown key 'oops'\.\s*\n\s*Valid keys: accept, label, note, noteFile, maxBytes/
+    /'fileImport': unknown key 'oops'\.\s*\n\s*Valid keys: note, noteFile/
   );
 });
 

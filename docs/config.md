@@ -151,6 +151,8 @@ These keys add copy and third-party notices to the generated app:
 
 Missing `source`, `assets`, design, `logo`, or design-`icon` paths fail the build with a clear error. An **unknown top-level key** also fails the build. A whole-key typo like `"popups"` or `"fontfallback"` fails rather than being silently ignored. Add a `"$schema"` key for editor tooling if you want; it is allowed.
 
+This schema is not backward compatible with ScadPub's previous config shape: an outdated key (e.g. a top-level `restOnGrid`, `features`, or `icon`) fails the build with the same unknown-key error above, listing the currently valid keys.
+
 ## Where paths resolve from
 
 Config paths are not all relative to the same thing. `gen-schema` resolves each one against whichever of three bases fits its role:
@@ -375,7 +377,7 @@ The **Files dialog is a manager**, not an importer: it lists what those controls
 
 `fileImport` gates whether the **Files** action exists at all — omit it (or set it to `null`/`false`) and no Files action is shown. Its optional **`note`** renders as guidance at the top of the Files dialog, in a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content. Alternatively set **`noteFile`** — a config-relative Markdown file whose contents become `note` at build time, read and inlined the same way as `popup.bodyFile` (see [Popup notice](#popup-notice-popup)); setting both `note` and `noteFile` fails the build.
 
-> The `accept`, `label`, and `maxBytes` fields are still accepted for backward compatibility but no longer drive a generic import button (each contextual control applies its own picker filter and size guard). They are vestigial and can be omitted.
+`fileImport` has no `accept`, `label`, or `maxBytes` fields — each contextual control (the font dropdown, the SVG drop zone) applies its own picker filter and size guard, so there is no generic import button left for those to configure. A config that still sets one fails the ordinary unknown-key check.
 
 ### How uploads reach OpenSCAD
 

@@ -84,9 +84,8 @@ function validateFieldValue(value, field, path) {
       return value;
     }
     case "number": {
-      const positive = field.numberKind === "positive";
-      const ok = typeof value === "number" && Number.isFinite(value) && (positive ? value > 0 : value >= 0);
-      if (!ok) throw new Error(`${prefix} must be a ${positive ? "positive" : "non-negative"} number`);
+      const ok = typeof value === "number" && Number.isFinite(value) && value >= 0;
+      if (!ok) throw new Error(`${prefix} must be a non-negative number`);
       return value;
     }
     case "string": {

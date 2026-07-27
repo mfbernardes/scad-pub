@@ -144,8 +144,8 @@ const extOf = (relPath) => {
   return dot > 0 ? relPath.slice(dot) : "";
 };
 
-// Load + sanity-check the config. Catches typo'd / stale top-level keys before
-// doing any work — a whole-key typo would otherwise be silently ignored (see
+// Load + sanity-check the config. Catches genuinely typo'd / stale top-level
+// keys — a whole-key typo would otherwise be silently ignored (see
 // KNOWN_TOP_LEVEL_KEYS).
 function loadConfig(configPath) {
   const config = JSON.parse(readFileSync(configPath, "utf-8"));

@@ -52,9 +52,8 @@
 // the build, with the valid-key list read straight off `properties`.
 //
 // What's left, because each encodes a real distinction rather than an
-// accident: `numberKind` ("nonNegative" >= 0 vs. "positive" > 0 — two
-// genuinely different bounds); `required` (validate even when entirely
-// absent — only `popup.header`/`popup.body`); `custom` (object/array nodes
+// accident: `required` (validate even when entirely absent — only
+// `popup.header`/`popup.body`); `custom` (object/array nodes
 // whose runtime validation lives in a bespoke parser instead, per the file-top
 // comment — and, since this commit, also a plain leaf FIELD nested inside an
 // otherwise applyGroupSpec-driven group, e.g. `render.features`/`render.fonts`
@@ -71,10 +70,10 @@
 // fields carry defaults that must resolve even when the config omits the
 // group entirely — only `viewer.controls` uses it today, since it replaces
 // what used to be flat `ui.*` booleans that were always present with a
-// built-in default; see `applyGroupSpec` in ./config-parsers.mjs); and
-// `rootTypeError` (a plain-string override describing a field's actual
-// accepted shapes — `fileImport` is `true`/an object/`null`, `popup` needs
-// `header`+`body` — genuinely more useful than the generic message).
+// built-in default; see `applyGroupSpec` in ./config-parsers.mjs); `rootTypeError`
+// (a plain-string override describing a field's actual accepted shapes —
+// `fileImport` is `true`/an object/`null`, `popup` needs `header`+`body` —
+// genuinely more useful than the generic message).
 
 // ── Small factories for the repeated field shapes (still plain data — these
 // just save re-typing the same few keys 30 times over). ────────────────────
@@ -96,9 +95,8 @@ const str = (extra = {}) => ({
   ...extra,
 });
 
-const num = (numberKind, extra = {}) => ({
+const num = (extra = {}) => ({
   type: "number",
-  numberKind,
   ...extra,
 });
 
@@ -193,9 +191,9 @@ const RENDER_CACHE_SPEC = {
   // to nothing rather than being stored (see the file-top comment).
   collapseEmptyToNull: true,
   properties: {
-    maxEntries: num("nonNegative", { description: "In-memory (L1) slot count." }),
-    maxBytes: num("nonNegative", { description: "In-memory (L1) total byte budget." }),
-    maxEntryBytes: num("nonNegative", { description: "Largest single render worth caching." }),
+    maxEntries: num({ description: "In-memory (L1) slot count." }),
+    maxBytes: num({ description: "In-memory (L1) total byte budget." }),
+    maxEntryBytes: num({ description: "Largest single render worth caching." }),
     // No `default` key (unlike the bool()-built ui toggles): omitted entirely
     // unless the config sets it, so an empty `cache` collapses to nothing
     // rather than `{ persistent: undefined }`.
@@ -238,7 +236,8 @@ const PWA_THEME_COLOR_SPEC = {
 // bespoke, lenient-to-malformed-entries validation these already had at the
 // top level (see parsePwa in ./config-parsers.mjs and generatePwaAssets);
 // `install` is a real behaviour toggle the app DOES read — see
-// gen-schema.mjs's UI assembly for how its value lands at `schema.ui.install`.
+// gen-schema.mjs's UI assembly for how its value still lands at
+// `schema.ui.install`.
 const PWA_SPEC = {
   type: "object",
   description:
@@ -454,7 +453,7 @@ export const CONFIG_SPEC = {
         custom: true,
         description: "A bundled family pinned as fontconfig's last-resort default. Folded into renderHash.",
       },
-      heavyMs: num("nonNegative", { description: "Auto-pause threshold (ms) for a slow live render. NOT in renderHash." }),
+      heavyMs: num({ description: "Auto-pause threshold (ms) for a slow live render. NOT in renderHash." }),
       cache: RENDER_CACHE_SPEC,
     },
   },
@@ -496,7 +495,7 @@ export const CONFIG_SPEC = {
       saveImage: { type: "boolean", description: "Show the 'Save image (PNG)' action." },
       gallery: bool(false, { description: "Replace the compact design dropdown with a searchable card grid." }),
       essentials: bool(false, { description: "Start with // @advanced parameters hidden behind 'Show all settings'." }),
-      // The Presets/Customize tab labels live in the i18n catalogue instead
+      // The Presets/Customize tab labels are the i18n catalogue
       // (`strings["presets.title"]`/`strings["settings.title"]`,
       // src/locales/en.json) since that's what they always were: chrome
       // copy, not build-time behaviour.
@@ -517,9 +516,7 @@ export const CONFIG_SPEC = {
       style: enumField(["plain", "studio"], "plain", {
         description: "'plain' is the classic CAD preview; 'studio' adds image-based lighting and a contact shadow.",
       }),
-      restOnGrid: bool(false, {
-        description: "Rest the model's base on the z=0 grid instead of centring in Z (display-only).",
-      }),
+      restOnGrid: bool(false, { description: "Rest the model's base on the z=0 grid instead of centring in Z (display-only)." }),
       // NOT a control-visibility flag like its `controls` neighbours below —
       // the grid toggle is always offered regardless of this value. It only
       // seeds that toggle's first-ever value; a visitor's own later choice
@@ -543,15 +540,12 @@ export const CONFIG_SPEC = {
     description: "Enables the Files dialog. true for defaults, or an options object; omit/false/null for no Files action.",
     rootTypeError: "gen-schema: 'fileImport' must be true, an options object, or null",
     properties: {
-      accept: str({ description: "Deprecated/vestigial; kept for backward compatibility." }),
-      label: str({ description: "Deprecated/vestigial; kept for backward compatibility." }),
       note: str({ description: "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'." }),
       // Same pre-pass/resolution pattern as popup.bodyFile above (see its
       // comment): resolved into 'note' before applyGroupSpec ever sees this
       // key, so it's registered here as `custom: true` purely for doc
       // coverage / schema emission.
       noteFile: fileAlt("note"),
-      maxBytes: num("positive", { description: "Deprecated/vestigial upload size cap; kept for backward compatibility." }),
     },
   },
 

@@ -349,10 +349,7 @@ test("validates the optional fileImport shape", () => {
   assert.doesNotThrow(() => validateSchema({ ...validBase(), fileImport: null }));
   assert.doesNotThrow(() => validateSchema({ ...validBase(), fileImport: {} }));
   assert.doesNotThrow(() =>
-    validateSchema({
-      ...validBase(),
-      fileImport: { accept: ".svg", label: "Import file", note: "any file" },
-    })
+    validateSchema({ ...validBase(), fileImport: { note: "any file" } })
   );
   // not an object.
   assert.throws(
@@ -361,8 +358,8 @@ test("validates the optional fileImport shape", () => {
   );
   // non-string field.
   assert.throws(
-    () => validateSchema({ ...validBase(), fileImport: { accept: 5 } }),
-    /'fileImport\.accept' must be a string/
+    () => validateSchema({ ...validBase(), fileImport: { note: 5 } }),
+    /'fileImport\.note' must be a string/
   );
 });
 

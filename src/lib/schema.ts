@@ -160,12 +160,8 @@ export function validateSchema(raw: unknown): Schema {
     if (typeof s.fileImport !== "object" || Array.isArray(s.fileImport))
       fail("'fileImport' must be an object or null");
     const fi = s.fileImport as Record<string, unknown>;
-    for (const key of ["accept", "label", "note"] as const) {
-      if (fi[key] !== undefined && typeof fi[key] !== "string")
-        fail(`'fileImport.${key}' must be a string`);
-    }
-    if (fi.maxBytes !== undefined && typeof fi.maxBytes !== "number")
-      fail("'fileImport.maxBytes' must be a number");
+    if (fi.note !== undefined && typeof fi.note !== "string")
+      fail("'fileImport.note' must be a string");
   }
   if (s.popup != null) {
     if (typeof s.popup !== "object" || Array.isArray(s.popup))

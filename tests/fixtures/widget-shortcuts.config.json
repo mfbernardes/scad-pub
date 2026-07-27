@@ -3,15 +3,13 @@
   "logo": "logo.svg",
   "source": "src",
   "assets": ["lib"],
-  "fileImport": { "accept": ".ttf,.otf", "label": "Import Foo font" },
+  "fileImport": true,
+  "designs": [{ "id": "widget", "label": "Widget", "heavy": true }],
   "pwa": {
     "shortcuts": [
       { "name": "Open help", "short_name": "Help", "url": "./#help" },
       { "name": "Bad entry without url" }
     ]
   },
-  "designs": [
-    { "id": "widget", "label": "Widget", "heavy": true }
-  ],
   "render": { "features": ["textmetrics"], "fonts": ["Foo.ttf"] }
 }

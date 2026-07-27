@@ -5,16 +5,22 @@
   "source": "src",
   "defaultDesign": "collapsible",
   "render": { "heavyMs": 9000, "cache": { "maxEntries": 4, "persistent": false } },
-  "fileImport": { "maxBytes": 1048576 },
+  "fileImport": { "note": "Upload a font or an SVG." },
   "ui": { "saveImage": false },
-  "viewer": { "controls": { "fullscreen": false } },
   "pwa": {
     "screenshots": [
-      { "src": "logo.svg", "sizes": "390x844", "form_factor": "narrow", "label": "Home screen", "platform": "android" }
+      {
+        "src": "logo.svg",
+        "sizes": "390x844",
+        "form_factor": "narrow",
+        "label": "Home screen",
+        "platform": "android"
+      }
     ]
   },
   "designs": [
     { "id": "widget", "label": "Widget", "file": "widget-meta.scad" },
     { "id": "collapsible", "label": "Collapsible" }
-  ]
+  ],
+  "viewer": { "controls": { "fullscreen": false } }
 }
