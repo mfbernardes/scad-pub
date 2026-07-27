@@ -151,7 +151,7 @@ Config paths are not all relative to the same thing. `gen-schema` resolves each 
 
 | Base | Keys resolved against it |
 | --- | --- |
-| The **config file's own directory** | `source`, `logo`, `pwa.icon`, `pwa.iconMaskable`, `extraCss`, `designs[].presets.images` values |
+| The **config file's own directory** | `source`, `logo`, `pwa.icon`, `pwa.iconMaskable`, `extraCss`, `designs[].presets.images` values, `popup.bodyFile`, `fileImport.noteFile`, `licenses[].textFile`, `help.file`, `help.tabs[].file` |
 | **`source`** (itself config-relative, see above) | `assets`, each `fonts` entry, `designs[].file` |
 | **The design's own `.scad` file** | the `// @icon`, `// @image`, and `// @doc` annotations |
 
@@ -367,7 +367,7 @@ The **Files dialog is a manager**, not an importer: it lists what those controls
 }
 ```
 
-`fileImport` gates whether the **Files** action exists at all — omit it (or set it to `null`/`false`) and no Files action is shown. Its optional **`note`** renders as guidance at the top of the Files dialog, in a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content.
+`fileImport` gates whether the **Files** action exists at all — omit it (or set it to `null`/`false`) and no Files action is shown. Its optional **`note`** renders as guidance at the top of the Files dialog, in a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content. Alternatively set **`noteFile`** — a config-relative Markdown file whose contents become `note` at build time, read and inlined the same way as `popup.bodyFile` (see [Popup notice](#popup-notice-popup)); setting both `note` and `noteFile` fails the build.
 
 > The `accept`, `label`, and `maxBytes` fields are still accepted for backward compatibility but no longer drive a generic import button (each contextual control applies its own picker filter and size guard). They are vestigial and can be omitted.
 
@@ -481,7 +481,7 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
 ```
 
 - **`header`**: the dialog title
-- **`body`**: the message, in the same Markdown subset used elsewhere. Links open in a new tab
+- **`body`**: the message, in the same Markdown subset used elsewhere. Links open in a new tab. Alternatively set **`bodyFile`** — a config-relative path to a Markdown file whose contents become `body` at build time. Setting both `body` and `bodyFile` fails the build, naming both. Unlike `designs[].doc` (fetched by the browser on demand), this file's content is read at build time and inlined into the generated schema — the browser never makes a separate request for it
 - **`mode`**: popup frequency:
   - **`always`**: shown on every visit. No opt-out
   - **`once`** (default): shown on the first visit only. Dismissing it with **OK**, the close button, Escape, or outside click remembers it so it will not return
@@ -655,6 +655,38 @@ Use `tabs` to group the guide into multiple panes. A tab strip appears, and each
 - A top-level `intro` renders once above the tab strip; a per-tab `intro` renders above that tab's sections.
 - If you supply **both** top-level `sections` and `tabs`, the top-level sections become a leading **Overview** tab. Adding `tabs` to an existing single-pane help never drops the original content. To control every label yourself, put all content inside `tabs` and leave top-level `sections` out.
 
+### Sourcing help from Markdown files
+
+Writing `sections` (and `intro`) inline means twenty-five `{title, body}` fragments joined by `\n\n` inside one JSON string — unreviewable in a diff, and unlintable by tools like markdownlint. As an alternative, set **`file`** — a config-relative path to a Markdown file — on the single-pane `help` object itself, or on any individual `tabs[]` entry. `gen-schema` splits that file's content at build time: everything before the first `##` heading becomes that pane's `intro`; each `##` heading after that starts a section, using the heading text as `title` and everything up to the next `##` heading (or the end of the file) as `body`. This maps exactly onto the `{title, body}` shape above, so a whole tab becomes one readable `.md` file instead of a handful of JSON fragments.
+
+A pane with `file` may not also set `sections` or `intro` directly — either combination fails the build, naming both keys. A bare `#` heading (or `###` and deeper) does not start a new section: use `#` for the file's own title if you want one (it stays as ordinary text inside `intro`), and `###` for structure within a section's own body.
+
+```jsonc
+{
+  "help": {
+    "tabs": [
+      { "label": "Getting started", "file": "docs/help-getting-started.md" },
+      { "label": "Printing tips", "sections": [ /* … */ ] }
+    ]
+  }
+}
+```
+
+```markdown
+<!-- docs/help-getting-started.md -->
+The basics.
+
+## Pick a design
+
+Use the **Design** dropdown…
+
+## Adjust parameters
+
+The left panel lists…
+```
+
+The Markdown file's content is read once, at build time, and inlined into the generated schema exactly as if it had been written as `intro`/`sections` inline — unlike `designs[].doc` (fetched by the browser on demand, see [Design sources](#design-sources)), a help-tab Markdown file never reaches the browser as its own request. It is pure prose and cannot affect geometry, so `help` — `file`-sourced or not — stays out of `renderHash` exactly as before.
+
 ## Open-source notices (`licenses`)
 
 The **ⓘ** button lists the third-party components ScadPub itself bundles, including OpenSCAD-WASM, React, three.js, and Liberation fonts. If your deployment bundles **additional** software, add its notice here. Examples include an extra `.scad` library, a custom font, or a vendored script. Entries are **appended** to the built-in list; ScadPub's own attributions are never removed.
@@ -678,7 +710,7 @@ The **ⓘ** button lists the third-party components ScadPub itself bundles, incl
 ```
 
 - `name`, `license`, `copyright`, `url`, and `licenseUrl` are required; the rest are optional. Unknown keys are ignored.
-- Provide `sourceUrl` for copyleft components, such as GPL components, so the corresponding-source requirement is met. Provide `text` to reproduce a permissive license inline.
+- Provide `sourceUrl` for copyleft components, such as GPL components, so the corresponding-source requirement is met. Provide `text` to reproduce a permissive license inline — or **`textFile`**, a config-relative path whose contents become `text` at build time (the full OFL/GPL/etc. text lives in its own file instead of a `\n`-joined JSON string). Setting both `text` and `textFile` fails the build.
 - A malformed entry fails the build with a clear message.
 
 ### Where the built-in versions come from

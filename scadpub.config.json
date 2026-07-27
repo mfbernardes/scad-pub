@@ -84,17 +84,7 @@
       },
       {
         "label": "Printing",
-        "intro": "Getting a clean print off the downloaded mesh.",
-        "sections": [
-          {
-            "title": "Material",
-            "body": "**PLA** prints these designs well. Slice the downloaded 3MF as you would any other mesh."
-          },
-          {
-            "title": "Supports",
-            "body": "Most designs need none. Add supports only if a part overhangs more than your printer handles."
-          }
-        ]
+        "file": "examples/help-printing.md"
       },
       {
         "label": "Troubleshooting",

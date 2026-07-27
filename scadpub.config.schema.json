@@ -611,7 +611,11 @@
               "type": "string"
             },
             "note": {
-              "description": "Markdown-subset guidance shown atop the Files dialog.",
+              "description": "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'.",
+              "type": "string"
+            },
+            "noteFile": {
+              "description": "Config-relative Markdown file whose contents become 'note' at build time. Mutually exclusive with 'note' (setting both fails the build, naming both).",
               "type": "string"
             },
             "maxBytes": {
@@ -632,7 +636,11 @@
           "type": "string"
         },
         "body": {
-          "description": "Dialog message (Markdown subset).",
+          "description": "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'.",
+          "type": "string"
+        },
+        "bodyFile": {
+          "description": "Config-relative Markdown file whose contents become 'body' at build time. Mutually exclusive with 'body' (setting both fails the build, naming both).",
           "type": "string"
         },
         "mode": {
@@ -662,7 +670,7 @@
       "additionalProperties": false
     },
     "help": {
-      "description": "Help dialog content: 'sections' for a single pane, or 'tabs' for a tabbed guide. Passed through verbatim.",
+      "description": "Help dialog content: 'sections' for a single pane, or 'tabs' for a tabbed guide. A pane (the top-level object, or any 'tabs[]' entry) may set 'file' instead of 'sections' — a config-relative Markdown file gen-schema splits into 'intro'/'sections' at build time (see docs/config.md). Passed through verbatim otherwise, with any 'file' already resolved.",
       "type": "object"
     },
     "notices": {
@@ -728,7 +736,11 @@
             "type": "string"
           },
           "text": {
-            "description": "Full license text, shown in a details panel.",
+            "description": "Full license text, shown in a details panel. Mutually exclusive with 'textFile'.",
+            "type": "string"
+          },
+          "textFile": {
+            "description": "Config-relative file whose contents become 'text' at build time. Mutually exclusive with 'text' (setting both fails the build, naming both).",
             "type": "string"
           },
           "sourceUrl": {

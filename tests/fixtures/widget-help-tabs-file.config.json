@@ -1,0 +1,11 @@
+{
+  "source": "src",
+  "help": {
+    "tabs": [
+      { "label": "Getting started", "file": "widget-help-tab.md" },
+      { "label": "Printing", "sections": [{ "title": "Material", "body": "Use **PLA**." }] }
+    ]
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}

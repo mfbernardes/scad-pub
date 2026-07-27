@@ -36,6 +36,8 @@ import { humanize, parseParams } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
 import { createDestinationRegistry, reconcileGenerated } from "./lib/destinations.mjs";
 import { sanitizeSvg } from "./lib/svg-sanitize.mjs";
+import { resolveFileField } from "./lib/prose-files.mjs";
+import { splitHelpMarkdown } from "./lib/help-file.mjs";
 import { resolveWorkerDependencyClosure } from "./lib/worker-deps.mjs";
 import { generatePwaAssets } from "./lib/pwa-assets.mjs";
 import { scadpubVersion } from "./lib/version.mjs";
@@ -83,6 +85,8 @@ export {
 } from "./lib/config-parsers.mjs";
 export { parseFontFallback, renderFontsConf, fontFamilyNames } from "./lib/fonts.mjs";
 export { firstSentence, parseEnumHint, parseParams } from "./lib/params.mjs";
+export { resolveFileField } from "./lib/prose-files.mjs";
+export { splitHelpMarkdown } from "./lib/help-file.mjs";
 
 // Every top-level key gen-schema (or its helpers) reads from scadpub.config.json.
 // A key outside this set is almost always a typo (`popups`, `fontfallback`, …)
@@ -577,6 +581,49 @@ function resolveDefaultDesign(config, designs) {
   return config.defaultDesign;
 }
 
+// Resolve one help "pane" — the top-level `help` object itself, or a single
+// `help.tabs[]` entry — against its optional `file` key (see docs/config.md
+// "Sourcing help from Markdown files" and scripts/lib/help-file.mjs). `file`
+// is an alternative to writing `sections` (and `intro`) inline: the
+// referenced Markdown file's content before the first `##` heading becomes
+// `intro`, and each `##` heading after that becomes a `{ title, body }`
+// section. Setting `file` alongside `sections` or `intro` fails the build,
+// naming both keys. A pane with no `file` passes through unchanged.
+function resolveHelpPane(raw, CONFIG_DIR, mustExist, what) {
+  if (raw?.file == null) return raw;
+  if (raw.sections != null)
+    throw new Error(`gen-schema: both '${what}.sections' and '${what}.file' are set — remove one.`);
+  if (raw.intro != null)
+    throw new Error(`gen-schema: both '${what}.intro' and '${what}.file' are set — remove one.`);
+  const abs = mustExist(resolve(CONFIG_DIR, raw.file), `${what}.file '${raw.file}'`);
+  const { intro, sections } = splitHelpMarkdown(readFileSync(abs, "utf-8"));
+  const { file: _file, ...rest } = raw;
+  return { ...rest, ...(intro ? { intro } : {}), sections };
+}
+
+// Optional `help` config block, with any `file` (top-level, or per-tab)
+// resolved to its derived `intro`/`sections` first — see resolveHelpPane
+// above. Everything else about `help` is passed through verbatim (see
+// CONFIG_SPEC.help's comment): this is the only pre-processing it gets.
+export function resolveHelp(raw, CONFIG_DIR, mustExist) {
+  if (raw == null) return null;
+  // `help` has never had its own shape check (see CONFIG_SPEC.help's
+  // comment: "passed through verbatim") — a non-object value passes through
+  // completely unchanged here too, exactly as before this function existed.
+  // Only a genuine object gets the 'file' treatment below.
+  if (typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const help = resolveHelpPane(raw, CONFIG_DIR, mustExist, "help");
+  if (!Array.isArray(help.tabs)) return help;
+  return {
+    ...help,
+    tabs: help.tabs.map((tab, i) =>
+      tab && typeof tab === "object" && !Array.isArray(tab)
+        ? resolveHelpPane(tab, CONFIG_DIR, mustExist, `help.tabs[${i}]`)
+        : tab
+    ),
+  };
+}
+
 // Optional raw-CSS escape hatch. Unlike `colors` — a safe, validated token map
 // — this is a stylesheet the consumer fully controls, copied verbatim into the
 // served tree and (see vite.config.ts) loaded *after* the app's own styles so
@@ -714,6 +761,47 @@ export function generate({
   // Everything in the config is resolved relative to the config file's directory.
   const CONFIG_DIR = dirname(configPath);
 
+  // ── Prose sourced from files ────────────────────────────────────────────
+  // popup.body / fileImport.note / licenses[].text may each be written
+  // inline OR sourced from a config-relative file (the sibling '<field>File'
+  // key) — see scripts/lib/prose-files.mjs. Resolved here, BEFORE
+  // parsePopup/parseFileImport/parseLicenses run below, so each sees its
+  // field already populated exactly as if it had been written inline; this
+  // content is inlined into designs.json and never reaches the browser as
+  // its own fetch (contrast a design's `// @doc` annotation, whose resolved
+  // `designs[].doc` URL genuinely is fetched on demand).
+  if (config.popup)
+    config.popup = resolveFileField({
+      obj: config.popup,
+      field: "body",
+      fileField: "bodyFile",
+      CONFIG_DIR,
+      mustExist,
+      path: "popup",
+    });
+  if (config.fileImport && typeof config.fileImport === "object" && !Array.isArray(config.fileImport))
+    config.fileImport = resolveFileField({
+      obj: config.fileImport,
+      field: "note",
+      fileField: "noteFile",
+      CONFIG_DIR,
+      mustExist,
+      path: "fileImport",
+    });
+  if (Array.isArray(config.licenses))
+    config.licenses = config.licenses.map((entry, i) =>
+      entry && typeof entry === "object" && !Array.isArray(entry)
+        ? resolveFileField({
+            obj: entry,
+            field: "text",
+            fileField: "textFile",
+            CONFIG_DIR,
+            mustExist,
+            path: `licenses[${i}]`,
+          })
+        : entry
+    );
+
   const { TITLE, ID, DESCRIPTION, LANG, DIR } = parseIdentity(config);
 
   // ── Design sources ────────────────────────────────────────────────────────
@@ -798,9 +886,10 @@ export function generate({
   // Optional one-off notice dialog shown over the app on load. Validated; absent
   // -> null -> no popup.
   const POPUP = parsePopup(config.popup);
-  // Optional help content; passed through verbatim. Absent -> null -> the app
-  // falls back to its generic, project-agnostic default help.
-  const HELP = config.help ?? null;
+  // Optional help content; passed through verbatim (any `file` resolved to
+  // its derived intro/sections first — see resolveHelp). Absent -> null ->
+  // the app falls back to its generic, project-agnostic default help.
+  const HELP = resolveHelp(config.help, CONFIG_DIR, mustExist);
   // ui.afterExport.helpTab (if set) must name an existing Help tab — checked
   // here rather than inside parseUi (config-parsers.mjs) because it's a
   // cross-field validation against HELP, only available now. Mirrors

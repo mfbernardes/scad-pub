@@ -41,6 +41,7 @@ import {
   parseStringArray,
   parseStrings,
   renderFontsConf,
+  resolveHelp,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
 import { componentVersions } from "../scripts/lib/dep-versions.mjs";
@@ -1219,6 +1220,24 @@ test("renderHash is unaffected by presentation-only config fields (title/help/no
   assert.equal(plain, dressedUp);
 });
 
+test("renderHash is unaffected by sourcing prose from a file instead of writing it inline", () => {
+  // popup.bodyFile / fileImport.noteFile / licenses[].textFile / help.file all
+  // just inline file content into fields that were already outside renderHash
+  // (popup/fileImport/licenses/help are all presentation-only) — confirm the
+  // file-sourced forms land at the exact same hash as a config with none of
+  // that content configured at all.
+  const baseline = run("widget-autodeps.config.json").schema.renderHash;
+  for (const fixture of [
+    "widget-popup-file.config.json",
+    "widget-fileimport-file.config.json",
+    "widget-licenses-file.config.json",
+    "widget-help-file.config.json",
+    "widget-help-tabs-file.config.json",
+  ]) {
+    assert.equal(run(fixture).schema.renderHash, baseline, `${fixture} changed renderHash`);
+  }
+});
+
 test("firstSentence does not break on decimals or abbreviations", () => {
   assert.equal(firstSentence("Depth (mm). Must be >= 0.4 mm."), "Depth (mm).");
   assert.equal(
@@ -1320,6 +1339,52 @@ test("help defaults to null when omitted", () => {
   assert.equal(schema.help, null);
 });
 
+test("help.file: a single-pane help sources its intro/sections from a Markdown file", () => {
+  const { schema } = run("widget-help-file.config.json");
+  assert.equal(schema.help.title, "User guide");
+  assert.equal(schema.help.intro, "Configure a widget and export a model.");
+  assert.deepEqual(schema.help.sections, [
+    { title: "Pick a design", body: "Use the dropdown." },
+    { title: "Adjust parameters", body: "The panel lists what you can change." },
+  ]);
+  // The 'file' key itself never reaches the generated schema.
+  assert.equal("file" in schema.help, false);
+});
+
+test("help.tabs[].file: one tab may source from a file while a sibling tab stays inline", () => {
+  const { schema } = run("widget-help-tabs-file.config.json");
+  assert.equal(schema.help.tabs.length, 2);
+  assert.equal(schema.help.tabs[0].label, "Getting started");
+  assert.equal(schema.help.tabs[0].intro, "How to begin.");
+  assert.deepEqual(schema.help.tabs[0].sections, [{ title: "Step 1", body: "Pick a design." }]);
+  assert.equal("file" in schema.help.tabs[0], false);
+  assert.equal(schema.help.tabs[1].label, "Printing");
+  assert.deepEqual(schema.help.tabs[1].sections, [{ title: "Material", body: "Use **PLA**." }]);
+});
+
+test("resolveHelp: 'file' set alongside 'sections' or 'intro' fails the build, naming both", () => {
+  const mustExist = (abs) => abs;
+  assert.throws(
+    () => resolveHelp({ file: "x.md", sections: [] }, "/cfg", mustExist),
+    /both 'help\.sections' and 'help\.file' are set/
+  );
+  assert.throws(
+    () => resolveHelp({ file: "x.md", intro: "Hi" }, "/cfg", mustExist),
+    /both 'help\.intro' and 'help\.file' are set/
+  );
+  assert.throws(
+    () => resolveHelp({ tabs: [{ label: "T", file: "x.md", sections: [] }] }, "/cfg", mustExist),
+    /both 'help\.tabs\[0\]\.sections' and 'help\.tabs\[0\]\.file' are set/
+  );
+});
+
+test("resolveHelp: a missing 'file' fails the build with the usual not-found message", () => {
+  assert.throws(
+    () => run("widget-help-file-missing.config.json"),
+    /help\.file 'nope\.md' not found/
+  );
+});
+
 test("licenses: extra entries are appended, sanitised, and unknown keys dropped", () => {
   const { schema } = run("widget-licenses.config.json");
   assert.equal(schema.licenses.length, 2);
@@ -1339,6 +1404,12 @@ test("licenses: extra entries are appended, sanitised, and unknown keys dropped"
 test("licenses default to an empty array when omitted", () => {
   const { schema } = run("widget-autodeps.config.json");
   assert.deepEqual(schema.licenses, []);
+});
+
+test("licenses[].textFile: the referenced file's contents become 'text'", () => {
+  const { schema } = run("widget-licenses-file.config.json");
+  assert.equal(schema.licenses[0].text, "MIT License\n\nFull text goes here.");
+  assert.equal("textFile" in schema.licenses[0], false);
 });
 
 test("parseLicenses validates shape and required fields", () => {
@@ -1427,7 +1498,7 @@ test("parseFileImport: true/object, defaults and errors", () => {
   // Unknown key -> rejected (newly enforced — used to be silently ignored).
   assert.throws(
     () => parseFileImport({ oops: true }),
-    /'fileImport': unknown key 'oops'\.\s*\n\s*Valid keys: accept, label, note, maxBytes/
+    /'fileImport': unknown key 'oops'\.\s*\n\s*Valid keys: accept, label, note, noteFile, maxBytes/
   );
 });
 
@@ -1631,13 +1702,32 @@ test("parsePopup: defaults, modes, links and errors", () => {
   // Unknown key -> rejected (newly enforced — used to be silently ignored).
   assert.throws(
     () => parsePopup({ header: "x", body: "y", oops: true }),
-    /'popup': unknown key 'oops'\.\s*\n\s*Valid keys: header, body, mode, button, footnote/
+    /'popup': unknown key 'oops'\.\s*\n\s*Valid keys: header, body, bodyFile, mode, button, footnote/
   );
 });
 
 test("popup.footnote: a full build carries it through to the generated schema", () => {
   const { schema } = run("widget-popup.config.json");
   assert.equal(schema.popup.footnote, "Everything runs in your browser. Nothing is uploaded.");
+});
+
+test("popup.bodyFile: the referenced file's contents become 'body'", () => {
+  const { schema } = run("widget-popup-file.config.json");
+  assert.equal(schema.popup.body, "Configure a widget.");
+  assert.equal("bodyFile" in schema.popup, false);
+});
+
+test("popup: both 'body' and 'bodyFile' set fails the build, naming both", () => {
+  assert.throws(
+    () => run("widget-popup-file-conflict.config.json"),
+    /both 'popup\.body' and 'popup\.bodyFile' are set/
+  );
+});
+
+test("fileImport.noteFile: the referenced file's contents become 'note'", () => {
+  const { schema } = run("widget-fileimport-file.config.json");
+  assert.equal(schema.fileImport.note, "Import a font or SVG here.");
+  assert.equal("noteFile" in schema.fileImport, false);
 });
 
 test("parseEnumHint ignores single-item and non-enum hints", () => {

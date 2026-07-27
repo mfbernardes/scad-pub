@@ -1,0 +1,15 @@
+{
+  "source": "src",
+  "licenses": [
+    {
+      "name": "Acme Widget Library",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2024 Acme Corp",
+      "url": "https://example.com/acme",
+      "licenseUrl": "https://example.com/acme/LICENSE",
+      "textFile": "widget-license.txt"
+    }
+  ],
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}

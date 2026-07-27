@@ -116,6 +116,27 @@ const color = (defaultValue, extra = {}) => ({
   ...extra,
 });
 
+// The "<field>File" companion of a prose field resolved by gen-schema's
+// prose-file pre-pass (scripts/lib/prose-files.mjs) or, for `licenses[].text`,
+// the equivalent one-off in parseLicenses — a config-relative file whose
+// contents become `field` at build time, before this spec's own
+// applyGroupSpec walk (or parseLicenses) ever sees the resolved value.
+// `custom: true` because the read-a-file behaviour is bespoke, like
+// render.features/pwa.categories (see the file-top comment): registered here
+// purely for doc-coverage / schema-emission, and never itself present by the
+// time its sibling field is validated (the pre-pass deletes it after
+// resolving `field`). Default wording assumes a Markdown file, matching
+// `popup.bodyFile`/`fileImport.noteFile`; `licenses[].textFile` overrides it
+// via `extra` since license text isn't Markdown-flavoured.
+const fileAlt = (field, extra = {}) => ({
+  type: "string",
+  custom: true,
+  description:
+    `Config-relative Markdown file whose contents become '${field}' at build time. Mutually exclusive ` +
+    `with '${field}' (setting both fails the build, naming both).`,
+  ...extra,
+});
+
 // ── `ui.afterExport` — nested under `ui` below. `title`/`body` used to live
 // here too, but they were only ever a SECOND override path for two keys the
 // `strings` catalogue can already override (`exportSuccess.title`/`.body` —
@@ -508,7 +529,12 @@ export const CONFIG_SPEC = {
     properties: {
       accept: str({ description: "Deprecated/vestigial; kept for backward compatibility." }),
       label: str({ description: "Deprecated/vestigial; kept for backward compatibility." }),
-      note: str({ description: "Markdown-subset guidance shown atop the Files dialog." }),
+      note: str({ description: "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'." }),
+      // Same pre-pass/resolution pattern as popup.bodyFile above (see its
+      // comment): resolved into 'note' before applyGroupSpec ever sees this
+      // key, so it's registered here as `custom: true` purely for doc
+      // coverage / schema emission.
+      noteFile: fileAlt("note"),
       maxBytes: num("positive", { description: "Deprecated/vestigial upload size cap; kept for backward compatibility." }),
     },
   },
@@ -520,7 +546,16 @@ export const CONFIG_SPEC = {
     rootTypeError: "gen-schema: 'popup' must be an object with 'header', 'body' and an optional 'mode'",
     properties: {
       header: str({ required: true, description: "Dialog title." }),
-      body: str({ required: true, description: "Dialog message (Markdown subset)." }),
+      body: str({ required: true, description: "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'." }),
+      // Resolved by gen-schema.mjs's prose-file pre-pass (scripts/lib/prose-files.mjs)
+      // BEFORE this spec's own applyGroupSpec walk ever runs: a config-relative
+      // Markdown file whose contents become 'body', so `body` is populated by the
+      // time the `required` check above sees it. `custom: true` because the
+      // read-a-file behaviour is bespoke, like render.features/pwa.categories (see
+      // the file-top comment) — it's registered here purely for doc-coverage /
+      // schema-emission, and is never itself present by the time applyGroupSpec
+      // walks this node (the pre-pass deletes it after resolving 'body').
+      bodyFile: fileAlt("body"),
       mode: enumField(["always", "once", "dismissible", "picker"], "once", { description: "Popup frequency." }),
       button: str({ description: "Primary-button label; overrides the default 'OK'." }),
       footnote: str({ description: "Short plain-text line shown small and muted at the bottom." }),
@@ -529,7 +564,11 @@ export const CONFIG_SPEC = {
   help: {
     type: "object",
     custom: true,
-    description: "Help dialog content: 'sections' for a single pane, or 'tabs' for a tabbed guide. Passed through verbatim.",
+    description:
+      "Help dialog content: 'sections' for a single pane, or 'tabs' for a tabbed guide. A pane (the top-level " +
+      "object, or any 'tabs[]' entry) may set 'file' instead of 'sections' — a config-relative Markdown file " +
+      "gen-schema splits into 'intro'/'sections' at build time (see docs/config.md). Passed through verbatim " +
+      "otherwise, with any 'file' already resolved.",
   },
   notices: {
     type: "array",
@@ -567,7 +606,19 @@ export const CONFIG_SPEC = {
         url: { type: "string", description: "Project homepage." },
         licenseUrl: { type: "string", description: "Where the license text lives." },
         version: { type: "string", description: "Component version." },
-        text: { type: "string", description: "Full license text, shown in a details panel." },
+        text: {
+          type: "string",
+          description: "Full license text, shown in a details panel. Mutually exclusive with 'textFile'.",
+        },
+        // Same pre-pass/resolution pattern as popup.bodyFile (see its
+        // comment): resolved into 'text' before parseLicenses ever sees this
+        // entry, so it's registered here as `custom: true` purely for doc
+        // coverage / schema emission.
+        textFile: fileAlt("text", {
+          description:
+            "Config-relative file whose contents become 'text' at build time. Mutually exclusive with " +
+            "'text' (setting both fails the build, naming both).",
+        }),
         sourceUrl: { type: "string", description: "Corresponding-source link (required by copyleft licenses)." },
         note: { type: "string", description: "One-line description." },
       },
