@@ -189,10 +189,12 @@ export function validateSchema(raw: unknown): Schema {
       const e = n as Record<string, unknown>;
       if (typeof e.marker !== "string" || !e.marker)
         fail("a notice category is missing required string 'marker'");
-      if (typeof e.label !== "string" || !e.label)
-        fail("a notice category is missing required string 'label'");
-      if (e.labelOne !== undefined && typeof e.labelOne !== "string")
-        fail("a notice 'labelOne' must be a string");
+      if (!e.label || typeof e.label !== "object" || Array.isArray(e.label))
+        fail("a notice category is missing required object 'label' ({ one, other })");
+      const label = e.label as Record<string, unknown>;
+      for (const key of ["one", "other"] as const)
+        if (typeof label[key] !== "string" || !label[key])
+          fail(`a notice 'label.${key}' must be a non-empty string`);
       if (e.color !== undefined && typeof e.color !== "string")
         fail("a notice 'color' must be a string");
       if (e.attention !== undefined && typeof e.attention !== "boolean")
@@ -280,9 +282,6 @@ export function validateSchema(raw: unknown): Schema {
     for (const key of ["gallery", "essentials"] as const)
       if (ui[key] !== undefined && typeof ui[key] !== "boolean")
         fail(`'ui.${key}' must be a boolean`);
-    for (const key of ["presetsLabel", "parametersLabel"] as const)
-      if (ui[key] !== undefined && typeof ui[key] !== "string")
-        fail(`'ui.${key}' must be a string`);
   }
   // The 3D viewer's presentation, framing, and per-control visibility. Unlike
   // `ui` above this is required (see the Schema/ViewerConfig types) — every

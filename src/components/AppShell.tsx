@@ -130,8 +130,6 @@ function ActionDock({
       {exportSuccess && (
         <ExportSuccess
           state={exportSuccess}
-          title={afterExport?.title}
-          body={afterExport?.body}
           helpTab={afterExport?.helpTab}
           onDismiss={onDismissExportSuccess}
         />
@@ -391,9 +389,6 @@ export const AppShell = memo(function AppShell({
   const panelDefaultOpen = (ui.panelDefault ?? "open") === "open";
   // Variable names are developer detail — hidden unless a config opts in.
   const showVarName = ui.showVarName === true;
-  // Configurable tab/section labels (default to the built-in names).
-  const presetsLabel = ui.presetsLabel ?? "Presets";
-  const parametersLabel = ui.parametersLabel ?? "Customize";
   // Whether the viewer offers the measure (dimensions) toggle. Off hides the HUD
   // ruler button; the overlay + panel are only reachable through it, so they
   // stay hidden too.
@@ -475,14 +470,13 @@ export const AppShell = memo(function AppShell({
   // notice — plus the overall state that drives the status strip/dock/review
   // dialog. `badges` (already computed above for the Notices tab) gives each
   // notice category's live pending count; joined here with the category's own
-  // config-declared `attention`/`labelOne` so deriveAttention can decide which
+  // config-declared `attention`/`label` so deriveAttention can decide which
   // ones matter without re-scanning the raw log itself.
   const noticeAttentionInputs: NoticeAttentionInput[] = useMemo(
     () =>
       notices.map((n) => ({
         marker: n.marker,
         label: n.label,
-        labelOne: n.labelOne,
         attention: n.attention === true,
         subsumedByFont: n.subsumedByFont === true,
         count: badges.find((b) => b.key === `notice:${n.marker}`)?.count ?? 0,
@@ -944,8 +938,6 @@ export const AppShell = memo(function AppShell({
                   availableSvgFiles={availableSvgFiles}
                   onActivate={expand}
                   showVarName={showVarName}
-                  presetsLabel={presetsLabel}
-                  parametersLabel={parametersLabel}
                   showAdvanced={showAdvanced}
                   onShowAdvancedChange={handleShowAdvancedChange}
                   tab={panelState.tab}
@@ -1030,8 +1022,6 @@ export const AppShell = memo(function AppShell({
               panelDefaultOpen={panelDefaultOpen}
               showVarName={showVarName}
               autoRender={autoRender}
-              presetsLabel={presetsLabel}
-              parametersLabel={parametersLabel}
               showAdvanced={showAdvanced}
               onShowAdvancedChange={handleShowAdvancedChange}
               panelTab={panelState.tab}

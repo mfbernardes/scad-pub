@@ -13,6 +13,7 @@ import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
+import { t } from "../lib/i18n";
 import { useAppActions } from "../lib/appActions";
 import { useDebounce } from "../lib/useDebounce";
 import { visibleGroups } from "../lib/paramGroups";
@@ -71,9 +72,6 @@ interface Props {
   /** Show the underlying OpenSCAD variable name beside each label. */
   showVarName: boolean;
   autoRender: boolean;
-  /** Configurable tab labels (default "Presets" / "Parameters"). */
-  presetsLabel?: string;
-  parametersLabel?: string;
   showAdvanced: boolean;
   /** Flip `showAdvanced`. Omitted when the config leaves `ui.essentials` off,
    *  which is what withholds the essentials toggle entirely (see AppShell). */
@@ -106,8 +104,6 @@ export function ParamPanel({
   panelDefaultOpen,
   showVarName,
   autoRender,
-  presetsLabel = "Presets",
-  parametersLabel = "Customize",
   showAdvanced,
   onShowAdvancedChange,
   panelTab,
@@ -197,6 +193,10 @@ export function ParamPanel({
   const side = panelSide === "right" ? "param-panel--right" : "param-panel--left";
   // Collapse chevron points toward the screen edge the panel docks against.
   const CollapseChevron = panelSide === "right" ? ChevronRightIcon : ChevronLeftIcon;
+  // Overridable via the config's `strings` block (src/locales/en.json's
+  // presets.title/settings.title) — see docs/config.md's "Text overrides".
+  const presetsLabel = t("presets.title");
+  const parametersLabel = t("settings.title");
 
   if (!open) {
     return (
@@ -207,8 +207,8 @@ export function ParamPanel({
         <button
           className="param-panel-open-btn font-display"
           onClick={() => setOpen(true)}
-          aria-label={`Open the ${parametersLabel} panel`}
-          title={`Open the ${parametersLabel} panel`}
+          aria-label={t("settings.openPanel", { label: parametersLabel })}
+          title={t("settings.openPanel", { label: parametersLabel })}
         >
           <MenuIcon size={14} /> {parametersLabel}
         </button>

@@ -1472,9 +1472,6 @@ async function main() {
     );
     const designs = schema.designs ?? [];
     for (const d of designs) designLabels[d.id] = d.label;
-    // Panel tab names are config-overridable (ui.presetsLabel/parametersLabel).
-    const presetsTabName = schema.ui?.presetsLabel || "Presets";
-    const paramsTabName = schema.ui?.parametersLabel || "Customize";
     const ids = designs.map((d) => d.id);
     // Chrome copy comes from the i18n catalogue (src/locales/en.json), which a
     // deployment overrides per key via the config's `strings` block — so build
@@ -1485,6 +1482,10 @@ async function main() {
       await readFile(fileURLToPath(new URL("../src/locales/en.json", import.meta.url)), "utf-8")
     );
     const uiText = (key) => schema.strings?.[key] ?? catalogue[key] ?? "";
+    // Panel tab names used to be config-overridable via ui.presetsLabel/
+    // parametersLabel; they're catalogue keys now (presets.title/settings.title).
+    const presetsTabName = uiText("presets.title") || "Presets";
+    const paramsTabName = uiText("settings.title") || "Customize";
     const textRe = (...keys) =>
       new RegExp(
         keys

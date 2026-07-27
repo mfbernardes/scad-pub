@@ -286,21 +286,27 @@ test("validates the optional help (single-pane and tabbed) shape", () => {
   );
 });
 
-test("validates the optional notices' labelOne field", () => {
+test("validates the notices' label shape ({ one, other })", () => {
   const ok = validBase();
-  ok.notices = [{ marker: "alert", label: "alerts", labelOne: "alert" }];
+  ok.notices = [{ marker: "alert", label: { one: "alert", other: "alerts" } }];
   assert.doesNotThrow(() => validateSchema(ok));
-  const bad = validBase();
-  bad.notices = [{ marker: "alert", label: "alerts", labelOne: 5 }];
-  assert.throws(() => validateSchema(bad), /a notice 'labelOne' must be a string/);
+  const missing = validBase();
+  missing.notices = [{ marker: "alert" }];
+  assert.throws(() => validateSchema(missing), /a notice category is missing required object 'label'/);
+  const badOne = validBase();
+  badOne.notices = [{ marker: "alert", label: { one: 5, other: "alerts" } }];
+  assert.throws(() => validateSchema(badOne), /a notice 'label\.one' must be a non-empty string/);
+  const badOther = validBase();
+  badOther.notices = [{ marker: "alert", label: { one: "alert", other: "" } }];
+  assert.throws(() => validateSchema(badOther), /a notice 'label\.other' must be a non-empty string/);
 });
 
 test("validates the optional notices' subsumedByFont field", () => {
   const ok = validBase();
-  ok.notices = [{ marker: "alert", label: "alerts", subsumedByFont: true }];
+  ok.notices = [{ marker: "alert", label: { one: "alert", other: "alerts" }, subsumedByFont: true }];
   assert.doesNotThrow(() => validateSchema(ok));
   const bad = validBase();
-  bad.notices = [{ marker: "alert", label: "alerts", subsumedByFont: "yes" }];
+  bad.notices = [{ marker: "alert", label: { one: "alert", other: "alerts" }, subsumedByFont: "yes" }];
   assert.throws(() => validateSchema(bad), /a notice 'subsumedByFont' must be a boolean/);
 });
 

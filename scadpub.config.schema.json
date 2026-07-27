@@ -519,34 +519,23 @@
           "default": false,
           "type": "boolean"
         },
-        "presetsLabel": {
-          "description": "Label for the Presets tab/section.",
-          "default": "Presets",
-          "type": "string"
-        },
-        "parametersLabel": {
-          "description": "Label for the parameters tab/section.",
-          "default": "Customize",
-          "type": "string"
-        },
         "afterExport": {
-          "description": "Turns on the after-export success panel; every field optional.",
-          "type": "object",
-          "properties": {
-            "title": {
-              "description": "Overrides the panel headline.",
-              "type": "string"
+          "description": "Turns on the after-export success panel: true for defaults, or { helpTab }.",
+          "anyOf": [
+            {
+              "type": "boolean"
             },
-            "body": {
-              "description": "Overrides the panel's one-line next step (Markdown subset).",
-              "type": "string"
-            },
-            "helpTab": {
-              "description": "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
-              "type": "string"
+            {
+              "type": "object",
+              "properties": {
+                "helpTab": {
+                  "description": "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
             }
-          },
-          "additionalProperties": false
+          ]
         }
       },
       "additionalProperties": false
@@ -696,11 +685,7 @@
             "type": "string"
           },
           "label": {
-            "description": "Badge/notice noun; defaults to 'marker'.",
-            "type": "string"
-          },
-          "labelOne": {
-            "description": "Singular form of 'label', used when the live count is exactly 1.",
+            "description": "Badge/notice noun: a plain string used for both counts, or { one, other } for distinct singular/plural forms (selected via Intl.PluralRules, the same as src/lib/i18n.ts's tn()). Defaults to 'marker'.",
             "type": "string"
           },
           "color": {

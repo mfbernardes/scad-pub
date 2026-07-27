@@ -394,15 +394,16 @@ export interface RenderConfig {
 export interface NoticeCategory {
   /** The design-defined marker, matched as `: <marker>:` within an echo. */
   marker: string;
-  /** Badge / notice noun (e.g. "alerts", "notes"). Defaults to the marker. */
-  label: string;
   /**
-   * Optional singular form of `label` (e.g. "alert" for `label: "alerts"`),
-   * used wherever a count renders alongside it whenever the live count is
-   * exactly 1 — `label` alone can't pluralize itself ("1 alerts" reads
-   * wrong). Omit to keep `label` regardless of count.
+   * Badge / notice noun, already normalised to both CLDR forms — `other` is
+   * the plural/default form, `one` the singular (config's plain-string
+   * shorthand sets both to the same word; defaults to the marker when
+   * `notices[].label` is entirely absent). Select between them with
+   * `src/lib/i18n.ts`'s `selectPlural(count, label)` rather than a bespoke
+   * `count === 1` check — the same Intl.PluralRules-backed logic `tn()` uses
+   * for catalogue keys.
    */
-  labelOne?: string;
+  label: { one: string; other: string };
   /** Optional badge fill colour (a plain CSS colour); falls back to the accent. */
   color?: string;
   /** Whether this category should be treated as requiring user attention. */
@@ -484,10 +485,6 @@ export interface UiConfig {
    * the desktop and mobile secondary-action surfaces.
    */
   saveImage?: boolean;
-  /** Label for the "Presets" tab/section (default "Presets"). */
-  presetsLabel?: string;
-  /** Label for the "Customize" (parameters) tab/section (default "Customize"). */
-  parametersLabel?: string;
   /** Use the card-grid design picker instead of the compact dropdown. */
   gallery?: boolean;
   /** Start with `@advanced` parameters hidden behind a Show all settings action. */
@@ -495,17 +492,15 @@ export interface UiConfig {
   /**
    * Optional inline success panel shown above the action dock after a
    * successful export (see src/components/ExportSuccess.tsx). Absent -> the
-   * feature is off entirely — no panel is ever shown, on any export. All
-   * fields are optional even when the object is present; omitted `title`/
-   * `body` fall back to built-in copy. None of these fields affect geometry
+   * feature is off entirely — no panel is ever shown, on any export. The
+   * panel's headline/body always come from the i18n catalogue
+   * (`exportSuccess.title`/`.body` in src/locales/en.json, overridable via the
+   * config's `strings` block like any other chrome text) — this object used
+   * to carry its own separate `title`/`body` override fields, a second path
+   * to the same two keys; removed. None of these fields affect geometry
    * (absent from renderHash).
    */
   afterExport?: {
-    /** Overrides the panel's default headline ("Your file is on its way"). */
-    title?: string;
-    /** Overrides the panel's default next-step body text. Rendered as the
-     *  same Markdown subset as `help`/`fileImport.note`. */
-    body?: string;
     /**
      * Help-modal tab label to deep-link the panel's "Open printing help"
      * action to (HelpModal's `initialTab`). Validated at build time against

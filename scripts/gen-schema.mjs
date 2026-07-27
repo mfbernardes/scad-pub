@@ -62,6 +62,7 @@ import { KNOWN_TOP_LEVEL_KEYS } from "./lib/config-spec.mjs";
 // import from this entry, so the module split is invisible to the test suite.
 export {
   COLOR_TOKENS,
+  parseAfterExport,
   parseColors,
   parseDir,
   parseFileImport,

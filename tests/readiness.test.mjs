@@ -155,7 +155,7 @@ test("deriveAttention: a flagged notice category with a pending notice produces 
     params: [],
     values: {},
     availableFontFamilies: new Set(),
-    notices: [{ marker: "alert", label: "alerts", attention: true, count: 2 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, count: 2 }],
   });
   assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alerts", count: 2 }]);
 });
@@ -165,7 +165,7 @@ test("deriveAttention: a notice item's label uses labelOne when the pending coun
     params: [],
     values: {},
     availableFontFamilies: new Set(),
-    notices: [{ marker: "alert", label: "alerts", labelOne: "alert", attention: true, count: 1 }],
+    notices: [{ marker: "alert", label: { one: "alert", other: "alerts" }, attention: true, count: 1 }],
   });
   assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alert", count: 1 }]);
 });
@@ -175,7 +175,7 @@ test("deriveAttention: a notice item's label stays plural when the pending count
     params: [],
     values: {},
     availableFontFamilies: new Set(),
-    notices: [{ marker: "alert", label: "alerts", labelOne: "alert", attention: true, count: 3 }],
+    notices: [{ marker: "alert", label: { one: "alert", other: "alerts" }, attention: true, count: 3 }],
   });
   assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alerts", count: 3 }]);
 });
@@ -185,7 +185,7 @@ test("deriveAttention: an unflagged notice category is never surfaced, however m
     params: [],
     values: {},
     availableFontFamilies: new Set(),
-    notices: [{ marker: "note", label: "notes", attention: false, count: 5 }],
+    notices: [{ marker: "note", label: { one: "notes", other: "notes" }, attention: false, count: 5 }],
   });
   assert.deepEqual(items, []);
 });
@@ -195,7 +195,7 @@ test("deriveAttention: a flagged category with nothing pending (count 0) is not 
     params: [],
     values: {},
     availableFontFamilies: new Set(),
-    notices: [{ marker: "alert", label: "alerts", attention: true, count: 0 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, count: 0 }],
   });
   assert.deepEqual(items, []);
 });
@@ -209,7 +209,7 @@ test("deriveAttention: a subsumedByFont category is folded away while a font fel
     params: [fontParam()],
     values: { font: "No Such Font" },
     availableFontFamilies: LOADED,
-    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 2 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, subsumedByFont: true, count: 2 }],
   });
   assert.deepEqual(items, [{ kind: "font-fallback", param: "font", family: "No Such Font" }]);
 });
@@ -219,7 +219,7 @@ test("deriveAttention: a subsumedByFont category counts normally when no font fe
     params: [fontParam()],
     values: { font: "Liberation Sans" },
     availableFontFamilies: LOADED,
-    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 2 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, subsumedByFont: true, count: 2 }],
   });
   assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alerts", count: 2 }]);
 });
@@ -229,7 +229,7 @@ test("deriveAttention: a subsumedByFont category counts normally when the design
     params: [],
     values: {},
     availableFontFamilies: LOADED,
-    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 1 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, subsumedByFont: true, count: 1 }],
   });
   assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alerts", count: 1 }]);
 });
@@ -239,7 +239,7 @@ test("deriveAttention: an unflagged (plain) category is unaffected by a font fal
     params: [fontParam()],
     values: { font: "No Such Font" },
     availableFontFamilies: LOADED,
-    notices: [{ marker: "alert", label: "alerts", attention: true, count: 2 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, count: 2 }],
   });
   assert.deepEqual(items, [
     { kind: "font-fallback", param: "font", family: "No Such Font" },
@@ -254,7 +254,7 @@ test("deriveAttention: subsumedByFont changes nothing for a category that isn't 
       params: [],
       values: {},
       availableFontFamilies: new Set(),
-      notices: [{ marker: "note", label: "notes", attention: false, subsumedByFont: true, count: 5 }],
+      notices: [{ marker: "note", label: { one: "notes", other: "notes" }, attention: false, subsumedByFont: true, count: 5 }],
     }),
     []
   );
@@ -264,7 +264,7 @@ test("deriveAttention: subsumedByFont changes nothing for a category that isn't 
       params: [fontParam()],
       values: { font: "No Such Font" },
       availableFontFamilies: LOADED,
-      notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 0 }],
+      notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, subsumedByFont: true, count: 0 }],
     }),
     [{ kind: "font-fallback", param: "font", family: "No Such Font" }]
   );
@@ -275,7 +275,7 @@ test("deriveAttention: a subsumedByFont category is NOT folded when two font par
     params: [fontParam(), fontParam({ name: "font2" })],
     values: { font: "No Such Font", font2: "Also Missing" },
     availableFontFamilies: LOADED,
-    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 2 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, subsumedByFont: true, count: 2 }],
   });
   assert.deepEqual(items, [
     { kind: "font-fallback", param: "font", family: "No Such Font" },
@@ -289,7 +289,7 @@ test("deriveAttention: a subsumedByFont category IS folded when a multi-font des
     params: [fontParam(), fontParam({ name: "font2" })],
     values: { font: "No Such Font", font2: "DejaVu Sans" },
     availableFontFamilies: LOADED,
-    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 2 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, subsumedByFont: true, count: 2 }],
   });
   assert.deepEqual(items, [{ kind: "font-fallback", param: "font", family: "No Such Font" }]);
 });
@@ -303,7 +303,7 @@ test("deriveAttention: a subsumedByFont category is NOT folded when a second, @s
     params: [fontParam(), fontParam({ name: "font2", showIf: "show_text" })],
     values: { font: "No Such Font", font2: "Also Missing", show_text: false },
     availableFontFamilies: LOADED,
-    notices: [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true, count: 2 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, subsumedByFont: true, count: 2 }],
   });
   assert.deepEqual(items, [
     { kind: "font-fallback", param: "font", family: "No Such Font" },
@@ -317,8 +317,8 @@ test("deriveAttention: font fallbacks come before flagged notices, and notices k
     values: { font: "No Such Font" },
     availableFontFamilies: LOADED,
     notices: [
-      { marker: "alert", label: "alerts", attention: true, count: 1 },
-      { marker: "warn", label: "warnings", attention: true, count: 3 },
+      { marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, count: 1 },
+      { marker: "warn", label: { one: "warnings", other: "warnings" }, attention: true, count: 3 },
     ],
   });
   assert.deepEqual(items.map((i) => i.kind), ["font-fallback", "notice", "notice"]);
@@ -380,7 +380,7 @@ test("deriveAttention: diagnostics and notices are independent inputs — no imp
     params: [],
     values: {},
     availableFontFamilies: new Set(),
-    notices: [{ marker: "alert", label: "alerts", attention: true, count: 1 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, count: 1 }],
     diagnostics: ["a bare warning, unrelated to the alert notice category"],
   });
   assert.deepEqual(items, [
@@ -394,7 +394,7 @@ test("deriveAttention: diagnostics come after font fallbacks and before flagged 
     params: [fontParam()],
     values: { font: "No Such Font" },
     availableFontFamilies: LOADED,
-    notices: [{ marker: "alert", label: "alerts", attention: true, count: 1 }],
+    notices: [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, count: 1 }],
     diagnostics: ["a bare warning"],
   });
   assert.deepEqual(items.map((i) => i.kind), ["font-fallback", "diagnostic", "notice"]);

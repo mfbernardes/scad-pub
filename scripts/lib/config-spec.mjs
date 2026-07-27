@@ -113,16 +113,31 @@ const color = (defaultValue, extra = {}) => ({
   ...extra,
 });
 
-// ── `ui.afterExport` — nested under `ui` below. Unknown keys are rejected
-// (matches parseAfterExport's own AFTER_EXPORT_KEYS loop); `helpTab`'s
-// cross-check against `help.tabs[].label` is a cross-field check and stays in
-// gen-schema.mjs's generate().
+// ── `ui.afterExport` — nested under `ui` below. `title`/`body` used to live
+// here too, but they were only ever a SECOND override path for two keys the
+// `strings` catalogue can already override (`exportSuccess.title`/`.body` —
+// see src/components/ExportSuccess.tsx's own fallback) — removed rather than
+// kept as a redundant mechanism; a deployment wanting different copy now sets
+// `strings["exportSuccess.title"]`/`["exportSuccess.body"]`. That leaves
+// `afterExport` meaning only "show this panel", with one real option
+// (`helpTab`) — so it takes the same `true`-or-options-object shape as
+// `fileImport` below rather than staying a plain nested object: `true` (or
+// `{}`) for defaults, `{ helpTab }` to also deep-link Help, `null`/absent for
+// no panel. Like `fileImport`, that union means this field is `custom: true`
+// (see the file-top comment on a plain leaf FIELD nested inside an
+// applyGroupSpec-driven group) — `parseAfterExport` in ./config-parsers.mjs
+// handles the true/object dispatch itself, reusing this node's own
+// `properties`/`rootTypeError` for the object-shape validation exactly the
+// way `parseFileImport` reuses `CONFIG_SPEC.fileImport`. Unknown keys inside
+// the object form are still rejected; `helpTab`'s cross-check against
+// `help.tabs[].label` is a cross-field check and stays in gen-schema.mjs's
+// generate().
 const AFTER_EXPORT_SPEC = {
-  type: "object",
-  description: "Turns on the after-export success panel; every field optional.",
+  type: "boolean",
+  custom: true,
+  description: "Turns on the after-export success panel: true for defaults, or { helpTab }.",
+  rootTypeError: "gen-schema: 'ui.afterExport' must be true, an options object, or null",
   properties: {
-    title: str({ description: "Overrides the panel headline." }),
-    body: str({ description: "Overrides the panel's one-line next step (Markdown subset)." }),
     helpTab: str({
       description: "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
     }),
@@ -407,8 +422,10 @@ export const CONFIG_SPEC = {
       saveImage: { type: "boolean", description: "Show the 'Save image (PNG)' action." },
       gallery: bool(false, { description: "Replace the compact design dropdown with a searchable card grid." }),
       essentials: bool(false, { description: "Start with // @advanced parameters hidden behind 'Show all settings'." }),
-      presetsLabel: str({ default: "Presets", description: "Label for the Presets tab/section." }),
-      parametersLabel: str({ default: "Customize", description: "Label for the parameters tab/section." }),
+      // The Presets/Customize tab labels live in the i18n catalogue instead
+      // (`strings["presets.title"]`/`strings["settings.title"]`,
+      // src/locales/en.json) since that's what they always were: chrome
+      // copy, not build-time behaviour.
       afterExport: AFTER_EXPORT_SPEC,
     },
   },
@@ -486,8 +503,13 @@ export const CONFIG_SPEC = {
       custom: true,
       properties: {
         marker: { type: "string", description: "Design-defined word matched as ': <marker>:' inside an echo (case-insensitive)." },
-        label: { type: "string", description: "Badge/notice noun; defaults to 'marker'." },
-        labelOne: { type: "string", description: "Singular form of 'label', used when the live count is exactly 1." },
+        label: {
+          type: "string",
+          description:
+            "Badge/notice noun: a plain string used for both counts, or { one, other } for distinct " +
+            "singular/plural forms (selected via Intl.PluralRules, the same as src/lib/i18n.ts's tn()). " +
+            "Defaults to 'marker'.",
+        },
         color: { type: "string", description: "Badge fill colour, a plain CSS colour." },
         attention: { type: "boolean", default: false, description: "Join the pre-download review dialog's attention items." },
         subsumedByFont: { type: "boolean", default: false, description: "Fold into a missing-font item instead of listing separately." },

@@ -37,16 +37,10 @@ export interface ExportSuccessState {
 
 export function ExportSuccess({
   state,
-  title,
-  body,
   helpTab,
   onDismiss,
 }: {
   state: ExportSuccessState;
-  /** Config `ui.afterExport.title` override; falls back to t("exportSuccess.title"). */
-  title?: string;
-  /** Config `ui.afterExport.body` override; falls back to t("exportSuccess.body"). */
-  body?: string;
   /** Config `ui.afterExport.helpTab` — shows the "Open printing help" action,
    *  deep-linking Help to that tab, only when set. gen-schema's build-time
    *  validation guarantees a set value always names a real Help tab. */
@@ -73,9 +67,9 @@ export function ExportSuccess({
       aria-live="polite"
     >
       <div className="min-w-0 flex-1">
-        <p className="m-0 font-medium text-foreground">{title ?? t("exportSuccess.title")}</p>
+        <p className="m-0 font-medium text-foreground">{t("exportSuccess.title")}</p>
         <div className="mt-[0.15rem] text-muted-foreground [&_p]:m-0">
-          <Markdown body={body ?? t("exportSuccess.body")} />
+          <Markdown body={t("exportSuccess.body")} />
         </div>
         {helpTab && (
           <Button

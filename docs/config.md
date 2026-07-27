@@ -503,31 +503,33 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`outputDefault`**: `"closed"` by default, or `"open"`. Controls whether the OpenSCAD output console starts open
 - **`showVarName`**: `false` by default, or `true`. Shows the underlying OpenSCAD variable name beside each parameter label. Hidden by default because it is developer detail; set `true` for a technical audience. Every parameter row always carries a `data-param="<var>"` attribute for smoke tests and `extraCss`
 - **`saveImage`**: `true` by default, or `false`. Controls the "Save image (PNG)" action in the secondary-action surfaces (the desktop command bar and the mobile ⋮ overflow menu). Set `false` to hide the Save-image action entirely
-- **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
-- **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
 - **`gallery`**: `false` by default. Replaces the compact design dropdown with a searchable card grid using each design's `image`, then `icon`, then a letter fallback
 - **`essentials`**: `false` by default. Starts with `// @advanced` parameters hidden behind **Show all settings**
 - **`afterExport`**: turns on the inline after-export success panel. Absent by default (no panel). See [After-export panel (`ui.afterExport`)](#after-export-panel-uiafterexport)
 
+The Presets tab, the parameters ("Customize") tab, and the desktop panel's own labels are plain chrome text — the `strings` catalogue's `"presets.title"` (default `"Presets"`) and `"settings.title"` (default `"Customize"`) — since that's all they ever were; see [Text overrides (`strings`)](#text-overrides-strings).
+
 ### After-export panel (`ui.afterExport`)
 
-The optional `ui.afterExport` object turns on a compact, non-modal panel (`src/components/ExportSuccess.tsx`) that appears above the floating export dock right after a successful model export. Absent entirely (the default) → no panel is ever shown, on any export. Every field inside it is also optional:
+The optional `ui.afterExport` field turns on a compact, non-modal panel (`src/components/ExportSuccess.tsx`) that appears above the floating export dock right after a successful model export. Absent, `null`, or `false` → no panel is ever shown, on any export. Set it to `true` for the panel with its defaults, or an options object for the one thing worth configuring — the same `true`-or-options-object shape as [`fileImport`](#import-file-fileimport):
 
 ```jsonc
 {
   "ui": {
+    // Shorthand: enable with defaults.
+    "afterExport": true
+
+    // …or an options object:
     "afterExport": {
-      "title": "Model downloaded",     // optional; defaults to "Your file is on its way"
-      "body": "Slice it and print.",   // optional; defaults to a generic next-step line
-      "helpTab": "Printing"            // optional; must name an existing help.tabs[].label
+      "helpTab": "Printing"   // optional; must name an existing help.tabs[].label
     }
   }
 }
 ```
 
-- **`title`**: overrides the panel's headline. Left unset, the panel reads "Your file is on its way"
-- **`body`**: overrides the panel's one-line next step. Rendered as the same Markdown subset as `help`/`fileImport.note`. Left unset, the panel gives a generic "check your downloads, then slice and print" line
 - **`helpTab`**: when set, the panel shows an "Open printing help" action that opens Help scrolled straight to the tab with this exact label (`HelpModal`'s `initialTab`, matched by [`help.tabs[].label`](#help-content-help)). **Validated at build time**: `gen-schema` fails the build if no tab in this config's `help` carries that label. Omit to hide the action
+
+The panel's headline and body always come from the `strings` catalogue (`"exportSuccess.title"`, default "Your file is on its way"; `"exportSuccess.body"`, default a generic next-step line) — override them there, the same way as any other chrome text, rather than through a second field on `afterExport`.
 
 The panel is dismissible (an ✕) and auto-hides itself after a few seconds; it never appears while a native share sheet is open — it's only ever shown once the export's share-or-download outcome has actually settled, and it replaces the export flow's one-time "install this app" toast on any deployment that configures it (the two never stack on the same export).
 
@@ -582,15 +584,14 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 ```jsonc
 {
   "notices": [
-    { "marker": "alert", "label": "alerts", "labelOne": "alert", "color": "#e0a458" },
-    { "marker": "note",  "label": "notes",  "labelOne": "note",  "color": "#86a9ff" }
+    { "marker": "alert", "label": { "one": "alert", "other": "alerts" }, "color": "#e0a458" },
+    { "marker": "note",  "label": { "one": "note",  "other": "notes"  }, "color": "#86a9ff" }
   ]
 }
 ```
 
 - **`marker`**: required. The design-defined word, matched as `: <marker>:` inside an echo, case-insensitive. The first configured category that matches a line claims it
-- **`label`**: optional badge noun, such as `"alerts"`. Defaults to the `marker`
-- **`labelOne`**: optional singular form of `label`, such as `"alert"`. Used wherever a live count renders alongside the label whenever the count is exactly 1 — `label` alone can't pluralize itself, so without this a single pending notice reads as "1 alerts". Omit to keep `label` regardless of count
+- **`label`**: optional badge noun. Either a plain string used regardless of count (e.g. `"alerts"`), or an object with `other` (the plural/default form, required within the object) and an optional `one` (the singular form, falling back to `other` when omitted) — the singular/plural is picked with the same [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) `Intl.PluralRules` logic `strings`' pluralized keys use (`#one`/`#other`), so a single pending notice never reads as "1 alerts". Defaults to the `marker` (used for both forms) when omitted entirely. A config using the old `label`/`labelOne` pair fails the build with a pointer at this shape
 - **`color`**: optional badge fill, as a plain CSS colour. For `#rgb`/`#rrggbb`, the badge text auto-switches between black and white to stay legible. Other colour forms keep the default badge text, so their contrast is your responsibility. Omit to use the default accent badge styling
 - **`attention`**: optional boolean, default `false`. Attention notices join OpenSCAD warnings, assertions, and missing fonts in the pre-download review dialog; **Download anyway** remains available
 - **`subsumedByFont`**: optional boolean, default `false`. Only meaningful alongside `attention: true`. Marks a category whose notices are a *symptom* of a missing font rather than their own separate issue — for example a design that warns about text overflowing once a substitute family was used. While a font the design asked for isn't loaded, and it is unambiguous which font parameter that is (the design has one font parameter, or exactly one fell back), this category's pending notices are folded into the font item instead of being listed again beside it. With no font missing, they count exactly as normal

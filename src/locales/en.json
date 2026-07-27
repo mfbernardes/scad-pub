@@ -22,6 +22,8 @@
 
   "common.close": "Close",
 
+  "presets.title": "Presets",
+
   "action.export": "Download for 3D printing",
   "action.share": "Share",
 
@@ -76,6 +78,8 @@
   "presetDiff.revertTo": "Revert to {name}",
   "presetDiff.reset": "Reset",
 
+  "settings.title": "Customize",
+  "settings.openPanel": "Open the {label} panel",
   "settings.jumpToSection": "Jump to section",
   "settings.showAllCount#one": "Show all settings ({count} more)",
   "settings.showAllCount#other": "Show all settings ({count} more)",

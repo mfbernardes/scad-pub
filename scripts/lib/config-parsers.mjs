@@ -460,6 +460,40 @@ export function parsePopup(raw) {
 // Notices don't affect geometry, so they're absent from renderHash. Off by
 // default: omitted (or []) -> no notice categories. OpenSCAD's own WARNING/ERROR
 // lines and assert failures stay hardcoded (see lib/diagnostics).
+//
+// `label` is `{ one, other }` — `other` the plural/default form, `one` an
+// optional singular override (falls back to `other` when unset) — selected
+// at render time via the same Intl.PluralRules-backed logic src/lib/i18n.ts's
+// `tn()` uses (see selectPlural there), rather than a bespoke `count === 1`
+// check. A plain string is accepted as shorthand for "the same word regardless
+// of count" and normalised to `{ one: v, other: v }`. A config still using the
+// old `label`/`labelOne` pair (plural-required, singular-optional) fails the
+// build with a clear pointer at this shape instead.
+function parseNoticeLabel(raw, marker, i) {
+  const path = `notices[${i}].label`;
+  if (raw === undefined || raw === null) return { one: marker, other: marker };
+  if (typeof raw === "string") {
+    if (!raw.trim()) throw new Error(`gen-schema: '${path}' must be a non-empty string, or { one, other }`);
+    const v = raw.trim();
+    return { one: v, other: v };
+  }
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error(`gen-schema: '${path}' must be a string, or an object with 'one'/'other'`);
+  for (const key of Object.keys(raw))
+    if (key !== "one" && key !== "other")
+      throw new Error(`gen-schema: '${path}': unknown key '${key}'.\n  Valid keys: one, other`);
+  if (typeof raw.other !== "string" || !raw.other.trim())
+    throw new Error(`gen-schema: '${path}.other' is required and must be a non-empty string`);
+  const other = raw.other.trim();
+  let one = other;
+  if (raw.one !== undefined && raw.one !== null) {
+    if (typeof raw.one !== "string" || !raw.one.trim())
+      throw new Error(`gen-schema: '${path}.one', when set, must be a non-empty string`);
+    one = raw.one.trim();
+  }
+  return { one, other };
+}
+
 export function parseNotices(raw) {
   if (raw == null) return [];
   if (!Array.isArray(raw))
@@ -473,23 +507,13 @@ export function parseNotices(raw) {
       throw new Error(
         `gen-schema: 'notices[${i}].marker' is required and must be a non-empty string`
       );
-    const out = { marker: entry.marker.trim() };
-    if (entry.label === undefined || entry.label === null) {
-      out.label = out.marker;
-    } else if (typeof entry.label !== "string" || !entry.label.trim()) {
+    if (entry.labelOne !== undefined)
       throw new Error(
-        `gen-schema: 'notices[${i}].label' must be a non-empty string`
+        `gen-schema: 'notices[${i}].labelOne' is no longer supported — use ` +
+          `'notices[${i}].label' as { one, other } instead (see docs/config.md's Notice badges section).`
       );
-    } else {
-      out.label = entry.label.trim();
-    }
-    if (entry.labelOne !== undefined && entry.labelOne !== null) {
-      if (typeof entry.labelOne !== "string" || !entry.labelOne.trim())
-        throw new Error(
-          `gen-schema: 'notices[${i}].labelOne' must be a non-empty string`
-        );
-      out.labelOne = entry.labelOne.trim();
-    }
+    const marker = entry.marker.trim();
+    const out = { marker, label: parseNoticeLabel(entry.label, marker, i) };
     if (entry.color !== undefined && entry.color !== null) {
       if (typeof entry.color !== "string" || !COLOR_VALUE_RE.test(entry.color.trim()))
         throw new Error(
@@ -512,17 +536,40 @@ export function parseNotices(raw) {
   });
 }
 
+// Validate and normalise the optional `ui.afterExport` field: `true`/`{}` for
+// defaults, `{ helpTab }` to also deep-link Help, `null`/`false`/absent for no
+// panel — the same true-or-options-object idiom as `parseFileImport` below,
+// reusing this field's own CONFIG_SPEC node (properties + rootTypeError) for
+// the object-shape validation exactly the way `parseFileImport` reuses
+// `CONFIG_SPEC.fileImport`. `title`/`body` used to live here too; removed (see
+// CONFIG_SPEC's AFTER_EXPORT_SPEC comment) — the `false` case is new relative
+// to the old plain-object field, which had no way to say "off" other than
+// omitting the key entirely.
+export function parseAfterExport(raw) {
+  if (raw == null || raw === false) return undefined;
+  if (raw === true) return {};
+  return applyGroupSpec(raw, CONFIG_SPEC.ui.properties.afterExport, "ui.afterExport");
+}
+
 // Validate and normalise the optional `ui` config block: build-time UI
-// behaviour overrides (panel/output defaults, labels, and the nested
-// `afterExport` panel — `helpTab`'s cross-check against a real
-// `help.tabs[].label` can't happen here, since `help` isn't available yet; it
-// stays a cross-field check in gen-schema.mjs's generate(), search that file
-// for 'ui.afterExport.helpTab'). The viewer's own controls live under
-// `viewer.controls` now (see parseViewer) — not here. None of it affects
-// geometry (absent from renderHash). Returns CONFIG_SPEC.ui's defaults object
-// when `ui` is omitted.
+// behaviour overrides (panel/output defaults and the nested `afterExport`
+// panel — `helpTab`'s cross-check against a real `help.tabs[].label` can't
+// happen here, since `help` isn't available yet; it stays a cross-field check
+// in gen-schema.mjs's generate(), search that file for
+// 'ui.afterExport.helpTab'). The viewer's own controls live under
+// `viewer.controls` now (see parseViewer) — not here, and the Presets/
+// Customize tab labels are the i18n catalogue's now (`strings["presets.title"]`/
+// `strings["settings.title"]`), not here either. None of it affects geometry
+// (absent from renderHash). Returns CONFIG_SPEC.ui's defaults object when
+// `ui` is omitted. `afterExport` is `custom: true` in CONFIG_SPEC (see that
+// file's comment), so applyGroupSpec recognises the key but skips it
+// entirely — parsed here instead via the bespoke `parseAfterExport` above,
+// same relationship as `parsePwa`'s `themeColor`.
 export function parseUi(raw) {
-  return applyGroupSpec(raw ?? {}, CONFIG_SPEC.ui, "ui");
+  const out = applyGroupSpec(raw ?? {}, CONFIG_SPEC.ui, "ui");
+  const afterExport = parseAfterExport(raw?.afterExport);
+  if (afterExport !== undefined) out.afterExport = afterExport;
+  return out;
 }
 
 // Validate and normalise the optional `strings` config block: per-deployment

@@ -22,6 +22,7 @@ import {
   KNOWN_TOP_LEVEL_KEYS,
   firstSentence,
   parseEnumHint,
+  parseAfterExport,
   parseColors,
   parseLicenses,
   parseFileImport,
@@ -683,7 +684,6 @@ test("config shortcuts are validated and folded into the manifest", () => {
 test("rejects a PWA colour that isn't a safe CSS colour string", () => {
   // pwa.themeColor/pwa.backgroundColor are interpolated into generated
   // SVG/HTML, so they must pass the same COLOR_VALUE_RE as every other colour.
-  // The fixture still sets the legacy top-level `themeColor` (-> pwa.themeColor.dark).
   assert.throws(() => run("widget-bad-color.config.json"), /'pwa\.themeColor\.dark' must be a CSS colour/);
 });
 
@@ -982,15 +982,12 @@ test("ui.showVarName defaults to false, accepts a boolean, rejects non-booleans"
   assert.throws(() => parseUi({ showVarName: 1 }), /'ui\.showVarName' must be a boolean/);
 });
 
-test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
-  assert.equal(parseUi(undefined).presetsLabel, "Presets");
-  assert.equal(parseUi(undefined).parametersLabel, "Customize");
-  assert.equal(parseUi({ presetsLabel: "  Styles  " }).presetsLabel, "Styles");
-  assert.equal(parseUi({ parametersLabel: "Options" }).parametersLabel, "Options");
-  // Both are optional (not `required`), so the "when set" wording applies —
-  // the one message shape every non-required string field now uses.
-  assert.throws(() => parseUi({ presetsLabel: "  " }), /'ui\.presetsLabel', when set, must be a non-empty string/);
-  assert.throws(() => parseUi({ parametersLabel: 5 }), /'ui\.parametersLabel', when set, must be a non-empty string/);
+test("ui.presetsLabel / parametersLabel moved to the i18n catalogue (strings['presets.title']/['settings.title'])", () => {
+  // These used to be `ui` fields (parseUi); they're plain chrome copy now,
+  // resolved via src/lib/i18n.ts's t() and overridable through the config's
+  // `strings` block like any other catalogue key.
+  assert.equal(parseUi(undefined).presetsLabel, undefined);
+  assert.equal(parseUi(undefined).parametersLabel, undefined);
 });
 
 test("ui: an explicit null is equivalent to omitting the key, for every field kind (normalization: null == not set)", () => {
@@ -1001,7 +998,6 @@ test("ui: an explicit null is equivalent to omitting the key, for every field ki
   // explicit null is how an author says "leave this alone", not a typo.
   assert.equal(parseUi({ showVarName: null }).showVarName, false); // boolean
   assert.equal(parsePwa({ install: null }).install, "auto"); // enum (pwa.install, moved from ui.install)
-  assert.equal(parseUi({ presetsLabel: null }).presetsLabel, "Presets"); // string
   assert.equal(parseUi({ saveImage: null }).saveImage, undefined); // no-default boolean
 });
 
@@ -1028,8 +1024,8 @@ test("notices: normalises entries, defaults the label, keeps order", () => {
       { marker: "alert" }, // label defaults to the marker
     ]),
     [
-      { marker: "note", label: "notes", color: "#3b82f6" },
-      { marker: "alert", label: "alert" },
+      { marker: "note", label: { one: "notes", other: "notes" }, color: "#3b82f6" },
+      { marker: "alert", label: { one: "alert", other: "alert" } },
     ]
   );
 });
@@ -1043,7 +1039,7 @@ test("notices: validates shape, marker, label and colour", () => {
   );
   assert.throws(
     () => parseNotices([{ marker: "n", label: "  " }]),
-    /'notices\[0\]\.label' must be a non-empty string/
+    /'notices\[0\]\.label' must be a non-empty string, or \{ one, other \}/
   );
   assert.throws(
     () => parseNotices([{ marker: "n", color: "#fff; } body { display:none" }]),
@@ -1051,28 +1047,49 @@ test("notices: validates shape, marker, label and colour", () => {
   );
 });
 
-test("notices: labelOne is optional, trimmed, and validated like label", () => {
-  assert.deepEqual(parseNotices([{ marker: "alert", label: "alerts", labelOne: " alert " }]), [
-    { marker: "alert", label: "alerts", labelOne: "alert" },
+test("notices: label accepts { one, other } — 'other' required, 'one' optional (falls back to 'other')", () => {
+  assert.deepEqual(
+    parseNotices([{ marker: "alert", label: { one: " alert ", other: " alerts " } }]),
+    [{ marker: "alert", label: { one: "alert", other: "alerts" } }]
+  );
+  // `one` omitted -> falls back to `other`, matching the old labelOne-absent behaviour.
+  assert.deepEqual(parseNotices([{ marker: "note", label: { other: "notes" } }]), [
+    { marker: "note", label: { one: "notes", other: "notes" } },
   ]);
-  assert.deepEqual(parseNotices([{ marker: "note" }]), [{ marker: "note", label: "note" }]);
+  assert.deepEqual(parseNotices([{ marker: "note" }]), [
+    { marker: "note", label: { one: "note", other: "note" } },
+  ]);
   assert.throws(
-    () => parseNotices([{ marker: "n", labelOne: "  " }]),
-    /'notices\[0\]\.labelOne' must be a non-empty string/
+    () => parseNotices([{ marker: "n", label: { one: "  " } }]),
+    /'notices\[0\]\.label\.other' is required/
+  );
+  assert.throws(
+    () => parseNotices([{ marker: "n", label: { other: "x", subtitle: "y" } }]),
+    /'notices\[0\]\.label': unknown key 'subtitle'\.\s*\n\s*Valid keys: one, other/
+  );
+  assert.throws(() => parseNotices([{ marker: "n", label: [] }]), /'notices\[0\]\.label' must be a string/);
+});
+
+test("notices: the old labelOne field is no longer accepted (reshaped to label: { one, other })", () => {
+  assert.throws(
+    () => parseNotices([{ marker: "alert", label: "alerts", labelOne: "alert" }]),
+    /'notices\[0\]\.labelOne' is no longer supported.*label.*\{ one, other \}/s
   );
 });
 
 test("notices: subsumedByFont is optional and must be a boolean", () => {
   assert.deepEqual(
     parseNotices([{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true }]),
-    [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true }]
+    [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, subsumedByFont: true }]
   );
   assert.deepEqual(parseNotices([{ marker: "alert", subsumedByFont: false }]), [
-    { marker: "alert", label: "alert", subsumedByFont: false },
+    { marker: "alert", label: { one: "alert", other: "alert" }, subsumedByFont: false },
   ]);
   // Omitted entirely -> absent from the emitted category (the app treats
   // absent as false).
-  assert.deepEqual(parseNotices([{ marker: "alert" }]), [{ marker: "alert", label: "alert" }]);
+  assert.deepEqual(parseNotices([{ marker: "alert" }]), [
+    { marker: "alert", label: { one: "alert", other: "alert" } },
+  ]);
   assert.throws(
     () => parseNotices([{ marker: "n", subsumedByFont: "yes" }]),
     /'notices\[0\]\.subsumedByFont' must be a boolean/
@@ -1174,7 +1191,7 @@ test("renderHash is unaffected by presentation-only config fields (title/help/no
     pwa: { themeColor: "#123456" },
     help: "<p>Different help copy entirely.</p>",
     notices: [{ marker: "note", label: "A note", color: "#3b82f6" }],
-    ui: { presetsLabel: "Styles", parametersLabel: "Options" },
+    strings: { "presets.title": "Styles", "settings.title": "Options" },
     designs: [{ id: "widget", label: "A Very Different Label" }],
   });
   assert.equal(plain, dressedUp);
@@ -1472,46 +1489,50 @@ test("parseUi: saveImage is absent by default, carried only when set, rejects no
   assert.throws(() => parseUi({ saveImage: 0 }), /'ui\.saveImage' must be a boolean/);
 });
 
-test("parseUi.afterExport is absent by default and accepts each valid field", () => {
+test("parseUi.afterExport: true/{} means defaults, an options object sets helpTab", () => {
+  // `title`/`body` used to live here; removed — see CONFIG_SPEC's
+  // AFTER_EXPORT_SPEC comment — they were only a second override path for the
+  // catalogue's exportSuccess.title/.body keys (src/locales/en.json).
   assert.equal(parseUi(undefined).afterExport, undefined);
   assert.equal(parseUi({}).afterExport, undefined);
-  assert.deepEqual(parseUi({ afterExport: { title: "Done" } }).afterExport, { title: "Done" });
-  assert.deepEqual(parseUi({ afterExport: { body: "Next steps" } }).afterExport, { body: "Next steps" });
+  assert.deepEqual(parseUi({ afterExport: true }).afterExport, {});
+  assert.deepEqual(parseUi({ afterExport: {} }).afterExport, {});
   assert.deepEqual(parseUi({ afterExport: { helpTab: "Printing" } }).afterExport, { helpTab: "Printing" });
-  assert.deepEqual(
-    parseUi({ afterExport: { title: " Done ", body: "Next", helpTab: "Printing" } }).afterExport,
-    { title: "Done", body: "Next", helpTab: "Printing" }
-  );
 });
 
 test("parseUi.afterExport rejects empty/wrong-typed fields, unknown keys and wrong shapes", () => {
-  // None of afterExport's fields are `required`, so an invalid value gets
-  // the "when set" wording, same as every other optional string field.
-  assert.throws(
-    () => parseUi({ afterExport: { title: "" } }),
-    /'ui\.afterExport\.title', when set, must be a non-empty string/
-  );
   assert.throws(
     () => parseUi({ afterExport: { helpTab: 3 } }),
     /'ui\.afterExport\.helpTab', when set, must be a non-empty string/
   );
   assert.throws(
     () => parseUi({ afterExport: { subtitle: "x" } }),
-    /'ui\.afterExport': unknown key 'subtitle'\.\s*\n\s*Valid keys: title, body, helpTab/
+    /'ui\.afterExport': unknown key 'subtitle'\.\s*\n\s*Valid keys: helpTab/
   );
-  assert.throws(() => parseUi({ afterExport: "on" }), /'ui\.afterExport' must be an object/);
-  assert.throws(() => parseUi({ afterExport: [] }), /'ui\.afterExport' must be an object/);
+  assert.throws(
+    () => parseUi({ afterExport: "on" }),
+    /'ui\.afterExport' must be true, an options object, or null/
+  );
+  assert.throws(() => parseUi({ afterExport: [] }), /'ui\.afterExport' must be true, an options object, or null/);
 });
 
-test("parseUi.afterExport: null is treated the same as absent (no panel)", () => {
+test("parseUi.afterExport: null/false are treated the same as absent (no panel)", () => {
   assert.equal(parseUi({ afterExport: null }).afterExport, undefined);
+  assert.equal(parseUi({ afterExport: false }).afterExport, undefined);
+  assert.equal(parseAfterExport(null), undefined);
+  assert.equal(parseAfterExport(false), undefined);
+  assert.equal(parseAfterExport(undefined), undefined);
 });
 
-test("ui.afterExport.helpTab: build succeeds when it names a real help tab", () => {
+test("ui.afterExport.helpTab: build succeeds when it names a real help tab, alongside a 'strings' override of the panel copy", () => {
   const { schema } = run("widget-afterexport-ok.config.json");
   assert.equal(schema.ui.afterExport.helpTab, "Printing");
-  assert.equal(schema.ui.afterExport.title, "Done");
-  assert.equal(schema.ui.afterExport.body, "Slice it.");
+  assert.equal(schema.ui.afterExport.title, undefined);
+  assert.equal(schema.ui.afterExport.body, undefined);
+  // The fixture overrides the panel's copy through `strings` instead — the
+  // ONE mechanism for overriding this text now, not a second afterExport path.
+  assert.equal(schema.strings["exportSuccess.title"], "Done");
+  assert.equal(schema.strings["exportSuccess.body"], "Slice it.");
 });
 
 test("ui.afterExport.helpTab: build succeeds against the synthetic leading 'Overview' tab", () => {

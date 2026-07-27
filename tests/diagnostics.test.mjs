@@ -6,10 +6,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseDiagnostics, countBadges, badgeTextColor } from "../src/lib/diagnostics.ts";
 
-// A sample notice config (what a consumer's `notices` key would produce).
+// A sample notice config (what a consumer's `notices` key would produce, after
+// scripts/lib/config-parsers.mjs's parseNotices normalises `label` to
+// `{ one, other }`).
 const NOTICES = [
-  { marker: "alert", label: "alerts", color: "#e0a458" },
-  { marker: "note", label: "notes" },
+  { marker: "alert", label: { one: "alert", other: "alerts" }, color: "#e0a458" },
+  { marker: "note", label: { one: "note", other: "notes" } },
 ];
 
 test("extracts notices and strips the marker", () => {
@@ -100,7 +102,10 @@ test("de-duplicates repeated notices", () => {
 test("a marker with regex metacharacters is matched literally, not as a pattern", () => {
   // Markers are config-supplied and interpolated into a RegExp; they must be
   // escaped so e.g. "a.b" matches "a.b" and not "axb", and "(note)" is literal.
-  const markers = [{ marker: "a.b", label: "ab" }, { marker: "(note)", label: "n" }];
+  const markers = [
+    { marker: "a.b", label: { one: "ab", other: "ab" } },
+    { marker: "(note)", label: { one: "n", other: "n" } },
+  ];
   assert.deepEqual(
     parseDiagnostics(['[out] ECHO: "tag: a.b: matched"'], markers),
     [{ level: "notice", text: "tag: matched" }]
@@ -131,27 +136,37 @@ test("countBadges tallies per category (raw counts, config order) plus asserts",
   ];
   assert.deepEqual(countBadges(log, NOTICES), [
     { key: "notice:alert", label: "alerts", count: 2, attention: false, color: "#e0a458" },
-    { key: "notice:note", label: "notes", count: 1, attention: false },
+    { key: "notice:note", label: "note", count: 1, attention: false },
     { key: "assert", label: "asserts", count: 1, attention: true },
   ]);
+});
+
+test("countBadges resolves the singular form when the final tally is exactly 1, plural otherwise", () => {
+  // Two lines for "alert" (plural "alerts"), one line for "note" (singular
+  // "note") — proves the label is picked from the FINAL count, via the same
+  // Intl.PluralRules-backed selectPlural as tn(), not a count-as-you-go guess.
+  const log = ['[out] ECHO: "a: alert: one"', '[out] ECHO: "a: alert: two"', '[out] ECHO: "b: note: three"'];
+  const badges = countBadges(log, NOTICES);
+  assert.equal(badges.find((b) => b.key === "notice:alert").label, "alerts");
+  assert.equal(badges.find((b) => b.key === "notice:note").label, "note");
 });
 
 test("countBadges omits categories with no matches", () => {
   assert.deepEqual(
     countBadges(['[out] ECHO: "x: note: only one"'], NOTICES),
-    [{ key: "notice:note", label: "notes", count: 1, attention: false }]
+    [{ key: "notice:note", label: "note", count: 1, attention: false }]
   );
 });
 
 test("countBadges marks a category attention:true when config flags it, and the assert badge is always attention:true", () => {
   const notices = [
-    { marker: "alert", label: "alerts", attention: true },
-    { marker: "note", label: "notes" },
+    { marker: "alert", label: { one: "alert", other: "alerts" }, attention: true },
+    { marker: "note", label: { one: "note", other: "notes" } },
   ];
   const log = ['[out] ECHO: "a: alert: one"', '[out] ECHO: "b: note: two"'];
   assert.deepEqual(countBadges(log, notices), [
-    { key: "notice:alert", label: "alerts", count: 1, attention: true },
-    { key: "notice:note", label: "notes", count: 1, attention: false },
+    { key: "notice:alert", label: "alert", count: 1, attention: true },
+    { key: "notice:note", label: "note", count: 1, attention: false },
   ]);
 });
 

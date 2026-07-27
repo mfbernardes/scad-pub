@@ -25,6 +25,7 @@ import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
+import { t } from "../lib/i18n";
 import { useDebounce } from "../lib/useDebounce";
 import type { PanelTab } from "../lib/usePanelState";
 import { ParamForm } from "./ParamForm";
@@ -63,9 +64,6 @@ interface Props {
   onActivate?: () => void;
   /** Show the underlying OpenSCAD variable name beside each label (default true). */
   showVarName?: boolean;
-  /** Configurable tab labels (default "Presets" / "Parameters"). */
-  presetsLabel?: string;
-  parametersLabel?: string;
   showAdvanced: boolean;
   /** Flip `showAdvanced`. Omitted when the config leaves `ui.essentials` off,
    *  which is what withholds the essentials toggle entirely (see AppShell). */
@@ -96,8 +94,6 @@ export function SheetTabs({
   availableSvgFiles,
   onActivate,
   showVarName = false,
-  presetsLabel = "Presets",
-  parametersLabel = "Customize",
   showAdvanced,
   onShowAdvancedChange,
   tab,
@@ -108,6 +104,10 @@ export function SheetTabs({
   onSearchBlur,
 }: Props) {
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
+  // Overridable via the config's `strings` block (src/locales/en.json's
+  // presets.title/settings.title) — see docs/config.md's "Text overrides".
+  const presetsLabel = t("presets.title");
+  const parametersLabel = t("settings.title");
   // Presets first on mobile, then Customize.
   const tabs: Tab[] = ["presets", "params"];
   const debouncedSearch = useDebounce(search, 150);
