@@ -787,12 +787,19 @@ test("viewer defaults to the plain style, validates style, rejects junk", () => 
   assert.deepEqual(parseViewer(undefined), { style: "plain" });
   assert.deepEqual(parseViewer(null), { style: "plain" });
   assert.deepEqual(parseViewer({}), { style: "plain" });
+  // An explicit null on a recognised key is "not set" too, same as omitting
+  // the whole block (normalization: null == omitted, everywhere).
+  assert.deepEqual(parseViewer({ style: null }), { style: "plain" });
   assert.deepEqual(parseViewer({ style: "studio" }), { style: "studio" });
   assert.deepEqual(parseViewer({ style: "plain" }), { style: "plain" });
-  assert.throws(() => parseViewer("studio"), /config\.viewer must be an object/);
-  assert.throws(() => parseViewer(["studio"]), /config\.viewer must be an object/);
-  assert.throws(() => parseViewer({ style: "toon" }), /config\.viewer\.style must be one of/);
-  assert.throws(() => parseViewer({ shadow: true }), /config\.viewer: unknown key 'shadow'/);
+  // Every message now uses the one "gen-schema: '<path>' ..." prefix — viewer
+  // used to read "config.<path> ..." with no quotes, an accident of predating
+  // the newer convention rather than a meaningful distinction.
+  assert.throws(() => parseViewer("studio"), /gen-schema: 'viewer' must be an object/);
+  assert.throws(() => parseViewer(["studio"]), /gen-schema: 'viewer' must be an object/);
+  // Enum errors always say what they got now (used to be viewer/popup only).
+  assert.throws(() => parseViewer({ style: "toon" }), /'viewer\.style' must be one of .* \(got "toon"\)/);
+  assert.throws(() => parseViewer({ shadow: true }), /'viewer': unknown key 'shadow'.*Valid keys: style/s);
 });
 
 test("viewer.grid is rejected as unknown — the grid belongs to ui.grid", () => {
@@ -802,11 +809,11 @@ test("viewer.grid is rejected as unknown — the grid belongs to ui.grid", () =>
   // message must point at its replacement.
   assert.throws(
     () => parseViewer({ grid: false }),
-    /config\.viewer: unknown key 'grid'.*ui\.grid/
+    /'viewer': unknown key 'grid'.*ui\.grid/s
   );
   assert.throws(
     () => parseViewer({ style: "studio", grid: true }),
-    /config\.viewer: unknown key 'grid'/
+    /'viewer': unknown key 'grid'/
   );
 });
 
@@ -987,8 +994,29 @@ test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-stri
   assert.equal(parseUi(undefined).parametersLabel, "Customize");
   assert.equal(parseUi({ presetsLabel: "  Styles  " }).presetsLabel, "Styles");
   assert.equal(parseUi({ parametersLabel: "Options" }).parametersLabel, "Options");
-  assert.throws(() => parseUi({ presetsLabel: "  " }), /'ui\.presetsLabel' must be a non-empty string/);
-  assert.throws(() => parseUi({ parametersLabel: 5 }), /'ui\.parametersLabel' must be a non-empty string/);
+  // Both are optional (not `required`), so the "when set" wording applies —
+  // the one message shape every non-required string field now uses.
+  assert.throws(() => parseUi({ presetsLabel: "  " }), /'ui\.presetsLabel', when set, must be a non-empty string/);
+  assert.throws(() => parseUi({ parametersLabel: 5 }), /'ui\.parametersLabel', when set, must be a non-empty string/);
+});
+
+test("ui: an explicit null is equivalent to omitting the key, for every field kind (normalization: null == not set)", () => {
+  // Most `ui` fields used to treat an explicit null as present-but-invalid
+  // and throw; render's and fileImport's already treated it as omitted. That
+  // split was an accident of five parsers growing up separately — a
+  // hand-written JSON config has no comments to delete a line with, so an
+  // explicit null is how an author says "leave this alone", not a typo.
+  assert.equal(parseUi({ showVarName: null }).showVarName, false); // boolean
+  assert.equal(parseUi({ grid: null }).grid, "off"); // enum
+  assert.equal(parseUi({ presetsLabel: null }).presetsLabel, "Presets"); // string
+  assert.equal(parseUi({ saveImage: null }).saveImage, undefined); // no-default boolean
+});
+
+test("ui: unknown nested keys are rejected (newly enforced — used to be silently ignored)", () => {
+  assert.throws(
+    () => parseUi({ oops: true }),
+    /'ui': unknown key 'oops'\.\s*\n\s*Valid keys: panelSide, panelDefault/
+  );
 });
 
 test("notices are off by default (omitted -> [])", () => {
@@ -1348,9 +1376,26 @@ test("parseFileImport: true/object, defaults and errors", () => {
   assert.throws(() => parseFileImport({ maxBytes: "big" }), /'fileImport\.maxBytes' must be a positive number/);
   // Wrong shapes -> clear errors.
   assert.throws(() => parseFileImport([]), /'fileImport' must be true/);
+  // `accept`/`label`/`note` are deprecated/vestigial but still strings, so
+  // the one string policy applies to them too: a non-string is rejected with
+  // the "when set" wording (they're optional, not `required`) — this used to
+  // read "must be a string" (no "non-empty") because these three fields
+  // opted out of the blank-rejection every other string field already had.
   assert.throws(
     () => parseFileImport({ accept: 5 }),
-    /'fileImport\.accept' must be a string/
+    /'fileImport\.accept', when set, must be a non-empty string/
+  );
+  // Blank/whitespace-only used to be accepted (nonBlank: false) and stored
+  // verbatim; now every string field rejects blank and trims what it keeps.
+  assert.throws(
+    () => parseFileImport({ accept: "   " }),
+    /'fileImport\.accept', when set, must be a non-empty string/
+  );
+  assert.deepEqual(parseFileImport({ accept: "  .svg  " }), { accept: ".svg" });
+  // Unknown key -> rejected (newly enforced — used to be silently ignored).
+  assert.throws(
+    () => parseFileImport({ oops: true }),
+    /'fileImport': unknown key 'oops'\.\s*\n\s*Valid keys: accept, label, note, maxBytes/
   );
 });
 
@@ -1384,6 +1429,16 @@ test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
   assert.throws(() => parseRender({ cache: 5 }), /'render\.cache' must be an object/);
   assert.throws(() => parseRender({ cache: { maxBytes: "lots" } }), /'render\.cache\.maxBytes' must be a non-negative number/);
   assert.throws(() => parseRender({ cache: { persistent: "yes" } }), /'render\.cache\.persistent' must be a boolean/);
+  // Unknown keys -> rejected (newly enforced — used to be silently ignored),
+  // one level down (render.cache) and at render's own level.
+  assert.throws(
+    () => parseRender({ cache: { oops: 1 } }),
+    /'render\.cache': unknown key 'oops'\.\s*\n\s*Valid keys: maxEntries, maxBytes, maxEntryBytes, persistent/
+  );
+  assert.throws(
+    () => parseRender({ oops: 1 }),
+    /'render': unknown key 'oops'\.\s*\n\s*Valid keys: heavyMs, cache/
+  );
 });
 
 test("parseStrings: absent -> {}, a known key overrides, an unknown key fails with a suggestion", () => {
@@ -1436,17 +1491,19 @@ test("parseUi.afterExport is absent by default and accepts each valid field", ()
 });
 
 test("parseUi.afterExport rejects empty/wrong-typed fields, unknown keys and wrong shapes", () => {
+  // None of afterExport's fields are `required`, so an invalid value gets
+  // the "when set" wording, same as every other optional string field.
   assert.throws(
     () => parseUi({ afterExport: { title: "" } }),
-    /'ui\.afterExport\.title' must be a non-empty string/
+    /'ui\.afterExport\.title', when set, must be a non-empty string/
   );
   assert.throws(
     () => parseUi({ afterExport: { helpTab: 3 } }),
-    /'ui\.afterExport\.helpTab' must be a non-empty string/
+    /'ui\.afterExport\.helpTab', when set, must be a non-empty string/
   );
   assert.throws(
     () => parseUi({ afterExport: { subtitle: "x" } }),
-    /unknown 'ui\.afterExport' key 'subtitle'/
+    /'ui\.afterExport': unknown key 'subtitle'\.\s*\n\s*Valid keys: title, body, helpTab/
   );
   assert.throws(() => parseUi({ afterExport: "on" }), /'ui\.afterExport' must be an object/);
   assert.throws(() => parseUi({ afterExport: [] }), /'ui\.afterExport' must be an object/);
@@ -1528,6 +1585,16 @@ test("parsePopup: defaults, modes, links and errors", () => {
   assert.throws(
     () => parsePopup({ header: "x", body: "y", footnote: "  " }),
     /'popup\.footnote', when set, must be a non-empty string/
+  );
+  // An explicit null on button/footnote used to throw (str()'s old default
+  // treated null as present-but-invalid); now it's equivalent to omitting
+  // the key, same as every other field.
+  assert.equal("button" in parsePopup({ header: "x", body: "y", button: null }), false);
+  assert.equal("footnote" in parsePopup({ header: "x", body: "y", footnote: null }), false);
+  // Unknown key -> rejected (newly enforced — used to be silently ignored).
+  assert.throws(
+    () => parsePopup({ header: "x", body: "y", oops: true }),
+    /'popup': unknown key 'oops'\.\s*\n\s*Valid keys: header, body, mode, button, footnote/
   );
 });
 

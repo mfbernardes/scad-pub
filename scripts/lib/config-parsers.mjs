@@ -6,12 +6,13 @@
 //
 // `ui`, `viewer`, `render` and `fileImport`, plus the scalar fields of
 // `popup`, used to each hand-write the same "check a boolean / check an enum /
-// assign a default" shape once per field (15 times over, for `ui` alone).
-// They're now driven by `applyGroupSpec` below, walking the field tables in
-// ./config-spec.mjs — see that file's file-top comment for the exact
-// per-field flag vocabulary (`skipOn`, `gotSuffix`, `wording`, ...) it takes
-// to reproduce each field's historical wording and null-handling exactly.
-// `parseColors`, `parseLicenses`, `parseNotices` and `parseStrings` are NOT
+// assign a default" shape once per field (15 times over, for `ui` alone), and
+// disagreed with each other about null-handling, error wording and unknown-key
+// rejection along the way. They're now driven by `applyGroupSpec` below,
+// walking the field tables in ./config-spec.mjs, which picks one behaviour per
+// axis for every field (see that file's file-top comment) instead of
+// reproducing the old disagreements. `parseColors`, `parseLicenses`,
+// `parseNotices` and `parseStrings` are NOT
 // driven by it: they carry real bespoke logic (cross-checks, defaulting rules
 // that don't fit the shared shape) that isn't worth forcing into the same
 // mould, and config-spec.mjs only registers their keys for unknown-key
@@ -19,44 +20,64 @@
 import { CONFIG_SPEC, COLOR_TOKENS } from "./config-spec.mjs";
 export { COLOR_TOKENS };
 
-// `prefix(path)` renders the leading part of a validation-error message.
-// Every collapsed group uses the "gen-schema: '<path>' ..." convention except
-// `viewer`, which predates it and reads "config.<path> ..." with no quotes —
-// config-spec.mjs's `messageStyle: "dotted"` selects that for viewer only.
-function messagePrefix(path, messageStyle) {
-  return messageStyle === "dotted" ? `config.${path}` : `gen-schema: '${path}'`;
+// `prefix(path)` renders the leading part of a validation-error message. One
+// convention everywhere now: "gen-schema: '<path>' ..." (previously `viewer`
+// alone predated this and read "config.<path> ..." with no quotes — that was
+// an accident of `viewer` being older code, not a meaningful distinction, so
+// it's gone).
+function messagePrefix(path) {
+  return `gen-schema: '${path}'`;
 }
 
-function defaultRootTypeError(path, messageStyle) {
-  return `${messagePrefix(path, messageStyle)} must be an object`;
+function defaultRootTypeError(path) {
+  return `${messagePrefix(path)} must be an object`;
 }
 
-// The four string-field message shapes config-spec.mjs's `wording` picks
-// between (see its file-top comment) — every combination gen-schema's
-// hand-written parsers used across `popup`, `ui`, `ui.afterExport` and
-// `fileImport` before this refactor.
-function stringFieldError(path, field, messageStyle) {
-  const prefix = messagePrefix(path, messageStyle);
-  if (field.wording === "required") return new Error(`${prefix} is required and must be a non-empty string`);
-  if (field.wording === "whenSet") return new Error(`${prefix}, when set, must be a non-empty string`);
-  return new Error(field.nonBlank ? `${prefix} must be a non-empty string` : `${prefix} must be a string`);
+// The two string-field message shapes every string field now uses (see
+// config-spec.mjs's file-top comment): a field that's `required` outright, or
+// one that's optional but was set to something invalid. (A third and fourth
+// shape used to exist — "must be a non-empty string" / "must be a string",
+// picked by a per-field `nonBlank` flag — but every string field rejects
+// blank now, so there's no second shape left to pick between.)
+function stringFieldError(path, field) {
+  const prefix = messagePrefix(path);
+  return new Error(
+    field.required
+      ? `${prefix} is required and must be a non-empty string`
+      : `${prefix}, when set, must be a non-empty string`
+  );
+}
+
+// The error a nested object's unrecognised key throws, built entirely from
+// the spec node so the "valid keys" list can never go stale. `node.hints`
+// (see config-spec.mjs) optionally appends a migration note for a
+// specifically-named retired key (only `viewer.grid` uses this today).
+function unknownNestedKeyError(path, node, key) {
+  const hint = node.hints?.[key];
+  return new Error(
+    `${messagePrefix(path)}: unknown key '${key}'.\n` +
+      `  Valid keys: ${Object.keys(node.properties).join(", ")}` +
+      (hint ? `\n  (${hint})` : "")
+  );
 }
 
 // Validate a single already-present (non-skipped) field value against its
 // config-spec.mjs descriptor, returning the normalised value to store (or
 // throwing gen-schema's fail-fast Error). `type: "object"` recurses into
 // applyGroupSpec for a nested group (render.cache, ui.afterExport).
-function validateFieldValue(value, field, path, messageStyle) {
-  const prefix = messagePrefix(path, messageStyle);
+function validateFieldValue(value, field, path) {
+  const prefix = messagePrefix(path);
   switch (field.type) {
     case "boolean":
       if (typeof value !== "boolean") throw new Error(`${prefix} must be a boolean`);
       return value;
     case "enum": {
+      // Enum errors always say what they got — strictly more informative,
+      // and every group agrees on it now (some used to omit it).
       if (!field.values.includes(value))
         throw new Error(
-          `${prefix} must be one of ${field.values.map((v) => `"${v}"`).join(", ")}` +
-            (field.gotSuffix ? ` (got ${JSON.stringify(value)})` : "")
+          `${prefix} must be one of ${field.values.map((v) => `"${v}"`).join(", ")} ` +
+            `(got ${JSON.stringify(value)})`
         );
       return value;
     }
@@ -67,9 +88,9 @@ function validateFieldValue(value, field, path, messageStyle) {
       return value;
     }
     case "string": {
-      if (typeof value !== "string" || (field.nonBlank && !value.trim()))
-        throw stringFieldError(path, field, messageStyle);
-      return field.trimStore ? value.trim() : value;
+      // One string policy: reject empty/whitespace-only, store trimmed.
+      if (typeof value !== "string" || !value.trim()) throw stringFieldError(path, field);
+      return value.trim();
     }
     case "object":
       return applyGroupSpec(value, field, path);
@@ -80,29 +101,24 @@ function validateFieldValue(value, field, path, messageStyle) {
 
 // Walk one nested config object (ui, viewer, render, render.cache, popup, the
 // object form of fileImport, ui.afterExport) against its config-spec.mjs
-// node, reproducing that group's exact historical validation: shape check,
-// then (for the groups that reject one) unknown-key rejection, then each
-// field in declaration order. See config-spec.mjs's file-top comment for what
-// each node/field flag means.
+// node: shape check, unknown-key rejection, then each field in declaration
+// order. `null` and an absent key are exactly equivalent throughout — a
+// hand-written JSON config has no comments to delete a line with, so an
+// explicit `null` is how an author says "leave this alone", not a typo the
+// way a misspelled key name is.
 export function applyGroupSpec(raw, node, path) {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    const err = node.rootTypeError;
-    throw new Error(
-      typeof err === "function" ? err(raw) : err ?? defaultRootTypeError(path, node.messageStyle)
-    );
-  }
-  if (node.unknownKeys === "reject") {
-    for (const key of Object.keys(raw))
-      if (!(key in node.properties)) throw new Error(node.unknownKeyError(key));
-  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
+    throw new Error(node.rootTypeError ?? defaultRootTypeError(path));
+  for (const key of Object.keys(raw))
+    if (!(key in node.properties)) throw unknownNestedKeyError(path, node, key);
   const out = {};
   for (const [key, field] of Object.entries(node.properties))
     if ("default" in field) out[key] = field.default;
   for (const [key, field] of Object.entries(node.properties)) {
     const value = raw[key];
-    const missing = field.skipOn === "nullish" ? value === undefined || value === null : value === undefined;
+    const missing = value === undefined || value === null;
     if (!field.required && missing) continue;
-    const result = validateFieldValue(value, field, `${path}.${key}`, node.messageStyle);
+    const result = validateFieldValue(value, field, `${path}.${key}`);
     // A nested object field (render.cache) that collapses an empty result to
     // `null` is omitted from its parent entirely, matching e.g.
     // `parseRender({ cache: { maxEntries: null } })` -> `null`, not

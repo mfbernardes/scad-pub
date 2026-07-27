@@ -42,14 +42,15 @@ function objectSchema(node) {
   }
   const schema = { type: "object", properties };
   if (required.length) schema.required = required;
-  // "reject" groups (the top-level config itself, `viewer`, `ui.afterExport`)
-  // are genuinely closed at runtime; every other object shape here — `ui`,
-  // `render`, `render.cache`, the object form of `fileImport`, `popup`, and
-  // every bespoke/`custom` shape — silently tolerates or drops an
-  // unrecognised key today (see config-parsers.mjs's applyGroupSpec and the
-  // untouched parseColors/parseLicenses/parseNotices), so a strict schema
-  // here would flag something gen-schema itself accepts.
-  schema.additionalProperties = node.unknownKeys !== "reject";
+  // Every node `applyGroupSpec` drives (the top-level config itself, `ui`,
+  // `viewer`, `render`, `render.cache`, `popup`, the object form of
+  // `fileImport`, `ui.afterExport`) is genuinely closed at runtime now — an
+  // unrecognised key always fails the build. The bespoke/`custom` shapes
+  // (`colors`, `designs[]`, `notices[]`, `licenses[]`, …) are the only ones
+  // that still silently tolerate or drop an unrecognised key (see
+  // config-spec.mjs's file-top comment and config-parsers.mjs's
+  // parseColors/parseLicenses/parseNotices), so only those stay open here.
+  schema.additionalProperties = !!node.custom;
   return schema;
 }
 
@@ -88,7 +89,7 @@ export function buildConfigSchema() {
     description:
       "scadpub.config.json. Generated from scripts/lib/config-spec.mjs by scripts/gen-config-schema.mjs " +
       "— see docs/config.md for the full human reference.",
-    ...objectSchema({ properties: CONFIG_SPEC, unknownKeys: "reject" }),
+    ...objectSchema({ properties: CONFIG_SPEC }),
   };
 }
 

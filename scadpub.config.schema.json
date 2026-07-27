@@ -222,10 +222,10 @@
               "type": "boolean"
             }
           },
-          "additionalProperties": true
+          "additionalProperties": false
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "logo": {
       "description": "Header logo: a path, or { light, dark } per-theme paths (config-relative).",
@@ -569,7 +569,7 @@
           "additionalProperties": false
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "viewer": {
       "description": "The 3D viewer's presentation, fixed at build time.",
@@ -613,7 +613,7 @@
               "type": "number"
             }
           },
-          "additionalProperties": true
+          "additionalProperties": false
         }
       ]
     },
@@ -653,7 +653,7 @@
         "header",
         "body"
       ],
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "help": {
       "description": "Help dialog content: 'sections' for a single pane, or 'tabs' for a tabbed guide. Passed through verbatim.",

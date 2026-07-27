@@ -33,65 +33,42 @@
 // `applyGroupSpec`; it exists purely so unknown-*top-level*-key rejection and
 // `gen-config-schema.mjs` cover them. Their node carries `custom: true` as a
 // marker for "the runtime behaviour lives elsewhere, don't try to derive it
-// from this shape".
+// from this shape" — `gen-config-schema.mjs` also reads this marker to decide
+// whether a node's JSON Schema tolerates an unrecognised key (`custom: true`,
+// matching those parsers' own leniency) or rejects one (every other object
+// node here, all of which `applyGroupSpec` makes genuinely closed at runtime).
 //
 // ── Field-descriptor shapes used by `properties` entries ────────────────────
-// Every property is at minimum { type, description }. The mechanically-
-// collapsed groups (ui/viewer/render/fileImport/popup) add a few more flags
-// that exist ONLY to let `applyGroupSpec` reproduce each field's exact
-// historical behaviour byte-for-byte (this codebase's parsers grew organically
-// and are not all consistent with each other — e.g. most `ui` fields treat an
-// explicit `null` as an invalid value and throw, but `render`'s and
-// `fileImport`'s fields treat `null` the same as "omitted"; `gotSuffix` is
-// similarly inconsistent between groups). Rather than silently normalise that
-// away (which the zero-behaviour-change constraint on this commit forbids),
-// each field spells out which behaviour it wants:
+// Every property is at minimum { type, description }. `applyGroupSpec` (see
+// ./config-parsers.mjs) now applies ONE behaviour per axis to every field,
+// rather than the per-field flags (`skipOn`, `gotSuffix`, `nonBlank`,
+// `trimStore`, `wording`, `unknownKeys`, `unknownKeyError`, `messageStyle`)
+// this file used to carry solely to reproduce five parsers' accidental
+// disagreements byte-for-byte: an explicit `null` always means "not set";
+// an enum error always appends ` (got <value>)`; a string is always rejected
+// blank and stored trimmed; a nested object's unrecognised key always fails
+// the build, with the valid-key list read straight off `properties`.
 //
-//   skipOn:       "undefined" — only an actually-missing key uses the default;
-//                 an explicit `null` is validated (and typically fails).
-//                 "nullish"  — both a missing key AND an explicit `null` use
-//                 the default / are treated as "not set".
-//   gotSuffix:    for `type: "enum"`, whether the error message appends
-//                 ` (got <value>)`. Some groups do, some don't.
-//   nonBlank:     for `type: "string"`, whether an empty/whitespace-only
-//                 string is rejected (vs. only the type being checked).
-//   trimStore:    for `type: "string"`, whether the stored value is
-//                 `.trim()`-ed (true) or kept exactly as given (false).
-//   wording:      for `type: "string"`, which error phrasing to use —
-//                 "required" ("<path> is required and must be a non-empty
-//                 string"), "whenSet" ("<path>, when set, must be a
-//                 non-empty string") or "plain" ("<path> must be a non-empty
-//                 string" / "<path> must be a string", depending on
-//                 `nonBlank`).
-//   numberKind:   for `type: "number"`, "nonNegative" (>= 0) or "positive"
-//                 (> 0) — two different messages, two different bounds.
-//   required:     the field must validate even when entirely absent (only
-//                 `popup.header`/`popup.body`).
-//
-// Object-typed properties (`render.cache`, `ui.afterExport`) additionally
-// carry their own `properties` (recursed into by `applyGroupSpec`), plus:
-//   unknownKeys:      "ignore" (default) or "reject" — whether a key outside
-//                      `properties` fails the build.
-//   unknownKeyError:  present when unknownKeys is "reject" — a
-//                      `(key) => message` function giving the exact wording.
-//   rootTypeError:    overrides the default "<path> must be an object"
-//                      message — a string, or `(raw) => message` when the
-//                      offending value needs to be echoed back.
-//   collapseEmptyToNull: when true, an object with no recognised keys set is
-//                      omitted from its parent entirely instead of being
-//                      stored as `{}` (used by `render` itself and
-//                      `render.cache`; NOT by `fileImport` or
-//                      `ui.afterExport`, which keep `{}`).
-//   messageStyle:      "quoted" (default; `gen-schema: '<path>' ...`) or
-//                      "dotted" (`config.<path> ...`, no `gen-schema:`
-//                      prefix — only `viewer` predates the newer convention).
+// What's left, because each encodes a real distinction rather than an
+// accident: `numberKind` ("nonNegative" >= 0 vs. "positive" > 0 — two
+// genuinely different bounds); `required` (validate even when entirely
+// absent — only `popup.header`/`popup.body`); `custom` (object/array nodes
+// whose runtime validation lives in a bespoke parser instead, per the file-top
+// comment); `collapseEmptyToNull` (an empty `{}` disappears entirely for a
+// pure tuning knob like `render`/`render.cache` — contrast `ui.afterExport`,
+// where the key's mere presence, even empty, is itself the "show the panel"
+// toggle); `rootTypeError` (a plain-string override describing a field's
+// actual accepted shapes — `fileImport` is `true`/an object/`null`, `popup`
+// needs `header`+`body` — genuinely more useful than the generic message);
+// and `hints` (`{ [retiredKey]: "..." }`, appended to that key's unknown-key
+// error — only `viewer` uses it, to point a config still carrying the
+// retired `viewer.grid` at its replacement `ui.grid`).
 
 // ── Small factories for the repeated field shapes (still plain data — these
-// just save re-typing the same five keys 30 times over). ────────────────────
+// just save re-typing the same few keys 30 times over). ────────────────────
 const bool = (defaultValue, extra = {}) => ({
   type: "boolean",
   default: defaultValue,
-  skipOn: "undefined",
   ...extra,
 });
 
@@ -99,24 +76,17 @@ const enumField = (values, defaultValue, extra = {}) => ({
   type: "enum",
   values,
   default: defaultValue,
-  skipOn: "undefined",
-  gotSuffix: false,
   ...extra,
 });
 
 const str = (extra = {}) => ({
   type: "string",
-  skipOn: "undefined",
-  nonBlank: true,
-  trimStore: false,
-  wording: "plain",
   ...extra,
 });
 
 const num = (numberKind, extra = {}) => ({
   type: "number",
   numberKind,
-  skipOn: "nullish",
   ...extra,
 });
 
@@ -127,27 +97,21 @@ const num = (numberKind, extra = {}) => ({
 const AFTER_EXPORT_SPEC = {
   type: "object",
   description: "Turns on the after-export success panel; every field optional.",
-  skipOn: "nullish",
-  unknownKeys: "reject",
-  unknownKeyError: (key) =>
-    `gen-schema: unknown 'ui.afterExport' key '${key}'.\n` +
-    `  Valid keys: ${Object.keys(AFTER_EXPORT_SPEC.properties).join(", ")}`,
   properties: {
-    title: str({ trimStore: true, description: "Overrides the panel headline." }),
-    body: str({ trimStore: true, description: "Overrides the panel's one-line next step (Markdown subset)." }),
+    title: str({ description: "Overrides the panel headline." }),
+    body: str({ description: "Overrides the panel's one-line next step (Markdown subset)." }),
     helpTab: str({
-      trimStore: true,
       description: "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
     }),
   },
 };
 
-// ── `render.cache` — nested under `render` below. No unknown-key rejection
-// (matches parseRender's cache loop, which only ever reads four names).
+// ── `render.cache` — nested under `render` below.
 const RENDER_CACHE_SPEC = {
   type: "object",
   description: "Sizes the runner's two-tier render cache.",
-  skipOn: "nullish",
+  // Pure tuning: an empty `{}` means nothing was configured, so it collapses
+  // to nothing rather than being stored (see the file-top comment).
   collapseEmptyToNull: true,
   properties: {
     maxEntries: num("nonNegative", { description: "In-memory (L1) slot count." }),
@@ -156,14 +120,15 @@ const RENDER_CACHE_SPEC = {
     // No `default` key (unlike the bool()-built ui toggles): omitted entirely
     // unless the config sets it, so an empty `cache` collapses to nothing
     // rather than `{ persistent: undefined }`.
-    persistent: { type: "boolean", skipOn: "nullish", description: "Persist renders to IndexedDB (L2)." },
+    persistent: { type: "boolean", description: "Persist renders to IndexedDB (L2)." },
   },
 };
 
 // The CSS custom-property tokens `colors.<theme>.*` may set (see
 // src/index.css). Registered here so gen-config-schema.mjs and the
-// docs-coverage test see them; parseColors (untouched) still does the actual
-// validation and owns this exact list independently as COLOR_TOKENS.
+// docs-coverage test see them; config-parsers.mjs imports and re-exports this
+// exact array, so parseColors's runtime validation and this schema/doc
+// metadata can never drift apart — there is one owner, this one.
 export const COLOR_TOKENS = [
   "bg", "panel", "panel-2", "line", "text", "muted", "accent", "accent-solid",
   "on-accent", "focus", "link", "warn", "warn-bg", "success", "success-bg",
@@ -259,6 +224,7 @@ export const CONFIG_SPEC = {
   render: {
     type: "object",
     description: "Build-time render tuning: heavy-render threshold + cache sizing.",
+    // Pure tuning: an empty `{}` collapses to nothing (see the file-top comment).
     collapseEmptyToNull: true,
     properties: {
       heavyMs: num("nonNegative", { description: "Auto-pause threshold (ms) for a slow live render." }),
@@ -304,27 +270,24 @@ export const CONFIG_SPEC = {
       // No `default` key: present only when the config sets it, matching
       // `parseUi(undefined).saveImage === undefined` (unlike the toggles
       // above, which always carry a built-in default).
-      saveImage: { type: "boolean", skipOn: "undefined", description: "Show the 'Save image (PNG)' action." },
+      saveImage: { type: "boolean", description: "Show the 'Save image (PNG)' action." },
       gallery: bool(false, { description: "Replace the compact design dropdown with a searchable card grid." }),
       essentials: bool(false, { description: "Start with // @advanced parameters hidden behind 'Show all settings'." }),
-      presetsLabel: str({ trimStore: true, default: "Presets", description: "Label for the Presets tab/section." }),
-      parametersLabel: str({ trimStore: true, default: "Customize", description: "Label for the parameters tab/section." }),
+      presetsLabel: str({ default: "Presets", description: "Label for the Presets tab/section." }),
+      parametersLabel: str({ default: "Customize", description: "Label for the parameters tab/section." }),
       afterExport: AFTER_EXPORT_SPEC,
     },
   },
   viewer: {
     type: "object",
     description: "The 3D viewer's presentation, fixed at build time.",
-    messageStyle: "dotted",
-    unknownKeys: "reject",
-    rootTypeError: (raw) => `config.viewer must be an object with an optional 'style' key (got ${JSON.stringify(raw)})`,
-    unknownKeyError: (key) =>
-      `config.viewer: unknown key '${key}' (valid keys: style)` +
-      (key === "grid" ? " — the reference grid is now seeded by 'ui.grid'" : ""),
+    rootTypeError: "gen-schema: 'viewer' must be an object with an optional 'style' key",
+    // `viewer.grid` was retired in favour of `ui.grid` (see parseViewer's own
+    // doc comment); a config still carrying it must fail loudly rather than
+    // silently no-op, and the error should say where it moved.
+    hints: { grid: "the reference grid is now seeded by 'ui.grid', not 'viewer.grid'" },
     properties: {
       style: enumField(["plain", "studio"], "plain", {
-        skipOn: "nullish",
-        gotSuffix: true,
         description: "'plain' is the classic CAD preview; 'studio' adds image-based lighting and a contact shadow.",
       }),
     },
@@ -337,9 +300,9 @@ export const CONFIG_SPEC = {
     description: "Enables the Files dialog. true for defaults, or an options object; omit/false/null for no Files action.",
     rootTypeError: "gen-schema: 'fileImport' must be true, an options object, or null",
     properties: {
-      accept: str({ nonBlank: false, skipOn: "nullish", description: "Deprecated/vestigial; kept for backward compatibility." }),
-      label: str({ nonBlank: false, skipOn: "nullish", description: "Deprecated/vestigial; kept for backward compatibility." }),
-      note: str({ nonBlank: false, skipOn: "nullish", description: "Markdown-subset guidance shown atop the Files dialog." }),
+      accept: str({ description: "Deprecated/vestigial; kept for backward compatibility." }),
+      label: str({ description: "Deprecated/vestigial; kept for backward compatibility." }),
+      note: str({ description: "Markdown-subset guidance shown atop the Files dialog." }),
       maxBytes: num("positive", { description: "Deprecated/vestigial upload size cap; kept for backward compatibility." }),
     },
   },
@@ -350,15 +313,11 @@ export const CONFIG_SPEC = {
     description: "One-off notice dialog shown over the app on load.",
     rootTypeError: "gen-schema: 'popup' must be an object with 'header', 'body' and an optional 'mode'",
     properties: {
-      header: str({ required: true, wording: "required", description: "Dialog title." }),
-      body: str({ required: true, wording: "required", description: "Dialog message (Markdown subset)." }),
-      mode: enumField(["always", "once", "dismissible", "picker"], "once", {
-        skipOn: "nullish",
-        gotSuffix: true,
-        description: "Popup frequency.",
-      }),
-      button: str({ wording: "whenSet", description: "Primary-button label; overrides the default 'OK'." }),
-      footnote: str({ wording: "whenSet", description: "Short plain-text line shown small and muted at the bottom." }),
+      header: str({ required: true, description: "Dialog title." }),
+      body: str({ required: true, description: "Dialog message (Markdown subset)." }),
+      mode: enumField(["always", "once", "dismissible", "picker"], "once", { description: "Popup frequency." }),
+      button: str({ description: "Primary-button label; overrides the default 'OK'." }),
+      footnote: str({ description: "Short plain-text line shown small and muted at the bottom." }),
     },
   },
   help: {
