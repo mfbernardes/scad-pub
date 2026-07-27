@@ -77,7 +77,6 @@
   "presetDiff.reset": "Reset",
 
   "settings.jumpToSection": "Jump to section",
-  "settings.showAll": "Show all settings",
   "settings.showAllCount#one": "Show all settings ({count} more)",
   "settings.showAllCount#other": "Show all settings ({count} more)",
   "settings.showEssential": "Show essential settings",

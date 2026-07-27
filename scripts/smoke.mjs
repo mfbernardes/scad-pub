@@ -1214,6 +1214,27 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
         await essentials.first().isVisible(),
         "the essentials toggle is reachable inside the sheet",
       );
+      // If it's on screen it must have something to do. The toggle renders only
+      // while its count is non-zero (EssentialsToggle), so pressing it has to
+      // move the number of visible param rows — a toggle that reveals nothing
+      // and then renames itself is the regression this guards.
+      const shown = () => page.locator(".param:visible").count();
+      const before = await shown();
+      await essentials.first().click();
+      await page.waitForTimeout(300);
+      const after = await shown();
+      check(after !== before, `the essentials toggle actually reveals/hides (${before} -> ${after})`);
+      // Restore the mode for whatever runs next; the toggle may have retired
+      // itself if flipping it left nothing reachable, so re-locate rather than
+      // reusing the stale handle.
+      const back = page.locator(".param-form .essentials-toggle");
+      if (await back.count()) await back.first().click();
+      await page.waitForTimeout(300);
+    } else {
+      // Absent is a real state, not just "config has no advanced params": it's
+      // also every design whose advanced params are all @showIf-hidden right
+      // now, and every config that leaves `ui.essentials` off.
+      console.log("  (no essentials toggle on this design — nothing reachable to reveal)");
     }
 
     // Type into the search box and leave it focused.

@@ -1,9 +1,33 @@
 // EssentialsToggle.tsx — the "Show all settings"/"Show essential settings"
-// control that reveals or hides a design's `// @advanced` params. Renders
-// nothing when the design has no advanced params. The reveal-side label
-// carries the count of currently hidden params — "Show all settings (N more)"
-// — which only reflects params that are visible under their own `@showIf`
-// right now (see lib/essentials.ts).
+// control that reveals or hides a design's `// @advanced` params. The
+// reveal-side label carries the count — "Show all settings (N more)".
+//
+// It renders only when that count is non-zero, i.e. when there is at least one
+// `@advanced` param that is ALSO visible under its own `@showIf` right now.
+// Both halves matter, and the count is what tests them together (see
+// lib/essentials.ts). Gating on "the design declares an advanced param
+// anywhere" — which is what this used to do — produced a dead control: a
+// design whose advanced params are all `@showIf`-hidden at its defaults, a
+// perfectly ordinary way to author one, offered "Show all settings", revealed
+// nothing at all when pressed, and then renamed itself to "Show essential
+// settings". The count is live, so the button appears and disappears as
+// `@showIf` conditions turn its params on and off, which is exactly when it
+// does and doesn't have work to do.
+//
+// The same reading applies on the hide side: when `showAdvanced` is on, the
+// count is the number of advanced params currently ON SCREEN, so a zero there
+// means "Show essential settings" would also do nothing, and the button is
+// correctly absent. Nobody gets stranded in either mode, because the state
+// outlives the button — flip a `@showIf` back and it returns, reading for
+// whichever mode is still in effect.
+//
+// Whether the feature is offered AT ALL is the caller's call, not this
+// component's: AppShell withholds `onShowAdvancedChange` unless the config
+// sets `ui.essentials`, and ParamForm renders no toggle without it. That
+// matches what docs/config.md and docs/annotations.md have always promised —
+// `@advanced` hides params "when `ui.essentials` is enabled" — where before, a
+// config that never opted in still got the toggle and could hide params its
+// operator meant to be permanent.
 //
 // It lives at the END of the parameter form (ParamForm renders it after the
 // last group), in one presentation for both layouts. It used to sit above the
@@ -18,9 +42,9 @@
 // toolbar collapse to a single search field.
 import type { Param } from "../openscad/types";
 import type { Values } from "../lib/presets";
-import { essentialsToggleLabel } from "../lib/essentials";
+import { hiddenAdvancedCount } from "../lib/essentials";
 import { cn } from "../lib/utils";
-import { t } from "../lib/i18n";
+import { t, tn } from "../lib/i18n";
 import { ChevronDown as MoreIcon, ChevronUp as FewerIcon } from "lucide-react";
 
 export function EssentialsToggle({
@@ -37,8 +61,11 @@ export function EssentialsToggle({
   /** Extra classes on the button (parent-supplied spacing). */
   className?: string;
 }) {
-  if (!params.some((p) => p.advanced)) return null;
-  const label = showAdvanced ? t("settings.showEssential") : essentialsToggleLabel(params, values);
+  // The one gate — see the component doc. Zero means the toggle has nothing to
+  // reveal (or, with `showAdvanced` on, nothing to hide), so it doesn't render.
+  const count = hiddenAdvancedCount(params, values);
+  if (count === 0) return null;
+  const label = showAdvanced ? t("settings.showEssential") : tn("settings.showAllCount", count);
   const Icon = showAdvanced ? FewerIcon : MoreIcon;
   return (
     <button

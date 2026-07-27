@@ -67,7 +67,9 @@ interface Props {
   presetsLabel?: string;
   parametersLabel?: string;
   showAdvanced: boolean;
-  onShowAdvancedChange: (show: boolean) => void;
+  /** Flip `showAdvanced`. Omitted when the config leaves `ui.essentials` off,
+   *  which is what withholds the essentials toggle entirely (see AppShell). */
+  onShowAdvancedChange?: (show: boolean) => void;
   /** Active tab + search query, hoisted to AppShell (usePanelState) so they
    *  survive a desktop/mobile remount — see docs/architecture-review.md M7. */
   tab: PanelTab;
