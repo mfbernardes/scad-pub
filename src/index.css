@@ -675,16 +675,6 @@ button:disabled { cursor: default; }
   min-height: 0;
 }
 
-/* Sticky footer inside sheet content */
-.sheet-footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.75rem;
-  border-top: 1px solid var(--line);
-  flex-shrink: 0;
-}
-
 /* ═══════════════════════════════════════════════════════════════
    PARAM FORM — the collapsible-group disclosure marker
    (The rest of the form is utility-styled in ParamForm.tsx; the ▸ marker's

@@ -117,22 +117,31 @@ export function BottomSheet({
   // so the collapsed sheet always shows the whole tab row regardless of device
   // safe-area insets or font scaling. getBoundingClientRect reports the full
   // layout box even while the body is clipped by the peek height.
+  //
+  // The content marks where the peek header ENDS with `data-sheet-peek-end`,
+  // because the tab row isn't the tablist alone anymore: SheetTabs wraps the
+  // tablist and the readiness chip in one row, and measuring the tablist would
+  // cut the chip in half whenever it's the taller of the two. The tablist stays
+  // as a fallback for any other sheet content.
   useLayoutEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet) return;
+    const peekEnd = () =>
+      (sheet.querySelector("[data-sheet-peek-end]") ??
+        sheet.querySelector('[role="tablist"]')) as HTMLElement | null;
     const measure = () => {
-      const tabs = sheet.querySelector('[role="tablist"]') as HTMLElement | null;
-      if (!tabs) return;
+      const header = peekEnd();
+      if (!header) return;
       const px = Math.ceil(
-        tabs.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top
+        header.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top
       );
       if (px > 0) setAutoPeek(px);
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(sheet);
-    const tabs = sheet.querySelector('[role="tablist"]');
-    if (tabs) ro.observe(tabs);
+    const header = peekEnd();
+    if (header) ro.observe(header);
     return () => ro.disconnect();
   }, []);
 

@@ -1,13 +1,19 @@
-// StatusStrip.tsx — one-line readiness surface (src/lib/readiness.ts's
-// ReadinessState), a button that opens the Review dialog (ReviewDialog.tsx).
-// Desktop: mounted at the top of the docked ParamPanel, above its tabs.
-// Mobile: mounted inside SheetTabs, above the tab row, so it's part of the
-// bottom sheet's always-visible peek header (BottomSheet measures the peek
-// height from the sheet's top down to the tab row's bottom edge, so anything
-// above the tabs — this strip included — is included in that measurement for
-// free; see BottomSheet's own layout-effect doc). `.status-strip` is a
-// stable hook class for the smoke/vis scripts (see CLAUDE.md's script-hook
-// convention) — kept even though no stylesheet rule targets it.
+// StatusStrip.tsx — readiness surface (src/lib/readiness.ts's ReadinessState),
+// a button that opens the Review dialog (ReviewDialog.tsx). Two presentations,
+// chosen by `compact` (the caller knows its layout):
+//   • full row (desktop): a one-line strip at the top of the docked ParamPanel,
+//     above its tabs.
+//   • compact chip (mobile): icon + short label, mounted ON the sheet's tab row
+//     (SheetTabs) rather than taking a whole row above it — the sheet's Half
+//     detent is ~385px tall, so a full-width status row there costs a parameter.
+//     It stays inside the peek header either way: BottomSheet measures the peek
+//     height down to the row marked `data-sheet-peek-end`, which wraps the tabs
+//     AND this chip (see BottomSheet's own layout-effect doc). Keeping the chip
+//     in the row — rather than hiding it while "ready" — also keeps the measured
+//     peek height constant as readiness changes.
+// `.status-strip` is a stable hook class for the smoke/vis scripts (see
+// CLAUDE.md's script-hook convention) — kept even though no stylesheet rule
+// targets it, and kept on BOTH presentations.
 import {
   CircleCheck as ReadyIcon,
   TriangleAlert as AttentionIcon,
@@ -23,6 +29,8 @@ export interface StatusStripProps {
   /** attention.length — only meaningful (and only read) in the "attention" state. */
   attentionCount: number;
   onOpen: () => void;
+  /** Render the compact chip (mobile tab row) instead of the full-width row. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -56,19 +64,45 @@ function label(readiness: ReadinessState, attentionCount: number): string {
   }
 }
 
-export function StatusStrip({ readiness, attentionCount, onOpen, className }: StatusStripProps) {
+// The chip's own wording — the same states in the width a tab row can spare.
+// The full sentence above stays the chip's accessible name (`aria-label`), so
+// nothing is lost to a screen reader by shortening the visible text.
+function shortLabel(readiness: ReadinessState, attentionCount: number): string {
+  switch (readiness) {
+    case "building":
+      return t("status.buildingShort");
+    case "ready":
+      return t("status.readyShort");
+    case "attention":
+      return tn("review.issueCountShort", attentionCount);
+    case "failed":
+      return t("status.failedShort");
+  }
+}
+
+export function StatusStrip({
+  readiness,
+  attentionCount,
+  onOpen,
+  compact = false,
+  className,
+}: StatusStripProps) {
   const Icon = ICON[readiness];
-  const text = label(readiness, attentionCount);
+  const full = label(readiness, attentionCount);
   return (
     <button
       type="button"
       className={cn(
-        "status-strip flex w-full cursor-pointer items-center gap-2 border-b px-3 py-[0.4rem] text-left text-[0.82rem] font-medium",
+        "status-strip cursor-pointer items-center font-medium",
+        compact
+          ? "status-strip--compact inline-flex shrink-0 gap-[0.3rem] rounded-(--radius-sm) px-[0.45rem] py-[0.25rem] text-[0.78rem] whitespace-nowrap"
+          : "flex w-full gap-2 border-b px-3 py-[0.4rem] text-left text-[0.82rem]",
         TONE[readiness],
         className
       )}
       onClick={onOpen}
       aria-haspopup="dialog"
+      aria-label={compact ? full : undefined}
       title={t("status.reviewTitle")}
     >
       <Icon
@@ -76,7 +110,11 @@ export function StatusStrip({ readiness, attentionCount, onOpen, className }: St
         aria-hidden="true"
         className={cn("shrink-0", readiness === "building" && "animate-spin motion-reduce:animate-none")}
       />
-      <span className="min-w-0 flex-1 truncate">{text}</span>
+      {compact ? (
+        <span aria-hidden="true">{shortLabel(readiness, attentionCount)}</span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{full}</span>
+      )}
     </button>
   );
 }

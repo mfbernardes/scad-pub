@@ -765,6 +765,9 @@ export const AppShell = memo(function AppShell({
                     onSavePng={showSaveImage ? handleSavePng : undefined}
                     canSavePng={exportable}
                     hasFiles={hasFiles}
+                    // Live preview lives in the ⋮ menu on mobile — the sheet's
+                    // Customize tab has no footer row to spare (see SheetTabs).
+                    autoRender={autoRender}
                   />
                 </div>
               </div>
@@ -837,7 +840,6 @@ export const AppShell = memo(function AppShell({
                   availableSvgFiles={availableSvgFiles}
                   onActivate={expand}
                   showVarName={showVarName}
-                  autoRender={autoRender}
                   presetsLabel={presetsLabel}
                   parametersLabel={parametersLabel}
                   showAdvanced={showAdvanced}

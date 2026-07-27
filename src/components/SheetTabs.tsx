@@ -2,6 +2,23 @@
 // Parameters / Presets. Prevents the stacked-sheet anti-pattern. Files used to
 // be a third tab here; it's now FilesModal, opened from the mobile top bar's
 // "⋮" overflow (BarActions.tsx) — see ParamPanel.tsx's own doc for its desktop twin.
+//
+// Vertical budget is the constraint here that the docked desktop panel doesn't
+// have: the sheet's Half detent is ~52vh (BottomSheet's HALF_VH_RATIO), so on a
+// phone every fixed row above the form costs a visible parameter. Three
+// deliberate differences from ParamPanel keep that budget for the form:
+//   • readiness rides ON the tab row as a compact chip (StatusStrip's `compact`)
+//     instead of a full-width strip above it. The row is marked
+//     `data-sheet-peek-end` so BottomSheet measures the peek height down to its
+//     bottom edge — the chip stays in the always-visible peek header, and the
+//     measured peek height doesn't move as readiness changes.
+//   • search + essentials toggle + section navigator share ONE toolbar row
+//     rather than stacking three.
+//   • that toolbar SCROLLS with the form instead of pinning above it, so it
+//     costs nothing once the visitor has scrolled.
+// Live preview (auto-render) used to pin to the bottom of this tab; on mobile
+// it now lives in the top bar's "⋮" overflow (BarActions), which is where the
+// app's other rarely-toggled chrome already is.
 import { useMemo, useRef } from "react";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
@@ -16,7 +33,6 @@ import { SectionNavigator } from "./SectionNavigator";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
-import { PanelFooter } from "./PanelFooter";
 import { StatusStrip, type StatusStripProps } from "./StatusStrip";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
@@ -50,7 +66,6 @@ interface Props {
   onActivate?: () => void;
   /** Show the underlying OpenSCAD variable name beside each label (default true). */
   showVarName?: boolean;
-  autoRender: boolean;
   /** Configurable tab labels (default "Presets" / "Parameters"). */
   presetsLabel?: string;
   parametersLabel?: string;
@@ -64,11 +79,11 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
-  /** Readiness status strip, mounted above the tab row — see StatusStrip.tsx's
-   *  own doc for why that keeps it inside the sheet's always-visible peek
-   *  header (BottomSheet measures Peek from the sheet's top down to the tab
-   *  row's bottom edge). */
-  statusStrip: Omit<StatusStripProps, "className">;
+  /** Readiness status, rendered as a compact chip on the tab row — see
+   *  StatusStrip.tsx's own doc for why that keeps it inside the sheet's
+   *  always-visible peek header (BottomSheet measures Peek from the sheet's
+   *  top down to the `data-sheet-peek-end` row's bottom edge). */
+  statusStrip: Omit<StatusStripProps, "className" | "compact">;
 }
 
 export function SheetTabs({
@@ -87,7 +102,6 @@ export function SheetTabs({
   availableSvgFiles,
   onActivate,
   showVarName = false,
-  autoRender,
   presetsLabel = "Presets",
   parametersLabel = "Customize",
   showAdvanced,
@@ -119,14 +133,23 @@ export function SheetTabs({
       onValueChange={(v) => onTabChange(v as Tab)}
       className="sheet-tabs min-h-0 flex-1 gap-0"
     >
-      <StatusStrip {...statusStrip} className="shrink-0" />
-      <TabsList className="w-full shrink-0 rounded-none border-b bg-transparent p-0" aria-label="Panel sections">
-        {tabs.map((t) => (
-          <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
-            {t === "params" ? parametersLabel : presetsLabel}
-          </TabsTrigger>
-        ))}
-      </TabsList>
+      {/* The peek header: everything down to this row's bottom edge is what
+          BottomSheet measures as the Peek height (it looks for the marker
+          attribute below), so the readiness chip is visible at every detent
+          without costing a row of its own. */}
+      <div
+        className="sheet-peek-header flex shrink-0 items-stretch border-b"
+        data-sheet-peek-end
+      >
+        <TabsList className="min-w-0 flex-1 rounded-none border-0 bg-transparent p-0" aria-label="Panel sections">
+          {tabs.map((t) => (
+            <TabsTrigger key={t} value={t} className={triggerClass} onClick={() => onActivate?.()}>
+              {t === "params" ? parametersLabel : presetsLabel}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <StatusStrip {...statusStrip} compact className="mr-2 self-center" />
+      </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetDiffBar
@@ -136,32 +159,37 @@ export function SheetTabs({
             presetName={presetName}
             changedParams={changedParams}
           />
-          <ParamSearch
-            value={search}
-            onChange={onSearchChange}
-            onClear={() => onSearchChange("")}
-            onFocus={onSearchFocus}
-            onBlur={onSearchBlur}
-          />
-          <EssentialsToggle
-            params={design.params}
-            values={values}
-            showAdvanced={showAdvanced}
-            onShowAdvancedChange={onShowAdvancedChange}
-          />
-          <SectionNavigator
-            sections={navSections}
-            onSelect={(s) => formRef.current?.openSection(s)}
-            compact
-            className="mx-3 mt-2 self-start"
-          />
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
+            {/* One form toolbar — search, essentials, jump — INSIDE the scroll
+                container, so it hands its ~44px back to the form as soon as
+                the visitor scrolls. All three are "find the setting I want"
+                controls; stacked as separate pinned rows they used to eat most
+                of a Half-detent sheet. */}
+            <div className="sheet-toolbar mb-2 flex items-center gap-2">
+              <ParamSearch
+                value={search}
+                onChange={onSearchChange}
+                onClear={() => onSearchChange("")}
+                onFocus={onSearchFocus}
+                onBlur={onSearchBlur}
+                compact
+                className="flex-1"
+              />
+              <EssentialsToggle
+                params={design.params}
+                values={values}
+                showAdvanced={showAdvanced}
+                onShowAdvancedChange={onShowAdvancedChange}
+                compact
+              />
+              <SectionNavigator
+                sections={navSections}
+                onSelect={(s) => formRef.current?.openSection(s)}
+                compact
+              />
+            </div>
             <ParamForm ref={formRef} design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} />
           </div>
-          {/* Auto-render is parameter-scoped, so it pins to the bottom of this
-              tab only — not on Presets (mirrors the desktop panel). Reset
-              lives in PresetDiffBar above now (the unified restore control). */}
-          <PanelFooter autoRender={autoRender} className="sheet-footer" />
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetPicker
