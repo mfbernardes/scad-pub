@@ -28,6 +28,12 @@ const ACTION_CLUSTER_CLASS =
 // pushes the cluster down from a fixed bottom edge — no height measurement
 // needed to stack the two.
 const ACTION_DOCK_CLASS = "action-dock flex flex-col items-center gap-2";
+// Off-screen until focused, shared verbatim by the two skip links below so a
+// tweak to the focused position/chrome lands once. `.skip-link` carries no
+// stylesheet rule — it's a script hook (see CLAUDE.md), so the decoration
+// lives here.
+const SKIP_LINK_CLASS =
+  "skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2";
 
 import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
@@ -229,7 +235,9 @@ export const AppShell = memo(function AppShell({
   const mobileViewerRef = useRef<ViewerHandle>(null);
   // The mobile layout root — its --sheet-follow-h CSS var sizes the viewer so it
   // tracks the sheet live (see handleSheetFollow / .app-shell__mobile-viewer).
-  const mobileRootRef = useRef<HTMLDivElement>(null);
+  // HTMLElement, not HTMLDivElement: this root is the <main> landmark (see the
+  // layout split below). Only style/dataset are read off it.
+  const mobileRootRef = useRef<HTMLElement>(null);
   // Only the active layout mounts a Viewer (the other layout is CSS-hidden), so
   // we never run two three.js renderers / RAF loops / STL parses at once.
   const isMobile = useIsMobile();
@@ -704,19 +712,29 @@ export const AppShell = memo(function AppShell({
     attentionCount: attention.length,
     onDownloadClick: handleDownloadClick,
   };
+  // The document's only <h1>. Visually hidden: BarBrand and the design picker
+  // already carry the sighted title treatment, so this names the page for
+  // assistive tech without duplicating that chrome. Built once here and
+  // rendered by whichever layout branch mounts (M7), so the live tree always
+  // holds exactly one.
+  const pageHeading = <h1 className="sr-only">{schema.title}</h1>;
   const dockStatusPill = hasStatusPill
     ? { readiness, attentionCount: attention.length, onOpen: openReview }
     : undefined;
   return (
     <div className="app-shell" ref={shellRef}>
-      {/* Skip link: off-screen until focused. Only the active layout is
-          mounted below (see M7 — a breakpoint change swaps the whole tree),
-          so the href always matches the one #params(-mobile) target that
-          actually exists. */}
-      <a
-        className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
-        href={isMobile ? "#params-mobile" : "#params"}
-      >
+      {/* Skip links: off-screen until focused. "Skip to main content" lands on
+          the workspace landmark below; "Skip to parameters" additionally jumps
+          past the toolbar/viewer chrome straight to the parameter form, which
+          saves more tabbing than a main-content jump alone, so it stays
+          alongside rather than being replaced. Only the active layout is
+          mounted below (see M7 — a breakpoint change swaps the whole tree), so
+          each href always matches the one target that actually exists:
+          #params(-mobile), and #main-content on the mounted branch's root. */}
+      <a className={SKIP_LINK_CLASS} href="#main-content">
+        Skip to main content
+      </a>
+      <a className={SKIP_LINK_CLASS} href={isMobile ? "#params-mobile" : "#params"}>
         Skip to parameters
       </a>
 
@@ -725,13 +743,26 @@ export const AppShell = memo(function AppShell({
           work and leaving stray focus targets in the hidden tree. Tab, search
           and viewer state are all hoisted above this split (panelState,
           sheetDetent, view, showDimensions, …) so switching trees here loses
-          nothing. */}
+          nothing.
+
+          Each branch's root IS the page's <main> landmark (and carries
+          #main-content + the pageHeading <h1>) rather than a shared wrapper
+          around the split. .app-shell is a plain block, not flex, so both
+          roots resolve their own height:100% against it and any box spliced
+          in between would have to re-declare that height to avoid collapsing
+          them. That's the only real cost of a wrapper — the overlays below
+          anchor to these roots' own `position: relative`, which a wrapper
+          would not disturb — but with two otherwise entirely different trees
+          it buys back only three lines. Since exactly one branch is ever
+          mounted, the duplicated id and heading resolve to one of each in the
+          live tree. */}
       {isMobile ? (
         // ── Mobile layout ──
         // --sheet-follow-h (set live by handleSheetFollow) sizes the viewer so
         // its bottom edge tracks the sheet; data-sheet-dragging toggles the
         // easing. See .app-shell__mobile-viewer in CSS.
-        <div className="app-shell__mobile" ref={mobileRootRef}>
+        <main id="main-content" tabIndex={-1} className="app-shell__mobile" ref={mobileRootRef}>
+          {pageHeading}
           {/* Background content: viewer, top bar, floating controls. Marked
               `inert` while the sheet is at the Full detent (M16) — Full
               visually covers this content, so it's removed from the tab
@@ -910,7 +941,7 @@ export const AppShell = memo(function AppShell({
           {showSheetHint && sheetDetent === "peek" && sheetHintArmed && (
             <SheetSwipeHint onDismiss={dismissSheetHint} />
           )}
-        </div>
+        </main>
       ) : (
         // ── Desktop layout ──
         <div className="app-shell__desktop">
@@ -935,7 +966,25 @@ export const AppShell = memo(function AppShell({
             hasFiles={hasFiles}
           />
 
-          <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
+          {/* The landmark starts BELOW CommandBar: CommandBar renders a
+              <header>, i.e. the banner landmark, and a banner nested inside
+              <main> is a landmark-nesting violation (axe
+              landmark-banner-is-top-level). Mobile has no <header> — its top
+              bar is a plain div — so that branch's root carries the landmark
+              directly. */}
+          <main
+            id="main-content"
+            // tabIndex -1 so activating "Skip to main content" moves focus INTO
+            // the landmark. Without it the browser only shifts the sequential-
+            // focus starting point: the next Tab lands in the right place, but
+            // document.activeElement stays on <body>, so a screen reader never
+            // announces the region it jumped to. Not tab-reachable itself, and
+            // `:focus:not(:focus-visible)` in index.css keeps a click on the
+            // canvas from drawing a focus ring.
+            tabIndex={-1}
+            className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}
+          >
+            {pageHeading}
             {/* Docked panel: Presets / Parameters tabs (mirrors mobile). */}
             <ParamPanel
               design={design}
@@ -989,7 +1038,7 @@ export const AppShell = memo(function AppShell({
               {/* Output console — inline below viewer */}
               <OutputConsole {...outputProps} className="max-h-56" />
             </div>
-          </div>
+          </main>
         </div>
       )}
 

@@ -43,7 +43,10 @@ const itemClass = (isSelected: boolean) =>
       : "enabled:hover:border-brand"
   );
 
-// Shared look for the "Ready-made" / "Saved by you" section headers.
+// Shared look for the "Ready-made" / "Saved by you" section headers. They are
+// <h2>: AppShell's visually-hidden <h1> is the page heading, and these are the
+// first headings under it, so an <h3> here would skip a level (axe
+// heading-order). The level is independent of the styling below.
 const sectionHeadingClass =
   "font-display mt-2 mb-[0.2rem] px-[0.4rem] text-[0.72rem] font-semibold uppercase tracking-[0.04em] text-muted-foreground";
 
@@ -200,9 +203,9 @@ export function PresetPicker({
       >
         {bundled.length > 0 && (
           <section>
-            <h3 className={sectionHeadingClass}>
+            <h2 className={sectionHeadingClass}>
               Ready-made
-            </h3>
+            </h2>
             {/* Presets with a configured image render as a card grid; the rest
                 render as plain list rows below them. We group (grid, then rows)
                 rather than interleave, so a mixed design still reads cleanly
@@ -226,7 +229,14 @@ export function PresetPicker({
                         onClick={() => applyBundled(p)}
                       >
                         <span className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted">
-                          <img src={image} alt="" loading="lazy" className="h-full w-full object-cover" />
+                          <img
+                            src={image}
+                            alt=""
+                            loading="lazy"
+                            width={640}
+                            height={480}
+                            className="h-full w-full object-cover"
+                          />
                         </span>
                         {isSelected && (
                           <span
@@ -277,9 +287,9 @@ export function PresetPicker({
         )}
         {userPresets.length > 0 && (
           <section>
-            <h3 className={sectionHeadingClass}>
+            <h2 className={sectionHeadingClass}>
               Saved by you
-            </h3>
+            </h2>
             <ul aria-label="Your saved presets">
               {userPresets.map((name) => {
                 const id = `user:${design.id}:${name}`;

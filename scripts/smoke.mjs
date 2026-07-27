@@ -180,8 +180,14 @@ async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
   // FilesModal (a Dialog) doesn't persist across a reload, so it must be
   // re-opened each time — exact match: a substring "Files" would also catch
   // "Clear all imported files" once the modal is open.
-  const gotoFiles = () =>
-    page.getByRole("button", { name: "Files", exact: true }).first().click().catch(() => {});
+  // FilesModal is code-split (App.tsx loads it through `lazy()`), so the dialog
+  // mounts a tick or two after the click rather than synchronously — wait for it
+  // here rather than at each call site, so neither an assertion nor the Escape
+  // in closeFiles below can run against a dialog that hasn't appeared yet.
+  const gotoFiles = async () => {
+    await page.getByRole("button", { name: "Files", exact: true }).first().click().catch(() => {});
+    await openDialog(page, "Files").catch(() => {});
+  };
   const closeFiles = async () => {
     await page.keyboard.press("Escape").catch(() => {});
     await waitDialogClosed(page, "Files").catch(() => {});
