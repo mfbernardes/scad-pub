@@ -75,6 +75,7 @@ import {
 } from "../lib/readiness";
 import { friendlyRenderError } from "../lib/friendlyErrors";
 import { ReviewDialog } from "./ReviewDialog";
+import { StatusStrip, type StatusStripProps } from "./StatusStrip";
 
 const ADVANCED_SETTINGS_KEY = ns("settings.advanced");
 
@@ -88,14 +89,38 @@ function ActionDock({
   afterExport,
   onDismissExportSuccess,
   actionButtonsProps,
+  statusPill,
+  onHeightChange,
 }: {
   exportSuccess: ExportSuccessState | null;
   afterExport: UiConfig["afterExport"];
   onDismissExportSuccess: () => void;
   actionButtonsProps: ComponentProps<typeof ActionButtons>;
+  /** The readiness pill, stacked directly above the cluster (StatusStrip).
+   *  Undefined in the states that shouldn't announce anything — see
+   *  `dockStatusPill` below. */
+  statusPill?: Omit<StatusStripProps, "className">;
+  /** Reports the dock's live height (px) whenever it changes — see the
+   *  `--action-dock-h` effect in AppShell for what reads it. */
+  onHeightChange?: (heightPx: number) => void;
 }) {
+  // The dock is a flex column whose height depends on what it currently holds
+  // (cluster alone, + readiness pill, + after-export panel), and the chips that
+  // sit above it have to clear whatever that is — so measure rather than let
+  // them guess. See the CSS note on `--action-dock-h`.
+  const dockRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = dockRef.current;
+    if (!el || !onHeightChange) return;
+    const measure = () => onHeightChange(Math.ceil(el.getBoundingClientRect().height));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onHeightChange]);
+
   return (
-    <div className={ACTION_DOCK_CLASS}>
+    <div className={ACTION_DOCK_CLASS} ref={dockRef}>
       {exportSuccess && (
         <ExportSuccess
           state={exportSuccess}
@@ -105,6 +130,7 @@ function ActionDock({
           onDismiss={onDismissExportSuccess}
         />
       )}
+      {statusPill && <StatusStrip {...statusPill} />}
       <div className={ACTION_CLUSTER_CLASS}>
         <ActionButtons {...actionButtonsProps} />
       </div>
@@ -570,6 +596,19 @@ export const AppShell = memo(function AppShell({
     el.style.setProperty("--mobile-peek-height", `${Math.round(heightPx)}px`);
   }, []);
 
+  // Mirror the export dock's measured height into --action-dock-h, the offset
+  // the over-viewer chips (ViewerGestureHint, SheetSwipeHint) stack themselves
+  // by. The dock is a flex column that grows with what it holds — the readiness
+  // pill, the after-export panel — and it outranks both chips (z-10 vs z-9), so
+  // a static "height of the button cluster" guess meant anything taller than
+  // the cluster simply covered them. Written on the shell root (rather than a
+  // per-layout one) because both layouts' chips read it and only one layout is
+  // ever mounted. See `.viewer-hint` / `.sheet-hint` in index.css.
+  const shellRef = useRef<HTMLDivElement>(null);
+  const handleDockHeight = useCallback((heightPx: number) => {
+    shellRef.current?.style.setProperty("--action-dock-h", `${Math.round(heightPx)}px`);
+  }, []);
+
   // Info-level notices (config-driven `notices`) are surfaced passively by the
   // dot/count on the Output toggle. A warning or assert is different — the model
   // came out wrong in a way worth seeing — so the console auto-opens the first
@@ -603,6 +642,13 @@ export const AppShell = memo(function AppShell({
     setReviewOpen(false);
     openOutput();
   }, [openOutput]);
+
+  // Whether the dock shows its readiness pill (StatusStrip), shared verbatim
+  // by both layouts: only the two states that want a look at the Review dialog.
+  // "ready" needs no announcement — the Download button right below it is the
+  // confirmation — and "building" is already narrated by the viewer's own
+  // loading overlay, so a pill in either state would be noise over the model.
+  const hasStatusPill = readiness === "attention" || readiness === "failed";
 
   // Prop bundles shared verbatim by the two layout trees — each invocation
   // below adds only its layout-specific bits (viewer ref, active flag, …).
@@ -660,13 +706,11 @@ export const AppShell = memo(function AppShell({
     attentionCount: attention.length,
     onDownloadClick: handleDownloadClick,
   };
-  const statusStripProps = {
-    readiness,
-    attentionCount: attention.length,
-    onOpen: openReview,
-  };
+  const dockStatusPill = hasStatusPill
+    ? { readiness, attentionCount: attention.length, onOpen: openReview }
+    : undefined;
   return (
-    <div className="app-shell">
+    <div className="app-shell" ref={shellRef}>
       {/* Skip link: off-screen until focused. Only the active layout is
           mounted below (see M7 — a breakpoint change swaps the whole tree),
           so the href always matches the one #params(-mobile) target that
@@ -765,22 +809,30 @@ export const AppShell = memo(function AppShell({
                     onSavePng={showSaveImage ? handleSavePng : undefined}
                     canSavePng={exportable}
                     hasFiles={hasFiles}
+                    // Live preview lives in the ⋮ menu on mobile — the sheet's
+                    // Customize tab has no footer row to spare (see SheetTabs).
+                    autoRender={autoRender}
                   />
                 </div>
               </div>
             </div>
 
-            {/* Floating action dock — an optional after-export panel stacked
-                above the same compact card the desktop floats over its
-                viewer, riding just above the sheet's top edge (it follows the
-                sheet up to the half detent via --sheet-follow-h) instead of a
-                solid docked footer band that would reserve a strip of the
-                viewport. Identical markup to the desktop dock. */}
+            {/* Floating action dock — the readiness pill and an optional
+                after-export panel stacked above the same compact card the
+                desktop floats over its viewer, riding just above the sheet's
+                top edge (it follows the sheet up to the half detent via
+                --sheet-follow-h) instead of a solid docked footer band that
+                would reserve a strip of the viewport. The pill is the mobile
+                half of the readiness surface: the sheet has no room for a
+                status row, and this puts the warning against the Download
+                button it gates. */}
             <ActionDock
               exportSuccess={exportSuccess}
               afterExport={afterExport}
               onDismissExportSuccess={onDismissExportSuccess}
               actionButtonsProps={actionButtonsProps}
+              statusPill={dockStatusPill}
+              onHeightChange={handleDockHeight}
             />
 
             <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
@@ -837,7 +889,6 @@ export const AppShell = memo(function AppShell({
                   availableSvgFiles={availableSvgFiles}
                   onActivate={expand}
                   showVarName={showVarName}
-                  autoRender={autoRender}
                   presetsLabel={presetsLabel}
                   parametersLabel={parametersLabel}
                   showAdvanced={showAdvanced}
@@ -848,7 +899,6 @@ export const AppShell = memo(function AppShell({
                   onSearchChange={panelState.setSearch}
                   onSearchFocus={handleSearchFocus}
                   onSearchBlur={handleSearchBlur}
-                  statusStrip={statusStripProps}
                 />
               </div>
             )}
@@ -917,7 +967,6 @@ export const AppShell = memo(function AppShell({
               onSearchChange={panelState.setSearch}
               onSearchFocus={handleSearchFocus}
               onSearchBlur={handleSearchBlur}
-              statusStrip={statusStripProps}
             />
 
             {/* Canvas */}
@@ -925,13 +974,16 @@ export const AppShell = memo(function AppShell({
               <ViewerStage {...stageProps} viewerRef={desktopViewerRef} active>
                 {/* Floating controls live inside viewer-wrap so they hover over the
                     canvas — which shrinks when the output console docks below it —
-                    rather than overlapping the console's notices. An optional
-                    after-export panel stacks above the dock (see ACTION_DOCK_CLASS). */}
+                    rather than overlapping the console's notices. The readiness
+                    pill and an optional after-export panel stack above the dock
+                    (see ACTION_DOCK_CLASS), exactly as they do on mobile. */}
                 <ActionDock
                   exportSuccess={exportSuccess}
                   afterExport={afterExport}
                   onDismissExportSuccess={onDismissExportSuccess}
                   actionButtonsProps={actionButtonsProps}
+                  statusPill={dockStatusPill}
+                  onHeightChange={handleDockHeight}
                 />
                 <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
               </ViewerStage>

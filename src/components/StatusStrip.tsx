@@ -1,13 +1,25 @@
-// StatusStrip.tsx — one-line readiness surface (src/lib/readiness.ts's
-// ReadinessState), a button that opens the Review dialog (ReviewDialog.tsx).
-// Desktop: mounted at the top of the docked ParamPanel, above its tabs.
-// Mobile: mounted inside SheetTabs, above the tab row, so it's part of the
-// bottom sheet's always-visible peek header (BottomSheet measures the peek
-// height from the sheet's top down to the tab row's bottom edge, so anything
-// above the tabs — this strip included — is included in that measurement for
-// free; see BottomSheet's own layout-effect doc). `.status-strip` is a
-// stable hook class for the smoke/vis scripts (see CLAUDE.md's script-hook
-// convention) — kept even though no stylesheet rule targets it.
+// StatusStrip.tsx — the readiness surface (src/lib/readiness.ts's
+// ReadinessState): a raised pill in the export dock (AppShell's ActionDock),
+// stacked directly above the Download button, that opens the Review dialog
+// (ReviewDialog.tsx).
+//
+// One presentation, both layouts. It used to be a full-width row at the top of
+// the docked desktop panel and a chip on the mobile sheet's tab row; the dock
+// is where the decision it gates actually gets made, so it lives there for
+// desktop and mobile alike — over the viewer, out of the panel/sheet entirely,
+// and still visible when the desktop panel is collapsed to its rail (which used
+// to drop readiness altogether, since the row lived inside the panel).
+//
+// The caller mounts it only for `attention`/`failed` — the two states that want
+// a look at the Review dialog. A ready model needs no announcement (the enabled
+// Download button is the confirmation), and a first build is already narrated by
+// the viewer's own loading overlay, so a pill in either state would be noise
+// over the model. The other two states are still spelled out below because
+// `readiness` can hold them and the label must stay exhaustive.
+//
+// `.status-strip` is a stable hook class for the smoke/vis scripts (see
+// CLAUDE.md's script-hook convention) — kept even though no stylesheet rule
+// targets it.
 import {
   CircleCheck as ReadyIcon,
   TriangleAlert as AttentionIcon,
@@ -35,12 +47,17 @@ const ICON: Record<ReadinessState, typeof ReadyIcon> = {
 
 // Warn/success/destructive tokens only — never a bespoke colour — so a
 // deployment's `colors` override (which retargets these same tokens) keeps
-// the strip in step with the rest of the app's status language.
+// the pill in step with the rest of the app's status language.
+//
+// Every fill is OPAQUE: the pill floats over the 3D viewer, so a translucent
+// tint (the old row used `bg-destructive/10`) would take its contrast from
+// whatever the model happens to be showing behind it. `--glass-bg` is the same
+// surface the dock's own card uses, so a failed pill reads as part of the dock.
 const TONE: Record<ReadinessState, string> = {
-  building: "text-muted-foreground",
+  building: "text-muted-foreground bg-(--glass-bg)",
   ready: "text-success bg-success-bg",
   attention: "text-warn bg-warn-bg",
-  failed: "text-destructive bg-destructive/10",
+  failed: "text-destructive bg-(--glass-bg)",
 };
 
 function label(readiness: ReadinessState, attentionCount: number): string {
@@ -58,12 +75,11 @@ function label(readiness: ReadinessState, attentionCount: number): string {
 
 export function StatusStrip({ readiness, attentionCount, onOpen, className }: StatusStripProps) {
   const Icon = ICON[readiness];
-  const text = label(readiness, attentionCount);
   return (
     <button
       type="button"
       className={cn(
-        "status-strip flex w-full cursor-pointer items-center gap-2 border-b px-3 py-[0.4rem] text-left text-[0.82rem] font-medium",
+        "status-strip inline-flex max-w-full cursor-pointer items-center gap-[0.4rem] rounded-full border border-(color:--glass-border) px-[0.7rem] py-[0.3rem] text-[0.8rem] font-medium shadow-(--elevation)",
         TONE[readiness],
         className
       )}
@@ -76,7 +92,7 @@ export function StatusStrip({ readiness, attentionCount, onOpen, className }: St
         aria-hidden="true"
         className={cn("shrink-0", readiness === "building" && "animate-spin motion-reduce:animate-none")}
       />
-      <span className="min-w-0 flex-1 truncate">{text}</span>
+      <span className="min-w-0 truncate">{label(readiness, attentionCount)}</span>
     </button>
   );
 }

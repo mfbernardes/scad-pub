@@ -68,5 +68,11 @@
   "settings.showAll": "Show all settings",
   "settings.showAllCount#one": "Show all settings ({count} more)",
   "settings.showAllCount#other": "Show all settings ({count} more)",
-  "settings.showEssential": "Show essential settings"
+  "settings.showEssential": "Show essential settings",
+  "settings.showAllShort": "All settings",
+  "settings.showAllCountShort#one": "+{count} more",
+  "settings.showAllCountShort#other": "+{count} more",
+  "settings.showEssentialShort": "Fewer",
+  "settings.livePreview": "Live preview",
+  "settings.livePreviewTitle": "Update the preview automatically as you change settings"
 }

@@ -4,7 +4,10 @@
 // live here (a tab, mirroring the mobile sheet) rather than in the top bar.
 // Files used to be a third tab here; it's now FilesModal, opened from
 // BarActions (see CommandBar.tsx) — a design that imports files is no longer
-// special-cased in this component at all.
+// special-cased in this component at all. Readiness went the same way: it used
+// to be a full-width StatusStrip row above the tabs, and is now the dock pill
+// both layouts share (see StatusStrip.tsx) — which also means it survives this
+// panel being collapsed to its rail, where the row used to disappear with it.
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
@@ -24,7 +27,6 @@ import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
 import { IconButton } from "./IconButton";
 import { PanelFooter } from "./PanelFooter";
-import { StatusStrip, type StatusStripProps } from "./StatusStrip";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import {
@@ -83,8 +85,6 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
-  /** Readiness status strip, mounted above the tabs (see StatusStrip.tsx). */
-  statusStrip: Omit<StatusStripProps, "className">;
 }
 
 export function ParamPanel({
@@ -115,7 +115,6 @@ export function ParamPanel({
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
-  statusStrip,
 }: Props) {
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
   const [open, setOpen] = useState(() => {
@@ -249,8 +248,6 @@ export function ParamPanel({
           if (e.key === grow) setWidth((w) => Math.min(MAX_WIDTH, w + 20));
         }}
       />
-
-      <StatusStrip {...statusStrip} className="shrink-0" />
 
       <Tabs
         value={panelTab}

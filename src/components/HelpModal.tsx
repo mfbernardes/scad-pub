@@ -13,11 +13,19 @@ import { DEFAULT_HELP } from "../lib/defaultHelp";
 import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
 
 /* The help sections' typography, applied to the scrolling body wrapper (the
-   Markdown renderer emits bare p/ul/li). */
+   Markdown renderer emits bare p/ul/li).
+
+   `[&_p]:m-0` zeroes the browser's paragraph margins so a section's first
+   paragraph sits directly under its <h3> (which brings its own `mb-1`). That
+   held while every section body was one paragraph — but a body with two
+   would then run them together, since a blank line in the source becomes a
+   second <p> with no gap. The sibling rules restore that gap for exactly the
+   paragraphs that follow something: p-after-p and p-after-list. */
 const HELP_BODY = cn(
   MODAL_BODY,
   "help-body [&_section]:my-[0.9rem] [&_h3]:mb-1 [&_h3]:text-[0.95rem] [&_h3]:text-brand",
   "[&_p]:m-0 [&_p]:text-[0.88rem] [&_p]:leading-[1.5] [&_p]:text-foreground",
+  "[&_p+p]:mt-[0.55rem] [&_ul+p]:mt-[0.55rem]",
   "[&_ul]:mt-[0.35rem] [&_ul]:pl-[1.1rem] [&_ul]:text-[0.88rem] [&_ul]:leading-[1.5] [&_ul]:text-foreground [&_li]:my-[0.2rem]"
 );
 
@@ -119,7 +127,7 @@ export function HelpModal({
     : null;
 
   return (
-    <Modal title={content.title ?? "How to use this configurator"} label="Help" onClose={onClose}>
+    <Modal title={content.title ?? "How to use this configurator"} onClose={onClose}>
       {content.intro && (
         <div className={MODAL_INTRO}>
           <Markdown body={content.intro} />

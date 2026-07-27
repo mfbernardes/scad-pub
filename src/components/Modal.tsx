@@ -2,6 +2,14 @@
 // overlay, focus trap, Escape + outside-click close, and a built-in close
 // button. Mounted only while open (callers conditionally render it), so the
 // dialog is always `open`.
+//
+// The dialog's accessible name is its visible `title`, always: Radix wires
+// `aria-labelledby` to the DialogTitle, and per the accname spec that beats any
+// `aria-label` on the same element. There used to be a `label` prop here
+// offering an alternative name — it never took effect, and two callers were
+// passing one under the impression that it did. Anything matching a dialog by
+// name (scripts/lib/browser.mjs's openDialog, the capture script) should expect
+// the title.
 import type { ReactNode } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { isCoarsePointer } from "../lib/pointer";
@@ -14,18 +22,15 @@ export const MODAL_INTRO =
 
 interface Props {
   title: string;
-  /** Accessible name for the dialog; defaults to the title. */
-  label?: string;
   onClose: () => void;
   children: ReactNode;
 }
 
-export function Modal({ title, label, onClose, children }: Props) {
+export function Modal({ title, onClose, children }: Props) {
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
         className="flex w-[min(680px,100%)] max-h-[min(80vh,760px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[680px]"
-        aria-label={label ?? title}
         aria-describedby={undefined}
         // On touch devices, don't let Radix pull focus to the first field on
         // open (e.g. the picker's design-search input), which pops the mobile

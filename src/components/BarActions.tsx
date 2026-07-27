@@ -16,18 +16,26 @@
 // third panel tab (ParamPanel/SheetTabs), which felt out of place next to
 // Presets/Customize — it now opens FilesModal from here instead, gated on
 // `hasFiles` (the caller knows whether the design's config sets `fileImport`).
+// Live preview (auto-render) is the third: on mobile it used to pin a footer
+// row inside the sheet's Customize tab, spending ~36px of a ~385px sheet on a
+// mode PanelFooter's own doc calls "rarely toggled". It rides this menu now
+// (mobile only — desktop keeps PanelFooter, where the panel has the room).
 import { useState } from "react";
 import { useAppActions } from "../lib/appActions";
 import { ThemeToggle } from "./ThemeToggle";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Switch } from "./ui/switch";
+import { Label } from "./ui/label";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
 import {
   CircleHelp as HelpIcon,
   Image as ImageIcon,
   Info as InfoIcon,
   EllipsisVertical as MoreIcon,
   Paperclip as FilesIcon,
+  RefreshCw as LivePreviewIcon,
   Sun as SunIcon,
   Moon as MoonIcon,
   SunMoon as AutoThemeIcon,
@@ -62,10 +70,21 @@ interface Props {
    *  `fileImport` is present (the caller derives this from the schema; see
    *  AppShell's `hasFiles`). False by default: most designs import nothing. */
   hasFiles?: boolean;
+  /** Live preview (auto-render) state. Present -> the collapsed (mobile) menu
+   *  carries the toggle; the inline desktop presentation ignores it, because
+   *  there PanelFooter still owns it at the bottom of the docked panel. */
+  autoRender?: boolean;
 }
 
-export function BarActions({ themeMode, collapse = false, onSavePng, canSavePng = true, hasFiles = false }: Props) {
-  const { cycleTheme, showHelp, showLicenses, showFiles } = useAppActions();
+export function BarActions({
+  themeMode,
+  collapse = false,
+  onSavePng,
+  canSavePng = true,
+  hasFiles = false,
+  autoRender,
+}: Props) {
+  const { cycleTheme, showHelp, showLicenses, showFiles, autoRenderChange } = useAppActions();
   const [open, setOpen] = useState(false);
   // Help/licenses/Save-image/Files close the menu; theme cycles in place.
   const openModal = (fn: () => void) => () => { fn(); setOpen(false); };
@@ -82,7 +101,26 @@ export function BarActions({ themeMode, collapse = false, onSavePng, canSavePng 
         >
           <MoreIcon size={16} />
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-48 p-1">
+        <PopoverContent align="end" className="w-52 p-1">
+          {autoRender !== undefined && (
+            // Keeps the `.auto-render` hook class and the switch's accessible
+            // name from PanelFooter, so the smoke suite finds the same control
+            // in either layout. Doesn't close the menu: it's a mode, and the
+            // visitor may want to see it flip.
+            <Label
+              className={cn(rowClass, "auto-render justify-between font-normal")}
+              title={t("settings.livePreviewTitle")}
+            >
+              <span className="inline-flex items-center gap-2">
+                <LivePreviewIcon size={16} /> {t("settings.livePreview")}
+              </span>
+              <Switch
+                checked={autoRender}
+                onCheckedChange={autoRenderChange}
+                aria-label={t("settings.livePreview")}
+              />
+            </Label>
+          )}
           {onSavePng && (
             <button
               type="button"

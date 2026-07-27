@@ -29,8 +29,13 @@ export function hiddenAdvancedCount(params: Param[], values: Values): number {
  * (N more)" when `@advanced` params are currently hidden, the plain "Show all
  * settings" when the count is zero. The hide side's label
  * (`settings.showEssential`) stays in the caller since it's unconditional.
+ *
+ * `compact` picks the short wording the mobile toolbar chip shows ("+N more"
+ * / "All settings") — same states, same count, in the width a toolbar row can
+ * spare. The long form stays the chip's accessible name.
  */
-export function essentialsToggleLabel(params: Param[], values: Values): string {
+export function essentialsToggleLabel(params: Param[], values: Values, compact = false): string {
   const hiddenCount = hiddenAdvancedCount(params, values);
-  return hiddenCount > 0 ? tn("settings.showAllCount", hiddenCount) : t("settings.showAll");
+  if (hiddenCount === 0) return compact ? t("settings.showAllShort") : t("settings.showAll");
+  return tn(compact ? "settings.showAllCountShort" : "settings.showAllCount", hiddenCount);
 }
