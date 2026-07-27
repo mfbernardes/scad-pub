@@ -57,6 +57,20 @@ Each `designs[]` entry also accepts optional `description`, `icon`, `image`, and
 
 All four fall back to the design's own `// @description` / `// @icon` / `// @image` / `// @doc` annotations when omitted here. A config value still wins.
 
+Each `designs[]` entry also accepts an optional **`group`** field — a header string the picker clusters designs under:
+
+```jsonc
+{
+  "designs": [
+    { "id": "signage", "label": "Flexible sign", "group": "Around the building" },
+    { "id": "elevator", "label": "Elevator button", "group": "Around the building" },
+    { "id": "nameplate", "label": "Nameplate", "group": "Labels & everyday" }
+  ]
+}
+```
+
+- **`group`**: an optional string. Designs sharing the same `group` value cluster under a header showing that string — a `<SelectGroup>`/`<SelectLabel>` pair in the compact dropdown, an `<h3>` section heading in the `ui.gallery` card grid (`src/components/DesignPicker.tsx`) — and the value is also matched by the gallery's search box, alongside `label`/`description`. Clustering follows `designs` array order and merges only **consecutive** entries: a run starts where a `group` value first appears and keeps absorbing later designs only while they repeat that exact value back-to-back; a design with a different (or absent) `group` breaks the run, so reusing the same group string further down the array — with something else in between — opens a second, separately headed section rather than joining the first. Omit `group`, or set it `null`, and that design renders in a headerless run; a config where no design sets `group` renders as a flat list with no headers at all
+
 Each `designs[]` entry also accepts optional **`reviewLabels`** and **`reviewNote`** fields, feeding a curated review summary (`src/lib/reviewSummary.ts`):
 
 ```jsonc
@@ -125,6 +139,20 @@ These keys add copy and third-party notices to the generated app:
 - **`licenses`**: optional list of extra third-party software/license notices. ScadPub appends them to the built-in open-source attributions in the ⓘ panel. See [Open-source notices](#open-source-notices-licenses)
 
 Missing `source`, `assets`, design, `logo`, or design-`icon` paths fail the build with a clear error. An **unknown top-level key** also fails the build. A whole-key typo like `"popups"` or `"fontfallback"` fails rather than being silently ignored. Add a `"$schema"` key for editor tooling if you want; it is allowed.
+
+## Where paths resolve from
+
+Config paths are not all relative to the same thing. `gen-schema` resolves each one against whichever of three bases fits its role:
+
+| Base | Keys resolved against it |
+| --- | --- |
+| The **config file's own directory** | `source`, `logo`, `icon`, `iconMaskable`, `extraCss`, `designs[].icon`, `designs[].image`, `designs[].doc`, `designs[].presetImages` values |
+| **`source`** (itself config-relative, see above) | `assets`, each `fonts` entry, `designs[].file` |
+| **The design's own `.scad` file** | the `// @icon`, `// @image`, and `// @doc` annotations |
+
+A path resolved against the design's own file must additionally stay inside `source` — `gen-schema`'s `checkContained` check rejects a `// @icon`/`// @image`/`// @doc` (or a `use`/`include` target, or a symlink resolving outside it) that escapes upward with a build-time error. A config-relative path (`logo`, `icon`, `designs[].icon`, …) is not checked against `source` at all: the config author who controls the config file's directory is assumed to also control what it points at.
+
+The surprising part is that a `designs[]` entry's `icon`/`image`/`doc` and its design's own `// @icon`/`// @image`/`// @doc` annotation are **fallbacks for the same field, resolved from different bases**: the config value (when present) is read relative to the config file, while the annotation (used only when the config field is omitted) is read relative to the `.scad` file that carries it. Moving a design deeper into `source` without touching the config can silently change what its `// @icon` annotation resolves to, even though a config-supplied `icon` path would have been unaffected.
 
 ## SVG asset trust model
 
@@ -230,7 +258,7 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
   /* --bg, --panel, --panel-2, --line, --text, --muted, --focus, --link, --warn,
      --warn-bg, --success, --success-bg, --code-bg, --overlay, --glass-bg,
      --glass-border, --elevation, --radius, --radius-sm,
-     --viewer-bg/-grid/-grid-2, --viewer-model */
+     --viewer-bg/-grid/-grid-2, --viewer-model/-dim */
 }
 :root[data-theme="light"] {
   --accent: #1d4ed8;
@@ -261,6 +289,7 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--font-sans` / `--font-display` | UI font stacks: body text / the display voice (brand, headings, tabs, buttons). Unquoted family names only (e.g. `Georgia, serif`); set them under `dark` (the `:root` block) to apply to both themes |
 | `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid (the grid renders only while the viewer's grid toggle is on — seeded by `ui.grid`, then the visitor's own choice) |
 | `--viewer-model` | rendered model material colour |
+| `--viewer-dim` | dimension-overlay colour: the W x D x H measurement lines/labels the viewer's measure tool draws (seeded by [`ui.measure`](#ui-options)) |
 
 `--accent` and `--accent-solid` are separate tokens because the same colour rarely passes WCAG AA both as small text on `--panel` and as a filled button background.
 
@@ -399,6 +428,7 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
     "header": "Welcome to Tag Studio",          // required: dialog title
     "body": "Configure a nameplate and export a 3MF.\n\nSee the [print guide](https://example.com/guide) for material tips.",  // required
     "mode": "once",                              // optional: "always" | "once" | "dismissible" | "picker"
+    "button": "Got it",                          // optional: overrides the default "OK" label
     "footnote": "Everything runs in your browser. Nothing is uploaded."  // optional
   }
 }
@@ -411,6 +441,7 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
   - **`once`** (default): shown on the first visit only. Dismissing it with **OK**, the close button, Escape, or outside click remembers it so it will not return
   - **`dismissible`**: shown on every visit until you tick **Don't show this again**. Closing without ticking the box shows it again next time
   - **`picker`**: shows the visual design gallery on the first visit. Intended for `ui.gallery: true` deployments with multiple designs
+- **`button`**: an optional label for the primary button, overriding the default `"OK"`. Must be a non-empty string when set. Has no effect in `picker` mode with more than one design — that mode's primary action is picking a design from the gallery, not clicking a button
 - **`footnote`**: an optional short line of plain text (not Markdown), shown small and muted at the bottom of the dialog in every mode, including `picker`. For a standing disclosure that doesn't belong in the main `body` message, such as a privacy note
 
 The remembered state is namespaced by the configurator's `id` and keyed by the popup's content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It's purely informational and doesn't affect renders, so it never invalidates the geometry cache.
