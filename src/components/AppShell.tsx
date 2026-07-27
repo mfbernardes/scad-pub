@@ -761,7 +761,7 @@ export const AppShell = memo(function AppShell({
         // --sheet-follow-h (set live by handleSheetFollow) sizes the viewer so
         // its bottom edge tracks the sheet; data-sheet-dragging toggles the
         // easing. See .app-shell__mobile-viewer in CSS.
-        <main id="main-content" className="app-shell__mobile" ref={mobileRootRef}>
+        <main id="main-content" tabIndex={-1} className="app-shell__mobile" ref={mobileRootRef}>
           {pageHeading}
           {/* Background content: viewer, top bar, floating controls. Marked
               `inert` while the sheet is at the Full detent (M16) — Full
@@ -944,8 +944,7 @@ export const AppShell = memo(function AppShell({
         </main>
       ) : (
         // ── Desktop layout ──
-        <main id="main-content" className="app-shell__desktop">
-          {pageHeading}
+        <div className="app-shell__desktop">
           <CommandBar
             schema={schema}
             designs={designs}
@@ -967,7 +966,25 @@ export const AppShell = memo(function AppShell({
             hasFiles={hasFiles}
           />
 
-          <div className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}>
+          {/* The landmark starts BELOW CommandBar: CommandBar renders a
+              <header>, i.e. the banner landmark, and a banner nested inside
+              <main> is a landmark-nesting violation (axe
+              landmark-banner-is-top-level). Mobile has no <header> — its top
+              bar is a plain div — so that branch's root carries the landmark
+              directly. */}
+          <main
+            id="main-content"
+            // tabIndex -1 so activating "Skip to main content" moves focus INTO
+            // the landmark. Without it the browser only shifts the sequential-
+            // focus starting point: the next Tab lands in the right place, but
+            // document.activeElement stays on <body>, so a screen reader never
+            // announces the region it jumped to. Not tab-reachable itself, and
+            // `:focus:not(:focus-visible)` in index.css keeps a click on the
+            // canvas from drawing a focus ring.
+            tabIndex={-1}
+            className={`app-shell__canvas-area${panelSide === "right" ? " panel-right" : ""}`}
+          >
+            {pageHeading}
             {/* Docked panel: Presets / Parameters tabs (mirrors mobile). */}
             <ParamPanel
               design={design}
@@ -1021,8 +1038,8 @@ export const AppShell = memo(function AppShell({
               {/* Output console — inline below viewer */}
               <OutputConsole {...outputProps} className="max-h-56" />
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
       )}
 
       <ReviewDialog
