@@ -229,7 +229,9 @@ export const AppShell = memo(function AppShell({
   const mobileViewerRef = useRef<ViewerHandle>(null);
   // The mobile layout root — its --sheet-follow-h CSS var sizes the viewer so it
   // tracks the sheet live (see handleSheetFollow / .app-shell__mobile-viewer).
-  const mobileRootRef = useRef<HTMLDivElement>(null);
+  // HTMLElement, not HTMLDivElement: this root is the <main> landmark (see the
+  // layout split below). Only style/dataset are read off it.
+  const mobileRootRef = useRef<HTMLElement>(null);
   // Only the active layout mounts a Viewer (the other layout is CSS-hidden), so
   // we never run two three.js renderers / RAF loops / STL parses at once.
   const isMobile = useIsMobile();
@@ -704,15 +706,31 @@ export const AppShell = memo(function AppShell({
     attentionCount: attention.length,
     onDownloadClick: handleDownloadClick,
   };
+  // The document's only <h1>. Visually hidden: BarBrand and the design picker
+  // already carry the sighted title treatment, so this names the page for
+  // assistive tech without duplicating that chrome. Built once here and
+  // rendered by whichever layout branch mounts (M7), so the live tree always
+  // holds exactly one.
+  const pageHeading = <h1 className="sr-only">{schema.title}</h1>;
   const dockStatusPill = hasStatusPill
     ? { readiness, attentionCount: attention.length, onOpen: openReview }
     : undefined;
   return (
     <div className="app-shell" ref={shellRef}>
-      {/* Skip link: off-screen until focused. Only the active layout is
-          mounted below (see M7 — a breakpoint change swaps the whole tree),
-          so the href always matches the one #params(-mobile) target that
-          actually exists. */}
+      {/* Skip links: off-screen until focused. "Skip to main content" lands on
+          the workspace landmark below; "Skip to parameters" additionally jumps
+          past the toolbar/viewer chrome straight to the parameter form, which
+          saves more tabbing than a main-content jump alone, so it stays
+          alongside rather than being replaced. Only the active layout is
+          mounted below (see M7 — a breakpoint change swaps the whole tree), so
+          each href always matches the one target that actually exists:
+          #params(-mobile), and #main-content on the mounted branch's root. */}
+      <a
+        className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
+        href="#main-content"
+      >
+        Skip to main content
+      </a>
       <a
         className="skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2"
         href={isMobile ? "#params-mobile" : "#params"}
@@ -725,13 +743,23 @@ export const AppShell = memo(function AppShell({
           work and leaving stray focus targets in the hidden tree. Tab, search
           and viewer state are all hoisted above this split (panelState,
           sheetDetent, view, showDimensions, …) so switching trees here loses
-          nothing. */}
+          nothing.
+
+          Each branch's root IS the page's <main> landmark (and carries
+          #main-content + the pageHeading <h1>) rather than a shared wrapper
+          around the split: .app-shell is a plain block whose children set
+          their own height:100% against it, so an extra box in that chain
+          would have to re-declare the height, and every absolute-positioned
+          overlay below anchors to .app-shell__mobile/__desktop. Since exactly
+          one branch is ever mounted, the duplicated id and heading resolve to
+          one of each in the live tree. */}
       {isMobile ? (
         // ── Mobile layout ──
         // --sheet-follow-h (set live by handleSheetFollow) sizes the viewer so
         // its bottom edge tracks the sheet; data-sheet-dragging toggles the
         // easing. See .app-shell__mobile-viewer in CSS.
-        <div className="app-shell__mobile" ref={mobileRootRef}>
+        <main id="main-content" className="app-shell__mobile" ref={mobileRootRef}>
+          {pageHeading}
           {/* Background content: viewer, top bar, floating controls. Marked
               `inert` while the sheet is at the Full detent (M16) — Full
               visually covers this content, so it's removed from the tab
@@ -910,10 +938,11 @@ export const AppShell = memo(function AppShell({
           {showSheetHint && sheetDetent === "peek" && sheetHintArmed && (
             <SheetSwipeHint onDismiss={dismissSheetHint} />
           )}
-        </div>
+        </main>
       ) : (
         // ── Desktop layout ──
-        <div className="app-shell__desktop">
+        <main id="main-content" className="app-shell__desktop">
+          {pageHeading}
           <CommandBar
             schema={schema}
             designs={designs}
@@ -990,7 +1019,7 @@ export const AppShell = memo(function AppShell({
               <OutputConsole {...outputProps} className="max-h-56" />
             </div>
           </div>
-        </div>
+        </main>
       )}
 
       <ReviewDialog

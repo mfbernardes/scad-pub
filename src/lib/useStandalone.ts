@@ -12,14 +12,19 @@ function isStandalone(): boolean {
   );
 }
 
+// Module-scope so useSyncExternalStore gets a referentially stable subscribe/
+// getSnapshot/getServerSnapshot across renders — inline callbacks would make it
+// tear down and re-add the listener on every render of every consumer.
+function subscribe(onChange: () => void): () => void {
+  const mq = window.matchMedia(QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+function getServerSnapshot(): boolean {
+  return false;
+}
+
 export function useStandalone(): boolean {
-  return useSyncExternalStore(
-    (onChange) => {
-      const mq = window.matchMedia(QUERY);
-      mq.addEventListener("change", onChange);
-      return () => mq.removeEventListener("change", onChange);
-    },
-    isStandalone,
-    () => false
-  );
+  return useSyncExternalStore(subscribe, isStandalone, getServerSnapshot);
 }

@@ -226,7 +226,14 @@ export function PresetPicker({
                         onClick={() => applyBundled(p)}
                       >
                         <span className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted">
-                          <img src={image} alt="" loading="lazy" className="h-full w-full object-cover" />
+                          <img
+                            src={image}
+                            alt=""
+                            loading="lazy"
+                            width={640}
+                            height={480}
+                            className="h-full w-full object-cover"
+                          />
                         </span>
                         {isSelected && (
                           <span

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import schemaJson from "./generated/designs.json";
 import type { Design, ParamValue } from "./openscad/types";
 import { validateSchema } from "./lib/schema";
@@ -36,13 +36,54 @@ import { toast } from "sonner";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/ui/sonner";
-import { LicensesModal } from "./components/LicensesModal";
-import { HelpModal } from "./components/HelpModal";
-import { DesignDocModal } from "./components/DesignDocModal";
-import { FilesModal } from "./components/FilesModal";
 import { PopupModal } from "./components/PopupModal";
 import { shouldShowPopup, rememberPopup } from "./lib/popup";
 import type { ExportSuccessState } from "./components/ExportSuccess";
+
+// LicensesModal, HelpModal, DesignDocModal and FilesModal are interaction-only
+// surfaces most sessions never open — LicensesModal in particular drags in the
+// raw OFL-1.1 license text (src/lib/licenses.ts) and HelpModal the built-in
+// help copy (src/lib/defaultHelp.ts). Load each behind a module-scope `lazy()`
+// (created once, not per render, so `react-hooks/static-components` is
+// satisfied — see SvgPrepareControl.tsx for the same pattern) so they land in
+// their own chunks instead of the eager main bundle.
+//
+// The thunks are named so warmModalChunks() below can pull the same dynamic
+// imports the `lazy()` wrappers use; the module loader dedupes them, so the
+// click path reuses the warmed module instead of re-fetching.
+const loadLicensesModal = () =>
+  import("./components/LicensesModal").then((m) => ({ default: m.LicensesModal }));
+const loadHelpModal = () => import("./components/HelpModal").then((m) => ({ default: m.HelpModal }));
+const loadDesignDocModal = () =>
+  import("./components/DesignDocModal").then((m) => ({ default: m.DesignDocModal }));
+const loadFilesModal = () =>
+  import("./components/FilesModal").then((m) => ({ default: m.FilesModal }));
+
+const LicensesModal = lazy(loadLicensesModal);
+const HelpModal = lazy(loadHelpModal);
+const DesignDocModal = lazy(loadDesignDocModal);
+const FilesModal = lazy(loadFilesModal);
+
+// Every one of these opens from a direct click (a menu item, a toolbar button),
+// so the goal is keeping them off the *critical* path, not off the wire: warm
+// all four once the app is idle, and the click never waits on the network.
+//
+// It does still wait on React: `lazy()` suspends for a render pass even when
+// the module is already in the loader's map (the payload only resolves the
+// first time React renders it), so the dialog mounts a tick or two after the
+// click rather than synchronously as it did when statically imported. That is
+// below the threshold of a frame for a real user, but it IS observable to a
+// driver that asserts immediately after clicking — hence the explicit wait in
+// scripts/smoke.mjs's gotoFiles().
+//
+// A rejected warm-up is ignored on purpose — the click path re-requests through
+// `lazy()`, which is where a real failure belongs (see ErrorBoundary in
+// main.tsx); swallowing it here must not mask that.
+function warmModalChunks(): void {
+  for (const load of [loadHelpModal, loadFilesModal, loadDesignDocModal, loadLicensesModal]) {
+    load().catch(() => {});
+  }
+}
 
 const schema = validateSchema(schemaJson);
 const initialState = readInitialState(schema);
@@ -287,6 +328,20 @@ export default function App() {
     return () => { active = false; };
   }, [design]);
 
+  // Warm the lazily-split modal chunks once the browser is idle — see
+  // warmModalChunks. requestIdleCallback where it exists (not Safari <17), a
+  // macrotask otherwise; either way this lands after first paint and after the
+  // render worker has had its turn.
+  useEffect(() => {
+    const idle = window.requestIdleCallback;
+    if (idle) {
+      const handle = idle(warmModalChunks, { timeout: 2000 });
+      return () => window.cancelIdleCallback?.(handle);
+    }
+    const timer = window.setTimeout(warmModalChunks, 1000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const setValue = useCallback((name: string, value: ParamValue) =>
     setValues((v) => ({ ...v, [name]: value })), []);
 
@@ -459,37 +514,42 @@ export default function App() {
           onDesignChange={handleDesignChange}
         />
       )}
-      {showHelp && (
-        <HelpModal
-          help={schema.help}
-          onClose={() => setShowHelp(false)}
-          canInstall={canInstall && installMode !== "off"}
-          onInstall={promptInstall}
-          initialTab={helpInitialTab}
-        />
-      )}
-      {showDesignDoc && design.doc && (
-        // Keyed on design.id so a design switch while the modal is open remounts
-        // it fresh (idle -> loading state) instead of needing to reset state
-        // imperatively inside the fetch effect.
-        <DesignDocModal key={design.id} design={design} onClose={() => setShowDesignDoc(false)} />
-      )}
-      {showLicenses && (
-        <LicensesModal
-          versions={buildVersions}
-          extra={schema.licenses}
-          onClose={() => setShowLicenses(false)}
-        />
-      )}
-      {showFiles && (
-        <FilesModal
-          fileImport={schema.fileImport ?? null}
-          loadedFiles={loadedFiles}
-          onRemoveFile={removeFile}
-          onClearFiles={clearImportedFiles}
-          onClose={() => setShowFiles(false)}
-        />
-      )}
+      {/* Each of these four is lazy-loaded (see the module-scope `lazy()` calls
+          above), so a single Suspense boundary covers the group — a pending
+          chunk load suspends only this fragment, never AppShell or Toaster. */}
+      <Suspense fallback={null}>
+        {showHelp && (
+          <HelpModal
+            help={schema.help}
+            onClose={() => setShowHelp(false)}
+            canInstall={canInstall && installMode !== "off"}
+            onInstall={promptInstall}
+            initialTab={helpInitialTab}
+          />
+        )}
+        {showDesignDoc && design.doc && (
+          // Keyed on design.id so a design switch while the modal is open remounts
+          // it fresh (idle -> loading state) instead of needing to reset state
+          // imperatively inside the fetch effect.
+          <DesignDocModal key={design.id} design={design} onClose={() => setShowDesignDoc(false)} />
+        )}
+        {showLicenses && (
+          <LicensesModal
+            versions={buildVersions}
+            extra={schema.licenses}
+            onClose={() => setShowLicenses(false)}
+          />
+        )}
+        {showFiles && (
+          <FilesModal
+            fileImport={schema.fileImport ?? null}
+            loadedFiles={loadedFiles}
+            onRemoveFile={removeFile}
+            onClearFiles={clearImportedFiles}
+            onClose={() => setShowFiles(false)}
+          />
+        )}
+      </Suspense>
 
       <Toaster theme={theme} />
 

@@ -65,6 +65,8 @@ export function DesignGallery({
       {designs.length > 6 && (
         <input
           type="search"
+          name="design-search"
+          autoComplete="off"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search designs…"
@@ -93,9 +95,23 @@ export function DesignGallery({
                   >
                     <span className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted">
                       {design.image ? (
-                        <img src={design.image} alt="" loading="lazy" className="h-full w-full object-cover" />
+                        <img
+                          src={design.image}
+                          alt=""
+                          loading="lazy"
+                          width={640}
+                          height={480}
+                          className="h-full w-full object-cover"
+                        />
                       ) : design.icon ? (
-                        <img src={design.icon} alt="" loading="lazy" className="h-16 w-16 object-contain" />
+                        <img
+                          src={design.icon}
+                          alt=""
+                          loading="lazy"
+                          width={64}
+                          height={64}
+                          className="h-16 w-16 object-contain"
+                        />
                       ) : (
                         <span className="text-3xl font-bold text-muted-foreground" aria-hidden="true">{design.label.charAt(0)}</span>
                       )}

@@ -21,7 +21,7 @@ function Progress({
         // progressbar pattern) has no percentage to translate to, so it gets a
         // looping sweep animation instead of the determinate translateX; see
         // the `progress-indeterminate` keyframes in index.css.
-        className="bg-primary h-full w-full flex-1 transition-all data-[state=indeterminate]:w-1/3 data-[state=indeterminate]:animate-[progress-indeterminate_1.4s_ease-in-out_infinite] motion-reduce:data-[state=indeterminate]:animate-none"
+        className="bg-primary h-full w-full flex-1 transition-transform data-[state=indeterminate]:w-1/3 data-[state=indeterminate]:animate-[progress-indeterminate_1.4s_ease-in-out_infinite] motion-reduce:data-[state=indeterminate]:animate-none"
         style={value != null ? { transform: `translateX(-${100 - value}%)` } : undefined}
       />
     </ProgressPrimitive.Root>
