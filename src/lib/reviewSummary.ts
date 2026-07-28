@@ -1,11 +1,13 @@
 // reviewSummary.ts — pure derivation of a review summary's row list: a
-// design's curated `designs[].reviewLabels` config (see docs/config.md),
-// each label's live formatted value (honouring any `echo("@review", …)`
-// override — see reviewOverrides.ts), plus one overall bounding-box
-// "Dimensions" row. No React or DOM: it depends only on the schema/values
-// types plus ./visibility and ./format, so the status strip/dialog can drive
-// it directly and tests/reviewSummary.test.mjs can exercise every branch
-// without a DOM harness.
+// design's curated `reviewLabels` (gathered by gen-schema from each
+// parameter's own `// @review "<label>"` annotation — see
+// docs/annotations.md; there is no config-level source), each label's live
+// formatted value (honouring any `echo("@review", …)` override — see
+// reviewOverrides.ts), plus one overall bounding-box "Dimensions" row. No
+// React or DOM: it depends only on the schema/values types plus ./visibility
+// and ./format, so the status strip/dialog can drive it directly and
+// tests/reviewSummary.test.mjs can exercise every branch without a DOM
+// harness.
 //
 // Value formatting is src/lib/format.ts's shared `mm`/`formatParamValue`, the
 // same functions DimensionInfo.tsx's `@info` rows use — see that module's own
@@ -41,13 +43,15 @@ export function formatBoundingBox(size: BoundingBoxSize): string {
 }
 
 /**
- * The review summary's row list: one row per `designs[].reviewLabels` entry
- * (see docs/config.md), in the order its keys first appear in that object —
- * a deployment's own curation order, not necessarily the design's
- * param-declaration order. Several params sharing one label merge into a
- * SINGLE row, their formatted values joined by " / ". A param whose value
- * isn't worth a row (`formatParamValue` returns null) or that's currently
- * hidden by `@showIf` contributes nothing to its label's row.
+ * The review summary's row list: one row per `reviewLabels` entry (each
+ * gathered from a parameter's own `// @review "<label>"` annotation — see
+ * docs/annotations.md), in the order gen-schema walked this design's parsed
+ * params to build that object — i.e. the design's own param-declaration
+ * order in its `.scad` file, not a curated or alphabetical one. Several
+ * params sharing one label merge into a SINGLE row, their formatted values
+ * joined by " / ". A param whose value isn't worth a row (`formatParamValue`
+ * returns null) or that's currently hidden by `@showIf` contributes nothing
+ * to its label's row.
  *
  * `reviewOverrides` (reviewOverrides.ts's `echo("@review", param, value)`
  * map) lets a param's row show what the design actually RENDERED instead of

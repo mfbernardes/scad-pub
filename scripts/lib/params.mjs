@@ -465,7 +465,12 @@ export function parseParams(absPath) {
       // gen-schema.mjs's buildDesigns folds it into the design's own
       // `reviewLabels` map and strips it back off before the param reaches
       // designs.json — src/openscad/types.ts's ParamBase carries no such
-      // field, and that file must never be edited (see this repo's CLAUDE.md).
+      // field. That's deliberate, not an oversight to "fix": types.ts sits in
+      // worker.ts's hashed import closure (scripts/lib/worker-deps.mjs feeds
+      // scripts/lib/hash.mjs's computeRenderHash), so any edit to it —
+      // comments included — changes renderHash and evicts every deployment's
+      // persisted render cache. Real edits are fine, just worth batching
+      // deliberately rather than trickling in one field at a time.
       if (pendingReview) p.reviewLabel = pendingReview;
       // Mark a string SVG field for the in-app wizard (see `// @svg`), and a
       // wizard-populated target for demoted rendering (see `// @filledBy`).

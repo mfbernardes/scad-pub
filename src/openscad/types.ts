@@ -249,7 +249,7 @@ export interface Design {
    *  Null/absent hides the "Design guide" affordance. */
   doc?: string | null;
   /**
-   * Optional bundled-preset thumbnails (config's `designs[].presetImages`;
+   * Optional bundled-preset thumbnails (config's `designs[].presets.images`;
    * see docs/config.md). Maps a bundled preset's EXACT name (as it appears in
    * the sibling parameterSets file) to a served image URL — gen-schema fails
    * the build if a key doesn't match a real bundled preset name. When set
@@ -263,22 +263,25 @@ export interface Design {
   collapsedSections?: string[];
   params: Param[];
   /**
-   * Optional curated label overrides for a review summary (config's
-   * `designs[].reviewLabels`; see docs/config.md). Maps a declared
-   * parameter's name to the label its value is shown under in the summary
-   * — gen-schema fails the build if a key doesn't match one of this
-   * design's own params. Several params sharing the same label merge into
-   * ONE summary row, their formatted values joined by " / ". Absent -> the
-   * curated summary is empty. Never affects geometry.
+   * Curated label overrides for a review summary, gathered from each
+   * declared parameter's own `// @review "<label>"` annotation (see
+   * docs/annotations.md) — there is no config-level source. Maps a
+   * parameter's name to the label its value is shown under in the summary,
+   * in the order gen-schema walks this design's parsed params (file order),
+   * not insertion/alphabetical order. Several params sharing the same label
+   * merge into ONE summary row, their formatted values joined by " / ".
+   * Absent -> the curated summary is empty. Never affects geometry.
    */
   reviewLabels?: Record<string, string>;
   /**
-   * Optional short explanatory note for a review summary (config's
-   * `designs[].reviewNote`) — e.g. "Text prints in capitals even though you
-   * typed it in lowercase." A generic hook for a design whose output
-   * transforms a parameter's raw value in a way worth calling out; a
-   * deployment supplies the wording, ScadPub never infers it. Null/absent
-   * renders nothing. Never affects geometry.
+   * Optional short explanatory note for a review summary, from the design's
+   * own file-level `// @reviewNote "<text>"` annotation (see
+   * docs/annotations.md) — there is no config-level source — e.g. "Text
+   * prints in capitals even though you typed it in lowercase." A generic
+   * hook for a design whose output transforms a parameter's raw value in a
+   * way worth calling out; the design's own comment supplies the wording,
+   * ScadPub never infers it. Null/absent renders nothing. Never affects
+   * geometry.
    */
   reviewNote?: string | null;
 }
@@ -335,28 +338,18 @@ export interface SoftwareLicense {
 }
 
 /**
- * Config for the generic "Import file" button. A single control that accepts
- * any file (or font); whether an upload is treated as a font is decided by its
- * extension, not by config — so one button covers both cases.
+ * Config for the Files dialog. There is no generic import button: importing is
+ * contextual, at the control that needs the file (a `@font` parameter's
+ * "Import font…", a `@svg` parameter's "Prepare SVG…"), and this dialog only
+ * *manages* what those controls have already imported. Present when the config
+ * sets `fileImport`; absent means no Files action at all.
  */
 export interface FileImport {
-  /**
-   * `accept` attribute for the file picker (e.g. ".svg" or ".ttf,.otf"). Omit to
-   * accept any file type.
-   */
-  accept?: string;
-  /** Button label (default "Import file"). */
-  label?: string;
   /**
    * Optional help text shown above the file list. Rendered as a Markdown
    * subset (paragraphs, bullet lists, **bold**, `code`, links).
    */
   note?: string;
-  /**
-   * Optional max upload size in bytes. A larger file is rejected with a friendly
-   * message instead of being stored. Omit for no cap.
-   */
-  maxBytes?: number;
 }
 
 /**

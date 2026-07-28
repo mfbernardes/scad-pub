@@ -459,13 +459,14 @@ export function parsePopup(raw) {
 // notice categories surfaced on the "OpenSCAD output" panel. A design echoes
 // `ECHO: "<context>: <marker>: <message>"` and each configured category turns
 // matching echoes into a friendly notice and a coloured count badge. Each entry
-// is { marker (required), label?, labelOne?, color? }:
+// is { marker (required), label?, color? }:
 //   - marker: the design-defined string matched as `: <marker>:` in an echo
 //     (e.g. "alert", "note"); case-insensitive.
-//   - label: the badge / notice noun (e.g. "alerts"); defaults to marker.
-//   - labelOne: optional singular form of `label` (e.g. "alert"), used
-//     wherever a count renders alongside it whenever the live count is
-//     exactly 1. Omit to keep `label` regardless of count.
+//   - label: the badge / notice noun, as `{ one, other }` (a plain string is
+//     shorthand for "the same word regardless of count"); defaults to marker.
+//     There is no separate `labelOne` field — a config still using the old
+//     `label`/`labelOne` pair fails the build with a pointer at this shape
+//     (see parseNoticeLabel below).
 //   - color: an optional badge fill colour, validated as a plain CSS colour
 //     (same strictness as `colors`) so it can't break out of the inline style
 //     it gets interpolated into.

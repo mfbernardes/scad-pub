@@ -1,8 +1,10 @@
 // Tests the pure derivation behind a review summary (src/lib/
 // reviewSummary.ts): the row list built from a design's curated
-// `designs[].reviewLabels` config plus one overall "Dimensions" row. No
-// DOM/React harness needed. Value formatting itself lives in src/lib/
-// format.ts and is covered by tests/format.test.mjs.
+// `reviewLabels` (gathered by gen-schema from each parameter's own
+// `// @review "<label>"` annotation — there is no config-level source)
+// plus one overall "Dimensions" row. No DOM/React harness needed. Value
+// formatting itself lives in src/lib/format.ts and is covered by
+// tests/format.test.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { formatBoundingBox, buildReviewSummaryRows } from "../src/lib/reviewSummary.ts";

@@ -160,7 +160,7 @@ test("deriveAttention: a flagged notice category with a pending notice produces 
   assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alerts", count: 2 }]);
 });
 
-test("deriveAttention: a notice item's label uses labelOne when the pending count is exactly 1", () => {
+test("deriveAttention: a notice item's label uses label.one when the pending count is exactly 1", () => {
   const items = deriveAttention({
     params: [],
     values: {},
@@ -170,7 +170,7 @@ test("deriveAttention: a notice item's label uses labelOne when the pending coun
   assert.deepEqual(items, [{ kind: "notice", marker: "alert", label: "alert", count: 1 }]);
 });
 
-test("deriveAttention: a notice item's label stays plural when the pending count isn't 1, even with labelOne configured", () => {
+test("deriveAttention: a notice item's label stays plural when the pending count isn't 1, even with label.one configured", () => {
   const items = deriveAttention({
     params: [],
     values: {},

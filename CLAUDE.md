@@ -51,12 +51,19 @@ What follows from that, before you edit anything:
   `SCADPUB_CONFIG=… npm run build`, run `git status` and delete what the build added, or
   another deployment's font gets committed here.
 - `renderHash` covers every render-affecting input (mounted `.scad`, bundled fonts, render
-  features, the WASM build, `worker.ts` itself) and is folded into the render cache key, so a
-  deploy that changes a render input invalidates persisted geometry. `scadpubVersion` is
+  features, `render.format`, the design id→file routing map, the WASM build, `worker.ts` itself
+  — see `scripts/lib/hash.mjs`'s `computeRenderHash`) and is folded into the render cache key,
+  so a deploy that changes a render input invalidates persisted geometry. `scadpubVersion` is
   display-only and deliberately *outside* `renderHash`; `scripts/lib/version.mjs` resolves it
   with `git describe` against ScadPub's own checkout — not the cwd — so a fork, submodule or
   sibling build still names ScadPub. `$SCADPUB_VERSION` overrides it for git-less trees, and
   resolving to nothing is not a build failure.
+- **`src/openscad/types.ts` is in that hashed closure.** `scripts/lib/worker-deps.mjs` walks
+  `worker.ts`'s local import graph to feed `computeRenderHash`, and `types.ts` is transitively
+  imported from there, so any change to it — comments included — changes `renderHash` and
+  evicts every deployment's persisted render cache. That's a real but affordable cost, not a
+  reason to avoid the file forever: batch `types.ts` edits deliberately (e.g. alongside another
+  change that already bumps `renderHash`) rather than trickling them in one comment at a time.
 - The licenses modal takes every version from build data (`componentVersions`, `wasmVersion`,
   `scadpubVersion`), never a literal. A new bundled component needs an entry in
   `src/lib/licenses.ts`; an npm package also needs its name in `BUNDLED_PACKAGES`, since
