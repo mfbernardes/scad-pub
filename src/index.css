@@ -454,11 +454,16 @@ button:disabled { cursor: default; }
 }
 
 /* Mobile: drop below the floating top bar (and any notch), level with the HUD,
-   and shrink the height cap to match the smaller offset. */
+   and shrink the height cap to match the smaller offset. The 40% cap is the
+   binding one in practice: "everything down to the dock" let a design with
+   many @info rows fill four fifths of the viewer at the sheet's half detent,
+   covering the model it is annotating. The panel starts folded on mobile
+   anyway (see viewerPrefs' initialMeasureCollapsed) — this bounds what
+   unfolding it can cost. */
 @media (max-width: 860px) {
   .app-shell__mobile .dimension-info {
     top: calc(env(safe-area-inset-top, 0px) + 4rem);
-    max-height: calc(100% - env(safe-area-inset-top, 0px) - 4.75rem);
+    max-height: min(40%, calc(100% - env(safe-area-inset-top, 0px) - 4.75rem));
   }
 }
 

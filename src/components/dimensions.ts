@@ -65,6 +65,43 @@ function makeLabel(text: string, color: THREE.Color, worldHeight: number): THREE
   return sprite;
 }
 
+// Overlay geometry, as fractions of the model's largest dimension. Module
+// constants rather than inline literals because dimensionOverlayMargin below
+// has to reproduce the same reach for the camera fit — the callouts sit
+// OUTSIDE the model's own bounding box, so a camera fitted to that box alone
+// crops them (see Viewer.tsx's frameView).
+const GAP = 0.12; // how far the dimension line sits outside the box
+const OVER = 0.2 * GAP; // how far the extension lines reach past it
+const ARROW = 0.04; // arrowhead barb length
+const LABEL_H = 0.085; // world height of the label text
+// Width/height ratio of a rendered label sprite. makeLabel sizes the sprite
+// from its own canvas metrics, so the true ratio depends on the text; ~2.8
+// covers the widest callout these overlays produce ("NNN.N mm") and is used
+// only to keep the label inside the frame, where over-estimating costs a
+// slightly roomier fit and under-estimating clips the text.
+const LABEL_ASPECT = 2.8;
+
+/**
+ * How far the overlay's callouts reach beyond the model's own bounding box,
+ * in world units — `lateral` on both ±X (the depth and height callouts, each
+ * offset sideways and carrying a wide billboarded label) and `front` on −Y
+ * (the width callout under the front edge). Nothing reaches past +Y or ±Z.
+ *
+ * Feeding this to the camera fit is what keeps "90.0 mm" on screen: the raw
+ * mesh box is up to ~1.5× narrower than the annotated envelope, so fitting
+ * the box alone pushed the outer labels off the canvas edges.
+ */
+export function dimensionOverlayMargin(size: THREE.Vector3): { lateral: number; front: number } {
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  // Label centre sits at GAP + GAP·0.55 + LABEL_H/2 from the box face (see
+  // `dim` below); add half the sprite's own extent to reach its far edge.
+  const toLabelCentre = GAP * 1.55 + LABEL_H * 0.5;
+  return {
+    lateral: maxDim * (toLabelCentre + (LABEL_H * LABEL_ASPECT) / 2),
+    front: maxDim * (toLabelCentre + LABEL_H * 0.5),
+  };
+}
+
 // Build the dimension overlay for a model of the given bounding-box `size` (mm),
 // coloured `color`. Returns a group ready to add to the scene; call dispose()
 // before removing it to free the line geometry, sprite textures and materials.
@@ -74,10 +111,10 @@ export function buildDimensions(size: THREE.Vector3, color: THREE.Color): Dimens
   const hy = size.y / 2;
   const hz = size.z / 2;
   const maxDim = Math.max(size.x, size.y, size.z) || 1;
-  const gap = maxDim * 0.12; // how far the dimension line sits outside the box
-  const over = gap * 0.2; // how far the extension lines reach past it
-  const arrow = maxDim * 0.04; // arrowhead barb length
-  const labelH = maxDim * 0.085; // world height of the label text
+  const gap = maxDim * GAP;
+  const over = maxDim * OVER;
+  const arrow = maxDim * ARROW;
+  const labelH = maxDim * LABEL_H;
 
   const pts: number[] = [];
   const seg = (a: THREE.Vector3, b: THREE.Vector3) =>

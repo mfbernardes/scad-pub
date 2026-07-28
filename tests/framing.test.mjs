@@ -11,10 +11,24 @@ import * as THREE from "three";
 import {
   frameDistanceForBox,
   cameraBasis,
-  insetHeightFraction,
-  insetTargetShift,
+  edgeInset,
+  mergeInsets,
+  clampInsets,
+  insetFitFraction,
+  insetTargetOffset,
+  MIN_USABLE_FRACTION,
+  NO_INSETS,
   DEFAULT_FIT_FRACTION,
 } from "../src/components/framing.ts";
+
+// A DOM-rect-shaped literal, so the inset math can be exercised without a DOM.
+const rect = (left, top, width, height) => ({
+  left,
+  top,
+  right: left + width,
+  bottom: top + height,
+});
+const insets = (partial) => ({ ...NO_INSETS, ...partial });
 
 const FOV = 45; // matches Viewer.tsx's PerspectiveCamera
 
@@ -139,68 +153,191 @@ test("cameraBasis stays finite for a near-top view (direction parallel to world-
   assert.ok(Number.isFinite(up.length()) && up.length() > 0);
 });
 
-// ── Vertical inset shift ────────────────────────────────────────────────
+// ── Chrome insets ───────────────────────────────────────────────────────
+// The measured mobile geometry these cases use (390x785 canvas at the sheet's
+// peek detent, and the four overlays over it) comes from the built app driven
+// at a 390x844 viewport — so the "reads as a <edge> inset" expectations below
+// are the real chrome, not invented rectangles.
 
-test("insetHeightFraction: no inset returns the fraction unchanged", () => {
-  assert.equal(insetHeightFraction(0.58, 800, 0), 0.58);
+const CANVAS = rect(0, 0, 390, 785);
+
+test("edgeInset: a bottom-centred export dock reads as a bottom inset", () => {
+  assert.deepEqual(edgeInset(rect(32, 730, 326, 45), CANVAS), insets({ bottom: 55 }));
 });
 
-test("insetHeightFraction: a bottom inset proportionally shrinks the target", () => {
-  // 100px inset out of an 800px canvas -> usable is 700/800 = 87.5% of it.
-  const reduced = insetHeightFraction(0.58, 800, 100);
-  assert.ok(Math.abs(reduced - 0.58 * 0.875) < 1e-9);
-  assert.ok(reduced < 0.58);
+test("edgeInset: a right-hand HUD column reads as a right inset", () => {
+  assert.deepEqual(edgeInset(rect(334, 64, 44, 258), CANVAS), insets({ right: 56 }));
 });
 
-test("insetHeightFraction: a pathologically large inset floors instead of collapsing to ~0", () => {
-  const reduced = insetHeightFraction(0.58, 800, 10000);
-  assert.ok(reduced >= 0.58 * 0.2 - 1e-9);
+test("edgeInset: a full-width top bar reads as a top inset", () => {
+  assert.deepEqual(edgeInset(rect(0, 0, 390, 58), CANVAS), insets({ top: 58 }));
 });
 
-test("insetTargetShift: no inset (or non-positive canvas) means no shift", () => {
-  assert.equal(insetTargetShift(200, FOV, 800, 0), 0);
-  assert.equal(insetTargetShift(200, FOV, 0, 50), 0);
+test("edgeInset: a folded top-left measurements panel reads as a top inset to its lower edge", () => {
+  assert.deepEqual(edgeInset(rect(12, 64, 278, 36), CANVAS), insets({ top: 100 }));
 });
 
-test("insetTargetShift: a larger inset (or distance) shifts more; a taller canvas shifts less", () => {
-  const base = insetTargetShift(200, FOV, 800, 100);
-  assert.ok(base > 0);
-  assert.ok(insetTargetShift(200, FOV, 800, 200) > base, "bigger inset -> bigger shift");
-  assert.ok(insetTargetShift(400, FOV, 800, 100) > base, "farther camera -> bigger world-space shift for the same pixel inset");
-  assert.ok(insetTargetShift(200, FOV, 1600, 100) < base, "taller canvas -> the same pixel inset is a smaller world shift");
+test("edgeInset: an overlay clear of the canvas contributes nothing", () => {
+  assert.deepEqual(edgeInset(rect(0, 900, 390, 50), CANVAS), insets({}));
+  assert.deepEqual(edgeInset(rect(400, 0, 40, 40), CANVAS), insets({}));
 });
 
-test("insetTargetShift: applying it actually recentres the model in the usable region (integration check)", () => {
-  // Fit a flat plate from the front view with a bottom inset, then verify:
-  // the box's screen-space vertical centre, after the target shift, lands
-  // near the usable region's own centre (not the full canvas's).
-  const canvasHeightPx = 800;
-  const insetPx = 160; // a chunky dock, for a clearly-measurable effect
-  const plate = SHAPES.flatPlate;
-  const aspect = 1.6;
-  const dir = VIEWS.front;
-  const reducedHeight = insetHeightFraction(DEFAULT_FIT_FRACTION.height, canvasHeightPx, insetPx);
-  const fit = { width: DEFAULT_FIT_FRACTION.width, height: reducedHeight };
-  const distance = frameDistanceForBox(plate, ORIGIN, dir, aspect, FOV, fit);
-  const shift = insetTargetShift(distance, FOV, canvasHeightPx, insetPx);
-  const { up } = cameraBasis(dir);
-  const shiftedTarget = ORIGIN.clone().addScaledVector(up, -shift);
+test("edgeInset: a degenerate (zero-sized) canvas contributes nothing", () => {
+  assert.deepEqual(edgeInset(rect(0, 0, 10, 10), rect(0, 0, 0, 0)), insets({}));
+});
 
-  // Project the box's own centre (world origin) relative to the shifted
-  // target, and convert its NDC-Y to a pixel offset from the canvas centre.
-  const tanHalfV = Math.tan((FOV * Math.PI) / 360);
-  const rel = ORIGIN.clone().sub(shiftedTarget);
-  const s = rel.dot(dir.clone().normalize());
-  const qy = rel.dot(up);
-  const depth = distance - s;
-  const ndcY = qy / (depth * tanHalfV);
-  const modelCenterPx = canvasHeightPx / 2 - ndcY * (canvasHeightPx / 2); // NDC-Y up positive -> pixel-Y down positive
+test("mergeInsets: same-edge overlays don't stack — the deepest wins", () => {
+  const merged = mergeInsets([insets({ top: 58 }), insets({ top: 100 }), insets({ right: 56 })]);
+  assert.deepEqual(merged, insets({ top: 100, right: 56 }));
+});
 
-  // The usable region is [0, canvasHeightPx - insetPx] (inset at the bottom);
-  // its own centre:
-  const usableCenterPx = (canvasHeightPx - insetPx) / 2;
+test("clampInsets: insets that already fit are returned untouched", () => {
+  const wanted = insets({ top: 100, bottom: 55, right: 56 });
+  assert.deepEqual(clampInsets(wanted, 390, 785), wanted);
+});
+
+test("clampInsets: an over-stuffed axis is scaled down proportionally, keeping the axis usable", () => {
+  // A short landscape viewer: top bar + dock + panel would eat nearly all of it.
+  const clamped = clampInsets(insets({ top: 120, bottom: 60, left: 10 }), 844, 187);
+  const usable = 187 - clamped.top - clamped.bottom;
   assert.ok(
-    Math.abs(modelCenterPx - usableCenterPx) < canvasHeightPx * 0.03,
-    `model centred at ${modelCenterPx}px, usable region centre is ${usableCenterPx}px`
+    Math.abs(usable - 187 * MIN_USABLE_FRACTION) < 1e-9,
+    `expected ${MIN_USABLE_FRACTION} of the axis left clear, got ${usable / 187}`
   );
+  // Proportional: the two edges keep their 2:1 ratio, so the centring stays honest.
+  assert.ok(Math.abs(clamped.top / clamped.bottom - 2) < 1e-9);
+  // The untouched axis is left alone.
+  assert.equal(clamped.left, 10);
+});
+
+test("insetFitFraction: no insets returns the fractions unchanged", () => {
+  const fit = insetFitFraction(DEFAULT_FIT_FRACTION, 390, 800, insets({}));
+  assert.equal(fit.width, DEFAULT_FIT_FRACTION.width);
+  assert.equal(fit.height, DEFAULT_FIT_FRACTION.height);
+});
+
+test("insetFitFraction: each axis shrinks by its own insets' share of the canvas", () => {
+  // 100px of vertical inset out of an 800px canvas -> usable is 700/800 = 87.5%.
+  const fit = insetFitFraction(DEFAULT_FIT_FRACTION, 400, 800, insets({ bottom: 100, right: 40 }));
+  assert.ok(Math.abs(fit.height - DEFAULT_FIT_FRACTION.height * 0.875) < 1e-9);
+  assert.ok(Math.abs(fit.width - DEFAULT_FIT_FRACTION.width * 0.9) < 1e-9);
+});
+
+test("insetFitFraction: opposing insets on one axis both count", () => {
+  const oneSide = insetFitFraction(DEFAULT_FIT_FRACTION, 400, 800, insets({ top: 200 }));
+  const bothSides = insetFitFraction(DEFAULT_FIT_FRACTION, 400, 800, insets({ top: 100, bottom: 100 }));
+  assert.ok(Math.abs(oneSide.height - bothSides.height) < 1e-9);
+});
+
+test("insetFitFraction: pathological insets floor instead of collapsing to ~0", () => {
+  const fit = insetFitFraction(DEFAULT_FIT_FRACTION, 400, 800, insets({ top: 10000 }));
+  assert.ok(fit.height >= DEFAULT_FIT_FRACTION.height * 0.2 - 1e-9);
+});
+
+test("insetTargetOffset: no insets (or a non-positive canvas/distance) means no offset", () => {
+  assert.deepEqual(insetTargetOffset(200, FOV, 800, insets({})), { right: 0, up: 0 });
+  assert.deepEqual(insetTargetOffset(200, FOV, 0, insets({ bottom: 50 })), { right: 0, up: 0 });
+  assert.deepEqual(insetTargetOffset(0, FOV, 800, insets({ bottom: 50 })), { right: 0, up: 0 });
+});
+
+test("insetTargetOffset: a bottom inset moves the target DOWN so the model rides up", () => {
+  // The camera keeps `target` dead centre, so clearing chrome at the bottom
+  // means moving the target away from the model's centre, not toward it.
+  const { up, right } = insetTargetOffset(200, FOV, 800, insets({ bottom: 100 }));
+  assert.ok(up < 0, `expected a negative up offset, got ${up}`);
+  assert.equal(right, 0);
+});
+
+test("insetTargetOffset: a right inset (the HUD column) moves the target right so the model shifts left", () => {
+  const { right, up } = insetTargetOffset(200, FOV, 800, insets({ right: 100 }));
+  assert.ok(right > 0, `expected a positive right offset, got ${right}`);
+  assert.equal(up, 0);
+});
+
+test("insetTargetOffset: equal opposing insets cancel — a centred model stays centred", () => {
+  const off = insetTargetOffset(200, FOV, 800, insets({ top: 90, bottom: 90, left: 40, right: 40 }));
+  assert.equal(off.up, 0);
+  assert.equal(off.right, 0);
+});
+
+test("insetTargetOffset: a bigger inset (or a farther camera) offsets more; a taller canvas offsets less", () => {
+  const base = Math.abs(insetTargetOffset(200, FOV, 800, insets({ bottom: 100 })).up);
+  assert.ok(base > 0);
+  assert.ok(Math.abs(insetTargetOffset(200, FOV, 800, insets({ bottom: 200 })).up) > base, "bigger inset -> bigger offset");
+  assert.ok(Math.abs(insetTargetOffset(400, FOV, 800, insets({ bottom: 100 })).up) > base, "farther camera -> bigger world-space offset for the same pixel inset");
+  assert.ok(Math.abs(insetTargetOffset(200, FOV, 1600, insets({ bottom: 100 })).up) < base, "taller canvas -> the same pixel inset is a smaller world offset");
+});
+
+// Where the box's own centre lands on screen, in pixels from the canvas top /
+// left, once `offset` has been applied to the orbit target — the whole point
+// of the inset math, re-derived here rather than re-imported.
+function projectedCentrePx(dir, distance, offset, canvasWidthPx, canvasHeightPx) {
+  const { dir: unit, right, up } = cameraBasis(dir);
+  const target = ORIGIN.clone().addScaledVector(right, offset.right).addScaledVector(up, offset.up);
+  const tanHalfV = Math.tan((FOV * Math.PI) / 360);
+  const tanHalfH = (canvasWidthPx / canvasHeightPx) * tanHalfV;
+  const rel = ORIGIN.clone().sub(target);
+  const depth = distance - rel.dot(unit);
+  const ndcX = rel.dot(right) / (depth * tanHalfH);
+  const ndcY = rel.dot(up) / (depth * tanHalfV);
+  return {
+    x: canvasWidthPx / 2 + ndcX * (canvasWidthPx / 2),
+    y: canvasHeightPx / 2 - ndcY * (canvasHeightPx / 2), // NDC-Y up positive -> pixel-Y down positive
+  };
+}
+
+test("the fit + offset pair actually recentres the model in the clear region (integration check)", () => {
+  // A flat plate from the front view, against chrome on three edges: a dock at
+  // the bottom, a HUD column on the right, a top bar above.
+  const canvasWidthPx = 390;
+  const canvasHeightPx = 800;
+  const chrome = insets({ top: 58, bottom: 160, right: 56 });
+  const dir = VIEWS.front;
+  const fit = insetFitFraction(DEFAULT_FIT_FRACTION, canvasWidthPx, canvasHeightPx, chrome);
+  const distance = frameDistanceForBox(SHAPES.flatPlate, ORIGIN, dir, canvasWidthPx / canvasHeightPx, FOV, fit);
+  const offset = insetTargetOffset(distance, FOV, canvasHeightPx, chrome);
+  const centre = projectedCentrePx(dir, distance, offset, canvasWidthPx, canvasHeightPx);
+
+  const clearCentreX = (chrome.left + (canvasWidthPx - chrome.right)) / 2;
+  const clearCentreY = (chrome.top + (canvasHeightPx - chrome.bottom)) / 2;
+  assert.ok(
+    Math.abs(centre.x - clearCentreX) < canvasWidthPx * 0.03,
+    `model centred at x=${centre.x}px, clear region centre is x=${clearCentreX}px`
+  );
+  assert.ok(
+    Math.abs(centre.y - clearCentreY) < canvasHeightPx * 0.03,
+    `model centred at y=${centre.y}px, clear region centre is y=${clearCentreY}px`
+  );
+});
+
+test("the fit keeps the model clear of the chrome it was told about (integration check)", () => {
+  // Same setup, but checking occupancy rather than centring: every corner must
+  // land inside the region the insets leave clear.
+  const canvasWidthPx = 390;
+  const canvasHeightPx = 405; // the sheet's half detent
+  const chrome = insets({ top: 100, bottom: 55, right: 56 });
+  const dir = VIEWS.isometric;
+  const fit = insetFitFraction(DEFAULT_FIT_FRACTION, canvasWidthPx, canvasHeightPx, chrome);
+  const aspect = canvasWidthPx / canvasHeightPx;
+  const distance = frameDistanceForBox(SHAPES.flatPlate, ORIGIN, dir, aspect, FOV, fit);
+  const offset = insetTargetOffset(distance, FOV, canvasHeightPx, chrome);
+  const { dir: unit, right, up } = cameraBasis(dir);
+  const target = ORIGIN.clone().addScaledVector(right, offset.right).addScaledVector(up, offset.up);
+  const tanHalfV = Math.tan((FOV * Math.PI) / 360);
+  const tanHalfH = aspect * tanHalfV;
+
+  for (const x of [SHAPES.flatPlate.min.x, SHAPES.flatPlate.max.x]) {
+    for (const y of [SHAPES.flatPlate.min.y, SHAPES.flatPlate.max.y]) {
+      for (const z of [SHAPES.flatPlate.min.z, SHAPES.flatPlate.max.z]) {
+        const rel = new THREE.Vector3(x, y, z).sub(target);
+        const depth = distance - rel.dot(unit);
+        const px = canvasWidthPx / 2 + (rel.dot(right) / (depth * tanHalfH)) * (canvasWidthPx / 2);
+        const py = canvasHeightPx / 2 - (rel.dot(up) / (depth * tanHalfV)) * (canvasHeightPx / 2);
+        assert.ok(px >= chrome.left - 1, `corner at x=${px}px runs under the left chrome`);
+        assert.ok(px <= canvasWidthPx - chrome.right + 1, `corner at x=${px}px runs under the HUD column`);
+        assert.ok(py >= chrome.top - 1, `corner at y=${py}px runs under the top bar`);
+        assert.ok(py <= canvasHeightPx - chrome.bottom + 1, `corner at y=${py}px runs under the dock`);
+      }
+    }
+  }
 });
