@@ -143,8 +143,74 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
         "https://github.com/googlefonts/atkinson-hyperlegible/blob/main/OFL.txt",
       text: `Copyright 2020 Braille Institute of America, Inc.\n\n${oflText}`,
       note:
-        "The interface's display typeface (packaged via Fontsource). Used only " +
-        "for the app chrome — it is not available to the rendered designs.",
+        "ScadPub bundles this (via Fontsource) as the interface's own display " +
+        "typeface, for the app chrome.",
     },
   ];
+}
+
+/**
+ * Merges a deployment's config-supplied `licenses[]` entries into the built-in
+ * list, matching on `name` (trimmed, case-insensitive) instead of appending
+ * blindly — the same typeface can legitimately be bundled twice for different
+ * reasons (ScadPub's own chrome font vs. a deployment's render font), and
+ * without this a shared name shows up as two attributions for what a reader
+ * sees as one component.
+ *
+ * A name match only merges when `license` and `copyright` also agree (trimmed,
+ * exact); the built-in's legal fields (`license`, `copyright`, `url`,
+ * `licenseUrl`, bundled `text`) always win and are never replaced by a config
+ * value, so the "ScadPub's own attributions are never removed" guarantee
+ * (docs/config.md) holds even after a merge. `version`, `sourceUrl` and `text`
+ * fill in from the config only where the built-in doesn't already have one;
+ * `note` is the one field both sides can legitimately contribute, so both
+ * survive, combined into a single line rather than one replacing the other.
+ *
+ * A same-name entry that disagrees on `license` or `copyright` is treated as a
+ * genuinely different component that happens to share a name — it is kept as
+ * its own separate entry rather than merged, since silently blending
+ * conflicting legal facts would misattribute one of them.
+ *
+ * Pure and order-stable: built-ins keep their built-in order (merges update
+ * them in place), and unmerged config entries are appended after, in their
+ * original relative order.
+ */
+export function mergeLicenses(
+  builtins: SoftwareLicense[],
+  extras: SoftwareLicense[]
+): SoftwareLicense[] {
+  const norm = (s: string) => s.trim().toLowerCase();
+  const merged = builtins.map((b) => ({ ...b }));
+  const appended: SoftwareLicense[] = [];
+
+  for (const extra of extras) {
+    const idx = merged.findIndex((b) => norm(b.name) === norm(extra.name));
+    const builtin = idx === -1 ? undefined : merged[idx];
+    const sameComponent =
+      builtin &&
+      builtin.license.trim() === extra.license.trim() &&
+      builtin.copyright.trim() === extra.copyright.trim();
+
+    if (!builtin || !sameComponent) {
+      // No match, or a name collision with a different license/copyright:
+      // a distinct entry, not a fact to blend into the built-in's.
+      appended.push(extra);
+      continue;
+    }
+
+    merged[idx] = {
+      ...builtin,
+      version: builtin.version ?? extra.version,
+      text: builtin.text ?? extra.text,
+      sourceUrl: builtin.sourceUrl ?? extra.sourceUrl,
+      note: combineNotes(builtin.note, extra.note),
+    };
+  }
+
+  return [...merged, ...appended];
+}
+
+function combineNotes(a?: string, b?: string): string | undefined {
+  if (a && b) return `${a.trim()} ${b.trim()}`;
+  return a ?? b;
 }

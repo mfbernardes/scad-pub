@@ -697,7 +697,7 @@ The Markdown file's content is read once, at build time, and inlined into the ge
 
 ## Open-source notices (`licenses`)
 
-The **ⓘ** button lists the third-party components ScadPub itself bundles, including OpenSCAD-WASM, React, three.js, and Liberation fonts. If your deployment bundles **additional** software, add its notice here. Examples include an extra `.scad` library, a custom font, or a vendored script. Entries are **appended** to the built-in list; ScadPub's own attributions are never removed.
+The **ⓘ** button lists the third-party components ScadPub itself bundles, including OpenSCAD-WASM, React, three.js, and Liberation fonts. If your deployment bundles **additional** software, add its notice here. Examples include an extra `.scad` library, a custom font, or a vendored script. Entries are **merged** into the built-in list by name; ScadPub's own attributions are never removed.
 
 ```jsonc
 {
@@ -720,6 +720,19 @@ The **ⓘ** button lists the third-party components ScadPub itself bundles, incl
 - `name`, `license`, `copyright`, `url`, and `licenseUrl` are required; the rest are optional. Unknown keys are ignored.
 - Provide `sourceUrl` for copyleft components, such as GPL components, so the corresponding-source requirement is met. Provide `text` to reproduce a permissive license inline — or **`textFile`**, a config-relative path whose contents become `text` at build time (the full OFL/GPL/etc. text lives in its own file instead of a `\n`-joined JSON string). Setting both `text` and `textFile` fails the build.
 - A malformed entry fails the build with a clear message.
+
+### Merging with the built-ins
+
+A config entry whose `name` matches a built-in's — compared trimmed and case-insensitively — is not appended as a second, duplicate-looking attribution. It is **merged** into that built-in entry, because the same component can legitimately be bundled twice for two different reasons (e.g. ScadPub bundles a typeface for its own interface chrome, while a deployment separately bundles the same typeface as a render font for its designs). Merging that case into one entry is exactly what makes the "never removed" guarantee meaningful — a config can't accidentally shadow or duplicate a built-in it happens to name.
+
+The merge rule:
+
+- ScadPub's own `license`, `copyright`, `url`, `licenseUrl`, and bundled `text` always win. A config can never override or remove them — that's what "ScadPub's own attributions are never removed" means in practice.
+- `version`, `sourceUrl`, and `text` fill in from the config **only** where the built-in doesn't already have one.
+- `note` is the one field both sides legitimately contribute, so both are kept — the built-in's note and the config's note are combined into a single line, not replaced.
+- If a config entry shares a built-in's `name` but declares a **different `license` or `copyright`**, it is treated as a different component that happens to share a name, not the same one — it is kept as its own separate entry instead of being merged, so two disagreeing legal facts are never blended into one attribution.
+
+Built-ins always keep their built-in display order; a config entry that doesn't merge (a new name, or a same-name/different-license mismatch) is appended after them, in the order it appears in `licenses[]`.
 
 ### Where the built-in versions come from
 
