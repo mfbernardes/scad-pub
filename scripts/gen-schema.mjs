@@ -864,8 +864,9 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
     bin: {
       cache: `openscad-wasm-bin-${WASM_VERSION}`,
       // H4: content-addressed via versionedPath — see its comment. Must match
-      // exactly what worker.ts's cachedBuffer() fetches for the same file
-      // (both derive the query from schema.binAssets), so the service worker's
+      // exactly what worker.ts fetches for the same file (resolveWasmModule
+      // for the wasm, cachedBuffer for the fonts — both derive the query from
+      // schema.binAssets), so the service worker's
       // warm-up and the worker's own first-render fetch always agree on the
       // Cache Storage key for a given build's bytes.
       urls: [

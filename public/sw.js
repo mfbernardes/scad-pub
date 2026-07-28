@@ -117,21 +117,56 @@ async function addPublicAssets(urls) {
 // (and cheap when another config already downloaded the binaries). Best-effort
 // per asset: an aborted 10 MB fetch must not fail the whole install — the
 // render worker fetches on demand as a fallback.
+// Serialize a binary download with the render worker fetching the same URL
+// into the same cache (worker.ts's withBinLock — the name is built by hand
+// from the same prefix + full URL on both sides). Web Locks are origin-scoped
+// and shared across the service worker and dedicated workers, so on a cold
+// visit whoever wins the per-URL lock downloads the ~10 MB wasm binary once;
+// the loser re-checks the cache after acquisition and finds it filled — real
+// coordination that holds at any connection speed, unlike a fixed grace
+// delay, and costs nothing when there's no contention. The lock auto-releases
+// if its holder dies mid-download. Without Web Locks support, run unlocked:
+// the old best-effort behavior, a rare duplicate download at worst.
+function withBinLock(href, fn) {
+  return navigator.locks ? navigator.locks.request(`openscad-bin-fetch:${href}`, fn) : fn();
+}
+
 async function precacheBin(bin) {
   if (!bin || !bin.cache || !Array.isArray(bin.urls)) return;
   const cache = await caches.open(bin.cache);
+  // Which entries are actually missing, before taking any lock: on the
+  // common warm install (a redeploy with an unchanged wasm pin, or a
+  // returning visitor) everything is already cached and this whole function
+  // must cost ~nothing.
+  const missing = [];
+  for (const path of bin.urls) {
+    try {
+      const url = new URL(path, SCOPE_URL);
+      if (url.origin !== self.location.origin) continue;
+      if (!(await cache.match(url.href))) missing.push(url.href);
+    } catch {
+      /* malformed manifest entry — skip it */
+    }
+  }
   await Promise.all(
-    bin.urls.map(async (path) => {
-      try {
-        const url = new URL(path, SCOPE_URL);
-        if (url.origin !== self.location.origin) return;
-        if (await cache.match(url.href)) return;
-        const res = await fetch(new Request(url, { cache: "no-cache" }));
-        if (res.ok) await cache.put(url.href, res);
-      } catch {
-        /* the render worker fetches on demand as before */
-      }
-    })
+    missing.map((href) =>
+      withBinLock(href, async () => {
+        try {
+          // The render worker may have filled the entry while we held back
+          // for the lock (it takes the same lock around its own fetch) — or,
+          // without lock support, at any point in this race window.
+          if (await cache.match(href)) return;
+          const res = await fetch(new Request(href, { cache: "no-cache" }));
+          // Re-check before the write, for the no-Web-Locks fallback where
+          // the render worker may have filled the entry mid-fetch. Two
+          // concurrent cache.put()s for one key don't corrupt anything, but
+          // there's no reason to store the ~10 MB body twice in a row.
+          if (res.ok && !(await cache.match(href))) await cache.put(href, res);
+        } catch {
+          /* the render worker fetches on demand as before */
+        }
+      })
+    )
   );
 }
 

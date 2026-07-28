@@ -10,7 +10,7 @@
 // signature + CACHE_VERSION), so hits survive reloads.
 import { CACHE_VERSION, MB, createStlCache } from "../lib/stlCache";
 import type { StlCacheStore, StoredStl } from "../lib/stlCache";
-import type { RenderRequest, RenderResult, WorkerProgress } from "./types";
+import type { RenderRequest, RenderResult, WorkerModuleMessage, WorkerProgress } from "./types";
 import { detectMountCollisions } from "./renderArgs";
 
 // M10: a user file set that sanitizes to a colliding mount path (see
@@ -161,7 +161,7 @@ export class OpenSCADRunner {
   private readonly store?: StlCacheStore;
   private readonly onReady?: () => void;
   // Forwards the worker's bootstrap-download progress (see worker.ts's
-  // cachedBufferWithProgress). Suppressed once `readyFired` is set (below) —
+  // resolveWasmModule). Suppressed once `readyFired` is set (below) —
   // a late/stale message from a respawned worker (spawn() resets bootstrap,
   // which typically hits Cache Storage and posts nothing, but isn't
   // guaranteed to) must never resurrect the pre-ready loading UI after the
@@ -169,6 +169,18 @@ export class OpenSCADRunner {
   private readonly onProgress?: (p: WorkerProgress) => void;
   private readyFired = false;
   private workerFailed = false;
+  // A module a PREVIOUS worker instance compiled itself (see worker.ts's
+  // postModuleOnce) — never one the worker merely received back, since that
+  // worker never re-echoes it. spawn() hands this to the next worker it
+  // creates so a respawn (latest-wins cancellation, or worker recovery)
+  // costs only re-instantiation there, not a repeat fetch+compile of the
+  // ~10 MB wasm binary. Stays set across a respawn (unlike lastSentFileSig,
+  // which spawn() explicitly resets) — a compiled module is valid for any
+  // worker instance sharing this runner's lifetime, not just the one that
+  // produced it. Nulled for good the moment postMessage() can't
+  // structured-clone it (DataCloneError): no future worker will fare any
+  // better, so the feature degrades to warmup-only rather than retrying.
+  private compiledModule: WebAssembly.Module | null = null;
   // M10: the user-file signature last actually POSTED to the current worker
   // instance (as opposed to served from a cache tier without ever reaching
   // the worker). null after spawn() — a fresh worker's module scope starts
@@ -276,10 +288,22 @@ export class OpenSCADRunner {
     };
     worker.onmessage = (e: MessageEvent) => {
       if (this.worker !== worker) return;
-      const data = e.data as RenderResult | { type: "ready" } | WorkerProgress;
+      const data = e.data as
+        | RenderResult
+        | { type: "ready" }
+        | WorkerProgress
+        | WorkerModuleMessage;
       if ("type" in data && data.type === "progress") {
         // Suppressed once ready has fired — see onProgress's doc comment.
         if (!this.readyFired) this.onProgress?.(data);
+        return;
+      }
+      if ("type" in data && data.type === "module") {
+        // This worker compiled the wasm module itself (a module we handed IT
+        // is never echoed back — see worker.ts's postModuleOnce). Keep it for
+        // the NEXT spawn() so a future respawn can skip straight to
+        // instantiation.
+        this.compiledModule = data.module;
         return;
       }
       if ("type" in data && data.type === "ready") {
@@ -329,6 +353,29 @@ export class OpenSCADRunner {
         p.resolve(result);
       }
     };
+
+    // Bootstrap warm-up: post immediately, before any render request, so
+    // asset loading starts at spawn time instead of waiting for the first
+    // (400ms-debounced) render message — see worker.ts's self.onmessage
+    // "module"/"warmup" cases. A module worker queues messages until its
+    // module script evaluates and installs the onmessage handler set up
+    // above, so posting right here (synchronously, before that has
+    // necessarily happened) is safe.
+    if (this.compiledModule) {
+      try {
+        worker.postMessage({ type: "module", module: this.compiledModule });
+      } catch {
+        // DataCloneError (or similar): this browser can't structured-clone a
+        // WebAssembly.Module across the worker boundary. Drop it for good —
+        // no future worker will fare any better either — and degrade to a
+        // plain warm-up instead of leaving the next respawn to retry the
+        // same failing post.
+        this.compiledModule = null;
+        worker.postMessage({ type: "warmup" });
+      }
+    } else {
+      worker.postMessage({ type: "warmup" });
+    }
   }
 
   private rejectInflight(error: unknown) {
