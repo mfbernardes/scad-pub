@@ -239,8 +239,15 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
       render: { cache: {} },
       pwa: { themeColor: {} },
       colors: { light: {}, dark: {} },
-      // marker is notices[]'s only required field.
-      notices: [{ marker: "alert" }],
+      // marker is notices[]'s only required field. 'label' is a shell (not a
+      // real singular/plural pair the test cares about) purely so
+      // 'notices[].label.one'/'.other' have a real object to set a key on —
+      // see setNull's own "container" comment. 'other' must be a real
+      // non-empty string since it's the object form's own required key
+      // (independent of the whole 'label' field's optionality), or every
+      // OTHER sibling field's null-test here would also trip that
+      // requirement.
+      notices: [{ marker: "alert", label: { other: "alerts" } }],
       // name/license/copyright/url/licenseUrl are licenses[]'s only required
       // fields; the optional ones (version/text/sourceUrl/note/textFile) are
       // deliberately absent so each one's own null-test is unconfounded.
@@ -381,7 +388,7 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
     mismatches,
     [],
     "emitted schema nullability disagrees with the real parser for the field(s) above — " +
-      "either the field's config-spec.mjs node needs 'required'/'rejectsNull' (or neither), " +
+      "either the field's config-spec.mjs node needs 'required' (or not), " +
       "or its own parser needs to genuinely accept/reject null to match"
   );
 });

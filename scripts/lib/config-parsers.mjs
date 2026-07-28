@@ -285,6 +285,10 @@ export function parseColors(raw) {
           `gen-schema: unknown colour token 'colors.${theme}.${token}'.\n` +
             `  Valid tokens: ${COLOR_TOKENS.join(", ")}`
         );
+      // An explicit `null` means "not set", same as every other optional
+      // field in this config — this token was previously the sole holdout,
+      // treating a present-but-null token as an invalid string instead.
+      if (value === null) continue;
       if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
         throw new Error(
           `gen-schema: 'colors.${theme}.${token}' must be a plain CSS colour ` +
@@ -324,7 +328,7 @@ export function parseLicenses(raw) {
       out[key] = entry[key];
     }
     for (const key of OPTIONAL) {
-      if (entry[key] === undefined) continue;
+      if (entry[key] === undefined || entry[key] === null) continue;
       if (typeof entry[key] !== "string")
         throw new Error(`gen-schema: 'licenses[${i}].${key}' must be a string`);
       out[key] = entry[key];
@@ -478,7 +482,12 @@ export function parsePopup(raw) {
 // matching echoes into a friendly notice and a coloured count badge. Each entry
 // is { marker (required), label?, color? }:
 //   - marker: the design-defined string matched as `: <marker>:` in an echo
-//     (e.g. "alert", "note"); case-insensitive.
+//     (e.g. "alert", "note"); case-insensitive. Two entries whose markers
+//     match case-insensitively fail the build (see parseNotices below) —
+//     `classify` (src/lib/diagnostics.ts) matches the same way and keys its
+//     badge tally by the first match, so a second entry for the same marker
+//     would silently produce a duplicate-keyed badge rather than a distinct
+//     category.
 //   - label: the badge / notice noun, as `{ one, other }` (a plain string is
 //     shorthand for "the same word regardless of count"); defaults to marker.
 //     There is no separate `labelOne` field — a config still using the old
@@ -530,6 +539,14 @@ export function parseNotices(raw) {
     throw new Error(
       "gen-schema: 'notices' must be an array of notice categories"
     );
+  // Two entries for the same marker would produce two identically-keyed
+  // `notice:<marker>` badges (countBadges/diagnostics.ts, both classify()
+  // matches case-insensitively and keys its tally by the FIRST match) — a
+  // config mistake, not a case worth silently tolerating or de-duplicating
+  // downstream, so it fails the build here instead. Compared case-insensitively
+  // to match classify()'s own matching, keyed by first-seen index for the
+  // error message.
+  const seenMarkers = new Map();
   return raw.map((entry, i) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry))
       throw new Error(`gen-schema: 'notices[${i}]' must be an object`);
@@ -543,6 +560,15 @@ export function parseNotices(raw) {
           `'notices[${i}].label' as { one, other } instead (see docs/config.md's Notice badges section).`
       );
     const marker = entry.marker.trim();
+    const markerKey = marker.toLowerCase();
+    if (seenMarkers.has(markerKey)) {
+      const firstIndex = seenMarkers.get(markerKey);
+      throw new Error(
+        `gen-schema: 'notices[${i}].marker' duplicates 'notices[${firstIndex}].marker' ` +
+          `— both match ${JSON.stringify(marker)} case-insensitively`
+      );
+    }
+    seenMarkers.set(markerKey, i);
     const out = { marker, label: parseNoticeLabel(entry.label, marker, i) };
     if (entry.color !== undefined && entry.color !== null) {
       if (typeof entry.color !== "string" || !COLOR_VALUE_RE.test(entry.color.trim()))
@@ -552,12 +578,12 @@ export function parseNotices(raw) {
         );
       out.color = entry.color.trim();
     }
-    if (entry.attention !== undefined) {
+    if (entry.attention !== undefined && entry.attention !== null) {
       if (typeof entry.attention !== "boolean")
         throw new Error(`gen-schema: 'notices[${i}].attention' must be a boolean`);
       out.attention = entry.attention;
     }
-    if (entry.subsumedByFont !== undefined) {
+    if (entry.subsumedByFont !== undefined && entry.subsumedByFont !== null) {
       if (typeof entry.subsumedByFont !== "boolean")
         throw new Error(`gen-schema: 'notices[${i}].subsumedByFont' must be a boolean`);
       out.subsumedByFont = entry.subsumedByFont;

@@ -417,91 +417,178 @@
           ],
           "properties": {
             "bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "panel": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "panel-2": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "line": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "text": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "muted": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "accent": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "accent-solid": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "on-accent": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "focus": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "link": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "warn": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "warn-bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "success": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "success-bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "code-bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "overlay": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "viewer-bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "viewer-grid": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "viewer-grid-2": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "viewer-model": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "viewer-dim": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "radius": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "radius-sm": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "glass-bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "glass-border": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "elevation": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "font-sans": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "font-display": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "additionalProperties": false
@@ -513,91 +600,178 @@
           ],
           "properties": {
             "bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "panel": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "panel-2": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "line": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "text": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "muted": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "accent": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "accent-solid": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "on-accent": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "focus": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "link": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "warn": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "warn-bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "success": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "success-bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "code-bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "overlay": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "viewer-bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "viewer-grid": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "viewer-grid-2": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "viewer-model": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "viewer-dim": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "radius": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "radius-sm": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "glass-bg": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "glass-border": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "elevation": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "font-sans": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "font-display": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "additionalProperties": false
@@ -939,9 +1113,33 @@
           },
           "label": {
             "description": "Badge/notice noun: a plain string used for both counts, or { one, other } for distinct singular/plural forms (selected via Intl.PluralRules, the same as src/lib/i18n.ts's tn()). Defaults to 'marker'.",
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "one": {
+                    "description": "Singular override; falls back to 'other' when omitted.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "other": {
+                    "description": "Plural/default form, used whenever 'one' is unset.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "other"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "color": {
@@ -954,12 +1152,18 @@
           "attention": {
             "description": "Join the pre-download review dialog's attention items.",
             "default": false,
-            "type": "boolean"
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "subsumedByFont": {
             "description": "Fold into a missing-font item instead of listing separately.",
             "default": false,
-            "type": "boolean"
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [
@@ -999,11 +1203,17 @@
           },
           "version": {
             "description": "Component version.",
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "text": {
             "description": "Full license text, shown in a details panel. Mutually exclusive with 'textFile'.",
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "textFile": {
             "description": "Config-relative file whose contents become 'text' at build time. Mutually exclusive with 'text' (setting both fails the build, naming both).",
@@ -1014,11 +1224,17 @@
           },
           "sourceUrl": {
             "description": "Corresponding-source link (required by copyleft licenses).",
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "note": {
             "description": "One-line description.",
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [

@@ -39,19 +39,18 @@ const PRIMITIVE_TYPES = new Set(["string", "boolean", "number", "integer"]);
 // — nullability is a property of one KEY having a value, not of "is this
 // array allowed to contain null" or "is the whole document nullable").
 //
-// Two field-descriptor markers (see config-spec.mjs's file-top comment)
-// suppress this: `required` (the field must genuinely be present — currently
-// only `popup.header`/`popup.body`, `designs[].id`, `notices[].marker`, and
-// `licenses[].name`/`license`/`copyright`/`url`/`licenseUrl`) and
-// `rejectsNull` (the field is genuinely optional, but the bespoke code that
-// reads it was never taught to treat an explicit `null` as "unset" the way
-// `applyGroupSpec` uniformly does — `notices[].attention`/`.subsumedByFont`,
-// `licenses[].version`/`.text`/`.sourceUrl`/`.note`, and every
-// `colors.<theme>.<token>` leaf). Every other optional field genuinely
-// accepts `null` — verified field-by-field against the real parsers (see
-// each spec node's own comment), and swept mechanically over the whole spec
-// by tests/config-spec.test.mjs so a newly added field can't silently drift
-// from whichever behaviour its own code actually has.
+// One field-descriptor marker (see config-spec.mjs's file-top comment)
+// suppresses this: `required` (the field must genuinely be present —
+// currently only `popup.header`/`popup.body`, `designs[].id`,
+// `notices[].marker`, and `licenses[].name`/`license`/`copyright`/`url`/
+// `licenseUrl`). Every other field is genuinely optional AND its parser
+// genuinely accepts an explicit `null` as "unset" — verified field-by-field
+// against the real parsers (see each spec node's own comment), and swept
+// mechanically over the whole spec by tests/config-spec.test.mjs so a newly
+// added field can't silently drift from whichever behaviour its own code
+// actually has. (An earlier revision carried a second marker here for a
+// handful of fields whose bespoke parsers hadn't been taught this yet; those
+// parsers were fixed to match the rule instead, so that marker is gone.)
 //
 // Merges a null alternative into an already-built schema fragment rather
 // than reshaping types by hand at each call site, so every shape `nodeToSchema`
@@ -105,10 +104,9 @@ function objectSchema(node) {
   const required = [];
   for (const [key, field] of Object.entries(node.properties)) {
     let fieldSchema = nodeToSchema(field);
-    // Every field is nullable UNLESS it's genuinely required or its own
-    // bespoke parser demonstrably rejects an explicit null (see addNull's
-    // comment and config-spec.mjs's file-top one for both markers).
-    if (!field.required && !field.rejectsNull) fieldSchema = addNull(fieldSchema);
+    // Every field is nullable UNLESS it's genuinely required (see addNull's
+    // comment and config-spec.mjs's file-top one for the marker).
+    if (!field.required) fieldSchema = addNull(fieldSchema);
     properties[key] = fieldSchema;
     if (field.required) required.push(key);
   }

@@ -1182,6 +1182,29 @@ test("notices: subsumedByFont is optional and must be a boolean", () => {
   );
 });
 
+test("notices: an explicit null on attention/subsumedByFont means unset, same as an absent one", () => {
+  assert.deepEqual(parseNotices([{ marker: "alert", attention: null, subsumedByFont: null }]), [
+    { marker: "alert", label: { one: "alert", other: "alert" } },
+  ]);
+});
+
+test("notices: duplicate markers (case-insensitive) fail the build", () => {
+  assert.throws(
+    () => parseNotices([{ marker: "alert" }, { marker: "Alert" }]),
+    /'notices\[1\]\.marker' duplicates 'notices\[0\]\.marker' — both match "Alert" case-insensitively/
+  );
+  // Three entries: the second AND third both collide with the first.
+  assert.throws(
+    () => parseNotices([{ marker: "alert" }, { marker: "Alert" }, { marker: "ALERT" }]),
+    /'notices\[1\]\.marker' duplicates 'notices\[0\]\.marker'/
+  );
+  // Distinct markers are unaffected.
+  assert.deepEqual(
+    parseNotices([{ marker: "alert" }, { marker: "note" }]).map((n) => n.marker),
+    ["alert", "note"]
+  );
+});
+
 test("renderHash folds in the renderer source so flag changes invalidate it", () => {
   // With outPublicDir + rendererFiles, a change to the renderer's render
   // contract (e.g. an OpenSCAD flag in worker.ts) must change renderHash.
@@ -1379,6 +1402,16 @@ test("parseColors validates tokens and values", () => {
   assert.throws(() => parseColors({ dark: "#fff" }), /'colors\.dark' must be an object/);
 });
 
+test("colors: an explicit null token means unset, same as an absent one", () => {
+  assert.deepEqual(parseColors({ dark: { bg: null } }), null);
+  assert.deepEqual(parseColors({ dark: { bg: null, accent: "#fff" } }), {
+    dark: { accent: "#fff" },
+  });
+  // An unknown token is still rejected even when its value is null — the
+  // null-means-unset rule is about VALUES, not about excusing a typo'd key.
+  assert.throws(() => parseColors({ dark: { accnt: null } }), /unknown colour token/);
+});
+
 test("colors: success/success-bg/warn-bg are accepted colour tokens", () => {
   assert.deepEqual(
     parseColors({ dark: { success: "#4ade80", "success-bg": "#142615", "warn-bg": "#332812" } }),
@@ -1560,6 +1593,20 @@ test("parseLicenses validates shape and required fields", () => {
         },
       ]),
     /'licenses\[0\]\.note' must be a string/
+  );
+});
+
+test("licenses: an explicit null on an optional field means unset, same as an absent one", () => {
+  const REQUIRED = {
+    name: "Lib",
+    license: "MIT",
+    copyright: "(c) X",
+    url: "https://x",
+    licenseUrl: "https://x/LICENSE",
+  };
+  assert.deepEqual(
+    parseLicenses([{ ...REQUIRED, version: null, text: null, sourceUrl: null, note: null }]),
+    [REQUIRED]
   );
 });
 
