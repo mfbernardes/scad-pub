@@ -1,0 +1,11 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "pwa": {
+    "icon": "logo.svg",
+    "screenshots": [
+      { "src": "no-such-screenshot.png", "sizes": "390x844", "form_factor": "narrow" }
+    ]
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }]
+}

@@ -3047,6 +3047,61 @@ test("a PWA/icon failure after a prior successful build leaves the previous outp
   if (beforeIcon) assert.deepEqual(readFileSync(iconPath), beforeIcon);
 });
 
+// A failure LATER in generatePwaAssets than icon rasterization — the
+// `pwa.screenshots[].src` existence check, which used to run after
+// pwa-assets.mjs had already written the (successfully rasterized) icon/
+// splash PNGs directly to outPublicDir. That's the gap the deferred-write
+// batch (pwa-assets.mjs's `batch`/commitPwaBatch, flushed only at generate()'s
+// single commit point) closes: unlike the widget-badicon case above — which
+// already failed BEFORE anything was written even under the old code, since
+// rasterization itself is the failure — this fixture's icon is valid, so the
+// icon/splash batch fully rasterizes, and only the screenshot check after it
+// fails. Under the pre-fix code that meant new icon/splash bytes landing on
+// disk paired with the OLD scad tree/schema/manifest; this asserts they don't.
+test("a failing screenshot leaves the previous PWA icon/splash/manifest files byte-identical (deferred-write batch)", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-pwatxn-"));
+  const outPublicDir = join(out, "public");
+  const outScadDir = join(outPublicDir, "scad");
+  const outSchemaDir = join(out, "schema");
+  const base = { outSchemaDir, outScadDir, outPublicDir };
+
+  // A good build first, so there is a previous icon/splash/manifest set to protect.
+  generate({ ...base, configPath: join(FIXTURES, "widget.config.json") });
+  const PWA_FILES = [
+    "icon.svg",
+    "icon-192.png",
+    "icon-512.png",
+    "icon-512-maskable.png",
+    "icon-180.png",
+    "apple-splash-1290x2796.png",
+    "apple-splash-750x1334.png",
+    "manifest.webmanifest",
+  ];
+  const snapshot = () =>
+    Object.fromEntries(
+      PWA_FILES.map((f) => {
+        const p = join(outPublicDir, f);
+        return [f, existsSync(p) ? readFileSync(p) : null];
+      })
+    );
+  const before = snapshot();
+  // Sanity: the rasterizer actually ran, so this test exercises the deferred
+  // batch rather than vacuously passing on all-null snapshots either way.
+  assert.ok(before["icon-192.png"], "fixture setup expects @resvg/resvg-js to be installed");
+
+  // A config with a VALID icon (so the icon+splash batch fully rasterizes and
+  // queues real bytes) but a `pwa.screenshots[].src` that doesn't exist.
+  assert.throws(
+    () => generate({ ...base, configPath: join(FIXTURES, "widget-screenshot-missing.config.json") }),
+    /screenshot 'no-such-screenshot\.png' not found/
+  );
+
+  const after = snapshot();
+  for (const f of PWA_FILES) {
+    assert.deepEqual(after[f], before[f], `${f} must be byte-identical to the pre-run state`);
+  }
+});
+
 test("changing a font then failing a later step leaves the prior font bytes and fonts.conf unchanged", () => {
   const REGULAR = join(HERE, "..", "public", "fonts", "LiberationSans-Regular.ttf");
   const BOLD = join(HERE, "..", "public", "fonts", "LiberationSans-Bold.ttf");

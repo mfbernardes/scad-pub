@@ -41,7 +41,7 @@ import { resolveFileField } from "./lib/prose-files.mjs";
 import { splitHelpMarkdown } from "./lib/help-file.mjs";
 import { slugifyPresetNames } from "./lib/preset-slug.mjs";
 import { resolveWorkerDependencyClosure } from "./lib/worker-deps.mjs";
-import { generatePwaAssets } from "./lib/pwa-assets.mjs";
+import { generatePwaAssets, commitPwaBatch } from "./lib/pwa-assets.mjs";
 import { scadpubVersion } from "./lib/version.mjs";
 import { componentVersions } from "./lib/dep-versions.mjs";
 import {
@@ -1150,24 +1150,38 @@ export function generate({
   // outScadDir yet: the swap is deferred to the very end (below), after the
   // fallible PWA generation and once the schema is in hand, so the whole
   // output — render sources, PWA/font assets, and designs.json — commits as
-  // one unit. A failure in generatePwaAssets (e.g. a malformed configured
-  // icon) therefore leaves the PREVIOUS complete output entirely intact: the
-  // old scad tree, the old schema, and the old icons all still match. (PWA
-  // icon writes are themselves non-destructive on failure — see
-  // pwa-assets.mjs, which rasterizes the whole batch before writing any of it.)
+  // one unit. generatePwaAssets() itself never writes a byte: every icon,
+  // splash, screenshot copy and manifest.webmanifest it would produce is
+  // QUEUED into the `batch` it returns (see pwa-assets.mjs's write()/copy()
+  // helpers and its module comment) instead of touching outPublicDir
+  // directly. The queue is only flushed — via commitPwaBatch — at the commit
+  // point below, in the same breath as the scad-tree rename and the font-tree
+  // copy. So a throw anywhere in generatePwaAssets (a malformed configured
+  // icon, or a `pwa.screenshots[].src` that doesn't exist, validated well
+  // after the icon/splash rasterization already succeeded) leaves
+  // outPublicDir completely untouched, not merely the scad tree: the old
+  // icons/splashes/manifest, the old scad tree, and the old schema all still
+  // match, exactly as if this run had never happened. (Previously this
+  // comment's claim was only half true: pwa-assets.mjs wrote icons/splashes
+  // to outPublicDir as soon as they rasterized, so a LATER failure in that
+  // same call — e.g. the screenshot existence check — could leave freshly
+  // written icons paired with the stale scad tree/schema the swap below never
+  // reached. Deferring every pwa-assets.mjs write into a batch closes that.)
 
   // Generate the PWA icon set, iOS splash images and manifest.webmanifest
   // (skipped for the fixture-driven unit tests, which pass no outPublicDir).
-  // Returns the iOS splash <link> descriptors vite injects into index.html,
-  // the icon files actually written (M8), and every path this call wrote
-  // (for the M8 lifecycle reconciliation below). It reads design picker-icon
-  // dimensions from the STAGING scad dir (scadDir), since the live swap hasn't
-  // happened yet.
+  // Nothing is written here — see the commit-point comment above. Returns the
+  // iOS splash <link> descriptors vite injects into index.html, the icon
+  // files that will be written (M8), and the pending write batch itself —
+  // flushed below, and also the source of the written-path list the M8
+  // lifecycle reconciliation below derives from it. It reads design
+  // picker-icon dimensions from the STAGING scad dir (scadDir), since the
+  // live swap hasn't happened yet.
   let appleSplash = [];
   let iconFiles = ["icon.svg"];
-  let pwaWritten = [];
+  let pwaBatch = [];
   if (outPublicDir) {
-    ({ appleSplash, iconFiles, written: pwaWritten } = generatePwaAssets({
+    ({ appleSplash, iconFiles, batch: pwaBatch } = generatePwaAssets({
       pwa: PWA,
       CONFIG_DIR,
       outPublicDir,
@@ -1276,11 +1290,15 @@ export function generate({
   rmSync(outScadDir, { recursive: true, force: true });
   renameSync(stageScadDir, outScadDir);
 
-  // The generated font tree is committed here too (deferred from bundleFonts):
-  // copy the source-referenced fonts into public/fonts and write fonts.conf,
-  // now that all fallible work has succeeded. A source font overwriting a
-  // same-named previous one, and the rewritten fonts.conf, therefore never
-  // outlive a build that later failed.
+  // The generated font tree AND the PWA icon/splash/screenshot/manifest batch
+  // are committed here too (deferred from bundleFonts and generatePwaAssets
+  // respectively): copy the source-referenced fonts into public/fonts, write
+  // fonts.conf, and flush every entry generatePwaAssets queued instead of
+  // writing directly (commitPwaBatch — see pwa-assets.mjs) — now that all
+  // fallible work (design parsing, PWA rasterization, the screenshot
+  // existence check) has already succeeded. A source font overwriting a
+  // same-named previous one, a rewritten fonts.conf, and a replaced icon/
+  // splash/manifest set therefore never outlive a build that later failed.
   if (outPublicDir) {
     mkdirSync(join(outPublicDir, "fonts"), { recursive: true });
     for (const { src, dest } of fontWrites) {
@@ -1288,6 +1306,7 @@ export function generate({
       copyFileSync(src, dest);
     }
     if (fontsConf != null) writeFileSync(join(outPublicDir, "fonts", "fonts.conf"), fontsConf);
+    commitPwaBatch(pwaBatch);
   }
 
   if (outPublicDir) {
@@ -1312,7 +1331,7 @@ export function generate({
     reconcileGenerated(
       join(outPublicDir, "..", ".gen-manifest.json"),
       outPublicDir,
-      [...fontCopies, ...pwaWritten]
+      [...fontCopies, ...pwaBatch.map((e) => e.dest)]
     );
   }
   writeFileSync(
