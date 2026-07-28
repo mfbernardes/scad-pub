@@ -363,11 +363,24 @@ async function checkIdleRenderCount({ page, check }) {
   );
 }
 
+// Inject axe-core via evaluate (the DevTools runtime channel), NOT
+// page.addScriptTag: serve-dist now sends the built dist/_headers, whose CSP
+// rightly refuses an inline <script> tag — and loosening the page's policy
+// (bypassCSP, or an 'unsafe-inline' carve-out) just to measure accessibility
+// would stop this suite from exercising the exact headers a real deploy
+// sends. Runtime evaluation is tooling-plane and not governed by the page's
+// CSP.
+async function injectAxe(page) {
+  const source = await readFile(
+    fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
+    "utf8"
+  );
+  await page.evaluate(source);
+}
+
 async function checkAxe({ page, check }) {
   console.log("=== accessibility (axe-core) ===");
-  await page.addScriptTag({
-    path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
-  });
+  await injectAxe(page); // see injectAxe for why not addScriptTag
   // axe's color-contrast check reads *computed* colours. Several controls (the
   // tab chips especially) carry `transition-[color,box-shadow]`, and a theme
   // swap animates every colour token, so sampling an element mid-transition
@@ -957,9 +970,7 @@ async function checkEditOnModel({ page, check, ids, paramsTabName }) {
 
   // Accessibility: no serious/critical axe violation with the editor open.
   check(await clickModel(), "the editor opens for the accessibility pass");
-  await page.addScriptTag({
-    path: fileURLToPath(new URL("../node_modules/axe-core/axe.min.js", import.meta.url)),
-  });
+  await injectAxe(page); // see injectAxe for why not addScriptTag
   const axeRes = await page.evaluate(async () =>
     window.axe.run(document, {
       resultTypes: ["violations"],

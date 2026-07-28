@@ -6,6 +6,7 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { headStyleInjection, escapeHtml } from "./src/lib/configCss";
+import { extractInlineScripts, buildAppHeadersBlock } from "./src/lib/securityHeaders.mjs";
 
 import { cloudflare } from "@cloudflare/vite-plugin";
 
@@ -210,13 +211,68 @@ function preloadLinks(): Plugin {
   };
 }
 
+// Appends the app-document security headers (CSP + clickjacking/MIME-sniffing/
+// referrer/permissions hardening) to dist/_headers at build time. The CSP's
+// script-src needs the exact hash of the inline pre-paint theme script in
+// index.html, and that script's body is per-config (%APP_THEME_KEY% is the
+// active config's storage namespace, substituted by configHtml above) — so the
+// hash can't be a literal here, it's computed from the actual built HTML.
+// Runs at closeBundle, like swVersion/preloadLinks, because dist/index.html
+// and dist/_headers (copied from public/) only exist once the bundle — and
+// every other index.html-mutating plugin — has already run; ordering after
+// preloadLinks (the last index.html mutator above) keeps this hashing the
+// final bytes, though preloadLinks only ever touches <link> tags, never
+// <script>, so today the ordering doesn't change the hash either way.
+//
+// Deliberately APPENDS a `/*` block after public/_headers's own content
+// rather than replacing it: on Cloudflare Pages (and Netlify) every matching
+// rule applies to a request, so `/scad/*` still gets both its own restrictive
+// `default-src 'none'; sandbox` block AND this `/*` block — the browser
+// enforces the intersection of the two CSPs, which is only ever MORE
+// restrictive than either alone, never a weakening. See
+// src/lib/securityHeaders.mjs for the policy itself and its rationale.
+function securityHeaders(): Plugin {
+  let outDir = "dist";
+  return {
+    name: "security-headers",
+    apply: "build",
+    configResolved(c) {
+      outDir = c.build.outDir;
+    },
+    closeBundle() {
+      const htmlPath = resolve(outDir, "index.html");
+      const headersPath = resolve(outDir, "_headers");
+      try {
+        const html = readFileSync(htmlPath, "utf-8");
+        const existing = readFileSync(headersPath, "utf-8");
+        const hashes = extractInlineScripts(html).map(
+          (body) => `sha256-${createHash("sha256").update(body, "utf8").digest("base64")}`
+        );
+        const block = buildAppHeadersBlock(hashes);
+        writeFileSync(headersPath, `${existing.replace(/\n*$/, "\n")}\n${block}`);
+      } catch {
+        /* no index.html or _headers in this build target (e.g. a host with no
+           Cloudflare/Netlify _headers convention) — skip */
+      }
+    },
+  };
+}
+
 // Defaults to serving at the domain root. Set BASE_PATH to the subpath your
 // host serves the app under (e.g. "/app/" for example.com/app/). Dev uses "/".
 export default defineConfig(({ command }) => {
   const schema = readSchema();
   return {
     base: command === "build" ? process.env.BASE_PATH || "/" : "/",
-    plugins: [react(), tailwindcss(), configHtml(schema), swVersion(), preloadLinks(), cloudflare()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      configHtml(schema),
+      swVersion(),
+      preloadLinks(),
+      securityHeaders(),
+      cloudflare(),
+    ],
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
