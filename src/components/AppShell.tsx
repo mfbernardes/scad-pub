@@ -602,10 +602,11 @@ export const AppShell = memo(function AppShell({
   }, []);
 
   // Size the mobile viewer to follow the sheet's live height: write the sheet
-  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge (the
-  // Viewer's RAF loop reframes the model into the new box). The CSS caps it at
-  // the half height, and data-sheet-dragging toggles the easing — see
-  // .app-shell__mobile-viewer.
+  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge —
+  // and, through the Viewer's ResizeObserver, re-fits the model into the new
+  // box so it holds its size instead of shrinking with the canvas (see
+  // Viewer.tsx's refitView). The CSS caps it at the half height, and
+  // data-sheet-dragging toggles the easing — see .app-shell__mobile-viewer.
   const handleSheetFollow = useCallback((heightPx: number, dragging: boolean) => {
     const el = mobileRootRef.current;
     if (!el) return;

@@ -275,8 +275,10 @@ button:disabled { cursor: default; }
    the model is framed in the remaining viewport rather than the full page (its
    lower part would otherwise sit hidden behind the sheet). The canvas follows
    the sheet live: its bottom sits at --sheet-top (the sheet's live top edge,
-   defined on .app-shell__mobile), and the Viewer's RAF loop reframes the model
-   into the new box. --sheet-top falls back to the peek height before the first
+   defined on .app-shell__mobile), and the Viewer's ResizeObserver re-fits the
+   model into the new box — carrying the visitor's own orbit/zoom/pan, so the
+   model holds its apparent size rather than shrinking with the canvas (see
+   Viewer.tsx's refitView). --sheet-top falls back to the peek height before the first
    drag and is capped at the half height, so dragging on to full doesn't shrink
    the canvas to nothing — the sheet covers it and the Viewer pauses rendering
    off-screen. */
