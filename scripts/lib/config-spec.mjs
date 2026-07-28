@@ -70,14 +70,41 @@
 // the build, with the valid-key list read straight off `properties`.
 //
 // What's left, because each encodes a real distinction rather than an
-// accident: `required` (validate even when entirely absent — only
-// `popup.header`/`popup.body`); `custom` (object/array nodes
-// whose runtime validation lives in a bespoke parser instead, per the file-top
-// comment — and, since this commit, also a plain leaf FIELD nested inside an
-// otherwise applyGroupSpec-driven group, e.g. `render.features`/`render.fonts`
-// or `pwa.screenshots`/`pwa.categories`/`pwa.themeColor`: `applyGroupSpec`
-// still accepts the key as recognised — so it can't be rejected as unknown —
-// but skips it entirely otherwise, neither defaulting nor validating nor
+// accident: `required` (validate even when entirely absent — `popup.header`/
+// `popup.body` via `applyGroupSpec`, plus, since gen-config-schema.mjs learned
+// to emit a null alternative for every genuinely-optional field, three spots
+// enforced by bespoke non-`applyGroupSpec` code instead: `designs[].id`
+// (`checkId` in gen-schema.mjs's `resolveDesignList`), `notices[].marker` and
+// `licenses[].name`/`license`/`copyright`/`url`/`licenseUrl` (parseNotices/
+// parseLicenses in ./config-parsers.mjs) — marking these `required: true`
+// changes nothing about how they're validated (that code already throws on a
+// missing or null value; `applyGroupSpec` never even sees these nodes), it
+// only makes gen-config-schema.mjs's `objectSchema` list them in the emitted
+// schema's own `required` array and withhold the null alternative it now adds
+// to every OTHER field — see that file's `addNull`); `rejectsNull` (the
+// opposite asymmetry: a field that's genuinely OPTIONAL — omitting it is
+// fine — but whose bespoke parser was never updated to treat an explicit
+// `null` as "unset" the way `applyGroupSpec`'s fields uniformly do, so a
+// config author writing `null` there hits a real build failure. Every
+// instance today shares the same root cause — a hand-rolled `if (x !==
+// undefined)`/`typeof x === "object"` check that a bare `null` fails, sitting
+// outside `applyGroupSpec` entirely: `notices[].attention`/
+// `.subsumedByFont` and `licenses[].version`/`.text`/`.sourceUrl`/`.note`
+// (parseNotices/parseLicenses again), and every `colors.light.*`/
+// `colors.dark.*` colour-token leaf (`parseColors`'s inner loop only ever
+// looks at tokens actually present in the object, so a token explicitly set
+// to `null` reaches its `typeof value !== "string"` check and throws) — this
+// is NOT a stance on whether that's the ideally desired behaviour, only a
+// faithful record of it, so gen-config-schema.mjs doesn't advertise a null
+// support these parsers don't actually have; `tests/config-spec.test.mjs`'s
+// mechanical null-agreement sweep is what catches a future drift either way);
+// `custom` (object/array nodes whose runtime validation lives in a bespoke
+// parser instead, per the file-top comment — and, since this commit, also a
+// plain leaf FIELD nested inside an otherwise applyGroupSpec-driven group,
+// e.g. `render.features`/`render.fonts` or
+// `pwa.screenshots`/`pwa.categories`/`pwa.themeColor`: `applyGroupSpec` still
+// accepts the key as recognised — so it can't be rejected as unknown — but
+// skips it entirely otherwise, neither defaulting nor validating nor
 // including it in its own return value, because the bespoke code that reads
 // it (parseStringArray, parseFormat, parseFontFallback, parsePwaThemeColor,
 // generatePwaAssets) reads the RAW config object directly instead);
@@ -415,7 +442,15 @@ export const CONFIG_SPEC = {
       type: "object",
       custom: true,
       properties: {
-        id: { type: "string", description: "Design id (charset [A-Za-z0-9._-]+); used in URLs, storage, filenames." },
+        // `required: true` even though resolveDesignList/buildDesigns (not
+        // applyGroupSpec) enforce it: `checkId` throws on a missing OR null
+        // `id` (see the file-top comment), so the schema shouldn't offer a
+        // null alternative here either.
+        id: {
+          type: "string",
+          required: true,
+          description: "Design id (charset [A-Za-z0-9._-]+); used in URLs, storage, filenames.",
+        },
         label: { type: "string", description: "Picker label; defaults to a humanized id." },
         file: { type: "string", description: "Path to the .scad file, relative to 'source'; defaults to '<id>.scad'." },
         heavy: { type: "boolean", default: false, description: "Start this design in manual-render mode." },
@@ -511,8 +546,22 @@ export const CONFIG_SPEC = {
     openKeys: true,
     description: "Optional per-theme CSS colour/design-token overrides.",
     properties: {
-      light: { type: "object", custom: true, properties: Object.fromEntries(COLOR_TOKENS.map((t) => [t, { type: "string" }])) },
-      dark: { type: "object", custom: true, properties: Object.fromEntries(COLOR_TOKENS.map((t) => [t, { type: "string" }])) },
+      // Each token leaf carries `rejectsNull: true` (see the file-top
+      // comment): parseColors's inner loop only ever inspects a token
+      // actually present on the object, so `colors.light.bg: null` reaches
+      // its `typeof value !== "string"` check and throws, unlike the
+      // `light`/`dark` objects themselves (below), which do treat an
+      // explicit `null` as "not configured".
+      light: {
+        type: "object",
+        custom: true,
+        properties: Object.fromEntries(COLOR_TOKENS.map((t) => [t, { type: "string", rejectsNull: true }])),
+      },
+      dark: {
+        type: "object",
+        custom: true,
+        properties: Object.fromEntries(COLOR_TOKENS.map((t) => [t, { type: "string", rejectsNull: true }])),
+      },
     },
   },
   extraCss: { type: "string", description: "Raw-CSS stylesheet path (config-relative), loaded after the app's own styles." },
@@ -634,7 +683,14 @@ export const CONFIG_SPEC = {
       // knows about and silently drops anything else — genuinely open.
       openKeys: true,
       properties: {
-        marker: { type: "string", description: "Design-defined word matched as ': <marker>:' inside an echo (case-insensitive)." },
+        // `required: true` (see the file-top comment): parseNotices throws on
+        // a missing OR null `marker`, even though that check lives in its own
+        // hand-rolled code rather than `applyGroupSpec`.
+        marker: {
+          type: "string",
+          required: true,
+          description: "Design-defined word matched as ': <marker>:' inside an echo (case-insensitive).",
+        },
         label: {
           type: "string",
           description:
@@ -643,8 +699,22 @@ export const CONFIG_SPEC = {
             "Defaults to 'marker'.",
         },
         color: { type: "string", description: "Badge fill colour, a plain CSS colour." },
-        attention: { type: "boolean", default: false, description: "Join the pre-download review dialog's attention items." },
-        subsumedByFont: { type: "boolean", default: false, description: "Fold into a missing-font item instead of listing separately." },
+        // `rejectsNull: true` (see the file-top comment): parseNotices checks
+        // `!== undefined` only, not `== null`, so an explicit `null` here
+        // reaches the boolean typeof check and throws instead of being
+        // treated as "omitted".
+        attention: {
+          type: "boolean",
+          default: false,
+          rejectsNull: true,
+          description: "Join the pre-download review dialog's attention items.",
+        },
+        subsumedByFont: {
+          type: "boolean",
+          default: false,
+          rejectsNull: true,
+          description: "Fold into a missing-font item instead of listing separately.",
+        },
       },
     },
   },
@@ -660,14 +730,24 @@ export const CONFIG_SPEC = {
       // — genuinely open, same as `notices[]` above.
       openKeys: true,
       properties: {
-        name: { type: "string", description: "Component name." },
-        license: { type: "string", description: "SPDX identifier." },
-        copyright: { type: "string", description: "Copyright line." },
-        url: { type: "string", description: "Project homepage." },
-        licenseUrl: { type: "string", description: "Where the license text lives." },
-        version: { type: "string", description: "Component version." },
+        // `name`/`license`/`copyright`/`url`/`licenseUrl` all carry
+        // `required: true` (see the file-top comment): parseLicenses's own
+        // REQUIRED loop throws on any of them missing OR null, even though
+        // that check lives in its own hand-rolled code rather than
+        // `applyGroupSpec`.
+        name: { type: "string", required: true, description: "Component name." },
+        license: { type: "string", required: true, description: "SPDX identifier." },
+        copyright: { type: "string", required: true, description: "Copyright line." },
+        url: { type: "string", required: true, description: "Project homepage." },
+        licenseUrl: { type: "string", required: true, description: "Where the license text lives." },
+        // `version`/`text`/`sourceUrl`/`note` all carry `rejectsNull: true`
+        // (see the file-top comment): parseLicenses's OPTIONAL loop checks
+        // `entry[key] === undefined` only, so an explicit `null` reaches its
+        // `typeof` check and throws instead of being treated as "omitted".
+        version: { type: "string", rejectsNull: true, description: "Component version." },
         text: {
           type: "string",
+          rejectsNull: true,
           description: "Full license text, shown in a details panel. Mutually exclusive with 'textFile'.",
         },
         // Same pre-pass/resolution pattern as popup.bodyFile (see its
@@ -679,8 +759,12 @@ export const CONFIG_SPEC = {
             "Config-relative file whose contents become 'text' at build time. Mutually exclusive with " +
             "'text' (setting both fails the build, naming both).",
         }),
-        sourceUrl: { type: "string", description: "Corresponding-source link (required by copyleft licenses)." },
-        note: { type: "string", description: "One-line description." },
+        sourceUrl: {
+          type: "string",
+          rejectsNull: true,
+          description: "Corresponding-source link (required by copyleft licenses).",
+        },
+        note: { type: "string", rejectsNull: true, description: "One-line description." },
       },
     },
   },

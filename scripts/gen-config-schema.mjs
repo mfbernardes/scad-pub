@@ -28,6 +28,73 @@ import { CONFIG_SPEC } from "./lib/config-spec.mjs";
 
 const PRIMITIVE_TYPES = new Set(["string", "boolean", "number", "integer"]);
 
+// scripts/lib/config-parsers.mjs's applyGroupSpec treats an explicit `null`
+// exactly like an absent key for every field it drives (see that function's
+// own comment) — that's the entire point of this reorg, and it's why a
+// config the real build ACCEPTS (`"heavyMs": null`) used to be flagged
+// invalid by any editor honouring this schema's own `$schema` pointer: the
+// emitted type had no null alternative. `addNull` is the fix, applied to
+// every optional field in `objectSchema`'s loop below (not called for a
+// node's own top-level document schema, nor for an array's `items` template
+// — nullability is a property of one KEY having a value, not of "is this
+// array allowed to contain null" or "is the whole document nullable").
+//
+// Two field-descriptor markers (see config-spec.mjs's file-top comment)
+// suppress this: `required` (the field must genuinely be present — currently
+// only `popup.header`/`popup.body`, `designs[].id`, `notices[].marker`, and
+// `licenses[].name`/`license`/`copyright`/`url`/`licenseUrl`) and
+// `rejectsNull` (the field is genuinely optional, but the bespoke code that
+// reads it was never taught to treat an explicit `null` as "unset" the way
+// `applyGroupSpec` uniformly does — `notices[].attention`/`.subsumedByFont`,
+// `licenses[].version`/`.text`/`.sourceUrl`/`.note`, and every
+// `colors.<theme>.<token>` leaf). Every other optional field genuinely
+// accepts `null` — verified field-by-field against the real parsers (see
+// each spec node's own comment), and swept mechanically over the whole spec
+// by tests/config-spec.test.mjs so a newly added field can't silently drift
+// from whichever behaviour its own code actually has.
+//
+// Merges a null alternative into an already-built schema fragment rather
+// than reshaping types by hand at each call site, so every shape `nodeToSchema`
+// can produce — a plain `type`, an `enum`, an existing `anyOf` (fileImport/
+// logo/pwa.themeColor's primitive-or-object union, designs[].presets.images's
+// string-or-object one) — gets exactly one, uniform treatment:
+//   - already `anyOf` (a union of shapes): append a `{ type: "null" }` branch
+//     rather than nesting a second anyOf inside the first.
+//   - `enum`: `type: [..., "null"]` alongside an untouched `enum` list would
+//     be silently self-defeating — draft 2020-12 requires an instance to
+//     satisfy BOTH keywords, and `null` is never one of the listed enum
+//     values — so this splits into its own two-branch `anyOf` instead: the
+///    original `{ type, enum }` unchanged, plus `{ type: "null" }`.
+//   - anything else (a plain `type: "string"/"object"/"array"/…`, `object`/
+//     `array` schemas straight out of `objectSchema`/the array branch below):
+//     widen `type` into an array that also lists `"null"` — the
+//     `"heavyMs"`/`"restOnGrid"` cases the PR review's finding named
+//     directly. `properties`/`items`/`required` all stay untouched: per JSON
+//     Schema's own semantics those keywords simply don't apply to a `null`
+//     instance, so nothing further needs to change for the object/array
+//     shapes.
+// `description`/`default` (when present) are kept OUTSIDE the anyOf/type
+// split in every branch, rather than duplicated into each alternative, so
+// they still read as a single field's metadata instead of two.
+function addNull(schema) {
+  const { description, default: def, ...core } = schema;
+  let widened;
+  if (core.anyOf) {
+    widened = { anyOf: [...core.anyOf, { type: "null" }] };
+  } else if (core.enum) {
+    widened = { anyOf: [{ ...core }, { type: "null" }] };
+  } else if (Array.isArray(core.type)) {
+    widened = { ...core, type: [...core.type, "null"] };
+  } else {
+    widened = { ...core, type: [core.type, "null"] };
+  }
+  return {
+    ...(description !== undefined ? { description } : {}),
+    ...(def !== undefined ? { default: def } : {}),
+    ...widened,
+  };
+}
+
 // The `{ type: "object", properties, additionalProperties, required }` shape
 // shared by every object-typed node: the top-level config itself, `ui`,
 // `viewer`, `render`, `render.cache`, `popup`, `ui.afterExport`, and the
@@ -37,7 +104,12 @@ function objectSchema(node) {
   const properties = {};
   const required = [];
   for (const [key, field] of Object.entries(node.properties)) {
-    properties[key] = nodeToSchema(field);
+    let fieldSchema = nodeToSchema(field);
+    // Every field is nullable UNLESS it's genuinely required or its own
+    // bespoke parser demonstrably rejects an explicit null (see addNull's
+    // comment and config-spec.mjs's file-top one for both markers).
+    if (!field.required && !field.rejectsNull) fieldSchema = addNull(fieldSchema);
+    properties[key] = fieldSchema;
     if (field.required) required.push(key);
   }
   const schema = { type: "object", properties };
