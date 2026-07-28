@@ -15,6 +15,7 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import { join, dirname, relative, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -43,6 +44,7 @@ import {
   renderFontsConf,
   resolveHelp,
   resolveFileField,
+  isRiskyExternalFontCopy,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
 import { componentVersions } from "../scripts/lib/dep-versions.mjs";
@@ -2483,6 +2485,148 @@ test("a real build records the bundled fonts' embedded families + writes fonts.c
   // fonts.conf is generated into the served tree, with the configured fallback.
   const conf = readFileSync(join(out, "public", "fonts", "fonts.conf"), "utf-8");
   assert.ok(conf.includes("<string>Liberation Sans</string>"));
+});
+
+// ── M9: the transient-external-font-copy warning ────────────────────────────
+// isRiskyExternalFontCopy is the boolean gen-schema.mjs's bundleFonts warns on
+// (see its own comment). `git` is injected so these drive the decision
+// without a real subprocess or a real git checkout on disk.
+
+test("isRiskyExternalFontCopy: no git repo at outPublicDir -> false", () => {
+  const git = () => ""; // `git rev-parse --show-toplevel` fails everywhere
+  assert.equal(isRiskyExternalFontCopy("/some/public", "/elsewhere/Font.ttf", git), false);
+});
+
+test("isRiskyExternalFontCopy: detached HEAD (a disposable build clone) -> false", () => {
+  // Mirrors tools/build-site.sh in a consumer repo: `git checkout --detach`
+  // into a gitignored ScadPub clone built purely to build against ITS OWN
+  // config. `git symbolic-ref` fails on a detached HEAD.
+  const git = (dir, args) =>
+    args[0] === "rev-parse" ? "/checkout" : "";
+  assert.equal(isRiskyExternalFontCopy("/checkout/public", "/elsewhere/Font.ttf", git), false);
+});
+
+test("isRiskyExternalFontCopy: attached branch + font from inside the checkout -> false", () => {
+  // A design bundling a new font from within ScadPub's own source tree (not
+  // yet copied to public/fonts) is an ordinary same-repo change to commit,
+  // not a stray deployment artifact.
+  const git = (dir, args) =>
+    args[0] === "rev-parse" ? "/checkout" : "main";
+  assert.equal(
+    isRiskyExternalFontCopy("/checkout/public", "/checkout/examples/Font.ttf", git),
+    false
+  );
+});
+
+test("isRiskyExternalFontCopy: attached branch + font from outside the checkout -> true", () => {
+  const git = (dir, args) =>
+    args[0] === "rev-parse" ? "/checkout" : "main";
+  assert.equal(
+    isRiskyExternalFontCopy("/checkout/public", "/elsewhere/Font.ttf", git),
+    true
+  );
+});
+
+test("bundleFonts warns exactly once, naming the font, when a real build copies an external font from an actively-developed checkout", () => {
+  // Drives the real generate() -> bundleFonts path (not just the boolean).
+  // isRiskyExternalFontCopy shells out to git itself (no seam to inject a
+  // stub through generate()), so this test builds its OWN throwaway git
+  // checkout — an `outPublicDir` inside a fresh `git init` repo with an
+  // attached HEAD — rather than pointing outPublicDir at this repo's real
+  // public/ dir, which would risk writing a font into the actual checkout
+  // under test.
+  const checkout = mkdtempSync(join(tmpdir(), "gen-schema-extfont-checkout-"));
+  execFileSync("git", ["init", "-q", checkout]);
+  const outPublicDir = join(checkout, "public");
+  mkdirSync(outPublicDir, { recursive: true });
+
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-extfont-src-")); // outside `checkout`
+  const REAL_TTF = join(HERE, "..", "public", "fonts", "LiberationSans-Regular.ttf");
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// Font.\nfont = "Liberation Sans";\n`);
+  copyFileSync(REAL_TTF, join(src, "Face.ttf"));
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: ".",
+      render: { fonts: ["Face.ttf"], fontFallback: "Liberation Sans" },
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    generate({
+      configPath: join(src, "c.config.json"),
+      outSchemaDir: join(checkout, "schema"),
+      outScadDir: join(checkout, "scad"),
+      outPublicDir,
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  const hits = warnings.filter((w) => w.includes("Face.ttf"));
+  assert.equal(
+    hits.length,
+    1,
+    `expected exactly one warning naming Face.ttf, got: ${JSON.stringify(warnings)}`
+  );
+  assert.ok(hits[0].includes("transient"));
+  assert.ok(hits[0].includes("git add"));
+});
+
+test("bundleFonts does not warn when the destination checkout's HEAD is detached (a disposable build clone)", () => {
+  // Mirrors tools/build-site.sh in a consumer repo: a ScadPub clone checked
+  // out `--detach`, built purely to build against the consumer's OWN config.
+  const checkout = mkdtempSync(join(tmpdir(), "gen-schema-extfont-detached-"));
+  execFileSync("git", ["init", "-q", checkout]);
+  execFileSync("git", [
+    "-C",
+    checkout,
+    "-c",
+    "user.email=test@example.com",
+    "-c",
+    "user.name=Test",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "init",
+  ]);
+  execFileSync("git", ["-C", checkout, "checkout", "-q", "--detach", "HEAD"]);
+  const outPublicDir = join(checkout, "public");
+  mkdirSync(outPublicDir, { recursive: true });
+
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-extfont-src2-"));
+  const REAL_TTF = join(HERE, "..", "public", "fonts", "LiberationSans-Regular.ttf");
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// Font.\nfont = "Liberation Sans";\n`);
+  copyFileSync(REAL_TTF, join(src, "Face.ttf"));
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: ".",
+      render: { fonts: ["Face.ttf"], fontFallback: "Liberation Sans" },
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    generate({
+      configPath: join(src, "c.config.json"),
+      outSchemaDir: join(checkout, "schema"),
+      outScadDir: join(checkout, "scad"),
+      outPublicDir,
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.filter((w) => w.includes("Face.ttf")).length, 0);
 });
 
 // ── H5: symlink containment ────────────────────────────────────────────────

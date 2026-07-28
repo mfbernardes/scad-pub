@@ -27,8 +27,9 @@ import {
   renameSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { WASM_VERSION } from "./wasm-version.mjs";
 import { computeRenderHash, computeBinAssetVersions } from "./lib/hash.mjs";
 import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "./lib/fonts.mjs";
@@ -203,6 +204,60 @@ function parseIdentity(config) {
 // tracked Liberation fallbacks under public/fonts are never written here (the
 // "already present" branch below is a no-op), so they never enter the list
 // and stay outside the M8 generated-font lifecycle the caller reconciles.
+//
+// M9 — the transient-copy warning: the M8 reconciliation above (see
+// destinations.mjs) means a font copied from outside the current build's own
+// config is never a permanent leak — the NEXT build against this checkout's
+// own config removes it. The real exposure is the window in between: if
+// someone runs `git add -A` in that window, the untracked font rides along
+// into an unrelated commit. `runGitQuiet`/`isRiskyExternalFontCopy` decide,
+// at the moment a font is staged for copying, whether this build is actually
+// creating that exposure, so bundleFonts can warn right there instead of the
+// old (wrong) CLAUDE.md ritual of hand-deleting after the fact.
+//
+// `git` is injectable (tests/gen-schema.test.mjs drives it with a stub, same
+// pattern as scripts/lib/version.mjs's `runGit`) so the decision is testable
+// without a real subprocess or a real git checkout on disk.
+function runGitQuiet(dir, args) {
+  try {
+    return execFileSync("git", ["-C", dir, ...args], {
+      encoding: "utf8",
+      // Inherit nothing on stdin, capture stdout, discard git's diagnostics —
+      // a build must never fail, or get noisier, just because this probe ran.
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5000,
+    }).trim();
+  } catch {
+    return ""; // git missing, outPublicDir doesn't exist yet, not a repo, …
+  }
+}
+
+// True only when copying `srcAbs` to `outPublicDir/fonts/` risks landing an
+// external deployment's font where a `git add -A` could sweep it into a
+// commit:
+//   - `outPublicDir` must sit inside a git working tree at all — a release
+//     tarball or an npm-packed tree isn't one, and nothing there is ever
+//     `git add`-ed from.
+//   - that checkout's HEAD must be ATTACHED to a branch. A checkout built
+//     purely to be thrown away — e.g. a consumer's tools/build-site.sh, which
+//     `git checkout --detach`s a fresh ScadPub clone into a directory ITS OWN
+//     .gitignore excludes, purely to build against its own config — is never
+//     the target of a stray `git add -A`. Flagging it would cry wolf on
+//     exactly the workflow the M8 reconciliation already handles silently
+//     every run.
+//   - `srcAbs` must lie OUTSIDE that checkout. A design bundling a new font
+//     from within ScadPub's own source tree (not yet copied to public/fonts)
+//     is an ordinary same-repo change a contributor means to commit, not a
+//     stray deployment artifact.
+export function isRiskyExternalFontCopy(outPublicDir, srcAbs, git = runGitQuiet) {
+  const toplevel = git(outPublicDir, ["rev-parse", "--show-toplevel"]);
+  if (!toplevel) return false; // not inside any git working tree
+  const branch = git(outPublicDir, ["symbolic-ref", "-q", "--short", "HEAD"]);
+  if (!branch) return false; // detached HEAD: a disposable build-only clone
+  const rel = relative(toplevel, srcAbs);
+  return rel === ".." || rel.startsWith(`..${sep}`);
+}
+
 function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained, register, fontCopies } = {}) {
   // The font tree is generated output too, so — like the scad tree — it is
   // validated, digested and family/face-read here but NOT written into the live
@@ -227,6 +282,16 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
         fontWrites.push({ src: srcAbs, dest });
         fontCopies?.push(dest);
         fontPaths[name] = srcAbs; // source bytes == the bytes that will be copied
+        if (isRiskyExternalFontCopy(outPublicDir, srcAbs)) {
+          console.warn(
+            `gen-schema: '${name}' is being copied into public/fonts/ from outside this ` +
+              `ScadPub checkout (${srcAbs}).\n` +
+              `  This copy is transient: the next build against THIS checkout's own config ` +
+              `removes it again (M8 reconciliation). Do not \`git add\`/commit it in the ` +
+              `meantime — if you want it gone right now, rebuild against your own config ` +
+              `instead of hand-deleting it.`
+          );
+        }
       } else if (existsSync(join(outPublicDir, "fonts", name))) {
         // An already-bundled font (e.g. the Liberation fallbacks tracked under
         // public/fonts) — read it in place; it isn't rewritten, so no staging.
