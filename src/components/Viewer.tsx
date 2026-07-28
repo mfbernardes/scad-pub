@@ -9,7 +9,7 @@ import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { buildDimensions, dimensionOverlayMargin, type DimensionsGroup } from "./dimensions";
+import { buildDimensions, type DimensionsGroup } from "./dimensions";
 import { createContactShadow, shadowViewFade, type ContactShadow } from "./contactShadow";
 import { VIEW_DIRECTIONS, DEFAULT_VIEW, type ViewName } from "./views";
 import { toIndexedGeometry } from "@/lib/meshIndex";
@@ -50,7 +50,7 @@ declare const __APP_VIEWER_STYLE__: "plain" | "studio";
 
 // The floating chrome the camera fit clears — see chromeInsets below for what
 // qualifies and what deliberately doesn't.
-const CHROME_SELECTORS = [".mobile-top-bar", ".action-dock", ".viewer-hud", ".dimension-info"];
+const CHROME_SELECTORS = [".mobile-top-bar", ".action-dock", ".viewer-hud"];
 
 // Axis-aligned bounding-box size of the rendered model, in millimetres (the
 // design's own units, kept 1:1 by the loaders). Reported via Viewer's onMeasure.
@@ -214,11 +214,6 @@ export const Viewer = forwardRef<
     reframeOnPreset?: boolean;
     /** Overlay arrowed dimension lines (W × D × H) around the model's bounding box. */
     showDimensions?: boolean;
-    /** Whether the measurements panel is folded. The viewer doesn't draw that
-     *  panel — it reads this only as a signal to re-fit, because folding and
-     *  unfolding changes how much of the canvas the panel covers, and the
-     *  camera fit clears the chrome (see chromeInsets). */
-    measureCollapsed?: boolean;
     /** The standard camera view to frame new models / Reset view with. */
     view?: ViewName;
     /** Whether the reference grid is drawn (default off). The HUD's grid
@@ -235,7 +230,7 @@ export const Viewer = forwardRef<
      *  position (px) relative to the viewer's top-left. A miss does nothing. */
     onModelPick?: (pos: { x: number; y: number }) => void;
   }
->(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, measureCollapsed = false, view = DEFAULT_VIEW, showGrid = false, onMeasure, editable = false, onModelPick }, ref) {
+>(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, view = DEFAULT_VIEW, showGrid = false, onMeasure, editable = false, onModelPick }, ref) {
   // Latest selected view, read inside the [stl]-only reframe effect and the
   // imperative handle without re-running them.
   const viewRef = useRef(view);
@@ -245,14 +240,9 @@ export const Viewer = forwardRef<
   // Keep the latest onMeasure without re-running the [stl]-only geometry effect.
   const onMeasureRef = useRef(onMeasure);
   onMeasureRef.current = onMeasure;
-  // Latest dimension-overlay visibility, read by the framing (the callouts are
-  // drawn outside the mesh's own box, so they change what has to be fitted)
-  // from call sites that must not close over a stale prop — notably the
-  // ResizeObserver, which is created once in the setup effect below.
-  const showDimensionsRef = useRef(showDimensions);
-  showDimensionsRef.current = showDimensions;
-  // Same reason, for the resize re-fit itself: the observer is created once,
-  // but refitView closes over props that change every render.
+  // The resize re-fit, kept fresh for the ResizeObserver: the observer is
+  // created once in the setup effect below, but refitView closes over refs and
+  // props that change every render.
   const refitRef = useRef<() => void>(() => {});
   // Latest on-model-edit props, read inside the one-time setup effect's pointer
   // handlers (which have no deps) without re-running setup.
@@ -301,8 +291,15 @@ export const Viewer = forwardRef<
   // never both (see AppShell.tsx's M7) — so plain, unscoped queries are safe.
   //
   // Deliberately NOT listed: the transient chips (`.viewer-hint`,
-  // `.sheet-hint`, the stale/updating banner). They come and go on their own
-  // timers, and insetting for them would jog the camera when they appear.
+  // `.sheet-hint`, the stale/updating banner), which come and go on their own
+  // timers, so insetting for them would jog the camera when they appear — and
+  // the measurements panel (`.dimension-info`), because the ruler must not
+  // move the model AT ALL. The point of the ruler is reading the callouts on
+  // the model at the size you were already looking at it; shrinking the model
+  // to make room for the panel (or for the callouts, which are drawn outside
+  // the mesh's own box) trades away the thing being measured for the label
+  // about it. The panel stays clear of the model by being folded to a header
+  // strip on mobile and transparent to pointers instead — see DimensionInfo.
   function chromeInsets(mount: HTMLElement): Insets {
     const canvas = mount.getBoundingClientRect();
     const insets: Insets[] = [];
@@ -321,19 +318,17 @@ export const Viewer = forwardRef<
   // reproduces that effect's own math (translation only, so `size` alone is
   // enough to reconstruct it).
   //
-  // With the dimension overlay on, the box grows by the callouts' own reach
-  // (see dimensions.ts): they are drawn outside the mesh's bounds, so fitting
-  // the bare mesh box pushed the outer "NN.N mm" labels off the canvas edges.
-  function framedBox(size: THREE.Vector3, annotated: boolean): Box3Like {
-    const margin = annotated ? dimensionOverlayMargin(size) : { lateral: 0, front: 0 };
-    const halfX = size.x / 2 + margin.lateral;
-    const minY = -size.y / 2 - margin.front;
-    const maxY = size.y / 2;
+  // Always the mesh's own box: the dimension overlay's callouts are drawn
+  // outside it and are deliberately NOT fitted (see chromeInsets), so the
+  // model keeps its size whether the ruler is on or off.
+  function framedBox(size: THREE.Vector3): Box3Like {
+    const halfX = size.x / 2;
+    const halfY = size.y / 2;
     return __APP_REST_ON_GRID__
-      ? { min: new THREE.Vector3(-halfX, minY, 0), max: new THREE.Vector3(halfX, maxY, size.z) }
+      ? { min: new THREE.Vector3(-halfX, -halfY, 0), max: new THREE.Vector3(halfX, halfY, size.z) }
       : {
-          min: new THREE.Vector3(-halfX, minY, -size.z / 2),
-          max: new THREE.Vector3(halfX, maxY, size.z / 2),
+          min: new THREE.Vector3(-halfX, -halfY, -size.z / 2),
+          max: new THREE.Vector3(halfX, halfY, size.z / 2),
         };
   }
 
@@ -366,7 +361,7 @@ export const Viewer = forwardRef<
     const h = mount.clientHeight;
     if (w <= 0 || h <= 0) return;
 
-    const box = framedBox(size, showDimensionsRef.current);
+    const box = framedBox(size);
     const insets = chromeInsets(mount);
     // Shrink the fit targets to the region the chrome leaves clear, so the
     // box-fit solve asks for a distance that fits the model into THAT, not
@@ -892,28 +887,12 @@ export const Viewer = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
-  // Show/hide the dimension overlay on toggle (geometry stays put).
+  // Show/hide the dimension overlay on toggle (geometry stays put — and so
+  // does the camera: the ruler never re-frames, see chromeInsets).
   useEffect(() => {
     syncDimensions(showDimensions);
-    // Re-fit: the toggle changes both what has to be framed (the callouts sit
-    // outside the mesh's box) and what covers the canvas (the measurements
-    // panel, which mounts in the same commit, so it is already measurable
-    // here). The camera does move on this toggle — deliberately: turning
-    // callouts on and leaving them cropped off the canvas edge would be the
-    // worse trade.
-    refitView();
     requestRenderRef.current();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showDimensions]);
-
-  // Folding/unfolding the measurements panel changes how much canvas it
-  // covers, so the model re-centres in what's left. No overlay rebuild here —
-  // the 3D callouts are unaffected — just the fit.
-  useEffect(() => {
-    refitView();
-    requestRenderRef.current();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measureCollapsed]);
 
   // Show/hide the reference grid on toggle (geometry stays put). Invalidating a
   // frame is the whole cost: under the studio style the contact shadow is NOT

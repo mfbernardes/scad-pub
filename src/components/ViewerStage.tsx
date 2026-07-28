@@ -136,7 +136,6 @@ export function ViewerStage({
               presetId={selectedPreset}
               reframeOnPreset={reframeOnPreset}
               showDimensions={showDimensions}
-              measureCollapsed={measureCollapsed}
               showGrid={showGrid}
               view={view}
               onMeasure={onMeasure}

@@ -185,12 +185,11 @@ export const MIN_USABLE_FRACTION = 0.55;
  * a full-width top bar as a top inset.
  *
  * Overlays that don't overlap the canvas at all contribute nothing. An
- * overlay pinned to a CORNER (the measurements panel) is the case this rule
- * handles least well — it is genuinely a corner box, not an edge band, and
- * whichever edge wins over-counts the other axis. That's why the panel is
- * collapsed by default on mobile (see DimensionInfo/viewerPrefs): as a short
- * header strip its "nearest edge" reading is honest, where the expanded
- * panel's would not be.
+ * overlay pinned to a CORNER would be the case this rule handles least well —
+ * it is genuinely a corner box, not an edge band, so whichever edge wins
+ * over-counts the other axis. Nothing passed here today is one: the viewer's
+ * only corner overlay is the measurements panel, which is deliberately left
+ * out of the fit entirely (see Viewer.tsx's chromeInsets).
  */
 export function edgeInset(overlay: RectLike, canvas: RectLike): Insets {
   const width = canvas.right - canvas.left;

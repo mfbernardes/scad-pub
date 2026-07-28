@@ -155,9 +155,9 @@ test("cameraBasis stays finite for a near-top view (direction parallel to world-
 
 // ── Chrome insets ───────────────────────────────────────────────────────
 // The measured mobile geometry these cases use (390x785 canvas at the sheet's
-// peek detent, and the four overlays over it) comes from the built app driven
-// at a 390x844 viewport — so the "reads as a <edge> inset" expectations below
-// are the real chrome, not invented rectangles.
+// peek detent, and the overlays over it) comes from the built app driven at a
+// 390x844 viewport — so the "reads as a <edge> inset" expectations below are
+// the real chrome, not invented rectangles.
 
 const CANVAS = rect(0, 0, 390, 785);
 
@@ -173,7 +173,12 @@ test("edgeInset: a full-width top bar reads as a top inset", () => {
   assert.deepEqual(edgeInset(rect(0, 0, 390, 58), CANVAS), insets({ top: 58 }));
 });
 
-test("edgeInset: a folded top-left measurements panel reads as a top inset to its lower edge", () => {
+test("edgeInset: a top-left corner box reads as a top inset down to its lower edge", () => {
+  // The nearest-edge rule at its weakest: a corner box has no single honest
+  // edge, and the loser's axis is over-counted. Nothing the viewer feeds in is
+  // one — the measurements panel, its only corner overlay, is left out of the
+  // fit entirely (Viewer.tsx's chromeInsets) — but the behaviour is pinned
+  // here so a future caller knows what it would get.
   assert.deepEqual(edgeInset(rect(12, 64, 278, 36), CANVAS), insets({ top: 100 }));
 });
 
