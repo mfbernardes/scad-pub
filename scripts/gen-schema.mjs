@@ -691,6 +691,51 @@ function resolveDefaultDesign(config, designs) {
   return config.defaultDesign;
 }
 
+// Explicit `assets` used to make the use/include walk (collectDeps) entirely
+// unnecessary — gen-schema trusted the configured set completely and never
+// checked it against what a design's `use`/`include` graph actually reaches.
+// That let a design whose graph goes further than `assets` (an entry the
+// operator forgot to add, or one they trimmed on purpose expecting a
+// narrower dependency set than the design really has) build green and fail
+// only once the OpenSCAD-WASM worker tries to mount it in someone's browser
+// — the render sandbox mounts exactly `assets` (plus each design's own
+// file), nothing more. generate() now runs collectDeps unconditionally (see
+// its own comment) so this can be checked at build time instead, matching
+// gen-schema's fail-fast stance everywhere else: a warning here would just be
+// a slower version of the same runtime failure.
+//
+// `walkedByDesign` is `[{ id, deps: Set<relPosixPath> }]`, one entry per
+// design, from generate()'s unconditional collectDeps pass. `assets` is the
+// already-expanded configured set (expandConfiguredAssets' return value,
+// turned into the accumulating Set generate() builds). Deliberately a
+// DISTINCT error from collectDeps' own "dependency ... not found": that one
+// already fired, with its own message, for any walked target missing from
+// disk entirely (collectDeps' existence check runs during the walk itself,
+// before this function ever sees the result) — so every `dep` reaching this
+// point is known to exist on disk. This is the other failure mode: it exists,
+// but isn't in the set gen-schema was told to bundle.
+function checkAssetCoverage(designs, walkedByDesign, assets) {
+  // A design's use/include graph may legitimately reach another design's own
+  // .scad file — buildDesigns/copyAsset already stages every design file
+  // regardless of `assets`, so that's covered too, not just the configured set.
+  const designFiles = new Set(designs.map((d) => d.file));
+  const uncovered = walkedByDesign
+    .map(({ id, deps }) => ({
+      id,
+      missing: [...deps].filter((dep) => !assets.has(dep) && !designFiles.has(dep)),
+    }))
+    .filter(({ missing }) => missing.length);
+  if (!uncovered.length) return;
+  throw new Error(
+    `gen-schema: design use/include dependencies not covered by 'assets':\n` +
+      uncovered.map(({ id, missing }) => `  design '${id}': ${missing.join(", ")}`).join("\n") +
+      `\n  (each is reached by a use/include but missing from the configured 'assets' — add it, ` +
+      `a directory/glob that matches it, or remove the use/include)\n` +
+      `  (a dependency missing from disk entirely fails earlier, during the walk itself, with its own ` +
+      `"dependency ... not found" error — this one only ever names a file that DOES exist)`
+  );
+}
+
 // Resolve one help "pane" — the top-level `help` object itself, or a single
 // `help.tabs[]` entry — against its optional `file` key (see docs/config.md
 // "Sourcing help from Markdown files" and scripts/lib/help-file.mjs). `file`
@@ -1079,11 +1124,23 @@ export function generate({
 
   // Shared dependency files: from the config's `assets` (files/directories) when
   // given, otherwise discovered by following each design's use/include graph.
+  //
+  // Either way, the use/include graph is now ALWAYS walked (collectDeps) —
+  // even when `assets` is explicit — purely to check it against the
+  // configured set below (checkAssetCoverage); explicit `assets` still wins
+  // as the actual set of files copied. See checkAssetCoverage's own comment
+  // for why this closes a real silent-failure gap, and for how its error
+  // stays distinct from collectDeps' own "not found" (a dependency missing
+  // from disk, not merely missing from `assets`) — that one can still throw
+  // right here, unchanged, since collectDeps runs its existence check
+  // regardless of which branch below ends up using the result.
   const assets = new Set();
+  const walkedByDesign = designs.map((d) => ({ id: d.id, deps: collectDeps(d.abs) }));
   if (Array.isArray(config.assets) && config.assets.length) {
     for (const a of expandConfiguredAssets(config.assets)) assets.add(a);
+    checkAssetCoverage(designs, walkedByDesign, assets);
   } else {
-    for (const d of designs) for (const dep of collectDeps(d.abs)) assets.add(dep);
+    for (const { deps } of walkedByDesign) for (const dep of deps) assets.add(dep);
   }
   for (const a of assets) copyAsset(a);
 

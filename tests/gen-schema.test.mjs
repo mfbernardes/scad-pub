@@ -660,6 +660,51 @@ test("a missing use/include target names the missing path and the referencing fi
   );
 });
 
+// ── explicit `assets` no longer skips the use/include walk entirely ────────
+//
+// Before this, an explicit `assets` list made collectDeps irrelevant: a
+// design whose use/include graph reached a file the operator forgot to list
+// (or deliberately left out) built green and only failed once the
+// OpenSCAD-WASM worker tried to mount it in a browser, since the render
+// sandbox only ever gets the configured `assets`. generate() now always
+// walks (collectDeps), then — only in explicit-assets mode — checks the walk
+// against the configured set.
+
+test("explicit `assets` that omits a use/include dependency fails the build with a distinct coverage error", () => {
+  // widget.scad -> lib/core.scad -> lib/util.scad (collectDeps' own walk);
+  // this fixture's `assets` covers only lib/util.scad, so lib/core.scad is
+  // reachable but not bundled — exactly the gap checkAssetCoverage exists for.
+  let caught;
+  try {
+    run("widget-assets-missing-dep.config.json");
+  } catch (err) {
+    caught = err;
+  }
+  assert.ok(caught, "expected generate() to throw");
+  // Names both the design id and the missing relative path.
+  assert.match(caught.message, /design 'widget'/);
+  assert.match(caught.message, /lib\/core\.scad/);
+  // A distinct diagnosis from collectDeps' own "dependency '...' not found:
+  // ... (referenced by ...)" (a dependency missing from disk entirely) — this
+  // dependency DOES exist on disk, it's just not in `assets`, so the two
+  // causes must never read the same. (collectDeps' message is quoted, for
+  // context, inside this error's own explanatory parenthetical, so match on
+  // its distinguishing "referenced by" rather than the more generic "not
+  // found" text that quoting necessarily repeats.)
+  assert.match(caught.message, /not covered by 'assets'/);
+  assert.doesNotMatch(caught.message, /referenced by/);
+});
+
+test("explicit `assets` that DOES cover every use/include dependency still builds (no false positive)", () => {
+  // widget-glob.config.json's `assets` ("lib/*.scad", "**/*.svg") covers both
+  // of widget.scad's walked dependencies (lib/core.scad, lib/util.scad) plus
+  // its @icon asset — see the "assets: globs match files" test above for the
+  // full assertion. Re-run here only to pin down that adding the coverage
+  // check didn't turn a previously-green explicit-assets build red.
+  const { schema } = run("widget-glob.config.json");
+  assert.deepEqual(schema.assets, ["assets/emblem.svg", "lib/core.scad", "lib/util.scad"]);
+});
+
 test("schema.json is written to the output dir", () => {
   const { out } = run("widget.config.json");
   const written = JSON.parse(
