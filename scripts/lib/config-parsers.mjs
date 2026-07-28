@@ -210,13 +210,18 @@ export function parseDir(raw) {
 // The model formats OpenSCAD can export and the viewer can parse.
 const FORMATS = ["3mf", "stl"];
 
-// Validate the optional `format` config key. "3mf" (the default) carries
-// per-object colour; "stl" is geometry-only. Fail fast on anything else.
-export function parseFormat(raw) {
+// Validate the optional `render.format` config key. "3mf" (the default)
+// carries per-object colour; "stl" is geometry-only. Fail fast on anything
+// else. `path` is the caller-supplied dotted path (default "render.format",
+// the field's only home since this reorg), so the message can't drift from
+// the key the way it did when `format` moved under `render` and this message
+// stayed "config.format must be..." — also brings this message in line with
+// every other one in this file, which route through `messagePrefix`.
+export function parseFormat(raw, path = "render.format") {
   if (raw == null) return "3mf";
   if (!FORMATS.includes(raw))
     throw new Error(
-      `config.format must be one of ${FORMATS.map((f) => `"${f}"`).join(", ")} (got ${JSON.stringify(raw)})`
+      `${messagePrefix(path)} must be one of ${FORMATS.map((f) => `"${f}"`).join(", ")} (got ${JSON.stringify(raw)})`
     );
   return raw;
 }
@@ -358,9 +363,11 @@ export function parseRender(raw) {
 // entry must be a non-empty string. Used for values interpolated verbatim
 // into generated output (the manifest, `--enable` render flags), so a stray
 // non-string would otherwise surface as a cryptic downstream failure instead
-// of a clear config error. `key` is the bare name used in the error message
-// (not a dotted path — these predate, and stay independent of, the
-// dotted-path convention `applyGroupSpec`-driven fields use).
+// of a clear config error. `key` is whatever the caller passes for the error
+// message — `render.features` passes its full dotted path (see this reorg's
+// move of `features` under `render`, and config-parsers.mjs's own
+// `messagePrefix`, for why a stale bare name is worth avoiding); `categories`
+// keeps its pre-existing bare name since it reads the same either way.
 export function parseStringArray(raw, key) {
   if (raw === undefined) return [];
   if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string" || !v.trim()))

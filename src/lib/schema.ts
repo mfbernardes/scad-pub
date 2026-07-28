@@ -47,6 +47,7 @@ export const PANEL_DEFAULTS = ["open", "collapsed"];
 export const OUTPUT_DEFAULTS = ["closed", "open"];
 export const VIEWER_STYLES = ["plain", "studio"];
 export const VIEWER_GRID_DEFAULTS = ["off", "on"];
+export const INSTALL_MODES = ["auto", "off"];
 
 function fail(msg: string): never {
   throw new Error(`Invalid designs schema: ${msg}`);
@@ -277,6 +278,10 @@ export function validateSchema(raw: unknown): Schema {
   }
   if (s.extraCss != null && typeof s.extraCss !== "string")
     fail("'extraCss' must be a string URL or null");
+  if (s.themeColor !== undefined && typeof s.themeColor !== "string")
+    fail("'themeColor' must be a string");
+  if (s.themeColorLight !== undefined && typeof s.themeColorLight !== "string")
+    fail("'themeColorLight' must be a string");
   if (s.ui != null) {
     if (typeof s.ui !== "object" || Array.isArray(s.ui)) fail("'ui' must be an object or null");
     const ui = s.ui as Record<string, unknown>;
@@ -286,13 +291,22 @@ export function validateSchema(raw: unknown): Schema {
       fail("'ui.panelDefault' must be \"open\" or \"collapsed\"");
     if (ui.outputDefault !== undefined && !OUTPUT_DEFAULTS.includes(ui.outputDefault as string))
       fail("'ui.outputDefault' must be \"closed\" or \"open\"");
-    if (ui.install !== undefined && !["auto", "off"].includes(ui.install as string))
+    if (ui.install !== undefined && !INSTALL_MODES.includes(ui.install as string))
       fail("'ui.install' must be \"auto\" or \"off\"");
     if (ui.showVarName !== undefined && typeof ui.showVarName !== "boolean")
       fail("'ui.showVarName' must be a boolean");
+    if (ui.saveImage !== undefined && typeof ui.saveImage !== "boolean")
+      fail("'ui.saveImage' must be a boolean");
     for (const key of ["gallery", "essentials"] as const)
       if (ui[key] !== undefined && typeof ui[key] !== "boolean")
         fail(`'ui.${key}' must be a boolean`);
+    if (ui.afterExport != null) {
+      if (typeof ui.afterExport !== "object" || Array.isArray(ui.afterExport))
+        fail("'ui.afterExport' must be an object");
+      const ae = ui.afterExport as Record<string, unknown>;
+      if (ae.helpTab !== undefined && typeof ae.helpTab !== "string")
+        fail("'ui.afterExport.helpTab' must be a string");
+    }
   }
   // The 3D viewer's presentation, framing, and per-control visibility. Unlike
   // `ui` above this is required (see the Schema/ViewerConfig types) — every

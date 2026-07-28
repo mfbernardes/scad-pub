@@ -510,7 +510,7 @@ The optional `ui` object is validated as a unit, and defaults apply when it is a
 - **`panelDefault`**: `"open"` by default, or `"collapsed"`. Sets the first-load desktop panel state. The later browser choice persists
 - **`outputDefault`**: `"closed"` by default, or `"open"`. Controls whether the OpenSCAD output console starts open
 - **`showVarName`**: `false` by default, or `true`. Shows the underlying OpenSCAD variable name beside each parameter label. Hidden by default because it is developer detail; set `true` for a technical audience. Every parameter row always carries a `data-param="<var>"` attribute for smoke tests and `extraCss`
-- **`saveImage`**: `true` by default, or `false`. Controls the "Save image (PNG)" action in the secondary-action surfaces (the desktop command bar and the mobile ⋮ overflow menu). Set `false` to hide the Save-image action entirely
+- **`saveImage`**: no config-level default — absent, like `true`, leaves the "Save image (PNG)" action shown (the app itself only hides it on an explicit `false`); there's no other observable difference between omitting the key and setting it `true`. Controls the action in the secondary-action surfaces (the desktop command bar and the mobile ⋮ overflow menu). Set `false` to hide the Save-image action entirely
 - **`gallery`**: `false` by default. Replaces the compact design dropdown with a searchable card grid using each design's `image`, then `icon`, then a letter fallback
 - **`essentials`**: `false` by default. Starts with `// @advanced` parameters hidden behind **Show all settings**
 - **`afterExport`**: turns on the inline after-export success panel. Absent by default (no panel). See [After-export panel (`ui.afterExport`)](#after-export-panel-uiafterexport)

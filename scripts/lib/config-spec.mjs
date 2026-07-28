@@ -35,10 +35,28 @@
 // `applyGroupSpec`; it exists purely so unknown-*top-level*-key rejection and
 // `gen-config-schema.mjs` cover them. Their node carries `custom: true` as a
 // marker for "the runtime behaviour lives elsewhere, don't try to derive it
-// from this shape" — `gen-config-schema.mjs` also reads this marker to decide
-// whether a node's JSON Schema tolerates an unrecognised key (`custom: true`,
-// matching those parsers' own leniency) or rejects one (every other object
-// node here, all of which `applyGroupSpec` makes genuinely closed at runtime).
+// from this shape" — nothing more than that.
+//
+// Whether the emitted JSON Schema tolerates an unrecognised key is a SEPARATE
+// question, decided by its own marker, `openKeys: true` (see
+// gen-config-schema.mjs's `objectSchema`) — NOT by `custom`. Most bespoke
+// parsers are exactly as closed as an `applyGroupSpec`-driven node, they just
+// enforce it by hand instead: `designs.items` (gen-schema.mjs's own
+// `unknownNestedKeyError` loop over a design's keys), `colors.light`/
+// `colors.dark` (parseColors throws on any token outside `COLOR_TOKENS`), and
+// `pwa.themeColor`'s object form (parsePwaThemeColor throws on any key but
+// `light`/`dark`) all genuinely reject an unknown key, so none of them carry
+// `openKeys` — a config author relying on this schema for autocomplete should
+// not see a typo here silently accepted. `openKeys` is reserved for the
+// genuine exceptions: the parent `colors` object (parseColors reads only
+// `light`/`dark` off it, silently ignoring anything else — contrast its own
+// `light`/`dark` children, above), a `licenses[]`/`notices[]` entry
+// (parseLicenses/parseNotices copy the fields they know and silently drop the
+// rest, never rejecting), `logo`'s object form (copyLogoAssets reads `light`/
+// `dark` only, same silent-drop), and `strings`/`help` (a genuinely
+// open-ended key space — every i18n catalogue key, or whatever shape a help
+// pane takes — with no fixed property list to close against in the first
+// place).
 //
 // ── Field-descriptor shapes used by `properties` entries ────────────────────
 // Every property is at minimum { type, description }. `applyGroupSpec` (see
@@ -106,12 +124,23 @@ const num = (extra = {}) => ({
 // plain `str()`) because `pwa.backgroundColor` and `pwa.themeColor`'s own
 // `light`/`dark` children are genuinely generic scalar fields once `pwa` is
 // applyGroupSpec-driven — see validateFieldValue's "color" case in
-// ./config-parsers.mjs, which owns COLOR_VALUE_RE.
-const color = (defaultValue, extra = {}) => ({
-  type: "color",
-  default: defaultValue,
-  ...extra,
-});
+// ./config-parsers.mjs, which owns COLOR_VALUE_RE. `type: "color"` is real
+// for THAT dispatch (config-parsers.mjs's own switch), but "color" isn't a
+// legal JSON Schema type, so gen-config-schema.mjs's `nodeToSchema` maps it
+// to a plain `"string"` for emission — this factory folds the "this is a CSS
+// colour, not any string" meaning into the description instead, so it isn't
+// lost when the type collapses.
+const color = (defaultValue, extra = {}) => {
+  const { description, ...rest } = extra;
+  return {
+    type: "color",
+    default: defaultValue,
+    description: description
+      ? `${description} A CSS colour string (hex, rgb()/rgba()/hsl()/hsla(), or a named colour).`
+      : "A CSS colour string (hex, rgb()/rgba()/hsl()/hsla(), or a named colour).",
+    ...rest,
+  };
+};
 
 // The "<field>File" companion of a prose field resolved by gen-schema's
 // prose-file pre-pass (scripts/lib/prose-files.mjs) or, for `licenses[].text`,
@@ -462,6 +491,10 @@ export const CONFIG_SPEC = {
   logo: {
     type: "string",
     custom: true,
+    // copyLogoAssets (scripts/gen-schema.mjs) reads only `light`/`dark` off
+    // the object form and silently ignores anything else — genuinely open,
+    // unlike `colors.light`/`colors.dark` below.
+    openKeys: true,
     description: "Header logo: a path, or { light, dark } per-theme paths (config-relative).",
     properties: {
       light: { type: "string", description: "Logo path used in the light theme." },
@@ -471,6 +504,11 @@ export const CONFIG_SPEC = {
   colors: {
     type: "object",
     custom: true,
+    // parseColors (scripts/lib/config-parsers.mjs) reads only `light`/`dark`
+    // off this object and silently ignores anything else — genuinely open,
+    // unlike its own `light`/`dark` children just below, which throw on any
+    // token outside COLOR_TOKENS and so do NOT carry `openKeys`.
+    openKeys: true,
     description: "Optional per-theme CSS colour/design-token overrides.",
     properties: {
       light: { type: "object", custom: true, properties: Object.fromEntries(COLOR_TOKENS.map((t) => [t, { type: "string" }])) },
@@ -574,6 +612,11 @@ export const CONFIG_SPEC = {
   help: {
     type: "object",
     custom: true,
+    // Passed through verbatim (see the description below) — a genuinely
+    // open-ended shape with no fixed property list to close against, so this
+    // carries no `properties` of its own and `openKeys` is documentation more
+    // than mechanism here (see this file's file-top comment).
+    openKeys: true,
     description:
       "Help dialog content: 'sections' for a single pane, or 'tabs' for a tabbed guide. A pane (the top-level " +
       "object, or any 'tabs[]' entry) may set 'file' instead of 'sections' — a config-relative Markdown file " +
@@ -587,6 +630,9 @@ export const CONFIG_SPEC = {
     items: {
       type: "object",
       custom: true,
+      // parseNotices (scripts/lib/config-parsers.mjs) copies the fields it
+      // knows about and silently drops anything else — genuinely open.
+      openKeys: true,
       properties: {
         marker: { type: "string", description: "Design-defined word matched as ': <marker>:' inside an echo (case-insensitive)." },
         label: {
@@ -609,6 +655,10 @@ export const CONFIG_SPEC = {
     items: {
       type: "object",
       custom: true,
+      // parseLicenses (scripts/lib/config-parsers.mjs) copies the required
+      // and optional fields it knows about and silently drops anything else
+      // — genuinely open, same as `notices[]` above.
+      openKeys: true,
       properties: {
         name: { type: "string", description: "Component name." },
         license: { type: "string", description: "SPDX identifier." },
@@ -639,6 +689,11 @@ export const CONFIG_SPEC = {
   strings: {
     type: "object",
     custom: true,
+    // Keyed by the i18n catalogue's own key set (parseStrings validates
+    // against it, not against a fixed property list here) — a genuinely
+    // open-ended key space, like `help` above; no `properties` of its own, so
+    // `openKeys` is documentation more than mechanism here too.
+    openKeys: true,
     description: "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys.",
   },
 };

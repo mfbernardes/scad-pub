@@ -402,3 +402,48 @@ test("validates the optional popup shape", () => {
     /'popup\.button', when set, must be a non-empty string/
   );
 });
+
+test("validates the optional ui.saveImage flag", () => {
+  // absent is fine (the app treats it as true).
+  assert.doesNotThrow(() => validateSchema(validBase()));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { saveImage: false } }));
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { saveImage: "no" } }),
+    /'ui\.saveImage' must be a boolean/
+  );
+});
+
+test("validates the optional ui.afterExport panel", () => {
+  // null/absent is fine (the panel is off).
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { afterExport: null } }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { afterExport: {} } }));
+  assert.doesNotThrow(() =>
+    validateSchema({ ...validBase(), ui: { afterExport: { helpTab: "Printing" } } })
+  );
+  // not an object.
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { afterExport: [] } }),
+    /'ui\.afterExport' must be an object/
+  );
+  // non-string helpTab.
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { afterExport: { helpTab: 5 } } }),
+    /'ui\.afterExport\.helpTab' must be a string/
+  );
+});
+
+test("validates the optional themeColor/themeColorLight strings", () => {
+  // absent is fine (the app falls back to its own defaults).
+  assert.doesNotThrow(() => validateSchema(validBase()));
+  assert.doesNotThrow(() =>
+    validateSchema({ ...validBase(), themeColor: "#1f2229", themeColorLight: "#ffffff" })
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), themeColor: 123 }),
+    /'themeColor' must be a string/
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), themeColorLight: 123 }),
+    /'themeColorLight' must be a string/
+  );
+});

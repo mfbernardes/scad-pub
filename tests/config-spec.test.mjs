@@ -19,6 +19,7 @@ import {
   OUTPUT_DEFAULTS,
   VIEWER_STYLES,
   VIEWER_GRID_DEFAULTS,
+  INSTALL_MODES,
 } from "../src/lib/schema.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -135,6 +136,7 @@ const ENUM_CROSS_CHECKS = [
   ["ui.outputDefault", OUTPUT_DEFAULTS, CONFIG_SPEC.ui.properties.outputDefault.values],
   ["viewer.style", VIEWER_STYLES, CONFIG_SPEC.viewer.properties.style.values],
   ["viewer.grid", VIEWER_GRID_DEFAULTS, CONFIG_SPEC.viewer.properties.grid.values],
+  ["pwa.install", INSTALL_MODES, CONFIG_SPEC.pwa.properties.install.values],
 ];
 
 test("src/lib/schema.ts's hand-typed enum lists match config-spec.mjs", () => {

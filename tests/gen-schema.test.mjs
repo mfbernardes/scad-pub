@@ -782,7 +782,7 @@ test("'categories' must be an array of strings when present", () => {
 test("'features' must be an array of strings when present", () => {
   assert.throws(
     () => run("widget-bad-features.config.json"),
-    /'features' must be an array of non-empty strings/
+    /'render\.features' must be an array of non-empty strings/
   );
 });
 
@@ -848,8 +848,8 @@ test("format defaults to 3mf, accepts stl, and rejects anything else", () => {
   assert.equal(parseFormat(null), "3mf");
   assert.equal(parseFormat("3mf"), "3mf");
   assert.equal(parseFormat("stl"), "stl");
-  assert.throws(() => parseFormat("obj"), /config\.format must be/);
-  assert.throws(() => parseFormat("STL"), /config\.format must be/);
+  assert.throws(() => parseFormat("obj"), /'render\.format' must be/);
+  assert.throws(() => parseFormat("STL"), /'render\.format' must be/);
 });
 
 // `viewer` gathers every display-only viewer concern in one place: the
@@ -2200,8 +2200,8 @@ test("parseFontFallback accepts a trimmed string or null; rejects empty", () => 
   assert.equal(parseFontFallback(undefined), null);
   assert.equal(parseFontFallback(null), null);
   assert.equal(parseFontFallback("  Liberation Mono  "), "Liberation Mono");
-  assert.throws(() => parseFontFallback(""), /'fontFallback' must be a non-empty string/);
-  assert.throws(() => parseFontFallback(42), /'fontFallback' must be a non-empty string/);
+  assert.throws(() => parseFontFallback(""), /'render\.fontFallback' must be a non-empty string/);
+  assert.throws(() => parseFontFallback(42), /'render\.fontFallback' must be a non-empty string/);
 });
 
 test("parseStringArray: absent -> [], every entry must be a non-empty string", () => {

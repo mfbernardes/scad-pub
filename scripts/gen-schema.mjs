@@ -237,13 +237,13 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
         throw new Error(
           `gen-schema: font '${entry}' not found:\n  ${srcAbs}\n` +
             `  (and not already present in public/fonts/${name})\n` +
-            `  (referenced from ${configPath} — check its 'fonts')`
+            `  (referenced from ${configPath} — check its 'render.fonts')`
         );
       }
     }
     return name;
   });
-  const FONT_FALLBACK = parseFontFallback(config.render?.fontFallback);
+  const FONT_FALLBACK = parseFontFallback(config.render?.fontFallback, "render.fontFallback");
   const fontsConf = outPublicDir ? renderFontsConf(FONT_FALLBACK) : null;
   // The bundled fonts' real embedded family names, so the app can decide font
   // availability by family rather than filename — plus their face descriptions
@@ -874,8 +874,8 @@ export function generate({
   // folded into renderHash below exactly as before; only their config PATH
   // moved. `render.heavyMs`/`render.cache` are display/perf tuning and stay
   // OUT of renderHash — see CONFIG_SPEC.render's comment and RENDER below.
-  const FEATURES = parseStringArray(config.render?.features, "features");
-  const FORMAT = parseFormat(config.render?.format);
+  const FEATURES = parseStringArray(config.render?.features, "render.features");
+  const FORMAT = parseFormat(config.render?.format, "render.format");
   // The 3D viewer's presentation, framing (restOnGrid) and per-control
   // visibility — all display-only, so VIEWER reaches the schema without
   // touching renderHash.

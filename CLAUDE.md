@@ -141,10 +141,11 @@ model to say it twice.
   title, description, per-scheme `theme-color`, the Apple web-app title and the splash `<link>`s
   into `index.html`, and exposes `__APP_ID__`/`__APP_THEME_COLOR__` as compile-time constants.
 - **Annotations** — `// @showIf`, `// @collapsed`, `// @advanced`, `// @font`, `// @info`,
-  `// @svg`, `// @filledBy`, `// @editOnModel`, the file-level `// @description`/`@icon`/
-  `@image`/`@doc`, and the runtime-only `echo("@info", …)` / `echo("@review", …)` — are parsed
-  by `gen-schema` and invisible to desktop OpenSCAD. [docs/annotations.md](docs/annotations.md)
-  is the reference; a new one lands in the parser and that doc together.
+  `// @svg`, `// @filledBy`, `// @editOnModel`, `// @review "<label>"`, the file-level
+  `// @description`/`@icon`/`@image`/`@doc`/`@reviewNote "<text>"`, and the runtime-only
+  `echo("@info", …)` / `echo("@review", …)` — are parsed by `gen-schema` and invisible to desktop
+  OpenSCAD. [docs/annotations.md](docs/annotations.md) is the reference; a new one lands in the
+  parser and that doc together.
 
 ## Verify UI work by looking at it
 

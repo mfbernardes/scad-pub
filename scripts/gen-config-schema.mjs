@@ -44,13 +44,20 @@ function objectSchema(node) {
   if (required.length) schema.required = required;
   // Every node `applyGroupSpec` drives (the top-level config itself, `ui`,
   // `viewer`, `render`, `render.cache`, `popup`, the object form of
-  // `fileImport`, `ui.afterExport`) is genuinely closed at runtime now — an
-  // unrecognised key always fails the build. The bespoke/`custom` shapes
-  // (`colors`, `designs[]`, `notices[]`, `licenses[]`, …) are the only ones
-  // that still silently tolerate or drop an unrecognised key (see
-  // config-spec.mjs's file-top comment and config-parsers.mjs's
-  // parseColors/parseLicenses/parseNotices), so only those stay open here.
-  schema.additionalProperties = !!node.custom;
+  // `fileImport`/`ui.afterExport`) is genuinely closed at runtime — an
+  // unrecognised key always fails the build. Most bespoke/`custom` shapes are
+  // JUST as closed, their own hand-written validation rejecting a key it
+  // doesn't recognise instead of `applyGroupSpec` doing it for them —
+  // `designs.items`, `colors.light`/`colors.dark`, and `pwa.themeColor`'s
+  // object form are the concrete examples (see config-spec.mjs's file-top
+  // comment). `custom` alone can't tell these apart from a shape that
+  // genuinely tolerates an unrecognised key, so it ISN'T what decides this —
+  // `openKeys: true` is: the separate, explicit marker for a node whose own
+  // validation silently tolerates or drops a key it doesn't recognise
+  // (`colors` itself, a `licenses[]`/`notices[]` entry, `logo`'s object form)
+  // or that has no fixed property list to close against in the first place
+  // (`strings`, `help`).
+  schema.additionalProperties = !!node.openKeys;
   return schema;
 }
 
@@ -65,6 +72,16 @@ function nodeToSchema(node) {
   if ("default" in node) base.default = node.default;
 
   if (node.type === "enum") return { ...base, type: "string", enum: node.values };
+
+  // `"color"` (config-spec.mjs's `color()` factory) is a real, distinct type
+  // for config-parsers.mjs's own validateFieldValue dispatch, but it isn't a
+  // legal JSON Schema type — a schema-consuming editor would reject the
+  // whole document over it. It's just a CSS-colour-flavoured string as far as
+  // shape goes (color()'s description already spells out the colour-string
+  // meaning this collapse would otherwise lose), so it's emitted as "string"
+  // like every other colour-valued field in this config
+  // (`notices[].color`, `logo`, `pwa.themeColor`'s `light`/`dark`).
+  if (node.type === "color") return { ...base, type: "string" };
 
   if (node.type === "array")
     return { ...base, type: "array", items: node.items ? nodeToSchema(node.items) : {} };

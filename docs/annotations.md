@@ -95,7 +95,7 @@ font = "Brand Display:style=Regular"; // ["Brand Display:style=Regular", "Libera
 
 The `// [..]` choice list is what the **desktop** Customizer renders as a dropdown. In the app, listed faces that are not loaded stay visible and selectable in a "Needs a font file" group. That lets a design keep suggesting its preferred face, even when the font is not bundled.
 
-When the selected face's family is not loaded, an inline hint appears beneath the control with two fixes: **Import font…** or a one-click switch to a loaded family. For a flagged dropdown, the fallback is the first listed choice whose family is loaded. See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.
+When the selected face's family is not loaded, an inline hint appears beneath the control with two fixes: **Import font…** or a one-click switch to a loaded family. For a flagged dropdown, the fallback is the first listed choice whose family is loaded. See [Fonts](config.md#fonts-renderfonts-renderfontfallback) for the availability check and the `fontFallback` config key.
 
 ## SVG fields (`// @svg`, `// @filledBy`)
 

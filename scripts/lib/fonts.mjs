@@ -8,15 +8,19 @@ import { xmlEscape } from "./config-parsers.mjs";
 
 export { fontFaces, fontFamilyNames };
 
-// Validate the optional `fontFallback` config key: a family name pinned as the
-// deterministic last-resort match in fonts.conf so an imported font can never
-// become Fontconfig's global default fallback. Must be a bundled family that
-// isn't offered as a selectable lettering font. Absent -> null -> no rule.
-export function parseFontFallback(raw) {
+// Validate the optional `render.fontFallback` config key: a family name
+// pinned as the deterministic last-resort match in fonts.conf so an imported
+// font can never become Fontconfig's global default fallback. Must be a
+// bundled family that isn't offered as a selectable lettering font. Absent ->
+// null -> no rule. `path` is the caller-supplied dotted path (default
+// "render.fontFallback", the field's only home since this reorg) so the
+// message names the real key instead of the stale bare "fontFallback" this
+// used to hard-code.
+export function parseFontFallback(raw, path = "render.fontFallback") {
   if (raw == null) return null;
   if (typeof raw !== "string" || !raw.trim())
     throw new Error(
-      `gen-schema: 'fontFallback' must be a non-empty string (got ${JSON.stringify(raw)})`
+      `gen-schema: '${path}' must be a non-empty string (got ${JSON.stringify(raw)})`
     );
   return raw.trim();
 }
