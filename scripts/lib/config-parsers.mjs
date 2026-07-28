@@ -33,19 +33,30 @@ function defaultRootTypeError(path) {
   return `${messagePrefix(path)} must be an object`;
 }
 
+// The message a plain OPTIONAL string field uses when set to something
+// invalid — factored out of stringFieldError (below) so a hand-rolled check
+// that lives outside applyGroupSpec's field-descriptor machinery can raise
+// the exact same wording instead of inventing its own. The file-backed prose
+// fields (popup.bodyFile/fileImport.noteFile/licenses[].textFile — see
+// prose-files.mjs's resolveFileField — and help.file/help.tabs[].file — see
+// gen-schema.mjs's resolveHelpPane) are exactly that: each is a sibling key
+// to a real field.body/.note/.text/.sections, not a config-spec.mjs field
+// descriptor of its own, so it validates its raw value directly against this
+// same shape before ever resolving a path from it.
+export function optionalStringFieldError(path) {
+  return new Error(`${messagePrefix(path)}, when set, must be a non-empty string`);
+}
+
 // The two string-field message shapes every string field now uses (see
 // config-spec.mjs's file-top comment): a field that's `required` outright, or
-// one that's optional but was set to something invalid. (A third and fourth
-// shape used to exist — "must be a non-empty string" / "must be a string",
-// picked by a per-field `nonBlank` flag — but every string field rejects
-// blank now, so there's no second shape left to pick between.)
+// one that's optional but was set to something invalid (optionalStringFieldError,
+// above). (A third and fourth shape used to exist — "must be a non-empty
+// string" / "must be a string", picked by a per-field `nonBlank` flag — but
+// every string field rejects blank now, so there's no second shape left to
+// pick between.)
 function stringFieldError(path, field) {
-  const prefix = messagePrefix(path);
-  return new Error(
-    field.required
-      ? `${prefix} is required and must be a non-empty string`
-      : `${prefix}, when set, must be a non-empty string`
-  );
+  if (!field.required) return optionalStringFieldError(path);
+  return new Error(`${messagePrefix(path)} is required and must be a non-empty string`);
 }
 
 // The error a nested object's unrecognised key throws, built entirely from
@@ -359,17 +370,21 @@ export function parseRender(raw) {
 }
 
 // A top-level (or, since this reorg, `render`/`pwa`-nested) array-of-strings
-// field (`render.features`, `pwa.categories`): absent -> [], otherwise every
-// entry must be a non-empty string. Used for values interpolated verbatim
-// into generated output (the manifest, `--enable` render flags), so a stray
+// field (`render.features`, `pwa.categories`): absent OR explicit `null` ->
+// [], otherwise every entry must be a non-empty string. `null` reads as
+// "unset" here for the same reason `applyGroupSpec` treats it that way
+// throughout this file (see its own comment): a hand-written JSON config has
+// no comments to delete a line with, so an explicit `null` is how an author
+// says "leave this alone". Used for values interpolated verbatim into
+// generated output (the manifest, `--enable` render flags), so a stray
 // non-string would otherwise surface as a cryptic downstream failure instead
 // of a clear config error. `key` is whatever the caller passes for the error
-// message — `render.features` passes its full dotted path (see this reorg's
-// move of `features` under `render`, and config-parsers.mjs's own
-// `messagePrefix`, for why a stale bare name is worth avoiding); `categories`
-// keeps its pre-existing bare name since it reads the same either way.
+// message — always the field's full dotted config path (`render.features`,
+// `pwa.categories`) so the message can't drift from the key the way
+// `render.features`'s used to before it moved under `render` (see
+// `messagePrefix`).
 export function parseStringArray(raw, key) {
-  if (raw === undefined) return [];
+  if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string" || !v.trim()))
     throw new Error(`gen-schema: '${key}' must be an array of non-empty strings (got ${JSON.stringify(raw)})`);
   return raw;
@@ -417,18 +432,20 @@ export function parsePwaThemeColor(raw) {
 // comment for why none of it is mirrored into designs.json. `shortName`/
 // `icon`/`iconMaskable`/`backgroundColor`/`install` are ordinary
 // applyGroupSpec-driven fields; `themeColor` is bespoke (parsePwaThemeColor,
-// above); `categories` reuses parseStringArray (unchanged message, matching
-// its pre-reorg top-level behaviour); `screenshots`/`shortcuts` are passed
-// through UNVALIDATED here, on purpose — pwa-assets.mjs already tolerates (and
-// silently drops) a malformed entry rather than failing the build, a bit of
-// leniency that predates this reorg and that this function must not turn into
-// a hard failure.
+// above); `categories` reuses parseStringArray, passing its full dotted path
+// 'pwa.categories' (a stale bare 'categories' — left over from before this
+// field moved under `pwa` — was fixed in a later review pass, matching the
+// same fix `render.features` already got); `screenshots`/`shortcuts` are
+// passed through UNVALIDATED here, on purpose — pwa-assets.mjs already
+// tolerates (and silently drops) a malformed entry rather than failing the
+// build, a bit of leniency that predates this reorg and that this function
+// must not turn into a hard failure.
 export function parsePwa(raw) {
   const src = raw ?? {};
   const out = applyGroupSpec(src, CONFIG_SPEC.pwa, "pwa");
   return {
     ...out,
-    categories: parseStringArray(src.categories, "categories"),
+    categories: parseStringArray(src.categories, "pwa.categories"),
     // Passed through EXACTLY as configured (including `undefined` when
     // absent) rather than normalised to `[]`: generatePwaAssets tells "author
     // configured no shortcuts at all" (falls back to deriving one per

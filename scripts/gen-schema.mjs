@@ -60,6 +60,7 @@ import {
   parseUi,
   parseViewer,
   unknownNestedKeyError,
+  optionalStringFieldError,
 } from "./lib/config-parsers.mjs";
 import { KNOWN_TOP_LEVEL_KEYS, CONFIG_SPEC } from "./lib/config-spec.mjs";
 
@@ -635,11 +636,19 @@ function resolveDefaultDesign(config, designs) {
 // naming both keys. A pane with no `file` passes through unchanged.
 function resolveHelpPane(raw, CONFIG_DIR, mustExist, what) {
   if (raw?.file == null) return raw;
+  // Validate BEFORE resolving: same shape as prose-files.mjs's resolveFileField
+  // (this is the same "<field>File" idiom, just with `sections` synthesized
+  // from Markdown instead of a single string) — a non-string or blank value
+  // must fail with the usual optional-string message, not escape as a raw
+  // Node TypeError out of node:path's resolve() below.
+  if (typeof raw.file !== "string" || !raw.file.trim())
+    throw optionalStringFieldError(`${what}.file`);
+  const file = raw.file.trim();
   if (raw.sections != null)
     throw new Error(`gen-schema: both '${what}.sections' and '${what}.file' are set — remove one.`);
   if (raw.intro != null)
     throw new Error(`gen-schema: both '${what}.intro' and '${what}.file' are set — remove one.`);
-  const abs = mustExist(resolve(CONFIG_DIR, raw.file), `${what}.file '${raw.file}'`);
+  const abs = mustExist(resolve(CONFIG_DIR, file), `${what}.file '${file}'`);
   const { intro, sections } = splitHelpMarkdown(readFileSync(abs, "utf-8"));
   const { file: _file, ...rest } = raw;
   return { ...rest, ...(intro ? { intro } : {}), sections };

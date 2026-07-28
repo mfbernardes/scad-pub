@@ -42,6 +42,7 @@ import {
   parseStrings,
   renderFontsConf,
   resolveHelp,
+  resolveFileField,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
 import { componentVersions } from "../scripts/lib/dep-versions.mjs";
@@ -772,11 +773,21 @@ test("rejects an app-level id with unsafe characters", () => {
   assert.throws(() => run("widget-bad-app-id.config.json"), /config 'id' .* must match/);
 });
 
-test("'categories' must be an array of strings when present", () => {
+test("'pwa.categories' must be an array of strings when present", () => {
+  // Asserts the corrected 'pwa.categories' path (not the stale bare
+  // 'categories' this used to say — see parseStringArray's own fix).
   assert.throws(
     () => run("widget-bad-categories.config.json"),
-    /'categories' must be an array of non-empty strings/
+    /'pwa\.categories' must be an array of non-empty strings/
   );
+});
+
+test("'render.features'/'pwa.categories': an explicit null is treated as unset, not an error", () => {
+  // Both used to throw ("must be an array of non-empty strings (got null)")
+  // because parseStringArray only checked `undefined` — every other
+  // render/pwa field already treats null == absent (see applyGroupSpec's own
+  // comment). Building must succeed, matching a config that omits both keys.
+  assert.doesNotThrow(() => run("widget-features-categories-null.config.json"));
 });
 
 test("'features' must be an array of strings when present", () => {
@@ -1437,6 +1448,46 @@ test("resolveHelp: a missing 'file' fails the build with the usual not-found mes
   );
 });
 
+test("resolveHelp: a non-string top-level 'file' fails validation before resolving, not a raw Node error", () => {
+  const mustExist = () => {
+    throw new Error("mustExist should not be called for an invalid 'file' value");
+  };
+  assert.throws(
+    () => resolveHelp({ file: 5 }, "/cfg", mustExist),
+    /'help\.file', when set, must be a non-empty string/
+  );
+});
+
+test("resolveHelp: a blank top-level 'file' fails validation, not a confusing 'not found'", () => {
+  const mustExist = () => {
+    throw new Error("mustExist should not be called for a blank 'file' value");
+  };
+  assert.throws(
+    () => resolveHelp({ file: "   " }, "/cfg", mustExist),
+    /'help\.file', when set, must be a non-empty string/
+  );
+});
+
+test("resolveHelp: a non-string 'help.tabs[].file' fails validation before resolving", () => {
+  const mustExist = () => {
+    throw new Error("mustExist should not be called for an invalid 'file' value");
+  };
+  assert.throws(
+    () => resolveHelp({ tabs: [{ label: "T", file: 5 }] }, "/cfg", mustExist),
+    /'help\.tabs\[0\]\.file', when set, must be a non-empty string/
+  );
+});
+
+test("resolveHelp: a blank 'help.tabs[].file' fails validation before resolving", () => {
+  const mustExist = () => {
+    throw new Error("mustExist should not be called for a blank 'file' value");
+  };
+  assert.throws(
+    () => resolveHelp({ tabs: [{ label: "T", file: "   " }] }, "/cfg", mustExist),
+    /'help\.tabs\[0\]\.file', when set, must be a non-empty string/
+  );
+});
+
 test("licenses: extra entries are appended, sanitised, and unknown keys dropped", () => {
   const { schema } = run("widget-licenses.config.json");
   assert.equal(schema.licenses.length, 2);
@@ -1775,6 +1826,106 @@ test("fileImport.noteFile: the referenced file's contents become 'note'", () => 
   const { schema } = run("widget-fileimport-file.config.json");
   assert.equal(schema.fileImport.note, "Import a font or SVG here.");
   assert.equal("noteFile" in schema.fileImport, false);
+});
+
+// resolveFileField backs popup.bodyFile / fileImport.noteFile /
+// licenses[].textFile alike (see prose-files.mjs) — each call site below
+// mirrors exactly how gen-schema.mjs's generate() wires it (same field/
+// fileField/path), so a non-string or blank value must fail validation
+// with the shared optional-string message BEFORE resolve()/readFileSync()
+// ever sees it, instead of escaping as a raw Node ERR_INVALID_ARG_TYPE.
+const refusingMustExist = () => {
+  throw new Error("mustExist should not be called for an invalid file-field value");
+};
+
+test("resolveFileField: popup.bodyFile — a non-string value fails validation before resolving", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { header: "Notice", bodyFile: 123 },
+        field: "body",
+        fileField: "bodyFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "popup",
+      }),
+    /'popup\.bodyFile', when set, must be a non-empty string/
+  );
+});
+
+test("resolveFileField: popup.bodyFile — a blank value fails validation, not a confusing 'not found'", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { header: "Notice", bodyFile: "   " },
+        field: "body",
+        fileField: "bodyFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "popup",
+      }),
+    /'popup\.bodyFile', when set, must be a non-empty string/
+  );
+});
+
+test("resolveFileField: fileImport.noteFile — a non-string value fails validation before resolving", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { noteFile: 42 },
+        field: "note",
+        fileField: "noteFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "fileImport",
+      }),
+    /'fileImport\.noteFile', when set, must be a non-empty string/
+  );
+});
+
+test("resolveFileField: fileImport.noteFile — a blank value fails validation before resolving", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { noteFile: "   " },
+        field: "note",
+        fileField: "noteFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "fileImport",
+      }),
+    /'fileImport\.noteFile', when set, must be a non-empty string/
+  );
+});
+
+test("resolveFileField: licenses[].textFile — a non-string value fails validation before resolving", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { textFile: 7 },
+        field: "text",
+        fileField: "textFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "licenses[0]",
+      }),
+    /'licenses\[0\]\.textFile', when set, must be a non-empty string/
+  );
+});
+
+test("resolveFileField: licenses[].textFile — a blank value fails validation before resolving", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { textFile: "   " },
+        field: "text",
+        fileField: "textFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "licenses[0]",
+      }),
+    /'licenses\[0\]\.textFile', when set, must be a non-empty string/
+  );
 });
 
 test("parseEnumHint ignores single-item and non-enum hints", () => {
@@ -2204,8 +2355,12 @@ test("parseFontFallback accepts a trimmed string or null; rejects empty", () => 
   assert.throws(() => parseFontFallback(42), /'render\.fontFallback' must be a non-empty string/);
 });
 
-test("parseStringArray: absent -> [], every entry must be a non-empty string", () => {
+test("parseStringArray: absent or null -> [], every entry must be a non-empty string", () => {
   assert.deepEqual(parseStringArray(undefined, "features"), []);
+  // `null` reads as "unset" too, same as every other render/pwa field (see
+  // applyGroupSpec) — it used to only check `undefined` and threw instead.
+  assert.deepEqual(parseStringArray(null, "render.features"), []);
+  assert.deepEqual(parseStringArray(null, "pwa.categories"), []);
   assert.deepEqual(parseStringArray(["a", "b"], "features"), ["a", "b"]);
   assert.throws(() => parseStringArray("a", "features"), /'features' must be an array of non-empty strings/);
   assert.throws(() => parseStringArray([""], "features"), /'features' must be an array of non-empty strings/);

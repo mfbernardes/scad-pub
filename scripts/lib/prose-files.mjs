@@ -18,6 +18,7 @@
 // axis), not a per-field shape one.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { optionalStringFieldError } from "./config-parsers.mjs";
 
 /**
  * Resolve one `<field>`/`<fileField>` pair on a plain object (or `undefined`/
@@ -40,9 +41,14 @@ export function resolveFileField({ obj, field, fileField, CONFIG_DIR, mustExist,
   if (fileRel == null) return obj;
   const fieldPath = `${path}.${field}`;
   const filePath = `${path}.${fileField}`;
+  // Validate BEFORE resolving: a non-string or blank value must fail with the
+  // same message every other optional string field gives, not escape as a
+  // raw Node TypeError out of node:path's resolve()/readFileSync() below.
+  if (typeof fileRel !== "string" || !fileRel.trim()) throw optionalStringFieldError(filePath);
+  const fileTrimmed = fileRel.trim();
   if (obj[field] != null)
     throw new Error(`gen-schema: both '${fieldPath}' and '${filePath}' are set — remove one.`);
-  const abs = mustExist(resolve(CONFIG_DIR, fileRel), `${filePath} '${fileRel}'`);
+  const abs = mustExist(resolve(CONFIG_DIR, fileTrimmed), `${filePath} '${fileTrimmed}'`);
   const content = readFileSync(abs, "utf-8").trim();
   const { [fileField]: _dropped, ...rest } = obj;
   return { ...rest, [field]: content };

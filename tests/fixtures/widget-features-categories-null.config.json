@@ -1,0 +1,6 @@
+{
+  "source": "src",
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": null, "fonts": [] },
+  "pwa": { "categories": null }
+}
