@@ -46,10 +46,15 @@ What follows from that, before you edit anything:
   `precache-manifest.json`) and `public/fonts/fonts.conf` are generated and gitignored. Change
   the config or the sources and re-run. `public/sw.js` and the bundled `.ttf` files are
   hand-maintained and tracked.
-- **Building against an external config leaves files behind.** `gen-schema` copies that
-  config's fonts into `public/fonts/`, where `.ttf` is tracked rather than ignored. After any
-  `SCADPUB_CONFIG=… npm run build`, run `git status` and delete what the build added, or
-  another deployment's font gets committed here.
+- **Building against an external config copies that config's fonts into `public/fonts/`
+  transiently, not permanently.** `.ttf` is tracked rather than ignored there, but
+  `.gen-manifest.json` records the copy, and the *next* build against this checkout's own
+  config removes it again (`reconcileGenerated`, `scripts/lib/destinations.mjs`) — no manual
+  cleanup needed. The real exposure is the window between those two builds: an untracked font
+  sits in a tracked directory, so a `git add -A` in that window commits another deployment's
+  font. Don't commit during that window; if you want the font gone immediately, rebuild against
+  this checkout's own config rather than hand-deleting it. `gen-schema` also warns at the
+  moment of the copy when the risk is real (see `bundleFonts`'s `isRiskyExternalFontCopy`).
 - `renderHash` covers every render-affecting input (mounted `.scad`, bundled fonts, render
   features, `render.format`, the design id→file routing map, the WASM build, `worker.ts` itself
   — see `scripts/lib/hash.mjs`'s `computeRenderHash`) and is folded into the render cache key,
