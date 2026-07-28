@@ -44,6 +44,10 @@ interface Props {
   selectedPreset: string;
   reframeOnPreset?: boolean;
   showDimensions: boolean;
+  /** Whether the measurements panel is folded to its bounding-box headline
+   *  (persisted; starts folded on mobile — see viewerPrefs). */
+  measureCollapsed: boolean;
+  onToggleMeasureCollapsed: () => void;
   /** Whether the viewer draws its reference grid (HUD toggle; see viewerPrefs). */
   showGrid: boolean;
   view: ViewName;
@@ -77,6 +81,8 @@ export function ViewerStage({
   selectedPreset,
   reframeOnPreset,
   showDimensions,
+  measureCollapsed,
+  onToggleMeasureCollapsed,
   showGrid,
   view,
   onMeasure,
@@ -186,6 +192,8 @@ export function ViewerStage({
           values={renderedValues}
           stale={stalePreview}
           computed={computedInfo}
+          collapsed={measureCollapsed}
+          onToggleCollapsed={onToggleMeasureCollapsed}
         />
       )}
 

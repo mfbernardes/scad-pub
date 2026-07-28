@@ -71,7 +71,12 @@ import { usePanelState } from "../lib/usePanelState";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
 import { ns } from "../lib/appId";
 import { readLocal, writeLocal } from "../lib/safeStorage";
-import { GRID_PREF_KEY, initialGridVisible } from "../lib/viewerPrefs";
+import {
+  GRID_PREF_KEY,
+  initialGridVisible,
+  MEASURE_COLLAPSED_KEY,
+  initialMeasureCollapsed,
+} from "../lib/viewerPrefs";
 import { SHEET_INTRODUCED_KEY, initialSheetDetent } from "../lib/sheetPolicy";
 import { SheetSwipeHint } from "./SheetSwipeHint";
 import {
@@ -257,6 +262,22 @@ export const AppShell = memo(function AppShell({
   // choice survives a desktop⇄mobile breakpoint switch.
   const [showDimensions, setShowDimensions] = useState(false);
   const toggleDimensions = useCallback(() => setShowDimensions((v) => !v), []);
+  // Whether that measurements panel is folded to its headline. Held here, not
+  // in DimensionInfo, because the panel unmounts on every ruler-off, cleared
+  // render and design switch — local state made the visitor re-fold it each
+  // time. Starts folded on mobile, where the expanded panel would cover the
+  // model outright (see viewerPrefs' initialMeasureCollapsed); after that the
+  // visitor's own choice persists, like the grid.
+  const [measureCollapsed, setMeasureCollapsed] = useState(() =>
+    initialMeasureCollapsed(readLocal(MEASURE_COLLAPSED_KEY), isMobile)
+  );
+  const toggleMeasureCollapsed = useCallback(() => {
+    setMeasureCollapsed((v) => {
+      const next = !v;
+      writeLocal(MEASURE_COLLAPSED_KEY, next ? "on" : "off");
+      return next;
+    });
+  }, []);
   // Whether the viewer draws its reference grid. Unlike the other HUD controls
   // this isn't config-gated — the button is always offered; `viewer.grid` only
   // seeds the first-ever value, after which the visitor's own choice persists
@@ -581,10 +602,11 @@ export const AppShell = memo(function AppShell({
   }, []);
 
   // Size the mobile viewer to follow the sheet's live height: write the sheet
-  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge (the
-  // Viewer's RAF loop reframes the model into the new box). The CSS caps it at
-  // the half height, and data-sheet-dragging toggles the easing — see
-  // .app-shell__mobile-viewer.
+  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge —
+  // and, through the Viewer's ResizeObserver, re-fits the model into the new
+  // box so it holds its size instead of shrinking with the canvas (see
+  // Viewer.tsx's refitView). The CSS caps it at the half height, and
+  // data-sheet-dragging toggles the easing — see .app-shell__mobile-viewer.
   const handleSheetFollow = useCallback((heightPx: number, dragging: boolean) => {
     const el = mobileRootRef.current;
     if (!el) return;
@@ -689,6 +711,8 @@ export const AppShell = memo(function AppShell({
     theme,
     selectedPreset,
     showDimensions,
+    measureCollapsed,
+    onToggleMeasureCollapsed: toggleMeasureCollapsed,
     showGrid,
     view,
     onMeasure: setMeasured,

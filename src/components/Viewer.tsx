@@ -17,10 +17,14 @@ import { isModelClick } from "@/lib/editOnModel";
 import {
   frameDistanceForBox,
   cameraBasis,
-  insetHeightFraction,
-  insetTargetShift,
+  edgeInset,
+  mergeInsets,
+  clampInsets,
+  insetFitFraction,
+  insetTargetOffset,
   DEFAULT_FIT_FRACTION,
   type Box3Like,
+  type Insets,
 } from "./framing";
 
 // The build-time model format (Vite define; see vite.config.ts). A literal, so
@@ -43,6 +47,10 @@ declare const __APP_REST_ON_GRID__: boolean;
 // prop, seeded by config `viewer.grid` — see src/lib/viewerPrefs.ts), and it
 // is drawn in both styles.
 declare const __APP_VIEWER_STYLE__: "plain" | "studio";
+
+// The floating chrome the camera fit clears — see chromeInsets below for what
+// qualifies and what deliberately doesn't.
+const CHROME_SELECTORS = [".mobile-top-bar", ".action-dock", ".viewer-hud"];
 
 // Axis-aligned bounding-box size of the rendered model, in millimetres (the
 // design's own units, kept 1:1 by the loaders). Reported via Viewer's onMeasure.
@@ -232,6 +240,10 @@ export const Viewer = forwardRef<
   // Keep the latest onMeasure without re-running the [stl]-only geometry effect.
   const onMeasureRef = useRef(onMeasure);
   onMeasureRef.current = onMeasure;
+  // The resize re-fit, kept fresh for the ResizeObserver: the observer is
+  // created once in the setup effect below, but refitView closes over refs and
+  // props that change every render.
+  const refitRef = useRef<() => void>(() => {});
   // Latest on-model-edit props, read inside the one-time setup effect's pointer
   // handlers (which have no deps) without re-running setup.
   const editableRef = useRef(editable);
@@ -267,82 +279,152 @@ export const Viewer = forwardRef<
   // The live dimension-annotation overlay (see dimensions.ts), or null when off.
   const dimGroupRef = useRef<DimensionsGroup | null>(null);
 
-  // The export dock (`.action-dock`) floats over the canvas via CSS
-  // `position: absolute` — it does NOT shrink the canvas's own box the way
-  // the mobile bottom sheet does (`.app-shell__mobile-viewer`'s `bottom:
-  // var(--sheet-top)` already excludes the sheet from `mount`'s own
-  // clientHeight, so that side needs no extra handling here). So the dock is
-  // the one piece of floating chrome the camera fit has to account for
-  // itself: how many pixels of `mount`'s own bottom edge it covers, measured
-  // live from the DOM rather than duplicating its CSS geometry (gap/safe-area
-  // constants) here. Only one `.action-dock` is ever in the document at a
-  // time — AppShell mounts exactly one of the desktop/mobile layouts, never
-  // both (see AppShell.tsx's M7) — so a plain, unscoped query is safe.
-  function dockInsetPx(mount: HTMLElement): number {
-    const dock = document.querySelector<HTMLElement>(".action-dock");
-    if (!dock) return 0;
-    const mountBottom = mount.getBoundingClientRect().bottom;
-    const dockTop = dock.getBoundingClientRect().top;
-    return Math.max(0, mountBottom - dockTop);
+  // Every piece of floating chrome the camera fit has to account for itself.
+  // All of these are CSS `position: absolute` overlays — they do NOT shrink
+  // the canvas's own box the way the mobile bottom sheet does
+  // (`.app-shell__mobile-viewer`'s `bottom: var(--sheet-top)` already excludes
+  // the sheet from `mount`'s own clientHeight, so that side needs no handling
+  // here) — so a model fitted to the full canvas sits partly behind them.
+  // Measured live from the DOM rather than duplicating their CSS geometry
+  // (gap/safe-area constants) here. Only one of each is ever in the document
+  // at a time — AppShell mounts exactly one of the desktop/mobile layouts,
+  // never both (see AppShell.tsx's M7) — so plain, unscoped queries are safe.
+  //
+  // Deliberately NOT listed: the transient chips (`.viewer-hint`,
+  // `.sheet-hint`, the stale/updating banner), which come and go on their own
+  // timers, so insetting for them would jog the camera when they appear — and
+  // the measurements panel (`.dimension-info`), because the ruler must not
+  // move the model AT ALL. The point of the ruler is reading the callouts on
+  // the model at the size you were already looking at it; shrinking the model
+  // to make room for the panel (or for the callouts, which are drawn outside
+  // the mesh's own box) trades away the thing being measured for the label
+  // about it. The panel stays clear of the model by being folded to a header
+  // strip on mobile and transparent to pointers instead — see DimensionInfo.
+  function chromeInsets(mount: HTMLElement): Insets {
+    const canvas = mount.getBoundingClientRect();
+    const insets: Insets[] = [];
+    for (const selector of CHROME_SELECTORS) {
+      const el = document.querySelector<HTMLElement>(selector);
+      if (el) insets.push(edgeInset(el.getBoundingClientRect(), canvas));
+    }
+    return clampInsets(mergeInsets(insets), canvas.width, canvas.height);
   }
 
-  // Frame the orbit camera for the current model (modelSizeRef), from the
-  // named standard view (default = the current one), fitting its actual
-  // bounding BOX (see framing.ts) rather than a bounding-sphere radius — a
-  // sphere over-estimates a flat/wide model's on-screen footprint, which
-  // used to leave e.g. flat plates reading much smaller than intended. The
-  // camera's up stays +Z for every view (set once at init), so OrbitControls
-  // keeps orbiting correctly; only the look-from direction changes.
-  function frameView(name: ViewName = viewRef.current) {
+  // Reconstruct the model's world-space bounding box from its size, in the
+  // same two positioning modes the geometry-swap effect below applies (both
+  // centred at target (0,0,0) in X/Y): centred on all three axes by default,
+  // or — restOnGrid — resting its base on z=0 instead of being vertically
+  // centred. Cheaper than re-measuring a live THREE.Box3, and exactly
+  // reproduces that effect's own math (translation only, so `size` alone is
+  // enough to reconstruct it).
+  //
+  // Always the mesh's own box: the dimension overlay's callouts are drawn
+  // outside it and are deliberately NOT fitted (see chromeInsets), so the
+  // model keeps its size whether the ruler is on or off.
+  function framedBox(size: THREE.Vector3): Box3Like {
+    const halfX = size.x / 2;
+    const halfY = size.y / 2;
+    return __APP_REST_ON_GRID__
+      ? { min: new THREE.Vector3(-halfX, -halfY, 0), max: new THREE.Vector3(halfX, halfY, size.z) }
+      : {
+          min: new THREE.Vector3(-halfX, -halfY, -size.z / 2),
+          max: new THREE.Vector3(halfX, halfY, size.z / 2),
+        };
+  }
+
+  // What the last framing solved for: the fit distance, and the target it
+  // centred on before any user pan. refitView reads these to carry the
+  // visitor's own zoom and pan across a canvas resize instead of discarding
+  // them. null until the first model is framed.
+  const fitStateRef = useRef<{ distance: number; target: THREE.Vector3 } | null>(null);
+
+  // Solve and apply a framing for the current model, looking from
+  // `direction`, at `zoomRatio` × the fit distance (1 = the fit itself) with
+  // `pan` (world units, relative to the fitted target) carried over. Fits the
+  // model's actual bounding BOX (see framing.ts) rather than a
+  // bounding-sphere radius — a sphere over-estimates a flat/wide model's
+  // on-screen footprint, which used to leave e.g. flat plates reading much
+  // smaller than intended. The camera's up stays +Z for every view (set once
+  // at init), so OrbitControls keeps orbiting correctly; only the look-from
+  // direction changes.
+  function applyFraming(direction: THREE.Vector3, zoomRatio: number, pan: THREE.Vector3) {
     const cam = camRef.current;
     const controls = controlsRef.current;
     const mount = mountRef.current;
     const size = modelSizeRef.current;
     if (!cam || !controls || !mount || !size) return;
 
-    // Reconstruct the model's world-space bounding box from its size, in the
-    // same two positioning modes the geometry-swap effect below applies
-    // (both centred at target (0,0,0) in X/Y): centred on all three axes by
-    // default, or — restOnGrid — resting its base on z=0 instead of being
-    // vertically centred. Cheaper than re-measuring a live THREE.Box3, and
-    // exactly reproduces that effect's own math (translation only, so `size`
-    // alone is enough to reconstruct it).
-    const halfX = size.x / 2;
-    const halfY = size.y / 2;
-    const box: Box3Like = __APP_REST_ON_GRID__
-      ? { min: new THREE.Vector3(-halfX, -halfY, 0), max: new THREE.Vector3(halfX, halfY, size.z) }
-      : { min: new THREE.Vector3(-halfX, -halfY, -size.z / 2), max: new THREE.Vector3(halfX, halfY, size.z / 2) };
+    // A zero-sized canvas (display:none, or a layout not yet resolved) can't
+    // be fitted to, and solving against it would poison fitStateRef for the
+    // resize that follows. Leave the current framing alone.
+    const w = mount.clientWidth;
+    const h = mount.clientHeight;
+    if (w <= 0 || h <= 0) return;
 
-    const [dx, dy, dz] = VIEW_DIRECTIONS[name];
-    const direction = new THREE.Vector3(dx, dy, dz);
+    const box = framedBox(size);
+    const insets = chromeInsets(mount);
+    // Shrink the fit targets to the region the chrome leaves clear, so the
+    // box-fit solve asks for a distance that fits the model into THAT, not
+    // into the full canvas.
+    const fit = insetFitFraction(DEFAULT_FIT_FRACTION, w, h, insets);
+
     const target = new THREE.Vector3(0, 0, 0);
+    const distance = frameDistanceForBox(box, target, direction, w / h, cam.fov, fit);
+    const applied = distance * zoomRatio;
 
-    const w = mount.clientWidth || 1;
-    const h = mount.clientHeight || 1;
-    const aspect = w / h;
+    // Move the orbit target so the (unmoved) model renders centred in that
+    // clear region rather than in the middle of the canvas. Measured at the
+    // APPLIED distance, not the fit distance, so the on-screen centring holds
+    // at whatever zoom the visitor is at — see framing.ts's insetTargetOffset
+    // for the sign/derivation.
+    const { dir, right, up } = cameraBasis(direction);
+    const offset = insetTargetOffset(applied, cam.fov, h, insets);
+    target.addScaledVector(right, offset.right).addScaledVector(up, offset.up);
 
-    // Leave room for the export dock: shrink the height target to the
-    // USABLE strip above it, so the box-fit solve below asks for a distance
-    // that fits the model into that strip, not the full canvas.
-    const inset = dockInsetPx(mount);
-    const fit = { width: DEFAULT_FIT_FRACTION.width, height: insetHeightFraction(DEFAULT_FIT_FRACTION.height, h, inset) };
+    fitStateRef.current = { distance, target: target.clone() };
 
-    const distance = frameDistanceForBox(box, target, direction, aspect, cam.fov, fit);
-
-    // Shift the orbit target opposite the screen "up" direction by half the
-    // inset, in world units at this distance, so the (unmoved) model renders
-    // centred in the usable strip above the dock instead of the full canvas
-    // — see framing.ts's insetTargetShift for the sign/derivation.
-    const { dir, up } = cameraBasis(direction);
-    if (inset > 0) {
-      const shift = insetTargetShift(distance, cam.fov, h, inset);
-      target.addScaledVector(up, -shift);
-    }
-
-    cam.position.copy(target).addScaledVector(dir, distance);
+    target.add(pan);
+    cam.position.copy(target).addScaledVector(dir, applied);
     controls.target.copy(target);
     controls.update();
   }
+
+  // Frame the orbit camera for the current model from the named standard view
+  // (default = the current one), at the fit distance with no pan — the "reset
+  // to a clean product shot" path, used for a new model and for Reset view.
+  function frameView(name: ViewName = viewRef.current) {
+    const [dx, dy, dz] = VIEW_DIRECTIONS[name];
+    applyFraming(new THREE.Vector3(dx, dy, dz), 1, new THREE.Vector3());
+  }
+
+  // Re-fit the current model after the canvas changed shape — the mobile
+  // bottom sheet sliding between detents is the big one, but the desktop
+  // panel resize and an orientation change land here too. Without this the
+  // camera kept its old distance while the canvas halved in height, and the
+  // model shrank to a quarter of its area (the vertical FOV is fixed, so
+  // pixels-per-world-unit follows the canvas height, and the widened aspect
+  // halves it again horizontally).
+  //
+  // Not a plain frameView(): that would throw away the visitor's orbit, zoom
+  // and pan. The orbit direction is read back off the camera, and the zoom is
+  // carried as a RATIO against the last fit distance, so a model the visitor
+  // had zoomed to twice its fitted size stays at twice its fitted size — the
+  // apparent size holds across the resize instead of the camera snapping back
+  // to a default.
+  function refitView() {
+    const cam = camRef.current;
+    const controls = controlsRef.current;
+    const fit = fitStateRef.current;
+    if (!cam || !controls || !fit || !modelSizeRef.current) return;
+    const direction = cam.position.clone().sub(controls.target);
+    const distance = direction.length();
+    if (!(distance > 0) || !(fit.distance > 0)) return;
+    // Clamped so a pathological state (a stale fit against a collapsed
+    // canvas, say) can't be amplified into a camera flung off to infinity.
+    const zoomRatio = THREE.MathUtils.clamp(distance / fit.distance, 0.1, 10);
+    applyFraming(direction, zoomRatio, controls.target.clone().sub(fit.target));
+  }
+  refitRef.current = refitView;
 
   // Rebuild the dimension overlay from the current model size + theme, matching
   // the `show` flag: removes any existing overlay first (disposing its GPU
@@ -718,6 +800,12 @@ export const Viewer = forwardRef<
       renderer.setSize(w, h, false);
       cam.aspect = w / Math.max(1, h);
       cam.updateProjectionMatrix();
+      // Re-fit before the frame is drawn, so the model holds its apparent
+      // size (and its centring in the chrome-free region) instead of
+      // shrinking with the canvas — see refitView. Cheap: eight corner
+      // projections plus four getBoundingClientRect reads, which is fine
+      // even at the per-frame rate a bottom-sheet drag produces.
+      refitRef.current();
       renderNow();
     });
     ro.observe(mount);
@@ -799,7 +887,8 @@ export const Viewer = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
-  // Show/hide the dimension overlay on toggle (geometry stays put).
+  // Show/hide the dimension overlay on toggle (geometry stays put — and so
+  // does the camera: the ruler never re-frames, see chromeInsets).
   useEffect(() => {
     syncDimensions(showDimensions);
     requestRenderRef.current();

@@ -134,47 +134,173 @@ export function frameDistanceForBox(
   return maxDistance;
 }
 
-// ── Vertical inset shift ────────────────────────────────────────────────
-// The floating export dock (`.action-dock`) overlays the canvas rather than
-// shrinking it (it's `position: absolute`, so it doesn't affect the canvas's
-// own flex-computed size — see index.css), so a model fitted to the FULL
-// canvas can sit half-hidden behind it. Two moves fix that together (applied
-// by Viewer.tsx's frameView): (1) shrink the fit's height target by the
-// inset's share of the canvas, so the box is asked to fit the USABLE height
-// (above the dock), not the full canvas; (2) shift the orbit target so the
-// box, unchanged in world space, renders centred in that usable region
-// rather than the full canvas.
+// ── Chrome insets ───────────────────────────────────────────────────────
+// The viewer's floating chrome — the export dock, the HUD button column, the
+// mobile top bar, the measurements panel — overlays the canvas rather than
+// shrinking it (all `position: absolute`, so none of them affect the canvas's
+// own flex-computed size — see index.css). A model fitted to the FULL canvas
+// therefore sits partly behind them. Two moves fix that together (applied by
+// Viewer.tsx's frameView): (1) shrink the fit's targets by each axis's inset
+// share, so the box is asked to fit the USABLE region rather than the full
+// canvas; (2) shift the orbit target so the box, unchanged in world space,
+// renders centred in that usable region.
+//
+// This was once a single bottom scalar, for the dock alone. It is a rect now
+// because the chrome isn't only at the bottom: the HUD is a right-edge
+// column tall enough to cover most of a short mobile viewport, and the top
+// bar spans the full width above the model.
 
-/** Reduce a height fill fraction so a box fit against it targets the usable
- *  region above a bottom inset of `insetPx`, out of a `canvasHeightPx`-tall
- *  canvas — e.g. `insetHeightFraction(0.58, 800, 100)` asks for 0.58 of the
- *  *700px* usable strip, expressed as a (smaller) fraction of the full 800px
- *  canvas. Floors at 20% of the original target so a pathologically large
- *  inset degrades to "smaller than ideal" rather than collapsing to ~0. */
-export function insetHeightFraction(fillHeight: number, canvasHeightPx: number, insetPx: number): number {
-  if (canvasHeightPx <= 0) return fillHeight;
-  const usableFraction = Math.max(0, 1 - insetPx / canvasHeightPx);
-  return Math.max(fillHeight * usableFraction, fillHeight * 0.2);
+/** Pixels of the canvas covered by chrome on each edge. */
+export interface Insets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export const NO_INSETS: Readonly<Insets> = Object.freeze({ top: 0, right: 0, bottom: 0, left: 0 });
+
+/** The viewport-coordinate edges of a DOM rect — the subset of
+ *  `getBoundingClientRect()` this module needs, so the math stays testable
+ *  without a DOM. */
+export interface RectLike {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/** How much of each axis must stay clear of chrome. A floor for pathological
+ *  cases — a short landscape viewport can stack the top bar, the dock and the
+ *  HUD over barely 190px of canvas, and honouring every inset there would
+ *  shrink the model to a dot. Better to let some chrome overlap than to make
+ *  the model unreadable. */
+export const MIN_USABLE_FRACTION = 0.55;
+
+/**
+ * The inset a single overlay implies: it eats into the edge it intrudes
+ * from *least*, by that intrusion's depth. A bottom-centred export dock
+ * reaches only ~55px up from the bottom but ~730px down from the top, so it
+ * reads as a bottom inset; a right-hand HUD column reads as a right inset;
+ * a full-width top bar as a top inset.
+ *
+ * Overlays that don't overlap the canvas at all contribute nothing. An
+ * overlay pinned to a CORNER would be the case this rule handles least well —
+ * it is genuinely a corner box, not an edge band, so whichever edge wins
+ * over-counts the other axis. Nothing passed here today is one: the viewer's
+ * only corner overlay is the measurements panel, which is deliberately left
+ * out of the fit entirely (see Viewer.tsx's chromeInsets).
+ */
+export function edgeInset(overlay: RectLike, canvas: RectLike): Insets {
+  const width = canvas.right - canvas.left;
+  const height = canvas.bottom - canvas.top;
+  if (width <= 0 || height <= 0) return { ...NO_INSETS };
+  // No overlap at all — nothing to clear.
+  if (overlay.right <= canvas.left || overlay.left >= canvas.right) return { ...NO_INSETS };
+  if (overlay.bottom <= canvas.top || overlay.top >= canvas.bottom) return { ...NO_INSETS };
+
+  const clampW = (v: number) => Math.min(Math.max(v, 0), width);
+  const clampH = (v: number) => Math.min(Math.max(v, 0), height);
+  const fromTop = clampH(overlay.bottom - canvas.top);
+  const fromBottom = clampH(canvas.bottom - overlay.top);
+  const fromLeft = clampW(overlay.right - canvas.left);
+  const fromRight = clampW(canvas.right - overlay.left);
+
+  const nearest = Math.min(fromTop, fromBottom, fromLeft, fromRight);
+  if (nearest === fromTop) return { ...NO_INSETS, top: fromTop };
+  if (nearest === fromBottom) return { ...NO_INSETS, bottom: fromBottom };
+  if (nearest === fromLeft) return { ...NO_INSETS, left: fromLeft };
+  return { ...NO_INSETS, right: fromRight };
+}
+
+/** Combine several overlays' insets by taking the deepest on each edge —
+ *  two overlays on the same edge don't stack, the further-reaching one wins. */
+export function mergeInsets(insets: Insets[]): Insets {
+  return insets.reduce<Insets>(
+    (acc, i) => ({
+      top: Math.max(acc.top, i.top),
+      right: Math.max(acc.right, i.right),
+      bottom: Math.max(acc.bottom, i.bottom),
+      left: Math.max(acc.left, i.left),
+    }),
+    { ...NO_INSETS }
+  );
+}
+
+/** Scale insets down, per axis and proportionally (so the two edges keep
+ *  their relative weight and the centring stays honest), until each axis
+ *  keeps at least `minUsable` of the canvas clear. */
+export function clampInsets(
+  insets: Insets,
+  canvasWidthPx: number,
+  canvasHeightPx: number,
+  minUsable: number = MIN_USABLE_FRACTION
+): Insets {
+  const scaleAxis = (a: number, b: number, size: number): [number, number] => {
+    const budget = size * (1 - minUsable);
+    const total = a + b;
+    if (size <= 0 || total <= budget || total <= 0) return [a, b];
+    const k = budget / total;
+    return [a * k, b * k];
+  };
+  const [left, right] = scaleAxis(insets.left, insets.right, canvasWidthPx);
+  const [top, bottom] = scaleAxis(insets.top, insets.bottom, canvasHeightPx);
+  return { top, right, bottom, left };
+}
+
+/** Reduce the fill fractions so a box fit against them targets the usable
+ *  region left by `insets` — e.g. a 100px bottom inset on an 800px-tall
+ *  canvas asks for 0.58 of the *700px* usable strip, expressed as a
+ *  (smaller) fraction of the full 800px canvas. Floors each axis at 20% of
+ *  its original target so a pathologically large inset degrades to "smaller
+ *  than ideal" rather than collapsing to ~0. */
+export function insetFitFraction(
+  fit: FitFraction,
+  canvasWidthPx: number,
+  canvasHeightPx: number,
+  insets: Insets
+): FitFraction {
+  const usable = (size: number, a: number, b: number) =>
+    size <= 0 ? 1 : Math.max(0, 1 - (a + b) / size);
+  return {
+    width: Math.max(fit.width * usable(canvasWidthPx, insets.left, insets.right), fit.width * 0.2),
+    height: Math.max(fit.height * usable(canvasHeightPx, insets.top, insets.bottom), fit.height * 0.2),
+  };
 }
 
 /**
- * How far to shift the orbit target, opposite the screen "up" direction, so
- * a model already fitted to `distance` centres in the region ABOVE a bottom
- * inset of `insetPx` (out of a `canvasHeightPx`-tall canvas) instead of the
- * full canvas. Half the inset, not the whole inset: with only the BOTTOM
- * edge inset, the usable region's own centre sits `insetPx / 2` above the
- * full canvas's centre.
+ * How far to move the orbit target, in the camera's own screen basis, so a
+ * model already fitted to `distance` renders centred in the region `insets`
+ * leaves clear instead of in the middle of the whole canvas.
  *
- * Returns a signed scalar to apply as `target.addScaledVector(up, -shift)`
- * (Viewer.tsx) — negated because the camera always keeps `target` at the
- * exact centre of the frame, so making the (stationary) model appear higher
- * on screen means moving the target itself the OTHER way, down and away
- * from the model's true centre, not up. See Viewer.tsx's frameView for the
- * full derivation in context.
+ * Half the difference of the opposing insets, not their sum: with (say) only
+ * the BOTTOM edge inset, the usable region's own centre sits `bottom / 2`
+ * above the canvas centre.
+ *
+ * The returned scalars are applied directly —
+ * `target.addScaledVector(right, off.right).addScaledVector(up, off.up)` —
+ * with no negation at the call site: the sign flip is already folded in
+ * here. The camera always keeps `target` at the exact centre of the frame,
+ * so making the (stationary) model appear higher on screen means moving the
+ * target itself the OTHER way, down and away from the model's true centre.
+ * Hence a bottom inset yields a NEGATIVE `up`.
+ *
+ * One `worldPerPixel` serves both axes because pixels are square: the
+ * horizontal world-per-pixel is `2·distance·tanHalfH / width`, and with
+ * `tanHalfH = aspect·tanHalfV` and `aspect = width/height` that reduces to
+ * the vertical expression.
  */
-export function insetTargetShift(distance: number, fovDeg: number, canvasHeightPx: number, insetPx: number): number {
-  if (insetPx <= 0 || canvasHeightPx <= 0) return 0;
+export function insetTargetOffset(
+  distance: number,
+  fovDeg: number,
+  canvasHeightPx: number,
+  insets: Insets
+): { right: number; up: number } {
+  if (canvasHeightPx <= 0 || !(distance > 0)) return { right: 0, up: 0 };
   const tanHalfV = Math.tan((fovDeg * Math.PI) / 360);
   const worldPerPixel = (2 * distance * tanHalfV) / canvasHeightPx;
-  return (insetPx / 2) * worldPerPixel;
+  return {
+    right: ((insets.right - insets.left) / 2) * worldPerPixel,
+    up: ((insets.top - insets.bottom) / 2) * worldPerPixel,
+  };
 }
