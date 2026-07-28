@@ -16,6 +16,58 @@ export type ModelFormat = "3mf" | "stl";
  */
 export type ViewerStyle = "plain" | "studio";
 
+/**
+ * Visibility of the individual viewer HUD control buttons (config
+ * `viewer.controls.*`). Every field is independent; none hides the 3D canvas
+ * itself, only the named button.
+ */
+export interface ViewerControls {
+  /**
+   * Whether the viewer's measure (dimensions) toggle is offered (default true).
+   * Set false to hide the ruler button — and with it the W×D×H overlay and the
+   * measurements/@info panel, which are only reachable through that toggle.
+   */
+  measure?: boolean;
+  /** Whether the viewer's view picker (camera-angle menu) is offered (default true). */
+  viewPicker?: boolean;
+  /** Whether the viewer's "reset view" button is offered (default true). */
+  reset?: boolean;
+  /** Whether the viewer's zoom in/out buttons are offered (default false). */
+  zoom?: boolean;
+  /**
+   * Whether the viewer's fullscreen toggle is offered (default true). Only ever
+   * shown in a browser tab that supports the Fullscreen API anyway; set false to
+   * suppress it there too.
+   */
+  fullscreen?: boolean;
+}
+
+/**
+ * Build-time viewer configuration (config `viewer`): presentation, framing,
+ * and per-control visibility. None of it affects the exported bytes or the
+ * render cache (absent from renderHash).
+ */
+export interface ViewerConfig {
+  /** "plain" (default) is the classic CAD preview; "studio" is the product-shot look. */
+  style: ViewerStyle;
+  /**
+   * When true, the viewer rests a loaded model's base on the z=0 grid (centred
+   * in X/Y only); when false (the default) it centres the model on the origin
+   * in all three axes.
+   */
+  restOnGrid?: boolean;
+  /**
+   * Whether the viewer starts with its reference grid drawn (default "off").
+   * Unlike `controls` below this does NOT gate a control: the HUD's grid
+   * toggle is always offered regardless. It only seeds that toggle's value on
+   * a visitor's first-ever load — once they've used the toggle, their
+   * persisted choice wins (see src/lib/viewerPrefs.ts).
+   */
+  grid?: "off" | "on";
+  /** Visibility of the individual viewer HUD control buttons. */
+  controls?: ViewerControls;
+}
+
 export interface RenderRequest {
   id: number;
   design: string; // a design id, e.g. "nameplate"
@@ -197,7 +249,7 @@ export interface Design {
    *  Null/absent hides the "Design guide" affordance. */
   doc?: string | null;
   /**
-   * Optional bundled-preset thumbnails (config's `designs[].presetImages`;
+   * Optional bundled-preset thumbnails (config's `designs[].presets.images`;
    * see docs/config.md). Maps a bundled preset's EXACT name (as it appears in
    * the sibling parameterSets file) to a served image URL — gen-schema fails
    * the build if a key doesn't match a real bundled preset name. When set
@@ -211,22 +263,25 @@ export interface Design {
   collapsedSections?: string[];
   params: Param[];
   /**
-   * Optional curated label overrides for a review summary (config's
-   * `designs[].reviewLabels`; see docs/config.md). Maps a declared
-   * parameter's name to the label its value is shown under in the summary
-   * — gen-schema fails the build if a key doesn't match one of this
-   * design's own params. Several params sharing the same label merge into
-   * ONE summary row, their formatted values joined by " / ". Absent -> the
-   * curated summary is empty. Never affects geometry.
+   * Curated label overrides for a review summary, gathered from each
+   * declared parameter's own `// @review "<label>"` annotation (see
+   * docs/annotations.md) — there is no config-level source. Maps a
+   * parameter's name to the label its value is shown under in the summary,
+   * in the order gen-schema walks this design's parsed params (file order),
+   * not insertion/alphabetical order. Several params sharing the same label
+   * merge into ONE summary row, their formatted values joined by " / ".
+   * Absent -> the curated summary is empty. Never affects geometry.
    */
   reviewLabels?: Record<string, string>;
   /**
-   * Optional short explanatory note for a review summary (config's
-   * `designs[].reviewNote`) — e.g. "Text prints in capitals even though you
-   * typed it in lowercase." A generic hook for a design whose output
-   * transforms a parameter's raw value in a way worth calling out; a
-   * deployment supplies the wording, ScadPub never infers it. Null/absent
-   * renders nothing. Never affects geometry.
+   * Optional short explanatory note for a review summary, from the design's
+   * own file-level `// @reviewNote "<text>"` annotation (see
+   * docs/annotations.md) — there is no config-level source — e.g. "Text
+   * prints in capitals even though you typed it in lowercase." A generic
+   * hook for a design whose output transforms a parameter's raw value in a
+   * way worth calling out; the design's own comment supplies the wording,
+   * ScadPub never infers it. Null/absent renders nothing. Never affects
+   * geometry.
    */
   reviewNote?: string | null;
 }
@@ -283,28 +338,18 @@ export interface SoftwareLicense {
 }
 
 /**
- * Config for the generic "Import file" button. A single control that accepts
- * any file (or font); whether an upload is treated as a font is decided by its
- * extension, not by config — so one button covers both cases.
+ * Config for the Files dialog. There is no generic import button: importing is
+ * contextual, at the control that needs the file (a `@font` parameter's
+ * "Import font…", a `@svg` parameter's "Prepare SVG…"), and this dialog only
+ * *manages* what those controls have already imported. Present when the config
+ * sets `fileImport`; absent means no Files action at all.
  */
 export interface FileImport {
-  /**
-   * `accept` attribute for the file picker (e.g. ".svg" or ".ttf,.otf"). Omit to
-   * accept any file type.
-   */
-  accept?: string;
-  /** Button label (default "Import file"). */
-  label?: string;
   /**
    * Optional help text shown above the file list. Rendered as a Markdown
    * subset (paragraphs, bullet lists, **bold**, `code`, links).
    */
   note?: string;
-  /**
-   * Optional max upload size in bytes. A larger file is rejected with a friendly
-   * message instead of being stored. Omit for no cap.
-   */
-  maxBytes?: number;
 }
 
 /**
@@ -342,15 +387,16 @@ export interface RenderConfig {
 export interface NoticeCategory {
   /** The design-defined marker, matched as `: <marker>:` within an echo. */
   marker: string;
-  /** Badge / notice noun (e.g. "alerts", "notes"). Defaults to the marker. */
-  label: string;
   /**
-   * Optional singular form of `label` (e.g. "alert" for `label: "alerts"`),
-   * used wherever a count renders alongside it whenever the live count is
-   * exactly 1 — `label` alone can't pluralize itself ("1 alerts" reads
-   * wrong). Omit to keep `label` regardless of count.
+   * Badge / notice noun, already normalised to both CLDR forms — `other` is
+   * the plural/default form, `one` the singular (config's plain-string
+   * shorthand sets both to the same word; defaults to the marker when
+   * `notices[].label` is entirely absent). Select between them with
+   * `src/lib/i18n.ts`'s `selectPlural(count, label)` rather than a bespoke
+   * `count === 1` check — the same Intl.PluralRules-backed logic `tn()` uses
+   * for catalogue keys.
    */
-  labelOne?: string;
+  label: { one: string; other: string };
   /** Optional badge fill colour (a plain CSS colour); falls back to the accent. */
   color?: string;
   /** Whether this category should be treated as requiring user attention. */
@@ -402,6 +448,14 @@ export interface PopupNotice {
   footnote?: string;
 }
 
+// Rule this commit establishes: `designs.json` (the `Schema` below, and the
+// types describing it) is the APP-FACING artifact and is free to differ from
+// scadpub.config.json's own surface where the app's needs genuinely differ —
+// but where both express the same grouping (as `viewer` now does on both
+// sides: style/restOnGrid/grid/controls.*), they mirror each other rather
+// than drifting into two different shapes for one idea. See scripts/lib/
+// config-spec.mjs for the config side of that same grouping.
+
 /** Build-time UI behaviour overrides. None affect geometry (absent from renderHash). */
 export interface UiConfig {
   /** Which edge the parameter panel docks to on desktop (default "left"). */
@@ -419,41 +473,11 @@ export interface UiConfig {
    */
   showVarName?: boolean;
   /**
-   * Whether the viewer's measure (dimensions) toggle is offered (default true).
-   * Set false to hide the ruler button — and with it the W×D×H overlay and the
-   * measurements/@info panel, which are only reachable through that toggle.
-   */
-  measure?: boolean;
-  /** Whether the viewer's view picker (camera-angle menu) is offered (default true). */
-  viewPicker?: boolean;
-  /** Whether the viewer's "reset view" button is offered (default true). */
-  reset?: boolean;
-  /** Whether the viewer's zoom in/out buttons are offered (default false). */
-  zoom?: boolean;
-  /**
-   * Whether the viewer's fullscreen toggle is offered (default true). Only ever
-   * shown in a browser tab that supports the Fullscreen API anyway; set false to
-   * suppress it there too.
-   */
-  fullscreen?: boolean;
-  /**
-   * Whether the viewer starts with its reference grid drawn (default "off").
-   * Unlike the flags above this does NOT gate a control: the HUD's grid
-   * toggle is always offered regardless. It only seeds that toggle's value on
-   * a visitor's first-ever load — once they've used the toggle, their
-   * persisted choice wins (see src/lib/viewerPrefs.ts).
-   */
-  grid?: "off" | "on";
-  /**
    * Whether the "Save image (PNG)" action is offered (default true — the button
    * is shown). Set false to hide the Save-image (PNG) action entirely, in both
    * the desktop and mobile secondary-action surfaces.
    */
   saveImage?: boolean;
-  /** Label for the "Presets" tab/section (default "Presets"). */
-  presetsLabel?: string;
-  /** Label for the "Customize" (parameters) tab/section (default "Customize"). */
-  parametersLabel?: string;
   /** Use the card-grid design picker instead of the compact dropdown. */
   gallery?: boolean;
   /** Start with `@advanced` parameters hidden behind a Show all settings action. */
@@ -461,17 +485,15 @@ export interface UiConfig {
   /**
    * Optional inline success panel shown above the action dock after a
    * successful export (see src/components/ExportSuccess.tsx). Absent -> the
-   * feature is off entirely — no panel is ever shown, on any export. All
-   * fields are optional even when the object is present; omitted `title`/
-   * `body` fall back to built-in copy. None of these fields affect geometry
+   * feature is off entirely — no panel is ever shown, on any export. The
+   * panel's headline/body always come from the i18n catalogue
+   * (`exportSuccess.title`/`.body` in src/locales/en.json, overridable via the
+   * config's `strings` block like any other chrome text) — this object used
+   * to carry its own separate `title`/`body` override fields, a second path
+   * to the same two keys; removed. None of these fields affect geometry
    * (absent from renderHash).
    */
   afterExport?: {
-    /** Overrides the panel's default headline ("Your file is on its way"). */
-    title?: string;
-    /** Overrides the panel's default next-step body text. Rendered as the
-     *  same Markdown subset as `help`/`fileImport.note`. */
-    body?: string;
     /**
      * Help-modal tab label to deep-link the panel's "Open printing help"
      * action to (HelpModal's `initialTab`). Validated at build time against
@@ -572,18 +594,11 @@ export interface Schema {
   /** Model format OpenSCAD exports and the viewer parses (build-time; default "3mf"). */
   format: ModelFormat;
   /**
-   * When true, the viewer rests a loaded model's base on the z=0 grid (centred
-   * in X/Y only); when false (the default) it centres the model on the origin in
-   * all three axes. Build-time, display-only — it doesn't affect the export.
+   * The 3D viewer's presentation, framing, and per-control visibility — see
+   * `ViewerConfig`. Display-only in every field: none of it affects the
+   * exported bytes or the render cache.
    */
-  restOnGrid: boolean;
-  /**
-   * Build-time viewer presentation: `style` picks the look ("plain" default,
-   * "studio" for the product-shot treatment). Display-only — never affects the
-   * exported bytes or the render cache. The reference grid is NOT part of this:
-   * it's a runtime toggle seeded by `ui.grid` (see src/lib/viewerPrefs.ts).
-   */
-  viewer: { style: ViewerStyle };
+  viewer: ViewerConfig;
   /** OpenSCAD experimental features to --enable for every render. */
   features: string[];
   /** Optional build-time render tuning (heavy-render threshold + cache sizing).

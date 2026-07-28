@@ -60,6 +60,7 @@ const validBase = () => ({
   title: "T",
   logo: null,
   format: "3mf",
+  viewer: { style: "plain" },
   features: [],
   fonts: [],
   assets: [],
@@ -116,6 +117,48 @@ test("validates the model format", () => {
   delete noFormat.format;
   assert.throws(() => validateSchema(noFormat), /'format' must be/);
   assert.throws(() => validateSchema({ ...validBase(), format: "obj" }), /'format' must be/);
+});
+
+test("validates the viewer object (style, restOnGrid, grid, controls) — required, unlike ui", () => {
+  const noViewer = validBase();
+  delete noViewer.viewer;
+  assert.throws(() => validateSchema(noViewer), /'viewer' must be an object/);
+  assert.throws(() => validateSchema({ ...validBase(), viewer: [] }), /'viewer' must be an object/);
+  assert.throws(
+    () => validateSchema({ ...validBase(), viewer: { style: "toon" } }),
+    /'viewer\.style' must be/
+  );
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      viewer: {
+        style: "studio",
+        restOnGrid: true,
+        grid: "on",
+        controls: { measure: false, viewPicker: false, reset: false, zoom: true, fullscreen: false },
+      },
+    })
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), viewer: { style: "plain", restOnGrid: "yes" } }),
+    /'viewer\.restOnGrid' must be a boolean/
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), viewer: { style: "plain", grid: "sometimes" } }),
+    /'viewer\.grid' must be "off" or "on"/
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), viewer: { style: "plain", controls: [] } }),
+    /'viewer\.controls' must be an object/
+  );
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        viewer: { style: "plain", controls: { measure: "no" } },
+      }),
+    /'viewer\.controls\.measure' must be a boolean/
+  );
 });
 
 test("validates the optional per-design collapsedSections", () => {
@@ -243,31 +286,28 @@ test("validates the optional help (single-pane and tabbed) shape", () => {
   );
 });
 
-test("validates the optional notices' labelOne field", () => {
+test("validates the notices' label shape ({ one, other })", () => {
   const ok = validBase();
-  ok.notices = [{ marker: "alert", label: "alerts", labelOne: "alert" }];
+  ok.notices = [{ marker: "alert", label: { one: "alert", other: "alerts" } }];
   assert.doesNotThrow(() => validateSchema(ok));
-  const bad = validBase();
-  bad.notices = [{ marker: "alert", label: "alerts", labelOne: 5 }];
-  assert.throws(() => validateSchema(bad), /a notice 'labelOne' must be a string/);
+  const missing = validBase();
+  missing.notices = [{ marker: "alert" }];
+  assert.throws(() => validateSchema(missing), /a notice category is missing required object 'label'/);
+  const badOne = validBase();
+  badOne.notices = [{ marker: "alert", label: { one: 5, other: "alerts" } }];
+  assert.throws(() => validateSchema(badOne), /a notice 'label\.one' must be a non-empty string/);
+  const badOther = validBase();
+  badOther.notices = [{ marker: "alert", label: { one: "alert", other: "" } }];
+  assert.throws(() => validateSchema(badOther), /a notice 'label\.other' must be a non-empty string/);
 });
 
 test("validates the optional notices' subsumedByFont field", () => {
   const ok = validBase();
-  ok.notices = [{ marker: "alert", label: "alerts", subsumedByFont: true }];
+  ok.notices = [{ marker: "alert", label: { one: "alert", other: "alerts" }, subsumedByFont: true }];
   assert.doesNotThrow(() => validateSchema(ok));
   const bad = validBase();
-  bad.notices = [{ marker: "alert", label: "alerts", subsumedByFont: "yes" }];
+  bad.notices = [{ marker: "alert", label: { one: "alert", other: "alerts" }, subsumedByFont: "yes" }];
   assert.throws(() => validateSchema(bad), /a notice 'subsumedByFont' must be a boolean/);
-});
-
-test("validates the optional ui.grid field", () => {
-  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { grid: "off" } }));
-  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { grid: "on" } }));
-  assert.throws(
-    () => validateSchema({ ...validBase(), ui: { grid: "sometimes" } }),
-    /'ui\.grid' must be "off" or "on"/
-  );
 });
 
 test("validates the optional appended licenses", () => {
@@ -309,10 +349,7 @@ test("validates the optional fileImport shape", () => {
   assert.doesNotThrow(() => validateSchema({ ...validBase(), fileImport: null }));
   assert.doesNotThrow(() => validateSchema({ ...validBase(), fileImport: {} }));
   assert.doesNotThrow(() =>
-    validateSchema({
-      ...validBase(),
-      fileImport: { accept: ".svg", label: "Import file", note: "any file" },
-    })
+    validateSchema({ ...validBase(), fileImport: { note: "any file" } })
   );
   // not an object.
   assert.throws(
@@ -321,8 +358,8 @@ test("validates the optional fileImport shape", () => {
   );
   // non-string field.
   assert.throws(
-    () => validateSchema({ ...validBase(), fileImport: { accept: 5 } }),
-    /'fileImport\.accept' must be a string/
+    () => validateSchema({ ...validBase(), fileImport: { note: 5 } }),
+    /'fileImport\.note' must be a string/
   );
 });
 
@@ -363,5 +400,50 @@ test("validates the optional popup shape", () => {
         popup: { header: "x", body: "y", mode: "once", button: "" },
       }),
     /'popup\.button', when set, must be a non-empty string/
+  );
+});
+
+test("validates the optional ui.saveImage flag", () => {
+  // absent is fine (the app treats it as true).
+  assert.doesNotThrow(() => validateSchema(validBase()));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { saveImage: false } }));
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { saveImage: "no" } }),
+    /'ui\.saveImage' must be a boolean/
+  );
+});
+
+test("validates the optional ui.afterExport panel", () => {
+  // null/absent is fine (the panel is off).
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { afterExport: null } }));
+  assert.doesNotThrow(() => validateSchema({ ...validBase(), ui: { afterExport: {} } }));
+  assert.doesNotThrow(() =>
+    validateSchema({ ...validBase(), ui: { afterExport: { helpTab: "Printing" } } })
+  );
+  // not an object.
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { afterExport: [] } }),
+    /'ui\.afterExport' must be an object/
+  );
+  // non-string helpTab.
+  assert.throws(
+    () => validateSchema({ ...validBase(), ui: { afterExport: { helpTab: 5 } } }),
+    /'ui\.afterExport\.helpTab' must be a string/
+  );
+});
+
+test("validates the optional themeColor/themeColorLight strings", () => {
+  // absent is fine (the app falls back to its own defaults).
+  assert.doesNotThrow(() => validateSchema(validBase()));
+  assert.doesNotThrow(() =>
+    validateSchema({ ...validBase(), themeColor: "#1f2229", themeColorLight: "#ffffff" })
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), themeColor: 123 }),
+    /'themeColor' must be a string/
+  );
+  assert.throws(
+    () => validateSchema({ ...validBase(), themeColorLight: 123 }),
+    /'themeColorLight' must be a string/
   );
 });

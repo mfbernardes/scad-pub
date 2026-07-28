@@ -6,7 +6,7 @@
   "description": "ScadPub publishes OpenSCAD models as static browser-based configurators.",
   "license": "MIT",
   "scripts": {
-    "gen": "node scripts/gen-schema.mjs",
+    "gen": "node scripts/gen-schema.mjs && node scripts/gen-config-schema.mjs",
     "wasm": "node scripts/fetch-wasm.mjs",
     "predev": "npm run wasm && npm run gen",
     "dev": "vite",

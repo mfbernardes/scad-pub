@@ -1,4 +1,5 @@
 {
+  "$schema": "./scadpub.config.schema.json",
   "title": "ScadPub",
   "id": "scadpub",
   "description": "ScadPub publishes OpenSCAD models as static browser-based configurators.",
@@ -8,27 +9,28 @@
     {
       "id": "tag",
       "label": "Tag",
-      "description": "Personalised name tag with text.",
-      "icon": "examples/tag-icon.svg",
-      "reviewLabels": { "label": "Text", "font": "Typeface" },
-      "reviewNote": "The engraved or raised text keeps your capitalisation exactly as typed.",
-      "presetImages": {
-        "Large tag": "examples/tag-preset-large.png",
-        "No hole": "examples/tag-preset-nohole.png"
+      "presets": {
+        "images": {
+          "Large tag": "examples/tag-preset-large.png",
+          "No hole": "examples/tag-preset-nohole.png"
+        }
       }
     },
-    { "id": "coin", "label": "Coin", "description": "Round coin with an embossed emblem.", "icon": "examples/coin-icon.svg" },
-    { "id": "panel", "label": "Panel", "description": "An SVG extruded as a coloured relief panel." }
+    { "id": "coin", "label": "Coin" },
+    { "id": "panel", "label": "Panel" }
   ],
   "assets": ["emblem.svg", "panel.svg"],
 
-  "features": [],
-  "fonts": [
-    "LiberationSans-Bold.ttf",
-    "LiberationSans-Regular.ttf"
-  ],
+  "render": {
+    "features": [],
+    "fonts": [
+      "LiberationSans-Bold.ttf",
+      "LiberationSans-Regular.ttf"
+    ]
+  },
 
-  "ui": { "install": "off", "afterExport": { "helpTab": "Printing" } },
+  "pwa": { "install": "off" },
+  "ui": { "afterExport": { "helpTab": "Printing" } },
   "fileImport": true,
 
   "popup": {
@@ -80,17 +82,7 @@
       },
       {
         "label": "Printing",
-        "intro": "Getting a clean print off the downloaded mesh.",
-        "sections": [
-          {
-            "title": "Material",
-            "body": "**PLA** prints these designs well. Slice the downloaded 3MF as you would any other mesh."
-          },
-          {
-            "title": "Supports",
-            "body": "Most designs need none. Add supports only if a part overhangs more than your printer handles."
-          }
-        ]
+        "file": "examples/help-printing.md"
       },
       {
         "label": "Troubleshooting",
@@ -104,7 +96,7 @@
     ]
   },
   "notices": [
-    { "marker": "alert", "label": "alerts", "labelOne": "alert", "color": "#e0a458", "attention": true },
-    { "marker": "note", "label": "notes", "labelOne": "note", "color": "#86a9ff" }
+    { "marker": "alert", "label": { "one": "alert", "other": "alerts" }, "color": "#e0a458", "attention": true },
+    { "marker": "note", "label": { "one": "note", "other": "notes" }, "color": "#86a9ff" }
   ]
 }

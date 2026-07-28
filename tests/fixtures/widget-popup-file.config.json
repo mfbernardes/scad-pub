@@ -1,0 +1,6 @@
+{
+  "source": "src",
+  "popup": { "header": "Welcome", "bodyFile": "widget-popup-body.md", "mode": "dismissible" },
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}

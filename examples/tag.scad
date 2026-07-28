@@ -7,6 +7,10 @@
 //   • import() extrudes an SVG (a default emblem.svg is bundled; upload your own
 //     SVG and set `svg_file` to its filename to swap it).
 
+// @description Personalised name tag with text.
+// @icon tag-icon.svg
+// @reviewNote "The engraved or raised text keeps your capitalisation exactly as typed."
+
 /* [Tag] */
 // Width of the tag (mm).
 width = 90; // [10:1:160]
@@ -23,6 +27,7 @@ corner_radius = 4; // [0:0.5:20]
 // Text to emboss on the tag. Leave empty for none.
 // @info Engraved text
 // @editOnModel
+// @review "Text"
 label = "ScadPub";
 // Font height (mm).
 // @info Text height | mm
@@ -32,6 +37,7 @@ text_depth = 1; // [0.4:0.1:3]
 // Font family/style. Change to an uploaded font's family, e.g. "DejaVu Sans".
 // @font
 // @info Font
+// @review "Typeface"
 font = "Liberation Sans:style=Bold";
 // Colour of the raised text — any OpenSCAD colour name or "#rrggbb". Exported
 // into the 3MF so the viewer (and colour-capable slicers) show it.

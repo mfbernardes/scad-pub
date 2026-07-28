@@ -12,6 +12,7 @@
 // See also computedInfo.ts, a separate echo convention (`echo("@info", ...)`)
 // for surfacing internally-calculated values in the measurements panel.
 import type { NoticeCategory } from "../openscad/types";
+import { selectPlural } from "./i18n";
 
 export type DiagnosticLevel = "notice" | "warning" | "assert";
 
@@ -133,31 +134,35 @@ export function parseDiagnostics(
  * and one for assert failures. Categories keep their configured order; the
  * assert badge comes last. Only badges with a non-zero count are returned.
  * Counts are over raw matching log lines (not de-duplicated) so repeated notices
- * still tally.
+ * still tally. Each category's badge noun is resolved from its `{ one, other }`
+ * pair via `selectPlural` against the FINAL tally — singular/plural has to wait
+ * until every line is counted, unlike the fixed "asserts" noun below.
  */
 export function countBadges(
   log: string[],
   notices: NoticeCategory[]
 ): BadgeCount[] {
-  const byKey = new Map<string, BadgeCount>();
-  for (const n of notices)
-    byKey.set(`notice:${n.marker}`, {
-      key: `notice:${n.marker}`,
-      label: n.label,
-      count: 0,
+  const counts = new Map<string, number>();
+  for (const line of log) {
+    const c = classify(line, notices);
+    if (c?.badgeKey) counts.set(c.badgeKey, (counts.get(c.badgeKey) ?? 0) + 1);
+  }
+  const badges: BadgeCount[] = [];
+  for (const n of notices) {
+    const key = `notice:${n.marker}`;
+    const count = counts.get(key) ?? 0;
+    if (count <= 0) continue;
+    badges.push({
+      key,
+      label: selectPlural(count, n.label),
+      count,
       attention: n.attention === true,
       ...(n.color ? { color: n.color } : {}),
     });
-  byKey.set("assert", { key: "assert", label: "asserts", count: 0, attention: true });
-
-  for (const line of log) {
-    const c = classify(line, notices);
-    if (c?.badgeKey) {
-      const badge = byKey.get(c.badgeKey);
-      if (badge) badge.count++;
-    }
   }
-  return [...byKey.values()].filter((b) => b.count > 0);
+  const assertCount = counts.get("assert") ?? 0;
+  if (assertCount > 0) badges.push({ key: "assert", label: "asserts", count: assertCount, attention: true });
+  return badges;
 }
 
 /**

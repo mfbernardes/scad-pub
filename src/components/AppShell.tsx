@@ -130,8 +130,6 @@ function ActionDock({
       {exportSuccess && (
         <ExportSuccess
           state={exportSuccess}
-          title={afterExport?.title}
-          body={afterExport?.body}
           helpTab={afterExport?.helpTab}
           onDismiss={onDismissExportSuccess}
         />
@@ -260,7 +258,7 @@ export const AppShell = memo(function AppShell({
   const [showDimensions, setShowDimensions] = useState(false);
   const toggleDimensions = useCallback(() => setShowDimensions((v) => !v), []);
   // Whether the viewer draws its reference grid. Unlike the other HUD controls
-  // this isn't config-gated — the button is always offered; `ui.grid` only
+  // this isn't config-gated — the button is always offered; `viewer.grid` only
   // seeds the first-ever value, after which the visitor's own choice persists
   // (see src/lib/viewerPrefs.ts). Shared across both layouts, like the
   // dimension toggle above, so it survives a desktop⇄mobile breakpoint switch.
@@ -386,28 +384,26 @@ export const AppShell = memo(function AppShell({
   }, [isMobile, sheetDetent]);
 
   const ui = schema.ui ?? {};
+  const viewerControls = schema.viewer?.controls ?? {};
   const panelSide = ui.panelSide ?? "left";
   const panelDefaultOpen = (ui.panelDefault ?? "open") === "open";
   // Variable names are developer detail — hidden unless a config opts in.
   const showVarName = ui.showVarName === true;
-  // Configurable tab/section labels (default to the built-in names).
-  const presetsLabel = ui.presetsLabel ?? "Presets";
-  const parametersLabel = ui.parametersLabel ?? "Customize";
   // Whether the viewer offers the measure (dimensions) toggle. Off hides the HUD
   // ruler button; the overlay + panel are only reachable through it, so they
   // stay hidden too.
-  const showMeasure = ui.measure !== false;
+  const showMeasure = viewerControls.measure !== false;
   // Whether the "Save image (PNG)" action is offered (default true). Off hides
   // it in both secondary-action surfaces (desktop CommandBar and mobile ⋮ menu).
   const showSaveImage = ui.saveImage !== false;
   // Whether the viewer offers the view picker (camera-angle menu).
-  const showViewPicker = ui.viewPicker !== false;
+  const showViewPicker = viewerControls.viewPicker !== false;
   // Whether the viewer offers the "reset view" button.
-  const showReset = ui.reset !== false;
+  const showReset = viewerControls.reset !== false;
   // Whether the viewer offers the zoom in/out buttons (off by default).
-  const showZoom = ui.zoom === true;
+  const showZoom = viewerControls.zoom === true;
   // Whether the viewer offers the fullscreen toggle (where it works at all).
-  const showFullscreen = ui.fullscreen !== false;
+  const showFullscreen = viewerControls.fullscreen !== false;
   // Optional after-export success panel (see ExportSuccess.tsx). Undefined
   // when the config never set `ui.afterExport` — `exportSuccess` stays null
   // forever in that case (App.tsx never sets it), so the panel just never mounts.
@@ -474,14 +470,13 @@ export const AppShell = memo(function AppShell({
   // notice — plus the overall state that drives the status strip/dock/review
   // dialog. `badges` (already computed above for the Notices tab) gives each
   // notice category's live pending count; joined here with the category's own
-  // config-declared `attention`/`labelOne` so deriveAttention can decide which
+  // config-declared `attention`/`label` so deriveAttention can decide which
   // ones matter without re-scanning the raw log itself.
   const noticeAttentionInputs: NoticeAttentionInput[] = useMemo(
     () =>
       notices.map((n) => ({
         marker: n.marker,
         label: n.label,
-        labelOne: n.labelOne,
         attention: n.attention === true,
         subsumedByFont: n.subsumedByFont === true,
         count: badges.find((b) => b.key === `notice:${n.marker}`)?.count ?? 0,
@@ -943,8 +938,6 @@ export const AppShell = memo(function AppShell({
                   availableSvgFiles={availableSvgFiles}
                   onActivate={expand}
                   showVarName={showVarName}
-                  presetsLabel={presetsLabel}
-                  parametersLabel={parametersLabel}
                   showAdvanced={showAdvanced}
                   onShowAdvancedChange={handleShowAdvancedChange}
                   tab={panelState.tab}
@@ -1029,8 +1022,6 @@ export const AppShell = memo(function AppShell({
               panelDefaultOpen={panelDefaultOpen}
               showVarName={showVarName}
               autoRender={autoRender}
-              presetsLabel={presetsLabel}
-              parametersLabel={parametersLabel}
               showAdvanced={showAdvanced}
               onShowAdvancedChange={handleShowAdvancedChange}
               panelTab={panelState.tab}

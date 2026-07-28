@@ -13,9 +13,10 @@
 //     or the instruction is wrong for half the visitors.
 //   • Names here must be the strings the visitor actually sees: the catalogue
 //     (src/locales/en.json) for anything routed through t()/tn(), the component
-//     otherwise. The tab names are the exception — `ui.presetsLabel` /
-//     `ui.parametersLabel` can rename them, but a config that renames tabs
-//     supplies its own `help` too, so the defaults are the right thing to name.
+//     otherwise. The tab names are the exception — `strings["presets.title"]` /
+//     `strings["settings.title"]` can rename them, but a config that renames
+//     tabs supplies its own `help` too, so the defaults are the right thing to
+//     name.
 import type { HelpContent } from "../openscad/types";
 
 export const DEFAULT_HELP: HelpContent = {

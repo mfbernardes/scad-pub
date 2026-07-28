@@ -27,9 +27,10 @@ import {
 // the unused branch below — and its loader import — drop out of the bundle.
 declare const __APP_FORMAT__: "3mf" | "stl";
 
-// Build-time toggle (Vite define; see vite.config.ts / config `restOnGrid`).
-// true rests the model's base on the z=0 grid; false (the default) centres it
-// on the origin in all three axes. A literal, so the unused branch drops out.
+// Build-time toggle (Vite define; see vite.config.ts / config
+// `viewer.restOnGrid`). true rests the model's base on the z=0 grid; false
+// (the default) centres it on the origin in all three axes. A literal, so
+// the unused branch drops out.
 declare const __APP_REST_ON_GRID__: boolean;
 
 // The viewer presentation (a Vite define; see vite.config.ts / config
@@ -39,8 +40,8 @@ declare const __APP_REST_ON_GRID__: boolean;
 // studio-only environment and contact-shadow modules — tree-shakes out of the
 // bundle, like the loaders above. The reference grid is deliberately NOT a
 // build-time choice: it is a runtime toggle the visitor owns (the `showGrid`
-// prop, seeded by config `ui.grid` — see src/lib/viewerPrefs.ts), and it is
-// drawn in both styles.
+// prop, seeded by config `viewer.grid` — see src/lib/viewerPrefs.ts), and it
+// is drawn in both styles.
 declare const __APP_VIEWER_STYLE__: "plain" | "studio";
 
 // Axis-aligned bounding-box size of the rendered model, in millimetres (the
@@ -208,7 +209,7 @@ export const Viewer = forwardRef<
     /** The standard camera view to frame new models / Reset view with. */
     view?: ViewName;
     /** Whether the reference grid is drawn (default off). The HUD's grid
-     *  toggle owns this; the config's `ui.grid` only seeds its first-ever
+     *  toggle owns this; the config's `viewer.grid` only seeds its first-ever
      *  value — see src/lib/viewerPrefs.ts. */
     showGrid?: boolean;
     /** Reports the model's bounding-box size in mm (null when geometry clears). */

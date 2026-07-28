@@ -1,0 +1,11 @@
+{
+  "source": "src",
+  "designs": [
+    {
+      "id": "presetdir",
+      "label": "Preset Dir",
+      "presets": { "images": "no-such-preset-images-dir" }
+    }
+  ],
+  "render": { "features": [], "fonts": [] }
+}

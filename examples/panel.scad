@@ -4,7 +4,7 @@
 // imported and coloured separately (per-region colour survives a 3MF export). A
 // single-colour drawing leaves `svg_layers` blank and imports as one relief.
 //
-// @description An SVG extruded as a coloured relief panel (per-region colours).
+// @description An SVG extruded as a coloured relief panel.
 // @icon panel-icon.svg
 // @doc panel.md
 

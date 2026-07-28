@@ -29,8 +29,8 @@ import { createHash } from "node:crypto";
 // Deliberately EXCLUDED — presentation-only, cannot affect exported geometry:
 // title/description/help/notices/licenses/popup/colors/ui/logo/extraCss,
 // param labels/help text/section names/collapsed state, design description/
-// icon/doc, restOnGrid (viewer framing only), and wasmVersion itself (implied
-// by the hashed wasm/glue bytes, not the version string).
+// icon/doc, viewer (presentation + framing only), and wasmVersion itself
+// (implied by the hashed wasm/glue bytes, not the version string).
 export function computeRenderHash({
   SOURCE,
   scadFiles,

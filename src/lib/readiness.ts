@@ -17,6 +17,7 @@ import type { Param } from "../openscad/types";
 import type { Values } from "./presets";
 import { familyOf, normalizeFamily } from "./fonts";
 import { isVisible } from "./visibility";
+import { selectPlural } from "./i18n";
 
 /**
  * A `font` parameter whose selected family isn't in the loaded set —
@@ -70,11 +71,10 @@ export type AttentionItem = FontFallbackItem | NoticeAttentionItem | DiagnosticA
  */
 export interface NoticeAttentionInput {
   marker: string;
-  label: string;
-  /** Optional singular form of `label` (see `NoticeCategory.labelOne`) —
-   *  used in place of `label` whenever `count` is exactly 1, so a single
-   *  pending notice never reads as "1 alerts". */
-  labelOne?: string;
+  /** Both CLDR forms (see `NoticeCategory.label`) — resolved to the one this
+   *  item's live `count` calls for via `selectPlural`, so a single pending
+   *  notice never reads as "1 alerts". */
+  label: { one: string; other: string };
   attention: boolean;
   count: number;
   /** Whether this category's notices are a SYMPTOM of a missing font rather
@@ -171,7 +171,7 @@ export function deriveAttention(inputs: DeriveAttentionInputs): AttentionItem[] 
     // which font the notice is about. 2+ missing fonts — visible or hidden —
     // leave it standing on its own.
     if (n.subsumedByFont && fontFallbackCount > 0 && missingFontCount === 1) continue;
-    const label = n.count === 1 && n.labelOne ? n.labelOne : n.label;
+    const label = selectPlural(n.count, n.label);
     items.push({ kind: "notice", marker: n.marker, label, count: n.count });
   }
   return items;

@@ -83,6 +83,22 @@ export function makeT(bundle: Bundle, overrides: Bundle = {}) {
   return { t, tn };
 }
 
+/**
+ * Picks between a singular/plural PAIR of already-resolved strings using the
+ * same CLDR plural-category selection `tn()` runs on catalogue keys — for a
+ * noun that isn't a catalogue key at all, e.g. a config-defined `notices[]`
+ * badge label (`{ one, other }`; see docs/config.md's Notice badges section).
+ * `one` is optional and falls back to `other`, mirroring `tn()`'s own
+ * fall-through-to-`#other` behaviour. Deliberately NOT a bespoke
+ * `count === 1` check: English happens to have only two CLDR categories, but
+ * the selection itself should go through `Intl.PluralRules` like every other
+ * plural decision in this app, not reimplement its own rule.
+ */
+export function selectPlural(count: number, forms: { one?: string; other: string }): string {
+  const category = EN_PLURAL_RULES.select(count);
+  return (category === "one" ? forms.one : undefined) ?? forms.other;
+}
+
 // Route through `unknown`: the generated JSON is validated at runtime by
 // schema.ts; a direct `as Schema` structural-checks the raw literal, which a
 // deployment's `strings` (many string-literal keys) can't satisfy vs

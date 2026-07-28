@@ -14,6 +14,7 @@ import {
 } from "../lib/presets";
 import { downloadBlob } from "../lib/download";
 import { parsePresetCardName } from "../lib/presetCard";
+import { t } from "../lib/i18n";
 import { Button } from "./ui/button";
 import { IconButton } from "./IconButton";
 import { FileInput } from "./FileInput";
@@ -77,8 +78,6 @@ interface Props {
   /** When true, renders inline (no popover wrapper). Used in mobile sheet tabs. */
   inline?: boolean;
   onClose?: () => void;
-  /** Popover title/aria-label (default "Presets"). */
-  presetsLabel?: string;
 }
 
 export function PresetPicker({
@@ -92,8 +91,10 @@ export function PresetPicker({
   onPresetsChange,
   inline = false,
   onClose,
-  presetsLabel = "Presets",
 }: Props) {
+  // Overridable via the config's `strings` block (src/locales/en.json's
+  // presets.title) — see docs/config.md's "Text overrides".
+  const presetsLabel = t("presets.title");
   // Preset images are optional per preset (docs/config.md's "Bundled presets"
   // note). A bundled preset that has a configured image renders as a card; one
   // without renders as a plain list row (the same `itemClass` row the "Saved by

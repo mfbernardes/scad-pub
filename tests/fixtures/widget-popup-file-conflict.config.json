@@ -1,0 +1,6 @@
+{
+  "source": "src",
+  "popup": { "header": "Welcome", "body": "Inline body.", "bodyFile": "widget-popup-body.md" },
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}

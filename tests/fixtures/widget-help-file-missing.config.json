@@ -1,0 +1,6 @@
+{
+  "source": "src",
+  "help": { "file": "nope.md" },
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}

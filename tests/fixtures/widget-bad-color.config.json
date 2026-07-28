@@ -2,6 +2,6 @@
   "title": "Widget Studio",
   "source": "src",
   "assets": ["lib"],
-  "themeColor": "#fff;}<script>",
-  "designs": [{ "id": "widget", "label": "Widget" }]
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "pwa": { "themeColor": { "dark": "#fff;}<script>" } }
 }

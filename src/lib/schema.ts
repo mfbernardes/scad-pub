@@ -2,9 +2,52 @@
 // by scripts/gen-schema.mjs and imported as a typed JSON blob; validating its
 // shape on load turns generator/type drift into a clear, immediate error instead
 // of a confusing failure deep inside a render.
+//
+// Rule this file follows (see src/openscad/types.ts for the base statement):
+// designs.json is the app-facing artifact and may differ from the config
+// surface where the app's needs differ, but where both express the same
+// grouping — as `viewer` now does on both sides — they mirror each other.
+//
+// The counter-example is deliberately documented HERE rather than in
+// types.ts: that file sits in the render worker's hashed dependency closure
+// (src/openscad/worker.ts imports its types — see scripts/lib/worker-deps.mjs
+// and computeRenderHash in scripts/lib/hash.mjs, which hashes whole files,
+// comments included), so a comment-only edit there moves `renderHash` and
+// invalidates every persisted render for nothing. This file isn't in that
+// closure, so it's the safe place for prose that doesn't need to change
+// behaviour. The config's `render` and `pwa` blocks (scripts/lib/
+// config-spec.mjs) do NOT both mirror into designs.json the way `viewer`
+// does: `render.features`/`.format`/`.fonts`/`.fontFallback` land as this
+// schema's own flat `features`/`format`/`fonts`/`fontFallback` fields (the
+// app already reads those flat; only `render.heavyMs`/`.cache` nest, under
+// `RenderConfig`, since that pairing is genuinely its own build-time-tuning
+// concept) — and `pwa` doesn't appear here at all, because every one of its
+// keys (`shortName`, `icon`, `iconMaskable`, `backgroundColor`, `categories`,
+// `screenshots`, `shortcuts`, `themeColor`, `install`) is a
+// manifest.webmanifest / icon-rasterizer input with no runtime reader; the
+// closest thing, vite.config.ts's meta-tag injection, already consumes this
+// schema's flat `themeColor`/`themeColorLight`/`appleSplash` fields, not a
+// `pwa` object. One sentence: mirror the config's grouping here when the app
+// shares the concept, keep this file's flat shape when it doesn't.
 import type { Schema, Design, Param } from "../openscad/types";
 
 const PARAM_TYPES = ["number", "boolean", "enum", "string"];
+
+// Enum value lists mirrored from scripts/lib/config-spec.mjs's own CONFIG_SPEC
+// (the single declarative source for each of these), since designs.json
+// carries the resolved value, not the spec node, and this runtime check has
+// no other way to know what's valid. Exported so tests/config-spec.test.mjs
+// can cross-check each pair against CONFIG_SPEC directly rather than trusting
+// two hand-typed lists to stay in sync — see that test for the drift guard.
+export const POPUP_MODES = ["always", "once", "dismissible", "picker"];
+export const TEXT_DIRECTIONS = ["ltr", "rtl", "auto"];
+export const FORMATS = ["3mf", "stl"];
+export const PANEL_SIDES = ["left", "right"];
+export const PANEL_DEFAULTS = ["open", "collapsed"];
+export const OUTPUT_DEFAULTS = ["closed", "open"];
+export const VIEWER_STYLES = ["plain", "studio"];
+export const VIEWER_GRID_DEFAULTS = ["off", "on"];
+export const INSTALL_MODES = ["auto", "off"];
 
 function fail(msg: string): never {
   throw new Error(`Invalid designs schema: ${msg}`);
@@ -133,12 +176,8 @@ export function validateSchema(raw: unknown): Schema {
     if (typeof s.fileImport !== "object" || Array.isArray(s.fileImport))
       fail("'fileImport' must be an object or null");
     const fi = s.fileImport as Record<string, unknown>;
-    for (const key of ["accept", "label", "note"] as const) {
-      if (fi[key] !== undefined && typeof fi[key] !== "string")
-        fail(`'fileImport.${key}' must be a string`);
-    }
-    if (fi.maxBytes !== undefined && typeof fi.maxBytes !== "number")
-      fail("'fileImport.maxBytes' must be a number");
+    if (fi.note !== undefined && typeof fi.note !== "string")
+      fail("'fileImport.note' must be a string");
   }
   if (s.popup != null) {
     if (typeof s.popup !== "object" || Array.isArray(s.popup))
@@ -148,7 +187,7 @@ export function validateSchema(raw: unknown): Schema {
       if (typeof p[key] !== "string" || !p[key])
         fail(`'popup.${key}' must be a non-empty string`);
     }
-    if (!["always", "once", "dismissible", "picker"].includes(p.mode as string))
+    if (!POPUP_MODES.includes(p.mode as string))
       fail("'popup.mode' must be \"always\", \"once\", \"dismissible\" or \"picker\"");
     if (p.button !== undefined && (typeof p.button !== "string" || !p.button))
       fail("'popup.button', when set, must be a non-empty string");
@@ -162,10 +201,12 @@ export function validateSchema(raw: unknown): Schema {
       const e = n as Record<string, unknown>;
       if (typeof e.marker !== "string" || !e.marker)
         fail("a notice category is missing required string 'marker'");
-      if (typeof e.label !== "string" || !e.label)
-        fail("a notice category is missing required string 'label'");
-      if (e.labelOne !== undefined && typeof e.labelOne !== "string")
-        fail("a notice 'labelOne' must be a string");
+      if (!e.label || typeof e.label !== "object" || Array.isArray(e.label))
+        fail("a notice category is missing required object 'label' ({ one, other })");
+      const label = e.label as Record<string, unknown>;
+      for (const key of ["one", "other"] as const)
+        if (typeof label[key] !== "string" || !label[key])
+          fail(`a notice 'label.${key}' must be a non-empty string`);
       if (e.color !== undefined && typeof e.color !== "string")
         fail("a notice 'color' must be a string");
       if (e.attention !== undefined && typeof e.attention !== "boolean")
@@ -195,7 +236,7 @@ export function validateSchema(raw: unknown): Schema {
       (key) => `'strings.${key}' must be a string`,
       false
     );
-  if (s.dir !== undefined && !["ltr", "rtl", "auto"].includes(s.dir as string))
+  if (s.dir !== undefined && !TEXT_DIRECTIONS.includes(s.dir as string))
     fail("'dir' must be \"ltr\", \"rtl\" or \"auto\"");
   if (s.defaultDesign != null) {
     if (typeof s.defaultDesign !== "string") fail("'defaultDesign' must be a string");
@@ -219,7 +260,7 @@ export function validateSchema(raw: unknown): Schema {
         fail("'render.cache.persistent' must be a boolean");
     }
   }
-  if (s.format !== "3mf" && s.format !== "stl")
+  if (!FORMATS.includes(s.format as string))
     fail("'format' must be \"3mf\" or \"stl\"");
   if (s.colors != null) {
     const c = s.colors as Record<string, unknown>;
@@ -237,37 +278,57 @@ export function validateSchema(raw: unknown): Schema {
   }
   if (s.extraCss != null && typeof s.extraCss !== "string")
     fail("'extraCss' must be a string URL or null");
+  if (s.themeColor !== undefined && typeof s.themeColor !== "string")
+    fail("'themeColor' must be a string");
+  if (s.themeColorLight !== undefined && typeof s.themeColorLight !== "string")
+    fail("'themeColorLight' must be a string");
   if (s.ui != null) {
     if (typeof s.ui !== "object" || Array.isArray(s.ui)) fail("'ui' must be an object or null");
     const ui = s.ui as Record<string, unknown>;
-    if (ui.panelSide !== undefined && !["left", "right"].includes(ui.panelSide as string))
+    if (ui.panelSide !== undefined && !PANEL_SIDES.includes(ui.panelSide as string))
       fail("'ui.panelSide' must be \"left\" or \"right\"");
-    if (ui.panelDefault !== undefined && !["open", "collapsed"].includes(ui.panelDefault as string))
+    if (ui.panelDefault !== undefined && !PANEL_DEFAULTS.includes(ui.panelDefault as string))
       fail("'ui.panelDefault' must be \"open\" or \"collapsed\"");
-    if (ui.outputDefault !== undefined && !["closed", "open"].includes(ui.outputDefault as string))
+    if (ui.outputDefault !== undefined && !OUTPUT_DEFAULTS.includes(ui.outputDefault as string))
       fail("'ui.outputDefault' must be \"closed\" or \"open\"");
-    if (ui.install !== undefined && !["auto", "off"].includes(ui.install as string))
+    if (ui.install !== undefined && !INSTALL_MODES.includes(ui.install as string))
       fail("'ui.install' must be \"auto\" or \"off\"");
     if (ui.showVarName !== undefined && typeof ui.showVarName !== "boolean")
       fail("'ui.showVarName' must be a boolean");
+    if (ui.saveImage !== undefined && typeof ui.saveImage !== "boolean")
+      fail("'ui.saveImage' must be a boolean");
     for (const key of ["gallery", "essentials"] as const)
       if (ui[key] !== undefined && typeof ui[key] !== "boolean")
         fail(`'ui.${key}' must be a boolean`);
-    if (ui.measure !== undefined && typeof ui.measure !== "boolean")
-      fail("'ui.measure' must be a boolean");
-    if (ui.viewPicker !== undefined && typeof ui.viewPicker !== "boolean")
-      fail("'ui.viewPicker' must be a boolean");
-    if (ui.reset !== undefined && typeof ui.reset !== "boolean")
-      fail("'ui.reset' must be a boolean");
-    if (ui.zoom !== undefined && typeof ui.zoom !== "boolean")
-      fail("'ui.zoom' must be a boolean");
-    if (ui.fullscreen !== undefined && typeof ui.fullscreen !== "boolean")
-      fail("'ui.fullscreen' must be a boolean");
-    if (ui.grid !== undefined && !["off", "on"].includes(ui.grid as string))
-      fail("'ui.grid' must be \"off\" or \"on\"");
-    for (const key of ["presetsLabel", "parametersLabel"] as const)
-      if (ui[key] !== undefined && typeof ui[key] !== "string")
-        fail(`'ui.${key}' must be a string`);
+    if (ui.afterExport != null) {
+      if (typeof ui.afterExport !== "object" || Array.isArray(ui.afterExport))
+        fail("'ui.afterExport' must be an object");
+      const ae = ui.afterExport as Record<string, unknown>;
+      if (ae.helpTab !== undefined && typeof ae.helpTab !== "string")
+        fail("'ui.afterExport.helpTab' must be a string");
+    }
+  }
+  // The 3D viewer's presentation, framing, and per-control visibility. Unlike
+  // `ui` above this is required (see the Schema/ViewerConfig types) — every
+  // config produces one, since parseViewer always returns an object.
+  if (typeof s.viewer !== "object" || s.viewer === null || Array.isArray(s.viewer))
+    fail("'viewer' must be an object");
+  {
+    const v = s.viewer as Record<string, unknown>;
+    if (!VIEWER_STYLES.includes(v.style as string))
+      fail("'viewer.style' must be \"plain\" or \"studio\"");
+    if (v.restOnGrid !== undefined && typeof v.restOnGrid !== "boolean")
+      fail("'viewer.restOnGrid' must be a boolean");
+    if (v.grid !== undefined && !VIEWER_GRID_DEFAULTS.includes(v.grid as string))
+      fail("'viewer.grid' must be \"off\" or \"on\"");
+    if (v.controls != null) {
+      if (typeof v.controls !== "object" || Array.isArray(v.controls))
+        fail("'viewer.controls' must be an object");
+      const c = v.controls as Record<string, unknown>;
+      for (const key of ["measure", "viewPicker", "reset", "zoom", "fullscreen"] as const)
+        if (c[key] !== undefined && typeof c[key] !== "boolean")
+          fail(`'viewer.controls.${key}' must be a boolean`);
+    }
   }
   if (s.help != null) {
     const h = s.help as Record<string, unknown>;

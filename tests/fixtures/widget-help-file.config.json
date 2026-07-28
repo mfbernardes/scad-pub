@@ -1,0 +1,6 @@
+{
+  "source": "src",
+  "help": { "title": "User guide", "file": "widget-help.md" },
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}

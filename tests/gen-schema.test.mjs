@@ -22,12 +22,12 @@ import {
   KNOWN_TOP_LEVEL_KEYS,
   firstSentence,
   parseEnumHint,
+  parseAfterExport,
   parseColors,
   parseLicenses,
   parseFileImport,
   parsePopup,
   parseFormat,
-  parseRestOnGrid,
   parseViewer,
   parseNotices,
   parseUi,
@@ -35,9 +35,14 @@ import {
   parseFontFallback,
   parseLang,
   parseDir,
+  parsePwa,
+  parsePwaThemeColor,
   parseRender,
+  parseStringArray,
   parseStrings,
   renderFontsConf,
+  resolveHelp,
+  resolveFileField,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
 import { componentVersions } from "../scripts/lib/dep-versions.mjs";
@@ -243,11 +248,8 @@ test("config-driven features, fonts; presets auto-detected by sibling name", () 
   const { schema, out } = run("widget.config.json");
   assert.deepEqual(schema.features, ["textmetrics"]);
   assert.deepEqual(schema.fonts, ["Foo.ttf"]);
-  // The fixture configures the generic file-import button directly.
-  assert.deepEqual(schema.fileImport, {
-    accept: ".ttf,.otf",
-    label: "Import Foo font",
-  });
+  // The fixture enables the generic file-import button with defaults.
+  assert.deepEqual(schema.fileImport, {});
   // src/widget.json sits next to src/widget.scad, so it's bundled automatically.
   assert.deepEqual(schema.designs[0].presets, ["widget.json"]);
   assert.equal(schema.designs[0].heavy, true); // per-design heavy flag passes through
@@ -289,8 +291,8 @@ test("render tuning and defaultDesign pass through to the schema", () => {
   const { schema } = run("widget-designmeta.config.json");
   assert.deepEqual(schema.render, { heavyMs: 9000, cache: { maxEntries: 4, persistent: false } });
   assert.equal(schema.defaultDesign, "collapsible");
-  assert.deepEqual(schema.fileImport, { maxBytes: 1048576 });
-  assert.equal(schema.ui.fullscreen, false);
+  assert.deepEqual(schema.fileImport, { note: "Upload a font or an SVG." });
+  assert.equal(schema.viewer.controls.fullscreen, false);
   assert.equal(schema.ui.saveImage, false);
 });
 
@@ -302,31 +304,54 @@ test("duplicate design ids fail the build", () => {
   assert.throws(() => run("widget-dup-id.config.json"), /duplicate design id "widget"/);
 });
 
-test("reviewLabels: keys matching declared params are resolved, plus a reviewNote string", () => {
-  const { schema } = run("widget-reviewlabels.config.json");
-  const widget = schema.designs.find((d) => d.id === "widget");
-  assert.deepEqual(widget.reviewLabels, { label: "Text", FontSize: "Text", thickness: "Thickness" });
-  assert.equal(widget.reviewNote, "Text prints in capitals even though you typed it in lowercase.");
+test("a designs[] entry with an unrecognised key fails the build, naming the design and the valid keys", () => {
+  assert.throws(
+    () => run("widget-designs-unknownkey.config.json"),
+    /'designs\[widget\]': unknown key 'shadow'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets/
+  );
 });
 
-test("a design with no configured reviewLabels/reviewNote omits/nulls them", () => {
+test("a designs[] entry's stale flat 'icon' fails the build instead of being silently dropped", () => {
+  assert.throws(
+    () => run("widget-designs-stale-icon.config.json"),
+    /'designs\[widget\]': unknown key 'icon'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets/
+  );
+});
+
+test("a designs[] entry's removed 'description'/'media'/'review' keys fail the build like any other unrecognised key", () => {
+  // Design metadata (description/icon/image/doc/review labels/note) comes only
+  // from the design's own .scad annotations now — these config-level fields
+  // were removed entirely, not just deprecated, so they fail the ordinary
+  // unknown-key check like any stale key.
+  assert.throws(
+    () => run("widget-designs-stale-description.config.json"),
+    /'designs\[widget\]': unknown key 'description'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets/
+  );
+  assert.throws(
+    () => run("widget-designs-stale-media.config.json"),
+    /'designs\[widget\]': unknown key 'media'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets/
+  );
+  assert.throws(
+    () => run("widget-designs-stale-review.config.json"),
+    /'designs\[widget\]': unknown key 'review'\.\s*\n\s*Valid keys: id, label, file, heavy, group, presets/
+  );
+});
+
+test("a design with no @review/@reviewNote annotations omits/nulls reviewLabels/reviewNote", () => {
   const { schema } = run("widget.config.json");
   assert.equal(schema.designs[0].reviewLabels, undefined);
   assert.equal(schema.designs[0].reviewNote ?? null, null);
 });
 
-test("reviewLabels: a key not matching any declared parameter fails the build", () => {
-  assert.throws(
-    () => run("widget-reviewlabels-badname.config.json"),
-    /'reviewLabels\["nope"\]' does not match any declared parameter/
-  );
-});
-
-test("reviewLabels: a blank value fails the build like the other design string fields", () => {
-  assert.throws(
-    () => run("widget-reviewlabels-badtype.config.json"),
-    /'reviewLabels\["label"\]' must be a non-empty string/
-  );
+test("reviewLabels/reviewNote: a design's own @review/@reviewNote annotations are the sole source", () => {
+  const { schema } = run("widget-review-annot.config.json");
+  const widget = schema.designs.find((d) => d.id === "widget");
+  assert.deepEqual(widget.reviewLabels, { label: "Text", thickness: "Thickness" });
+  assert.equal(widget.reviewNote, "Prints exactly as typed.");
+  // The transient annotation flag never reaches a param's own object — it's
+  // folded into reviewLabels above and stripped (src/openscad/types.ts's
+  // ParamBase carries no such field).
+  for (const p of widget.params) assert.equal(p.reviewLabel, undefined);
 });
 
 test("presetImages: a key matching a bundled preset name is resolved and copied", () => {
@@ -344,7 +369,56 @@ test("a design with no configured presetImages omits the field", () => {
 test("presetImages: a key not matching any bundled preset name fails the build", () => {
   assert.throws(
     () => run("widget-presetimages-badname.config.json"),
-    /'presetImages\["Nope"\]' does not match any bundled preset name/
+    /'presets\.images\["Nope"\]' does not match any bundled preset name/
+  );
+});
+
+test("presets.images directory form: each preset's image is found by slug, trying .svg/.png/.webp in turn", (t) => {
+  let logged = "";
+  t.mock.method(console, "log", (msg) => {
+    logged += msg + "\n";
+  });
+  const { schema, out } = run("widget-presetimages-dir.config.json");
+  const design = schema.designs.find((d) => d.id === "presetdir");
+  // "Salz (Deutsch)" has both a .svg and a .png in the directory — .svg wins
+  // (the documented extension priority).
+  assert.equal(design.presetImages["Salz (Deutsch)"], "scad/presetdir-preset-0.svg");
+  assert.ok(existsSync(join(out, "scad", "presetdir-preset-0.svg")));
+  assert.equal(design.presetImages["Office (English US)"], "scad/presetdir-preset-1.png");
+  // The two punctuation-only names slug identically; only the FIRST one
+  // (matching "...english-us.webp", no "-2" suffix) has a file in the
+  // directory, so only it gets an image.
+  assert.equal(
+    design.presetImages["Punctuation | English UEB: - : ; ' (English US)"],
+    "scad/presetdir-preset-2.webp"
+  );
+  assert.equal("Punctuation | English UEB: . , ? ! (English US)" in design.presetImages, false);
+  // "No Image Here" has no matching file in the directory at all — legitimate
+  // (preset images are optional per preset), not a build failure.
+  assert.equal("No Image Here" in design.presetImages, false);
+  // 3 of the 5 bundled presets matched an image — reported in the build log
+  // so a wrong-but-existing directory (e.g. every name misspelled) is visible.
+  assert.match(logged, /presets\.images: 3\/5 preset\(s\) matched an image in 'preset-images-dir'/);
+});
+
+test("presets.images directory form: a directory that doesn't exist fails the build", () => {
+  assert.throws(
+    () => run("widget-presetimages-dir-missing.config.json"),
+    /presets\.images directory 'no-such-preset-images-dir' not found/
+  );
+});
+
+test("presets.images directory form: a path that exists but isn't a directory fails the build", () => {
+  assert.throws(
+    () => run("widget-presetimages-dir-notadir.config.json"),
+    /'presets\.images' 'src\/presetdir\.scad' is not a directory/
+  );
+});
+
+test("presets.images: a blank string fails the build like the map form's blank values", () => {
+  assert.throws(
+    () => run("widget-presetimages-dir-blank.config.json"),
+    /'presets\.images' must be a non-empty string or object/
   );
 });
 
@@ -365,23 +439,22 @@ test("strings: an unknown key fails the build, pointing at the catalogue", () =>
   );
 });
 
-test("per-design description + icon are parsed, copied and served", () => {
+test("per-design description + icon come from the design's own annotations", () => {
   const { schema, out } = run("widget-designmeta.config.json");
   const widget = schema.designs.find((d) => d.id === "widget");
   const collapsible = schema.designs.find((d) => d.id === "collapsible");
-  // Config `designs[]` values win over the design's own annotations.
+  // widget's `// @description` / `// @icon` annotations (the icon path is
+  // resolved relative to the design file and copied under <id>-icon.<ext>).
   assert.equal(widget.description, "A little widget.");
   assert.equal(widget.icon, "scad/widget-icon.svg");
   assert.ok(existsSync(join(out, "scad", "widget-icon.svg")));
-  // collapsible sets no config description/icon, so it falls back to the
-  // `// @description` / `// @icon` annotations in its .scad (the icon path is
-  // resolved relative to the design file and copied under <id>-icon.<ext>).
+  // collapsible's own `// @description` / `// @icon` annotations.
   assert.equal(collapsible.description, "A collapsible gadget.");
   assert.equal(collapsible.icon, "scad/collapsible-icon.svg");
   assert.ok(existsSync(join(out, "scad", "collapsible-icon.svg")));
 });
 
-test("per-design @doc is resolved, copied and served (config + annotation paths)", () => {
+test("per-design @doc is resolved, copied and served (annotation paths)", () => {
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   const schema = generate({
     configPath: join(FIXTURES, "widget-designmeta.config.json"),
@@ -391,11 +464,10 @@ test("per-design @doc is resolved, copied and served (config + annotation paths)
   });
   const widget = schema.designs.find((d) => d.id === "widget");
   const collapsible = schema.designs.find((d) => d.id === "collapsible");
-  // widget's doc comes from the config `designs[].doc` (config-relative path).
+  // Both designs' docs come from their own `// @doc` annotation (resolved
+  // relative to the design file), copied under <id>-doc.md.
   assert.equal(widget.doc, "scad/widget-doc.md");
   assert.ok(existsSync(join(out, "public", "scad", "widget-doc.md")));
-  // collapsible sets no config doc, so it falls back to its `// @doc`
-  // annotation (resolved relative to the design file), copied under <id>-doc.md.
   assert.equal(collapsible.doc, "scad/collapsible-doc.md");
   assert.ok(existsSync(join(out, "public", "scad", "collapsible-doc.md")));
   // Both docs are precached for offline use.
@@ -406,7 +478,7 @@ test("per-design @doc is resolved, copied and served (config + annotation paths)
   assert.ok(precache.shell.includes("scad/collapsible-doc.md"));
 });
 
-test("a design with no @doc / config doc has doc null and no button target", () => {
+test("a design with no @doc annotation has doc null and no button target", () => {
   const { schema } = run("widget.config.json");
   assert.equal(schema.designs[0].doc ?? null, null);
 });
@@ -425,10 +497,17 @@ test("parseParams captures file-level @description / @icon / @doc metadata", () 
     icon: "assets/emblem.svg",
     image: null,
     doc: "collapsible-doc.md",
+    reviewNote: null,
   });
   // A design file with no such annotations reports nulls.
   const plain = parseParams(join(FIXTURES, "mini.scad"));
-  assert.deepEqual(plain.meta, { description: null, icon: null, image: null, doc: null });
+  assert.deepEqual(plain.meta, {
+    description: null,
+    icon: null,
+    image: null,
+    doc: null,
+    reviewNote: null,
+  });
 });
 
 test("lang/dir + per-design shortcut icons + screenshot fields reach the manifest", () => {
@@ -445,7 +524,7 @@ test("lang/dir + per-design shortcut icons + screenshot fields reach the manifes
   assert.equal(manifest.lang, "pt-BR");
   assert.equal(manifest.dir, "rtl");
   // Two designs -> auto-derived shortcuts, each carrying its design's icon —
-  // widget's from the config, collapsible's from its `// @icon` annotation.
+  // each design's own `// @icon` annotation.
   const widgetShortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
   assert.deepEqual(widgetShortcut.icons, [
     { src: "scad/widget-icon.svg", sizes: "any", type: "image/svg+xml" },
@@ -679,9 +758,9 @@ test("config shortcuts are validated and folded into the manifest", () => {
 });
 
 test("rejects a PWA colour that isn't a safe CSS colour string", () => {
-  // themeColor/themeColorLight/backgroundColor are interpolated into generated
+  // pwa.themeColor/pwa.backgroundColor are interpolated into generated
   // SVG/HTML, so they must pass the same COLOR_VALUE_RE as every other colour.
-  assert.throws(() => run("widget-bad-color.config.json"), /'themeColor' must be a CSS colour/);
+  assert.throws(() => run("widget-bad-color.config.json"), /'pwa\.themeColor\.dark' must be a CSS colour/);
 });
 
 test("rejects a design id with unsafe characters", () => {
@@ -694,17 +773,27 @@ test("rejects an app-level id with unsafe characters", () => {
   assert.throws(() => run("widget-bad-app-id.config.json"), /config 'id' .* must match/);
 });
 
-test("'categories' must be an array of strings when present", () => {
+test("'pwa.categories' must be an array of strings when present", () => {
+  // Asserts the corrected 'pwa.categories' path (not the stale bare
+  // 'categories' this used to say — see parseStringArray's own fix).
   assert.throws(
     () => run("widget-bad-categories.config.json"),
-    /'categories' must be an array of non-empty strings/
+    /'pwa\.categories' must be an array of non-empty strings/
   );
+});
+
+test("'render.features'/'pwa.categories': an explicit null is treated as unset, not an error", () => {
+  // Both used to throw ("must be an array of non-empty strings (got null)")
+  // because parseStringArray only checked `undefined` — every other
+  // render/pwa field already treats null == absent (see applyGroupSpec's own
+  // comment). Building must succeed, matching a config that omits both keys.
+  assert.doesNotThrow(() => run("widget-features-categories-null.config.json"));
 });
 
 test("'features' must be an array of strings when present", () => {
   assert.throws(
     () => run("widget-bad-features.config.json"),
-    /'features' must be an array of non-empty strings/
+    /'render\.features' must be an array of non-empty strings/
   );
 });
 
@@ -770,51 +859,90 @@ test("format defaults to 3mf, accepts stl, and rejects anything else", () => {
   assert.equal(parseFormat(null), "3mf");
   assert.equal(parseFormat("3mf"), "3mf");
   assert.equal(parseFormat("stl"), "stl");
-  assert.throws(() => parseFormat("obj"), /config\.format must be/);
-  assert.throws(() => parseFormat("STL"), /config\.format must be/);
+  assert.throws(() => parseFormat("obj"), /'render\.format' must be/);
+  assert.throws(() => parseFormat("STL"), /'render\.format' must be/);
 });
 
-test("restOnGrid defaults to false, accepts booleans, and rejects anything else", () => {
-  assert.equal(parseRestOnGrid(undefined), false);
-  assert.equal(parseRestOnGrid(null), false);
-  assert.equal(parseRestOnGrid(true), true);
-  assert.equal(parseRestOnGrid(false), false);
-  assert.throws(() => parseRestOnGrid("true"), /config\.restOnGrid must be a boolean/);
-  assert.throws(() => parseRestOnGrid(1), /config\.restOnGrid must be a boolean/);
-});
+// `viewer` gathers every display-only viewer concern in one place: the
+// presentation style, restOnGrid framing, the grid toggle's seed value, and
+// per-control visibility (viewer.controls.*) — see this commit's message for
+// why these used to be split across the top level and `ui`.
+const VIEWER_DEFAULTS = {
+  style: "plain",
+  restOnGrid: false,
+  grid: "off",
+  controls: { measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true },
+};
 
-test("viewer defaults to the plain style, validates style, rejects junk", () => {
-  assert.deepEqual(parseViewer(undefined), { style: "plain" });
-  assert.deepEqual(parseViewer(null), { style: "plain" });
-  assert.deepEqual(parseViewer({}), { style: "plain" });
-  assert.deepEqual(parseViewer({ style: "studio" }), { style: "studio" });
-  assert.deepEqual(parseViewer({ style: "plain" }), { style: "plain" });
-  assert.throws(() => parseViewer("studio"), /config\.viewer must be an object/);
-  assert.throws(() => parseViewer(["studio"]), /config\.viewer must be an object/);
-  assert.throws(() => parseViewer({ style: "toon" }), /config\.viewer\.style must be one of/);
-  assert.throws(() => parseViewer({ shadow: true }), /config\.viewer: unknown key 'shadow'/);
-});
-
-test("viewer.grid is rejected as unknown — the grid belongs to ui.grid", () => {
-  // The reference grid is a persisted runtime toggle seeded by `ui.grid`; a
-  // build-time gate here would silently make that toggle a no-op. So a config
-  // carrying the retired key must FAIL loudly rather than be ignored, and the
-  // message must point at its replacement.
+test("viewer defaults every field (style, restOnGrid, grid, controls), validates style, rejects junk", () => {
+  assert.deepEqual(parseViewer(undefined), VIEWER_DEFAULTS);
+  assert.deepEqual(parseViewer(null), VIEWER_DEFAULTS);
+  assert.deepEqual(parseViewer({}), VIEWER_DEFAULTS);
+  // An explicit null on a recognised key is "not set" too, same as omitting
+  // the whole block (normalization: null == omitted, everywhere).
+  assert.deepEqual(parseViewer({ style: null }), VIEWER_DEFAULTS);
+  assert.deepEqual(parseViewer({ style: "studio" }), { ...VIEWER_DEFAULTS, style: "studio" });
+  assert.deepEqual(parseViewer({ style: "plain" }), VIEWER_DEFAULTS);
+  // Every message now uses the one "gen-schema: '<path>' ..." prefix — viewer
+  // used to read "config.<path> ..." with no quotes, an accident of predating
+  // the newer convention rather than a meaningful distinction.
+  assert.throws(() => parseViewer("studio"), /gen-schema: 'viewer' must be an object/);
+  assert.throws(() => parseViewer(["studio"]), /gen-schema: 'viewer' must be an object/);
+  // Enum errors always say what they got now (used to be viewer/popup only).
+  assert.throws(() => parseViewer({ style: "toon" }), /'viewer\.style' must be one of .* \(got "toon"\)/);
   assert.throws(
-    () => parseViewer({ grid: false }),
-    /config\.viewer: unknown key 'grid'.*ui\.grid/
-  );
-  assert.throws(
-    () => parseViewer({ style: "studio", grid: true }),
-    /config\.viewer: unknown key 'grid'/
+    () => parseViewer({ shadow: true }),
+    /'viewer': unknown key 'shadow'.*Valid keys: style, restOnGrid, grid, controls/s
   );
 });
 
-test("restOnGrid is emitted to the schema and absent from renderHash (display-only)", () => {
-  // restOnGrid only changes how the viewer frames the model, not the exported
-  // bytes, so it must reach the schema without disturbing renderHash.
-  const a = run("widget.config.json").schema; // default -> false
-  assert.equal(a.restOnGrid, false);
+test("viewer.restOnGrid defaults to false, accepts booleans, and rejects anything else", () => {
+  assert.equal(parseViewer(undefined).restOnGrid, false);
+  assert.equal(parseViewer({ restOnGrid: true }).restOnGrid, true);
+  assert.equal(parseViewer({ restOnGrid: false }).restOnGrid, false);
+  assert.throws(() => parseViewer({ restOnGrid: "true" }), /'viewer\.restOnGrid' must be a boolean/);
+  assert.throws(() => parseViewer({ restOnGrid: 1 }), /'viewer\.restOnGrid' must be a boolean/);
+});
+
+test("viewer.grid defaults to off, accepts on/off, rejects anything else", () => {
+  assert.equal(parseViewer(undefined).grid, "off");
+  assert.equal(parseViewer({ grid: "on" }).grid, "on");
+  assert.equal(parseViewer({ grid: "off" }).grid, "off");
+  assert.throws(() => parseViewer({ grid: "yes" }), /'viewer\.grid' must be one of "off", "on"/);
+  assert.throws(() => parseViewer({ grid: true }), /'viewer\.grid' must be one of "off", "on"/);
+});
+
+test("viewer.controls.* each default independently and reject non-booleans", () => {
+  assert.deepEqual(parseViewer(undefined).controls, VIEWER_DEFAULTS.controls);
+  // Every default is always present, even when the config never mentions
+  // `viewer` (or `viewer.controls`) at all — matching the flat `ui.*`
+  // booleans these fields replace, which were always present too.
+  assert.deepEqual(parseViewer({}).controls, VIEWER_DEFAULTS.controls);
+  assert.deepEqual(parseViewer({ controls: {} }).controls, VIEWER_DEFAULTS.controls);
+  assert.equal(parseViewer({ controls: { measure: false } }).controls.measure, false);
+  assert.equal(parseViewer({ controls: { viewPicker: false } }).controls.viewPicker, false);
+  assert.equal(parseViewer({ controls: { reset: false } }).controls.reset, false);
+  assert.equal(parseViewer({ controls: { zoom: true } }).controls.zoom, true);
+  assert.equal(parseViewer({ controls: { fullscreen: false } }).controls.fullscreen, false);
+  assert.throws(
+    () => parseViewer({ controls: { measure: "no" } }),
+    /'viewer\.controls\.measure' must be a boolean/
+  );
+  assert.throws(
+    () => parseViewer({ controls: { zoom: 1 } }),
+    /'viewer\.controls\.zoom' must be a boolean/
+  );
+  assert.throws(
+    () => parseViewer({ controls: { shadow: true } }),
+    /'viewer\.controls': unknown key 'shadow'/
+  );
+});
+
+test("viewer is emitted to the schema and absent from renderHash (display-only)", () => {
+  // Nothing under `viewer` changes the exported bytes, so it must reach the
+  // schema without disturbing renderHash.
+  const a = run("widget.config.json").schema; // defaults throughout
+  assert.deepEqual(a.viewer, VIEWER_DEFAULTS);
 });
 
 test("format is emitted to the schema and folded into renderHash", () => {
@@ -940,55 +1068,30 @@ test("ui.showVarName defaults to false, accepts a boolean, rejects non-booleans"
   assert.throws(() => parseUi({ showVarName: 1 }), /'ui\.showVarName' must be a boolean/);
 });
 
-test("ui.measure defaults to true, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseUi(undefined).measure, true);
-  assert.equal(parseUi({}).measure, true);
-  assert.equal(parseUi({ measure: true }).measure, true);
-  assert.equal(parseUi({ measure: false }).measure, false);
-  assert.throws(() => parseUi({ measure: "no" }), /'ui\.measure' must be a boolean/);
-  assert.throws(() => parseUi({ measure: 0 }), /'ui\.measure' must be a boolean/);
+test("ui.presetsLabel / parametersLabel moved to the i18n catalogue (strings['presets.title']/['settings.title'])", () => {
+  // These used to be `ui` fields (parseUi); they're plain chrome copy now,
+  // resolved via src/lib/i18n.ts's t() and overridable through the config's
+  // `strings` block like any other catalogue key.
+  assert.equal(parseUi(undefined).presetsLabel, undefined);
+  assert.equal(parseUi(undefined).parametersLabel, undefined);
 });
 
-test("ui.viewPicker defaults to true, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseUi(undefined).viewPicker, true);
-  assert.equal(parseUi({}).viewPicker, true);
-  assert.equal(parseUi({ viewPicker: false }).viewPicker, false);
-  assert.throws(() => parseUi({ viewPicker: "no" }), /'ui\.viewPicker' must be a boolean/);
-  assert.throws(() => parseUi({ viewPicker: 1 }), /'ui\.viewPicker' must be a boolean/);
+test("ui: an explicit null is equivalent to omitting the key, for every field kind (normalization: null == not set)", () => {
+  // Most `ui` fields used to treat an explicit null as present-but-invalid
+  // and throw; render's and fileImport's already treated it as omitted. That
+  // split was an accident of five parsers growing up separately — a
+  // hand-written JSON config has no comments to delete a line with, so an
+  // explicit null is how an author says "leave this alone", not a typo.
+  assert.equal(parseUi({ showVarName: null }).showVarName, false); // boolean
+  assert.equal(parsePwa({ install: null }).install, "auto"); // enum (pwa.install, moved from ui.install)
+  assert.equal(parseUi({ saveImage: null }).saveImage, undefined); // no-default boolean
 });
 
-test("ui.reset defaults to true, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseUi(undefined).reset, true);
-  assert.equal(parseUi({}).reset, true);
-  assert.equal(parseUi({ reset: false }).reset, false);
-  assert.throws(() => parseUi({ reset: "no" }), /'ui\.reset' must be a boolean/);
-  assert.throws(() => parseUi({ reset: 1 }), /'ui\.reset' must be a boolean/);
-});
-
-test("ui.zoom defaults to false, accepts a boolean, rejects non-booleans", () => {
-  assert.equal(parseUi(undefined).zoom, false);
-  assert.equal(parseUi({}).zoom, false);
-  assert.equal(parseUi({ zoom: true }).zoom, true);
-  assert.throws(() => parseUi({ zoom: "no" }), /'ui\.zoom' must be a boolean/);
-  assert.throws(() => parseUi({ zoom: 1 }), /'ui\.zoom' must be a boolean/);
-});
-
-test("ui.grid defaults to off, accepts on/off, rejects anything else", () => {
-  assert.equal(parseUi(undefined).grid, "off");
-  assert.equal(parseUi({}).grid, "off");
-  assert.equal(parseUi({ grid: "on" }).grid, "on");
-  assert.equal(parseUi({ grid: "off" }).grid, "off");
-  assert.throws(() => parseUi({ grid: "yes" }), /'ui\.grid' must be one of "off", "on"/);
-  assert.throws(() => parseUi({ grid: true }), /'ui\.grid' must be one of "off", "on"/);
-});
-
-test("ui.presetsLabel / parametersLabel default, trim, and reject empty/non-strings", () => {
-  assert.equal(parseUi(undefined).presetsLabel, "Presets");
-  assert.equal(parseUi(undefined).parametersLabel, "Customize");
-  assert.equal(parseUi({ presetsLabel: "  Styles  " }).presetsLabel, "Styles");
-  assert.equal(parseUi({ parametersLabel: "Options" }).parametersLabel, "Options");
-  assert.throws(() => parseUi({ presetsLabel: "  " }), /'ui\.presetsLabel' must be a non-empty string/);
-  assert.throws(() => parseUi({ parametersLabel: 5 }), /'ui\.parametersLabel' must be a non-empty string/);
+test("ui: unknown nested keys are rejected (newly enforced — used to be silently ignored)", () => {
+  assert.throws(
+    () => parseUi({ oops: true }),
+    /'ui': unknown key 'oops'\.\s*\n\s*Valid keys: panelSide, panelDefault/
+  );
 });
 
 test("notices are off by default (omitted -> [])", () => {
@@ -1007,8 +1110,8 @@ test("notices: normalises entries, defaults the label, keeps order", () => {
       { marker: "alert" }, // label defaults to the marker
     ]),
     [
-      { marker: "note", label: "notes", color: "#3b82f6" },
-      { marker: "alert", label: "alert" },
+      { marker: "note", label: { one: "notes", other: "notes" }, color: "#3b82f6" },
+      { marker: "alert", label: { one: "alert", other: "alert" } },
     ]
   );
 });
@@ -1022,7 +1125,7 @@ test("notices: validates shape, marker, label and colour", () => {
   );
   assert.throws(
     () => parseNotices([{ marker: "n", label: "  " }]),
-    /'notices\[0\]\.label' must be a non-empty string/
+    /'notices\[0\]\.label' must be a non-empty string, or \{ one, other \}/
   );
   assert.throws(
     () => parseNotices([{ marker: "n", color: "#fff; } body { display:none" }]),
@@ -1030,31 +1133,75 @@ test("notices: validates shape, marker, label and colour", () => {
   );
 });
 
-test("notices: labelOne is optional, trimmed, and validated like label", () => {
-  assert.deepEqual(parseNotices([{ marker: "alert", label: "alerts", labelOne: " alert " }]), [
-    { marker: "alert", label: "alerts", labelOne: "alert" },
+test("notices: label accepts { one, other } — 'other' required, 'one' optional (falls back to 'other')", () => {
+  assert.deepEqual(
+    parseNotices([{ marker: "alert", label: { one: " alert ", other: " alerts " } }]),
+    [{ marker: "alert", label: { one: "alert", other: "alerts" } }]
+  );
+  // `one` omitted -> falls back to `other`, matching the old labelOne-absent behaviour.
+  assert.deepEqual(parseNotices([{ marker: "note", label: { other: "notes" } }]), [
+    { marker: "note", label: { one: "notes", other: "notes" } },
   ]);
-  assert.deepEqual(parseNotices([{ marker: "note" }]), [{ marker: "note", label: "note" }]);
+  assert.deepEqual(parseNotices([{ marker: "note" }]), [
+    { marker: "note", label: { one: "note", other: "note" } },
+  ]);
   assert.throws(
-    () => parseNotices([{ marker: "n", labelOne: "  " }]),
-    /'notices\[0\]\.labelOne' must be a non-empty string/
+    () => parseNotices([{ marker: "n", label: { one: "  " } }]),
+    /'notices\[0\]\.label\.other' is required/
+  );
+  assert.throws(
+    () => parseNotices([{ marker: "n", label: { other: "x", subtitle: "y" } }]),
+    /'notices\[0\]\.label': unknown key 'subtitle'\.\s*\n\s*Valid keys: one, other/
+  );
+  assert.throws(() => parseNotices([{ marker: "n", label: [] }]), /'notices\[0\]\.label' must be a string/);
+});
+
+test("notices: the old labelOne field is no longer accepted (reshaped to label: { one, other })", () => {
+  assert.throws(
+    () => parseNotices([{ marker: "alert", label: "alerts", labelOne: "alert" }]),
+    /'notices\[0\]\.labelOne' is no longer supported.*label.*\{ one, other \}/s
   );
 });
 
 test("notices: subsumedByFont is optional and must be a boolean", () => {
   assert.deepEqual(
     parseNotices([{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true }]),
-    [{ marker: "alert", label: "alerts", attention: true, subsumedByFont: true }]
+    [{ marker: "alert", label: { one: "alerts", other: "alerts" }, attention: true, subsumedByFont: true }]
   );
   assert.deepEqual(parseNotices([{ marker: "alert", subsumedByFont: false }]), [
-    { marker: "alert", label: "alert", subsumedByFont: false },
+    { marker: "alert", label: { one: "alert", other: "alert" }, subsumedByFont: false },
   ]);
   // Omitted entirely -> absent from the emitted category (the app treats
   // absent as false).
-  assert.deepEqual(parseNotices([{ marker: "alert" }]), [{ marker: "alert", label: "alert" }]);
+  assert.deepEqual(parseNotices([{ marker: "alert" }]), [
+    { marker: "alert", label: { one: "alert", other: "alert" } },
+  ]);
   assert.throws(
     () => parseNotices([{ marker: "n", subsumedByFont: "yes" }]),
     /'notices\[0\]\.subsumedByFont' must be a boolean/
+  );
+});
+
+test("notices: an explicit null on attention/subsumedByFont means unset, same as an absent one", () => {
+  assert.deepEqual(parseNotices([{ marker: "alert", attention: null, subsumedByFont: null }]), [
+    { marker: "alert", label: { one: "alert", other: "alert" } },
+  ]);
+});
+
+test("notices: duplicate markers (case-insensitive) fail the build", () => {
+  assert.throws(
+    () => parseNotices([{ marker: "alert" }, { marker: "Alert" }]),
+    /'notices\[1\]\.marker' duplicates 'notices\[0\]\.marker' — both match "Alert" case-insensitively/
+  );
+  // Three entries: the second AND third both collide with the first.
+  assert.throws(
+    () => parseNotices([{ marker: "alert" }, { marker: "Alert" }, { marker: "ALERT" }]),
+    /'notices\[1\]\.marker' duplicates 'notices\[0\]\.marker'/
+  );
+  // Distinct markers are unaffected.
+  assert.deepEqual(
+    parseNotices([{ marker: "alert" }, { marker: "note" }]).map((n) => n.marker),
+    ["alert", "note"]
   );
 });
 
@@ -1150,13 +1297,31 @@ test("renderHash is unaffected by presentation-only config fields (title/help/no
   const plain = gen({ title: "Plain Title" });
   const dressedUp = gen({
     title: "A Whole Different Title",
-    themeColor: "#123456",
+    pwa: { themeColor: "#123456" },
     help: "<p>Different help copy entirely.</p>",
     notices: [{ marker: "note", label: "A note", color: "#3b82f6" }],
-    ui: { presetsLabel: "Styles", parametersLabel: "Options" },
+    strings: { "presets.title": "Styles", "settings.title": "Options" },
     designs: [{ id: "widget", label: "A Very Different Label" }],
   });
   assert.equal(plain, dressedUp);
+});
+
+test("renderHash is unaffected by sourcing prose from a file instead of writing it inline", () => {
+  // popup.bodyFile / fileImport.noteFile / licenses[].textFile / help.file all
+  // just inline file content into fields that were already outside renderHash
+  // (popup/fileImport/licenses/help are all presentation-only) — confirm the
+  // file-sourced forms land at the exact same hash as a config with none of
+  // that content configured at all.
+  const baseline = run("widget-autodeps.config.json").schema.renderHash;
+  for (const fixture of [
+    "widget-popup-file.config.json",
+    "widget-fileimport-file.config.json",
+    "widget-licenses-file.config.json",
+    "widget-help-file.config.json",
+    "widget-help-tabs-file.config.json",
+  ]) {
+    assert.equal(run(fixture).schema.renderHash, baseline, `${fixture} changed renderHash`);
+  }
 });
 
 test("firstSentence does not break on decimals or abbreviations", () => {
@@ -1237,6 +1402,16 @@ test("parseColors validates tokens and values", () => {
   assert.throws(() => parseColors({ dark: "#fff" }), /'colors\.dark' must be an object/);
 });
 
+test("colors: an explicit null token means unset, same as an absent one", () => {
+  assert.deepEqual(parseColors({ dark: { bg: null } }), null);
+  assert.deepEqual(parseColors({ dark: { bg: null, accent: "#fff" } }), {
+    dark: { accent: "#fff" },
+  });
+  // An unknown token is still rejected even when its value is null — the
+  // null-means-unset rule is about VALUES, not about excusing a typo'd key.
+  assert.throws(() => parseColors({ dark: { accnt: null } }), /unknown colour token/);
+});
+
 test("colors: success/success-bg/warn-bg are accepted colour tokens", () => {
   assert.deepEqual(
     parseColors({ dark: { success: "#4ade80", "success-bg": "#142615", "warn-bg": "#332812" } }),
@@ -1260,6 +1435,92 @@ test("help defaults to null when omitted", () => {
   assert.equal(schema.help, null);
 });
 
+test("help.file: a single-pane help sources its intro/sections from a Markdown file", () => {
+  const { schema } = run("widget-help-file.config.json");
+  assert.equal(schema.help.title, "User guide");
+  assert.equal(schema.help.intro, "Configure a widget and export a model.");
+  assert.deepEqual(schema.help.sections, [
+    { title: "Pick a design", body: "Use the dropdown." },
+    { title: "Adjust parameters", body: "The panel lists what you can change." },
+  ]);
+  // The 'file' key itself never reaches the generated schema.
+  assert.equal("file" in schema.help, false);
+});
+
+test("help.tabs[].file: one tab may source from a file while a sibling tab stays inline", () => {
+  const { schema } = run("widget-help-tabs-file.config.json");
+  assert.equal(schema.help.tabs.length, 2);
+  assert.equal(schema.help.tabs[0].label, "Getting started");
+  assert.equal(schema.help.tabs[0].intro, "How to begin.");
+  assert.deepEqual(schema.help.tabs[0].sections, [{ title: "Step 1", body: "Pick a design." }]);
+  assert.equal("file" in schema.help.tabs[0], false);
+  assert.equal(schema.help.tabs[1].label, "Printing");
+  assert.deepEqual(schema.help.tabs[1].sections, [{ title: "Material", body: "Use **PLA**." }]);
+});
+
+test("resolveHelp: 'file' set alongside 'sections' or 'intro' fails the build, naming both", () => {
+  const mustExist = (abs) => abs;
+  assert.throws(
+    () => resolveHelp({ file: "x.md", sections: [] }, "/cfg", mustExist),
+    /both 'help\.sections' and 'help\.file' are set/
+  );
+  assert.throws(
+    () => resolveHelp({ file: "x.md", intro: "Hi" }, "/cfg", mustExist),
+    /both 'help\.intro' and 'help\.file' are set/
+  );
+  assert.throws(
+    () => resolveHelp({ tabs: [{ label: "T", file: "x.md", sections: [] }] }, "/cfg", mustExist),
+    /both 'help\.tabs\[0\]\.sections' and 'help\.tabs\[0\]\.file' are set/
+  );
+});
+
+test("resolveHelp: a missing 'file' fails the build with the usual not-found message", () => {
+  assert.throws(
+    () => run("widget-help-file-missing.config.json"),
+    /help\.file 'nope\.md' not found/
+  );
+});
+
+test("resolveHelp: a non-string top-level 'file' fails validation before resolving, not a raw Node error", () => {
+  const mustExist = () => {
+    throw new Error("mustExist should not be called for an invalid 'file' value");
+  };
+  assert.throws(
+    () => resolveHelp({ file: 5 }, "/cfg", mustExist),
+    /'help\.file', when set, must be a non-empty string/
+  );
+});
+
+test("resolveHelp: a blank top-level 'file' fails validation, not a confusing 'not found'", () => {
+  const mustExist = () => {
+    throw new Error("mustExist should not be called for a blank 'file' value");
+  };
+  assert.throws(
+    () => resolveHelp({ file: "   " }, "/cfg", mustExist),
+    /'help\.file', when set, must be a non-empty string/
+  );
+});
+
+test("resolveHelp: a non-string 'help.tabs[].file' fails validation before resolving", () => {
+  const mustExist = () => {
+    throw new Error("mustExist should not be called for an invalid 'file' value");
+  };
+  assert.throws(
+    () => resolveHelp({ tabs: [{ label: "T", file: 5 }] }, "/cfg", mustExist),
+    /'help\.tabs\[0\]\.file', when set, must be a non-empty string/
+  );
+});
+
+test("resolveHelp: a blank 'help.tabs[].file' fails validation before resolving", () => {
+  const mustExist = () => {
+    throw new Error("mustExist should not be called for a blank 'file' value");
+  };
+  assert.throws(
+    () => resolveHelp({ tabs: [{ label: "T", file: "   " }] }, "/cfg", mustExist),
+    /'help\.tabs\[0\]\.file', when set, must be a non-empty string/
+  );
+});
+
 test("licenses: extra entries are appended, sanitised, and unknown keys dropped", () => {
   const { schema } = run("widget-licenses.config.json");
   assert.equal(schema.licenses.length, 2);
@@ -1279,6 +1540,12 @@ test("licenses: extra entries are appended, sanitised, and unknown keys dropped"
 test("licenses default to an empty array when omitted", () => {
   const { schema } = run("widget-autodeps.config.json");
   assert.deepEqual(schema.licenses, []);
+});
+
+test("licenses[].textFile: the referenced file's contents become 'text'", () => {
+  const { schema } = run("widget-licenses-file.config.json");
+  assert.equal(schema.licenses[0].text, "MIT License\n\nFull text goes here.");
+  assert.equal("textFile" in schema.licenses[0], false);
 });
 
 test("parseLicenses validates shape and required fields", () => {
@@ -1329,28 +1596,54 @@ test("parseLicenses validates shape and required fields", () => {
   );
 });
 
+test("licenses: an explicit null on an optional field means unset, same as an absent one", () => {
+  const REQUIRED = {
+    name: "Lib",
+    license: "MIT",
+    copyright: "(c) X",
+    url: "https://x",
+    licenseUrl: "https://x/LICENSE",
+  };
+  assert.deepEqual(
+    parseLicenses([{ ...REQUIRED, version: null, text: null, sourceUrl: null, note: null }]),
+    [REQUIRED]
+  );
+});
+
 test("parseFileImport: true/object, defaults and errors", () => {
   // Absent -> null; explicit false -> null.
   assert.equal(parseFileImport(undefined), null);
   assert.equal(parseFileImport(false), null);
   // true -> defaults (an empty options object).
   assert.deepEqual(parseFileImport(true), {});
-  // Object form: known string fields pass through; nulls/undefined dropped.
-  assert.deepEqual(
-    parseFileImport({ accept: ".svg", label: "Add SVG", note: undefined }),
-    { accept: ".svg", label: "Add SVG" }
-  );
-  // maxBytes: a positive number passes through; bad values fail.
-  assert.deepEqual(parseFileImport({ maxBytes: 1024 }), { maxBytes: 1024 });
-  assert.deepEqual(parseFileImport({ accept: ".ttf", maxBytes: null }), { accept: ".ttf" });
-  assert.throws(() => parseFileImport({ maxBytes: 0 }), /'fileImport\.maxBytes' must be a positive number/);
-  assert.throws(() => parseFileImport({ maxBytes: -5 }), /'fileImport\.maxBytes' must be a positive number/);
-  assert.throws(() => parseFileImport({ maxBytes: "big" }), /'fileImport\.maxBytes' must be a positive number/);
+  // Object form: known string field passes through; undefined is dropped.
+  assert.deepEqual(parseFileImport({ note: "Add a font.", noteFile: undefined }), {
+    note: "Add a font.",
+  });
   // Wrong shapes -> clear errors.
   assert.throws(() => parseFileImport([]), /'fileImport' must be true/);
   assert.throws(
-    () => parseFileImport({ accept: 5 }),
-    /'fileImport\.accept' must be a string/
+    () => parseFileImport({ note: 5 }),
+    /'fileImport\.note', when set, must be a non-empty string/
+  );
+  // Blank/whitespace-only is rejected; what's kept is trimmed.
+  assert.throws(
+    () => parseFileImport({ note: "   " }),
+    /'fileImport\.note', when set, must be a non-empty string/
+  );
+  assert.deepEqual(parseFileImport({ note: "  Add a font.  " }), { note: "Add a font." });
+  // `accept`/`label`/`maxBytes` are gone, not merely deprecated: they no
+  // longer drove any generic import button (each contextual control applies
+  // its own picker filter and size guard — see docs/config.md's Import file
+  // section), so a config still setting one fails the ordinary unknown-key
+  // check exactly like any other typo.
+  assert.throws(
+    () => parseFileImport({ accept: ".svg" }),
+    /'fileImport': unknown key 'accept'\.\s*\n\s*Valid keys: note, noteFile/
+  );
+  assert.throws(
+    () => parseFileImport({ oops: true }),
+    /'fileImport': unknown key 'oops'\.\s*\n\s*Valid keys: note, noteFile/
   );
 });
 
@@ -1371,6 +1664,14 @@ test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
   assert.equal(parseRender(undefined), null);
   assert.equal(parseRender(null), null);
   assert.equal(parseRender({}), null); // no recognised keys -> null (all defaults)
+  // `features`/`format`/`fonts`/`fontFallback` are recognised nested keys (so
+  // they don't fail the unknown-key check below) but are `custom: true` —
+  // parseRender ignores them entirely; gen-schema.mjs reads them straight off
+  // `config.render` itself (see the 'config-driven features, fonts' test and
+  // 'format is emitted to the schema' test, further down, for the real
+  // end-to-end behaviour). A render block containing ONLY one of these still
+  // collapses to null, same as an empty `{}`.
+  assert.equal(parseRender({ format: "stl", features: ["textmetrics"] }), null);
   assert.deepEqual(parseRender({ heavyMs: 8000 }), { heavyMs: 8000 });
   assert.deepEqual(
     parseRender({ heavyMs: 3000, cache: { maxEntries: 4, maxBytes: 1024, maxEntryBytes: 512, persistent: false } }),
@@ -1384,6 +1685,16 @@ test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
   assert.throws(() => parseRender({ cache: 5 }), /'render\.cache' must be an object/);
   assert.throws(() => parseRender({ cache: { maxBytes: "lots" } }), /'render\.cache\.maxBytes' must be a non-negative number/);
   assert.throws(() => parseRender({ cache: { persistent: "yes" } }), /'render\.cache\.persistent' must be a boolean/);
+  // Unknown keys -> rejected (newly enforced — used to be silently ignored),
+  // one level down (render.cache) and at render's own level.
+  assert.throws(
+    () => parseRender({ cache: { oops: 1 } }),
+    /'render\.cache': unknown key 'oops'\.\s*\n\s*Valid keys: maxEntries, maxBytes, maxEntryBytes, persistent/
+  );
+  assert.throws(
+    () => parseRender({ oops: 1 }),
+    /'render': unknown key 'oops'\.\s*\n\s*Valid keys: features, format, fonts, fontFallback, heavyMs, cache/
+  );
 });
 
 test("parseStrings: absent -> {}, a known key overrides, an unknown key fails with a suggestion", () => {
@@ -1405,13 +1716,6 @@ test("parseStrings: absent -> {}, a known key overrides, an unknown key fails wi
   );
 });
 
-test("parseUi: fullscreen defaults true and validates", () => {
-  assert.equal(parseUi(undefined).fullscreen, true);
-  assert.equal(parseUi({}).fullscreen, true);
-  assert.equal(parseUi({ fullscreen: false }).fullscreen, false);
-  assert.throws(() => parseUi({ fullscreen: "no" }), /'ui\.fullscreen' must be a boolean/);
-});
-
 test("parseUi: saveImage is absent by default, carried only when set, rejects non-booleans", () => {
   // Default is "shown": the key is not defaulted onto the object, so the app's
   // `ui.saveImage !== false` treats absent as true.
@@ -1423,44 +1727,50 @@ test("parseUi: saveImage is absent by default, carried only when set, rejects no
   assert.throws(() => parseUi({ saveImage: 0 }), /'ui\.saveImage' must be a boolean/);
 });
 
-test("parseUi.afterExport is absent by default and accepts each valid field", () => {
+test("parseUi.afterExport: true/{} means defaults, an options object sets helpTab", () => {
+  // `title`/`body` used to live here; removed — see CONFIG_SPEC's
+  // AFTER_EXPORT_SPEC comment — they were only a second override path for the
+  // catalogue's exportSuccess.title/.body keys (src/locales/en.json).
   assert.equal(parseUi(undefined).afterExport, undefined);
   assert.equal(parseUi({}).afterExport, undefined);
-  assert.deepEqual(parseUi({ afterExport: { title: "Done" } }).afterExport, { title: "Done" });
-  assert.deepEqual(parseUi({ afterExport: { body: "Next steps" } }).afterExport, { body: "Next steps" });
+  assert.deepEqual(parseUi({ afterExport: true }).afterExport, {});
+  assert.deepEqual(parseUi({ afterExport: {} }).afterExport, {});
   assert.deepEqual(parseUi({ afterExport: { helpTab: "Printing" } }).afterExport, { helpTab: "Printing" });
-  assert.deepEqual(
-    parseUi({ afterExport: { title: " Done ", body: "Next", helpTab: "Printing" } }).afterExport,
-    { title: "Done", body: "Next", helpTab: "Printing" }
-  );
 });
 
 test("parseUi.afterExport rejects empty/wrong-typed fields, unknown keys and wrong shapes", () => {
   assert.throws(
-    () => parseUi({ afterExport: { title: "" } }),
-    /'ui\.afterExport\.title' must be a non-empty string/
-  );
-  assert.throws(
     () => parseUi({ afterExport: { helpTab: 3 } }),
-    /'ui\.afterExport\.helpTab' must be a non-empty string/
+    /'ui\.afterExport\.helpTab', when set, must be a non-empty string/
   );
   assert.throws(
     () => parseUi({ afterExport: { subtitle: "x" } }),
-    /unknown 'ui\.afterExport' key 'subtitle'/
+    /'ui\.afterExport': unknown key 'subtitle'\.\s*\n\s*Valid keys: helpTab/
   );
-  assert.throws(() => parseUi({ afterExport: "on" }), /'ui\.afterExport' must be an object/);
-  assert.throws(() => parseUi({ afterExport: [] }), /'ui\.afterExport' must be an object/);
+  assert.throws(
+    () => parseUi({ afterExport: "on" }),
+    /'ui\.afterExport' must be true, an options object, or null/
+  );
+  assert.throws(() => parseUi({ afterExport: [] }), /'ui\.afterExport' must be true, an options object, or null/);
 });
 
-test("parseUi.afterExport: null is treated the same as absent (no panel)", () => {
+test("parseUi.afterExport: null/false are treated the same as absent (no panel)", () => {
   assert.equal(parseUi({ afterExport: null }).afterExport, undefined);
+  assert.equal(parseUi({ afterExport: false }).afterExport, undefined);
+  assert.equal(parseAfterExport(null), undefined);
+  assert.equal(parseAfterExport(false), undefined);
+  assert.equal(parseAfterExport(undefined), undefined);
 });
 
-test("ui.afterExport.helpTab: build succeeds when it names a real help tab", () => {
+test("ui.afterExport.helpTab: build succeeds when it names a real help tab, alongside a 'strings' override of the panel copy", () => {
   const { schema } = run("widget-afterexport-ok.config.json");
   assert.equal(schema.ui.afterExport.helpTab, "Printing");
-  assert.equal(schema.ui.afterExport.title, "Done");
-  assert.equal(schema.ui.afterExport.body, "Slice it.");
+  assert.equal(schema.ui.afterExport.title, undefined);
+  assert.equal(schema.ui.afterExport.body, undefined);
+  // The fixture overrides the panel's copy through `strings` instead — the
+  // ONE mechanism for overriding this text now, not a second afterExport path.
+  assert.equal(schema.strings["exportSuccess.title"], "Done");
+  assert.equal(schema.strings["exportSuccess.body"], "Slice it.");
 });
 
 test("ui.afterExport.helpTab: build succeeds against the synthetic leading 'Overview' tab", () => {
@@ -1529,11 +1839,140 @@ test("parsePopup: defaults, modes, links and errors", () => {
     () => parsePopup({ header: "x", body: "y", footnote: "  " }),
     /'popup\.footnote', when set, must be a non-empty string/
   );
+  // An explicit null on button/footnote used to throw (str()'s old default
+  // treated null as present-but-invalid); now it's equivalent to omitting
+  // the key, same as every other field.
+  assert.equal("button" in parsePopup({ header: "x", body: "y", button: null }), false);
+  assert.equal("footnote" in parsePopup({ header: "x", body: "y", footnote: null }), false);
+  // Unknown key -> rejected (newly enforced — used to be silently ignored).
+  assert.throws(
+    () => parsePopup({ header: "x", body: "y", oops: true }),
+    /'popup': unknown key 'oops'\.\s*\n\s*Valid keys: header, body, bodyFile, mode, button, footnote/
+  );
 });
 
 test("popup.footnote: a full build carries it through to the generated schema", () => {
   const { schema } = run("widget-popup.config.json");
   assert.equal(schema.popup.footnote, "Everything runs in your browser. Nothing is uploaded.");
+});
+
+test("popup.bodyFile: the referenced file's contents become 'body'", () => {
+  const { schema } = run("widget-popup-file.config.json");
+  assert.equal(schema.popup.body, "Configure a widget.");
+  assert.equal("bodyFile" in schema.popup, false);
+});
+
+test("popup: both 'body' and 'bodyFile' set fails the build, naming both", () => {
+  assert.throws(
+    () => run("widget-popup-file-conflict.config.json"),
+    /both 'popup\.body' and 'popup\.bodyFile' are set/
+  );
+});
+
+test("fileImport.noteFile: the referenced file's contents become 'note'", () => {
+  const { schema } = run("widget-fileimport-file.config.json");
+  assert.equal(schema.fileImport.note, "Import a font or SVG here.");
+  assert.equal("noteFile" in schema.fileImport, false);
+});
+
+// resolveFileField backs popup.bodyFile / fileImport.noteFile /
+// licenses[].textFile alike (see prose-files.mjs) — each call site below
+// mirrors exactly how gen-schema.mjs's generate() wires it (same field/
+// fileField/path), so a non-string or blank value must fail validation
+// with the shared optional-string message BEFORE resolve()/readFileSync()
+// ever sees it, instead of escaping as a raw Node ERR_INVALID_ARG_TYPE.
+const refusingMustExist = () => {
+  throw new Error("mustExist should not be called for an invalid file-field value");
+};
+
+test("resolveFileField: popup.bodyFile — a non-string value fails validation before resolving", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { header: "Notice", bodyFile: 123 },
+        field: "body",
+        fileField: "bodyFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "popup",
+      }),
+    /'popup\.bodyFile', when set, must be a non-empty string/
+  );
+});
+
+test("resolveFileField: popup.bodyFile — a blank value fails validation, not a confusing 'not found'", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { header: "Notice", bodyFile: "   " },
+        field: "body",
+        fileField: "bodyFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "popup",
+      }),
+    /'popup\.bodyFile', when set, must be a non-empty string/
+  );
+});
+
+test("resolveFileField: fileImport.noteFile — a non-string value fails validation before resolving", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { noteFile: 42 },
+        field: "note",
+        fileField: "noteFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "fileImport",
+      }),
+    /'fileImport\.noteFile', when set, must be a non-empty string/
+  );
+});
+
+test("resolveFileField: fileImport.noteFile — a blank value fails validation before resolving", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { noteFile: "   " },
+        field: "note",
+        fileField: "noteFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "fileImport",
+      }),
+    /'fileImport\.noteFile', when set, must be a non-empty string/
+  );
+});
+
+test("resolveFileField: licenses[].textFile — a non-string value fails validation before resolving", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { textFile: 7 },
+        field: "text",
+        fileField: "textFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "licenses[0]",
+      }),
+    /'licenses\[0\]\.textFile', when set, must be a non-empty string/
+  );
+});
+
+test("resolveFileField: licenses[].textFile — a blank value fails validation before resolving", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { textFile: "   " },
+        field: "text",
+        fileField: "textFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "licenses[0]",
+      }),
+    /'licenses\[0\]\.textFile', when set, must be a non-empty string/
+  );
 });
 
 test("parseEnumHint ignores single-item and non-enum hints", () => {
@@ -1553,6 +1992,20 @@ function paramsOf(scad) {
   writeFileSync(file, scad);
   try {
     return parseParams(file).params;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// Same as paramsOf, but returns the FULL parseParams() result — needed for
+// file-level metadata (`@description`/`@icon`/`@reviewNote`/…) assertions,
+// which live on `.meta` rather than `.params`.
+function parseOf(scad) {
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-font-"));
+  const file = join(dir, "f.scad");
+  writeFileSync(file, scad);
+  try {
+    return parseParams(file);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -1617,6 +2070,37 @@ test("@info marks a param for the viewer panel, with optional label + unit", () 
   assert.deepEqual(byName.dia.info, { label: "Diameter", unit: null });
   // No annotation -> no info field.
   assert.equal(byName.width.info, undefined);
+});
+
+test("@review sets a parameter's review-summary label; the quoted label is required", () => {
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Engraved text.\n` +
+      `// @review "Text"\n` +
+      `label = "hi";\n` +
+      `// Plain param, no annotation.\n` +
+      `width = 10;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.label.reviewLabel, "Text");
+  // The annotation line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.label.help.includes("@review"));
+  assert.equal(byName.label.description, "Engraved text.");
+  // No annotation -> no reviewLabel field.
+  assert.equal(byName.width.reviewLabel, undefined);
+});
+
+test("@reviewNote sets a design's review-summary note; first occurrence wins, blank is ignored", () => {
+  const { meta } = parseOf(
+    `// @reviewNote "First note."\n` +
+      `// @reviewNote "Second note (ignored)."\n` +
+      `/* [Main] */\n` +
+      `label = "hi";\n`
+  );
+  assert.equal(meta.reviewNote, "First note.");
+
+  const blank = parseOf(`// @reviewNote ""\n/* [Main] */\nlabel = "hi";\n`);
+  assert.equal(blank.meta.reviewNote, null);
 });
 
 test("@svg marks a string field for the wizard and captures the layers binding", () => {
@@ -1724,6 +2208,31 @@ test("a malformed @filledBy (no target) fails with file and line", () => {
   assert.throws(
     () => paramsOf(`/* [S] */\n// @filledBy\nlayers_param = "";\n`),
     /f\.scad:2: malformed @filledBy annotation/
+  );
+});
+
+test("a malformed @review (no quoted label, or unquoted text) fails with file and line", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @review\nfoo = 1;\n`),
+    /f\.scad:2: malformed @review annotation/
+  );
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @review Text\nfoo = 1;\n`),
+    /f\.scad:2: malformed @review annotation/
+  );
+});
+
+test("@review with a blank quoted label fails with file and line", () => {
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @review ""\nfoo = 1;\n`),
+    /f\.scad:2: @review annotation must have a non-empty quoted label/
+  );
+});
+
+test("a malformed @reviewNote (missing quotes) fails with file and line", () => {
+  assert.throws(
+    () => parseOf(`// @reviewNote no quotes here\n/* [S] */\nfoo = 1;\n`),
+    /f\.scad:1: malformed @reviewNote annotation/
   );
 });
 
@@ -1889,8 +2398,44 @@ test("parseFontFallback accepts a trimmed string or null; rejects empty", () => 
   assert.equal(parseFontFallback(undefined), null);
   assert.equal(parseFontFallback(null), null);
   assert.equal(parseFontFallback("  Liberation Mono  "), "Liberation Mono");
-  assert.throws(() => parseFontFallback(""), /'fontFallback' must be a non-empty string/);
-  assert.throws(() => parseFontFallback(42), /'fontFallback' must be a non-empty string/);
+  assert.throws(() => parseFontFallback(""), /'render\.fontFallback' must be a non-empty string/);
+  assert.throws(() => parseFontFallback(42), /'render\.fontFallback' must be a non-empty string/);
+});
+
+test("parseStringArray: absent or null -> [], every entry must be a non-empty string", () => {
+  assert.deepEqual(parseStringArray(undefined, "features"), []);
+  // `null` reads as "unset" too, same as every other render/pwa field (see
+  // applyGroupSpec) — it used to only check `undefined` and threw instead.
+  assert.deepEqual(parseStringArray(null, "render.features"), []);
+  assert.deepEqual(parseStringArray(null, "pwa.categories"), []);
+  assert.deepEqual(parseStringArray(["a", "b"], "features"), ["a", "b"]);
+  assert.throws(() => parseStringArray("a", "features"), /'features' must be an array of non-empty strings/);
+  assert.throws(() => parseStringArray([""], "features"), /'features' must be an array of non-empty strings/);
+  assert.throws(() => parseStringArray([1], "categories"), /'categories' must be an array of non-empty strings/);
+});
+
+test("parsePwaThemeColor: string shorthand sets both themes; object form defaults each side independently", () => {
+  assert.deepEqual(parsePwaThemeColor(undefined), { light: "#ffffff", dark: "#1f2229" });
+  assert.deepEqual(parsePwaThemeColor(null), { light: "#ffffff", dark: "#1f2229" });
+  assert.deepEqual(parsePwaThemeColor("#123456"), { light: "#123456", dark: "#123456" });
+  assert.deepEqual(parsePwaThemeColor({ dark: "#000000" }), { light: "#ffffff", dark: "#000000" });
+  assert.deepEqual(parsePwaThemeColor({ light: "#f0f0f0", dark: "#000000" }), { light: "#f0f0f0", dark: "#000000" });
+  assert.throws(
+    () => parsePwaThemeColor("#fff;}<script>"),
+    /'pwa\.themeColor' must be a CSS colour string/
+  );
+  assert.throws(
+    () => parsePwaThemeColor({ dark: "#fff;}<script>" }),
+    /'pwa\.themeColor\.dark' must be a CSS colour string/
+  );
+  assert.throws(
+    () => parsePwaThemeColor({ bogus: "#000000" }),
+    /'pwa\.themeColor': unknown key 'bogus'\.\s*\n\s*Valid keys: light, dark/
+  );
+  assert.throws(
+    () => parsePwaThemeColor(5),
+    /'pwa\.themeColor' must be a CSS colour string, or an object with optional 'light'\/'dark' colour strings/
+  );
 });
 
 test("renderFontsConf emits the base dirs, and a weak fallback only when set", () => {
@@ -1921,8 +2466,7 @@ test("a real build records the bundled fonts' embedded families + writes fonts.c
     JSON.stringify({
       title: "T",
       source: ".",
-      fonts: ["Face.ttf"],
-      fontFallback: "Liberation Sans",
+      render: { fonts: ["Face.ttf"], fontFallback: "Liberation Sans" },
       designs: [{ id: "d", label: "D" }],
     })
   );
@@ -2197,8 +2741,8 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
     JSON.stringify({
       title: "T",
       source: "src",
-      fonts: ["Face.ttf"],
-      screenshots: [{ src: "shot.png", sizes: "1x1", form_factor: "narrow" }],
+      render: { fonts: ["Face.ttf"] },
+      pwa: { screenshots: [{ src: "shot.png", sizes: "1x1", form_factor: "narrow" }] },
       designs: [{ id: "d", label: "D" }],
     })
   );
@@ -2334,7 +2878,12 @@ test("changing a font then failing a later step leaves the prior font bytes and 
   const good = join(root, "good.config.json");
   writeFileSync(
     good,
-    JSON.stringify({ title: "T", source: "src", fonts: ["Face.ttf"], fontFallback: "Alpha", designs: [{ id: "d", label: "D" }] })
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      render: { fonts: ["Face.ttf"], fontFallback: "Alpha" },
+      designs: [{ id: "d", label: "D" }],
+    })
   );
   generate({ ...base, configPath: good });
   const fontDest = join(outPublicDir, "fonts", "Face.ttf");
@@ -2350,7 +2899,13 @@ test("changing a font then failing a later step leaves the prior font bytes and 
   const bad = join(root, "bad.config.json");
   writeFileSync(
     bad,
-    JSON.stringify({ title: "T", source: "src", fonts: ["Face.ttf"], fontFallback: "Beta", icon: "bad.svg", designs: [{ id: "d", label: "D" }] })
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      render: { fonts: ["Face.ttf"], fontFallback: "Beta" },
+      pwa: { icon: "bad.svg" },
+      designs: [{ id: "d", label: "D" }],
+    })
   );
   assert.throws(() => generate({ ...base, configPath: bad }), /icon rasterization failed/);
 

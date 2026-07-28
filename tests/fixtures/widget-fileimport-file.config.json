@@ -1,0 +1,6 @@
+{
+  "source": "src",
+  "fileImport": { "noteFile": "widget-fileimport-note.md" },
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}

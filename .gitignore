@@ -7,6 +7,10 @@ public/wasm/
 
 # Generated from the configured design source via scripts/gen-schema.mjs
 public/scad/
+# gen-schema builds the new tree here and renames it over public/scad/ at its
+# commit point; a build that dies partway leaves it behind, and an untracked
+# half-built tree must never be committable.
+public/scad.staging/
 src/generated/
 # fontconfig config is generated (carries the optional fontFallback rule)
 public/fonts/fonts.conf

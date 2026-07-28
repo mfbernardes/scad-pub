@@ -1,16 +1,10 @@
 {
   "source": "src",
-  "features": [],
-  "fonts": [],
   "ui": { "afterExport": { "helpTab": "Overview" } },
   "help": {
     "sections": [{ "title": "Welcome", "body": "Start here." }],
-    "tabs": [
-      {
-        "label": "Printing",
-        "sections": [{ "title": "Material", "body": "Use **PLA**." }]
-      }
-    ]
+    "tabs": [{ "label": "Printing", "sections": [{ "title": "Material", "body": "Use **PLA**." }] }]
   },
-  "designs": [{ "id": "widget", "label": "Widget" }]
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
 }

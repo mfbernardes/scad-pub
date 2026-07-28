@@ -5,13 +5,22 @@
   "source": "src",
   "defaultDesign": "collapsible",
   "render": { "heavyMs": 9000, "cache": { "maxEntries": 4, "persistent": false } },
-  "fileImport": { "maxBytes": 1048576 },
-  "ui": { "fullscreen": false, "saveImage": false },
-  "screenshots": [
-    { "src": "logo.svg", "sizes": "390x844", "form_factor": "narrow", "label": "Home screen", "platform": "android" }
-  ],
+  "fileImport": { "note": "Upload a font or an SVG." },
+  "ui": { "saveImage": false },
+  "pwa": {
+    "screenshots": [
+      {
+        "src": "logo.svg",
+        "sizes": "390x844",
+        "form_factor": "narrow",
+        "label": "Home screen",
+        "platform": "android"
+      }
+    ]
+  },
   "designs": [
-    { "id": "widget", "label": "Widget", "description": "A little widget.", "icon": "logo.svg", "doc": "widget-doc.md" },
+    { "id": "widget", "label": "Widget", "file": "widget-meta.scad" },
     { "id": "collapsible", "label": "Collapsible" }
-  ]
+  ],
+  "viewer": { "controls": { "fullscreen": false } }
 }

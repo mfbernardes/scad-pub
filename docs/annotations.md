@@ -7,9 +7,9 @@ content plan: define each supported OpenSCAD comment annotation, show its syntax
 
 ScadPub adds a handful of comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
 
-## Design metadata (`// @description`, `// @icon`, `// @doc`)
+## Design metadata (`// @description`, `// @icon`, `// @image`, `// @doc`)
 
-A design can describe itself from its own `.scad` file instead of the config. Put these anywhere in the file. A header comment above the first section is the natural home:
+A design describes itself from its own `.scad` file — this is the **only** place its picker sub-label, thumbnail icon, gallery card art, and user-doc come from; there is no config-level override or escape hatch. Put these anywhere in the file. A header comment above the first section is the natural home:
 
 ```openscad
 // @description Auto-sized flat name plate for a door, shelf, or desk.
@@ -20,11 +20,12 @@ A design can describe itself from its own `.scad` file instead of the config. Pu
 label = "Room 1";
 ```
 
-- **`@description`**: the design's picker sub-label. It sets the same value as `description` on a config `designs[]` entry.
-- **`@icon`**: a path to the design's thumbnail. The path resolves **relative to the design's own `.scad` file**, unlike a config `icon`, which is relative to the config. It may be a Scalable Vector Graphics (SVG), PNG, or WebP file. ScadPub serves it as-is and reuses it as the design's manifest shortcut icon.
-- **`@doc`**: a path to the design's own user-documentation Markdown file, same path-resolution rule as `@icon`. It sets the same value as `doc` on a config `designs[]` entry. When present, the app shows a documentation button that opens the file's contents in a modal.
+- **`@description`**: the design's picker sub-label.
+- **`@icon`**: a path to the design's thumbnail, resolved **relative to the design's own `.scad` file** (and checked to stay inside `source`). It may be a Scalable Vector Graphics (SVG), PNG, or WebP file. ScadPub serves it as-is and reuses it as the design's manifest shortcut icon.
+- **`@image`**: a path to larger card artwork for `ui.gallery`, same path-resolution rule as `@icon`. May also be SVG, PNG, or WebP. When omitted, the gallery card falls back to `@icon` instead (see `ui.gallery` in [config.md](config.md#ui-behaviour-and-pwa)).
+- **`@doc`**: a path to the design's own user-documentation Markdown file, same path-resolution rule as `@icon`. When present, the app shows a documentation button that opens the file's contents in a modal.
 
-All three are **fallbacks**: a value on the design's config `designs[]` entry wins. First occurrence in the file wins; blank values are ignored. This keeps a design self-describing (and works even with auto-discovery, when the config lists no `designs[]` at all), while still letting a deployment override any of them from the config.
+First occurrence of each in the file wins; blank values are ignored. This keeps a design self-describing, and works even with auto-discovery, when the config lists no `designs[]` at all.
 
 ## Conditional parameters (`// @showIf`)
 
@@ -94,7 +95,7 @@ font = "Brand Display:style=Regular"; // ["Brand Display:style=Regular", "Libera
 
 The `// [..]` choice list is what the **desktop** Customizer renders as a dropdown. In the app, listed faces that are not loaded stay visible and selectable in a "Needs a font file" group. That lets a design keep suggesting its preferred face, even when the font is not bundled.
 
-When the selected face's family is not loaded, an inline hint appears beneath the control with two fixes: **Import font…** or a one-click switch to a loaded family. For a flagged dropdown, the fallback is the first listed choice whose family is loaded. See [Fonts](config.md#fonts-fonts-fontfallback) for the availability check and the `fontFallback` config key.
+When the selected face's family is not loaded, an inline hint appears beneath the control with two fixes: **Import font…** or a one-click switch to a loaded family. For a flagged dropdown, the fallback is the first listed choice whose family is loaded. See [Fonts](config.md#fonts-renderfonts-renderfontfallback) for the availability check and the `fontFallback` config key.
 
 ## SVG fields (`// @svg`, `// @filledBy`)
 
@@ -230,7 +231,45 @@ Two checks help avoid confusing output:
 - Rows are **not** de-duplicated. If two branches both echo the same label unconditionally, you see two rows. Make sure only one branch echoes a given label per render.
 - A malformed call is silently ignored. If a row does not appear, double-check the argument count and the exact `"@info"` tag.
 
+## Curated review label (`// @review`)
+
+Mark a parameter `// @review "<label>"` to set the label its value is shown under in the pre-download review summary (`designs[].reviewLabels`; see [config.md](config.md#design-sources)). It labels the parameter it sits on — there's no name argument, unlike `// @filledBy` — so the label lives beside the parameter it documents instead of a separate config block that would have to re-state the parameter's own name back to itself:
+
+```scad
+/* [Text] */
+// Text to emboss on the tag.
+// @review "Text"
+label = "ScadPub";
+
+// Font family/style.
+// @font
+// @review "Typeface"
+font = "Liberation Sans:style=Bold";
+```
+
+The quoted label is required: bare `// @review`, with no label, fails the build the same way a malformed `@showIf` does — and so does a label that's present but blank (`@review ""`). Several parameters may set the same label; their values merge into a single review row, joined by `" / "` (`src/lib/reviewSummary.ts`). A parameter with no `// @review` annotation contributes no row. There is no config-level way to add or override a label: a design's own annotations are the only source.
+
+Adding `// @review` to a design's `.scad` file changes that file's bytes and therefore its `renderHash` (see [Everything renderable is generated at build time](../CLAUDE.md) — `renderHash` hashes the mounted `.scad`, comments included). A deployment that adopts the annotation on an already-shipped design invalidates every cached render for it, exactly like any other edit to a mounted `.scad` file.
+
+## Curated review note (`// @reviewNote`)
+
+Set a design's review-summary note from its own `.scad` file — the same file-level idiom as `// @description`/`@icon`/`@image`/`@doc` above, put anywhere in the file (a header comment is the natural home):
+
+```scad
+// @reviewNote "Text prints in capitals even though you typed it in lowercase."
+
+/* [Text] */
+label = "gate 12";
+```
+
+- First occurrence in the file wins; a blank quoted string (`""`) is ignored, same as the other file-level annotations.
+- Unlike those, the quoted-string form is required here: `// @reviewNote` followed by anything other than a `"…"` string fails the build. There is no config-level override: a design's own `// @reviewNote` is the only source.
+
+Like `// @review` above, adding this line to a design's `.scad` file changes its `renderHash` for any deployment building against it.
+
 ## Curated review override (`echo("@review", …)`)
+
+Not to be confused with the build-time `// @review "<label>"` comment annotation above, which sets a row's *label*: this is a runtime `echo()` that overrides a row's *value*.
 
 A curated review row (`designs[].reviewLabels`, see [config.md](config.md#design-sources)) normally shows a parameter's raw stored value, formatted the same way as any other row. Some designs **transform** a value before it reaches the printed model — a lettering profile that uppercases free text, for instance: typed `"gate 12"`, printed `"GATE 12"`. Showing the raw typed value in the review row would misrepresent what's actually on the model.
 

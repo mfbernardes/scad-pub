@@ -3,46 +3,176 @@
 // shared "safe interpolation of untrusted config values" helpers. Every parser
 // fails the build with a clear message on a bad shape (gen-schema's fail-fast
 // convention) and returns a normalised value (or a null/[]/defaults) otherwise.
+//
+// `ui`, `viewer`, `render` and `fileImport`, plus the scalar fields of
+// `popup`, used to each hand-write the same "check a boolean / check an enum /
+// assign a default" shape once per field (15 times over, for `ui` alone), and
+// disagreed with each other about null-handling, error wording and unknown-key
+// rejection along the way. They're now driven by `applyGroupSpec` below,
+// walking the field tables in ./config-spec.mjs, which picks one behaviour per
+// axis for every field (see that file's file-top comment) instead of
+// reproducing the old disagreements. `parseColors`, `parseLicenses`,
+// `parseNotices` and `parseStrings` are NOT
+// driven by it: they carry real bespoke logic (cross-checks, defaulting rules
+// that don't fit the shared shape) that isn't worth forcing into the same
+// mould, and config-spec.mjs only registers their keys for unknown-key
+// rejection and schema emission.
+import { CONFIG_SPEC, COLOR_TOKENS } from "./config-spec.mjs";
+export { COLOR_TOKENS };
 
-// The CSS custom-property tokens a consumer config may override via `colors`
-// (see src/index.css), listed without the leading `--`. Overriding a token
-// outside this set is almost always a typo, so we fail the build rather than
-// silently emit a no-op rule.
-export const COLOR_TOKENS = [
-  "bg",
-  "panel",
-  "panel-2",
-  "line",
-  "text",
-  "muted",
-  "accent",
-  "accent-solid",
-  "on-accent",
-  "focus",
-  "link",
-  "warn",
-  "warn-bg",
-  "success",
-  "success-bg",
-  "code-bg",
-  "overlay",
-  "viewer-bg",
-  "viewer-grid",
-  "viewer-grid-2",
-  "viewer-model",
-  "viewer-dim",
-  // Shape / glass design tokens (non-colour values allowed)
-  "radius",
-  "radius-sm",
-  "glass-bg",
-  "glass-border",
-  "elevation",
-  // Font stacks — unquoted family names only (the value filter forbids quotes),
-  // e.g. "Georgia, serif". Set them under `dark` (the `:root` block) to apply
-  // to both themes; the light theme doesn't redeclare them.
-  "font-sans",
-  "font-display",
-];
+// `prefix(path)` renders the leading part of a validation-error message. One
+// convention everywhere now: "gen-schema: '<path>' ..." (previously `viewer`
+// alone predated this and read "config.<path> ..." with no quotes — that was
+// an accident of `viewer` being older code, not a meaningful distinction, so
+// it's gone).
+function messagePrefix(path) {
+  return `gen-schema: '${path}'`;
+}
+
+function defaultRootTypeError(path) {
+  return `${messagePrefix(path)} must be an object`;
+}
+
+// The message a plain OPTIONAL string field uses when set to something
+// invalid — factored out of stringFieldError (below) so a hand-rolled check
+// that lives outside applyGroupSpec's field-descriptor machinery can raise
+// the exact same wording instead of inventing its own. The file-backed prose
+// fields (popup.bodyFile/fileImport.noteFile/licenses[].textFile — see
+// prose-files.mjs's resolveFileField — and help.file/help.tabs[].file — see
+// gen-schema.mjs's resolveHelpPane) are exactly that: each is a sibling key
+// to a real field.body/.note/.text/.sections, not a config-spec.mjs field
+// descriptor of its own, so it validates its raw value directly against this
+// same shape before ever resolving a path from it.
+export function optionalStringFieldError(path) {
+  return new Error(`${messagePrefix(path)}, when set, must be a non-empty string`);
+}
+
+// The two string-field message shapes every string field now uses (see
+// config-spec.mjs's file-top comment): a field that's `required` outright, or
+// one that's optional but was set to something invalid (optionalStringFieldError,
+// above). (A third and fourth shape used to exist — "must be a non-empty
+// string" / "must be a string", picked by a per-field `nonBlank` flag — but
+// every string field rejects blank now, so there's no second shape left to
+// pick between.)
+function stringFieldError(path, field) {
+  if (!field.required) return optionalStringFieldError(path);
+  return new Error(`${messagePrefix(path)} is required and must be a non-empty string`);
+}
+
+// The error a nested object's unrecognised key throws, built entirely from
+// the spec node so the "valid keys" list can never go stale. Exported so a
+// caller that can't route a whole object through `applyGroupSpec` — a
+// `designs[]` entry itself, whose id/label/file/heavy/group/description
+// fields stay hand-checked in gen-schema.mjs's resolveDesignList rather than
+// spec-driven — can still raise the exact same error shape for its own
+// unrecognised keys, against `CONFIG_SPEC.designs.items` (see that node's
+// `properties`).
+export function unknownNestedKeyError(path, node, key) {
+  return new Error(
+    `${messagePrefix(path)}: unknown key '${key}'.\n` +
+      `  Valid keys: ${Object.keys(node.properties).join(", ")}`
+  );
+}
+
+// Validate a single already-present (non-skipped) field value against its
+// config-spec.mjs descriptor, returning the normalised value to store (or
+// throwing gen-schema's fail-fast Error). `type: "object"` recurses into
+// applyGroupSpec for a nested group (render.cache, ui.afterExport).
+function validateFieldValue(value, field, path) {
+  const prefix = messagePrefix(path);
+  switch (field.type) {
+    case "boolean":
+      if (typeof value !== "boolean") throw new Error(`${prefix} must be a boolean`);
+      return value;
+    case "enum": {
+      // Enum errors always say what they got — strictly more informative,
+      // and every group agrees on it now (some used to omit it).
+      if (!field.values.includes(value))
+        throw new Error(
+          `${prefix} must be one of ${field.values.map((v) => `"${v}"`).join(", ")} ` +
+            `(got ${JSON.stringify(value)})`
+        );
+      return value;
+    }
+    case "number": {
+      const ok = typeof value === "number" && Number.isFinite(value) && value >= 0;
+      if (!ok) throw new Error(`${prefix} must be a non-negative number`);
+      return value;
+    }
+    case "string": {
+      // One string policy: reject empty/whitespace-only, store trimmed.
+      if (typeof value !== "string" || !value.trim()) throw stringFieldError(path, field);
+      return value.trim();
+    }
+    case "color": {
+      // Same strictness as every other colour input in this config
+      // (COLOR_VALUE_RE, defined below) — safe to interpolate into generated
+      // SVG/HTML attributes and the manifest.
+      if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
+        throw new Error(`${prefix} must be a CSS colour string (got ${JSON.stringify(value)})`);
+      return value.trim();
+    }
+    case "object":
+      // `?? {}` covers both an explicit `null`/absent value on a `required`
+      // or `alwaysPresent` field (see applyGroupSpec below) — those bypass
+      // the ordinary "missing -> skip" path specifically so a nested group's
+      // own defaults still resolve, and need something object-shaped to
+      // recurse into.
+      return applyGroupSpec(value ?? {}, field, path);
+    default:
+      throw new Error(`config-spec: unsupported field type '${field.type}' at '${path}'`);
+  }
+}
+
+// Walk one nested config object (ui, viewer, render, render.cache, popup, the
+// object form of fileImport, ui.afterExport) against its config-spec.mjs
+// node: shape check, unknown-key rejection, then each field in declaration
+// order. `null` and an absent key are exactly equivalent throughout — a
+// hand-written JSON config has no comments to delete a line with, so an
+// explicit `null` is how an author says "leave this alone", not a typo the
+// way a misspelled key name is.
+export function applyGroupSpec(raw, node, path) {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
+    throw new Error(node.rootTypeError ?? defaultRootTypeError(path));
+  for (const key of Object.keys(raw))
+    if (!(key in node.properties)) throw unknownNestedKeyError(path, node, key);
+  const out = {};
+  for (const [key, field] of Object.entries(node.properties)) {
+    // A `custom: true` FIELD (as opposed to a custom top-level node — see
+    // config-spec.mjs's file-top comment) is recognised here just enough to
+    // pass the unknown-key check above; it is otherwise entirely the bespoke
+    // reader's problem (parseStringArray/parseFormat/parseFontFallback/
+    // parsePwaThemeColor/generatePwaAssets, reading the RAW config object
+    // directly) — so it never gets a default pre-populated, never reaches
+    // validateFieldValue, and never appears in this function's own return
+    // value. This is what keeps e.g. parseRender's result (schema.render)
+    // carrying only heavyMs/cache even though render.features/format/fonts/
+    // fontFallback are now valid nested keys.
+    if (field.custom) continue;
+    if ("default" in field) out[key] = field.default;
+  }
+  for (const [key, field] of Object.entries(node.properties)) {
+    if (field.custom) continue;
+    const value = raw[key];
+    const missing = value === undefined || value === null;
+    // `alwaysPresent` (see config-spec.mjs's file-top comment) is
+    // `required`'s sibling for a nested object field whose OWN properties
+    // carry defaults (`viewer.controls`): it must resolve even when the
+    // parent omits it entirely, so those defaults still populate — contrast
+    // an ordinary optional nested group (`render.cache`, `ui.afterExport`),
+    // which stays entirely absent unless the config sets it.
+    if (!field.required && !field.alwaysPresent && missing) continue;
+    const result = validateFieldValue(value, field, `${path}.${key}`);
+    // A nested object field (render.cache) that collapses an empty result to
+    // `null` is omitted from its parent entirely, matching e.g.
+    // `parseRender({ cache: { maxEntries: null } })` -> `null`, not
+    // `{ cache: {} }`.
+    if (result === null) continue;
+    out[key] = result;
+  }
+  if (node.collapseEmptyToNull && Object.keys(out).length === 0) return null;
+  return out;
+}
 
 // A deliberately strict CSS-colour value: hex, rgb()/rgba()/hsl()/hsla(), or a
 // named colour. Forbids `;`, `{`, `}` and comment markers so a value can't break
@@ -91,67 +221,42 @@ export function parseDir(raw) {
 // The model formats OpenSCAD can export and the viewer can parse.
 const FORMATS = ["3mf", "stl"];
 
-// Validate the optional `format` config key. "3mf" (the default) carries
-// per-object colour; "stl" is geometry-only. Fail fast on anything else.
-export function parseFormat(raw) {
+// Validate the optional `render.format` config key. "3mf" (the default)
+// carries per-object colour; "stl" is geometry-only. Fail fast on anything
+// else. `path` is the caller-supplied dotted path (default "render.format",
+// the field's only home since this reorg), so the message can't drift from
+// the key the way it did when `format` moved under `render` and this message
+// stayed "config.format must be..." — also brings this message in line with
+// every other one in this file, which route through `messagePrefix`.
+export function parseFormat(raw, path = "render.format") {
   if (raw == null) return "3mf";
   if (!FORMATS.includes(raw))
     throw new Error(
-      `config.format must be one of ${FORMATS.map((f) => `"${f}"`).join(", ")} (got ${JSON.stringify(raw)})`
+      `${messagePrefix(path)} must be one of ${FORMATS.map((f) => `"${f}"`).join(", ")} (got ${JSON.stringify(raw)})`
     );
   return raw;
 }
 
-// Validate the optional `restOnGrid` config key. When true the viewer rests a
-// loaded model's base on the z=0 grid (X/Y centred); when false (the default)
-// it centres the model on the origin in all three axes, as it always has. This
-// only affects how the viewer frames the geometry, not the exported bytes, so
-// it stays out of renderHash.
-export function parseRestOnGrid(raw) {
-  if (raw == null) return false;
-  if (typeof raw !== "boolean")
-    throw new Error(
-      `config.restOnGrid must be a boolean (got ${JSON.stringify(raw)})`
-    );
-  return raw;
-}
-
-// The viewer presentation styles a config may pick via `viewer.style`.
-export const VIEWER_STYLES = ["plain", "studio"];
-
-// Validate the optional `viewer` config key — the 3D viewer's presentation,
-// fixed at build time. Its only key is `style`, which picks the look: "plain"
-// (the default) is the classic CAD preview; "studio" adds image-based studio
-// lighting, tone mapping, and a soft contact shadow under the model for a
-// product-shot look. Display-only: it doesn't affect the exported bytes, so —
-// like restOnGrid — it stays out of renderHash.
-//
-// The reference grid is deliberately NOT configured here. It is a runtime
-// toggle the visitor owns, seeded once by `ui.grid` and persisted thereafter
-// (see parseUi and src/lib/viewerPrefs.ts); a build-time gate here would make
-// that toggle a no-op. A config still passing `viewer.grid` therefore fails as
-// an unknown key rather than being silently ignored.
+// Validate the optional `viewer` config key — everything display-only the 3D
+// viewer owns, fixed at build time and absent from renderHash (none of it
+// affects the exported bytes):
+//   - `style` picks the look: "plain" (the default) is the classic CAD
+//     preview; "studio" adds image-based studio lighting, tone mapping, and a
+//     soft contact shadow under the model for a product-shot look.
+//   - `restOnGrid`: when true, the viewer rests a loaded model's base on the
+//     z=0 grid (X/Y centred); when false (the default) it centres the model
+//     on the origin in all three axes, as it always has.
+//   - `grid` seeds the viewer's reference-grid toggle's first-ever value.
+//     Unlike `controls` below this is NOT a control-visibility flag — the
+//     grid toggle is always offered regardless, and a visitor's own later
+//     choice (persisted client-side, see src/lib/viewerPrefs.ts) wins on
+//     every subsequent visit. That's exactly why it lives directly on
+//     `viewer` rather than inside `controls`.
+//   - `controls.{measure,viewPicker,reset,zoom,fullscreen}`: each shows or
+//     hides one HUD button; every default matches the flat `ui.*` booleans
+//     these replace.
 export function parseViewer(raw) {
-  const out = { style: "plain" };
-  if (raw == null) return out;
-  if (typeof raw !== "object" || Array.isArray(raw))
-    throw new Error(
-      `config.viewer must be an object with an optional 'style' key (got ${JSON.stringify(raw)})`
-    );
-  for (const key of Object.keys(raw))
-    if (key !== "style")
-      throw new Error(
-        `config.viewer: unknown key '${key}' (valid keys: style)` +
-          (key === "grid" ? " — the reference grid is now seeded by 'ui.grid'" : "")
-      );
-  if (raw.style != null) {
-    if (!VIEWER_STYLES.includes(raw.style))
-      throw new Error(
-        `config.viewer.style must be one of ${VIEWER_STYLES.map((s) => `"${s}"`).join(", ")} (got ${JSON.stringify(raw.style)})`
-      );
-    out.style = raw.style;
-  }
-  return out;
+  return applyGroupSpec(raw ?? {}, CONFIG_SPEC.viewer, "viewer");
 }
 
 // Validate and normalise the optional `colors` config block into
@@ -180,6 +285,10 @@ export function parseColors(raw) {
           `gen-schema: unknown colour token 'colors.${theme}.${token}'.\n` +
             `  Valid tokens: ${COLOR_TOKENS.join(", ")}`
         );
+      // An explicit `null` means "not set", same as every other optional
+      // field in this config — this token was previously the sole holdout,
+      // treating a present-but-null token as an invalid string instead.
+      if (value === null) continue;
       if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
         throw new Error(
           `gen-schema: 'colors.${theme}.${token}' must be a plain CSS colour ` +
@@ -219,7 +328,7 @@ export function parseLicenses(raw) {
       out[key] = entry[key];
     }
     for (const key of OPTIONAL) {
-      if (entry[key] === undefined) continue;
+      if (entry[key] === undefined || entry[key] === null) continue;
       if (typeof entry[key] !== "string")
         throw new Error(`gen-schema: 'licenses[${i}].${key}' must be a string`);
       out[key] = entry[key];
@@ -237,134 +346,207 @@ export function parseFileImport(fileImport) {
   const raw = fileImport;
   if (raw == null || raw === false) return null;
   if (raw === true) return {};
-  if (typeof raw !== "object" || Array.isArray(raw))
-    throw new Error("gen-schema: 'fileImport' must be true, an options object, or null");
-  const out = {};
-  for (const key of ["accept", "label", "note"]) {
-    if (raw[key] === undefined || raw[key] === null) continue;
-    if (typeof raw[key] !== "string")
-      throw new Error(`gen-schema: 'fileImport.${key}' must be a string`);
-    out[key] = raw[key];
-  }
-  // Optional upload size cap (bytes). The app rejects a larger file with a
-  // friendly message instead of persisting it to IndexedDB. Must be positive.
-  if (raw.maxBytes !== undefined && raw.maxBytes !== null) {
-    if (typeof raw.maxBytes !== "number" || !Number.isFinite(raw.maxBytes) || raw.maxBytes <= 0)
-      throw new Error("gen-schema: 'fileImport.maxBytes' must be a positive number");
-    out.maxBytes = raw.maxBytes;
-  }
-  return out;
+  return applyGroupSpec(raw, CONFIG_SPEC.fileImport, "fileImport");
 }
 
-// Validate and normalise the optional `render` config block: build-time render
-// tuning. `heavyMs` sets the auto-pause threshold (a live render slower than
-// this pauses auto-render for the design); `cache` tunes the runner's two-tier
-// render cache (`maxEntries` L1 slot count, `maxBytes` total L1 budget,
+// Validate and normalise the optional `render` config block. `heavyMs` sets
+// the auto-pause threshold (a live render slower than this pauses
+// auto-render for the design); `cache` tunes the runner's two-tier render
+// cache (`maxEntries` L1 slot count, `maxBytes` total L1 budget,
 // `maxEntryBytes` largest cacheable render, `persistent` the L2 IndexedDB
 // store). Every key is optional — the app keeps its built-in default for any
-// omitted value. None affect geometry, so `render` is absent from renderHash.
-// Returns null when unset; fails the build with a clear message on a bad shape.
+// omitted value. Neither affects geometry, so `heavyMs`/`cache` are absent
+// from renderHash. Returns null when unset; fails the build with a clear
+// message on a bad shape.
+//
+// `render` ALSO carries `features`/`format`/`fonts`/`fontFallback` now (moved
+// in from the top level) — genuine render inputs that ARE folded into
+// renderHash — but this function doesn't touch them: they're `custom: true`
+// in CONFIG_SPEC.render (see that file's comment), so `applyGroupSpec` merely
+// recognises the keys and otherwise ignores them. gen-schema.mjs reads
+// `config.render.features`/`.format`/`.fonts`/`.fontFallback` directly with
+// the same bespoke, individually unit-tested parsers
+// (parseStringArray/parseFormat/parseFontFallback) this file already
+// exported, unchanged apart from where they now read from.
 export function parseRender(raw) {
   if (raw == null) return null;
-  if (typeof raw !== "object" || Array.isArray(raw))
-    throw new Error("gen-schema: 'render' must be an object");
-  const posNum = (v, key) => {
-    if (typeof v !== "number" || !Number.isFinite(v) || v < 0)
-      throw new Error(`gen-schema: 'render.${key}' must be a non-negative number`);
-    return v;
-  };
-  const out = {};
-  if (raw.heavyMs !== undefined && raw.heavyMs !== null)
-    out.heavyMs = posNum(raw.heavyMs, "heavyMs");
-  if (raw.cache !== undefined && raw.cache !== null) {
-    if (typeof raw.cache !== "object" || Array.isArray(raw.cache))
-      throw new Error("gen-schema: 'render.cache' must be an object");
-    const cache = {};
-    for (const key of ["maxEntries", "maxBytes", "maxEntryBytes"]) {
-      if (raw.cache[key] !== undefined && raw.cache[key] !== null)
-        cache[key] = posNum(raw.cache[key], `cache.${key}`);
-    }
-    if (raw.cache.persistent !== undefined && raw.cache.persistent !== null) {
-      if (typeof raw.cache.persistent !== "boolean")
-        throw new Error("gen-schema: 'render.cache.persistent' must be a boolean");
-      cache.persistent = raw.cache.persistent;
-    }
-    if (Object.keys(cache).length) out.cache = cache;
-  }
-  return Object.keys(out).length ? out : null;
+  return applyGroupSpec(raw, CONFIG_SPEC.render, "render");
 }
 
-// The display policies a `popup` may choose: shown on every visit ("always"),
-// only the first visit ("once"), or every visit until the user opts out with a
-// "Don't show this again" checkbox ("dismissible").
-export const POPUP_MODES = ["always", "once", "dismissible", "picker"];
+// A top-level (or, since this reorg, `render`/`pwa`-nested) array-of-strings
+// field (`render.features`, `pwa.categories`): absent OR explicit `null` ->
+// [], otherwise every entry must be a non-empty string. `null` reads as
+// "unset" here for the same reason `applyGroupSpec` treats it that way
+// throughout this file (see its own comment): a hand-written JSON config has
+// no comments to delete a line with, so an explicit `null` is how an author
+// says "leave this alone". Used for values interpolated verbatim into
+// generated output (the manifest, `--enable` render flags), so a stray
+// non-string would otherwise surface as a cryptic downstream failure instead
+// of a clear config error. `key` is whatever the caller passes for the error
+// message — always the field's full dotted config path (`render.features`,
+// `pwa.categories`) so the message can't drift from the key the way
+// `render.features`'s used to before it moved under `render` (see
+// `messagePrefix`).
+export function parseStringArray(raw, key) {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string" || !v.trim()))
+    throw new Error(`gen-schema: '${key}' must be an array of non-empty strings (got ${JSON.stringify(raw)})`);
+  return raw;
+}
+
+// Independent built-in defaults for pwa.themeColor's two sides — identical to
+// the pre-reorg top-level themeColor/themeColorLight defaults, so an
+// unconfigured deployment's chrome colours don't change.
+const PWA_THEME_COLOR_DEFAULTS = { light: "#ffffff", dark: "#1f2229" };
+
+function validateThemeColorValue(value, path) {
+  if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
+    throw new Error(`${messagePrefix(path)} must be a CSS colour string (got ${JSON.stringify(value)})`);
+  return value.trim();
+}
+
+// Validate and normalise the optional `pwa.themeColor` config field: same
+// shape as `logo` — a plain string used for both themes, or a { light, dark }
+// object with either side optional — but each side defaults INDEPENDENTLY
+// (see PWA_THEME_COLOR_DEFAULTS) rather than falling back to the other side
+// the way `logo`'s object form does, since light/dark chrome colours are
+// genuinely different colours, not interchangeable assets.
+export function parsePwaThemeColor(raw) {
+  if (raw == null) return { ...PWA_THEME_COLOR_DEFAULTS };
+  if (typeof raw === "string") {
+    const v = validateThemeColorValue(raw, "pwa.themeColor");
+    return { light: v, dark: v };
+  }
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error(
+      "gen-schema: 'pwa.themeColor' must be a CSS colour string, or an object with optional 'light'/'dark' colour strings"
+    );
+  for (const key of Object.keys(raw))
+    if (key !== "light" && key !== "dark")
+      throw new Error(`gen-schema: 'pwa.themeColor': unknown key '${key}'.\n  Valid keys: light, dark`);
+  return {
+    light: raw.light != null ? validateThemeColorValue(raw.light, "pwa.themeColor.light") : PWA_THEME_COLOR_DEFAULTS.light,
+    dark: raw.dark != null ? validateThemeColorValue(raw.dark, "pwa.themeColor.dark") : PWA_THEME_COLOR_DEFAULTS.dark,
+  };
+}
+
+// Validate and normalise the optional `pwa` config block: manifest-only PWA
+// chrome (install metadata, icons, theming) that feeds manifest.webmanifest
+// and the icon rasterizer (scripts/lib/pwa-assets.mjs) — see CONFIG_SPEC.pwa's
+// comment for why none of it is mirrored into designs.json. `shortName`/
+// `icon`/`iconMaskable`/`backgroundColor`/`install` are ordinary
+// applyGroupSpec-driven fields; `themeColor` is bespoke (parsePwaThemeColor,
+// above); `categories` reuses parseStringArray, passing its full dotted path
+// 'pwa.categories' (a stale bare 'categories' — left over from before this
+// field moved under `pwa` — was fixed in a later review pass, matching the
+// same fix `render.features` already got); `screenshots`/`shortcuts` are
+// passed through UNVALIDATED here, on purpose — pwa-assets.mjs already
+// tolerates (and silently drops) a malformed entry rather than failing the
+// build, a bit of leniency that predates this reorg and that this function
+// must not turn into a hard failure.
+export function parsePwa(raw) {
+  const src = raw ?? {};
+  const out = applyGroupSpec(src, CONFIG_SPEC.pwa, "pwa");
+  return {
+    ...out,
+    categories: parseStringArray(src.categories, "pwa.categories"),
+    // Passed through EXACTLY as configured (including `undefined` when
+    // absent) rather than normalised to `[]`: generatePwaAssets tells "author
+    // configured no shortcuts at all" (falls back to deriving one per
+    // design) apart from "author configured an explicitly empty list" (no
+    // shortcuts, no derived fallback either) by checking `Array.isArray`, and
+    // defaulting an absent value to `[]` here would collapse that
+    // distinction.
+    screenshots: Array.isArray(src.screenshots) ? src.screenshots : undefined,
+    shortcuts: Array.isArray(src.shortcuts) ? src.shortcuts : undefined,
+    themeColor: parsePwaThemeColor(src.themeColor),
+  };
+}
 
 // Validate and normalise the optional `popup` config block: a notice dialog
 // shown over the app on load. `header` (dialog title) and `body` (a
 // Markdown-subset string — bold/code/links/lists, same renderer as `help`) are
-// required; `mode` (one of POPUP_MODES) chooses how often it appears and
-// defaults to "once". Purely informational, so it's absent from renderHash.
-// Returns null when not configured; fails the build with a clear message on a
-// bad shape (consistent with gen-schema's other fail-fast checks).
+// required; `mode` (one of CONFIG_SPEC.popup.properties.mode.values) chooses
+// how often it appears and defaults to "once". Purely informational, so it's
+// absent from renderHash. Returns null when not configured; fails the build
+// with a clear message on a bad shape (consistent with gen-schema's other
+// fail-fast checks).
 export function parsePopup(raw) {
   if (raw == null) return null;
-  if (typeof raw !== "object" || Array.isArray(raw))
-    throw new Error(
-      "gen-schema: 'popup' must be an object with 'header', 'body' and an optional 'mode'"
-    );
-  for (const key of ["header", "body"]) {
-    if (typeof raw[key] !== "string" || !raw[key].trim())
-      throw new Error(
-        `gen-schema: 'popup.${key}' is required and must be a non-empty string`
-      );
-  }
-  const mode = raw.mode ?? "once";
-  if (!POPUP_MODES.includes(mode))
-    throw new Error(
-      `gen-schema: 'popup.mode' must be one of ${POPUP_MODES.map((m) => `"${m}"`).join(", ")} ` +
-        `(got ${JSON.stringify(raw.mode)})`
-    );
-  // Optional label for the primary button (the app defaults to "OK"). A blank
-  // string would render an empty button, so require non-empty when present.
-  if (raw.button !== undefined && (typeof raw.button !== "string" || !raw.button.trim()))
-    throw new Error(
-      "gen-schema: 'popup.button', when set, must be a non-empty string"
-    );
-  // Optional plain-text footnote, shown small and muted at the bottom of the
-  // dialog in every mode. Same non-empty-when-present rule as `button`.
-  if (raw.footnote !== undefined && (typeof raw.footnote !== "string" || !raw.footnote.trim()))
-    throw new Error(
-      "gen-schema: 'popup.footnote', when set, must be a non-empty string"
-    );
-  const out = { header: raw.header, body: raw.body, mode };
-  if (raw.button !== undefined) out.button = raw.button;
-  if (raw.footnote !== undefined) out.footnote = raw.footnote;
-  return out;
+  return applyGroupSpec(raw, CONFIG_SPEC.popup, "popup");
 }
 
 // Validate and normalise the optional `notices` config block: the design-defined
 // notice categories surfaced on the "OpenSCAD output" panel. A design echoes
 // `ECHO: "<context>: <marker>: <message>"` and each configured category turns
 // matching echoes into a friendly notice and a coloured count badge. Each entry
-// is { marker (required), label?, labelOne?, color? }:
+// is { marker (required), label?, color? }:
 //   - marker: the design-defined string matched as `: <marker>:` in an echo
-//     (e.g. "alert", "note"); case-insensitive.
-//   - label: the badge / notice noun (e.g. "alerts"); defaults to marker.
-//   - labelOne: optional singular form of `label` (e.g. "alert"), used
-//     wherever a count renders alongside it whenever the live count is
-//     exactly 1. Omit to keep `label` regardless of count.
+//     (e.g. "alert", "note"); case-insensitive. Two entries whose markers
+//     match case-insensitively fail the build (see parseNotices below) —
+//     `classify` (src/lib/diagnostics.ts) matches the same way and keys its
+//     badge tally by the first match, so a second entry for the same marker
+//     would silently produce a duplicate-keyed badge rather than a distinct
+//     category.
+//   - label: the badge / notice noun, as `{ one, other }` (a plain string is
+//     shorthand for "the same word regardless of count"); defaults to marker.
+//     There is no separate `labelOne` field — a config still using the old
+//     `label`/`labelOne` pair fails the build with a pointer at this shape
+//     (see parseNoticeLabel below).
 //   - color: an optional badge fill colour, validated as a plain CSS colour
 //     (same strictness as `colors`) so it can't break out of the inline style
 //     it gets interpolated into.
 // Notices don't affect geometry, so they're absent from renderHash. Off by
 // default: omitted (or []) -> no notice categories. OpenSCAD's own WARNING/ERROR
 // lines and assert failures stay hardcoded (see lib/diagnostics).
+//
+// `label` is `{ one, other }` — `other` the plural/default form, `one` an
+// optional singular override (falls back to `other` when unset) — selected
+// at render time via the same Intl.PluralRules-backed logic src/lib/i18n.ts's
+// `tn()` uses (see selectPlural there), rather than a bespoke `count === 1`
+// check. A plain string is accepted as shorthand for "the same word regardless
+// of count" and normalised to `{ one: v, other: v }`. A config still using the
+// old `label`/`labelOne` pair (plural-required, singular-optional) fails the
+// build with a clear pointer at this shape instead.
+function parseNoticeLabel(raw, marker, i) {
+  const path = `notices[${i}].label`;
+  if (raw === undefined || raw === null) return { one: marker, other: marker };
+  if (typeof raw === "string") {
+    if (!raw.trim()) throw new Error(`gen-schema: '${path}' must be a non-empty string, or { one, other }`);
+    const v = raw.trim();
+    return { one: v, other: v };
+  }
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error(`gen-schema: '${path}' must be a string, or an object with 'one'/'other'`);
+  for (const key of Object.keys(raw))
+    if (key !== "one" && key !== "other")
+      throw new Error(`gen-schema: '${path}': unknown key '${key}'.\n  Valid keys: one, other`);
+  if (typeof raw.other !== "string" || !raw.other.trim())
+    throw new Error(`gen-schema: '${path}.other' is required and must be a non-empty string`);
+  const other = raw.other.trim();
+  let one = other;
+  if (raw.one !== undefined && raw.one !== null) {
+    if (typeof raw.one !== "string" || !raw.one.trim())
+      throw new Error(`gen-schema: '${path}.one', when set, must be a non-empty string`);
+    one = raw.one.trim();
+  }
+  return { one, other };
+}
+
 export function parseNotices(raw) {
   if (raw == null) return [];
   if (!Array.isArray(raw))
     throw new Error(
       "gen-schema: 'notices' must be an array of notice categories"
     );
+  // Two entries for the same marker would produce two identically-keyed
+  // `notice:<marker>` badges (countBadges/diagnostics.ts, both classify()
+  // matches case-insensitively and keys its tally by the FIRST match) — a
+  // config mistake, not a case worth silently tolerating or de-duplicating
+  // downstream, so it fails the build here instead. Compared case-insensitively
+  // to match classify()'s own matching, keyed by first-seen index for the
+  // error message.
+  const seenMarkers = new Map();
   return raw.map((entry, i) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry))
       throw new Error(`gen-schema: 'notices[${i}]' must be an object`);
@@ -372,23 +554,22 @@ export function parseNotices(raw) {
       throw new Error(
         `gen-schema: 'notices[${i}].marker' is required and must be a non-empty string`
       );
-    const out = { marker: entry.marker.trim() };
-    if (entry.label === undefined || entry.label === null) {
-      out.label = out.marker;
-    } else if (typeof entry.label !== "string" || !entry.label.trim()) {
+    if (entry.labelOne !== undefined)
       throw new Error(
-        `gen-schema: 'notices[${i}].label' must be a non-empty string`
+        `gen-schema: 'notices[${i}].labelOne' is no longer supported — use ` +
+          `'notices[${i}].label' as { one, other } instead (see docs/config.md's Notice badges section).`
       );
-    } else {
-      out.label = entry.label.trim();
+    const marker = entry.marker.trim();
+    const markerKey = marker.toLowerCase();
+    if (seenMarkers.has(markerKey)) {
+      const firstIndex = seenMarkers.get(markerKey);
+      throw new Error(
+        `gen-schema: 'notices[${i}].marker' duplicates 'notices[${firstIndex}].marker' ` +
+          `— both match ${JSON.stringify(marker)} case-insensitively`
+      );
     }
-    if (entry.labelOne !== undefined && entry.labelOne !== null) {
-      if (typeof entry.labelOne !== "string" || !entry.labelOne.trim())
-        throw new Error(
-          `gen-schema: 'notices[${i}].labelOne' must be a non-empty string`
-        );
-      out.labelOne = entry.labelOne.trim();
-    }
+    seenMarkers.set(markerKey, i);
+    const out = { marker, label: parseNoticeLabel(entry.label, marker, i) };
     if (entry.color !== undefined && entry.color !== null) {
       if (typeof entry.color !== "string" || !COLOR_VALUE_RE.test(entry.color.trim()))
         throw new Error(
@@ -397,12 +578,12 @@ export function parseNotices(raw) {
         );
       out.color = entry.color.trim();
     }
-    if (entry.attention !== undefined) {
+    if (entry.attention !== undefined && entry.attention !== null) {
       if (typeof entry.attention !== "boolean")
         throw new Error(`gen-schema: 'notices[${i}].attention' must be a boolean`);
       out.attention = entry.attention;
     }
-    if (entry.subsumedByFont !== undefined) {
+    if (entry.subsumedByFont !== undefined && entry.subsumedByFont !== null) {
       if (typeof entry.subsumedByFont !== "boolean")
         throw new Error(`gen-schema: 'notices[${i}].subsumedByFont' must be a boolean`);
       out.subsumedByFont = entry.subsumedByFont;
@@ -411,132 +592,39 @@ export function parseNotices(raw) {
   });
 }
 
-// The optional after-export success-panel config a config may set under
-// `ui.afterExport` (see src/components/ExportSuccess.tsx). Every field is a
-// plain non-empty string override; the app's own built-in copy applies to any
-// field left unset. Unlike the other `ui` keys, `helpTab` can't be validated
-// here — it names a tab in this same config's `help` block, parsed separately
-// in gen-schema's generate() — so that cross-field check happens there, once
-// both are available (search generate() for 'ui.afterExport.helpTab').
-const AFTER_EXPORT_KEYS = ["title", "body", "helpTab"];
-function parseAfterExport(raw) {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
-    throw new Error("gen-schema: 'ui.afterExport' must be an object");
-  for (const key of Object.keys(raw)) {
-    if (!AFTER_EXPORT_KEYS.includes(key))
-      throw new Error(
-        `gen-schema: unknown 'ui.afterExport' key '${key}'.\n` +
-          `  Valid keys: ${AFTER_EXPORT_KEYS.join(", ")}`
-      );
-  }
-  const out = {};
-  for (const key of AFTER_EXPORT_KEYS) {
-    if (raw[key] !== undefined) {
-      if (typeof raw[key] !== "string" || !raw[key].trim())
-        throw new Error(`gen-schema: 'ui.afterExport.${key}' must be a non-empty string`);
-      out[key] = raw[key].trim();
-    }
-  }
-  return out;
+// Validate and normalise the optional `ui.afterExport` field: `true`/`{}` for
+// defaults, `{ helpTab }` to also deep-link Help, `null`/`false`/absent for no
+// panel — the same true-or-options-object idiom as `parseFileImport` below,
+// reusing this field's own CONFIG_SPEC node (properties + rootTypeError) for
+// the object-shape validation exactly the way `parseFileImport` reuses
+// `CONFIG_SPEC.fileImport`. `title`/`body` used to live here too; removed (see
+// CONFIG_SPEC's AFTER_EXPORT_SPEC comment) — the `false` case is new relative
+// to the old plain-object field, which had no way to say "off" other than
+// omitting the key entirely.
+export function parseAfterExport(raw) {
+  if (raw == null || raw === false) return undefined;
+  if (raw === true) return {};
+  return applyGroupSpec(raw, CONFIG_SPEC.ui.properties.afterExport, "ui.afterExport");
 }
 
-// Validate and normalise the optional `ui` config block: build-time UI behaviour
-// overrides. None affect geometry (absent from renderHash). Applies defaults for
-// omitted keys. Returns the defaults object when the config omits `ui` entirely.
+// Validate and normalise the optional `ui` config block: build-time UI
+// behaviour overrides (panel/output defaults and the nested `afterExport`
+// panel — `helpTab`'s cross-check against a real `help.tabs[].label` can't
+// happen here, since `help` isn't available yet; it stays a cross-field check
+// in gen-schema.mjs's generate(), search that file for
+// 'ui.afterExport.helpTab'). The viewer's own controls live under
+// `viewer.controls` now (see parseViewer) — not here, and the Presets/
+// Customize tab labels are the i18n catalogue's now (`strings["presets.title"]`/
+// `strings["settings.title"]`), not here either. None of it affects geometry
+// (absent from renderHash). Returns CONFIG_SPEC.ui's defaults object when
+// `ui` is omitted. `afterExport` is `custom: true` in CONFIG_SPEC (see that
+// file's comment), so applyGroupSpec recognises the key but skips it
+// entirely — parsed here instead via the bespoke `parseAfterExport` above,
+// same relationship as `parsePwa`'s `themeColor`.
 export function parseUi(raw) {
-  const defaults = { panelSide: "left", panelDefault: "open", outputDefault: "closed", install: "auto", showVarName: false, measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true, grid: "off", gallery: false, essentials: false, presetsLabel: "Presets", parametersLabel: "Customize" };
-  if (raw == null) return defaults;
-  if (typeof raw !== "object" || Array.isArray(raw))
-    throw new Error("gen-schema: 'ui' must be an object");
-  const out = { ...defaults };
-  const PANEL_SIDES = ["left", "right"];
-  const PANEL_DEFAULTS = ["open", "collapsed"];
-  const OUTPUT_DEFAULTS = ["closed", "open"];
-  const INSTALL_MODES = ["auto", "off"];
-  const GRID_MODES = ["off", "on"];
-  if (raw.panelSide !== undefined) {
-    if (!PANEL_SIDES.includes(raw.panelSide))
-      throw new Error(`gen-schema: 'ui.panelSide' must be one of ${PANEL_SIDES.map((s) => `"${s}"`).join(", ")}`);
-    out.panelSide = raw.panelSide;
-  }
-  if (raw.panelDefault !== undefined) {
-    if (!PANEL_DEFAULTS.includes(raw.panelDefault))
-      throw new Error(`gen-schema: 'ui.panelDefault' must be one of ${PANEL_DEFAULTS.map((s) => `"${s}"`).join(", ")}`);
-    out.panelDefault = raw.panelDefault;
-  }
-  if (raw.outputDefault !== undefined) {
-    if (!OUTPUT_DEFAULTS.includes(raw.outputDefault))
-      throw new Error(`gen-schema: 'ui.outputDefault' must be one of ${OUTPUT_DEFAULTS.map((s) => `"${s}"`).join(", ")}`);
-    out.outputDefault = raw.outputDefault;
-  }
-  if (raw.install !== undefined) {
-    if (!INSTALL_MODES.includes(raw.install))
-      throw new Error(`gen-schema: 'ui.install' must be one of ${INSTALL_MODES.map((s) => `"${s}"`).join(", ")}`);
-    out.install = raw.install;
-  }
-  if (raw.showVarName !== undefined) {
-    if (typeof raw.showVarName !== "boolean")
-      throw new Error("gen-schema: 'ui.showVarName' must be a boolean");
-    out.showVarName = raw.showVarName;
-  }
-  if (raw.measure !== undefined) {
-    if (typeof raw.measure !== "boolean")
-      throw new Error("gen-schema: 'ui.measure' must be a boolean");
-    out.measure = raw.measure;
-  }
-  if (raw.viewPicker !== undefined) {
-    if (typeof raw.viewPicker !== "boolean")
-      throw new Error("gen-schema: 'ui.viewPicker' must be a boolean");
-    out.viewPicker = raw.viewPicker;
-  }
-  if (raw.reset !== undefined) {
-    if (typeof raw.reset !== "boolean")
-      throw new Error("gen-schema: 'ui.reset' must be a boolean");
-    out.reset = raw.reset;
-  }
-  if (raw.zoom !== undefined) {
-    if (typeof raw.zoom !== "boolean")
-      throw new Error("gen-schema: 'ui.zoom' must be a boolean");
-    out.zoom = raw.zoom;
-  }
-  if (raw.fullscreen !== undefined) {
-    if (typeof raw.fullscreen !== "boolean")
-      throw new Error("gen-schema: 'ui.fullscreen' must be a boolean");
-    out.fullscreen = raw.fullscreen;
-  }
-  // Unlike its neighbours this doesn't gate a button — the viewer's grid
-  // toggle is always offered. It only seeds that toggle's first-ever value;
-  // a visitor's own choice is persisted and wins from then on.
-  if (raw.grid !== undefined) {
-    if (!GRID_MODES.includes(raw.grid))
-      throw new Error(`gen-schema: 'ui.grid' must be one of ${GRID_MODES.map((s) => `"${s}"`).join(", ")}`);
-    out.grid = raw.grid;
-  }
-  // Optional: hide the "Save image (PNG)" action. Defaults to shown, so it's
-  // carried onto `ui` only when the config sets it (the app treats absent as
-  // true — see AppShell's `showSaveImage`).
-  if (raw.saveImage !== undefined) {
-    if (typeof raw.saveImage !== "boolean")
-      throw new Error("gen-schema: 'ui.saveImage' must be a boolean");
-    out.saveImage = raw.saveImage;
-  }
-  for (const key of ["gallery", "essentials"]) {
-    if (raw[key] !== undefined) {
-      if (typeof raw[key] !== "boolean")
-        throw new Error(`gen-schema: 'ui.${key}' must be a boolean`);
-      out[key] = raw[key];
-    }
-  }
-  for (const key of ["presetsLabel", "parametersLabel"]) {
-    if (raw[key] !== undefined) {
-      if (typeof raw[key] !== "string" || !raw[key].trim())
-        throw new Error(`gen-schema: 'ui.${key}' must be a non-empty string`);
-      out[key] = raw[key].trim();
-    }
-  }
-  if (raw.afterExport !== undefined && raw.afterExport !== null) {
-    out.afterExport = parseAfterExport(raw.afterExport);
-  }
+  const out = applyGroupSpec(raw ?? {}, CONFIG_SPEC.ui, "ui");
+  const afterExport = parseAfterExport(raw?.afterExport);
+  if (afterExport !== undefined) out.afterExport = afterExport;
   return out;
 }
 

@@ -1,0 +1,1259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScadPub configuration",
+  "description": "scadpub.config.json. Generated from scripts/lib/config-spec.mjs by scripts/gen-config-schema.mjs — see docs/config.md for the full human reference.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "Optional pointer to a JSON Schema for editor tooling; not read by gen-schema itself.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "title": {
+      "description": "Browser tab title and header text.",
+      "default": "ScadPub",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "id": {
+      "description": "Namespaces localStorage, IndexedDB and the preset cache (charset [A-Za-z0-9._-]+).",
+      "default": "scadpub",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "description": {
+      "description": "Page <meta> description and PWA description.",
+      "default": "Configure and export designs in your browser.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lang": {
+      "description": "Document/manifest language, a BCP-47 tag.",
+      "default": "en",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "dir": {
+      "description": "Document/manifest text direction.",
+      "default": "ltr",
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "ltr",
+            "rtl",
+            "auto"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pwa": {
+      "description": "Manifest-only PWA chrome (install metadata, icons, theming) that feeds manifest.webmanifest and the icon rasterizer at build time. Not mirrored into designs.json — the app itself never reads a 'pwa' object.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "shortName": {
+          "description": "Short PWA name; defaults to 'title'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "description": "PWA/favicon icon path, relative to the config file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "iconMaskable": {
+          "description": "Separate SVG for the maskable icon; defaults to 'icon'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "themeColor": {
+          "description": "Per-theme PWA/browser-chrome colour: a string for both themes, or { light, dark } (either may be omitted, defaulting independently: light '#ffffff', dark '#1f2229'). Same shape as 'logo'.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "light": {
+                  "description": "Light-scheme <meta name=theme-color>. Default '#ffffff'.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "dark": {
+                  "description": "Dark-scheme browser-chrome / PWA colour. Default '#1f2229'.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "backgroundColor": {
+          "description": "PWA manifest background colour. A CSS colour string (hex, rgb()/rgba()/hsl()/hsla(), or a named colour).",
+          "default": "#15171c",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "categories": {
+          "description": "Manifest categories array.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "screenshots": {
+          "description": "Richer Android install-UI screenshots: [{ src, sizes, form_factor, label?, platform? }].",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object"
+          }
+        },
+        "shortcuts": {
+          "description": "App shortcuts for Android long-press / desktop jump lists: [{ name, short_name?, url, icons? }].",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object"
+          }
+        },
+        "install": {
+          "description": "PWA install affordance; 'off' hides it entirely.",
+          "default": "auto",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "auto",
+                "off"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "description": "Directory of Customizer-style .scad designs, relative to the config file.",
+      "default": ".",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "designs": {
+      "description": "Explicit design list; omit to auto-discover *.scad in 'source'.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Design id (charset [A-Za-z0-9._-]+); used in URLs, storage, filenames.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Picker label; defaults to a humanized id.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "file": {
+            "description": "Path to the .scad file, relative to 'source'; defaults to '<id>.scad'.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "heavy": {
+            "description": "Start this design in manual-render mode.",
+            "default": false,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "group": {
+            "description": "Dropdown/gallery grouping header; consecutive same-value designs cluster.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "presets": {
+            "description": "This design's bundled-preset presentation.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "images": {
+                "description": "Bundled-preset thumbnails: either a preset-name -> image-path map (every key must match a real bundled preset name), or a single config-relative directory string (each preset's image looked up by slugifying its name — see docs/config.md). Preset images are optional per preset either way.",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "defaultDesign": {
+      "description": "Design id shown on a visit with no #d= deep link; must name a configured design.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "assets": {
+      "description": "Files/directories/globs to bundle verbatim; omit to follow use/include.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "render": {
+      "description": "Rendering: OpenSCAD flags/format/fonts (render inputs — folded into renderHash) plus build-time heavy-render-threshold/cache tuning ('heavyMs'/'cache' — display/perf only, absent from renderHash).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "features": {
+          "description": "OpenSCAD --enable=<feature> flags applied to every render. Folded into renderHash.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "format": {
+          "description": "Export/preview model format. Folded into renderHash.",
+          "default": "3mf",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "3mf",
+                "stl"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fonts": {
+          "description": "Bundled font files (public/fonts basenames or 'source'-relative paths). Folded into renderHash.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "fontFallback": {
+          "description": "A bundled family pinned as fontconfig's last-resort default. Folded into renderHash.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "heavyMs": {
+          "description": "Auto-pause threshold (ms) for a slow live render. NOT in renderHash.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "cache": {
+          "description": "Sizes the runner's two-tier render cache.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "maxEntries": {
+              "description": "In-memory (L1) slot count.",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "maxBytes": {
+              "description": "In-memory (L1) total byte budget.",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "maxEntryBytes": {
+              "description": "Largest single render worth caching.",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "persistent": {
+              "description": "Persist renders to IndexedDB (L2).",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "logo": {
+      "description": "Header logo: a path, or { light, dark } per-theme paths (config-relative).",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "light": {
+              "description": "Logo path used in the light theme.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "dark": {
+              "description": "Logo path used in the dark theme.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "colors": {
+      "description": "Optional per-theme CSS colour/design-token overrides.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "light": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "panel": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "panel-2": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "line": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "muted": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "accent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "accent-solid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "on-accent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "focus": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "link": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "warn": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "warn-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "success": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "success-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "overlay": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "viewer-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "viewer-grid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "viewer-grid-2": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "viewer-model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "viewer-dim": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "radius": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "radius-sm": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "glass-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "glass-border": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "elevation": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "font-sans": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "font-display": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "dark": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "panel": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "panel-2": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "line": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "muted": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "accent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "accent-solid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "on-accent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "focus": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "link": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "warn": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "warn-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "success": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "success-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "overlay": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "viewer-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "viewer-grid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "viewer-grid-2": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "viewer-model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "viewer-dim": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "radius": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "radius-sm": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "glass-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "glass-border": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "elevation": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "font-sans": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "font-display": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "extraCss": {
+      "description": "Raw-CSS stylesheet path (config-relative), loaded after the app's own styles.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ui": {
+      "description": "Build-time UI behaviour: panel/output defaults and labels.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "panelSide": {
+          "description": "Which edge the desktop parameter panel docks against.",
+          "default": "left",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "left",
+                "right"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "panelDefault": {
+          "description": "First-load desktop panel state.",
+          "default": "open",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "open",
+                "collapsed"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputDefault": {
+          "description": "Whether the OpenSCAD output console starts open.",
+          "default": "closed",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "closed",
+                "open"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "showVarName": {
+          "description": "Show the OpenSCAD variable name beside each parameter label.",
+          "default": false,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "saveImage": {
+          "description": "Show the 'Save image (PNG)' action.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "gallery": {
+          "description": "Replace the compact design dropdown with a searchable card grid.",
+          "default": false,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "essentials": {
+          "description": "Start with // @advanced parameters hidden behind 'Show all settings'.",
+          "default": false,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "afterExport": {
+          "description": "Turns on the after-export success panel: true for defaults, or { helpTab }.",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "helpTab": {
+                  "description": "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "viewer": {
+      "description": "The 3D viewer's presentation, framing, and per-control visibility, fixed at build time.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "style": {
+          "description": "'plain' is the classic CAD preview; 'studio' adds image-based lighting and a contact shadow.",
+          "default": "plain",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "plain",
+                "studio"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restOnGrid": {
+          "description": "Rest the model's base on the z=0 grid instead of centring in Z (display-only).",
+          "default": false,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "grid": {
+          "description": "Seeds the viewer's reference-grid toggle's first-ever value. The toggle itself is always offered — this is not a visibility flag, unlike 'controls' below — and a visitor's own later choice persists and wins on every subsequent visit.",
+          "default": "off",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "off",
+                "on"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "controls": {
+          "description": "Visibility of the individual viewer HUD control buttons. None of these hide the 3D canvas itself.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "measure": {
+              "description": "Show the viewer's measure (ruler) toggle.",
+              "default": true,
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "viewPicker": {
+              "description": "Show the camera-angle cube button.",
+              "default": true,
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "reset": {
+              "description": "Show the 'reset view' button.",
+              "default": true,
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "zoom": {
+              "description": "Show explicit zoom in/out buttons.",
+              "default": false,
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "fullscreen": {
+              "description": "Show the fullscreen toggle (browser tabs only).",
+              "default": true,
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "fileImport": {
+      "description": "Enables the Files dialog. true for defaults, or an options object; omit/false/null for no Files action.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "note": {
+              "description": "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "noteFile": {
+              "description": "Config-relative Markdown file whose contents become 'note' at build time. Mutually exclusive with 'note' (setting both fails the build, naming both).",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "popup": {
+      "description": "One-off notice dialog shown over the app on load.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "header": {
+          "description": "Dialog title.",
+          "type": "string"
+        },
+        "body": {
+          "description": "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'.",
+          "type": "string"
+        },
+        "bodyFile": {
+          "description": "Config-relative Markdown file whose contents become 'body' at build time. Mutually exclusive with 'body' (setting both fails the build, naming both).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "description": "Popup frequency.",
+          "default": "once",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "always",
+                "once",
+                "dismissible",
+                "picker"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "button": {
+          "description": "Primary-button label; overrides the default 'OK'.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "footnote": {
+          "description": "Short plain-text line shown small and muted at the bottom.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "header",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "help": {
+      "description": "Help dialog content: 'sections' for a single pane, or 'tabs' for a tabbed guide. A pane (the top-level object, or any 'tabs[]' entry) may set 'file' instead of 'sections' — a config-relative Markdown file gen-schema splits into 'intro'/'sections' at build time (see docs/config.md). Passed through verbatim otherwise, with any 'file' already resolved.",
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "notices": {
+      "description": "Design-defined notice categories surfaced on the OpenSCAD output panel.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "marker": {
+            "description": "Design-defined word matched as ': <marker>:' inside an echo (case-insensitive).",
+            "type": "string"
+          },
+          "label": {
+            "description": "Badge/notice noun: a plain string used for both counts, or { one, other } for distinct singular/plural forms (selected via Intl.PluralRules, the same as src/lib/i18n.ts's tn()). Defaults to 'marker'.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "one": {
+                    "description": "Singular override; falls back to 'other' when omitted.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "other": {
+                    "description": "Plural/default form, used whenever 'one' is unset.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "other"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "color": {
+            "description": "Badge fill colour, a plain CSS colour.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attention": {
+            "description": "Join the pre-download review dialog's attention items.",
+            "default": false,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "subsumedByFont": {
+            "description": "Fold into a missing-font item instead of listing separately.",
+            "default": false,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "marker"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "licenses": {
+      "description": "Extra third-party software/license notices, appended to the built-in attributions.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Component name.",
+            "type": "string"
+          },
+          "license": {
+            "description": "SPDX identifier.",
+            "type": "string"
+          },
+          "copyright": {
+            "description": "Copyright line.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Project homepage.",
+            "type": "string"
+          },
+          "licenseUrl": {
+            "description": "Where the license text lives.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Component version.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "description": "Full license text, shown in a details panel. Mutually exclusive with 'textFile'.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "textFile": {
+            "description": "Config-relative file whose contents become 'text' at build time. Mutually exclusive with 'text' (setting both fails the build, naming both).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceUrl": {
+            "description": "Corresponding-source link (required by copyleft licenses).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "description": "One-line description.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "license",
+          "copyright",
+          "url",
+          "licenseUrl"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "strings": {
+      "description": "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys.",
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

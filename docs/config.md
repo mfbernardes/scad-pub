@@ -14,17 +14,20 @@ This representative config shows the major surfaces. The sections below define e
   "title": "ScadPub",             // page/header title
   "id": "scadpub",                // namespaces browser storage (default "scadpub")
   "description": "Configure …",   // page <meta> + PWA description
-  "icon": "branding/icon.svg",    // PWA/favicon icon
-  "themeColor": "#1f2229",        // browser-chrome / PWA colour
+  "pwa": {
+    "icon": "branding/icon.svg",    // PWA/favicon icon
+    "themeColor": "#1f2229"         // browser-chrome / PWA colour (both themes; or { light, dark })
+  },
   "source": "examples",           // directory of .scad designs (relative to this file)
   "designs": [
-    { "id": "tag", "label": "Tag", "heavy": false, "description": "A name tag.", "icon": "branding/tag.svg" }
+    { "id": "tag", "label": "Tag", "heavy": false }
   ],                              // omit to auto-discover *.scad in source; presets auto-detected as <id>.json
   "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
-  "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
-  "format": "3mf",                // export/preview format: "3mf" (colour) or "stl"; default "3mf"
-  "restOnGrid": false,            // rest the model's base on the z=0 grid instead of centring in Z; default false
-  "viewer": { "style": "plain" }, // viewer presentation: "plain" (default) or "studio"
+  "render": {
+    "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
+    "format": "3mf"                 // export/preview format: "3mf" (colour) or "stl"; default "3mf"
+  },
+  "viewer": { "style": "plain" }, // viewer presentation, framing, and controls — see Viewer
   "fileImport": true              // optional Files dialog (manages imported fonts/SVGs)
 }
 ```
@@ -35,13 +38,13 @@ The top-level keys map to app identity, design discovery, rendering, appearance,
 
 ### App identity and PWA
 
-These keys set the document chrome and the Progressive Web App (PWA) manifest:
+These keys set the document chrome and, through the `pwa` block, the Progressive Web App (PWA) manifest:
 
 - **`title`** / **`logo`**: see [Title and logo](#title-and-logo)
 - **`id`**: namespaces localStorage, IndexedDB, and preset cache. Defaults to `"scadpub"`
-- **`description`** / **`shortName`** / **`icon`** / **`themeColor`** / **`backgroundColor`**: `<meta>` and PWA manifest fields. `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg`
+- **`description`**: `<meta>` description and PWA manifest description
 - **`lang`** / **`dir`**: document and manifest language (a BCP-47 tag, default `"en"`) and text direction (`"ltr"` by default, `"rtl"`, or `"auto"`). ScadPub emits them onto `<html lang dir>` and into the manifest
-- **`themeColorLight`** / **`categories`** / **`iconMaskable`** / **`screenshots`** / **`shortcuts`**: see [UI behaviour and PWA](#ui-behaviour-and-pwa)
+- **`pwa`**: manifest-only fields (`shortName`, `icon`, `iconMaskable`, `themeColor`, `backgroundColor`, `categories`, `screenshots`, `shortcuts`, `install`) — see [PWA manifest (`pwa`)](#pwa-manifest-pwa). `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg` from it
 
 ### Design sources
 
@@ -53,29 +56,27 @@ These keys tell `gen-schema` which `.scad` files and assets to bundle:
 - **`assets`**: files or directories to copy verbatim. If omitted, `gen-schema` follows each design's `use`/`include` graph
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under "Bundled" in the preset picker.
 
-Each `designs[]` entry also accepts optional `description`, `icon`, `image`, and `doc` fields. `description` is the short line shown under the label in the design picker. `icon` is a path relative to the config file, shown in the compact picker and used as the design's manifest shortcut icon. `image` is larger card artwork for `ui.gallery` and falls back to the icon. These assets may be SVG, PNG, or WebP. `doc` is a path (also config-relative) to a Markdown file of user documentation; when present, the app shows a button that opens it in a modal.
+A `designs[]` entry's own keys get the same unknown-key check as the top level: an unrecognised key fails the build, naming the offending design's `id` and listing the keys an entry accepts. (A missing or malformed `id` is itself checked first, so that failure is reported on its own rather than as a confusing unknown-key error.)
 
-All four fall back to the design's own `// @description` / `// @icon` / `// @image` / `// @doc` annotations when omitted here. A config value still wins.
+A design's picker sub-label, thumbnail icon, gallery card art, and user-doc all come from the design's **own `.scad` file** — `// @description`, `// @icon`, `// @image`, `// @doc` (see [annotations.md](annotations.md#design-metadata--description--icon--image--doc)) — never from the config. There is no `designs[]` field for any of them: a design's own metadata lives in the design, full stop.
 
-Each `designs[]` entry also accepts optional **`reviewLabels`** and **`reviewNote`** fields, feeding a curated review summary (`src/lib/reviewSummary.ts`):
+Each `designs[]` entry also accepts an optional **`group`** field — a header string the picker clusters designs under:
 
 ```jsonc
 {
   "designs": [
-    {
-      "id": "tag",
-      "label": "Tag",
-      "reviewLabels": { "label": "Text", "font": "Typeface" },
-      "reviewNote": "Text prints in capitals even though you typed it in lowercase."
-    }
+    { "id": "signage", "label": "Flexible sign", "group": "Around the building" },
+    { "id": "elevator", "label": "Elevator button", "group": "Around the building" },
+    { "id": "nameplate", "label": "Nameplate", "group": "Labels & everyday" }
   ]
 }
 ```
 
-- **`reviewLabels`**: an object mapping a **declared parameter's exact name** to the label its value is shown under in a review summary. Every key must match one of that design's own params — a stale or misspelled name fails the build. Several params sharing the same label merge into one summary row, their formatted values joined by `" / "`. A design with no `reviewLabels` still shows the summary's overall bounding-box "Dimensions" row, just no curated section above it. A row's value can be overridden by an `echo("@review", param, value)` from the design itself — see [`echo("@review", …)`](annotations.md#curated-review-override-echoreview-) — when the printed model doesn't literally match the stored parameter value (e.g. an uppercasing transform)
-- **`reviewNote`**: an optional short string, a generic hook for a design whose printed output transforms a parameter's raw value in a way worth calling out (e.g. "Text prints in capitals even though you typed it in lowercase"). Plain text, not Markdown. Omit for no note
+- **`group`**: an optional string. Designs sharing the same `group` value cluster under a header showing that string — a `<SelectGroup>`/`<SelectLabel>` pair in the compact dropdown, an `<h3>` section heading in the `ui.gallery` card grid (`src/components/DesignPicker.tsx`) — and the value is also matched by the gallery's search box, alongside `label`/`description`. Clustering follows `designs` array order and merges only **consecutive** entries: a run starts where a `group` value first appears and keeps absorbing later designs only while they repeat that exact value back-to-back; a design with a different (or absent) `group` breaks the run, so reusing the same group string further down the array — with something else in between — opens a second, separately headed section rather than joining the first. Omit `group`, or set it `null`, and that design renders in a headerless run; a config where no design sets `group` renders as a flat list with no headers at all
 
-Each `designs[]` entry also accepts an optional **`presetImages`** field — bundled-preset thumbnails:
+A curated review summary's row labels and its note also come only from the design's own `.scad` file — a parameter's own `// @review "<label>"` comment and the design's file-level `// @reviewNote "<text>"` (see [annotations.md](annotations.md#curated-review-label--review)). There is no config-level `review` field: no way to override a parameter's label or the note from the config, and no way to add a label to a parameter the design didn't annotate. A row's value can still be overridden by an `echo("@review", param, value)` from the design itself — see [`echo("@review", …)`](annotations.md#curated-review-override-echoreview-) — when the printed model doesn't literally match the stored parameter value (e.g. an uppercasing transform).
+
+Each `designs[]` entry also accepts an optional **`presets`** object — currently just an **`images`** field, bundled-preset thumbnails, in either of two forms:
 
 ```jsonc
 {
@@ -83,27 +84,51 @@ Each `designs[]` entry also accepts an optional **`presetImages`** field — bun
     {
       "id": "tag",
       "label": "Tag",
-      "presetImages": {
-        "Large tag": "examples/tag-preset-large.png",
-        "No hole": "examples/tag-preset-nohole.png"
+      "presets": {
+        "images": {
+          "Large tag": "examples/tag-preset-large.png",
+          "No hole": "examples/tag-preset-nohole.png"
+        }
       }
     }
   ]
 }
 ```
 
-- **`presetImages`**: an object mapping a **bundled preset's exact name** (as it appears as a key inside that design's sibling `<design>.json` parameterSets file — see "Bundled presets" above) to an image path, relative to the config file (like `icon`/`image`/`doc`). Every key must match a real bundled preset name — a stale or misspelled name fails the build, and a design with no bundled presets at all can't configure `presetImages` either. Images may be SVG, PNG, or WebP. Preset images are **optional per preset**: in the in-app preset picker a bundled preset that has a configured image renders as a card (thumbnail + title, matching the visual design picker's card treatment), while a bundled preset without one renders as a compact list row — the same row style the "Saved by you" section uses. Under the single "Ready-made" heading the imaged presets show first as a card grid, then the imageless ones as list rows. A design with no `presetImages` at all keeps the plain compact list exactly. A preset's display name is split into an optional leading **overline** (`"Category | Title"`) and an optional trailing **badge** (`"Title (Language)"`) for the card — see `src/lib/presetCard.ts`; the stored preset name itself is never changed, only how it's parsed for display
+- `presets.`**`images`** (map form): an object mapping a **bundled preset's exact name** (as it appears as a key inside that design's sibling `<design>.json` parameterSets file — see "Bundled presets" above) to an image path, relative to the config file. Every key must match a real bundled preset name — a stale or misspelled name fails the build, and a design with no bundled presets at all can't configure `presets.images` either. Images may be SVG, PNG, or WebP.
+
+`presets.images` also accepts a plain **string** — a config-relative **directory** — as the escape from hand-listing every preset's image path, which just restates a mechanically-derivable mapping in a second file:
+
+```jsonc
+{
+  "designs": [
+    { "id": "tag", "label": "Tag", "presets": { "images": "branding/presets/tag" } }
+  ]
+}
+```
+
+In the directory form, each bundled preset's image is looked up by **slugifying its name** — lowercase, "×" becomes "x", every run of characters outside `[a-z0-9]` collapses to a single "-", leading/trailing "-" stripped, and a name that slugs the same as an earlier one gets a numeric suffix ("-2", "-3", …) in preset order — and trying `.svg`, `.png`, then `.webp` in that directory. This is the exact rule a maintainer's own thumbnail-rendering script can implement independently and still agree with `gen-schema` on every filename; `scripts/lib/preset-slug.mjs` is the one implementation both this doc and the build itself describe.
+
+Preset images are **optional per preset** in both forms: in the in-app preset picker a bundled preset that has a configured image renders as a card (thumbnail + title, matching the visual design picker's card treatment), while a bundled preset without one renders as a compact list row — the same row style the "Saved by you" section uses. Under the single "Ready-made" heading the imaged presets show first as a card grid, then the imageless ones as list rows. A design with no `presets.images` at all keeps the plain compact list exactly. A preset's display name is split into an optional leading **overline** (`"Category | Title"`) and an optional trailing **badge** (`"Title (Language)"`) for the card — see `src/lib/presetCard.ts`; the stored preset name itself is never changed, only how it's parsed for display.
+
+In the directory form specifically, a preset with no matching file in the directory is exactly as fine as an unlisted key in the map form — but the directory itself must exist, or the build fails with a clear error (an existing-but-wrong directory, e.g. every preset name misspelled relative to its filenames, would otherwise silently yield zero images). `gen-schema`'s build log reports how many of the design's bundled presets matched an image, so that failure mode is visible even though it isn't a build error:
+
+```text
+gen-schema: design 'tag' presets.images: 2/3 preset(s) matched an image in 'branding/presets/tag'
+```
+
+The map form remains the escape hatch for a preset whose name and image file genuinely don't correspond mechanically.
 
 ### Rendering
 
-These keys affect render arguments, bundled fonts, and cache behavior:
+The `render` object gathers everything that affects render arguments, bundled fonts, and cache behavior. Two genuinely different kinds of field live in it, and that distinction matters for `renderHash` — the content hash folded into the persisted render-cache key:
 
-- **`features`**: applied to all designs as `--enable=<feature>`
-- **`format`**: the model format OpenSCAD exports and the viewer parses, fixed at build time. `"3mf"` is the default and carries per-object colour from each design's `color(...)` calls. `"stl"` is geometry-only. Changing it invalidates the render cache automatically
-- **`restOnGrid`**: how the viewer frames a loaded model, fixed at build time. `false` (the default) centres the model on the origin in all three axes, as it always has. `true` centres it in X/Y but rests its base on the `z=0` grid plane, which suits designs modelled with their base on `z=0` (as OpenSCAD designs typically are) where centring in Z would sink them half-way through the grid. Display-only: it does not change the exported file or the render cache
-- **`viewer`**: the 3D viewer's presentation, fixed at build time. Its only key is `style`, which picks the look: `"plain"` (the default) is the classic CAD preview with the flat light rig, while `"studio"` lights the model with an image-based studio environment, tone mapping, and a soft contact shadow under the model — a product-shot treatment that emphasises materials and relief. Display-only: it does not change the exported file or the render cache. The reference grid is **not** configured here — it is a runtime toggle the visitor owns, seeded by [`ui.grid`](#ui-behaviour-and-pwa). A `"studio"` deployment usually wants `"ui": { "grid": "off" }` so the model reads as a product against a clean backdrop rather than as a CAD part
-- **`fonts`** / **`fontFallback`**: see [Fonts](#fonts-fonts-fontfallback)
-- **`render`**: optional render tuning for the heavy-render threshold and cache sizing. See [Render tuning](#render-tuning-render)
+- `render.features` / `render.format` / `render.fonts` / `render.fontFallback` (**`features`**/**`format`**/**`fonts`**/**`fontFallback`**): real render inputs — an OpenSCAD `--enable` flag, the export format, and the bundled glyph outlines all change the rendered bytes. Changing any of them **invalidates every persisted render** (`renderHash` moves)
+- `render.heavyMs` / `render.cache` (**`heavyMs`**/**`cache`**): build-time tuning only — the heavy-render auto-pause threshold and the runner's cache sizing. Neither affects geometry, so neither is part of `renderHash`
+
+See [Render tuning (`render`)](#render-tuning-render) for the full field reference, and [Fonts](#fonts-renderfonts-renderfontfallback) for `render.fonts`/`render.fontFallback` specifically.
+
+- **`viewer`**: the 3D viewer's presentation, framing, and per-control visibility, all fixed at build time and none of it affecting the exported file or the render cache. See [Viewer](#viewer-viewer)
 
 ### Appearance and UI behaviour
 
@@ -125,6 +150,20 @@ These keys add copy and third-party notices to the generated app:
 - **`licenses`**: optional list of extra third-party software/license notices. ScadPub appends them to the built-in open-source attributions in the ⓘ panel. See [Open-source notices](#open-source-notices-licenses)
 
 Missing `source`, `assets`, design, `logo`, or design-`icon` paths fail the build with a clear error. An **unknown top-level key** also fails the build. A whole-key typo like `"popups"` or `"fontfallback"` fails rather than being silently ignored. Add a `"$schema"` key for editor tooling if you want; it is allowed.
+
+This schema is not backward compatible with ScadPub's previous config shape: an outdated key (e.g. a top-level `restOnGrid`, `features`, or `icon`) fails the build with the same unknown-key error above, listing the currently valid keys.
+
+## Where paths resolve from
+
+Config paths are not all relative to the same thing. `gen-schema` resolves each one against whichever of three bases fits its role:
+
+| Base | Keys resolved against it |
+| --- | --- |
+| The **config file's own directory** | `source`, `logo`, `pwa.icon`, `pwa.iconMaskable`, `extraCss`, `designs[].presets.images` (the map form's values, or the directory itself in the string form), `popup.bodyFile`, `fileImport.noteFile`, `licenses[].textFile`, `help.file`, `help.tabs[].file` |
+| **`source`** (itself config-relative, see above) | `assets`, each `fonts` entry, `designs[].file` |
+| **The design's own `.scad` file** | the `// @icon`, `// @image`, and `// @doc` annotations |
+
+A path resolved against the design's own file must additionally stay inside `source` — `gen-schema`'s `checkContained` check rejects a `// @icon`/`// @image`/`// @doc` (or a `use`/`include` target, or a symlink resolving outside it) that escapes upward with a build-time error. A config-relative path (`logo`, `pwa.icon`, …) is not checked against `source` at all: the config author who controls the config file's directory is assumed to also control what it points at.
 
 ## SVG asset trust model
 
@@ -230,7 +269,7 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
   /* --bg, --panel, --panel-2, --line, --text, --muted, --focus, --link, --warn,
      --warn-bg, --success, --success-bg, --code-bg, --overlay, --glass-bg,
      --glass-border, --elevation, --radius, --radius-sm,
-     --viewer-bg/-grid/-grid-2, --viewer-model */
+     --viewer-bg/-grid/-grid-2, --viewer-model/-dim */
 }
 :root[data-theme="light"] {
   --accent: #1d4ed8;
@@ -259,8 +298,9 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--elevation` | drop shadow on raised surfaces (a `box-shadow`, not a colour) |
 | `--radius` / `--radius-sm` | corner radius, base and small (a length, not a colour) |
 | `--font-sans` / `--font-display` | UI font stacks: body text / the display voice (brand, headings, tabs, buttons). Unquoted family names only (e.g. `Georgia, serif`); set them under `dark` (the `:root` block) to apply to both themes |
-| `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid (the grid renders only while the viewer's grid toggle is on — seeded by `ui.grid`, then the visitor's own choice) |
+| `--viewer-bg` / `--viewer-grid` / `--viewer-grid-2` | 3D preview background and grid (the grid renders only while the viewer's grid toggle is on — seeded by [`viewer.grid`](#viewer-viewer), then the visitor's own choice) |
 | `--viewer-model` | rendered model material colour |
+| `--viewer-dim` | dimension-overlay colour: the W x D x H measurement lines/labels the viewer's measure tool draws (seeded by [`viewer.controls.measure`](#viewer-viewer)) |
 
 `--accent` and `--accent-solid` are separate tokens because the same colour rarely passes WCAG AA both as small text on `--panel` and as a filled button background.
 
@@ -335,9 +375,9 @@ The **Files dialog is a manager**, not an importer: it lists what those controls
 }
 ```
 
-`fileImport` gates whether the **Files** action exists at all — omit it (or set it to `null`/`false`) and no Files action is shown. Its optional **`note`** renders as guidance at the top of the Files dialog, in a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content.
+`fileImport` gates whether the **Files** action exists at all — omit it (or set it to `null`/`false`) and no Files action is shown. Its optional **`note`** renders as guidance at the top of the Files dialog, in a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content. Alternatively set **`noteFile`** — a config-relative Markdown file whose contents become `note` at build time, read and inlined the same way as `popup.bodyFile` (see [Popup notice](#popup-notice-popup)); setting both `note` and `noteFile` fails the build.
 
-> The `accept`, `label`, and `maxBytes` fields are still accepted for backward compatibility but no longer drive a generic import button (each contextual control applies its own picker filter and size guard). They are vestigial and can be omitted.
+`fileImport` has no `accept`, `label`, or `maxBytes` fields — each contextual control (the font dropdown, the SVG drop zone) applies its own picker filter and size guard, so there is no generic import button left for those to configure. A config that still sets one fails the ordinary unknown-key check.
 
 ### How uploads reach OpenSCAD
 
@@ -350,9 +390,9 @@ ScadPub chooses the mounting behavior from the file extension:
 
 Imported files persist in IndexedDB and are re-applied on the next visit; the Files dialog lists what's currently loaded, with a **Clear all** button to remove them. Importing, removing, or clearing files drops the render cache (in-memory and persistent) so no stale geometry is served.
 
-## Fonts (`fonts`, `fontFallback`)
+## Fonts (`render.fonts`, `render.fontFallback`)
 
-`fonts` lists the font files the renderer bundles and mounts. Each entry is either a basename already in `public/fonts/` or a path into `source` to copy in. ScadPub reads each embedded family and style name at build time, so the app knows the authoritative available set and can name each face the way you know it.
+`render.fonts` lists the font files the renderer bundles and mounts. Each entry is either a basename already in `public/fonts/` or a path into `source` to copy in. ScadPub reads each embedded family and style name at build time, so the app knows the authoritative available set and can name each face the way you know it. Bundled fonts are genuine render inputs — the glyph outlines drive `text()` geometry — so `render.fonts` and `render.fontFallback` are folded into `renderHash`: swapping a font invalidates persisted renders automatically.
 
 A string or enum dropdown parameter annotated `// @font` renders as a **font dropdown**. See [Font selectors](annotations.md#font-selectors--font). The dropdown lists every face the renderer can use, including bundled fonts and imported fonts. Friendly names come from the font file, such as "Liberation Sans Bold", never the raw Fontconfig `Family:style=Style` string.
 
@@ -360,23 +400,33 @@ Imported faces are labelled, and the menu includes an **Import font…** action 
 
 ```jsonc
 {
-  // Bundle the fallback face too. fontFallback must name a family you bundle.
-  "fonts": ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf", "LiberationMono-Regular.ttf"],
-  "fontFallback": "Liberation Mono"  // optional, see below
+  "render": {
+    // Bundle the fallback face too. fontFallback must name a family you bundle.
+    "fonts": ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf", "LiberationMono-Regular.ttf"],
+    "fontFallback": "Liberation Mono"  // optional, see below
+  }
 }
 ```
 
-**`fontFallback`** is optional and pins a deterministic last-resort family in the generated `fonts.conf`. Without it, Fontconfig can pick an imported font as the global default for any unmatched family. That makes OpenSCAD's own substitution unpredictable. Set `fontFallback` to a **bundled** family that you **don't** offer as a selectable lettering choice, such as a monospace face. Any absent family falls back to it. Omit it for the default behavior with no fallback rule.
+`render.`**`fontFallback`** is optional and pins a deterministic last-resort family in the generated `fonts.conf`. Without it, Fontconfig can pick an imported font as the global default for any unmatched family. That makes OpenSCAD's own substitution unpredictable. Set `render.fontFallback` to a **bundled** family that you **don't** offer as a selectable lettering choice, such as a monospace face. Any absent family falls back to it. Omit it for the default behavior with no fallback rule.
 
 ## Render tuning (`render`)
 
-An optional build-time object that tunes rendering behaviour. Every field is optional; the app keeps its built-in default for any you omit. None affect geometry, so `render` is absent from `renderHash` (changing it doesn't invalidate cached renders).
+`render` is a build-time object with two halves that behave differently with respect to `renderHash` (the content hash folded into the persisted render-cache key):
+
+- **Render inputs** — `features`, `format`, `fonts`, `fontFallback` — documented in [Rendering](#rendering), [Fonts](#fonts-renderfonts-renderfontfallback), and the representative config's `format` line. These genuinely change the rendered bytes, so they're folded into `renderHash`: changing any of them invalidates every persisted render.
+- **Tuning-only fields** — `heavyMs`, `cache` — covered below. Every field here is optional; the app keeps its built-in default for any you omit. Neither affects geometry, so neither is part of `renderHash` (changing them doesn't invalidate cached renders).
 
 ```jsonc
 {
   "render": {
-    "heavyMs": 6000,       // auto-pause threshold (ms); default ≈ 6000
-    "cache": {
+    "features": ["textmetrics"],  // OpenSCAD --enable flags for every render (renderHash input)
+    "format": "3mf",               // export/preview format: "3mf" (colour) or "stl"; default "3mf" (renderHash input)
+    "fonts": ["LiberationSans-Regular.ttf"],  // bundled font files (renderHash input)
+    "fontFallback": "Liberation Mono",         // optional last-resort family (renderHash input)
+
+    "heavyMs": 6000,       // auto-pause threshold (ms); default ≈ 6000 — NOT a renderHash input
+    "cache": {              // NOT a renderHash input
       "maxEntries": 16,    // in-memory (L1) slot count; default 16
       "maxBytes": 67108864,    // in-memory (L1) total budget; default derived from device memory
       "maxEntryBytes": 33554432,  // largest single render that may be cached
@@ -389,6 +439,39 @@ An optional build-time object that tunes rendering behaviour. Every field is opt
 - **`heavyMs`**: when a live auto-render pass takes longer than this, auto-render pauses for that design and you render on demand with **Render now**. Designs flagged `"heavy": true` start paused regardless. Raise it for a fast machine, lower it to pause sooner.
 - **`cache`**: sizes the runner's two-tier render cache. `maxEntries` and `maxBytes` bound the in-memory L1 cache. `maxEntryBytes` caps the largest single render worth caching. `persistent` toggles the IndexedDB L2 store. Set it to `false` to render fresh each session or for privacy-sensitive deployments.
 
+## Viewer (`viewer`)
+
+An optional build-time object gathering every display-only concern the 3D viewer owns:
+presentation, framing, and per-control visibility. None of it affects the exported bytes or
+the render cache, so `viewer` is absent from `renderHash`.
+
+```jsonc
+{
+  "viewer": {
+    "style": "plain",       // "plain" (default) is the classic CAD preview; "studio" is a product-shot look
+    "restOnGrid": false,     // rest the model's base on the z=0 grid instead of centring in Z; default false
+    "grid": "off",           // seeds the reference-grid toggle's first-ever value; default "off"
+    "controls": {
+      "measure": true,       // the ruler/measure toggle; default true
+      "viewPicker": true,    // the camera-angle cube button; default true
+      "reset": true,         // the "reset view" button; default true
+      "zoom": false,         // explicit zoom in/out buttons; default false
+      "fullscreen": true     // the fullscreen toggle (browser tabs only); default true
+    }
+  }
+}
+```
+
+- **`style`**: picks the look. `"plain"` (the default) is the classic CAD preview with the flat light rig. `"studio"` lights the model with an image-based studio environment, tone mapping, and a soft contact shadow under the model — a product-shot treatment that emphasises materials and relief. A `"studio"` deployment usually wants `"viewer": { "grid": "off" }` so the model reads as a product against a clean backdrop rather than as a CAD part
+- **`restOnGrid`**: how the viewer frames a loaded model. `false` (the default) centres the model on the origin in all three axes, as it always has. `true` centres it in X/Y but rests its base on the `z=0` grid plane, which suits designs modelled with their base on `z=0` (as OpenSCAD designs typically are) where centring in Z would sink them half-way through the grid
+- **`grid`**: `"off"` by default, or `"on"`. Seeds whether the viewer starts with its reference grid drawn. Unlike `controls` below, this is **not** a control-visibility flag — the grid toggle is always offered regardless of this value. It only seeds that toggle's first-ever value; a visitor's own later choice is remembered in the browser and wins on every subsequent visit. That's exactly why it sits directly on `viewer` rather than inside `controls`
+- **`controls`**: visibility of the individual viewer HUD buttons. Every field is optional and independent; none hides the 3D canvas itself, only the named button:
+  - **`measure`**: `true` by default, or `false`. Controls the viewer measure toggle, the ruler button that draws the W x D x H overlay and shows the measurements/`@info` panel. Set `false` to hide the button entirely
+  - **`viewPicker`**: `true` by default, or `false`. Controls the cube button whose menu snaps the camera to standard angles. Set `false` to hide it
+  - **`reset`**: `true` by default, or `false`. Controls the "reset view" button. Mouse/touch orbit and zoom still work regardless
+  - **`zoom`**: `false` by default, or `true`. Controls the zoom in/out buttons. Mouse-wheel and pinch zoom already work, so the buttons are off by default
+  - **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
+
 ## Popup notice (`popup`)
 
 Show a one-off notice dialog over the app on load. Use it for a welcome message, a usage caveat, a docs link, or a required font/license link. It is a build-time setting; all copy is config-driven, so the app stays project-agnostic. Omit `popup` and nothing is shown.
@@ -399,18 +482,20 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
     "header": "Welcome to Tag Studio",          // required: dialog title
     "body": "Configure a nameplate and export a 3MF.\n\nSee the [print guide](https://example.com/guide) for material tips.",  // required
     "mode": "once",                              // optional: "always" | "once" | "dismissible" | "picker"
+    "button": "Got it",                          // optional: overrides the default "OK" label
     "footnote": "Everything runs in your browser. Nothing is uploaded."  // optional
   }
 }
 ```
 
 - **`header`**: the dialog title
-- **`body`**: the message, in the same Markdown subset used elsewhere. Links open in a new tab
+- **`body`**: the message, in the same Markdown subset used elsewhere. Links open in a new tab. Alternatively set **`bodyFile`** — a config-relative path to a Markdown file whose contents become `body` at build time. Setting both `body` and `bodyFile` fails the build, naming both. Unlike `designs[].doc` (fetched by the browser on demand), this file's content is read at build time and inlined into the generated schema — the browser never makes a separate request for it
 - **`mode`**: popup frequency:
   - **`always`**: shown on every visit. No opt-out
   - **`once`** (default): shown on the first visit only. Dismissing it with **OK**, the close button, Escape, or outside click remembers it so it will not return
   - **`dismissible`**: shown on every visit until you tick **Don't show this again**. Closing without ticking the box shows it again next time
   - **`picker`**: shows the visual design gallery on the first visit. Intended for `ui.gallery: true` deployments with multiple designs
+- **`button`**: an optional label for the primary button, overriding the default `"OK"`. Must be a non-empty string when set. Has no effect in `picker` mode with more than one design — that mode's primary action is picking a design from the gallery, not clicking a button
 - **`footnote`**: an optional short line of plain text (not Markdown), shown small and muted at the bottom of the dialog in every mode, including `picker`. For a standing disclosure that doesn't belong in the main `body` message, such as a privacy note
 
 The remembered state is namespaced by the configurator's `id` and keyed by the popup's content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It's purely informational and doesn't affect renders, so it never invalidates the geometry cache.
@@ -419,59 +504,77 @@ The remembered state is namespaced by the configurator's `id` and keyed by the p
 
 ### UI options
 
-The optional `ui` object is validated as a unit, and defaults apply when it is absent. None of these fields affect geometry, so they never invalidate the render cache.
+The optional `ui` object is validated as a unit, and defaults apply when it is absent. None of these fields affect geometry, so they never invalidate the render cache. The viewer's own presentation, framing, and per-control visibility (`style`, `restOnGrid`, `grid`, `controls.*`) live under [`viewer`](#viewer-viewer), not here.
 
 - **`panelSide`**: `"left"` by default, or `"right"`. Controls which edge the desktop parameter panel docks against
 - **`panelDefault`**: `"open"` by default, or `"collapsed"`. Sets the first-load desktop panel state. The later browser choice persists
 - **`outputDefault`**: `"closed"` by default, or `"open"`. Controls whether the OpenSCAD output console starts open
-- **`install`**: `"auto"` by default, or `"off"`. When `"off"`, no PWA install affordance appears, even on browsers that support it
 - **`showVarName`**: `false` by default, or `true`. Shows the underlying OpenSCAD variable name beside each parameter label. Hidden by default because it is developer detail; set `true` for a technical audience. Every parameter row always carries a `data-param="<var>"` attribute for smoke tests and `extraCss`
-- **`measure`**: `true` by default, or `false`. Controls the viewer measure toggle, the ruler button that draws the W x D x H overlay and shows the measurements/`@info` panel. Set `false` to hide the button entirely
-- **`viewPicker`**: `true` by default, or `false`. Controls the cube button whose menu snaps the camera to standard angles. Set `false` to hide it
-- **`reset`**: `true` by default, or `false`. Controls the "reset view" button. Mouse/touch orbit and zoom still work regardless
-- **`zoom`**: `false` by default, or `true`. Controls the zoom in/out buttons. Mouse-wheel and pinch zoom already work, so the buttons are off by default
-- **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
-- **`grid`**: `"off"` by default, or `"on"`. Seeds whether the viewer starts with its reference grid drawn. Unlike the keys above it does **not** hide a control — the viewer's grid toggle is always offered — and a visitor's own choice is remembered in the browser and wins on every later visit
-- **`saveImage`**: `true` by default, or `false`. Controls the "Save image (PNG)" action in the secondary-action surfaces (the desktop command bar and the mobile ⋮ overflow menu). Set `false` to hide the Save-image action entirely
-- **`presetsLabel`**: string, default `"Presets"`. Labels the Presets tab/section, desktop panel tab, and presets popover title
-- **`parametersLabel`**: string, default `"Customize"`. Labels the parameters tab/section, desktop parameter panel, and collapsed panel reopen button
+- **`saveImage`**: no config-level default — absent, like `true`, leaves the "Save image (PNG)" action shown (the app itself only hides it on an explicit `false`); there's no other observable difference between omitting the key and setting it `true`. Controls the action in the secondary-action surfaces (the desktop command bar and the mobile ⋮ overflow menu). Set `false` to hide the Save-image action entirely
 - **`gallery`**: `false` by default. Replaces the compact design dropdown with a searchable card grid using each design's `image`, then `icon`, then a letter fallback
 - **`essentials`**: `false` by default. Starts with `// @advanced` parameters hidden behind **Show all settings**
 - **`afterExport`**: turns on the inline after-export success panel. Absent by default (no panel). See [After-export panel (`ui.afterExport`)](#after-export-panel-uiafterexport)
 
+The Presets tab, the parameters ("Customize") tab, and the desktop panel's own labels are plain chrome text — the `strings` catalogue's `"presets.title"` (default `"Presets"`) and `"settings.title"` (default `"Customize"`) — since that's all they ever were; see [Text overrides (`strings`)](#text-overrides-strings).
+
 ### After-export panel (`ui.afterExport`)
 
-The optional `ui.afterExport` object turns on a compact, non-modal panel (`src/components/ExportSuccess.tsx`) that appears above the floating export dock right after a successful model export. Absent entirely (the default) → no panel is ever shown, on any export. Every field inside it is also optional:
+The optional `ui.afterExport` field turns on a compact, non-modal panel (`src/components/ExportSuccess.tsx`) that appears above the floating export dock right after a successful model export. Absent, `null`, or `false` → no panel is ever shown, on any export. Set it to `true` for the panel with its defaults, or an options object for the one thing worth configuring — the same `true`-or-options-object shape as [`fileImport`](#import-file-fileimport):
 
 ```jsonc
 {
   "ui": {
+    // Shorthand: enable with defaults.
+    "afterExport": true
+
+    // …or an options object:
     "afterExport": {
-      "title": "Model downloaded",     // optional; defaults to "Your file is on its way"
-      "body": "Slice it and print.",   // optional; defaults to a generic next-step line
-      "helpTab": "Printing"            // optional; must name an existing help.tabs[].label
+      "helpTab": "Printing"   // optional; must name an existing help.tabs[].label
     }
   }
 }
 ```
 
-- **`title`**: overrides the panel's headline. Left unset, the panel reads "Your file is on its way"
-- **`body`**: overrides the panel's one-line next step. Rendered as the same Markdown subset as `help`/`fileImport.note`. Left unset, the panel gives a generic "check your downloads, then slice and print" line
 - **`helpTab`**: when set, the panel shows an "Open printing help" action that opens Help scrolled straight to the tab with this exact label (`HelpModal`'s `initialTab`, matched by [`help.tabs[].label`](#help-content-help)). **Validated at build time**: `gen-schema` fails the build if no tab in this config's `help` carries that label. Omit to hide the action
+
+The panel's headline and body always come from the `strings` catalogue (`"exportSuccess.title"`, default "Your file is on its way"; `"exportSuccess.body"`, default a generic next-step line) — override them there, the same way as any other chrome text, rather than through a second field on `afterExport`.
 
 The panel is dismissible (an ✕) and auto-hides itself after a few seconds; it never appears while a native share sheet is open — it's only ever shown once the export's share-or-download outcome has actually settled, and it replaces the export flow's one-time "install this app" toast on any deployment that configures it (the two never stack on the same export).
 
-### PWA manifest
+### PWA manifest (`pwa`)
+
+The optional `pwa` object gathers every manifest-only, icon-rasterizer-only field: install metadata, icons, and theming that feed `public/manifest.webmanifest` and the generated icon set. Nothing in it affects geometry, so none of it is part of `renderHash`.
 
 `gen-schema` writes `public/manifest.webmanifest`. It always includes a `launch_handler` so an already-open install is reused rather than re-launched. When the optional `@resvg/resvg-js` rasterizer is installed, `gen-schema` also rasterizes the `icon` SVG to PNGs and generates per-device iOS launch images. Without it, the PNGs fall back to the SVG and the iOS splash images are skipped.
 
-These keys feed the manifest:
+```jsonc
+{
+  "pwa": {
+    "shortName": "Widget",           // optional; defaults to "title"
+    "icon": "branding/icon.svg",     // PWA/favicon icon, relative to the config file
+    "iconMaskable": "branding/icon-maskable.svg",  // optional; defaults to "icon"
+    "themeColor": {                  // a string (both themes), or { light, dark }
+      "light": "#ffffff",             // default "#ffffff"
+      "dark": "#1f2229"                // default "#1f2229"
+    },
+    "backgroundColor": "#15171c",    // PWA manifest background colour; default "#15171c"
+    "categories": ["utilities"],     // optional manifest categories
+    "screenshots": [ /* … */ ],       // optional, see below
+    "shortcuts": [ /* … */ ],          // optional, see below
+    "install": "auto"                 // "auto" (default) or "off"
+  }
+}
+```
 
-- **`themeColorLight`**: light-scheme `<meta name="theme-color">`, default `"#ffffff"`. The dark value comes from `themeColor`
-- **`categories`**: optional array of [manifest categories](https://developer.mozilla.org/docs/Web/Manifest/categories)
+- **`shortName`**: short PWA name. Optional; defaults to `title`
+- **`icon`**: PWA/favicon icon, a path relative to the config file
 - **`iconMaskable`**: optional separate SVG for the maskable icon. Defaults to `icon`
+- **`themeColor`**: browser-chrome / PWA colour, **per theme**. Same shape as [`logo`](#title-and-logo): a plain string sets both themes, or supply an object with either/both of `light`/`dark`. Unlike `logo`, an omitted side does **not** fall back to the other — `light` and `dark` each default independently (`"#ffffff"` / `"#1f2229"`), since they're genuinely different colours rather than one asset shared across themes. `light` feeds `<meta name="theme-color">` in the light scheme; `dark` feeds the PWA manifest's `theme_color` and the default icon's fill when no `icon` is configured
+- **`backgroundColor`**: PWA manifest background colour, default `"#15171c"`
+- **`categories`**: optional array of [manifest categories](https://developer.mozilla.org/docs/Web/Manifest/categories)
 - **`screenshots`**: optional `[{ src, sizes, form_factor, label?, platform? }]` for the richer Android install UI. `form_factor` is `"wide"` or `"narrow"`. `label` is the accessible caption. `platform` targets a store listing. `label` and `platform` are passed through to the manifest when present
 - **`shortcuts`**: optional `[{ name, short_name?, url, icons? }]` app shortcuts for Android long-press and desktop jump lists. `icons`, an array of `{ src, sizes?, type? }`, is passed through when supplied. If omitted and the config has more than one design, ScadPub derives a shortcut per design
+- **`install`**: `"auto"` by default, or `"off"`. When `"off"`, no PWA install affordance appears, even on browsers that support it
 
 ## Notice badges (`notices`)
 
@@ -489,15 +592,14 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 ```jsonc
 {
   "notices": [
-    { "marker": "alert", "label": "alerts", "labelOne": "alert", "color": "#e0a458" },
-    { "marker": "note",  "label": "notes",  "labelOne": "note",  "color": "#86a9ff" }
+    { "marker": "alert", "label": { "one": "alert", "other": "alerts" }, "color": "#e0a458" },
+    { "marker": "note",  "label": { "one": "note",  "other": "notes"  }, "color": "#86a9ff" }
   ]
 }
 ```
 
 - **`marker`**: required. The design-defined word, matched as `: <marker>:` inside an echo, case-insensitive. The first configured category that matches a line claims it
-- **`label`**: optional badge noun, such as `"alerts"`. Defaults to the `marker`
-- **`labelOne`**: optional singular form of `label`, such as `"alert"`. Used wherever a live count renders alongside the label whenever the count is exactly 1 — `label` alone can't pluralize itself, so without this a single pending notice reads as "1 alerts". Omit to keep `label` regardless of count
+- **`label`**: optional badge noun. Either a plain string used regardless of count (e.g. `"alerts"`), or an object with `other` (the plural/default form, required within the object) and an optional `one` (the singular form, falling back to `other` when omitted) — the singular/plural is picked with the same [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) `Intl.PluralRules` logic `strings`' pluralized keys use (`#one`/`#other`), so a single pending notice never reads as "1 alerts". Defaults to the `marker` (used for both forms) when omitted entirely. A config using the old `label`/`labelOne` pair fails the build with a pointer at this shape
 - **`color`**: optional badge fill, as a plain CSS colour. For `#rgb`/`#rrggbb`, the badge text auto-switches between black and white to stay legible. Other colour forms keep the default badge text, so their contrast is your responsibility. Omit to use the default accent badge styling
 - **`attention`**: optional boolean, default `false`. Attention notices join OpenSCAD warnings, assertions, and missing fonts in the pre-download review dialog; **Download anyway** remains available
 - **`subsumedByFont`**: optional boolean, default `false`. Only meaningful alongside `attention: true`. Marks a category whose notices are a *symptom* of a missing font rather than their own separate issue — for example a design that warns about text overflowing once a substitute family was used. While a font the design asked for isn't loaded, and it is unambiguous which font parameter that is (the design has one font parameter, or exactly one fell back), this category's pending notices are folded into the font item instead of being listed again beside it. With no font missing, they count exactly as normal
@@ -561,9 +663,41 @@ Use `tabs` to group the guide into multiple panes. A tab strip appears, and each
 - A top-level `intro` renders once above the tab strip; a per-tab `intro` renders above that tab's sections.
 - If you supply **both** top-level `sections` and `tabs`, the top-level sections become a leading **Overview** tab. Adding `tabs` to an existing single-pane help never drops the original content. To control every label yourself, put all content inside `tabs` and leave top-level `sections` out.
 
+### Sourcing help from Markdown files
+
+Writing `sections` (and `intro`) inline means twenty-five `{title, body}` fragments joined by `\n\n` inside one JSON string — unreviewable in a diff, and unlintable by tools like markdownlint. As an alternative, set **`file`** — a config-relative path to a Markdown file — on the single-pane `help` object itself, or on any individual `tabs[]` entry. `gen-schema` splits that file's content at build time: everything before the first `##` heading becomes that pane's `intro`; each `##` heading after that starts a section, using the heading text as `title` and everything up to the next `##` heading (or the end of the file) as `body`. This maps exactly onto the `{title, body}` shape above, so a whole tab becomes one readable `.md` file instead of a handful of JSON fragments.
+
+A pane with `file` may not also set `sections` or `intro` directly — either combination fails the build, naming both keys. A bare `#` heading (or `###` and deeper) does not start a new section: use `#` for the file's own title if you want one (it stays as ordinary text inside `intro`), and `###` for structure within a section's own body.
+
+```jsonc
+{
+  "help": {
+    "tabs": [
+      { "label": "Getting started", "file": "docs/help-getting-started.md" },
+      { "label": "Printing tips", "sections": [ /* … */ ] }
+    ]
+  }
+}
+```
+
+```markdown
+<!-- docs/help-getting-started.md -->
+The basics.
+
+## Pick a design
+
+Use the **Design** dropdown…
+
+## Adjust parameters
+
+The left panel lists…
+```
+
+The Markdown file's content is read once, at build time, and inlined into the generated schema exactly as if it had been written as `intro`/`sections` inline — unlike `designs[].doc` (fetched by the browser on demand, see [Design sources](#design-sources)), a help-tab Markdown file never reaches the browser as its own request. It is pure prose and cannot affect geometry, so `help` — `file`-sourced or not — stays out of `renderHash` exactly as before.
+
 ## Open-source notices (`licenses`)
 
-The **ⓘ** button lists the third-party components ScadPub itself bundles, including OpenSCAD-WASM, React, three.js, and Liberation fonts. If your deployment bundles **additional** software, add its notice here. Examples include an extra `.scad` library, a custom font, or a vendored script. Entries are **appended** to the built-in list; ScadPub's own attributions are never removed.
+The **ⓘ** button lists the third-party components ScadPub itself bundles, including OpenSCAD-WASM, React, three.js, and Liberation fonts. If your deployment bundles **additional** software, add its notice here. Examples include an extra `.scad` library, a custom font, or a vendored script. Entries are **merged** into the built-in list by name; ScadPub's own attributions are never removed.
 
 ```jsonc
 {
@@ -584,8 +718,21 @@ The **ⓘ** button lists the third-party components ScadPub itself bundles, incl
 ```
 
 - `name`, `license`, `copyright`, `url`, and `licenseUrl` are required; the rest are optional. Unknown keys are ignored.
-- Provide `sourceUrl` for copyleft components, such as GPL components, so the corresponding-source requirement is met. Provide `text` to reproduce a permissive license inline.
+- Provide `sourceUrl` for copyleft components, such as GPL components, so the corresponding-source requirement is met. Provide `text` to reproduce a permissive license inline — or **`textFile`**, a config-relative path whose contents become `text` at build time (the full OFL/GPL/etc. text lives in its own file instead of a `\n`-joined JSON string). Setting both `text` and `textFile` fails the build.
 - A malformed entry fails the build with a clear message.
+
+### Merging with the built-ins
+
+A config entry whose `name` matches a built-in's — compared trimmed and case-insensitively — is not appended as a second, duplicate-looking attribution. It is **merged** into that built-in entry, because the same component can legitimately be bundled twice for two different reasons (e.g. ScadPub bundles a typeface for its own interface chrome, while a deployment separately bundles the same typeface as a render font for its designs). Merging that case into one entry is exactly what makes the "never removed" guarantee meaningful — a config can't accidentally shadow or duplicate a built-in it happens to name.
+
+The merge rule:
+
+- ScadPub's own `license`, `copyright`, `url`, `licenseUrl`, and bundled `text` always win. A config can never override or remove them — that's what "ScadPub's own attributions are never removed" means in practice.
+- `version`, `sourceUrl`, and `text` fill in from the config **only** where the built-in doesn't already have one.
+- `note` is the one field both sides legitimately contribute, so both are kept — the built-in's note and the config's note are combined into a single line, not replaced.
+- If a config entry shares a built-in's `name` but declares a **different `license` or `copyright`**, it is treated as a different component that happens to share a name, not the same one — it is kept as its own separate entry instead of being merged, so two disagreeing legal facts are never blended into one attribution.
+
+Built-ins always keep their built-in display order; a config entry that doesn't merge (a new name, or a same-name/different-license mismatch) is appended after them, in the order it appears in `licenses[]`.
 
 ### Where the built-in versions come from
 
