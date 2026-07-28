@@ -11,9 +11,10 @@
 // the summary and again inside the action ("Revert to <name>") — with neither
 // side able to shrink: the summary was a flex item at its default
 // `min-width: auto`, so it could not go below its longest word, and the action
-// was `shrink-0`. A long preset name ("Flexibel | Aufzug, automatisch bemessen
-// (Deutsch)") therefore collapsed the summary into a tall one-word column on a
-// phone while the action still overflowed off-screen. So: the name is said
+// was `shrink-0`. A preset whose name ran to ~50 characters — routine once a
+// name carries a qualifier and a language tag — therefore collapsed the
+// summary into a tall one-word column on a phone while the action still
+// overflowed off-screen. So: the name is said
 // once, in the summary, which is `min-w-0` + `truncate` and carries the full
 // text in `title`; the action is the bare verb, with the full "Revert to
 // <name>" kept on its aria-label/title for assistive tech and hover. One

@@ -223,14 +223,23 @@ export const AppShell = memo(function AppShell({
   onDismissExportSuccess,
 }: Props) {
   const actions = useAppActions();
+  // `ui.essentials` is what decides whether `@advanced` params are hideable at
+  // all — docs/config.md and docs/annotations.md both scope the whole feature
+  // to it ("when `ui.essentials` is enabled"). Off (the default), every param
+  // is simply shown: `showAdvanced` is a constant `true` and the change
+  // handler below is withheld, which is what keeps the toggle from rendering
+  // (ParamForm mounts EssentialsToggle only when handed one). It used to be
+  // passed unconditionally, so a config that never opted in still got a
+  // toggle that could hide params its operator meant to be permanent.
   const essentialsEnabled = schema.ui?.essentials === true;
   const [showAdvanced, setShowAdvanced] = useState(() =>
     essentialsEnabled ? readLocal(ADVANCED_SETTINGS_KEY) === "true" : true
   );
-  const handleShowAdvancedChange = useCallback((show: boolean) => {
+  const changeShowAdvanced = useCallback((show: boolean) => {
     setShowAdvanced(show);
     writeLocal(ADVANCED_SETTINGS_KEY, String(show));
   }, []);
+  const handleShowAdvancedChange = essentialsEnabled ? changeShowAdvanced : undefined;
   const desktopViewerRef = useRef<ViewerHandle>(null);
   const mobileViewerRef = useRef<ViewerHandle>(null);
   // The mobile layout root — its --sheet-follow-h CSS var sizes the viewer so it
