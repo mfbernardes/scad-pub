@@ -21,6 +21,7 @@ import {
   mergeInsets,
   clampInsets,
   insetFitFraction,
+  aspectAwareFit,
   insetTargetOffset,
   DEFAULT_FIT_FRACTION,
   type Box3Like,
@@ -305,7 +306,26 @@ export const Viewer = forwardRef<
     const insets: Insets[] = [];
     for (const selector of CHROME_SELECTORS) {
       const el = document.querySelector<HTMLElement>(selector);
-      if (el) insets.push(edgeInset(el.getBoundingClientRect(), canvas));
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      // framing.ts's edgeInset assigns an overlay to the edge it intrudes from
+      // least, which is right for an edge BAND and — as its own doc warns —
+      // the worst case for a corner box. The mobile HUD is exactly that case
+      // now that it collapses to a single trigger: a ~44px button tucked in
+      // the top-right corner. Left to edgeInset it reads as a right-edge band
+      // and charges its width across the canvas's whole height, shrinking the
+      // model for chrome that only occupies one corner.
+      //
+      // Charge it to the TOP instead, down to its own lower edge. That is the
+      // cheaper of the two truthful answers — the top bar already reserves a
+      // band there, so the two merge rather than stacking — and it still keeps
+      // the model clear of the button, which is the point of the inset.
+      if (el.classList.contains("viewer-hud--collapsed")) {
+        const fromTop = Math.min(Math.max(rect.bottom - canvas.top, 0), canvas.height);
+        insets.push({ top: fromTop, right: 0, bottom: 0, left: 0 });
+        continue;
+      }
+      insets.push(edgeInset(rect, canvas));
     }
     return clampInsets(mergeInsets(insets), canvas.width, canvas.height);
   }
@@ -363,10 +383,16 @@ export const Viewer = forwardRef<
 
     const box = framedBox(size);
     const insets = chromeInsets(mount);
-    // Shrink the fit targets to the region the chrome leaves clear, so the
-    // box-fit solve asks for a distance that fits the model into THAT, not
-    // into the full canvas.
-    const fit = insetFitFraction(DEFAULT_FIT_FRACTION, w, h, insets);
+    // Two corrections, in this order:
+    //  1. aspectAwareFit: on a canvas far from square (a portrait phone, or
+    //     the sheet's full-detent model strip) one axis provably can't bind,
+    //     so raise the one that does — otherwise the model reads small in a
+    //     mostly-empty frame. A no-op at ordinary aspect ratios.
+    //  2. insetFitFraction: shrink whatever that produced to the region the
+    //     chrome leaves clear, so the solve fits the model into THAT rather
+    //     than the full canvas. Second, so a corrected target still yields to
+    //     the top bar/dock/HUD instead of sliding under them.
+    const fit = insetFitFraction(aspectAwareFit(DEFAULT_FIT_FRACTION, w / h), w, h, insets);
 
     const target = new THREE.Vector3(0, 0, 0);
     const distance = frameDistanceForBox(box, target, direction, w / h, cam.fov, fit);

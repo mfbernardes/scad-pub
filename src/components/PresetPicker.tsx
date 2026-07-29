@@ -19,8 +19,9 @@ import { Button } from "./ui/button";
 import { IconButton } from "./IconButton";
 import { FileInput } from "./FileInput";
 import { Input } from "./ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { cn } from "../lib/utils";
-import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon, Check as CheckIcon } from "lucide-react";
+import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon, Check as CheckIcon, EllipsisVertical as MoreIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,6 +78,18 @@ interface Props {
   onPresetsChange: () => void;
   /** When true, renders inline (no popover wrapper). Used in mobile sheet tabs. */
   inline?: boolean;
+  /**
+   * Collapse the save + import/export rows into a single "Manage" overflow
+   * (mobile) instead of two standing rows (desktop).
+   *
+   * Those two rows are `border-t`-separated, always mounted, and together
+   * ~95px tall. On the mobile sheet's half detent the whole tab is ~330-380px,
+   * so a quarter of the surface a first-time visitor lands on was going to
+   * saving and file round-tripping — while the ready-made cards they came for
+   * got about one and a half rows. Nothing is removed: the same three actions
+   * live one tap away, in the popover.
+   */
+  compact?: boolean;
   onClose?: () => void;
 }
 
@@ -90,8 +103,11 @@ export function PresetPicker({
   onSelectedChange,
   onPresetsChange,
   inline = false,
+  compact = false,
   onClose,
 }: Props) {
+  // Whether the compact footer's "Manage" popover is open (compact only).
+  const [manageOpen, setManageOpen] = useState(false);
   // Overridable via the config's `strings` block (src/locales/en.json's
   // presets.title) — see docs/config.md's "Text overrides".
   const presetsLabel = t("presets.title");
@@ -192,6 +208,102 @@ export function PresetPicker({
     for (const set of parsed) savePreset(design.id, set.name, set.values);
     onPresetsChange();
   };
+
+  // The "save these settings as…" field + its Save button. Shared verbatim by
+  // the standing footer and the compact popover, so the two presentations can
+  // never drift on what saving actually does.
+  const saveField = values ? (
+    <div className="flex items-center gap-[0.4rem]">
+      <Input
+        type="text"
+        name="preset-name"
+        autoComplete="off"
+        className="h-8 flex-1"
+        placeholder="Save these settings as…"
+        value={saveName}
+        aria-label="New preset name"
+        onChange={(e) => setSaveName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleSave();
+        }}
+      />
+      <Button size="sm" onClick={handleSave} disabled={!saveName.trim()}>
+        Save
+      </Button>
+    </div>
+  ) : null;
+
+  // Import / export saved presets as an OpenSCAD parameterSets file — the same
+  // format the desktop Customizer reads and writes, so presets carry between
+  // the two. Shared by both footers, like `saveField` above.
+  const importButton = (
+    <FileInput accept=".json,application/json" onFile={handleImport}>
+      {(open) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className={compact ? "w-full justify-start" : undefined}
+          onClick={open}
+          title="Import presets from an OpenSCAD parameterSets file"
+        >
+          <UploadIcon size={14} /> Import…
+        </Button>
+      )}
+    </FileInput>
+  );
+  const exportButton = (
+    <Button
+      variant="ghost"
+      size="sm"
+      className={compact ? "w-full justify-start" : "ml-auto"}
+      onClick={handleExport}
+      disabled={userPresets.length === 0}
+      title={
+        userPresets.length
+          ? "Export your saved presets as an OpenSCAD parameterSets file"
+          : "Save a preset first"
+      }
+    >
+      <DownloadIcon size={14} /> Export
+    </Button>
+  );
+
+  // Desktop: both rows stand permanently, where the docked panel has the room.
+  const standingFooter = (
+    <>
+      {saveField && (
+        <div className="preset-picker__save shrink-0 border-t px-[0.6rem] py-2">{saveField}</div>
+      )}
+      <div className="preset-picker__manage flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-[0.4rem]">
+        {importButton}
+        {exportButton}
+      </div>
+    </>
+  );
+
+  // Mobile: one row, one tap away from the same three actions. See the
+  // `compact` prop's own doc for why.
+  const compactFooter = (
+    <div className="preset-picker__manage flex shrink-0 items-center justify-end border-t px-[0.6rem] py-[0.3rem]">
+      <Popover open={manageOpen} onOpenChange={setManageOpen}>
+        <PopoverTrigger
+          className="inline-flex cursor-pointer items-center gap-[0.35rem] rounded-(--radius-sm) border-none bg-transparent px-2 py-[0.3rem] text-[0.85rem] text-muted-foreground outline-none hover:text-brand focus-visible:text-brand data-[state=open]:text-brand"
+          aria-label={t("presets.manage")}
+        >
+          <MoreIcon size={15} aria-hidden="true" />
+          {t("presets.manage")}
+        </PopoverTrigger>
+        {/* Opens upward: the trigger sits at the bottom of the sheet. */}
+        <PopoverContent side="top" align="end" collisionPadding={8} className="w-64 p-2">
+          {saveField}
+          <div className="mt-1 flex flex-col gap-[0.1rem]">
+            {importButton}
+            {exportButton}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
 
   const content = (
     <div className={cn("preset-picker flex flex-col", inline && "min-h-0 flex-1")}>
@@ -324,58 +436,7 @@ export function PresetPicker({
         )}
       </div>
 
-      {values && (
-        <div className="flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-2">
-          <Input
-            type="text"
-            name="preset-name"
-            autoComplete="off"
-            className="h-8 flex-1"
-            placeholder="Save these settings as…"
-            value={saveName}
-            aria-label="New preset name"
-            onChange={(e) => setSaveName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSave();
-            }}
-          />
-          <Button size="sm" onClick={handleSave} disabled={!saveName.trim()}>
-            Save
-          </Button>
-        </div>
-      )}
-
-      {/* Import / export saved presets as an OpenSCAD parameterSets file — the
-          same format the desktop Customizer reads and writes, so presets carry
-          between the two. */}
-      <div className="flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-[0.4rem]">
-        <FileInput accept=".json,application/json" onFile={handleImport}>
-          {(open) => (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={open}
-              title="Import presets from an OpenSCAD parameterSets file"
-            >
-              <UploadIcon size={14} /> Import…
-            </Button>
-          )}
-        </FileInput>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          onClick={handleExport}
-          disabled={userPresets.length === 0}
-          title={
-            userPresets.length
-              ? "Export your saved presets as an OpenSCAD parameterSets file"
-              : "Save a preset first"
-          }
-        >
-          <DownloadIcon size={14} /> Export
-        </Button>
-      </div>
+      {compact ? compactFooter : standingFooter}
     </div>
   );
 

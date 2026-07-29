@@ -129,6 +129,13 @@
      output console) anchors to it, and AppShell mirrors the same value
      (useSafeAreaBottom) for the sheet geometry. Off-iOS the inset is 0. */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  /* Notch / dynamic-island inset. The sheet's Full detent stops short of the
+     top edge to leave a model strip (BottomSheet's FULL_TOP_GAP), and this
+     keeps a notch from eating into that strip. Published as a var — rather
+     than env() inline — for the same reason as its bottom twin: BottomSheet
+     measures it off a probe, so CSS and JS read one source of truth and a test
+     can override it to simulate a device inset. */
+  --safe-area-top: env(safe-area-inset-top, 0px);
   color-scheme: dark;
 }
 
@@ -236,19 +243,55 @@ button:disabled { cursor: default; }
     height: 100%;
     position: relative;
     overflow: hidden;
+    /* The gap the Full detent leaves at the top of the viewport, so the live
+       viewer stays in frame as a model strip instead of being covered
+       outright. Mirrors BottomSheet's FULL_TOP_GAP + the top safe-area inset —
+       keep the two in sync. */
+    --sheet-full-gap: calc(var(--safe-area-top) + 132px);
     /* The bottom sheet's live top edge, in px from the viewport bottom: the
-       sheet's current height (--sheet-follow-h, set each drag frame by AppShell)
-       above its safe-area inset, capped at the half detent so dragging on to
-       full doesn't drag dependents off-screen. The viewer's bottom sits here;
-       the floating action cluster rides just above it. The 0.52 cap mirrors
-       BottomSheet's HALF_VH_RATIO — keep them in sync. */
+       sheet's current height (--sheet-follow-h, set each drag frame by
+       AppShell) above its safe-area inset, capped where the sheet itself stops.
+       The viewer's bottom sits here; the floating action cluster rides just
+       above it.
+
+       The cap mirrors BottomSheet's `fullH` exactly — including its `max()`
+       floor at the half height, which keeps a short landscape viewport from
+       resolving "full" to something smaller than "half". Keep the 0.52 in step
+       with HALF_VH_RATIO and the 132px with FULL_TOP_GAP. Following the sheet
+       all the way (rather than stopping at half, as it used to) is what turns
+       the Full detent's uncovered band into a real preview: the canvas shrinks
+       to the strip and the Viewer's ResizeObserver re-fits the model into it
+       (Viewer.tsx's refitView). */
     --sheet-top: calc(
       var(--safe-area-bottom) +
       min(
         var(--sheet-follow-h, var(--mobile-peek-height)),
-        (100dvh - var(--safe-area-bottom)) * 0.52
+        max(
+          (100dvh - var(--safe-area-bottom)) * 0.52,
+          100dvh - var(--safe-area-bottom) - var(--sheet-full-gap)
+        )
       )
     );
+  }
+
+  /* At the Full detent the uncovered band is a PREVIEW, not a workspace: the
+     background is `inert` there (AppShell's M16 wiring), so the top bar, the
+     export dock and the HUD are all non-interactive anyway — leaving them
+     drawn would just occlude the strip they sit over with controls nobody can
+     press. Hiding them hands the whole strip to the model. `display: none`
+     rather than opacity so Viewer's chrome-inset math (CHROME_SELECTORS) sees
+     zero-size rects and centres the model in the full strip.
+
+     Only the two overlays whose `display` comes from THIS file are handled
+     here. The top bar and the export dock get theirs from Tailwind `grid` /
+     `flex` utilities, and the utilities layer sits above this components
+     layer, so a rule here could never win — AppShell adds a `hidden` utility
+     to those two through `cn()` instead (tailwind-merge drops the conflicting
+     display class, so it resolves deterministically rather than by source
+     order). Same intent, split only by which layer owns the property. */
+  .app-shell__mobile[data-sheet-detent="full"] .viewer-hud,
+  .app-shell__mobile[data-sheet-detent="full"] .dimension-info {
+    display: none;
   }
 }
 
@@ -414,12 +457,44 @@ button:disabled { cursor: default; }
   z-index: 5;
 }
 
-/* Mobile: anchor the HUD to the upper-right, clear of the top bar + sheet. */
+/* Mobile: anchor the HUD to the upper-right, clear of the top bar + sheet.
+   ViewerHUD collapses to a single "View options" trigger here (see its own
+   doc), so this is normally one button tall.
+
+   `max-height` is the guard that keeps it that way. The HUD is anchored to the
+   TOP of the viewer while the export dock rides the sheet UPWARD (see
+   `.action-dock`'s mobile override), and the dock outranks it (z-10 vs z-5) —
+   so on a short or narrow viewport at the half detent the dock used to come to
+   rest on top of the rail's last buttons, which were then un-tappable rather
+   than merely overlapped. Bounding the column at the dock's own top edge means
+   a taller HUD scrolls inside its band instead of running under the dock, no
+   matter how many controls a config enables. --sheet-top and --action-dock-h
+   are the same live values `.viewer-hint` / `.sheet-hint` already clear
+   themselves by. The `max()` floor keeps one button's worth of band (and keeps
+   the declaration valid at all) once the sheet passes half, where the
+   subtraction would otherwise go negative — the background is inert and
+   covered by the sheet at that point anyway. */
 @media (max-width: 860px) {
   .app-shell__mobile .viewer-hud {
     top: calc(env(safe-area-inset-top, 0px) + 4rem);
     transform: none;
+    max-height: max(
+      2.75rem,
+      calc(
+        100% - env(safe-area-inset-top, 0px) - 4rem - var(--sheet-top) - 0.6rem
+          - var(--action-dock-h, 3.25rem) - 0.6rem
+      )
+    );
+    overflow-y: auto;
+    overflow-x: visible;
+    /* Never a scrollbar gutter over the model: the column is at most a few
+       buttons wide and the overflow case is rare. */
+    scrollbar-width: none;
   }
+  .app-shell__mobile .viewer-hud::-webkit-scrollbar { display: none; }
+  /* The collapsed trigger + its view chip are centred as a unit under the
+     top bar's right edge. */
+  .app-shell__mobile .viewer-hud--collapsed { align-items: center; }
 }
 
 /* Touch targets: on coarse-pointer (touch) devices the tightly-stacked viewer
@@ -435,6 +510,33 @@ button:disabled { cursor: default; }
     min-width: 2.75rem;
     min-height: 2.75rem;
   }
+  /* The same floor for the two controls a visitor actually presses most —
+     Download and Share/Copy-link in the export dock — and for the sheet's
+     Presets/Customize tabs. All three were 32-33px: past WCAG 2.2's 24x24
+     minimum (SC 2.5.8) but well under the 44px of SC 2.5.5 and the platform
+     guidance, on the app's primary action. Height only: their widths are
+     already generous, and stretching them further would crowd the dock. */
+  .action-cluster .action-export,
+  .action-cluster .action-share,
+  .sheet-tabs [role="tab"] {
+    min-height: 2.75rem;
+  }
+  /* The sheet's drag handle was a 22px-tall strip — the one target genuinely
+     under the 24x24 minimum, and it sits directly above the tab row, so the
+     spacing exception doesn't clearly rescue it. The visible bar is unchanged;
+     only the hit area grows. */
+  .sheet-handle { padding: 0.85rem 0 0.7rem; }
+}
+
+/* Light schemes give `--glass-bg` very little separation from the viewer
+   backdrop (on some palettes a few percent of luminance), which left the HUD
+   buttons reading as faint outlines rather than controls. Firm up the border
+   and add the blur the dark scheme gets for free from its own contrast, so the
+   button has an edge regardless of what is behind it. Scoped to the viewer HUD:
+   the top bar and dock sit on their own solid bands and don't have the problem. */
+:root[data-theme="light"] .viewer-hud .icon-btn {
+  border-color: color-mix(in srgb, var(--line) 88%, var(--text));
+  backdrop-filter: blur(6px);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -599,10 +701,15 @@ button:disabled { cursor: default; }
    Detents: peek (72 px) / half (~52 vh) / full (100 vh)
    ═══════════════════════════════════════════════════════════════ */
 
-/* Scrim visible only at Full detent */
+/* Scrim visible only at Full detent. It starts BELOW the model strip the Full
+   detent leaves uncovered (--sheet-full-gap): dimming the strip would undo the
+   point of leaving it. Everything the scrim does cover is inert anyway, so
+   this is purely about what the visitor can see. The var is only defined on
+   `.app-shell__mobile` (the sheet's only host), and `top: 0` is the right
+   fallback anywhere it isn't. */
 .sheet-scrim {
   position: absolute;
-  inset: 0;
+  inset: var(--sheet-full-gap, 0) 0 0 0;
   z-index: 29;
   background: rgba(0, 0, 0, 0.4);
   border: 0;

@@ -168,7 +168,14 @@ export function SheetTabs({
                 compact
               />
             </div>
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} />
+            {/* `compact`: control beside label wherever the control doesn't
+                need the full row, plus a tighter vertical rhythm. The sheet's
+                half detent is the only state where a phone shows the model and
+                the controls together, and its form port is ~380px — a stacked
+                row costs the label's height plus the control's, which fitted
+                two of sixteen parameters in it. See ParamForm's `compact`
+                doc. The docked desktop panel keeps the stacked layout. */}
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} compact />
           </div>
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
@@ -182,6 +189,7 @@ export function SheetTabs({
             onSelectedChange={selectedPresetChange}
             onPresetsChange={presetsChange}
             inline
+            compact
           />
         </TabsContent>
       </div>

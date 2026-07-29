@@ -1459,6 +1459,46 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
       await context.close();
     }
   }
+
+  // (d) The viewer HUD must stay reachable at every detent, on the narrow and
+  //     short viewports where it used not to. The HUD is anchored to the top
+  //     of the viewer while the export dock rides the sheet UPWARD, and the
+  //     dock outranks it (z-10 vs z-5) — so at the half detent on a 360- or
+  //     320-wide phone the dock came to rest ON the rail's last buttons.
+  //     Counting elements can't see that (both are mounted and "visible"), so
+  //     this hit-tests each button's own centre, which is what a finger does.
+  //     The full detent is excluded on purpose: the sheet legitimately covers
+  //     the background there, and AppShell marks it `inert` (checked above).
+  for (const [width, height] of [[360, 740], [320, 568]]) {
+    const { page, context } = await firstVisit(width, height);
+    try {
+      for (const detent of ["peek", "half"]) {
+        // Cycle to the detent under test: the handle steps peek -> half -> full.
+        if (detent !== "peek") {
+          await page.locator(".sheet-handle").click();
+          await page.waitForSelector(`.bottom-sheet--${detent}`, { timeout: 3000 }).catch(() => {});
+          // Let the dock's `bottom` transition settle before measuring.
+          await page.waitForTimeout(450);
+        }
+        const covered = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".viewer-hud button"))
+            .filter((b) => b.getBoundingClientRect().width > 0)
+            .filter((b) => {
+              const r = b.getBoundingClientRect();
+              const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              return !hit || !hit.closest(".viewer-hud");
+            })
+            .map((b) => b.getAttribute("aria-label") || b.textContent?.trim() || "?")
+        );
+        check(
+          covered.length === 0,
+          `${width}x${height} ${detent}: every viewer HUD button is hit-testable${covered.length ? ` (covered: ${covered.join(", ")})` : ""}`
+        );
+      }
+    } finally {
+      await context.close();
+    }
+  }
 }
 
 async function main() {

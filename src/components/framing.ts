@@ -42,6 +42,55 @@ export const DEFAULT_FIT_FRACTION: Readonly<FitFraction> = Object.freeze({
   height: 0.58,
 });
 
+// ── Extreme-aspect correction ───────────────────────────────────────────
+// The fit above takes the tighter of the two axes, which is correct — but it
+// says nothing about the OTHER axis, and on a canvas far from square that
+// axis can be left almost entirely empty.
+//
+// The case that motivated this: a phone in portrait. The viewer is a tall
+// column (390 x ~730, aspect ~0.53) and these designs are wide flat plates, so
+// the width target always binds. The model duly occupied 66% of the width —
+// and under a quarter of the height, reading small in a mostly-empty frame.
+// The mirror case now exists too: the bottom sheet's Full detent leaves a
+// short, wide model strip (aspect ~3), where height binds and width is empty.
+//
+// So: when a canvas is far enough from square that one axis provably cannot
+// bind, raise the binding axis's target — by sqrt(aspect), which grows the
+// correction smoothly rather than stepping — and cap it so the model still
+// reads as a framed object rather than something cropped at the edges.
+//
+// Aspects inside the neutral band are left EXACTLY alone. That band covers
+// every ordinary desktop viewer pane and the mobile half detent, so this
+// changes nothing about the framing that was tuned against a flat plate, a
+// tall thin model and a cube — it only rescues the two extremes.
+const NEUTRAL_ASPECT_MIN = 0.8;
+const NEUTRAL_ASPECT_MAX = 1.6;
+/** Caps for the corrected axis. Below 1.0 by a real margin so a corrected fit
+ *  still leaves visible margin around the model on that axis. */
+const MAX_WIDTH_FIT = 0.82;
+const MAX_HEIGHT_FIT = 0.8;
+
+/**
+ * `fit`, adjusted for a canvas whose aspect ratio makes one axis unable to
+ * bind. Portrait (`aspect < 0.8`) widens the width target; wide landscape
+ * (`aspect > 1.6`) raises the height target; anything between is returned
+ * unchanged (the same object, so callers can cheaply detect the no-op).
+ *
+ * Pure, and applied BEFORE `insetFitFraction` — the chrome insets then shrink
+ * whatever this produced, so a corrected target still yields to the top bar,
+ * the dock and the HUD rather than sliding under them.
+ */
+export function aspectAwareFit(fit: FitFraction, aspect: number): FitFraction {
+  if (!Number.isFinite(aspect) || aspect <= 0) return fit;
+  if (aspect < NEUTRAL_ASPECT_MIN) {
+    return { width: Math.min(MAX_WIDTH_FIT, fit.width / Math.sqrt(aspect)), height: fit.height };
+  }
+  if (aspect > NEUTRAL_ASPECT_MAX) {
+    return { width: fit.width, height: Math.min(MAX_HEIGHT_FIT, fit.height * Math.sqrt(aspect)) };
+  }
+  return fit;
+}
+
 // OpenSCAD is Z-up; Viewer.tsx sets camera.up to match once at mount and
 // never changes it, so every view direction's screen basis is derived
 // against this same world-up.

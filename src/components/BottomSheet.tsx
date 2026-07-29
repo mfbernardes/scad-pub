@@ -25,6 +25,40 @@ export type SheetDetent = "peek" | "half" | "full";
 const DETENT_ORDER: SheetDetent[] = ["peek", "half", "full"];
 // Slightly above 50% to clear browser chrome at the bottom.
 export const HALF_VH_RATIO = 0.52;
+// Height (px) of the model strip the Full detent deliberately leaves uncovered
+// at the top of the viewport, plus any top safe-area inset.
+//
+// "Full" used to mean the whole viewport, which made it the one state where a
+// visitor could read the form comfortably and the one state where they could
+// not see what they were editing — on a tool whose entire loop is "change the
+// text, watch the plate change". Stopping short of the top edge keeps the LIVE
+// viewer in frame instead of adding a second render surface: the canvas's
+// bottom already tracks the sheet (`--sheet-top` in index.css), and the
+// Viewer's ResizeObserver re-fits the model into whatever box it is left with
+// (Viewer.tsx's refitView), so the strip is the real model, correctly framed,
+// for free.
+//
+// Sized to read as a recognisable object rather than a sliver: below roughly
+// this the plate becomes a line. The sheet still gains everything between the
+// strip and the half detent, which is most of the screen.
+export const FULL_TOP_GAP = 132;
+
+/** Top inset (px) the sheet's Full detent leaves clear, including any device
+ *  safe-area inset — so a notch never eats into the strip itself. env() can't
+ *  be read from JS, so this measures a hidden probe against the same
+ *  `--safe-area-top` custom property the CSS uses, exactly as
+ *  useSafeAreaBottom does for the other edge (one source of truth, and a test
+ *  can override the var to simulate a device inset). */
+function fullTopGap(): number {
+  if (typeof document === "undefined") return FULL_TOP_GAP;
+  const probe = document.createElement("div");
+  probe.style.cssText =
+    "position:fixed;left:0;top:0;width:0;height:var(--safe-area-top,env(safe-area-inset-top,0px));visibility:hidden;pointer-events:none;";
+  document.body.appendChild(probe);
+  const inset = probe.getBoundingClientRect().height;
+  probe.remove();
+  return FULL_TOP_GAP + Math.round(inset);
+}
 // Movement (px) past which a pointer interaction counts as a drag, not a tap.
 const DRAG_THRESHOLD = 6;
 // Elements a focus trap should consider reachable — the standard "visible,
@@ -33,7 +67,15 @@ const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function halfH(inset: number) { return Math.round((window.innerHeight - inset) * HALF_VH_RATIO); }
-function fullH(inset: number) { return window.innerHeight - inset; }
+// Full stops FULL_TOP_GAP short of the top edge so the live viewer stays in
+// frame (see FULL_TOP_GAP's own doc). Floored at the half height so a very
+// short viewport — a landscape phone, where half is already most of the screen
+// — can never resolve "full" to something SMALLER than "half", which would
+// make the detent order non-monotonic and break the nearest-detent snap in
+// onPointerUp.
+function fullH(inset: number) {
+  return Math.max(halfH(inset), window.innerHeight - inset - fullTopGap());
+}
 
 interface Props {
   children: (detent: SheetDetent, expand: () => void) => ReactNode;

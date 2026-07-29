@@ -107,6 +107,7 @@ function ActionDock({
   actionButtonsProps,
   statusPill,
   onHeightChange,
+  className,
 }: {
   exportSuccess: ExportSuccessState | null;
   afterExport: UiConfig["afterExport"];
@@ -119,6 +120,12 @@ function ActionDock({
   /** Reports the dock's live height (px) whenever it changes — see the
    *  `--action-dock-h` effect in AppShell for what reads it. */
   onHeightChange?: (heightPx: number) => void;
+  /** Extra classes for the dock wrapper. Mobile passes `hidden` at the sheet's
+   *  Full detent, where the dock would cover the model strip with an already
+   *  `inert` button — through `cn()` rather than a stylesheet rule, because
+   *  ACTION_DOCK_CLASS's own `flex` utility outranks index.css's layer (see
+   *  the matching note there). */
+  className?: string;
 }) {
   // The dock is a flex column whose height depends on what it currently holds
   // (cluster alone, + readiness pill, + after-export panel), and the chips that
@@ -136,7 +143,7 @@ function ActionDock({
   }, [onHeightChange]);
 
   return (
-    <div className={ACTION_DOCK_CLASS} ref={dockRef}>
+    <div className={cn(ACTION_DOCK_CLASS, className)} ref={dockRef}>
       {exportSuccess && (
         <ExportSuccess
           state={exportSuccess}
@@ -365,6 +372,20 @@ export const AppShell = memo(function AppShell({
     else el.removeAttribute("inert");
   }, [isMobile, sheetDetent]);
 
+  // Publish the settled detent onto the mobile root so CSS can react to it.
+  // Only Full currently does: it stops short of the top edge to leave a live
+  // model strip (BottomSheet's FULL_TOP_GAP), and the chrome floating over
+  // that band — top bar, export dock, HUD, measurements panel — is hidden
+  // there, since `inert` has already made all of it non-interactive and it
+  // would otherwise just cover the model. Written as a data attribute rather
+  // than a class so it reads as one enum-valued piece of state, alongside the
+  // `data-sheet-dragging` flag handleSheetFollow writes on the same element.
+  useEffect(() => {
+    const el = mobileRootRef.current;
+    if (!el) return;
+    el.dataset.sheetDetent = sheetDetent;
+  }, [sheetDetent, isMobile]);
+
   const ui = schema.ui ?? {};
   const viewerControls = schema.viewer?.controls ?? {};
   const panelSide = ui.panelSide ?? "left";
@@ -577,6 +598,13 @@ export const AppShell = memo(function AppShell({
   // which is the contract working as intended: one tally on screen, not none.
   const hasStatusPill = readiness === "failed" || (!isMobile && readiness === "attention");
 
+  // Whether the mobile sheet is at its Full detent, where it stops short of the
+  // top edge to leave a live model strip (BottomSheet's FULL_TOP_GAP). The
+  // chrome floating over that band is hidden there — see the `data-sheet-detent`
+  // effect above for the whole rationale, and index.css for the two overlays
+  // this flag does NOT have to cover.
+  const sheetFull = isMobile && sheetDetent === "full";
+
   // Prop bundles shared verbatim by the two layout trees — each invocation
   // below adds only its layout-specific bits (viewer ref, active flag, …).
   const stageProps = {
@@ -607,6 +635,12 @@ export const AppShell = memo(function AppShell({
   };
   const hudProps = {
     visible: !!result?.ok,
+    // Mobile collapses the whole HUD into one "View options" popover; desktop
+    // keeps the inline column. Passed as a prop rather than read from a
+    // viewport hook inside ViewerHUD for the same reason BarActions takes
+    // `collapse`: the caller already knows which layout it is, and only one
+    // layout tree is mounted at a time (M7).
+    collapse: isMobile,
     measure: showMeasure,
     showDimensions,
     onToggleDimensions: toggleDimensions,
@@ -712,7 +746,14 @@ export const AppShell = memo(function AppShell({
                   full-detent sheet. */}
               <div className={cn(
                 "mobile-top-bar absolute inset-x-0 top-0 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]",
-                outputOpen ? "z-[33]" : "z-10"
+                outputOpen ? "z-[33]" : "z-10",
+                // At the Full detent the sheet leaves a live model strip at the
+                // top; this bar would cover half of it with controls that are
+                // already `inert`. `hidden` via cn() rather than a stylesheet
+                // rule because this element's `display` comes from the `grid`
+                // utility above, and the utilities layer outranks index.css —
+                // see the matching note there.
+                sheetFull && "hidden"
               )}>
                 <span className="inline-flex min-w-0 items-center gap-[0.4rem] justify-self-start overflow-hidden whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.92rem] font-bold">
                   <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
@@ -785,6 +826,7 @@ export const AppShell = memo(function AppShell({
               actionButtonsProps={actionButtonsProps}
               statusPill={dockStatusPill}
               onHeightChange={handleDockHeight}
+              className={sheetFull ? "hidden" : undefined}
             />
 
             <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
