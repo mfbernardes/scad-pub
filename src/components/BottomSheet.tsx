@@ -1,13 +1,16 @@
 // BottomSheet.tsx — persistent, detented bottom sheet for mobile (< 860px).
-// Three snap points: Peek (collapsed header) / Half (~50vh) / Full (full-height).
-// Never fully dismissed. Drag handle tap cycles detents; Arrow Up/Down adjusts.
+// Three snap points: Peek (collapsed header) / Half (~50vh) / Full (everything
+// but a model strip at the top — see FULL_TOP_GAP). Never fully dismissed.
+// Drag handle tap cycles detents; Arrow Up/Down adjusts.
 // Non-modal at Peek/Half (canvas stays interactive, background stays reachable
 // by keyboard/AT). Modal at Full (see docs/architecture-review.md M16): the
-// sheet visually covers the background there, so the effect below traps
+// sheet covers everything there but a model strip at the top, and that strip
+// is a preview rather than a workspace — AppShell hides the chrome floating
+// over it and marks the background `inert` — so the effect below traps
 // keyboard focus inside the sheet (+ scrim), sends initial focus in, restores
 // it to the triggering control on close, and Escape collapses it from
-// anywhere in the trap. The parent (AppShell) marks the background `inert`
-// for the complementary half of the fix — see mobileBackgroundRef there.
+// anywhere in the trap. See AppShell's mobileBackgroundRef and `sheetFull`
+// for the two halves it owns.
 import {
   useCallback,
   useEffect,
@@ -19,6 +22,7 @@ import {
 import { tapFeedback } from "../lib/haptics";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
 import { useScrollFocusedIntoView } from "../lib/useScrollFocusedIntoView";
+import { useSafeAreaInset } from "../lib/useSafeAreaInset";
 
 export type SheetDetent = "peek" | "half" | "full";
 
@@ -26,7 +30,8 @@ const DETENT_ORDER: SheetDetent[] = ["peek", "half", "full"];
 // Slightly above 50% to clear browser chrome at the bottom.
 export const HALF_VH_RATIO = 0.52;
 // Height (px) of the model strip the Full detent deliberately leaves uncovered
-// at the top of the viewport, plus any top safe-area inset.
+// at the top of the viewport. Any notch inset is added on top of it by fullH's
+// `topInset` argument, so a device with one doesn't lose part of the strip.
 //
 // "Full" used to mean the whole viewport, which made it the one state where a
 // visitor could read the form comfortably and the one state where they could
@@ -43,22 +48,6 @@ export const HALF_VH_RATIO = 0.52;
 // strip and the half detent, which is most of the screen.
 export const FULL_TOP_GAP = 132;
 
-/** Top inset (px) the sheet's Full detent leaves clear, including any device
- *  safe-area inset — so a notch never eats into the strip itself. env() can't
- *  be read from JS, so this measures a hidden probe against the same
- *  `--safe-area-top` custom property the CSS uses, exactly as
- *  useSafeAreaBottom does for the other edge (one source of truth, and a test
- *  can override the var to simulate a device inset). */
-function fullTopGap(): number {
-  if (typeof document === "undefined") return FULL_TOP_GAP;
-  const probe = document.createElement("div");
-  probe.style.cssText =
-    "position:fixed;left:0;top:0;width:0;height:var(--safe-area-top,env(safe-area-inset-top,0px));visibility:hidden;pointer-events:none;";
-  document.body.appendChild(probe);
-  const inset = probe.getBoundingClientRect().height;
-  probe.remove();
-  return FULL_TOP_GAP + Math.round(inset);
-}
 // Movement (px) past which a pointer interaction counts as a drag, not a tap.
 const DRAG_THRESHOLD = 6;
 // Elements a focus trap should consider reachable — the standard "visible,
@@ -67,14 +56,14 @@ const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function halfH(inset: number) { return Math.round((window.innerHeight - inset) * HALF_VH_RATIO); }
-// Full stops FULL_TOP_GAP short of the top edge so the live viewer stays in
-// frame (see FULL_TOP_GAP's own doc). Floored at the half height so a very
-// short viewport — a landscape phone, where half is already most of the screen
-// — can never resolve "full" to something SMALLER than "half", which would
-// make the detent order non-monotonic and break the nearest-detent snap in
-// onPointerUp.
-function fullH(inset: number) {
-  return Math.max(halfH(inset), window.innerHeight - inset - fullTopGap());
+// Full stops FULL_TOP_GAP (plus any notch inset, passed in as `topInset`)
+// short of the top edge so the live viewer stays in frame — see FULL_TOP_GAP's
+// own doc. Floored at the half height so a very short viewport — a landscape
+// phone, where half is already most of the screen — can never resolve "full"
+// to something SMALLER than "half", which would make the detent order
+// non-monotonic and break the nearest-detent snap in onPointerUp.
+function fullH(inset: number, topInset: number) {
+  return Math.max(halfH(inset), window.innerHeight - inset - FULL_TOP_GAP - topInset);
 }
 
 interface Props {
@@ -99,6 +88,13 @@ interface Props {
    *  parent can anchor other fixed content (e.g. the output console overlay)
    *  exactly above the real peek row instead of a static guess. */
   onPeekHeightChange?: (heightPx: number) => void;
+  /** Reports the gap (px) the Full detent leaves clear at the TOP of the
+   *  viewport — FULL_TOP_GAP plus the measured notch inset. The parent
+   *  publishes it as a CSS custom property so the stylesheet can anchor to the
+   *  model strip (the scrim starts below it) without re-deriving the number:
+   *  this module owns the detent model, so it should own the arithmetic. Same
+   *  shape and purpose as onPeekHeightChange above. */
+  onFullGapChange?: (gapPx: number) => void;
 }
 
 export function BottomSheet({
@@ -109,6 +105,7 @@ export function BottomSheet({
   bottomInset = 0,
   onFollow,
   onPeekHeightChange,
+  onFullGapChange,
 }: Props) {
   // Detent is controlled by the parent; setDetent forwards to it.
   const setDetent = onDetentChange;
@@ -146,6 +143,16 @@ export function BottomSheet({
   peekHeightRef.current = effectivePeek;
   const bottomInsetRef = useRef(bottomInset);
   bottomInsetRef.current = bottomInset;
+  // The notch inset the Full detent's model strip has to clear. Measured once
+  // per mount and on viewport change (useSafeAreaInset) rather than read at
+  // each call: the probe it uses appends to document.body and reads a rect,
+  // forcing a synchronous document layout — and fullH() below runs on every
+  // pointermove, every drag frame and every render. Held in a ref for the same
+  // reason bottomInset is: so the pointer handlers stay identity-stable with
+  // empty dependency lists.
+  const topInset = useSafeAreaInset("top");
+  const topInsetRef = useRef(topInset);
+  topInsetRef.current = topInset;
 
   // Report the effective peek height whenever it changes (first measurement,
   // font-scaling/resize-driven remeasure, …) so the parent can anchor fixed
@@ -154,6 +161,13 @@ export function BottomSheet({
   useEffect(() => {
     onPeekHeightChange?.(effectivePeek);
   }, [effectivePeek, onPeekHeightChange]);
+
+  // Publish the Full detent's top gap for the same reason: the stylesheet
+  // needs it (see `.sheet-scrim`), and re-deriving `FULL_TOP_GAP + inset` in
+  // CSS would be a second definition of a number this module owns.
+  useEffect(() => {
+    onFullGapChange?.(FULL_TOP_GAP + topInset);
+  }, [topInset, onFullGapChange]);
 
   // Measure the header (drag handle + tab row) and use that as the peek height,
   // so the collapsed sheet always shows the whole tab row regardless of device
@@ -210,7 +224,7 @@ export function BottomSheet({
     switch (d) {
       case "peek": return peekHeightRef.current;
       case "half": return halfH(bottomInsetRef.current);
-      case "full": return fullH(bottomInsetRef.current);
+      case "full": return fullH(bottomInsetRef.current, topInsetRef.current);
     }
   }, []);
 
@@ -253,7 +267,7 @@ export function BottomSheet({
     (height) => {
       const sheet = sheetRef.current;
       if (!sheet) return;
-      const full = fullH(bottomInsetRef.current);
+      const full = fullH(bottomInsetRef.current, topInsetRef.current);
       sheet.style.setProperty("--sheet-visible-h", `${height}px`);
       sheet.style.transform = `translateY(${Math.max(0, full - height)}px)`;
       sheet.style.transition = "none";
@@ -268,7 +282,7 @@ export function BottomSheet({
     if (Math.abs(offset) > DRAG_THRESHOLD) draggedRef.current = true;
     const nextH = Math.max(
       peekHeightRef.current,
-      Math.min(fullH(bottomInsetRef.current), dragStart.current.height + offset)
+      Math.min(fullH(bottomInsetRef.current, topInsetRef.current), dragStart.current.height + offset)
     );
     scheduleHeight(nextH);
   }, [scheduleHeight]);
@@ -285,7 +299,7 @@ export function BottomSheet({
     setDragging(false);
 
     const minH = peekHeightRef.current;
-    const maxH = fullH(bottomInsetRef.current);
+    const maxH = fullH(bottomInsetRef.current, topInsetRef.current);
     const targetH = Math.max(minH, Math.min(maxH, currentH + delta));
     let best = detentRef.current;
     let bestDist = Infinity;
@@ -306,7 +320,7 @@ export function BottomSheet({
     const sheet = sheetRef.current;
     if (sheet) {
       const settledH = heightFor(best);
-      const full = fullH(bottomInsetRef.current);
+      const full = fullH(bottomInsetRef.current, topInsetRef.current);
       sheet.style.setProperty("--sheet-visible-h", `${settledH}px`);
       sheet.style.transform = `translateY(${Math.max(0, full - settledH)}px)`;
       sheet.style.transition = "transform 0.28s cubic-bezier(0.32,0.72,0,1)";
@@ -333,7 +347,7 @@ export function BottomSheet({
   // Committed height for the current detent. Drag frames update the DOM
   // directly via applyLiveHeight and don't flow through this render path.
   const displayH = heightFor(detent);
-  const fullHeight = fullH(bottomInset);
+  const fullHeight = fullH(bottomInset, topInset);
 
   // Report the committed height + drag state up so the viewer follows detent
   // changes; in-progress drag frames report via applyLiveHeight instead.

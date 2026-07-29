@@ -16,8 +16,11 @@
 // the half detent on a 360- or 320-wide viewport the dock came to rest on top
 // of the last one or two buttons, which were then genuinely un-tappable
 // (elementFromPoint returned the dock, not the button). Collapsing to a single
-// trigger removes the rail outright; `.viewer-hud`'s mobile max-height in
-// index.css bounds whatever is left, so the collision cannot return.
+// trigger removes the rail outright — `collapse` is keyed on the same 860px
+// breakpoint the mobile CSS uses, so below it there is only ever one button
+// and no config can grow it. scripts/smoke.mjs hit-tests each HUD button's own
+// centre at 360x740 and 320x568 so a layout that reintroduces the overlap
+// fails there rather than shipping.
 //
 // The trade is one extra tap for controls a visitor touches rarely, against
 // standing space over the model — which is the thing they came for. Desktop
@@ -33,12 +36,13 @@
 import { useState, type ReactNode } from "react";
 import type { ViewerHandle } from "./Viewer";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
-import { ViewPicker, HUD_GLASS_BTN } from "./ViewPicker";
+import { ViewPicker, ViewOptionList, HUD_GLASS_BTN } from "./ViewPicker";
+import { MenuRow } from "./MenuRow";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { cn } from "../lib/utils";
 import { VIEW_OPTIONS, type ViewName } from "./views";
-import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, Maximize as MaximizeIcon, Ruler as RulerIcon, Grid3x3 as GridIcon, SlidersHorizontal as ViewOptionsIcon, Check as CheckIcon } from "lucide-react";
+import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, Maximize as MaximizeIcon, Ruler as RulerIcon, Grid3x3 as GridIcon, SlidersHorizontal as ViewOptionsIcon } from "lucide-react";
 import { useStandalone } from "../lib/useStandalone";
 import { fullscreenSupported } from "../lib/fullscreen";
 import { t } from "../lib/i18n";
@@ -105,36 +109,6 @@ function HudTooltipButton({
   );
 }
 
-// One row of the collapsed menu. Mirrors BarActions' own `rowClass` so the
-// app's two overflow popovers read as the same control, and carries
-// `aria-pressed` for the rows that are toggles rather than one-shot actions.
-const menuRowClass =
-  "flex w-full items-center gap-2 rounded-(--radius-sm) px-2 py-[0.45rem] text-left text-[0.9rem] text-foreground cursor-pointer hover:bg-muted focus-visible:bg-muted";
-
-function MenuRow({
-  label,
-  onClick,
-  pressed,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  pressed?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      className={cn(menuRowClass, pressed && "text-brand font-medium")}
-      aria-pressed={pressed}
-      onClick={onClick}
-    >
-      {children}
-      {label}
-    </button>
-  );
-}
-
 export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showDimensions, onToggleDimensions, showGrid, onToggleGrid, viewPicker, reset, zoom, fullscreen, view, onSelectView }: Props) {
   const standalone = useStandalone();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -159,10 +133,19 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
   const gridLabel = showGrid ? t("hud.hideGrid") : t("hud.showGrid");
 
   if (collapse) {
-    const currentView = VIEW_OPTIONS.find((o) => o.id === view)?.label ?? "";
-    // One-shot actions close the menu; the two toggles leave it open, because
-    // a visitor flipping the grid or the ruler usually wants to see the result
-    // and flip it straight back — the same reasoning as BarActions' theme row.
+    // The trigger names the active view, the way ViewPicker's desktop trigger
+    // does — "which way am I looking" is the one piece of HUD state worth
+    // reading without opening the menu, and this says it without spending a
+    // second element over the model (which would also widen the top inset the
+    // camera fit has to clear).
+    const currentView = VIEW_OPTIONS.find((o) => o.id === view)?.label;
+    const triggerLabel = currentView
+      ? `${t("hud.viewOptions")}: ${currentView}`
+      : t("hud.viewOptions");
+    // Rows that DO something close the menu; the ruler and grid toggles don't,
+    // because a visitor flipping one usually wants to see the result and flip
+    // it straight back (the same reasoning as BarActions' theme row), and
+    // neither does zoom, which is meant to be tapped repeatedly.
     const act = (fn: () => void) => () => {
       fn();
       setMenuOpen(false);
@@ -177,10 +160,15 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
             className={cn(
               ICON_BUTTON_CLASS,
               HUD_GLASS_BTN,
-              "inline-flex items-center justify-center outline-none data-[state=open]:border-brand data-[state=open]:text-brand"
+              // `outline-none` suppresses index.css's global :focus-visible
+              // outline, so the replacement ring is not optional — this is a
+              // native <button> (PopoverTrigger needs the ref), which means it
+              // gets none of shadcn Button's focus styling either. Same recipe
+              // as ViewPicker's trigger, the desktop twin of this control.
+              "inline-flex items-center justify-center outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-brand data-[state=open]:text-brand"
             )}
-            aria-label={t("hud.viewOptions")}
-            title={t("hud.viewOptions")}
+            aria-label={triggerLabel}
+            title={triggerLabel}
           >
             <ViewOptionsIcon size={18} />
           </PopoverTrigger>
@@ -193,34 +181,18 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
                 <p className="px-2 pt-1 pb-[0.2rem] text-[0.7rem] font-semibold uppercase tracking-[0.04em] text-muted-foreground">
                   {t("hud.viewHeading")}
                 </p>
-                {/* A chip grid, not a nested submenu: seven short labels fit
-                    two-up and stay one tap deep, which is the whole point of
-                    collapsing the rail in the first place. */}
-                <ul className="mb-1 grid grid-cols-2 gap-[0.15rem] px-1">
-                  {VIEW_OPTIONS.map((o) => {
-                    const active = o.id === view;
-                    return (
-                      <li key={o.id}>
-                        <button
-                          type="button"
-                          className={cn(
-                            "flex w-full items-center gap-1 rounded-(--radius-sm) px-2 py-[0.4rem] text-left text-[0.82rem] text-foreground cursor-pointer hover:bg-muted focus-visible:bg-muted",
-                            active && "text-brand font-semibold"
-                          )}
-                          aria-current={active ? "true" : undefined}
-                          onClick={act(() => onSelectView(o.id))}
-                        >
-                          {/* Fixed-width slot so labels align whether or not
-                              checkmarked. */}
-                          <span className="inline-flex w-3.5 shrink-0" aria-hidden="true">
-                            {active && <CheckIcon size={13} />}
-                          </span>
-                          {o.label}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                {/* Two-up, not a nested submenu: seven short labels fit and
+                    stay one tap deep, which is the whole point of collapsing
+                    the rail. The list itself is ViewPicker's — same options,
+                    same active marking, same re-snap-on-repick behaviour. */}
+                <ViewOptionList
+                  view={view}
+                  onSelect={(v) => {
+                    onSelectView(v);
+                    setMenuOpen(false);
+                  }}
+                  listClassName="mb-1 grid grid-cols-2 gap-[0.15rem] px-1"
+                />
                 <div className="my-1 border-t" role="none" />
               </>
             )}
@@ -254,19 +226,6 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
             )}
           </PopoverContent>
         </Popover>
-        {/* Which way the camera is pointing is the one piece of HUD state
-            worth reading without opening the menu, and the trigger is an icon.
-            Decorative (`aria-hidden`): the trigger's own accessible name
-            already covers the control, and the chip would otherwise announce a
-            bare word with no context. */}
-        {viewPicker && currentView && (
-          <span
-            aria-hidden="true"
-            className="viewer-hud__view-label pointer-events-none mt-1 max-w-16 truncate rounded-(--radius-sm) border border-(color:--glass-border) bg-(--glass-bg) px-[0.35rem] py-[0.1rem] text-center text-[0.62rem] font-medium text-muted-foreground"
-          >
-            {currentView}
-          </span>
-        )}
       </div>
     );
   }

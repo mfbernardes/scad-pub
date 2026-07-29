@@ -2,7 +2,11 @@
 //   Desktop (≥ 860px): CommandBar + docked ParamPanel + ActionCluster + ViewerHUD
 //   Mobile (< 860px):  full-bleed viewer + top bar + BottomSheet + floating ActionCluster
 // Both layouts float the same compact action cluster over the viewer bottom —
-// mobile no longer reserves a solid footer band.
+// mobile no longer reserves a solid footer band. The mobile HUD is a single
+// collapsed trigger rather than the desktop column (see ViewerHUD's own doc),
+// and the sheet's Full detent stops short of the top edge, leaving a live
+// model strip; the chrome floating over that band is hidden there, driven by
+// the `data-sheet-detent` attribute this file publishes on the mobile root.
 //
 // App.tsx still owns render orchestration (useRenderPipeline) and the values/
 // presets/export/URL/theme state a design edit touches. What AppShell itself
@@ -75,7 +79,7 @@ import { isFontFile } from "../openscad/renderArgs";
 import { svgPresent } from "../lib/svgFiles";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
-import { useSafeAreaBottom } from "../lib/useSafeAreaBottom";
+import { useSafeAreaBottom } from "../lib/useSafeAreaInset";
 import { usePanelState } from "../lib/usePanelState";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
 import { ns } from "../lib/appId";
@@ -107,7 +111,6 @@ function ActionDock({
   actionButtonsProps,
   statusPill,
   onHeightChange,
-  className,
 }: {
   exportSuccess: ExportSuccessState | null;
   afterExport: UiConfig["afterExport"];
@@ -120,12 +123,6 @@ function ActionDock({
   /** Reports the dock's live height (px) whenever it changes — see the
    *  `--action-dock-h` effect in AppShell for what reads it. */
   onHeightChange?: (heightPx: number) => void;
-  /** Extra classes for the dock wrapper. Mobile passes `hidden` at the sheet's
-   *  Full detent, where the dock would cover the model strip with an already
-   *  `inert` button — through `cn()` rather than a stylesheet rule, because
-   *  ACTION_DOCK_CLASS's own `flex` utility outranks index.css's layer (see
-   *  the matching note there). */
-  className?: string;
 }) {
   // The dock is a flex column whose height depends on what it currently holds
   // (cluster alone, + readiness pill, + after-export panel), and the chips that
@@ -143,7 +140,7 @@ function ActionDock({
   }, [onHeightChange]);
 
   return (
-    <div className={cn(ACTION_DOCK_CLASS, className)} ref={dockRef}>
+    <div className={ACTION_DOCK_CLASS} ref={dockRef}>
       {exportSuccess && (
         <ExportSuccess
           state={exportSuccess}
@@ -372,19 +369,6 @@ export const AppShell = memo(function AppShell({
     else el.removeAttribute("inert");
   }, [isMobile, sheetDetent]);
 
-  // Publish the settled detent onto the mobile root so CSS can react to it.
-  // Only Full currently does: it stops short of the top edge to leave a live
-  // model strip (BottomSheet's FULL_TOP_GAP), and the chrome floating over
-  // that band — top bar, export dock, HUD, measurements panel — is hidden
-  // there, since `inert` has already made all of it non-interactive and it
-  // would otherwise just cover the model. Written as a data attribute rather
-  // than a class so it reads as one enum-valued piece of state, alongside the
-  // `data-sheet-dragging` flag handleSheetFollow writes on the same element.
-  useEffect(() => {
-    const el = mobileRootRef.current;
-    if (!el) return;
-    el.dataset.sheetDetent = sheetDetent;
-  }, [sheetDetent, isMobile]);
 
   const ui = schema.ui ?? {};
   const viewerControls = schema.viewer?.controls ?? {};
@@ -544,6 +528,17 @@ export const AppShell = memo(function AppShell({
   // --mobile-peek-height, so the output console overlay + scrim anchor to the
   // real row instead of the static CSS fallback, which font scaling can
   // exceed. See BottomSheet's onPeekHeightChange doc.
+  // Mirror the sheet's Full-detent top gap into --sheet-full-gap, so the
+  // stylesheet can anchor to the model strip (the scrim starts below it)
+  // without re-deriving `FULL_TOP_GAP + notch inset` in CSS. Same pattern as
+  // the peek height below — BottomSheet owns the detent model, so it owns the
+  // number, and this just republishes it.
+  const handleSheetFullGap = useCallback((gapPx: number) => {
+    const el = mobileRootRef.current;
+    if (!el) return;
+    el.style.setProperty("--sheet-full-gap", `${Math.round(gapPx)}px`);
+  }, []);
+
   const handleSheetPeekHeight = useCallback((heightPx: number) => {
     const el = mobileRootRef.current;
     if (!el) return;
@@ -598,12 +593,6 @@ export const AppShell = memo(function AppShell({
   // which is the contract working as intended: one tally on screen, not none.
   const hasStatusPill = readiness === "failed" || (!isMobile && readiness === "attention");
 
-  // Whether the mobile sheet is at its Full detent, where it stops short of the
-  // top edge to leave a live model strip (BottomSheet's FULL_TOP_GAP). The
-  // chrome floating over that band is hidden there — see the `data-sheet-detent`
-  // effect above for the whole rationale, and index.css for the two overlays
-  // this flag does NOT have to cover.
-  const sheetFull = isMobile && sheetDetent === "full";
 
   // Prop bundles shared verbatim by the two layout trees — each invocation
   // below adds only its layout-specific bits (viewer ref, active flag, …).
@@ -718,7 +707,19 @@ export const AppShell = memo(function AppShell({
         // --sheet-follow-h (set live by handleSheetFollow) sizes the viewer so
         // its bottom edge tracks the sheet; data-sheet-dragging toggles the
         // easing. See .app-shell__mobile-viewer in CSS.
-        <main id="main-content" tabIndex={-1} className="app-shell__mobile" ref={mobileRootRef}>
+        // data-sheet-detent drives the full-detent CSS below: at Full the
+        // sheet leaves a live model strip at the top, and the chrome floating
+        // over that band is hidden (see the `[data-sheet-detent="full"]` rule
+        // in index.css). A data attribute rather than a class so it reads as
+        // one enum-valued piece of state, alongside the `data-sheet-dragging`
+        // flag handleSheetFollow writes imperatively on the same element.
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="app-shell__mobile"
+          data-sheet-detent={sheetDetent}
+          ref={mobileRootRef}
+        >
           {pageHeading}
           {/* Background content: viewer, top bar, floating controls. Marked
               `inert` while the sheet is at the Full detent (M16) — Full
@@ -746,14 +747,7 @@ export const AppShell = memo(function AppShell({
                   full-detent sheet. */}
               <div className={cn(
                 "mobile-top-bar absolute inset-x-0 top-0 grid min-h-12 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-b-(color:--glass-border) bg-(--glass-bg) pt-[calc(env(safe-area-inset-top,0px)+0.4rem)] pb-[0.4rem] pl-[calc(0.75rem+env(safe-area-inset-left,0px))] pr-[calc(0.75rem+env(safe-area-inset-right,0px))]",
-                outputOpen ? "z-[33]" : "z-10",
-                // At the Full detent the sheet leaves a live model strip at the
-                // top; this bar would cover half of it with controls that are
-                // already `inert`. `hidden` via cn() rather than a stylesheet
-                // rule because this element's `display` comes from the `grid`
-                // utility above, and the utilities layer outranks index.css —
-                // see the matching note there.
-                sheetFull && "hidden"
+                outputOpen ? "z-[33]" : "z-10"
               )}>
                 <span className="inline-flex min-w-0 items-center gap-[0.4rem] justify-self-start overflow-hidden whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.92rem] font-bold">
                   <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
@@ -826,7 +820,6 @@ export const AppShell = memo(function AppShell({
               actionButtonsProps={actionButtonsProps}
               statusPill={dockStatusPill}
               onHeightChange={handleDockHeight}
-              className={sheetFull ? "hidden" : undefined}
             />
 
             <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
@@ -859,6 +852,7 @@ export const AppShell = memo(function AppShell({
             onDetentChange={handleDetentChange}
             onFollow={handleSheetFollow}
             onPeekHeightChange={handleSheetPeekHeight}
+            onFullGapChange={handleSheetFullGap}
             peekHeight={PEEK_HEIGHT}
             bottomInset={safeAreaBottom}
           >

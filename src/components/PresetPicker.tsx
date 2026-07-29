@@ -1,6 +1,12 @@
 // PresetPicker.tsx — a plain preset list (Bundled / Yours), with a
 // "Save current as…" row. Used as a popover on desktop (CommandBar) and as the
 // Presets tab on mobile.
+//
+// The three list-management actions — save-as, import, export — render two
+// ways, chosen by the `compact` prop: two standing rows on desktop, one
+// "Manage" popover on the mobile sheet, where they were spending a quarter of
+// the tab. Both presentations compose the SAME `saveField`/`importButton`/
+// `exportButton` below, so what the actions do can't drift between them.
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Design } from "../openscad/types";
@@ -235,7 +241,8 @@ export function PresetPicker({
 
   // Import / export saved presets as an OpenSCAD parameterSets file — the same
   // format the desktop Customizer reads and writes, so presets carry between
-  // the two. Shared by both footers, like `saveField` above.
+  // the two. Shared by both footers like `saveField`, bar the width/alignment
+  // each layout needs.
   const importButton = (
     <FileInput accept=".json,application/json" onFile={handleImport}>
       {(open) => (
@@ -269,12 +276,12 @@ export function PresetPicker({
   );
 
   // Desktop: both rows stand permanently, where the docked panel has the room.
-  const standingFooter = (
+  const standingFooter = () => (
     <>
       {saveField && (
-        <div className="preset-picker__save shrink-0 border-t px-[0.6rem] py-2">{saveField}</div>
+        <div className="shrink-0 border-t px-[0.6rem] py-2">{saveField}</div>
       )}
-      <div className="preset-picker__manage flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-[0.4rem]">
+      <div className="flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-[0.4rem]">
         {importButton}
         {exportButton}
       </div>
@@ -282,12 +289,20 @@ export function PresetPicker({
   );
 
   // Mobile: one row, one tap away from the same three actions. See the
-  // `compact` prop's own doc for why.
-  const compactFooter = (
-    <div className="preset-picker__manage flex shrink-0 items-center justify-end border-t px-[0.6rem] py-[0.3rem]">
+  // `compact` prop's own doc for why. Both footers are FUNCTIONS, not values:
+  // PresetPicker re-renders on every parameter change (it takes `values`), and
+  // building the branch that isn't used — a whole Popover tree, either way —
+  // on each of those was pure waste.
+  const compactFooter = () => (
+    <div className="flex shrink-0 items-center justify-end border-t px-[0.6rem] py-[0.3rem]">
       <Popover open={manageOpen} onOpenChange={setManageOpen}>
+        {/* `outline-none` suppresses index.css's global :focus-visible
+            outline, so the replacement ring is required — this is a native
+            <button> (PopoverTrigger needs the ref) and gets none of shadcn
+            Button's focus styling. `min-h-11` keeps it at the coarse-pointer
+            target floor the dock buttons and sheet tabs now share. */}
         <PopoverTrigger
-          className="inline-flex cursor-pointer items-center gap-[0.35rem] rounded-(--radius-sm) border-none bg-transparent px-2 py-[0.3rem] text-[0.85rem] text-muted-foreground outline-none hover:text-brand focus-visible:text-brand data-[state=open]:text-brand"
+          className="inline-flex min-h-11 cursor-pointer items-center gap-[0.35rem] rounded-(--radius-sm) border-none bg-transparent px-2 py-[0.3rem] text-[0.85rem] text-muted-foreground outline-none transition-[color,box-shadow] hover:text-brand focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:text-brand"
           aria-label={t("presets.manage")}
         >
           <MoreIcon size={15} aria-hidden="true" />
@@ -436,7 +451,7 @@ export function PresetPicker({
         )}
       </div>
 
-      {compact ? compactFooter : standingFooter}
+      {compact ? compactFooter() : standingFooter()}
     </div>
   );
 

@@ -1460,26 +1460,59 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
     }
   }
 
-  // (d) The viewer HUD must stay reachable at every detent, on the narrow and
-  //     short viewports where it used not to. The HUD is anchored to the top
-  //     of the viewer while the export dock rides the sheet UPWARD, and the
-  //     dock outranks it (z-10 vs z-5) — so at the half detent on a 360- or
-  //     320-wide phone the dock came to rest ON the rail's last buttons.
-  //     Counting elements can't see that (both are mounted and "visible"), so
-  //     this hit-tests each button's own centre, which is what a finger does.
-  //     The full detent is excluded on purpose: the sheet legitimately covers
-  //     the background there, and AppShell marks it `inert` (checked above).
+}
+
+// The viewer HUD must stay reachable at every detent, on the narrow and short
+// viewports where it used not to. The HUD is anchored to the top of the viewer
+// while the export dock rides the sheet UPWARD, and the dock outranks it (z-10
+// vs z-5) — so at the half detent on a 360- or 320-wide phone the dock came to
+// rest ON the rail's last buttons. Counting elements cannot see that (both are
+// mounted and "visible"), so this hit-tests each button's own centre, which is
+// what a finger does.
+//
+// The full detent is excluded on purpose: the sheet legitimately covers the
+// background there, AppShell marks it `inert`, and the chrome over the model
+// strip is hidden outright — all checked by the M16 block above.
+// Mirrors BottomSheet's DETENT_ORDER — the order Arrow Up/Down step through.
+const DETENTS = ["peek", "half", "full"];
+
+async function checkViewerHudReachable({ browser, base, check }) {
+  console.log("=== viewer HUD reachability (narrow + short viewports) ===");
   for (const [width, height] of [[360, 740], [320, 568]]) {
-    const { page, context } = await firstVisit(width, height);
+    const context = await browser.newContext({
+      viewport: { width, height },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+    });
+    const page = await context.newPage();
     try {
+      await page.goto(base, { waitUntil: "load" });
+      await dismissWelcomePopup(page);
+      await waitRenderDone(page).catch(() => {});
       for (const detent of ["peek", "half"]) {
-        // Cycle to the detent under test: the handle steps peek -> half -> full.
-        if (detent !== "peek") {
-          await page.locator(".sheet-handle").click();
-          await page.waitForSelector(`.bottom-sheet--${detent}`, { timeout: 3000 }).catch(() => {});
-          // Let the dock's `bottom` transition settle before measuring.
-          await page.waitForTimeout(450);
-        }
+        // Drive the sheet with the handle's ARROW KEYS, not its tap-to-cycle:
+        // the starting detent depends on the first-visit policy (a tall
+        // portrait viewport opens to half), so "click once to get to half"
+        // silently lands somewhere else on some viewports. Arrow Down/Up step
+        // one detent and stop at the ends, so Down x2 normalises to peek from
+        // anywhere and Up x N walks to the one under test.
+        await page.locator(".sheet-handle").focus();
+        for (let i = 0; i < DETENTS.length - 1; i++) await page.keyboard.press("ArrowDown");
+        for (let i = 0; i < DETENTS.indexOf(detent); i++) await page.keyboard.press("ArrowUp");
+        // Assert we actually GOT there before measuring. Swallowing this (as a
+        // bare `.catch(() => {})` would) turns a step that didn't take into a
+        // green "half" result measured at peek — the failure mode this whole
+        // check exists to catch, reported as a pass.
+        const reached = await page
+          .waitForSelector(`.bottom-sheet--${detent}`, { timeout: 3000 })
+          .then(() => true)
+          .catch(() => false);
+        check(reached, `${width}x${height}: sheet reached the ${detent} detent`);
+        if (!reached) continue;
+        // Let the dock's `bottom` transition settle before measuring — it
+        // mirrors the sheet's own 0.28s ease (see .action-dock in index.css).
+        await page.waitForTimeout(450);
         const covered = await page.evaluate(() =>
           Array.from(document.querySelectorAll(".viewer-hud button"))
             .filter((b) => b.getBoundingClientRect().width > 0)
@@ -1574,6 +1607,7 @@ async function main() {
     await checkSectionNavigator(ctx);
     await checkResponsiveLayout(ctx);
     await checkFirstVisitSheetPolicy(ctx);
+    await checkViewerHudReachable(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);

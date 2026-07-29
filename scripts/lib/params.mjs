@@ -1,7 +1,7 @@
 // params.mjs — parse OpenSCAD's Customizer syntax (the `// [Section]` headers,
 // `name = default; // [hint]` parameter lines, and the doc comments above them,
-// plus ScadPub's `@showIf` / `@font` / `@info` / `@review` / `@collapsed`
-// annotations) into the typed parameter schema the UI is generated from.
+// plus ScadPub's `@showIf` / `@font` / `@info` / `@review` / `@label` /
+// `@collapsed` annotations) into the typed parameter schema the UI is generated from.
 // Skips the [Hidden] section, exactly as OpenSCAD's own Customizer does.
 import { readFileSync } from "node:fs";
 
@@ -267,11 +267,16 @@ function validateAnnotations(params, lineInfo, absPath) {
 // after the `e.g.`, because the next token opens with a quote — turning a
 // legitimate parenthetical into a truncated label. Matched case-insensitively
 // against the last whitespace-delimited token before the dot, so `(e.g.` and
-// `e.g.` both hit. German designs use `z.B.`/`bzw.`, so those are here too.
-const SENTENCE_ABBREVIATIONS = new Set([
-  "e.g.", "i.e.", "etc.", "cf.", "vs.", "approx.", "ca.", "no.", "fig.",
-  "z.b.", "d.h.", "bzw.", "ggf.", "bspw.", "usw.", "vgl.",
-]);
+// `e.g.` both hit; `z.B.`/`d.h.` are the German designs' equivalents.
+//
+// Deliberately only abbreviations that essentially NEVER end a sentence. The
+// obvious extensions — `etc.`, `vs.`, `no.`, `ca.`, `fig.` — routinely do, and
+// listing one here would suppress a real boundary and silently restore the
+// paragraph-as-label bug this whole function exists to avoid. A missing entry
+// costs one over-long label, which `// @label` overrides anyway; a wrong entry
+// costs a truncated one with nothing to notice it. Grow it on evidence, not on
+// speculation.
+const SENTENCE_ABBREVIATIONS = new Set(["e.g.", "i.e.", "z.b.", "d.h."]);
 
 // Sentence boundary: `.!?` + whitespace + the start of the next sentence.
 // The lookahead accepts a capital or an opening paren — as it always has —
@@ -303,7 +308,7 @@ export function firstSentence(text) {
     // i.e. m.index is already "just past the .!?", and slicing to it keeps
     // the terminator without the following space.
     const end = m.index;
-    const lastToken = text.slice(0, end).split(/\s+/).pop() ?? "";
+    const lastToken = /\S+$/.exec(text.slice(0, end))?.[0] ?? "";
     // Strip any opening bracket/quote so `(e.g.` matches the bare `e.g.`.
     const bare = lastToken.replace(/^[([{"'“‘]+/, "").toLowerCase();
     if (SENTENCE_ABBREVIATIONS.has(bare)) continue;
@@ -507,12 +512,8 @@ export function parseParams(absPath) {
     if (pm) {
       const [, name, def, hint] = pm;
       // OpenSCAD's Customizer documents a parameter with the comment block
-      // directly above it. The first sentence is the label, the full block is
-      // help — unless `// @label "…"` supplied a short label outright, in which
-      // case the whole doc block stays as help and the annotation wins. Help is
-      // never dropped either way: ParamForm shows an ⓘ popover whenever `help`
-      // differs from the label, so an explanatory sentence demoted by `@label`
-      // is one tap away rather than gone.
+      // directly above it: its first sentence is the label and the full block
+      // is help — unless `// @label "…"` supplied one outright (see LABEL_RE).
       const trimmed = pendingDoc.map((d) => d.trim()).filter(Boolean);
       const help = trimmed.join(" ");
       const p = inferParam(name, def, hint, pendingLabel ?? firstSentence(help), help, section);
@@ -627,9 +628,6 @@ export function parseParams(absPath) {
         if (!label) fail(absPath, lineNo, `@review annotation must have a non-empty quoted label`);
         pendingReview = label;
       } else if (shortLabel) {
-        // Same required-and-non-empty rule as `@review` above: the whole point
-        // of the annotation is to supply a label, so `@label ""` is a mistake,
-        // not a way to clear one.
         const label = shortLabel[1].trim();
         if (!label) fail(absPath, lineNo, `@label annotation must have a non-empty quoted label`);
         pendingLabel = label;

@@ -12,6 +12,7 @@ import {
   frameDistanceForBox,
   cameraBasis,
   edgeInset,
+  singleEdgeInset,
   mergeInsets,
   clampInsets,
   insetFitFraction,
@@ -399,4 +400,46 @@ test("a portrait-corrected fit still yields to the chrome insets", () => {
   const withChrome = insetFitFraction(corrected, 390, 730, insets({ top: 58, bottom: 45 }));
   assert.ok(withChrome.height < corrected.height, "insets still shrink the height target");
   assert.ok(withChrome.width <= corrected.width, "and never grow the width target");
+});
+
+// ── singleEdgeInset: the caller-chosen edge for a corner overlay ────────────
+
+test("singleEdgeInset charges a corner overlay to the edge the caller names", () => {
+  // The mobile HUD's collapsed trigger: a 44px button in the top-right corner.
+  const hud = rect(334, 64, 44, 44);
+  // Left to edgeInset it reads as a right-edge band across the whole height…
+  assert.deepEqual(edgeInset(hud, CANVAS), insets({ right: CANVAS.right - 334 }));
+  // …but charged to the top it costs only its own depth from that edge.
+  assert.deepEqual(singleEdgeInset(hud, CANVAS, "top"), insets({ top: 108 }));
+});
+
+test("singleEdgeInset measures each edge from the right side of the canvas", () => {
+  const box = rect(40, 60, 100, 80); // left 40, top 60, right 140, bottom 140
+  assert.deepEqual(singleEdgeInset(box, CANVAS, "top"), insets({ top: 140 }));
+  assert.deepEqual(singleEdgeInset(box, CANVAS, "left"), insets({ left: 140 }));
+  assert.deepEqual(singleEdgeInset(box, CANVAS, "right"), insets({ right: CANVAS.right - 40 }));
+  assert.deepEqual(singleEdgeInset(box, CANVAS, "bottom"), insets({ bottom: CANVAS.bottom - 60 }));
+});
+
+test("singleEdgeInset clamps to the canvas and ignores an overlay clear of it", () => {
+  // Extends past both edges — the inset can never exceed the canvas.
+  const huge = rect(-50, -50, 1000, 2000);
+  assert.deepEqual(singleEdgeInset(huge, CANVAS, "top"), insets({ top: CANVAS.bottom }));
+  // Entirely outside: contributes nothing, same as edgeInset.
+  const away = rect(2000, 2000, 40, 40);
+  assert.deepEqual(singleEdgeInset(away, CANVAS, "top"), insets({}));
+  // Degenerate canvas.
+  assert.deepEqual(singleEdgeInset(rect(0, 0, 10, 10), rect(0, 0, 0, 0), "top"), insets({}));
+});
+
+test("charging a corner overlay to one edge only helps if it is charged ONCE", () => {
+  // Why Viewer.tsx's CHROME_OVERLAYS spells the general HUD entry
+  // `.viewer-hud:not(.viewer-hud--collapsed)`: insets merge by taking the
+  // DEEPEST per edge, so an overlay matched by both entries would keep its
+  // right-edge band next to the top charge and gain nothing.
+  const hud = rect(334, 64, 44, 44);
+  const bothWays = mergeInsets([singleEdgeInset(hud, CANVAS, "top"), edgeInset(hud, CANVAS)]);
+  assert.equal(bothWays.right, CANVAS.right - 334, "matching both entries keeps the band");
+  const onceOnly = mergeInsets([singleEdgeInset(hud, CANVAS, "top")]);
+  assert.deepEqual(onceOnly, insets({ top: 108 }), "matching one entry costs the top only");
 });

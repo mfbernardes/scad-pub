@@ -54,34 +54,62 @@ export function ViewPicker({ view, onSelect }: Props) {
         <TooltipContent side="left">{`View: ${current}`}</TooltipContent>
       </Tooltip>
       <PopoverContent side="left" align="start" className="w-auto min-w-[9rem] p-1">
-        <ul className="flex flex-col gap-[0.1rem]">
-          {VIEW_OPTIONS.map((o) => {
-            const active = o.id === view;
-            return (
-              <li key={o.id}>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-(--radius-sm) px-2 py-[0.35rem] text-left text-[0.85rem] text-foreground cursor-pointer hover:bg-muted focus-visible:bg-muted",
-                    active && "text-brand font-semibold"
-                  )}
-                  aria-current={active ? "true" : undefined}
-                  onClick={() => {
-                    onSelect(o.id);
-                    setOpen(false);
-                  }}
-                >
-                  {/* Fixed-width slot so labels align whether or not checkmarked. */}
-                  <span className="inline-flex w-4 shrink-0 text-brand" aria-hidden="true">
-                    {active && <CheckIcon size={15} />}
-                  </span>
-                  {o.label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <ViewOptionList
+          view={view}
+          onSelect={(v) => {
+            onSelect(v);
+            setOpen(false);
+          }}
+        />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * The list of standard views, checkmarked at the active one. Extracted so the
+ * desktop popover above and the mobile HUD's collapsed menu (ViewerHUD's
+ * `collapse` branch) render the SAME list — what the views are, how the active
+ * one is marked, and the fact that picking the current one re-snaps the camera
+ * are all properties of the control, not of either layout.
+ *
+ * `listClassName` is the one genuine difference: the mobile menu lays the
+ * seven options out two-up to stay one tap deep, where the desktop popover has
+ * the height for a single column.
+ */
+export function ViewOptionList({
+  view,
+  onSelect,
+  listClassName = "flex flex-col gap-[0.1rem]",
+}: {
+  view: ViewName;
+  onSelect: (view: ViewName) => void;
+  listClassName?: string;
+}) {
+  return (
+    <ul className={listClassName}>
+      {VIEW_OPTIONS.map((o) => {
+        const active = o.id === view;
+        return (
+          <li key={o.id}>
+            <button
+              type="button"
+              className={cn(
+                "flex w-full items-center gap-2 rounded-(--radius-sm) px-2 py-[0.4rem] text-left text-[0.85rem] text-foreground cursor-pointer hover:bg-muted focus-visible:bg-muted",
+                active && "text-brand font-semibold"
+              )}
+              aria-current={active ? "true" : undefined}
+              onClick={() => onSelect(o.id)}
+            >
+              {/* Fixed-width slot so labels align whether or not checkmarked. */}
+              <span className="inline-flex w-4 shrink-0 text-brand" aria-hidden="true">
+                {active && <CheckIcon size={15} />}
+              </span>
+              {o.label}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

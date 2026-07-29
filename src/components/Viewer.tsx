@@ -18,6 +18,7 @@ import {
   frameDistanceForBox,
   cameraBasis,
   edgeInset,
+  singleEdgeInset,
   mergeInsets,
   clampInsets,
   insetFitFraction,
@@ -51,7 +52,27 @@ declare const __APP_VIEWER_STYLE__: "plain" | "studio";
 
 // The floating chrome the camera fit clears — see chromeInsets below for what
 // qualifies and what deliberately doesn't.
-const CHROME_SELECTORS = [".mobile-top-bar", ".action-dock", ".viewer-hud"];
+//
+// `edge` overrides framing.ts's "charge it to the side it intrudes from least"
+// rule for an overlay that is a corner BOX rather than an edge band. The
+// mobile HUD is one: collapsed, it is a single ~44px trigger in the top-right
+// corner (ViewerHUD's `collapse` branch). Left to the default it reads as a
+// right-edge band and charges its width across the canvas's whole height,
+// shrinking the model for chrome that occupies one corner. Charging it to the
+// top is the cheaper truthful answer — the top bar already reserves a band
+// there, so the two merge instead of stacking — and it still keeps the model
+// clear of the button, which is the point. The desktop HUD is a genuine
+// right-edge column and keeps the default.
+// The two HUD entries are mutually exclusive by construction — `:not()` on the
+// general one — because insets MERGE by taking the deepest per edge. Letting a
+// collapsed HUD match both would keep the right-edge band alongside the top
+// charge and undo the whole point of the override.
+const CHROME_OVERLAYS: { selector: string; edge?: keyof Insets }[] = [
+  { selector: ".mobile-top-bar" },
+  { selector: ".action-dock" },
+  { selector: ".viewer-hud:not(.viewer-hud--collapsed)" },
+  { selector: ".viewer-hud--collapsed", edge: "top" },
+];
 
 // Axis-aligned bounding-box size of the rendered model, in millimetres (the
 // design's own units, kept 1:1 by the loaders). Reported via Viewer's onMeasure.
@@ -304,28 +325,11 @@ export const Viewer = forwardRef<
   function chromeInsets(mount: HTMLElement): Insets {
     const canvas = mount.getBoundingClientRect();
     const insets: Insets[] = [];
-    for (const selector of CHROME_SELECTORS) {
+    for (const { selector, edge } of CHROME_OVERLAYS) {
       const el = document.querySelector<HTMLElement>(selector);
       if (!el) continue;
       const rect = el.getBoundingClientRect();
-      // framing.ts's edgeInset assigns an overlay to the edge it intrudes from
-      // least, which is right for an edge BAND and — as its own doc warns —
-      // the worst case for a corner box. The mobile HUD is exactly that case
-      // now that it collapses to a single trigger: a ~44px button tucked in
-      // the top-right corner. Left to edgeInset it reads as a right-edge band
-      // and charges its width across the canvas's whole height, shrinking the
-      // model for chrome that only occupies one corner.
-      //
-      // Charge it to the TOP instead, down to its own lower edge. That is the
-      // cheaper of the two truthful answers — the top bar already reserves a
-      // band there, so the two merge rather than stacking — and it still keeps
-      // the model clear of the button, which is the point of the inset.
-      if (el.classList.contains("viewer-hud--collapsed")) {
-        const fromTop = Math.min(Math.max(rect.bottom - canvas.top, 0), canvas.height);
-        insets.push({ top: fromTop, right: 0, bottom: 0, left: 0 });
-        continue;
-      }
-      insets.push(edgeInset(rect, canvas));
+      insets.push(edge ? singleEdgeInset(rect, canvas, edge) : edgeInset(rect, canvas));
     }
     return clampInsets(mergeInsets(insets), canvas.width, canvas.height);
   }

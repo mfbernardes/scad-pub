@@ -296,6 +296,26 @@ function NumberControl({
   );
 }
 
+/**
+ * Whether `param`'s control needs the full width of a form row, so a compact
+ * (mobile) layout must keep it stacked under its label rather than beside it.
+ *
+ * Lives beside `Control` because it is a statement about which WIDGET the
+ * param resolves to: a ranged number renders a Slider plus a numeric input
+ * (NumberControl's `hasRange`), which in a 48% column leaves the slider too
+ * short to aim at, and an `@svg` field's control is a whole wizard launcher. A
+ * `@filledBy` param rides its own inner disclosure and keeps the stacked
+ * layout too. Deriving it at the call site instead would let the layout and
+ * the widget disagree the next time either changes.
+ */
+function controlNeedsFullRow(param: Param): boolean {
+  return (
+    (param.type === "number" && param.min !== undefined && param.max !== undefined) ||
+    (param.type === "string" && param.svg != null) ||
+    param.filledBy != null
+  );
+}
+
 function Control({
   param,
   value,
@@ -421,7 +441,15 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
+// The two densities' spacing, side by side so a change to one is made against
+// the other rather than three conditionals apart. See Props.compact.
+const DENSITY = {
+  regular: { group: "mb-3", summary: "py-[0.6rem]", row: "my-3 gap-[0.35rem]" },
+  compact: { group: "mb-2", summary: "py-[0.45rem]", row: "my-2 gap-[0.25rem]" },
+} as const;
+
 export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true, onShowAdvancedChange, compact = false, ref }: Props) {
+  const density = compact ? DENSITY.compact : DENSITY.regular;
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
@@ -514,7 +542,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
         const isOpen = openSections[section] ?? !collapsedDefault.has(section);
         return (
           <details
-            className={`param-group rounded-lg border bg-background/50 px-[0.8rem] open:pb-2 ${compact ? "mb-2" : "mb-3"}`}
+            className={`param-group rounded-lg border bg-background/50 px-[0.8rem] open:pb-2 ${density.group}`}
             key={section}
             data-section={section}
             open={q ? true : isOpen}
@@ -530,7 +558,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               setOpenSections((prev) => (prev[section] === next ? prev : { ...prev, [section]: next }));
             }}
           >
-            <summary className={`font-display flex cursor-pointer select-none list-none items-center px-[0.2rem] text-[0.92rem] font-semibold text-brand focus-visible:rounded-[4px] ${compact ? "py-[0.45rem]" : "py-[0.6rem]"}`}>
+            <summary className={`font-display flex cursor-pointer select-none list-none items-center px-[0.2rem] text-[0.92rem] font-semibold text-brand focus-visible:rounded-[4px] ${density.summary}`}>
               {section}
             </summary>
             {params.map((p) => {
@@ -544,17 +572,8 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               // control row below would leave a stranded switch.
               const isToggle = p.type === "boolean";
               // In compact (mobile) mode most controls join the toggle on the
-              // label row. The exceptions are the ones that genuinely need the
-              // full width: a ranged number is a slider plus a numeric input,
-              // which in a 48% column leaves the slider too short to aim at,
-              // and an `@svg` field's control is a whole wizard launcher. A
-              // `@filledBy` param already rides its own inner disclosure, so
-              // it keeps the stacked layout too.
-              const needsFullRow =
-                (p.type === "number" && p.min !== undefined && p.max !== undefined) ||
-                (p.type === "string" && p.svg != null) ||
-                p.filledBy != null;
-              const sideBySide = compact && !isToggle && !needsFullRow;
+              // label row; see controlNeedsFullRow for the exceptions.
+              const sideBySide = compact && !isToggle && !controlNeedsFullRow(p);
               // Tier-2 preset-diff marker (see PresetDiffBar for Tier 1): this
               // param's value differs from the baseline (selected preset, or
               // design defaults). Neutral/slate — never the warn colour.
@@ -603,7 +622,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                         label and a long one give the control the same size and
                         the column of controls stays aligned down the form. */}
                     {sideBySide && (
-                      <span className="param__control w-[48%] min-w-[8.5rem] shrink-0">{control}</span>
+                      <span className="w-[48%] min-w-[8.5rem] shrink-0">{control}</span>
                     )}
                   </span>
                   {!isToggle && !sideBySide && control}
@@ -636,7 +655,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               // an inner "Advanced" disclosure — demoted, but still hand-editable.
               return (
                 <div
-                  className={`param flex flex-col ${compact ? "my-2 gap-[0.25rem]" : "my-3 gap-[0.35rem]"}`}
+                  className={`param flex flex-col ${density.row}`}
                   key={p.name}
                   data-param={p.name}
                 >

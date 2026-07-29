@@ -3,6 +3,7 @@
   "status.ready": "Ready to download",
   "status.failed": "Preview failed",
   "status.reviewTitle": "Review this design before downloading",
+
   "error.bootstrapFailed": "The 3D engine couldn't start — check your connection and try again.",
   "error.renderFailed": "Preview could not be updated",
   "error.generic": "That combination of settings didn't work",
@@ -10,6 +11,7 @@
   "error.modalLoadFailed": "This dialog couldn't be loaded — check your connection, then reload to try again.",
   "error.modalLoadFailedReason": "Reloading is the fix: a failed load like this is cached for the rest of this visit, so retrying without reloading won't re-fetch it.",
   "error.reload": "Reload",
+
   "review.title": "Review",
   "review.descriptionFailure": "The last render failed — see the details below.",
   "review.descriptionSummary": "A summary of what will be downloaded, and anything that still needs your attention.",
@@ -17,37 +19,49 @@
   "review.downloadAnyway": "Download anyway",
   "review.issueCount#one": "{count} issue to review",
   "review.issueCount#other": "{count} issues to review",
+
   "common.close": "Close",
+
   "presets.title": "Presets",
   "presets.manage": "Manage",
+
   "action.export": "Download for 3D printing",
   "action.share": "Share",
+
   "dock.copyLink": "Copy link",
   "dock.exportAria": "Download {format} for slicers and print services",
   "dock.buildingReason": "Still building the preview…",
   "dock.staleReason": "Preview out of date — render first",
+
   "attention.fontFallbackLead": "Font not loaded",
   "attention.substituteFont": "The preview uses a substitute font.",
   "attention.importFont": "Import font…",
   "attention.useBundledFont": "Use a bundled font",
   "attention.noticePending": "{count} {label} pending",
   "attention.viewMessages": "View messages",
+
   "exportSuccess.title": "Your file is on its way",
   "exportSuccess.body": "Check your browser's downloads, then slice and print when you're ready.",
   "exportSuccess.openHelp": "Open printing help",
   "exportSuccess.dismiss": "Dismiss",
+
   "hint.rotateZoomMouse": "Drag to rotate · Scroll to zoom",
   "hint.rotateZoomTouch": "Drag to rotate · Pinch to zoom",
   "hint.sheetSwipeUp": "Swipe up for settings",
+
   "hud.showGrid": "Show grid",
   "hud.hideGrid": "Hide grid",
   "hud.viewOptions": "View options",
   "hud.viewHeading": "View",
+
   "editOnModel.open": "Edit text",
   "editOnModel.label": "Text",
+
   "stale.updating": "Updating…",
+
   "console.title": "Messages",
   "console.rawOutput": "Raw output",
+
   "files.title": "Files",
   "files.empty": "No files imported yet.",
   "files.emptyFonts": "Fonts are imported from a font control.",
@@ -58,6 +72,7 @@
   "files.remove": "Remove {name}",
   "files.clearAll": "Clear all imported files",
   "svg.missing": "“{name}” isn’t imported — prepare or import it again.",
+
   "presetDiff.changesFrom#one": "{count} change from",
   "presetDiff.changesFrom#other": "{count} changes from",
   "presetDiff.defaults": "defaults",
@@ -65,6 +80,7 @@
   "presetDiff.revert": "Revert",
   "presetDiff.revertTo": "Revert to {name}",
   "presetDiff.reset": "Reset",
+
   "settings.title": "Customize",
   "settings.openPanel": "Open the {label} panel",
   "settings.jumpToSection": "Jump to section",

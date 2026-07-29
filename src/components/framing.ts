@@ -234,11 +234,13 @@ export const MIN_USABLE_FRACTION = 0.55;
  * a full-width top bar as a top inset.
  *
  * Overlays that don't overlap the canvas at all contribute nothing. An
- * overlay pinned to a CORNER would be the case this rule handles least well —
- * it is genuinely a corner box, not an edge band, so whichever edge wins
- * over-counts the other axis. Nothing passed here today is one: the viewer's
- * only corner overlay is the measurements panel, which is deliberately left
- * out of the fit entirely (see Viewer.tsx's chromeInsets).
+ * overlay pinned to a CORNER is the case this rule handles least well — it is
+ * genuinely a corner box, not an edge band, so whichever edge wins
+ * over-counts the other axis. Two of the viewer's overlays are corner boxes,
+ * and neither goes through this function: the measurements panel is left out
+ * of the fit entirely, and the mobile HUD's collapsed trigger declares its
+ * edge and goes through `singleEdgeInset` below. See Viewer.tsx's
+ * CHROME_OVERLAYS.
  */
 export function edgeInset(overlay: RectLike, canvas: RectLike): Insets {
   const width = canvas.right - canvas.left;
@@ -260,6 +262,41 @@ export function edgeInset(overlay: RectLike, canvas: RectLike): Insets {
   if (nearest === fromBottom) return { ...NO_INSETS, bottom: fromBottom };
   if (nearest === fromLeft) return { ...NO_INSETS, left: fromLeft };
   return { ...NO_INSETS, right: fromRight };
+}
+
+/**
+ * The inset an overlay implies when the caller already knows which edge it
+ * should be charged to: its depth from that edge, clamped to the canvas, with
+ * the other three edges left clear.
+ *
+ * `edgeInset` picks the edge itself by "least intrusion", which is right for a
+ * band spanning one whole side and — as its doc says — worst for a corner box,
+ * where the winning edge over-counts the other axis. A corner overlay's right
+ * answer depends on what ELSE is on screen (charging the mobile HUD's trigger
+ * to the top is only cheap because the top bar already reserves a band there),
+ * which this module cannot see. So the choice stays with the caller and the
+ * arithmetic stays here, tested, rather than being hand-rolled at the call
+ * site. See Viewer.tsx's CHROME_OVERLAYS.
+ */
+export function singleEdgeInset(
+  overlay: RectLike,
+  canvas: RectLike,
+  edge: keyof Insets
+): Insets {
+  const width = canvas.right - canvas.left;
+  const height = canvas.bottom - canvas.top;
+  if (width <= 0 || height <= 0) return { ...NO_INSETS };
+  // No overlap at all — nothing to clear. Same two guards as edgeInset.
+  if (overlay.right <= canvas.left || overlay.left >= canvas.right) return { ...NO_INSETS };
+  if (overlay.bottom <= canvas.top || overlay.top >= canvas.bottom) return { ...NO_INSETS };
+
+  const clamp = (v: number, size: number) => Math.min(Math.max(v, 0), size);
+  switch (edge) {
+    case "top": return { ...NO_INSETS, top: clamp(overlay.bottom - canvas.top, height) };
+    case "bottom": return { ...NO_INSETS, bottom: clamp(canvas.bottom - overlay.top, height) };
+    case "left": return { ...NO_INSETS, left: clamp(overlay.right - canvas.left, width) };
+    case "right": return { ...NO_INSETS, right: clamp(canvas.right - overlay.left, width) };
+  }
 }
 
 /** Combine several overlays' insets by taking the deepest on each edge —
