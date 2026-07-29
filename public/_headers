@@ -5,6 +5,22 @@
 # version-pinned but served under a stable filename, so it gets a day of
 # browser cache (the app's own versioned Cache Storage makes browser-cache
 # lifetime mostly moot anyway).
+#
+# This is only PART of what ships as dist/_headers. vite.config.ts's
+# securityHeaders plugin appends a further `/*` block at build time — the app
+# document's Content-Security-Policy, X-Frame-Options, X-Content-Type-Options,
+# Referrer-Policy and Permissions-Policy — computed fresh on every build
+# because its script-src needs the built index.html's inline theme-script
+# hash, which varies per config (see src/lib/securityHeaders.mjs for the
+# policy and its rationale). That block is deliberately not committed here.
+# Cloudflare Pages combines every matching rule for a request; where two
+# matching rules set the same header name (e.g. this file's /scad/* CSP and
+# the appended /* CSP, for a request under /scad/), it joins the values with
+# a comma rather than letting one replace the other — for Content-Security-
+# Policy specifically, a comma-separated value is a list of policies the
+# browser enforces as their INTERSECTION, so both stay in force together. So
+# don't be surprised that a freshly built dist/_headers has more in it than
+# this file: that's the /* block above, not a change to what's committed here.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 /wasm/*

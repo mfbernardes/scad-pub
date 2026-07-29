@@ -223,6 +223,23 @@ input SVGs under `/scad/` get none). This is one more reason the trust model
 above is load-bearing: on GitHub Pages, treat everything under `source` and
 every config-referenced path as fully trusted, full stop.
 
+The same absence covers the app document itself, not just the SVG paths
+above. At build time, `vite.config.ts`'s `securityHeaders` plugin appends a
+further `/*` block to `dist/_headers` — a `Content-Security-Policy` scoped to
+the app (`script-src` allow-lists only `'self'`, `'wasm-unsafe-eval'` for
+OpenSCAD-WASM, and a sha256 hash of the built inline theme script), plus
+`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer` and a `Permissions-Policy` denying camera/
+microphone/geolocation (see `src/lib/securityHeaders.mjs` for the policy and
+its rationale). On Cloudflare Pages / Netlify this is real protection —
+`frame-ancestors 'none'` and `X-Frame-Options: DENY` in particular are what
+stop the export flow from being framed for clickjacking. **On GitHub Pages,
+neither the SVG containment headers nor this app-document CSP/frame
+protection ever reaches the browser** — both live only in `_headers`, which
+that host ignores outright. There is no equivalent on GitHub Pages; if
+clickjacking or CSP protection matters for your deployment, use a host that
+honours `_headers`.
+
 ## Title and logo
 
 These keys control the browser title and the brand shown in the app header:

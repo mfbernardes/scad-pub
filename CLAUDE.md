@@ -94,11 +94,15 @@ bundle; serve `.wasm` as `application/wasm`.
 
 ## App structure
 
-State lives in `App.tsx` — debounced auto-render, the heavy-render brake (renders past
-`HEAVY_RENDER_MS` auto-pause live updates, and `heavy` designs start manual), export, presets,
-fonts, URL state, theme, PWA notices. `AppShell.tsx` is a pure view extraction choosing the
-docked `ParamPanel` or the mobile `BottomSheet`; only the active layout mounts a `Viewer`,
-lazy-loaded to keep three.js out of the initial chunk.
+State lives in `App.tsx` — export, presets, fonts, URL state, theme, PWA notices — with render
+orchestration (debounced auto-render, the heavy-render brake: renders past `HEAVY_RENDER_MS`
+auto-pause live updates, and `heavy` designs start manual) factored into `useRenderPipeline`.
+`AppShell.tsx` composes that state into layout: which breakpoint's tree mounts (the docked
+`ParamPanel` or the mobile `BottomSheet`; only the active layout mounts a `Viewer`, lazy-loaded
+to keep three.js out of the initial chunk), plus three extracted hooks for the logic that isn't
+layout — `useReadinessModel` (production-readiness derivation and the Review dialog),
+`useOutputConsole` (the Output console's open/auto-open state), and `useSheetPolicy` (the mobile
+sheet's first-visit policy).
 
 Action callbacks reach the panels through the `AppActions` context (`src/lib/appActions.ts`)
 instead of prop drilling; the provider's value is ref-backed and stable, so a consumer never

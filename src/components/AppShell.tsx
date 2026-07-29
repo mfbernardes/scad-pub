@@ -2,8 +2,19 @@
 //   Desktop (≥ 860px): CommandBar + docked ParamPanel + ActionCluster + ViewerHUD
 //   Mobile (< 860px):  full-bleed viewer + top bar + BottomSheet + floating ActionCluster
 // Both layouts float the same compact action cluster over the viewer bottom —
-// mobile no longer reserves a solid footer band. All state/logic stays in
-// App.tsx; this is a pure view extraction.
+// mobile no longer reserves a solid footer band.
+//
+// App.tsx still owns render orchestration (useRenderPipeline) and the values/
+// presets/export/URL/theme state a design edit touches. What AppShell itself
+// owns is layout: which breakpoint's tree is mounted, panel width, focus
+// restoration and `inert` management across a breakpoint switch, and the
+// handful of viewer/panel toggles (dimensions, grid, view) both layouts
+// share. The three self-contained pieces that used to be inline here —
+// production-readiness derivation + the Review dialog
+// (useReadinessModel.ts), the Output console's open/auto-open state machine
+// (useOutputConsole.ts), and the mobile sheet's first-visit policy
+// (useSheetPolicy.ts) — are extracted hooks this component composes, not
+// logic it owns itself.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import type { Design, Schema, UiConfig, WorkerProgress } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
@@ -45,7 +56,6 @@ import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
 import { BookOpen as GuideIcon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { ViewerStage } from "./ViewerStage";
-import { stageLoading } from "../lib/renderStatus";
 import { ViewerHUD } from "./ViewerHUD";
 import { DEFAULT_VIEW, type ViewName } from "./views";
 import { OutputConsole } from "./OutputConsole";
@@ -53,7 +63,6 @@ import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
 import { DesignPicker } from "./DesignPicker";
 import { BarBrand } from "./BarBrand";
-import { parseDiagnostics, countBadges } from "../lib/diagnostics";
 import { parseComputedInfo } from "../lib/computedInfo";
 import {
   fontFaces,
@@ -77,14 +86,10 @@ import {
   MEASURE_COLLAPSED_KEY,
   initialMeasureCollapsed,
 } from "../lib/viewerPrefs";
-import { SHEET_INTRODUCED_KEY, initialSheetDetent } from "../lib/sheetPolicy";
 import { SheetSwipeHint } from "./SheetSwipeHint";
-import {
-  deriveAttention,
-  readinessState,
-  type NoticeAttentionInput,
-} from "../lib/readiness";
-import { friendlyRenderError } from "../lib/friendlyErrors";
+import { useReadinessModel } from "../lib/useReadinessModel";
+import { useOutputConsole } from "../lib/useOutputConsole";
+import { useSheetPolicy } from "../lib/useSheetPolicy";
 import { ReviewDialog } from "./ReviewDialog";
 import { StatusStrip, type StatusStripProps } from "./StatusStrip";
 
@@ -300,62 +305,18 @@ export const AppShell = memo(function AppShell({
   // clears the gesture bar. Its JS geometry must match that CSS bottom offset.
   // Off-iOS the inset is 0.
   const safeAreaBottom = useSafeAreaBottom();
-  const [outputOpen, setOutputOpen] = useState(
-    schema.ui?.outputDefault === "open"
-  );
-  const outputOpenRef = useRef(outputOpen);
-  outputOpenRef.current = outputOpen;
-  // First-visit mobile bottom-sheet policy (src/lib/sheetPolicy.ts): on a mobile
-  // visitor's genuine first visit the settings sheet opens partway ("half" on a
-  // tall viewport, "peek" on a short/landscape one) so a new visitor sees the
-  // settings exist while the model stays meaningfully visible; every later visit
-  // starts at "peek". Desktop never uses the sheet, so it keeps the prior "peek"
-  // default, touches no storage, and shows no hint.
-  //
-  // Resolved once, on mount, in a single lazy pass held in a ref rather than two
-  // useState initializers, because the detent and the hint share one decision:
-  // the detent branch SETS the introduced flag, so a second initializer
-  // re-reading it could no longer tell this was a first visit. Deciding both
-  // together — before that write is observable to any later read — keeps them
-  // consistent, and the write itself is the once-per-browser guard (the flag
-  // exists ever after, so `firstVisitPeek` can only ever be true on this mount).
-  const initialSheet = useRef<{ detent: SheetDetent; firstVisitPeek: boolean } | null>(null);
-  if (initialSheet.current === null) {
-    if (!isMobile || readLocal(SHEET_INTRODUCED_KEY) !== null) {
-      initialSheet.current = { detent: "peek", firstVisitPeek: false };
-    } else {
-      const detent = initialSheetDetent(window.innerHeight, window.innerWidth > window.innerHeight);
-      writeLocal(SHEET_INTRODUCED_KEY, "1");
-      initialSheet.current = { detent, firstVisitPeek: detent === "peek" };
-    }
-  }
-  // Sheet detent state (peek/half/full). On mobile the output overlay now covers
-  // the sheet, so it no longer has to be positioned relative to the detent.
-  const [sheetDetent, setSheetDetent] = useState<SheetDetent>(initialSheet.current.detent);
-  // Whether to show the one-time "Swipe up for settings" nudge — true only on a
-  // first-visit mount that resolved to peek (a half-open sheet needs no nudge).
-  // Dismissed on the first sheet interaction or a timeout (SheetSwipeHint), and
-  // permanently false thereafter for this session.
-  const [showSheetHint, setShowSheetHint] = useState(initialSheet.current.firstVisitPeek);
-  const dismissSheetHint = useCallback(() => setShowSheetHint(false), []);
-  // …but not before there's anything to nudge the visitor TOWARDS. The nudge's
-  // fade timeout runs from the moment it mounts (SheetSwipeHint), so it must
-  // not mount while the visitor can't act on it — otherwise the whole
-  // once-per-browser nudge expires unseen and, since the introduced flag was
-  // written on mount, never comes back. Two ways that happens, both invisible
-  // on a fast machine and both certain on a slow phone:
-  //   • first-run boot — a cold ~10 MB engine download plus the first render
-  //     easily outlasts the timeout, leaving the nudge to fade behind the
-  //     "Getting things ready…" overlay. Same signal ViewerGestureHint arms on.
-  //   • the config's welcome popup — the one modal that opens by itself on a
-  //     first visit and covers everything, including this chip. A visitor who
-  //     reads it (or, in `popup.mode: "picker"`, browses the design cards) for
-  //     longer than the timeout would come out the other side to nothing.
-  // Not sticky: a later design switch re-raises the loading overlay, and it's
-  // better to re-show the still-undismissed nudge over the new model than to
-  // let it tick away over a spinner. Once the visitor touches the sheet (or it
-  // times out while genuinely visible) `showSheetHint` retires it for good.
-  const sheetHintArmed = !introOpen && !stageLoading({ ready, rendering, result });
+  // First-visit mobile bottom-sheet policy, the sheet's detent state, and the
+  // "swipe up for settings" nudge's visibility — see useSheetPolicy.ts. Layout
+  // (handleDetentChange, handleSheetFollow, the mobileBackgroundRef `inert`
+  // effect below) still reads/drives `sheetDetent` directly; only the
+  // first-visit policy that seeds it lives in the hook.
+  const { sheetDetent, setSheetDetent, showSheetHint, dismissSheetHint, sheetHintArmed } = useSheetPolicy({
+    isMobile,
+    introOpen,
+    ready,
+    rendering,
+    result,
+  });
 
   // Panel tab + search state (see M7): hoisted here — above the desktop/mobile
   // split below — so ONLY the active layout mounts (ParamPanel or SheetTabs,
@@ -431,9 +392,6 @@ export const AppShell = memo(function AppShell({
   const afterExport = ui.afterExport;
 
   const log = result?.log ?? EMPTY_LOG;
-  // Memoized so a config without `notices` doesn't hand a fresh `[]` to the
-  // useMemo hooks below on every render.
-  const notices = useMemo(() => schema.notices ?? [], [schema.notices]);
   // Gates the toolbar's "Files" action (BarActions) — the actual FilesModal
   // (import button + imported-file list) is hosted in App.tsx alongside
   // Help/Licenses/DesignDoc, opened via AppActions' `showFiles`. Neither
@@ -477,91 +435,34 @@ export const AppShell = memo(function AppShell({
     [schema.assets, userFiles]
   );
 
-  // Parse the log once here; the OutputConsole (Notices tab count chips) reads
-  // this derived data instead of re-parsing it.
-  const diagnostics = useMemo(() => parseDiagnostics(log, notices), [log, notices]);
-  const badges = useMemo(() => countBadges(log, notices), [log, notices]);
   // Rows from `echo("@info", label, unit, value)` — internally-calculated
   // values the design surfaced at render time (see lib/computedInfo.ts).
   const computedInfo = useMemo(() => parseComputedInfo(log), [log]);
 
-  // Production-readiness (src/lib/readiness.ts): a structured, typed list of
-  // real gaps between "rendered" and "ready to ship" — a font param whose
-  // selected family isn't loaded, or a flagged notice category with a pending
-  // notice — plus the overall state that drives the status strip/dock/review
-  // dialog. `badges` (already computed above for the Notices tab) gives each
-  // notice category's live pending count; joined here with the category's own
-  // config-declared `attention`/`label` so deriveAttention can decide which
-  // ones matter without re-scanning the raw log itself.
-  const noticeAttentionInputs: NoticeAttentionInput[] = useMemo(
-    () =>
-      notices.map((n) => ({
-        marker: n.marker,
-        label: n.label,
-        attention: n.attention === true,
-        subsumedByFont: n.subsumedByFont === true,
-        count: badges.find((b) => b.key === `notice:${n.marker}`)?.count ?? 0,
-      })),
-    [notices, badges]
-  );
-  // Attention-flagged diagnostics that aren't already one of the notice
-  // categories above — see readiness.ts's `DeriveAttentionInputs.diagnostics`
-  // for why `level === "notice"` is excluded here.
-  //
-  // Only surfaced for a render that actually SUCCEEDED: a currently-FAILED
-  // render's own diagnostics (e.g. the very assert that failed it) are
-  // already explained by the Review dialog's friendly-failure card (see
-  // `failure` below) — stacking them as attention items too would just
-  // repeat the same message under a second heading. readinessState's own
-  // failed > attention precedence already keeps the overall readiness state
-  // correct either way, but the Review dialog renders `attention` cards
-  // unconditionally alongside a failure card, so the gate has to live here.
-  const diagnosticAttentionInputs: string[] = useMemo(
-    () =>
-      result?.ok ? diagnostics.filter((d) => d.attention && d.level !== "notice").map((d) => d.text) : [],
-    [diagnostics, result]
-  );
-  const attention = useMemo(
-    () =>
-      deriveAttention({
-        params: design.params,
-        values,
-        availableFontFamilies,
-        notices: noticeAttentionInputs,
-        diagnostics: diagnosticAttentionInputs,
-      }),
-    [design.params, values, availableFontFamilies, noticeAttentionInputs, diagnosticAttentionInputs]
-  );
-  // `result` is the only render outcome readiness cares about: null until a
-  // FIRST render has ever landed (readinessState's "building"), regardless of
-  // whether a later live edit is currently re-rendering over it — matching
-  // the viewer's own "Building your preview…" vs. "Updating…" distinction.
-  const readiness = useMemo(() => readinessState(result ? result.ok : null, attention), [result, attention]);
-  // Friendly {title, body, technical} mapping of a failed render, shared by
-  // the Notices tab (OutputConsole) and the Review dialog so a failure reads
-  // identically wherever it surfaces. Null on a missing/successful result.
-  const failure = useMemo(() => friendlyRenderError(result), [result]);
-
-  // Review dialog: one instance, its content and footer driven entirely by the
-  // live `readiness`/`attention`/`failure` above — both entry points (the dock
-  // Download button and the status strip) open the identical dialog; the footer
-  // reflects the current review state, not how it was opened. See ReviewDialog's
-  // own doc.
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const openReview = useCallback(() => {
-    setReviewOpen(true);
-  }, []);
-  // The dock's Download click: a ready render downloads directly (subject to
-  // the same `exportable` safety gate exportModel itself re-checks); anything
-  // else (attention/failed/building) opens the review dialog instead of doing
-  // nothing or exporting something stale/broken.
-  const handleDownloadClick = useCallback(() => {
-    if (readiness === "ready") {
-      if (exportable) actions.exportModel();
-      return;
-    }
-    openReview();
-  }, [readiness, exportable, actions, openReview]);
+  // Production-readiness derivation (diagnostics/notices → count badges →
+  // attention items → readiness → failure card state), plus the Review
+  // dialog's open/closed state and the dock Download button's routing through
+  // it — see useReadinessModel.ts. `availableFontFamilies` is computed above
+  // (ParamPanel/SheetTabs need the same set), so it's threaded in rather than
+  // recomputed.
+  const {
+    diagnostics,
+    badges,
+    attention,
+    readiness,
+    failure,
+    reviewOpen,
+    setReviewOpen,
+    openReview,
+    handleDownloadClick,
+  } = useReadinessModel({
+    design,
+    values,
+    result,
+    notices: schema.notices,
+    availableFontFamilies,
+    exportable,
+  });
 
   const handleSavePng = useCallback(() => {
     const url = (isMobile ? mobileViewerRef : desktopViewerRef).current?.snapshot();
@@ -575,17 +476,21 @@ export const AppShell = memo(function AppShell({
     (isMobile ? mobileViewerRef : desktopViewerRef).current?.setView(next);
   }, [isMobile]);
 
-  // Open the overlay and collapse the sheet to peek, so the overlay's fixed
-  // anchor (just above the peek tab row) never overlaps an expanded sheet.
-  const openOutput = useCallback(() => {
-    setOutputOpen(true);
-    setSheetDetent("peek");
-  }, []);
-
-  const toggleOutput = useCallback(() => {
-    if (outputOpenRef.current) setOutputOpen(false);
-    else openOutput();
-  }, [openOutput]);
+  // Output console open/closed state + its auto-open-on-problem machine (see
+  // useOutputConsole.ts). Opening the console has to collapse an expanded
+  // sheet to peek — the overlay's fixed anchor sits just above the peek tab
+  // row — but that hook has no reason to know about sheet state, so the
+  // collapse is injected as a callback instead. Wrapped in its own
+  // zero-dependency useCallback (setSheetDetent is a useState setter, always
+  // identity-stable) so this stays identity-stable too, which keeps
+  // useOutputConsole's `openOutput` — and therefore `toggleOutput`, handed to
+  // the memo'd CommandBar — stable across renders as well.
+  const collapseSheetToPeek = useCallback(() => setSheetDetent("peek"), [setSheetDetent]);
+  const { outputOpen, openOutput, closeOutput, toggleOutput } = useOutputConsole({
+    diagnostics,
+    defaultOpen: schema.ui?.outputDefault === "open",
+    collapseSheet: collapseSheetToPeek,
+  });
 
   // Raising the sheet off peek (dragging the handle OR tapping a tab) would slide
   // its content up under the overlay — close the overlay on any such change so
@@ -593,13 +498,13 @@ export const AppShell = memo(function AppShell({
   const handleDetentChange = useCallback((d: SheetDetent) => {
     setSheetDetent(d);
     if (d !== "peek") {
-      setOutputOpen(false);
+      closeOutput();
       // The visitor has opened the sheet, so the first-visit nudge has done its
       // job — retire it for good. Without this a keyboard user who expands then
       // collapses the sheet before the timeout would see the hint return.
-      setShowSheetHint(false);
+      dismissSheetHint();
     }
-  }, []);
+  }, [setSheetDetent, closeOutput, dismissSheetHint]);
 
   // Size the mobile viewer to follow the sheet's live height: write the sheet
   // height (px) into --sheet-follow-h, which sets the viewer's bottom edge —
@@ -637,39 +542,13 @@ export const AppShell = memo(function AppShell({
     shellRef.current?.style.setProperty("--action-dock-h", `${Math.round(heightPx)}px`);
   }, []);
 
-  // Info-level notices (config-driven `notices`) are surfaced passively by the
-  // dot/count on the Output toggle. A warning or assert is different — the model
-  // came out wrong in a way worth seeing — so the console auto-opens the first
-  // time a render surfaces one, rather than hiding it behind a badge the user
-  // may never click. Both transitions use the react.dev "adjust state during
-  // render" pattern (compare against the previous render's value), no effect.
-  const hasNotices = diagnostics.length > 0;
-  const [prevHasNotices, setPrevHasNotices] = useState(hasNotices);
-  if (hasNotices !== prevHasNotices) {
-    setPrevHasNotices(hasNotices);
-    if (!hasNotices) setOutputOpen(false); // notices cleared → hide the console
-  }
-  // Auto-open on the false→true edge only, so a persistent warning across edits
-  // doesn't re-pop a console the user has dismissed.
-  const hasProblem = diagnostics.some((d) => d.level === "warning" || d.level === "assert");
-  const [prevHasProblem, setPrevHasProblem] = useState(hasProblem);
-  if (hasProblem !== prevHasProblem) {
-    setPrevHasProblem(hasProblem);
-    if (hasProblem) {
-      setOutputOpen(true);
-      setSheetDetent("peek"); // mobile: anchor the overlay above the peek sheet
-    }
-  }
-
-  const closeOutput = useCallback(() => setOutputOpen(false), []);
-
   // "View messages" (the review dialog's notice-attention cards) closes the
   // dialog and opens the console — the same anchor-above-peek behaviour as
   // the bell.
   const openMessagesFromReview = useCallback(() => {
     setReviewOpen(false);
     openOutput();
-  }, [openOutput]);
+  }, [setReviewOpen, openOutput]);
 
   // Whether the dock shows its readiness pill (StatusStrip). "ready" needs no
   // announcement — the Download button right below it is the confirmation —

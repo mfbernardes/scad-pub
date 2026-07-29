@@ -125,7 +125,11 @@ test("a cache hit still supersedes an in-flight render", async () => {
   assert.equal(w.terminated, true);
   await slowRejects;
   assert.equal(cached.ok, true);
-  assert.equal(newest().posted.length, 0); // served from cache after respawn
+  // Respawned worker got only its spawn-time boot message (warmup, since
+  // this runner never received a compiled module) — no render request, since
+  // the cache hit served it without ever reaching the worker.
+  assert.equal(newest().posted.length, 1);
+  assert.deepEqual(newest().last, { type: "warmup" });
   runner.dispose();
 });
 
@@ -417,11 +421,13 @@ test("an L1 miss is served from the persistent store without the worker", async 
   await first;
   a.dispose();
 
-  // A fresh runner (empty L1) serves the same request from L2 — no worker post.
+  // A fresh runner (empty L1) serves the same request from L2 — no render
+  // request reaches the worker (only its spawn-time warmup post does).
   const b = new OpenSCADRunner({ store });
   const wb = newest();
   const cached = await b.render({ design: "x", defines: { a: "1" } });
-  assert.equal(wb.posted.length, 0);
+  assert.equal(wb.posted.length, 1);
+  assert.deepEqual(wb.last, { type: "warmup" });
   assert.equal(cached.ok, true);
   assert.equal(cached.cached, true);
   b.dispose();
@@ -468,7 +474,9 @@ test("a different cacheVersion does not reuse another build's stored entry", asy
   const wb = newest();
   const p = b.render({ design: "x", defines: { a: "1" } });
   await flush();
-  assert.equal(wb.posted.length, 1); // L2 miss under the new version -> worker
+  // The spawn-time warmup post, plus the render request an L2 miss under the
+  // new version sends to the worker.
+  assert.equal(wb.posted.length, 2);
   wb.emit(ok(wb.last.id, 6));
   assert.equal((await p).ok, true);
   b.dispose();
@@ -526,8 +534,10 @@ test("render() rejects filename aliases that sanitize to the same mount path", a
     assert.deepEqual(e.collisions["/logo.svg"].sort(), ["a/logo.svg", "b/logo.svg"]);
     return true;
   });
-  // Rejected before ever posting to the worker.
-  assert.equal(newest().posted.length, 0);
+  // Rejected before ever posting a render request to the worker — only the
+  // spawn-time warmup message went out.
+  assert.equal(newest().posted.length, 1);
+  assert.deepEqual(newest().last, { type: "warmup" });
   runner.dispose();
 });
 
@@ -721,4 +731,102 @@ test("a StrictMode-style construct/dispose/construct replay leaves exactly one l
   w1.emit(ok(w1.last.id));
   assert.equal((await b).ok, true);
   runnerB.dispose();
+});
+
+// ---- Bootstrap warm-up / compiled-module hand-off across respawns ----
+// spawn() now posts a control message immediately, before any render
+// request, so worker.ts's asset bootstrap starts at spawn time instead of
+// waiting for the first (400ms-debounced) render message. A worker that
+// compiles the wasm module itself reports it back; the runner keeps it and
+// hands it to whichever worker it spawns next, so a respawn after
+// latest-wins cancellation costs only re-instantiation there, not a repeat
+// fetch+compile.
+
+test("a fresh runner posts a warmup message to its first worker before any render", () => {
+  const runner = new OpenSCADRunner();
+  const w = newest();
+  assert.equal(w.posted.length, 1, "only the spawn-time boot message, no render yet");
+  assert.deepEqual(w.posted[0], { type: "warmup" }, "no module to hand back on the very first worker");
+  runner.dispose();
+});
+
+test("a compiled module received from one worker is handed to the next spawned worker", async () => {
+  const sentinel = { fakeModule: "sentinel" };
+  const runner = new OpenSCADRunner();
+  const w0 = newest();
+  assert.deepEqual(w0.posted[0], { type: "warmup" });
+
+  // w0 compiled the wasm module itself and reports it back to the runner.
+  w0.emit({ type: "module", module: sentinel });
+
+  // Trigger a respawn via latest-wins cancellation: start a render, then
+  // supersede it before it resolves.
+  const a = runner.render({ design: "x", defines: {} });
+  const aRejects = assert.rejects(a, (e) => e.name === "SupersededError");
+  const b = runner.render({ design: "y", defines: {} }); // supersedes a -> terminate + spawn
+  await aRejects;
+
+  const w1 = newest();
+  assert.notStrictEqual(w1, w0);
+  // The new worker's spawn-time message hands back the SAME module w0
+  // compiled, instead of a plain warmup.
+  assert.deepEqual(w1.posted[0], { type: "module", module: sentinel });
+
+  w1.emit(ok(w1.last.id));
+  assert.equal((await b).ok, true);
+  runner.dispose();
+});
+
+test("a DataCloneError posting the module falls back to warmup and is never retried", async () => {
+  // Simulates a browser that can't structured-clone a WebAssembly.Module:
+  // postMessage throws for a "module" payload, exactly like the real API
+  // would (DataCloneError), while behaving normally for everything else.
+  class ThrowingModuleWorker extends FakeWorker {
+    postMessage(m) {
+      if (m && m.type === "module") throw new DOMException("cannot clone", "DataCloneError");
+      super.postMessage(m);
+    }
+  }
+  const OriginalWorker = globalThis.Worker;
+  globalThis.Worker = ThrowingModuleWorker;
+  try {
+    const sentinel = { fakeModule: "sentinel" };
+    const runner = new OpenSCADRunner();
+    const w0 = newest();
+    // The first-ever worker has no module to hand back yet, so its spawn-time
+    // post is a plain warmup — never throws.
+    assert.deepEqual(w0.posted[0], { type: "warmup" });
+
+    w0.emit({ type: "module", module: sentinel });
+
+    // Respawn via cancellation: the runner tries to hand w0's module to the
+    // new worker; ThrowingModuleWorker's postMessage rejects it.
+    const a = runner.render({ design: "x", defines: {} });
+    const aRejects = assert.rejects(a, (e) => e.name === "SupersededError");
+    const b = runner.render({ design: "y", defines: {} });
+    await aRejects;
+
+    const w1 = newest();
+    assert.notStrictEqual(w1, w0);
+    // The failed module post fell back to warmup instead of leaving the
+    // worker with no boot message at all.
+    assert.deepEqual(w1.posted[0], { type: "warmup" });
+
+    w1.emit(ok(w1.last.id));
+    assert.equal((await b).ok, true);
+
+    // The module was dropped for good, not just skipped once: a FURTHER
+    // respawn (via worker-error recovery this time) also gets a plain
+    // warmup — no second attempt to post the now-discarded module.
+    w1.emitError("boom");
+    const c = runner.render({ design: "z", defines: {} });
+    const w2 = newest();
+    assert.notStrictEqual(w2, w1);
+    assert.deepEqual(w2.posted[0], { type: "warmup" });
+    w2.emit(ok(w2.last.id));
+    assert.equal((await c).ok, true);
+    runner.dispose();
+  } finally {
+    globalThis.Worker = OriginalWorker;
+  }
 });

@@ -115,7 +115,7 @@ export interface RenderResult {
 /**
  * A throttled progress update posted by the render worker while it downloads
  * a large bootstrap asset (currently only the ~10 MB WASM binary, on a Cache
- * Storage miss — see worker.ts's cachedBufferWithProgress). Never posted on a
+ * Storage miss — see worker.ts's resolveWasmModule). Never posted on a
  * cache hit (nothing to report progress on), and never once the worker's
  * `{ type: "ready" }` message has fired for this worker instance — see
  * runner.ts's `onProgress` doc.
@@ -133,6 +133,38 @@ export interface WorkerProgress {
    */
   total: number | null;
 }
+
+/**
+ * Worker -> runner: sent once a render worker has compiled a
+ * WebAssembly.Module ITSELF (never sent for a module the worker instead
+ * received from the runner — see `WorkerCommand`'s "module" case and
+ * worker.ts's `postModuleOnce`). The runner keeps it and hands it to the
+ * NEXT worker it spawns (see runner.ts's `spawn()`), so a respawn after
+ * latest-wins cancellation costs only re-instantiation, not a repeat
+ * fetch+compile of the ~10 MB wasm binary. Posted at most once per worker
+ * instance.
+ */
+export interface WorkerModuleMessage {
+  type: "module";
+  module: WebAssembly.Module;
+}
+
+/**
+ * Runner -> worker control messages, posted once immediately after spawn() —
+ * before the first render request, and safely before the worker's module
+ * script has necessarily finished evaluating (a module worker queues
+ * messages until it installs its onmessage handler). `RenderRequest` carries
+ * no `type` field, so `"type" in data` remains the discriminator between a
+ * command and an actual render on both sides of the protocol.
+ *  - "module": reuse a WebAssembly.Module a PREVIOUS worker instance (in
+ *    this runner's lifetime) compiled, instead of re-fetching/recompiling
+ *    the wasm binary from scratch.
+ *  - "warmup": nothing to reuse yet (the runner's first-ever worker, or a
+ *    browser that can't structured-clone a WebAssembly.Module) — still
+ *    starts asset bootstrap at spawn time rather than waiting for the first
+ *    (400ms-debounced) render message.
+ */
+export type WorkerCommand = WorkerModuleMessage | { type: "warmup" };
 
 // ---- Parameter schema (produced by scripts/gen-schema.mjs) ----
 

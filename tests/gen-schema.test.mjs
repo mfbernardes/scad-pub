@@ -660,6 +660,51 @@ test("a missing use/include target names the missing path and the referencing fi
   );
 });
 
+// ── explicit `assets` no longer skips the use/include walk entirely ────────
+//
+// Before this, an explicit `assets` list made collectDeps irrelevant: a
+// design whose use/include graph reached a file the operator forgot to list
+// (or deliberately left out) built green and only failed once the
+// OpenSCAD-WASM worker tried to mount it in a browser, since the render
+// sandbox only ever gets the configured `assets`. generate() now always
+// walks (collectDeps), then — only in explicit-assets mode — checks the walk
+// against the configured set.
+
+test("explicit `assets` that omits a use/include dependency fails the build with a distinct coverage error", () => {
+  // widget.scad -> lib/core.scad -> lib/util.scad (collectDeps' own walk);
+  // this fixture's `assets` covers only lib/util.scad, so lib/core.scad is
+  // reachable but not bundled — exactly the gap checkAssetCoverage exists for.
+  let caught;
+  try {
+    run("widget-assets-missing-dep.config.json");
+  } catch (err) {
+    caught = err;
+  }
+  assert.ok(caught, "expected generate() to throw");
+  // Names both the design id and the missing relative path.
+  assert.match(caught.message, /design 'widget'/);
+  assert.match(caught.message, /lib\/core\.scad/);
+  // A distinct diagnosis from collectDeps' own "dependency '...' not found:
+  // ... (referenced by ...)" (a dependency missing from disk entirely) — this
+  // dependency DOES exist on disk, it's just not in `assets`, so the two
+  // causes must never read the same. (collectDeps' message is quoted, for
+  // context, inside this error's own explanatory parenthetical, so match on
+  // its distinguishing "referenced by" rather than the more generic "not
+  // found" text that quoting necessarily repeats.)
+  assert.match(caught.message, /not covered by 'assets'/);
+  assert.doesNotMatch(caught.message, /referenced by/);
+});
+
+test("explicit `assets` that DOES cover every use/include dependency still builds (no false positive)", () => {
+  // widget-glob.config.json's `assets` ("lib/*.scad", "**/*.svg") covers both
+  // of widget.scad's walked dependencies (lib/core.scad, lib/util.scad) plus
+  // its @icon asset — see the "assets: globs match files" test above for the
+  // full assertion. Re-run here only to pin down that adding the coverage
+  // check didn't turn a previously-green explicit-assets build red.
+  const { schema } = run("widget-glob.config.json");
+  assert.deepEqual(schema.assets, ["assets/emblem.svg", "lib/core.scad", "lib/util.scad"]);
+});
+
 test("schema.json is written to the output dir", () => {
   const { out } = run("widget.config.json");
   const written = JSON.parse(
@@ -3000,6 +3045,61 @@ test("a PWA/icon failure after a prior successful build leaves the previous outp
   assert.deepEqual(readdirSync(outScadDir).sort(), beforeScad);
   assert.deepEqual(readFileSync(join(outSchemaDir, "designs.json")), beforeSchema);
   if (beforeIcon) assert.deepEqual(readFileSync(iconPath), beforeIcon);
+});
+
+// A failure LATER in generatePwaAssets than icon rasterization — the
+// `pwa.screenshots[].src` existence check, which used to run after
+// pwa-assets.mjs had already written the (successfully rasterized) icon/
+// splash PNGs directly to outPublicDir. That's the gap the deferred-write
+// batch (pwa-assets.mjs's `batch`/commitPwaBatch, flushed only at generate()'s
+// single commit point) closes: unlike the widget-badicon case above — which
+// already failed BEFORE anything was written even under the old code, since
+// rasterization itself is the failure — this fixture's icon is valid, so the
+// icon/splash batch fully rasterizes, and only the screenshot check after it
+// fails. Under the pre-fix code that meant new icon/splash bytes landing on
+// disk paired with the OLD scad tree/schema/manifest; this asserts they don't.
+test("a failing screenshot leaves the previous PWA icon/splash/manifest files byte-identical (deferred-write batch)", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-pwatxn-"));
+  const outPublicDir = join(out, "public");
+  const outScadDir = join(outPublicDir, "scad");
+  const outSchemaDir = join(out, "schema");
+  const base = { outSchemaDir, outScadDir, outPublicDir };
+
+  // A good build first, so there is a previous icon/splash/manifest set to protect.
+  generate({ ...base, configPath: join(FIXTURES, "widget.config.json") });
+  const PWA_FILES = [
+    "icon.svg",
+    "icon-192.png",
+    "icon-512.png",
+    "icon-512-maskable.png",
+    "icon-180.png",
+    "apple-splash-1290x2796.png",
+    "apple-splash-750x1334.png",
+    "manifest.webmanifest",
+  ];
+  const snapshot = () =>
+    Object.fromEntries(
+      PWA_FILES.map((f) => {
+        const p = join(outPublicDir, f);
+        return [f, existsSync(p) ? readFileSync(p) : null];
+      })
+    );
+  const before = snapshot();
+  // Sanity: the rasterizer actually ran, so this test exercises the deferred
+  // batch rather than vacuously passing on all-null snapshots either way.
+  assert.ok(before["icon-192.png"], "fixture setup expects @resvg/resvg-js to be installed");
+
+  // A config with a VALID icon (so the icon+splash batch fully rasterizes and
+  // queues real bytes) but a `pwa.screenshots[].src` that doesn't exist.
+  assert.throws(
+    () => generate({ ...base, configPath: join(FIXTURES, "widget-screenshot-missing.config.json") }),
+    /screenshot 'no-such-screenshot\.png' not found/
+  );
+
+  const after = snapshot();
+  for (const f of PWA_FILES) {
+    assert.deepEqual(after[f], before[f], `${f} must be byte-identical to the pre-run state`);
+  }
 });
 
 test("changing a font then failing a later step leaves the prior font bytes and fonts.conf unchanged", () => {
