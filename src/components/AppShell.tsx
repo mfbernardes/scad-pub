@@ -35,7 +35,7 @@ const EMPTY_LOG: string[] = [];
 // card shared verbatim by the desktop and mobile clusters so a tweak to
 // padding/border lands once.
 const ACTION_CLUSTER_CLASS =
-  "action-cluster flex items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation)";
+  "action-cluster flex max-w-full items-center gap-[0.3rem] whitespace-nowrap rounded-lg border-(color:--glass-border) border bg-(--glass-bg) px-[0.45rem] py-[0.35rem] shadow-(--elevation)";
 // The bottom-anchored dock wrapping the action cluster (and, when shown, the
 // after-export panel riding above it). Positioning (absolute/bottom/left/
 // transform, plus the mobile sheet-follow override) lives on `.action-dock`

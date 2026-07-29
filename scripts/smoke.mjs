@@ -1544,6 +1544,74 @@ async function checkDocumentNeverScrolls({ browser, base, check }) {
   }
 }
 
+// Nothing may sit outside the viewport horizontally, and the page must never
+// scroll sideways. Checked at 320px — the narrowest phone still in use, and the
+// width where two controls had escaped: the export dock (centred by a
+// transform, so nothing bounded its intrinsic 326px) hung off both edges, and
+// the Messages console's Close button was pushed clean off the right, leaving
+// no way to dismiss the console at all.
+//
+// Both were invisible at 390px, which is why this checks the narrow case
+// explicitly rather than trusting the default viewport.
+async function checkNothingOffscreen({ browser, base, check }) {
+  console.log("=== narrow viewport: nothing escapes horizontally ===");
+  const context = await browser.newContext({
+    viewport: { width: 320, height: 568 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  const scan = () =>
+    page.evaluate(() => {
+      const out = [];
+      const de = document.documentElement;
+      if (de.scrollWidth > de.clientWidth + 1) out.push(`document scrolls sideways (${de.scrollWidth} > ${de.clientWidth})`);
+      for (const el of document.querySelectorAll("body *")) {
+        const s = getComputedStyle(el);
+        if (s.visibility === "hidden" || s.display === "none") continue;
+        if (el.closest(".sr-only") || el.closest("[inert]") || el.classList.contains("skip-link")) continue;
+        const b = el.getBoundingClientRect();
+        if (b.width === 0 || b.height === 0) continue;
+        if (b.right > innerWidth + 1 || b.left < -1) {
+          const name = el.tagName.toLowerCase() + "." + String(el.className).split(" ").filter(Boolean).slice(0, 2).join(".");
+          out.push(`${name} at [${Math.round(b.left)}, ${Math.round(b.right)}]`);
+        }
+      }
+      return [...new Set(out)];
+    });
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+    const atRest = await scan();
+    check(atRest.length === 0, `nothing escapes the 320px viewport at rest${atRest.length ? ` (${atRest.join("; ")})` : ""}`);
+
+    // The console is the surface that failed, and only when open.
+    const bell = page.getByRole("button", { name: /Messages/i }).first();
+    if (await bell.count()) {
+      await bell.click().catch(() => {});
+      await page.waitForTimeout(500);
+      const withConsole = await scan();
+      check(withConsole.length === 0, `nothing escapes with the Messages console open${withConsole.length ? ` (${withConsole.join("; ")})` : ""}`);
+      // `.output-console__close` (a documented hook class), NOT the accessible
+      // name: the console's dismiss SCRIM carries the same "Close Messages"
+      // label and spans the viewport, so a by-role lookup matches it first and
+      // reports a pass no matter where the button itself is.
+      const close = page.locator(".output-console__close").first();
+      if (await close.count()) {
+        const b = await close.boundingBox();
+        check(
+          !!b && b.x >= 0 && b.x + b.width <= 320,
+          `the console's close button is inside the viewport (${b ? `${Math.round(b.x)}..${Math.round(b.x + b.width)}` : "missing"})`
+        );
+      }
+    }
+  } finally {
+    await context.close();
+  }
+}
+
 // Square opaque children painted over a ROUNDED parent that doesn't clip them.
 // The parent's border curve is left stranded outside the child's fill, so the
 // corner reads as a notch — which is what a sticky group header did to every
@@ -1734,6 +1802,7 @@ async function main() {
     await checkViewerHudReachable(ctx);
     await checkDocumentNeverScrolls(ctx);
     await checkRoundedCorners(ctx);
+    await checkNothingOffscreen(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);

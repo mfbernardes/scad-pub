@@ -475,11 +475,16 @@ button:disabled { cursor: default; }
   .sheet-tabs [role="tab"] {
     min-height: 2.75rem;
   }
-  /* The sheet's drag handle was a 22px-tall strip — the one target genuinely
-     under the 24x24 minimum, and it sits directly above the tab row, so the
-     spacing exception doesn't clearly rescue it. The visible bar is unchanged;
-     only the hit area grows. */
-  .sheet-handle { padding: 0.85rem 0 0.7rem; }
+  /* Radix's Switch (36x20) and Slider thumb (20x20) sit under 24px on their
+     short axis and are deliberately left that way. They meet WCAG 2.2 SC 2.5.8
+     through its spacing exception — measured, the nearest other target's centre
+     is 43-72px away against a 24px requirement — and every way of growing them
+     costs something real: a transparent ::after is NOT hit-tested by Chromium
+     (verified: the pseudo computes correctly and the effective target stays
+     20px), a transparent border changes the thumb's own painted size, and a
+     min-height stretches the switch track. They remain short of SC 2.5.5's
+     44px, which is a AAA target; the controls a visitor presses most — the
+     dock buttons, the sheet tabs and the drag handle — are at 44px above. */
 }
 
 /* Light schemes give `--glass-bg` very little separation from the viewer
@@ -540,6 +545,12 @@ button:disabled { cursor: default; }
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
+  /* Centred by transform, so nothing else bounds it: at 320px the Download +
+     Share cluster's intrinsic 326px hung 3px off BOTH edges, clipping the
+     primary action. Capping it makes the cluster the flex container it already
+     is — the export label is `truncate` inside a `min-w-0` wrapper, so it
+     shrinks to fit instead of overflowing. */
+  max-width: calc(100% - 1rem);
 }
 
 /* Mobile: ride the dock 0.6rem above the sheet's live top edge (--sheet-top,
@@ -709,6 +720,20 @@ button:disabled { cursor: default; }
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* The drag handle is a 22px-tall strip — the one target genuinely under WCAG
+   2.2 SC 2.5.8's 24x24 minimum, and it sits directly above the tab row, so the
+   spacing exception doesn't clearly rescue it. The visible bar is unchanged;
+   only the hit area grows.
+
+   This lives HERE, immediately after the base rule, rather than up with the
+   other coarse-pointer target sizes: it overrides the same `padding` shorthand,
+   at the same specificity, in the same cascade layer — so source order decides,
+   and up there it lost silently. The neighbours up there set `min-height`/
+   `min-width`, which nothing else re-declares, so they are unaffected. */
+@media (pointer: coarse) {
+  .sheet-handle { padding: 0.85rem 0 0.7rem; }
 }
 
 .sheet-handle__bar {
