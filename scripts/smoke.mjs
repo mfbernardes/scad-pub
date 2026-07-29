@@ -1476,6 +1476,74 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
 // Mirrors BottomSheet's DETENT_ORDER — the order Arrow Up/Down step through.
 const DETENTS = ["peek", "half", "full"];
 
+// The app is a fixed-height shell: `#root` is 100dvh and every scrollable
+// region is an inner one, so the DOCUMENT must never be scrollable. When it is,
+// iOS ends up scrolling it while the software keyboard is up and does not undo
+// it afterwards — the whole shell sits shifted above its own viewport, with the
+// model clipped off the top and page background exposed below the sheet.
+//
+// Checked at the mobile breakpoint with the sheet expanded and a text field
+// focused, which is the exact state that produced it.
+//
+// The `overflow: hidden` assertion is the one with teeth. The scrollTop one
+// states the user-visible invariant, but headless Chromium has no software
+// keyboard and never makes the document overflow, so it cannot fail here —
+// verified by reverting the fix, which trips the overflow check alone. Keep
+// both: one is the property, the other is the mechanism that guarantees it.
+async function checkDocumentNeverScrolls({ browser, base, check }) {
+  console.log("=== fixed shell: the document never scrolls ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // Raise the sheet and put a text field in focus — a real keyboard would be
+    // up at this point on a device.
+    await page.locator(".sheet-handle").focus();
+    await page.keyboard.press("ArrowUp");
+    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 }).catch(() => {});
+    const field = page.locator('.sheet-content input[type="text"]').first();
+    if (await field.count()) await field.click().catch(() => {});
+    await page.waitForTimeout(500); // outlast useScrollFocusedIntoView's settle
+
+    const doc = await page.evaluate(() => {
+      const se = document.scrollingElement ?? document.documentElement;
+      // Try to scroll it, then read back. A locked shell reports 0 either way.
+      se.scrollTop = 200;
+      window.scrollTo(0, 200);
+      const after = { scrollTop: se.scrollTop, scrollY: window.scrollY };
+      se.scrollTop = 0;
+      window.scrollTo(0, 0);
+      return {
+        ...after,
+        overflowY: getComputedStyle(document.documentElement).overflowY,
+        bodyOverflowY: getComputedStyle(document.body).overflowY,
+        shellTop: Math.round(
+          document.querySelector(".app-shell__mobile")?.getBoundingClientRect().top ?? 0
+        ),
+      };
+    });
+    check(
+      doc.scrollTop === 0 && doc.scrollY === 0,
+      `the document stays at scroll 0 even when pushed (got ${doc.scrollTop}/${doc.scrollY})`
+    );
+    check(
+      doc.overflowY === "hidden" && doc.bodyOverflowY === "hidden",
+      `html/body keep overflow hidden (got ${doc.overflowY}/${doc.bodyOverflowY})`
+    );
+    check(doc.shellTop === 0, `the mobile shell stays flush with the viewport top (got ${doc.shellTop})`);
+  } finally {
+    await context.close();
+  }
+}
+
 async function checkViewerHudReachable({ browser, base, check }) {
   console.log("=== viewer HUD reachability (narrow + short viewports) ===");
   for (const [width, height] of [[360, 740], [320, 568]]) {
@@ -1608,6 +1676,7 @@ async function main() {
     await checkResponsiveLayout(ctx);
     await checkFirstVisitSheetPolicy(ctx);
     await checkViewerHudReachable(ctx);
+    await checkDocumentNeverScrolls(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);

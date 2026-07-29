@@ -27,6 +27,7 @@ import { useTheme } from "./lib/theme";
 import { useServiceWorkerUpdate } from "./lib/swUpdate";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
 import { useOnline } from "./lib/useOnline";
+import { useDocumentScrollLock } from "./lib/useDocumentScrollLock";
 import { useRenderPipeline } from "./lib/useRenderPipeline";
 import { useFileImports } from "./lib/useFileImports";
 import { useAppNotices } from "./lib/useAppNotices";
@@ -125,6 +126,10 @@ const INSTALL_HINT_KEY = ns("install.hint.seen");
 const afterExportConfig = schema.ui?.afterExport ?? null;
 
 export default function App() {
+  // The shell is fixed-height and never scrolls; this puts back any document
+  // scroll a browser applied on its own (iOS does, while the software keyboard
+  // is up, and does not undo it afterwards). See the hook's own doc.
+  useDocumentScrollLock();
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
   const { canInstall, promptInstall } = useInstallPrompt();
   const online = useOnline();

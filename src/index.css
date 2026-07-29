@@ -195,6 +195,16 @@ html, body { height: 100%; margin: 0; }
 /* Pull-to-refresh kills the WebGL drag gesture on mobile; disable it on the
    outer document. touch-action:none is scoped to the canvas below. */
 html, body { overscroll-behavior: none; }
+/* The app is a fixed-height shell (#root below) — every scrollable region is
+   an inner one (the param form, the preset list, the output console), and the
+   document itself has nothing to scroll to. Saying so keeps a stray document
+   scroll from ever STICKING: on iOS the layout viewport becomes scrollable
+   while the software keyboard is up, and any offset it picks up there survives
+   the keyboard closing, leaving the whole shell shifted up with page
+   background exposed below it. See useScrollFocusedIntoView, which is careful
+   never to cause that scroll, and useDocumentScrollLock, which undoes one the
+   browser did on its own. */
+html, body { overflow: hidden; }
 #root {
   /* 100dvh accounts for the shrinking URL bar on mobile; 100vh as fallback. */
   height: 100vh;
