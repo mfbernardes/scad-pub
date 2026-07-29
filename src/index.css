@@ -784,7 +784,21 @@ button:disabled { cursor: default; }
     color-mix(in srgb, var(--bg) 50%, transparent),
     color-mix(in srgb, var(--bg) 50%, transparent)
   );
-  border-radius: inherit;
+  /* Round the fill to the group's INNER curve — the radius at the inside of
+     its 1px border, which is what this sits against once the negative inline
+     margins above have pushed it out to the padding edge.
+     `border-radius: inherit` was doing neither job: it computed to 0 here (so
+     the opaque fill painted square corners straight over the group's rounded
+     border, leaving the arcs stranded outside it), and had it applied it would
+     have copied the OUTER 10px and bulged a pixel past the same border. */
+  border-radius: calc(var(--radius) - 1px);
+}
+
+/* An OPEN group's header has content below it, so only its top corners follow
+   the group; square bottom corners let the rows butt against it. A CLOSED
+   group is the header alone, so it keeps all four (the rule above). */
+.param-group[open] > summary {
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
 }
 
 /* A hairline under an OPEN group's header. At rest it's an ordinary divider

@@ -1544,6 +1544,62 @@ async function checkDocumentNeverScrolls({ browser, base, check }) {
   }
 }
 
+// Square opaque children painted over a ROUNDED parent that doesn't clip them.
+// The parent's border curve is left stranded outside the child's fill, so the
+// corner reads as a notch — which is what a sticky group header did to every
+// `.param-group` card, in both layouts and both themes.
+//
+// Expressed as the general property rather than as a check on that one header:
+// find any child whose own background reaches its parent's padding edge where
+// the parent is rounded, the child is not, and no `overflow` clips it. Reverting
+// the `.param-group > summary` radius reproduces exactly two hits (the open and
+// closed header) and nothing else, so this is measuring what it claims to.
+const CORNER_SCAN = `(() => {
+  const px = (v) => parseFloat(v) || 0;
+  const opaque = (bg, img) =>
+    (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") || (img && img !== "none");
+  const out = [];
+  for (const el of document.querySelectorAll("body *")) {
+    const p = el.parentElement;
+    if (!p) continue;
+    const ps = getComputedStyle(p), es = getComputedStyle(el);
+    const pr = px(ps.borderTopLeftRadius);
+    if (pr <= 0) continue;
+    if (ps.overflow !== "visible" || ps.overflowX !== "visible") continue;
+    if (!opaque(es.backgroundColor, es.backgroundImage)) continue;
+    const er = px(es.borderTopLeftRadius);
+    if (er >= pr - 1.5) continue;
+    const pb = p.getBoundingClientRect(), eb = el.getBoundingClientRect();
+    if (eb.width === 0 || eb.height === 0) continue;
+    const reachesX =
+      eb.left <= pb.left + px(ps.borderLeftWidth) + 0.5 &&
+      eb.right >= pb.right - px(ps.borderRightWidth) - 0.5;
+    const reachesTop = eb.top <= pb.top + px(ps.borderTopWidth) + 0.5;
+    const reachesBottom = eb.bottom >= pb.bottom - px(ps.borderBottomWidth) - 0.5;
+    if (!reachesX || !(reachesTop || reachesBottom)) continue;
+    const name = (n) => n.tagName.toLowerCase() + "." + String(n.className).split(" ").filter(Boolean).slice(0, 2).join(".");
+    out.push(name(el) + " in " + name(p));
+  }
+  return [...new Set(out)];
+})()`;
+
+async function checkRoundedCorners({ page, check, paramsTabName }) {
+  console.log("=== rounded corners: no square fill over a rounded parent ===");
+  // Scan the params form in both its open and collapsed group states — the
+  // header is a different box in each, and only one of them was caught by eye.
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  await page.waitForTimeout(300);
+  const open = await page.evaluate(CORNER_SCAN);
+  check(open.length === 0, `no square-over-rounded corners with groups open${open.length ? ` (${open.join("; ")})` : ""}`);
+  await page.locator(".param-group > summary").first().click().catch(() => {});
+  await page.waitForTimeout(300);
+  const collapsed = await page.evaluate(CORNER_SCAN);
+  check(collapsed.length === 0, `no square-over-rounded corners with a group collapsed${collapsed.length ? ` (${collapsed.join("; ")})` : ""}`);
+  // Leave the group as we found it.
+  await page.locator(".param-group > summary").first().click().catch(() => {});
+  await page.waitForTimeout(200);
+}
+
 async function checkViewerHudReachable({ browser, base, check }) {
   console.log("=== viewer HUD reachability (narrow + short viewports) ===");
   for (const [width, height] of [[360, 740], [320, 568]]) {
@@ -1677,6 +1733,7 @@ async function main() {
     await checkFirstVisitSheetPolicy(ctx);
     await checkViewerHudReachable(ctx);
     await checkDocumentNeverScrolls(ctx);
+    await checkRoundedCorners(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);
