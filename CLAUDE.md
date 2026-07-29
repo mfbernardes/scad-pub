@@ -11,6 +11,20 @@ config reference, [docs/annotations.md](docs/annotations.md) the annotation voca
 the source rather than trusting a summary here — this file covers what the source does not say
 out loud.
 
+## Comments and replies earn their space
+
+Default to neither, and add one when it carries something the reader cannot get from the code:
+why a workaround exists, which invariant a line protects, the issue or spec behind a magic
+number. A comment restating the next line, a `// --- Section ---` banner, a step-by-step
+narration of a function, or a note about what you just changed is noise — don't write it, and
+delete it when you find it. Explanation longer than a couple of sentences belongs in `docs/`
+or in this file, not inline. JSDoc stays on exported helpers whose signature isn't
+self-evident; user-facing copy stays in `src/locales/en.json`.
+
+Same discipline in what you say back: what changed, what you verified, what still needs a
+decision — a few sentences plus the screenshot. No preamble, no restatement of the request, no
+file-by-file tour of the diff. Length is not thoroughness.
+
 ## Commands
 
 ```bash
