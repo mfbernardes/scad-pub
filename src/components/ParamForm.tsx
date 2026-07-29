@@ -74,6 +74,21 @@ interface Props {
   /** Whether parameters marked `@advanced` are included. */
   showAdvanced?: boolean;
   /**
+   * Density. `false` (the default, and what the docked desktop panel uses)
+   * stacks every control under its label. `true` — the mobile sheet — puts the
+   * control BESIDE its label wherever the control doesn't need the full row,
+   * and tightens the vertical rhythm.
+   *
+   * The sheet's half detent is the only state where a phone visitor can see
+   * the model and the controls at once, and it was showing one or two
+   * parameters out of sixteen: a stacked row costs the label's height PLUS the
+   * control's, and a label is often two lines. Side-by-side makes a row
+   * `max(label, control)` instead of their sum. Numbers with a slider and
+   * `@svg` fields still stack — their controls genuinely need the width — so
+   * this narrows rows rather than cramping them.
+   */
+  compact?: boolean;
+  /**
    * Flip `showAdvanced`. Present → the form closes with the EssentialsToggle
    * row (see its own doc for why it belongs at the END of the form rather
    * than above it); omitted → no toggle, for a caller that offers no way to
@@ -281,6 +296,26 @@ function NumberControl({
   );
 }
 
+/**
+ * Whether `param`'s control needs the full width of a form row, so a compact
+ * (mobile) layout must keep it stacked under its label rather than beside it.
+ *
+ * Lives beside `Control` because it is a statement about which WIDGET the
+ * param resolves to: a ranged number renders a Slider plus a numeric input
+ * (NumberControl's `hasRange`), which in a 48% column leaves the slider too
+ * short to aim at, and an `@svg` field's control is a whole wizard launcher. A
+ * `@filledBy` param rides its own inner disclosure and keeps the stacked
+ * layout too. Deriving it at the call site instead would let the layout and
+ * the widget disagree the next time either changes.
+ */
+function controlNeedsFullRow(param: Param): boolean {
+  return (
+    (param.type === "number" && param.min !== undefined && param.max !== undefined) ||
+    (param.type === "string" && param.svg != null) ||
+    param.filledBy != null
+  );
+}
+
 function Control({
   param,
   value,
@@ -406,7 +441,15 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
   );
 }
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true, onShowAdvancedChange, ref }: Props) {
+// The two densities' spacing, side by side so a change to one is made against
+// the other rather than three conditionals apart. See Props.compact.
+const DENSITY = {
+  regular: { group: "mb-3", summary: "py-[0.6rem]", row: "my-3 gap-[0.35rem]" },
+  compact: { group: "mb-2", summary: "py-[0.45rem]", row: "my-2 gap-[0.25rem]" },
+} as const;
+
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true, onShowAdvancedChange, compact = false, ref }: Props) {
+  const density = compact ? DENSITY.compact : DENSITY.regular;
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
@@ -499,7 +542,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
         const isOpen = openSections[section] ?? !collapsedDefault.has(section);
         return (
           <details
-            className="param-group mb-3 rounded-lg border bg-background/50 px-[0.8rem] open:pb-2"
+            className={`param-group rounded-lg border bg-background/50 px-[0.8rem] open:pb-2 ${density.group}`}
             key={section}
             data-section={section}
             open={q ? true : isOpen}
@@ -515,7 +558,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               setOpenSections((prev) => (prev[section] === next ? prev : { ...prev, [section]: next }));
             }}
           >
-            <summary className="font-display flex cursor-pointer select-none list-none items-center px-[0.2rem] py-[0.6rem] text-[0.92rem] font-semibold text-brand focus-visible:rounded-[4px]">
+            <summary className={`font-display flex cursor-pointer select-none list-none items-center px-[0.2rem] text-[0.92rem] font-semibold text-brand focus-visible:rounded-[4px] ${density.summary}`}>
               {section}
             </summary>
             {params.map((p) => {
@@ -528,6 +571,9 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               // Toggles ride the label row (label left, switch right) — a
               // control row below would leave a stranded switch.
               const isToggle = p.type === "boolean";
+              // In compact (mobile) mode most controls join the toggle on the
+              // label row; see controlNeedsFullRow for the exceptions.
+              const sideBySide = compact && !isToggle && !controlNeedsFullRow(p);
               // Tier-2 preset-diff marker (see PresetDiffBar for Tier 1): this
               // param's value differs from the baseline (selected preset, or
               // design defaults). Neutral/slate — never the warn colour.
@@ -549,7 +595,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               );
               const body = (
                 <>
-                  <span className={`flex ${isToggle ? "items-center" : "items-baseline"} justify-between gap-2`}>
+                  <span className={`flex ${isToggle || sideBySide ? "items-center" : "items-baseline"} justify-between gap-2`}>
                     {/* Label + optional info button together on the left so the
                         right edge is free for the toggle / var-name code. */}
                     <span className="flex min-w-0 items-baseline gap-[0.3rem]">
@@ -571,8 +617,15 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                       )}
                     </span>
                     {isToggle && control}
+                    {/* Compact: the control shares the label's row. Fixed
+                        share of the width rather than `flex-1`, so a one-word
+                        label and a long one give the control the same size and
+                        the column of controls stays aligned down the form. */}
+                    {sideBySide && (
+                      <span className="w-[48%] min-w-[8.5rem] shrink-0">{control}</span>
+                    )}
                   </span>
-                  {!isToggle && control}
+                  {!isToggle && !sideBySide && control}
                   {isDrifted && baseline && (
                     <span className="param-drift flex items-center gap-[0.4rem] text-[0.78rem] text-muted-foreground">
                       <span className="line-through">was {displayValue(p, baseline[p.name])}</span>
@@ -602,7 +655,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               // an inner "Advanced" disclosure — demoted, but still hand-editable.
               return (
                 <div
-                  className="param my-3 flex flex-col gap-[0.35rem]"
+                  className={`param flex flex-col ${density.row}`}
                   key={p.name}
                   data-param={p.name}
                 >

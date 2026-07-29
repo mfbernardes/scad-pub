@@ -27,6 +27,30 @@ label = "Room 1";
 
 First occurrence of each in the file wins; blank values are ignored. This keeps a design self-describing, and works even with auto-discovery, when the config lists no `designs[]` at all.
 
+## Short control labels (`// @label`)
+
+By default a parameter's control label is the **first sentence** of its comment block, and the whole block becomes the ⓘ help. That default is right when the docstring reads as a label first and an explanation after ("Figure height (mm). The width follows the silhouette's aspect ratio."). It is wrong when the docstring is a single explanatory sentence, which is the usual way to write a Customizer comment:
+
+```scad
+// Choose the language and Braille standard for this sign.
+language_standard = "de-basis-din32976-gross"; // [de-basis:German, en-ueb-g1:English]
+```
+
+That sentence is a good description and a poor label — above a dropdown on a phone it wraps to two lines where a noun phrase would do. `// @label "…"` supplies the label directly and demotes the whole comment block to help:
+
+```scad
+// Choose the language and Braille standard for this sign.
+// @label "Language & standard"
+language_standard = "de-basis-din32976-gross"; // [de-basis:German, en-ueb-g1:English]
+```
+
+- The quoted label is **required and non-empty** — a control always needs a label, so `@label ""` fails the build rather than clearing one. Bare `@label Short` (unquoted) fails too.
+- Nothing is lost. The comment block still becomes `help`, and the app shows its ⓘ popover whenever help differs from the label, so the explanation is one tap away.
+- Without the annotation, the first-sentence default is unchanged. That split handles decimals (`0.4 mm`), abbreviations (`e.g.`, `i.e.`, `z.B.`) and sentences opening with a quote (`Text alignment. "center" (default) centres …`), so a multi-sentence block usually needs no annotation at all.
+- It also names the parameter in the viewer's info panel when `// @info` carries no label of its own.
+
+Use it when a docstring's first sentence is longer than a few words. Skip it when the first sentence already reads as a label.
+
 ## Conditional parameters (`// @showIf`)
 
 Add `// @showIf <expr>` anywhere in a parameter's doc comment block:

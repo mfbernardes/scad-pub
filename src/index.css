@@ -129,6 +129,13 @@
      output console) anchors to it, and AppShell mirrors the same value
      (useSafeAreaBottom) for the sheet geometry. Off-iOS the inset is 0. */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  /* Notch / dynamic-island inset. The sheet's Full detent stops short of the
+     top edge to leave a model strip (BottomSheet's FULL_TOP_GAP), and this
+     keeps a notch from eating into that strip. Published as a var — rather
+     than env() inline — for the same reason as its bottom twin: BottomSheet
+     measures it off a probe, so CSS and JS read one source of truth and a test
+     can override it to simulate a device inset. */
+  --safe-area-top: env(safe-area-inset-top, 0px);
   color-scheme: dark;
 }
 
@@ -188,6 +195,16 @@ html, body { height: 100%; margin: 0; }
 /* Pull-to-refresh kills the WebGL drag gesture on mobile; disable it on the
    outer document. touch-action:none is scoped to the canvas below. */
 html, body { overscroll-behavior: none; }
+/* The app is a fixed-height shell (#root below) — every scrollable region is
+   an inner one (the param form, the preset list, the output console), and the
+   document itself has nothing to scroll to. Saying so keeps a stray document
+   scroll from ever STICKING: on iOS the layout viewport becomes scrollable
+   while the software keyboard is up, and any offset it picks up there survives
+   the keyboard closing, leaving the whole shell shifted up with page
+   background exposed below it. See useScrollFocusedIntoView, which is careful
+   never to cause that scroll, and useDocumentScrollLock, which undoes one the
+   browser did on its own. */
+html, body { overflow: hidden; }
 #root {
   /* 100dvh accounts for the shrinking URL bar on mobile; 100vh as fallback. */
   height: 100vh;
@@ -237,19 +254,24 @@ button:disabled { cursor: default; }
     position: relative;
     overflow: hidden;
     /* The bottom sheet's live top edge, in px from the viewport bottom: the
-       sheet's current height (--sheet-follow-h, set each drag frame by AppShell)
-       above its safe-area inset, capped at the half detent so dragging on to
-       full doesn't drag dependents off-screen. The viewer's bottom sits here;
-       the floating action cluster rides just above it. The 0.52 cap mirrors
-       BottomSheet's HALF_VH_RATIO — keep them in sync. */
+       sheet's current height (--sheet-follow-h, set each drag frame by
+       AppShell) above its safe-area inset. The viewer's bottom sits here; the
+       floating action cluster rides just above it.
+
+       No cap. --sheet-follow-h is the sheet reporting its OWN height, already
+       clamped to its own full detent (BottomSheet's fullH), so a cap here
+       could only ever restate that arithmetic — which is exactly what it used
+       to do, back when the Full detent covered the whole viewport and the cap
+       had to stop the viewer collapsing to nothing. Full now stops short of
+       the top edge on its own, so following the sheet all the way is what
+       turns the uncovered band into a real preview: the canvas shrinks to the
+       strip and the Viewer's ResizeObserver re-fits the model into it
+       (Viewer.tsx's refitView). */
     --sheet-top: calc(
-      var(--safe-area-bottom) +
-      min(
-        var(--sheet-follow-h, var(--mobile-peek-height)),
-        (100dvh - var(--safe-area-bottom)) * 0.52
-      )
+      var(--safe-area-bottom) + var(--sheet-follow-h, var(--mobile-peek-height))
     );
   }
+
 }
 
 /* Canvas area: row flex, holds panel + viewer side by side */
@@ -414,10 +436,17 @@ button:disabled { cursor: default; }
   z-index: 5;
 }
 
-/* Mobile: anchor the HUD to the upper-right, clear of the top bar + sheet. */
+/* Mobile: anchor the HUD to the upper-right, clear of the top bar.
+   ViewerHUD collapses to a single "View options" trigger below this breakpoint
+   (AppShell passes `collapse={isMobile}`, keyed on the same 860px), so this is
+   one button — it cannot grow into the export dock riding up from below, which
+   is what the desktop-style column used to do on short and narrow viewports.
+   scripts/smoke.mjs hit-tests every HUD button at 360x740 and 320x568, at both
+   the peek and half detents, so a layout that reintroduces the overlap fails
+   there rather than silently shipping. */
 @media (max-width: 860px) {
   .app-shell__mobile .viewer-hud {
-    top: calc(env(safe-area-inset-top, 0px) + 4rem);
+    top: calc(var(--safe-area-top) + 4rem);
     transform: none;
   }
 }
@@ -435,6 +464,38 @@ button:disabled { cursor: default; }
     min-width: 2.75rem;
     min-height: 2.75rem;
   }
+  /* The same floor for the two controls a visitor actually presses most —
+     Download and Share/Copy-link in the export dock — and for the sheet's
+     Presets/Customize tabs. All three were 32-33px: past WCAG 2.2's 24x24
+     minimum (SC 2.5.8) but well under the 44px of SC 2.5.5 and the platform
+     guidance, on the app's primary action. Height only: their widths are
+     already generous, and stretching them further would crowd the dock. */
+  .action-cluster .action-export,
+  .action-cluster .action-share,
+  .sheet-tabs [role="tab"] {
+    min-height: 2.75rem;
+  }
+  /* Radix's Switch (36x20) and Slider thumb (20x20) sit under 24px on their
+     short axis and are deliberately left that way. They meet WCAG 2.2 SC 2.5.8
+     through its spacing exception — measured, the nearest other target's centre
+     is 43-72px away against a 24px requirement — and every way of growing them
+     costs something real: a transparent ::after is NOT hit-tested by Chromium
+     (verified: the pseudo computes correctly and the effective target stays
+     20px), a transparent border changes the thumb's own painted size, and a
+     min-height stretches the switch track. They remain short of SC 2.5.5's
+     44px, which is a AAA target; the controls a visitor presses most — the
+     dock buttons, the sheet tabs and the drag handle — are at 44px above. */
+}
+
+/* Light schemes give `--glass-bg` very little separation from the viewer
+   backdrop (on some palettes a few percent of luminance), which left the HUD
+   buttons reading as faint outlines rather than controls. Firm up the border
+   and add the blur the dark scheme gets for free from its own contrast, so the
+   button has an edge regardless of what is behind it. Scoped to the viewer HUD:
+   the top bar and dock sit on their own solid bands and don't have the problem. */
+:root[data-theme="light"] .viewer-hud .icon-btn {
+  border-color: color-mix(in srgb, var(--line) 88%, var(--text));
+  backdrop-filter: blur(6px);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -484,6 +545,12 @@ button:disabled { cursor: default; }
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
+  /* Centred by transform, so nothing else bounds it: at 320px the Download +
+     Share cluster's intrinsic 326px hung 3px off BOTH edges, clipping the
+     primary action. Capping it makes the cluster the flex container it already
+     is — the export label is `truncate` inside a `min-w-0` wrapper, so it
+     shrinks to fit instead of overflowing. */
+  max-width: calc(100% - 1rem);
 }
 
 /* Mobile: ride the dock 0.6rem above the sheet's live top edge (--sheet-top,
@@ -596,13 +663,24 @@ button:disabled { cursor: default; }
 
 /* ═══════════════════════════════════════════════════════════════
    BOTTOM SHEET — persistent detented sheet for mobile
-   Detents: peek (72 px) / half (~52 vh) / full (100 vh)
+   Detents: peek (72 px) / half (~52 vh) / full (all but the model strip —
+   see --sheet-full-gap and BottomSheet's FULL_TOP_GAP)
    ═══════════════════════════════════════════════════════════════ */
 
-/* Scrim visible only at Full detent */
+/* Scrim visible only at Full detent. It starts BELOW the model strip the Full
+   detent leaves uncovered (--sheet-full-gap): dimming the strip would undo the
+   point of leaving it. Everything the scrim does cover is inert anyway, so
+   this is purely about what the visitor can see.
+
+   --sheet-full-gap is published on `.app-shell__mobile` by AppShell, from the
+   value BottomSheet computes (FULL_TOP_GAP + the measured notch inset) — one
+   definition of the number, in the module that owns the detent model. The
+   `0` fallback covers the frames before that lands and anywhere the sheet
+   isn't mounted; a full-height scrim is the safe direction to be wrong in,
+   and the scrim only exists at a detent the visitor has to drag to. */
 .sheet-scrim {
   position: absolute;
-  inset: 0;
+  inset: var(--sheet-full-gap, 0) 0 0 0;
   z-index: 29;
   background: rgba(0, 0, 0, 0.4);
   border: 0;
@@ -642,6 +720,20 @@ button:disabled { cursor: default; }
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* The drag handle is a 22px-tall strip — the one target genuinely under WCAG
+   2.2 SC 2.5.8's 24x24 minimum, and it sits directly above the tab row, so the
+   spacing exception doesn't clearly rescue it. The visible bar is unchanged;
+   only the hit area grows.
+
+   This lives HERE, immediately after the base rule, rather than up with the
+   other coarse-pointer target sizes: it overrides the same `padding` shorthand,
+   at the same specificity, in the same cascade layer — so source order decides,
+   and up there it lost silently. The neighbours up there set `min-height`/
+   `min-width`, which nothing else re-declares, so they are unaffected. */
+@media (pointer: coarse) {
+  .sheet-handle { padding: 0.85rem 0 0.7rem; }
 }
 
 .sheet-handle__bar {
@@ -717,7 +809,21 @@ button:disabled { cursor: default; }
     color-mix(in srgb, var(--bg) 50%, transparent),
     color-mix(in srgb, var(--bg) 50%, transparent)
   );
-  border-radius: inherit;
+  /* Round the fill to the group's INNER curve — the radius at the inside of
+     its 1px border, which is what this sits against once the negative inline
+     margins above have pushed it out to the padding edge.
+     `border-radius: inherit` was doing neither job: it computed to 0 here (so
+     the opaque fill painted square corners straight over the group's rounded
+     border, leaving the arcs stranded outside it), and had it applied it would
+     have copied the OUTER 10px and bulged a pixel past the same border. */
+  border-radius: calc(var(--radius) - 1px);
+}
+
+/* An OPEN group's header has content below it, so only its top corners follow
+   the group; square bottom corners let the rows butt against it. A CLOSED
+   group is the header alone, so it keeps all four (the rule above). */
+.param-group[open] > summary {
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
 }
 
 /* A hairline under an OPEN group's header. At rest it's an ordinary divider
@@ -765,3 +871,32 @@ button:disabled { cursor: default; }
   .param-group > summary::before { transition: none; }
 }
 } /* end @layer components */
+
+/* ═══════════════════════════════════════════════════════════════
+   FULL-DETENT MODEL STRIP — the one rule that must outrank Tailwind
+   ═══════════════════════════════════════════════════════════════ */
+
+/* At the Full detent the sheet stops short of the top edge and leaves a live
+   model strip (BottomSheet's FULL_TOP_GAP). The background is `inert` there
+   (AppShell's M16 wiring), so the top bar, the export dock, the HUD and the
+   measurements panel are all non-interactive already — leaving them drawn
+   would just cover the strip with controls nobody can press. Hiding them hands
+   the whole strip to the model. `display: none` rather than opacity so
+   Viewer's chrome-inset math (CHROME_SELECTORS) sees zero-size rects and
+   centres the model in the full strip.
+
+   This is the one rule in the file that lives in `utilities` rather than
+   `components`, and it has to: the top bar and the export dock take their
+   `display` from Tailwind's own `grid` / `flex` utilities, which a
+   components-layer rule can never beat. Inside `utilities` the cascade is back
+   to plain specificity, and (0,3,0) here comfortably outranks a single utility
+   class — so one rule covers all four overlays instead of two mechanisms
+   covering two each. */
+@layer utilities {
+  .app-shell__mobile[data-sheet-detent="full"] .mobile-top-bar,
+  .app-shell__mobile[data-sheet-detent="full"] .action-dock,
+  .app-shell__mobile[data-sheet-detent="full"] .viewer-hud,
+  .app-shell__mobile[data-sheet-detent="full"] .dimension-info {
+    display: none;
+  }
+}

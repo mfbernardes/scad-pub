@@ -24,6 +24,7 @@ import { useState } from "react";
 import { useAppActions } from "../lib/appActions";
 import { ThemeToggle } from "./ThemeToggle";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
+import { MenuRow, MENU_ROW_CLASS } from "./MenuRow";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
@@ -52,8 +53,10 @@ const THEME_ICON: Record<ThemeMode, React.ReactNode> = {
 // One wording for the licenses control in both presentations.
 const LICENSES_LABEL = "Open-source licenses";
 
-const rowClass =
-  "flex w-full items-center gap-2 rounded-(--radius-sm) px-2 py-[0.45rem] text-left text-[0.9rem] text-foreground cursor-pointer hover:bg-muted focus-visible:bg-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent";
+// The menu's rows are the shared MenuRow (see MenuRow.tsx). The bare class is
+// what the Live-preview row needs: it's a <Label> wrapping a Switch, not a
+// button, so it takes the look without the component.
+const rowClass = MENU_ROW_CLASS;
 
 interface Props {
   themeMode: ThemeMode;
@@ -95,7 +98,12 @@ export function BarActions({
         {/* Native button so PopoverTrigger's ref reaches the DOM (Radix anchors to
             it); styled to match the top bar's other icon buttons. */}
         <PopoverTrigger
-          className={cn(ICON_BUTTON_CLASS, "inline-flex items-center justify-center rounded-md outline-none data-[state=open]:border-brand")}
+          // `outline-none` suppresses index.css's global :focus-visible
+          // outline, and a native <button> (which PopoverTrigger's ref needs)
+          // gets none of shadcn Button's focus styling — so the ring below is
+          // what makes this keyboard-visible at all. Same recipe as
+          // ViewPicker's and ViewerHUD's triggers.
+          className={cn(ICON_BUTTON_CLASS, "inline-flex items-center justify-center rounded-md outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-brand")}
           aria-label="More actions"
           title="More"
         >
@@ -122,35 +130,21 @@ export function BarActions({
             </Label>
           )}
           {onSavePng && (
-            <button
-              type="button"
-              className={rowClass}
+            <MenuRow
+              label="Save image"
+              icon={<ImageIcon size={16} />}
               onClick={openModal(onSavePng)}
               disabled={!canSavePng}
-              aria-label="Save image"
-            >
-              <ImageIcon size={16} /> Save image
-            </button>
+            />
           )}
           {hasFiles && (
-            <button
-              type="button"
-              className={rowClass}
-              onClick={openModal(showFiles)}
-              aria-label="Files"
-            >
-              <FilesIcon size={16} /> Files
-            </button>
+            <MenuRow label="Files" icon={<FilesIcon size={16} />} onClick={openModal(showFiles)} />
           )}
-          <button type="button" className={rowClass} onClick={cycleTheme} aria-label="Toggle theme">
-            {THEME_ICON[themeMode]} Theme
-          </button>
-          <button type="button" className={rowClass} onClick={openModal(() => showHelp())}>
-            <HelpIcon size={16} /> Help
-          </button>
-          <button type="button" className={rowClass} onClick={openModal(showLicenses)}>
-            <InfoIcon size={16} /> {LICENSES_LABEL}
-          </button>
+          {/* Cycles in place — the visitor usually wants to see the theme
+              change, so this row deliberately leaves the menu open. */}
+          <MenuRow label="Theme" icon={THEME_ICON[themeMode]} onClick={cycleTheme} aria-label="Toggle theme" />
+          <MenuRow label="Help" icon={<HelpIcon size={16} />} onClick={openModal(() => showHelp())} />
+          <MenuRow label={LICENSES_LABEL} icon={<InfoIcon size={16} />} onClick={openModal(showLicenses)} />
         </PopoverContent>
       </Popover>
     );

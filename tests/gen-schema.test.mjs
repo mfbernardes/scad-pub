@@ -1379,6 +1379,50 @@ test("firstSentence does not break on decimals or abbreviations", () => {
   );
 });
 
+test("firstSentence splits before a sentence that opens with a quote", () => {
+  // The case the capital/paren-only lookahead used to miss entirely: a design
+  // documenting an enum by naming its values kept the whole paragraph as the
+  // control's label.
+  assert.equal(
+    firstSentence(
+      'Text alignment. "center" (default) centres both the raised lettering ' +
+        'and the Braille row; "left" and "right" flush both to that edge.'
+    ),
+    "Text alignment."
+  );
+  assert.equal(
+    firstSentence('Top-edge treatment. "Square" leaves a flat top.'),
+    "Top-edge treatment."
+  );
+  // Typographic quotes count too.
+  assert.equal(firstSentence("Mounting holes. “none” leaves a clean back."), "Mounting holes.");
+});
+
+test("firstSentence does not split an abbreviation followed by a quote", () => {
+  // The regression the quote-aware lookahead would otherwise introduce: the
+  // token before the dot is an abbreviation, not the end of a sentence.
+  assert.equal(
+    firstSentence('Enter the floor number or control name (e.g. "1 OG").'),
+    'Enter the floor number or control name (e.g. "1 OG").'
+  );
+  assert.equal(
+    firstSentence('Primary label (z.B. "Ausgang"). Keep it short.'),
+    'Primary label (z.B. "Ausgang").'
+  );
+  // …and it resumes scanning rather than giving up at the first abbreviation:
+  // the real boundary after the parenthetical is still found.
+  assert.equal(
+    firstSentence('Label text (e.g. "1 OG"). "left" flushes it to that edge.'),
+    'Label text (e.g. "1 OG").'
+  );
+});
+
+test("firstSentence returns a block with no interior boundary unchanged", () => {
+  const one = 'Enter the letters to practise: one tile per character ("abc" -> 3 tiles).';
+  assert.equal(firstSentence(one), one);
+  assert.equal(firstSentence(""), "");
+});
+
 test("colors: per-theme overrides pass through to the schema", () => {
   const { schema } = run("widget-colors.config.json");
   assert.deepEqual(schema.colors, {
@@ -2135,6 +2179,38 @@ test("@review sets a parameter's review-summary label; the quoted label is requi
   assert.equal(byName.label.description, "Engraved text.");
   // No annotation -> no reviewLabel field.
   assert.equal(byName.width.reviewLabel, undefined);
+});
+
+test("@label overrides the first-sentence control label and keeps the doc block as help", () => {
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Choose the language and Braille standard for this sign.\n` +
+      `// @label "Language & standard"\n` +
+      `locale = "de";\n` +
+      `// Plain param, no annotation.\n` +
+      `width = 10;\n`
+  );
+  const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(byName.locale.description, "Language & standard");
+  // The explanation isn't lost — it stays as help, so ParamForm's ⓘ popover
+  // still offers it (it only mounts when help differs from the label).
+  assert.equal(byName.locale.help, "Choose the language and Braille standard for this sign.");
+  // The annotation line is consumed, not leaked into the help/label text.
+  assert.ok(!byName.locale.help.includes("@label"));
+  // No annotation -> the first-sentence default still applies.
+  assert.equal(byName.width.description, "Plain param, no annotation.");
+});
+
+test("@label requires a non-empty quoted label", () => {
+  assert.throws(
+    () => paramsOf(`/* [Main] */\n// Doc.\n// @label ""\nlabel = "hi";\n`),
+    /@label annotation must have a non-empty quoted label/
+  );
+  // Unquoted is a malformed use of a KNOWN keyword, not an unknown annotation.
+  assert.throws(
+    () => paramsOf(`/* [Main] */\n// Doc.\n// @label Short\nlabel = "hi";\n`),
+    /malformed @label annotation/
+  );
 });
 
 test("@reviewNote sets a design's review-summary note; first occurrence wins, blank is ignored", () => {

@@ -18,9 +18,11 @@ import {
   frameDistanceForBox,
   cameraBasis,
   edgeInset,
+  singleEdgeInset,
   mergeInsets,
   clampInsets,
   insetFitFraction,
+  aspectAwareFit,
   insetTargetOffset,
   DEFAULT_FIT_FRACTION,
   type Box3Like,
@@ -50,7 +52,27 @@ declare const __APP_VIEWER_STYLE__: "plain" | "studio";
 
 // The floating chrome the camera fit clears — see chromeInsets below for what
 // qualifies and what deliberately doesn't.
-const CHROME_SELECTORS = [".mobile-top-bar", ".action-dock", ".viewer-hud"];
+//
+// `edge` overrides framing.ts's "charge it to the side it intrudes from least"
+// rule for an overlay that is a corner BOX rather than an edge band. The
+// mobile HUD is one: collapsed, it is a single ~44px trigger in the top-right
+// corner (ViewerHUD's `collapse` branch). Left to the default it reads as a
+// right-edge band and charges its width across the canvas's whole height,
+// shrinking the model for chrome that occupies one corner. Charging it to the
+// top is the cheaper truthful answer — the top bar already reserves a band
+// there, so the two merge instead of stacking — and it still keeps the model
+// clear of the button, which is the point. The desktop HUD is a genuine
+// right-edge column and keeps the default.
+// The two HUD entries are mutually exclusive by construction — `:not()` on the
+// general one — because insets MERGE by taking the deepest per edge. Letting a
+// collapsed HUD match both would keep the right-edge band alongside the top
+// charge and undo the whole point of the override.
+const CHROME_OVERLAYS: { selector: string; edge?: keyof Insets }[] = [
+  { selector: ".mobile-top-bar" },
+  { selector: ".action-dock" },
+  { selector: ".viewer-hud:not(.viewer-hud--collapsed)" },
+  { selector: ".viewer-hud--collapsed", edge: "top" },
+];
 
 // Axis-aligned bounding-box size of the rendered model, in millimetres (the
 // design's own units, kept 1:1 by the loaders). Reported via Viewer's onMeasure.
@@ -303,9 +325,11 @@ export const Viewer = forwardRef<
   function chromeInsets(mount: HTMLElement): Insets {
     const canvas = mount.getBoundingClientRect();
     const insets: Insets[] = [];
-    for (const selector of CHROME_SELECTORS) {
+    for (const { selector, edge } of CHROME_OVERLAYS) {
       const el = document.querySelector<HTMLElement>(selector);
-      if (el) insets.push(edgeInset(el.getBoundingClientRect(), canvas));
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      insets.push(edge ? singleEdgeInset(rect, canvas, edge) : edgeInset(rect, canvas));
     }
     return clampInsets(mergeInsets(insets), canvas.width, canvas.height);
   }
@@ -363,10 +387,16 @@ export const Viewer = forwardRef<
 
     const box = framedBox(size);
     const insets = chromeInsets(mount);
-    // Shrink the fit targets to the region the chrome leaves clear, so the
-    // box-fit solve asks for a distance that fits the model into THAT, not
-    // into the full canvas.
-    const fit = insetFitFraction(DEFAULT_FIT_FRACTION, w, h, insets);
+    // Two corrections, in this order:
+    //  1. aspectAwareFit: on a canvas far from square (a portrait phone, or
+    //     the sheet's full-detent model strip) one axis provably can't bind,
+    //     so raise the one that does — otherwise the model reads small in a
+    //     mostly-empty frame. A no-op at ordinary aspect ratios.
+    //  2. insetFitFraction: shrink whatever that produced to the region the
+    //     chrome leaves clear, so the solve fits the model into THAT rather
+    //     than the full canvas. Second, so a corrected target still yields to
+    //     the top bar/dock/HUD instead of sliding under them.
+    const fit = insetFitFraction(aspectAwareFit(DEFAULT_FIT_FRACTION, w / h), w, h, insets);
 
     const target = new THREE.Vector3(0, 0, 0);
     const distance = frameDistanceForBox(box, target, direction, w / h, cam.fov, fit);

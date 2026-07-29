@@ -23,6 +23,7 @@
   "common.close": "Close",
 
   "presets.title": "Presets",
+  "presets.manage": "Manage",
 
   "action.export": "Download for 3D printing",
   "action.share": "Share",
@@ -50,6 +51,8 @@
 
   "hud.showGrid": "Show grid",
   "hud.hideGrid": "Hide grid",
+  "hud.viewOptions": "View options",
+  "hud.viewHeading": "View",
 
   "editOnModel.open": "Edit text",
   "editOnModel.label": "Text",

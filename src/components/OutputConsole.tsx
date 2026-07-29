@@ -53,11 +53,20 @@ export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose
       aria-label={t("console.title")}
     >
       <Tabs value={tab} onValueChange={setTab} className="gap-0">
+        {/* The close button must survive a narrow viewport. At 320px the
+            title + three tabs measured 355px against a 320px row, and since
+            nothing here could shrink, `ml-auto` pushed Close clean off the
+            right edge — leaving no way to dismiss the console on the smallest
+            phones. Two changes fix it and keep every tab reachable: the title
+            (redundant — the region carries the same accessible name, and the
+            bell that opens this says "Messages") drops out below 360px, and
+            the tab strip may shrink and scroll rather than forcing the row
+            wider than its container. Close itself stays `shrink-0`. */}
         <div className="flex shrink-0 items-center border-b">
-          <span className="output-console__title self-center pl-3 pr-1 font-display text-[0.8rem] font-semibold text-foreground">
+          <span className="output-console__title self-center pl-3 pr-1 font-display text-[0.8rem] font-semibold text-foreground max-[359px]:hidden">
             {t("console.title")}
           </span>
-          <TabsList className="h-auto rounded-none border-0 bg-transparent p-0">
+          <TabsList className="h-auto min-w-0 shrink overflow-x-auto rounded-none border-0 bg-transparent p-0">
             <TabsTrigger value="notices" className={cn(chipTabTrigger, "px-3")}>
               Notices
               <CountBadges badges={badges} />

@@ -1459,6 +1459,271 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
       await context.close();
     }
   }
+
+}
+
+// The viewer HUD must stay reachable at every detent, on the narrow and short
+// viewports where it used not to. The HUD is anchored to the top of the viewer
+// while the export dock rides the sheet UPWARD, and the dock outranks it (z-10
+// vs z-5) — so at the half detent on a 360- or 320-wide phone the dock came to
+// rest ON the rail's last buttons. Counting elements cannot see that (both are
+// mounted and "visible"), so this hit-tests each button's own centre, which is
+// what a finger does.
+//
+// The full detent is excluded on purpose: the sheet legitimately covers the
+// background there, AppShell marks it `inert`, and the chrome over the model
+// strip is hidden outright — all checked by the M16 block above.
+// Mirrors BottomSheet's DETENT_ORDER — the order Arrow Up/Down step through.
+const DETENTS = ["peek", "half", "full"];
+
+// The app is a fixed-height shell: `#root` is 100dvh and every scrollable
+// region is an inner one, so the DOCUMENT must never be scrollable. When it is,
+// iOS ends up scrolling it while the software keyboard is up and does not undo
+// it afterwards — the whole shell sits shifted above its own viewport, with the
+// model clipped off the top and page background exposed below the sheet.
+//
+// Checked at the mobile breakpoint with the sheet expanded and a text field
+// focused, which is the exact state that produced it.
+//
+// The `overflow: hidden` assertion is the one with teeth. The scrollTop one
+// states the user-visible invariant, but headless Chromium has no software
+// keyboard and never makes the document overflow, so it cannot fail here —
+// verified by reverting the fix, which trips the overflow check alone. Keep
+// both: one is the property, the other is the mechanism that guarantees it.
+async function checkDocumentNeverScrolls({ browser, base, check }) {
+  console.log("=== fixed shell: the document never scrolls ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // Raise the sheet and put a text field in focus — a real keyboard would be
+    // up at this point on a device.
+    await page.locator(".sheet-handle").focus();
+    await page.keyboard.press("ArrowUp");
+    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 }).catch(() => {});
+    const field = page.locator('.sheet-content input[type="text"]').first();
+    if (await field.count()) await field.click().catch(() => {});
+    await page.waitForTimeout(500); // outlast useScrollFocusedIntoView's settle
+
+    const doc = await page.evaluate(() => {
+      const se = document.scrollingElement ?? document.documentElement;
+      // Try to scroll it, then read back. A locked shell reports 0 either way.
+      se.scrollTop = 200;
+      window.scrollTo(0, 200);
+      const after = { scrollTop: se.scrollTop, scrollY: window.scrollY };
+      se.scrollTop = 0;
+      window.scrollTo(0, 0);
+      return {
+        ...after,
+        overflowY: getComputedStyle(document.documentElement).overflowY,
+        bodyOverflowY: getComputedStyle(document.body).overflowY,
+        shellTop: Math.round(
+          document.querySelector(".app-shell__mobile")?.getBoundingClientRect().top ?? 0
+        ),
+      };
+    });
+    check(
+      doc.scrollTop === 0 && doc.scrollY === 0,
+      `the document stays at scroll 0 even when pushed (got ${doc.scrollTop}/${doc.scrollY})`
+    );
+    check(
+      doc.overflowY === "hidden" && doc.bodyOverflowY === "hidden",
+      `html/body keep overflow hidden (got ${doc.overflowY}/${doc.bodyOverflowY})`
+    );
+    check(doc.shellTop === 0, `the mobile shell stays flush with the viewport top (got ${doc.shellTop})`);
+  } finally {
+    await context.close();
+  }
+}
+
+// Nothing may sit outside the viewport horizontally, and the page must never
+// scroll sideways. Checked at 320px — the narrowest phone still in use, and the
+// width where two controls had escaped: the export dock (centred by a
+// transform, so nothing bounded its intrinsic 326px) hung off both edges, and
+// the Messages console's Close button was pushed clean off the right, leaving
+// no way to dismiss the console at all.
+//
+// Both were invisible at 390px, which is why this checks the narrow case
+// explicitly rather than trusting the default viewport.
+async function checkNothingOffscreen({ browser, base, check }) {
+  console.log("=== narrow viewport: nothing escapes horizontally ===");
+  const context = await browser.newContext({
+    viewport: { width: 320, height: 568 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  const scan = () =>
+    page.evaluate(() => {
+      const out = [];
+      const de = document.documentElement;
+      if (de.scrollWidth > de.clientWidth + 1) out.push(`document scrolls sideways (${de.scrollWidth} > ${de.clientWidth})`);
+      for (const el of document.querySelectorAll("body *")) {
+        const s = getComputedStyle(el);
+        if (s.visibility === "hidden" || s.display === "none") continue;
+        if (el.closest(".sr-only") || el.closest("[inert]") || el.classList.contains("skip-link")) continue;
+        const b = el.getBoundingClientRect();
+        if (b.width === 0 || b.height === 0) continue;
+        if (b.right > innerWidth + 1 || b.left < -1) {
+          const name = el.tagName.toLowerCase() + "." + String(el.className).split(" ").filter(Boolean).slice(0, 2).join(".");
+          out.push(`${name} at [${Math.round(b.left)}, ${Math.round(b.right)}]`);
+        }
+      }
+      return [...new Set(out)];
+    });
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+    const atRest = await scan();
+    check(atRest.length === 0, `nothing escapes the 320px viewport at rest${atRest.length ? ` (${atRest.join("; ")})` : ""}`);
+
+    // The console is the surface that failed, and only when open.
+    const bell = page.getByRole("button", { name: /Messages/i }).first();
+    if (await bell.count()) {
+      await bell.click().catch(() => {});
+      await page.waitForTimeout(500);
+      const withConsole = await scan();
+      check(withConsole.length === 0, `nothing escapes with the Messages console open${withConsole.length ? ` (${withConsole.join("; ")})` : ""}`);
+      // `.output-console__close` (a documented hook class), NOT the accessible
+      // name: the console's dismiss SCRIM carries the same "Close Messages"
+      // label and spans the viewport, so a by-role lookup matches it first and
+      // reports a pass no matter where the button itself is.
+      const close = page.locator(".output-console__close").first();
+      if (await close.count()) {
+        const b = await close.boundingBox();
+        check(
+          !!b && b.x >= 0 && b.x + b.width <= 320,
+          `the console's close button is inside the viewport (${b ? `${Math.round(b.x)}..${Math.round(b.x + b.width)}` : "missing"})`
+        );
+      }
+    }
+  } finally {
+    await context.close();
+  }
+}
+
+// Square opaque children painted over a ROUNDED parent that doesn't clip them.
+// The parent's border curve is left stranded outside the child's fill, so the
+// corner reads as a notch — which is what a sticky group header did to every
+// `.param-group` card, in both layouts and both themes.
+//
+// Expressed as the general property rather than as a check on that one header:
+// find any child whose own background reaches its parent's padding edge where
+// the parent is rounded, the child is not, and no `overflow` clips it. Reverting
+// the `.param-group > summary` radius reproduces exactly two hits (the open and
+// closed header) and nothing else, so this is measuring what it claims to.
+const CORNER_SCAN = `(() => {
+  const px = (v) => parseFloat(v) || 0;
+  const opaque = (bg, img) =>
+    (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") || (img && img !== "none");
+  const out = [];
+  for (const el of document.querySelectorAll("body *")) {
+    const p = el.parentElement;
+    if (!p) continue;
+    const ps = getComputedStyle(p), es = getComputedStyle(el);
+    const pr = px(ps.borderTopLeftRadius);
+    if (pr <= 0) continue;
+    if (ps.overflow !== "visible" || ps.overflowX !== "visible") continue;
+    if (!opaque(es.backgroundColor, es.backgroundImage)) continue;
+    const er = px(es.borderTopLeftRadius);
+    if (er >= pr - 1.5) continue;
+    const pb = p.getBoundingClientRect(), eb = el.getBoundingClientRect();
+    if (eb.width === 0 || eb.height === 0) continue;
+    const reachesX =
+      eb.left <= pb.left + px(ps.borderLeftWidth) + 0.5 &&
+      eb.right >= pb.right - px(ps.borderRightWidth) - 0.5;
+    const reachesTop = eb.top <= pb.top + px(ps.borderTopWidth) + 0.5;
+    const reachesBottom = eb.bottom >= pb.bottom - px(ps.borderBottomWidth) - 0.5;
+    if (!reachesX || !(reachesTop || reachesBottom)) continue;
+    const name = (n) => n.tagName.toLowerCase() + "." + String(n.className).split(" ").filter(Boolean).slice(0, 2).join(".");
+    out.push(name(el) + " in " + name(p));
+  }
+  return [...new Set(out)];
+})()`;
+
+async function checkRoundedCorners({ page, check, paramsTabName }) {
+  console.log("=== rounded corners: no square fill over a rounded parent ===");
+  // Scan the params form in both its open and collapsed group states — the
+  // header is a different box in each, and only one of them was caught by eye.
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  await page.waitForTimeout(300);
+  const open = await page.evaluate(CORNER_SCAN);
+  check(open.length === 0, `no square-over-rounded corners with groups open${open.length ? ` (${open.join("; ")})` : ""}`);
+  await page.locator(".param-group > summary").first().click().catch(() => {});
+  await page.waitForTimeout(300);
+  const collapsed = await page.evaluate(CORNER_SCAN);
+  check(collapsed.length === 0, `no square-over-rounded corners with a group collapsed${collapsed.length ? ` (${collapsed.join("; ")})` : ""}`);
+  // Leave the group as we found it.
+  await page.locator(".param-group > summary").first().click().catch(() => {});
+  await page.waitForTimeout(200);
+}
+
+async function checkViewerHudReachable({ browser, base, check }) {
+  console.log("=== viewer HUD reachability (narrow + short viewports) ===");
+  for (const [width, height] of [[360, 740], [320, 568]]) {
+    const context = await browser.newContext({
+      viewport: { width, height },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto(base, { waitUntil: "load" });
+      await dismissWelcomePopup(page);
+      await waitRenderDone(page).catch(() => {});
+      for (const detent of ["peek", "half"]) {
+        // Drive the sheet with the handle's ARROW KEYS, not its tap-to-cycle:
+        // the starting detent depends on the first-visit policy (a tall
+        // portrait viewport opens to half), so "click once to get to half"
+        // silently lands somewhere else on some viewports. Arrow Down/Up step
+        // one detent and stop at the ends, so Down x2 normalises to peek from
+        // anywhere and Up x N walks to the one under test.
+        await page.locator(".sheet-handle").focus();
+        for (let i = 0; i < DETENTS.length - 1; i++) await page.keyboard.press("ArrowDown");
+        for (let i = 0; i < DETENTS.indexOf(detent); i++) await page.keyboard.press("ArrowUp");
+        // Assert we actually GOT there before measuring. Swallowing this (as a
+        // bare `.catch(() => {})` would) turns a step that didn't take into a
+        // green "half" result measured at peek — the failure mode this whole
+        // check exists to catch, reported as a pass.
+        const reached = await page
+          .waitForSelector(`.bottom-sheet--${detent}`, { timeout: 3000 })
+          .then(() => true)
+          .catch(() => false);
+        check(reached, `${width}x${height}: sheet reached the ${detent} detent`);
+        if (!reached) continue;
+        // Let the dock's `bottom` transition settle before measuring — it
+        // mirrors the sheet's own 0.28s ease (see .action-dock in index.css).
+        await page.waitForTimeout(450);
+        const covered = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".viewer-hud button"))
+            .filter((b) => b.getBoundingClientRect().width > 0)
+            .filter((b) => {
+              const r = b.getBoundingClientRect();
+              const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              return !hit || !hit.closest(".viewer-hud");
+            })
+            .map((b) => b.getAttribute("aria-label") || b.textContent?.trim() || "?")
+        );
+        check(
+          covered.length === 0,
+          `${width}x${height} ${detent}: every viewer HUD button is hit-testable${covered.length ? ` (covered: ${covered.join(", ")})` : ""}`
+        );
+      }
+    } finally {
+      await context.close();
+    }
+  }
 }
 
 async function main() {
@@ -1534,6 +1799,10 @@ async function main() {
     await checkSectionNavigator(ctx);
     await checkResponsiveLayout(ctx);
     await checkFirstVisitSheetPolicy(ctx);
+    await checkViewerHudReachable(ctx);
+    await checkDocumentNeverScrolls(ctx);
+    await checkRoundedCorners(ctx);
+    await checkNothingOffscreen(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);
