@@ -12,6 +12,12 @@ interface BeforeInstallPromptEvent extends Event {
 
 export function useInstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
+  // Latches on `appinstalled`: the user has just committed to keeping this app,
+  // which is what tells the offline warm-up to stop being polite about
+  // bandwidth (see swUpdate.ts's useOfflineWarmup). Only ever true for the tab
+  // that saw the event; a later *launch* of the installed app is recognised by
+  // useStandalone instead.
+  const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
     const onPrompt = (e: Event) => {
@@ -20,7 +26,10 @@ export function useInstallPrompt() {
       setDeferred(e as BeforeInstallPromptEvent);
     };
     // Once installed, drop the captured prompt so no install UI lingers.
-    const onInstalled = () => setDeferred(null);
+    const onInstalled = () => {
+      setDeferred(null);
+      setInstalled(true);
+    };
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
     return () => {
@@ -47,5 +56,5 @@ export function useInstallPrompt() {
     }
   }, [deferred]);
 
-  return { canInstall: deferred !== null, promptInstall };
+  return { canInstall: deferred !== null, promptInstall, installed };
 }

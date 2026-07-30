@@ -1,0 +1,30 @@
+{
+  "title": "Widget Studio",
+  "logo": "logo.svg",
+  "source": "src",
+  "assets": [
+    "lib"
+  ],
+  "fileImport": true,
+  "designs": [
+    {
+      "id": "widget",
+      "label": "Widget",
+      "heavy": true,
+      "group": "Gadgets"
+    }
+  ],
+  "render": {
+    "features": [
+      "textmetrics"
+    ],
+    "fonts": [
+      "Foo.ttf"
+    ]
+  },
+  "popup": {
+    "mode": "picker",
+    "header": "Welcome",
+    "body": "One design only."
+  }
+}

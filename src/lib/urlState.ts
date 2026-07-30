@@ -102,21 +102,34 @@ function fromStore(schema: Schema): SessionState | null {
   }
 }
 
+export interface InitialState extends SessionState {
+  /**
+   * The URL hash named the design: a shared link, or an installed app's
+   * shortcut (`./#d=<id>`, see the manifest's `shortcuts`). Distinct from a
+   * localStorage restore, which reproduces a session rather than expressing an
+   * explicit choice. `shouldShowPopup` skips the design chooser for these — the
+   * question it asks was answered by whoever built the link.
+   */
+  fromLink: boolean;
+}
+
 /** Initial state on load: URL hash wins, then last session, then defaults. The
  *  no-link default is the configured `defaultDesign`, else the first design. */
-export function readInitialState(schema: Schema): SessionState {
+export function readInitialState(schema: Schema): InitialState {
+  const linked = fromHash(schema);
+  if (linked) return { ...linked, fromLink: true };
   // find() returns undefined when defaultDesign is unset (no id === undefined),
   // so the ?? fallback to the first design covers the no-default case too.
   const design0 =
     schema.designs.find((d) => d.id === schema.defaultDesign) ?? schema.designs[0];
-  return (
-    fromHash(schema) ??
-    fromStore(schema) ?? {
+  return {
+    ...(fromStore(schema) ?? {
       designId: design0.id,
       values: defaultsFor(design0),
       preset: "",
-    }
-  );
+    }),
+    fromLink: false,
+  };
 }
 
 // The single source of the "d=/v=/p=" hash encoding, shared by `persistState`

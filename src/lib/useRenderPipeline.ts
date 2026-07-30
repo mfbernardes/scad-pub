@@ -64,6 +64,16 @@ export interface RenderPipelineArgs {
     maxCacheEntryBytes?: number;
     persistentCache?: boolean;
   };
+  /**
+   * Hold the whole render path back: construct no runner, spawn no worker,
+   * request no render. Set while the app's *first screen is a chooser* — see
+   * popup.ts's `isDesignChooser` — where rendering the default design is
+   * speculative anyway and its bootstrap download (the ~10 MB WASM binary plus
+   * the bundled fonts) would otherwise starve the very images that chooser is
+   * made of. Released the moment the user picks; nothing about the pipeline's
+   * behaviour after that differs.
+   */
+  holdBoot?: boolean;
   setAnnouncement: (msg: string) => void;
   /** Test injection point: build the runner instead of constructing a real
    * OpenSCADRunner (which spawns a worker). Defaults to `new OpenSCADRunner`. */
@@ -77,6 +87,7 @@ export function useRenderPipeline({
   initialValues,
   heavyMs,
   runner,
+  holdBoot = false,
   setAnnouncement,
   createRunner,
 }: RenderPipelineArgs) {
@@ -292,7 +303,13 @@ export function useRenderPipeline({
   // initial-render effect from firing a second time on remount. End state
   // after the replay: exactly one live worker (the second runner's), zero
   // leaked ones.
+  //
+  // `holdBoot` (see its own doc above for why) is the one thing that delays
+  // this. Flipping it off constructs the runner exactly as a mount would have;
+  // it never flips back on, so the "one runner per component lifetime"
+  // property is unchanged in practice.
   useEffect(() => {
+    if (holdBoot) return;
     const opts: RunnerCtorOptions = {
       onReady: () => {
         setReady(true);
@@ -318,17 +335,18 @@ export function useRenderPipeline({
       // initial render per design view" guarantee is unchanged.
       initialRenderFiredRef.current = false;
     };
-    // Intentionally mount-only: matches the previous lazy-ref-init's semantics
-    // of constructing exactly one runner for the component's lifetime and
-    // never reconstructing it when `runner`/`createRunner` identities change.
+    // Deps are `holdBoot` alone, deliberately: otherwise mount-only, matching
+    // the previous lazy-ref-init's semantics of constructing exactly one runner
+    // for the component's lifetime and never reconstructing it when
+    // `runner`/`createRunner` identities change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [holdBoot]);
 
   useEffect(() => {
-    if (!autoRender) return;
+    if (holdBoot || !autoRender) return;
     const t = setTimeout(doRender, 400);
     return () => clearTimeout(t);
-  }, [doRender, autoRender]);
+  }, [doRender, autoRender, holdBoot]);
 
   // First view of a design always renders exactly once, even when auto-render
   // is off (heavy designs start in manual mode) — so the user never faces an
@@ -340,11 +358,15 @@ export function useRenderPipeline({
   // doRender's own epoch check makes a mid-flight design switch safe.
   useEffect(() => {
     // shouldFireInitialRender deliberately takes no `ready` argument — see
-    // its doc comment and docs/architecture-review.md M15.
+    // its doc comment and docs/architecture-review.md M15. `holdBoot` is
+    // separate from it because it is not about *this* design's state at all:
+    // it says the app hasn't started yet. Once it clears, this effect re-runs
+    // with the flag still unset and the first render happens as usual.
+    if (holdBoot) return;
     if (!shouldFireInitialRender(initialRenderFiredRef.current, autoRenderRef.current)) return;
     initialRenderFiredRef.current = true;
     doRender();
-  }, [design.id, doRender]);
+  }, [design.id, doRender, holdBoot]);
 
   // Imported-file changes alter render inputs the key can't fully capture in
   // the persisted tiers: drop both cache tiers, forget the last key so the

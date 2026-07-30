@@ -267,3 +267,29 @@ test("sessionStateEquals — the external-navigation loop guard", () => {
     false
   );
 });
+
+// --- fromLink: was the design chosen by whoever built the URL? -------------
+// App reads this to skip the design chooser (src/lib/popup.ts's
+// shouldShowPopup) — a shared link, or an installed app's `./#d=<id>`
+// shortcut, arrives with the chooser's question already answered.
+test("fromLink is set only when the hash named the design", () => {
+  // A shared link.
+  globalThis.location.hash = "#d=d&v=" + encodeURIComponent('{"text":"linked"}');
+  assert.equal(readInitialState(schema).fromLink, true);
+
+  // A restored session is not a link: the user never expressed a choice this
+  // visit, so the chooser still has something to ask.
+  globalThis.location.hash = "";
+  persistState(design, { text: "stored", n: 2, b: false });
+  globalThis.location.hash = "";
+  assert.equal(readInitialState(schema).fromLink, false);
+
+  // Cold visit, no hash and no store.
+  globalThis.localStorage.clear();
+  assert.equal(readInitialState(schema).fromLink, false);
+
+  // A hash that names no known design falls through to the store/defaults —
+  // and is not a link either.
+  globalThis.location.hash = "#d=nope";
+  assert.equal(readInitialState(schema).fromLink, false);
+});

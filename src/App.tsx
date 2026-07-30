@@ -24,9 +24,10 @@ import { computeShareability, shareabilityWarning } from "./lib/shareability";
 import { download, downloadBlob } from "./lib/download";
 import { shareUrl, shareFileOrFallback } from "./lib/share";
 import { useTheme } from "./lib/theme";
-import { useServiceWorkerUpdate } from "./lib/swUpdate";
+import { useServiceWorkerUpdate, useOfflineWarmup } from "./lib/swUpdate";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
 import { useOnline } from "./lib/useOnline";
+import { useStandalone } from "./lib/useStandalone";
 import { useDocumentScrollLock } from "./lib/useDocumentScrollLock";
 import { useRenderPipeline } from "./lib/useRenderPipeline";
 import { useFileImports } from "./lib/useFileImports";
@@ -42,7 +43,7 @@ import { PopupModal } from "./components/PopupModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Modal, MODAL_BODY } from "./components/Modal";
 import { Button } from "./components/ui/button";
-import { shouldShowPopup, rememberPopup } from "./lib/popup";
+import { shouldShowPopup, rememberPopup, isDesignChooser } from "./lib/popup";
 import type { ExportSuccessState } from "./components/ExportSuccess";
 
 // LicensesModal, HelpModal, DesignDocModal and FilesModal are interaction-only
@@ -131,8 +132,10 @@ export default function App() {
   // is up, and does not undo it afterwards). See the hook's own doc.
   useDocumentScrollLock();
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
-  const { canInstall, promptInstall } = useInstallPrompt();
+  const { canInstall, promptInstall, installed } = useInstallPrompt();
   const online = useOnline();
+  // True when this is the installed app in its own window (see the warm-up below).
+  const standalone = useStandalone();
   const {
     updateReady,
     applyUpdate,
@@ -173,11 +176,23 @@ export default function App() {
   const [exportSuccess, setExportSuccess] = useState<ExportSuccessState | null>(null);
   const exportSuccessKeyRef = useRef(0);
   const dismissExportSuccess = useCallback(() => setExportSuccess(null), []);
-  const [showPopup, setShowPopup] = useState(() => shouldShowPopup(popup));
+  // `fromLink` skips the picker intro when the hash already names a design —
+  // see shouldShowPopup. That also means a shared link never trips the boot
+  // gate below: it renders what it was sent to render, immediately.
+  const [showPopup, setShowPopup] = useState(() =>
+    shouldShowPopup(popup, initialState.fromLink)
+  );
   const closePopup = (remember: boolean) => {
     if (remember && popup) rememberPopup(popup);
     setShowPopup(false);
   };
+  // A showing design chooser *is* the app's first screen — a grid of design
+  // thumbnails with nothing chosen yet. Until the user picks, there is nothing
+  // worth rendering, so the render path stays parked and leaves the network to
+  // those thumbnails; see useRenderPipeline's `holdBoot`. `isDesignChooser` is
+  // the same predicate PopupModal renders the gallery from, so the two cannot
+  // disagree about what this popup is.
+  const holdBoot = showPopup && isDesignChooser(popup);
   // Bumped by the popup's primary CTA to open the design picker (the obvious
   // first step). AppShell routes it to whichever layout's picker is visible.
   const [openPickerSignal, setOpenPickerSignal] = useState(0);
@@ -232,9 +247,22 @@ export default function App() {
       maxCacheEntryBytes: cacheConfig?.maxEntryBytes,
       persistentCache: cacheConfig?.persistent,
     },
+    holdBoot,
     setAnnouncement,
   });
   invalidateRef.current = invalidate;
+
+  // Fill the offline cache at the first moment nothing is competing for the
+  // connection — installed/standalone, hidden, or the render worker's own
+  // bootstrap having landed. The policy lives in `warmDelayMs`; `standalone`
+  // recognises a launch of the installed app, `installed` the visit that
+  // installed it.
+  useOfflineWarmup({
+    holdBoot,
+    ready,
+    committed: installed || standalone,
+    updateWaiting: updateReady,
+  });
 
   // Switching designs resets everything design-scoped in the same event —
   // values, preset selection, and the pipeline's render-scoped state.
@@ -276,10 +304,17 @@ export default function App() {
     [designId, resetForDesign]
   );
 
+  // Nothing is written while the chooser still owns the first screen. Not just
+  // because there is no chosen state worth mirroring yet: `persistState` puts
+  // `#d=<default>` in the URL, and on the next load `readInitialState` cannot
+  // tell that hash from one a person sent, so it would report `fromLink` and
+  // skip the very chooser the user never answered — leaving them on the default
+  // design, permanently, after a reload.
   useEffect(() => {
+    if (holdBoot) return;
     const t = setTimeout(() => persistState(design, values, presetSel), 300);
     return () => clearTimeout(t);
-  }, [design, values, presetSel]);
+  }, [design, values, presetSel, holdBoot]);
 
   // M4: consume external navigations that only change the URL hash — a
   // same-document `hashchange` (e.g. a browser/OS "navigate to #d=..." that
@@ -308,6 +343,14 @@ export default function App() {
     const applyFromHash = (hash: string) => {
       const state = parseHashState(schema, hash);
       if (!state) return;
+      // A navigation that names a design answers the chooser's question, so stop
+      // asking it — the same rule `shouldShowPopup` applies to a link at load,
+      // including not remembering the skip (a notice is left alone: navigating
+      // doesn't answer one). Deliberately BEFORE the equality guard below: a
+      // launch shortcut or hash naming the design that is already current is a
+      // state no-op, but it is not a chooser no-op — treating it as one left the
+      // chooser up and, with it, the render path parked.
+      if (isDesignChooser(popup)) setShowPopup(false);
       if (sessionStateEquals(currentSessionRef.current, state)) return;
       applyExternalStateRef.current(state);
     };
