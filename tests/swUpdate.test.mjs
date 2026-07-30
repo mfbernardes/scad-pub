@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { isWaitingUpdate, forceReload } from "../src/lib/swUpdate.ts";
+import { isWaitingUpdate, forceReload, warmDelayMs } from "../src/lib/swUpdate.ts";
 
 const swText = () =>
   readFileSync(fileURLToPath(new URL("../public/sw.js", import.meta.url)), "utf-8");
@@ -23,7 +23,7 @@ test("a freshly-installed worker is an update only when a controller exists", ()
 test("service worker precaches the app shell without auto-activating updates", () => {
   const text = swText();
   assert.match(text, /addEventListener\(\s*["']install["']/);
-  assert.match(text, /precacheShell/);
+  assert.match(text, /precacheEssential/);
   assert.match(text, /asset-manifest\.json/);
   assert.match(text, /precache-manifest\.json/);
   assert.doesNotMatch(text, /install[\s\S]{0,200}skipWaiting/);
@@ -34,7 +34,7 @@ test("service worker keeps the big binaries out of the shell cache and warms BIN
   // The wasm + font binaries live in the render worker's own versioned cache…
   assert.match(text, /BIN_RE\s*=\s*\/\\\.\(wasm\|ttf\|otf\|ttc\)\$\/i/);
   assert.doesNotMatch(text, /pathname\.includes\(["']\/wasm\/["']\)/);
-  // …which the install step warms from the precache manifest's `bin` section,
+  // …which the WARM message warms from the precache manifest's `bin` section,
   // so offline rendering works even before the first render.
   assert.match(text, /precacheBin/);
   assert.match(text, /bin\.cache/);
@@ -122,4 +122,30 @@ test("service worker carries a build-stamped version so updates are detectable",
   const text = swText();
   assert.match(text, /__SW_VERSION__/);
   assert.match(text, /shell-\$\{VERSION\}/);
+});
+
+// --- Offline warm-up policy (src/lib/swUpdate.ts's warmDelayMs) ------------
+// The bundle is ~11 MB, so it may only download when nothing is competing for
+// the connection. Pure policy, tested without a browser.
+test("warmDelayMs waits for an uncontended moment, and an installed app never waits", () => {
+  const base = { holdBoot: false, ready: false, committed: false, hidden: false };
+  // Nothing has happened yet: a visitor still reading the first screen.
+  assert.equal(warmDelayMs(base), null);
+  // The render worker's own bootstrap landed — the heavy download the app
+  // actually needed is done, so follow it after a short settle.
+  assert.equal(warmDelayMs({ ...base, ready: true }), 2000);
+  // Installed, or launched as the installed app: offline completeness is the
+  // point, and it must not depend on the user having rendered anything.
+  assert.equal(warmDelayMs({ ...base, committed: true }), 0);
+  // Looked away — free bandwidth.
+  assert.equal(warmDelayMs({ ...base, hidden: true }), 0);
+  // The design chooser holds back the `ready` trigger — its thumbnails own the
+  // connection while someone is choosing.
+  assert.equal(warmDelayMs({ ...base, holdBoot: true, ready: true }), null);
+  // …but it must not veto the other two. Someone who installs from the chooser
+  // and never picks would otherwise never warm, on this launch or any later
+  // one (the chooser they never dismissed returns every time), leaving an
+  // installed app permanently unable to render offline.
+  assert.equal(warmDelayMs({ ...base, holdBoot: true, committed: true }), 0);
+  assert.equal(warmDelayMs({ ...base, holdBoot: true, hidden: true }), 0);
 });

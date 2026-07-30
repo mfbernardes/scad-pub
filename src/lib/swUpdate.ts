@@ -57,6 +57,99 @@ export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void
   }
 }
 
+/**
+ * Tell the service worker the page is done with its first screen, so it can
+ * pull down the rest of the offline bundle — the lazy chunks, artwork, design
+ * sources and the ~11 MB of pinned binaries (public/sw.js's WARM message).
+ * Install deliberately caches only the boot-critical shell; without this call
+ * the offline bundle still fills in through the fetch handler as things get
+ * used, so a page that never reaches this (closed early, JS error) degrades
+ * rather than breaks. Safe to call repeatedly — the worker memoizes the pass.
+ */
+export function warmServiceWorker(): void {
+  if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
+  void navigator.serviceWorker.ready
+    .then((reg) => (reg.active ?? navigator.serviceWorker.controller)?.postMessage({ type: "WARM" }))
+    .catch(() => {
+      /* offline support is best-effort */
+    });
+}
+
+/** What the offline warm-up needs to know about the session. */
+export interface WarmupState {
+  /** The design chooser is the first screen — nothing may compete with it. */
+  holdBoot: boolean;
+  /** The render worker finished its own bootstrap download. */
+  ready: boolean;
+  /** This visit installed the app, or is running as the installed app. */
+  committed: boolean;
+  /** The page is currently hidden. */
+  hidden: boolean;
+}
+
+/**
+ * How long to wait before asking the service worker to fill the offline cache,
+ * or null for "not yet". Pure, so the policy is testable without a browser.
+ *
+ * The tension: the bundle is ~11 MB, and downloading it while the first screen
+ * still needs the network is what made a cold visit slow. So the trigger is
+ * whichever comes first of three moments where bandwidth is provably not
+ * contended:
+ *
+ *   - `committed` — installed, or launched as the installed app. Offline
+ *     completeness is the whole point of installing, so this outranks
+ *     politeness and warms with no delay. It is also the only trigger that
+ *     fires for someone who never renders at all.
+ *   - `hidden` — the user has looked away. Free bandwidth by definition, and
+ *     the pass outlives the page (the worker holds it in `waitUntil`).
+ *   - `ready` — the render worker's own bootstrap is done, i.e. the heavy
+ *     download the app actually needed has landed. A short delay lets the
+ *     first render's own work settle first.
+ *
+ * `holdBoot` vetoes only the last of those. It must NOT veto the other two, or
+ * the case this exists for goes uncovered: someone who installs from the
+ * chooser and never picks a design would never warm — not on that visit and
+ * not on any later launch, since the chooser they never dismissed comes back
+ * every time, leaving an installed app permanently unable to render offline.
+ * Politeness about ~240 kB of thumbnails is worth it for a first visit in a
+ * browser tab; it is not worth an installed app that doesn't work, and it means
+ * nothing at all while the page is hidden.
+ */
+export function warmDelayMs(s: WarmupState): number | null {
+  if (s.committed || s.hidden) return 0;
+  if (s.holdBoot) return null;
+  return s.ready ? 2000 : null;
+}
+
+/**
+ * Ask the service worker to fill the offline cache at the first uncontended
+ * moment — see `warmDelayMs` for the policy. Re-arms as the session changes;
+ * the worker itself memoizes the pass, so an extra call costs nothing.
+ */
+export function useOfflineWarmup(state: Omit<WarmupState, "hidden">): void {
+  const { holdBoot, ready, committed } = state;
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const evaluate = () => {
+      const delay = warmDelayMs({
+        holdBoot,
+        ready,
+        committed,
+        hidden: typeof document !== "undefined" && document.hidden,
+      });
+      if (delay === null) return;
+      clearTimeout(timer);
+      timer = setTimeout(warmServiceWorker, delay);
+    };
+    evaluate();
+    document.addEventListener("visibilitychange", evaluate);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", evaluate);
+    };
+  }, [holdBoot, ready, committed]);
+}
+
 export function useServiceWorkerUpdate() {
   const [updateReady, setUpdateReady] = useState(false);
   const waitingRef = useRef<ServiceWorker | null>(null);

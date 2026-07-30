@@ -92,15 +92,19 @@ cancellation terminates and respawns the worker and the superseded promise rejec
 The WASM is single-threaded: no `SharedArrayBuffer`, no COOP/COEP. `dist/` is a plain static
 bundle; serve `.wasm` as `application/wasm`.
 
-**Nothing heavy is downloaded while the first screen still needs the network.**
-`useRenderPipeline`'s `holdBoot` constructs no runner at all while a design chooser is the
-first screen — spawning it there starts the ~11 MB bootstrap fetch against the chooser's own
+**Nothing heavy is downloaded while the first screen still needs the network.** Two boot
+brakes exist for that, and both are easy to undo by accident. `useRenderPipeline`'s `holdBoot`
+constructs no runner at all while a design chooser is the first screen — spawning it there starts the ~11 MB bootstrap fetch against the chooser's own
 thumbnails, which measurably starved them. `App` derives it from `popup.ts`'s
 `isDesignChooser` — which is just `mode === "picker"`, because `gen-schema`'s `checkPopupMode`
 refuses to build a `picker` config with fewer than two designs; that mode used to fall back to
-a plain notice, and consumers disagreeing about which it was cost two bugs. Anything that moves
-that work back into mount re-creates the stall — measure a cold, throttled first visit before
-believing otherwise.
+a plain notice, and consumers disagreeing about which it was cost two bugs. And `public/sw.js`
+install caches only the boot-critical shell; the lazy chunks, artwork, sources and the binary
+warm-up wait for the page's `WARM` message, sent at the first uncontended moment
+`swUpdate.ts`'s `warmDelayMs` recognises — installed/standalone (no delay: offline completeness
+is why someone installs), the tab going hidden, or the render worker reporting `ready`. Anything
+that moves that work back into mount or install re-creates the stall — measure a cold,
+throttled first visit before believing otherwise.
 
 ## App structure
 

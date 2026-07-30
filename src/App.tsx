@@ -24,9 +24,10 @@ import { computeShareability, shareabilityWarning } from "./lib/shareability";
 import { download, downloadBlob } from "./lib/download";
 import { shareUrl, shareFileOrFallback } from "./lib/share";
 import { useTheme } from "./lib/theme";
-import { useServiceWorkerUpdate } from "./lib/swUpdate";
+import { useServiceWorkerUpdate, useOfflineWarmup } from "./lib/swUpdate";
 import { useInstallPrompt } from "./lib/useInstallPrompt";
 import { useOnline } from "./lib/useOnline";
+import { useStandalone } from "./lib/useStandalone";
 import { useDocumentScrollLock } from "./lib/useDocumentScrollLock";
 import { useRenderPipeline } from "./lib/useRenderPipeline";
 import { useFileImports } from "./lib/useFileImports";
@@ -131,8 +132,10 @@ export default function App() {
   // is up, and does not undo it afterwards). See the hook's own doc.
   useDocumentScrollLock();
   const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
-  const { canInstall, promptInstall } = useInstallPrompt();
+  const { canInstall, promptInstall, installed } = useInstallPrompt();
   const online = useOnline();
+  // True when this is the installed app in its own window (see the warm-up below).
+  const standalone = useStandalone();
   const {
     updateReady,
     applyUpdate,
@@ -243,6 +246,13 @@ export default function App() {
     setAnnouncement,
   });
   invalidateRef.current = invalidate;
+
+  // Fill the offline cache at the first moment nothing is competing for the
+  // connection — installed/standalone, hidden, or the render worker's own
+  // bootstrap having landed. The policy lives in `warmDelayMs`; `standalone`
+  // recognises a launch of the installed app, `installed` the visit that
+  // installed it.
+  useOfflineWarmup({ holdBoot, ready, committed: installed || standalone });
 
   // Switching designs resets everything design-scoped in the same event —
   // values, preset selection, and the pipeline's render-scoped state.

@@ -1,10 +1,16 @@
 // sw.js — service worker for offline use. Caches the app shell and hashed
 // build assets at runtime (stale-while-revalidate); SPA navigations fall back
 // to the cached shell when offline. The big version-pinned binaries (the
-// ~10 MB WASM + the bundled fonts) are warmed at install into the render
-// worker's own versioned Cache Storage entry (same cache, same keys — see
+// ~10 MB WASM + the bundled fonts) are warmed into the render worker's own
+// versioned Cache Storage entry (same cache, same keys — see
 // src/openscad/worker.ts BIN_CACHE), so offline rendering works even before
 // the first render, without double-storing 10 MB.
+//
+// Install caches the boot-critical shell and nothing else; the rest — that
+// binary warm-up included — waits for the page's WARM message, sent once its
+// first screen no longer needs the network (see warmSupplementary below and
+// src/lib/swUpdate.ts's warmServiceWorker). Each WARM fills whatever is still
+// missing, so an interrupted pass is repaired by the next one.
 // The cache is namespaced per configurator: the registering page passes ?ns=<id>
 // (the config's `id`) on the worker URL, so two configs on one origin don't share
 // a shell cache. Falls back to a neutral name if registered without it.
@@ -46,6 +52,11 @@ function isAppEntry(url) {
 // keys the result, permanently poisoning the persisted render cache for those
 // parameters. precache-manifest.json drives the SW's own asset list, so it
 // needs the same treatment.
+//
+// EVERYTHING under `scad/` is volatile, with no exceptions by name or by file
+// type: that tree mirrors the operator's source layout at its own relative
+// paths, so any name here could be theirs — a `.png` can be a `surface()`
+// heightmap, and a subdirectory can be whatever they called it.
 function isVolatileSource(pathname) {
   return pathname.split("/").includes("scad") || pathname.endsWith("precache-manifest.json");
 }
@@ -197,7 +208,16 @@ async function cacheEssential(cache, url) {
   await cache.put(url, res.clone());
 }
 
-async function precacheShell() {
+// Install caches ONLY this — the app entry document plus the JS/CSS it
+// needs to boot. Everything else (lazy chunks, icons, splash artwork, design
+// sources, presets, docs, and the ~11 MB of pinned binaries) is deferred to
+// warmSupplementary() below, which the page asks for once its first screen is
+// done with the network. Install fires the moment the page registers the
+// worker, which is exactly when the app is fetching whatever the user is
+// looking at; downloading the entire offline bundle right then made a first
+// visit's own content — the design gallery's thumbnails above all — queue
+// behind megabytes it doesn't need yet.
+async function precacheEssential() {
   const cache = await caches.open(CACHE);
 
   // The atomic minimum shell: the app entry document itself, plus every
@@ -214,22 +234,65 @@ async function precacheShell() {
   const essential = new Set();
   const extra = new Set();
   // JS/CSS the entry needs -> essential (install-fatal); the webmanifest,
-  // icons, and Apple splash images it also links -> extra (best-effort).
+  // icons, and Apple splash images it also links -> extra (warmed later).
   addHtmlAssets(essential, extra, html);
   await Promise.all([...essential].map((url) => cacheEssential(cache, url)));
+  return extra;
+}
 
-  // Everything below is supplementary: the HTML-linked PWA metadata/artwork
-  // collected above, plus additional lazy chunks, icons, presets, docs, and the
-  // warmed binary cache. Best-effort — the app is already bootable offline from
-  // the essential shell above, and the runtime fetch handler (stale-while-
-  // revalidate / network-first) fills these in on first request if install
-  // couldn't reach them.
-  await addBuildAssets(extra);
-  const bin = await addPublicAssets(extra);
-  await Promise.all([
-    ...[...extra].map((url) => cacheOne(cache, url)),
-    precacheBin(bin),
-  ]);
+// The rest of the offline bundle: the HTML-linked PWA metadata/artwork, the
+// additional lazy chunks, icons, presets, docs, and the warmed binary cache.
+// Best-effort throughout — the app is already bootable offline from the
+// essential shell, and the runtime fetch handler (stale-while-revalidate /
+// network-first) fills any of this in on first request anyway.
+//
+// `warming` coalesces concurrent WARMs (several tabs, one tab re-triggering)
+// but is cleared once the pass settles, so a LATER trigger retries. That
+// matters because every helper below swallows its own per-asset failure: a pass
+// interrupted by a dead network, a flaky response or a worker killed mid-flight
+// resolves looking exactly like a complete one. Memoizing that forever left an
+// installed app that boots offline and then cannot render, with no way back —
+// precisely the state the warm-up exists to prevent. Retrying is cheap because
+// a pass only fetches what is actually missing.
+let warming = null;
+function warmSupplementary() {
+  warming ??= runWarmup()
+    .catch(() => {
+      /* whatever is still missing is the next trigger's problem */
+    })
+    .finally(() => {
+      warming = null;
+    });
+  return warming;
+}
+
+function runWarmup() {
+  return (async () => {
+    const cache = await caches.open(CACHE);
+    // The artwork/metadata the entry links comes from the shell install
+    // cached, re-parsed rather than carried over from install in a module
+    // variable: WARM can only arrive at an ACTIVE worker (the page waits on
+    // serviceWorker.ready), so by now that entry is always in the cache — and
+    // this pass runs once per worker, so one cached read costs nothing next to
+    // a second way of obtaining the same set.
+    const extra = new Set();
+    const shell = await cache.match(SHELL_KEY);
+    if (shell) addHtmlAssets(new Set(), extra, await shell.text());
+    const [, bin] = await Promise.all([addBuildAssets(extra), addPublicAssets(extra)]);
+    // Only what isn't cached yet, so re-running this after a partial pass costs
+    // a handful of cache lookups rather than the whole bundle again. (The
+    // versioned shell cache is per build, so "already there" always means this
+    // build's copy; precacheBin does the same check for the binaries.)
+    const missing = [];
+    for (const url of extra) if (!(await cache.match(url))) missing.push(url);
+    // Light assets first (~1.5 MB of chunks, artwork, sources, presets, docs),
+    // the pinned binaries after (~11 MB). A warm-up can be cut short at any
+    // point — the tab closes, the worker is terminated, the network drops — and
+    // in that order what survives is an app that boots and switches designs
+    // offline. Interleaved, an interruption left an arbitrary subset of both.
+    await Promise.all(missing.map((url) => cacheOne(cache, url)));
+    await precacheBin(bin);
+  })();
 }
 
 // A new worker waits (doesn't auto-activate) so the page can prompt the user
@@ -237,15 +300,21 @@ async function precacheShell() {
 // src/lib/swUpdate.ts. This avoids silently swapping code under an open tab
 // (which could mismatch the lazily-loaded viewer chunk mid-session).
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
+  const type = event.data && event.data.type;
+  if (type === "SKIP_WAITING") self.skipWaiting();
+  // The page is past its first screen and the network is free — pull down
+  // the rest of the offline bundle now (src/lib/swUpdate.ts's
+  // warmServiceWorker). Nothing else triggers this: a visit whose page closes
+  // first simply stays warmed by the fetch handler instead.
+  if (type === "WARM") event.waitUntil(warmSupplementary());
 });
 
 self.addEventListener("install", (event) => {
-  // M2: precacheShell() now rejects on a missing/broken essential shell asset
+  // M2: precacheEssential() rejects on a missing/broken essential shell asset
   // instead of swallowing the failure, so a broken deploy never "succeeds"
   // into an unusable offline fallback — the browser retries install later
   // with the previous worker (and its cache) still fully in control.
-  event.waitUntil(precacheShell());
+  event.waitUntil(precacheEssential());
 });
 
 self.addEventListener("activate", (event) => {

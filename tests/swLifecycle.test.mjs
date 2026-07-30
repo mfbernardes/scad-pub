@@ -58,9 +58,10 @@ class FakeCacheStorage {
 
 // --- Minimal fake fetch, keyed by exact URL -------------------------------
 // route(url) -> { status, body } | { fail: true }. Unregistered URLs 404.
-function makeFetch(routes) {
+function makeFetch(routes, calls = []) {
   return async (req) => {
     const url = typeof req === "string" ? req : req.url;
+    calls.push(url);
     const route = routes.get(url);
     if (!route) return new Response("not found", { status: 404 });
     if (route.fail) throw new TypeError("network error");
@@ -71,6 +72,9 @@ function makeFetch(routes) {
 // --- Load sw.js into a vm context with the fakes wired in -----------------
 function loadSw({ routes, existingCaches } = {}) {
   const fakeCaches = new FakeCacheStorage();
+  // Every URL sw.js fetched, in order — lets a test assert what install did
+  // NOT pull down, and that a repeated WARM doesn't refetch.
+  const calls = [];
   for (const [name, cache] of Object.entries(existingCaches ?? {})) {
     fakeCaches.caches.set(name, cache);
   }
@@ -88,7 +92,11 @@ function loadSw({ routes, existingCaches } = {}) {
     Error,
     TypeError,
     caches: fakeCaches,
-    fetch: makeFetch(routes ?? new Map()),
+    fetch: makeFetch(routes ?? new Map(), calls),
+    // precacheBin serializes binary downloads through Web Locks when the
+    // platform has them; without `locks` it takes the unlocked path, which is
+    // what we want under a single-threaded fake.
+    navigator: {},
   };
   sandbox.self = {
     location: new URL(`${SCOPE_URL}sw.js?ns=${NS}`),
@@ -101,7 +109,7 @@ function loadSw({ routes, existingCaches } = {}) {
   };
   vm.createContext(sandbox);
   new vm.Script(swSource, { filename: "sw.js" }).runInContext(sandbox);
-  return { listeners, fakeCaches, sandbox };
+  return { listeners, fakeCaches, sandbox, calls };
 }
 
 function makeEvent(request) {
@@ -132,6 +140,12 @@ async function fireInstall(listeners) {
   listeners.install(event);
   // Propagate a rejection the way the real browser would treat it: install
   // fails if the waitUntil promise rejects.
+  await Promise.all(waits);
+}
+
+async function fireMessage(listeners, data) {
+  const waits = [];
+  listeners.message({ data, waitUntil: (p) => waits.push(p) });
   await Promise.all(waits);
 }
 
@@ -328,4 +342,142 @@ test("navigation and volatile-source runtime cache writes are awaited within the
   assert.equal(await scadRes.text(), "cube(1);");
   assert.ok(scadEvent._waits.length > 0, "the volatile-source write was registered via event.waitUntil");
   assert.ok(await cache.match(scadReq));
+});
+
+// --- P1: install stays lean; the heavy warm-up waits for the page ---------
+// A first visit's own content (the design gallery's thumbnails above all) was
+// queueing behind the whole offline bundle, because install fires exactly when
+// the app is fetching what the user is looking at. Install now caches only the
+// boot-critical shell; everything else waits for the page's WARM message.
+
+const LAZY_JS = `https://example.test/${NS}/assets/lazy.js`;
+const SCAD_SRC = `https://example.test/${NS}/scad/plate.scad`;
+const WASM_URL = `https://example.test/${NS}/wasm/openscad.wasm?v=abc`;
+const BIN_CACHE = "openscad-wasm-bin-test";
+
+const warmRoutes = () => {
+  const routes = goodRoutes();
+  routes.set(new URL("asset-manifest.json", SCOPE_URL).href, {
+    body: JSON.stringify({ "index.html": { file: "assets/lazy.js" } }),
+  });
+  routes.set(new URL("precache-manifest.json", SCOPE_URL).href, {
+    body: JSON.stringify({
+      version: 2,
+      shell: ["scad/plate.scad"],
+      bin: { cache: BIN_CACHE, urls: ["wasm/openscad.wasm?v=abc"] },
+    }),
+  });
+  routes.set(LAZY_JS, { body: "export {}" });
+  routes.set(SCAD_SRC, { body: "cube(1);" });
+  routes.set(WASM_URL, { body: "\0asm" });
+  return routes;
+};
+
+test("install fetches only the boot-critical shell — no lazy chunks, sources or binaries", async () => {
+  const { listeners, fakeCaches, calls } = loadSw({ routes: warmRoutes() });
+  await fireInstall(listeners);
+
+  assert.deepEqual([...calls].sort(), [SCOPE_URL, ENTRY_CSS, ENTRY_JS].sort());
+  assert.ok(!fakeCaches.caches.has(BIN_CACHE), "the ~10 MB binary cache was not opened at install");
+});
+
+test("a WARM message pulls down the rest of the offline bundle, once", async () => {
+  const { listeners, fakeCaches, calls } = loadSw({ routes: warmRoutes() });
+  await fireInstall(listeners);
+  calls.length = 0;
+
+  await fireMessage(listeners, { type: "WARM" });
+  const cache = await fakeCaches.open(`${NS}-shell-__SW_VERSION__`);
+  assert.ok(await cache.match(LAZY_JS), "lazy build chunk cached");
+  assert.ok(await cache.match(SCAD_SRC), "design source cached");
+  const bin = await fakeCaches.open(BIN_CACHE);
+  assert.ok(await bin.match(WASM_URL), "the pinned binary was warmed into BIN_CACHE");
+
+  // The light assets land before the ~11 MB binaries, so a warm-up cut short
+  // leaves an app that boots and switches designs offline rather than an
+  // arbitrary subset of both.
+  assert.ok(
+    calls.indexOf(WASM_URL) > calls.indexOf(SCAD_SRC),
+    "the pinned binary was fetched after the design source"
+  );
+
+  // Several tabs (or one that re-sends on a later screen) must not re-download
+  // any of it. A repeat pass does re-read the two small manifests, since that is
+  // how it works out what is still missing — but nothing it already holds.
+  calls.length = 0;
+  await fireMessage(listeners, { type: "WARM" });
+  assert.deepEqual(
+    calls.filter((u) => !u.endsWith("-manifest.json")),
+    [],
+    "a repeated WARM refetched no assets"
+  );
+});
+
+test("WARM covers the entry's linked artwork, even at a worker that never ran install", async () => {
+  // The artwork list is re-derived from the cached shell rather than carried
+  // over from install in memory, so a worker revived after termination (or a
+  // second tab's WARM) covers it just the same.
+  const routes = warmRoutes();
+  const ICON = `https://example.test/${NS}/icon.svg`;
+  routes.set(SCOPE_URL, {
+    body: INDEX_HTML.replace("</head>", `<link rel="icon" href="/${NS}/icon.svg"></head>`),
+  });
+  routes.set(ICON, { body: "<svg/>" });
+
+  const first = loadSw({ routes });
+  await fireInstall(first.listeners);
+  const shellCache = first.fakeCaches.caches.get(`${NS}-shell-__SW_VERSION__`);
+
+  // A fresh worker instance over the same Cache Storage: it has no
+  // `pendingHtmlExtra`, exactly like one revived after termination.
+  const revived = loadSw({ routes, existingCaches: { [`${NS}-shell-__SW_VERSION__`]: shellCache } });
+  await fireMessage(revived.listeners, { type: "WARM" });
+  assert.ok(await shellCache.match(ICON), "artwork linked from the cached shell was warmed");
+});
+
+test("everything under scad/ is served network-first, whatever it is called", async () => {
+  // That tree mirrors the operator's source layout at its own relative paths, so
+  // no name in it can be assumed to be ours: a stale `.scad` would be mounted
+  // under the new build's renderHash and poison the persisted geometry, and a
+  // `.png` there can be a surface() heightmap.
+  const routes = goodRoutes();
+  const { listeners } = loadSw({ routes });
+  await fireInstall(listeners);
+
+  for (const path of ["scad/widget.scad", "scad/nested/dep.scad", "scad/height.png"]) {
+    const url = `${SCOPE_URL}${path}`;
+    routes.set(url, { body: "v1" });
+    const first = makeEvent(new Request(url));
+    listeners.fetch(first);
+    await first.settle();
+    routes.set(url, { body: "v2" });
+    const second = makeEvent(new Request(url));
+    listeners.fetch(second);
+    assert.equal(await (await second.settle()).text(), "v2", `${path} bypasses the cache`);
+  }
+});
+
+test("a partial warm-up is retried by the next trigger, not memoized as success", async () => {
+  // Every helper in the warm pass swallows its own per-asset failure, so an
+  // interrupted pass resolves looking exactly like a complete one. Remembering
+  // that forever would leave an installed app that boots offline and cannot
+  // render, with no way back.
+  const routes = warmRoutes();
+  routes.set(SCAD_SRC, { fail: true }); // a flaky response mid-pass
+  const { listeners, fakeCaches, calls } = loadSw({ routes });
+  await fireInstall(listeners);
+  const cache = await fakeCaches.open(`${NS}-shell-__SW_VERSION__`);
+
+  await fireMessage(listeners, { type: "WARM" });
+  assert.ok(await cache.match(LAZY_JS), "what could be fetched was cached");
+  assert.ok(!(await cache.match(SCAD_SRC)), "the failing asset is missing");
+
+  // The network recovers and something triggers a warm again (a later `ready`,
+  // the tab going hidden, another tab).
+  routes.set(SCAD_SRC, { body: "cube(1);" });
+  calls.length = 0;
+  await fireMessage(listeners, { type: "WARM" });
+  assert.ok(await cache.match(SCAD_SRC), "the retry filled the gap");
+  // …without re-downloading what the first pass already got.
+  assert.ok(!calls.includes(LAZY_JS), "already-cached assets are not refetched");
 });
