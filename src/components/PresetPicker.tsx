@@ -24,6 +24,7 @@ import { t } from "../lib/i18n";
 import { Button } from "./ui/button";
 import { IconButton } from "./IconButton";
 import { FileInput } from "./FileInput";
+import { Thumbnail } from "./Thumbnail";
 import { Input } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { cn } from "../lib/utils";
@@ -356,16 +357,7 @@ export function PresetPicker({
                         aria-pressed={isSelected}
                         onClick={() => applyBundled(p)}
                       >
-                        <span className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted">
-                          <img
-                            src={image}
-                            alt=""
-                            loading="lazy"
-                            width={640}
-                            height={480}
-                            className="h-full w-full object-cover"
-                          />
-                        </span>
+                        <Thumbnail src={image!} />
                         {isSelected && (
                           <span
                             className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground"

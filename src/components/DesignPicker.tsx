@@ -6,6 +6,7 @@ import type { Design } from "../openscad/types";
 import { Check as CheckIcon, ChevronDown as ChevronDownIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { isCoarsePointer } from "../lib/pointer";
+import { THUMB_FRAME, Thumbnail } from "./Thumbnail";
 import {
   Select,
   SelectContent,
@@ -93,29 +94,24 @@ export function DesignGallery({
                     onClick={() => onChange(design.id)}
                     className={`relative overflow-hidden rounded-lg border bg-card text-left shadow-sm outline-none hover:border-brand focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-primary" : "border-border"}`}
                   >
-                    <span className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted">
-                      {design.image ? (
-                        <img
-                          src={design.image}
-                          alt=""
-                          loading="lazy"
-                          width={640}
-                          height={480}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : design.icon ? (
-                        <img
-                          src={design.icon}
-                          alt=""
-                          loading="lazy"
-                          width={64}
-                          height={64}
-                          className="h-16 w-16 object-contain"
-                        />
-                      ) : (
-                        <span className="text-3xl font-bold text-muted-foreground" aria-hidden="true">{design.label.charAt(0)}</span>
-                      )}
-                    </span>
+                    {design.image ? (
+                      <Thumbnail src={design.image} />
+                    ) : (
+                      <span className={THUMB_FRAME}>
+                        {design.icon ? (
+                          <img
+                            src={design.icon}
+                            alt=""
+                            loading="lazy"
+                            width={64}
+                            height={64}
+                            className="h-16 w-16 object-contain"
+                          />
+                        ) : (
+                          <span className="text-3xl font-bold text-muted-foreground" aria-hidden="true">{design.label.charAt(0)}</span>
+                        )}
+                      </span>
+                    )}
                     {current && (
                       <span className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-hidden="true">
                         <CheckIcon size={14} />
