@@ -257,7 +257,12 @@ export default function App() {
   // bootstrap having landed. The policy lives in `warmDelayMs`; `standalone`
   // recognises a launch of the installed app, `installed` the visit that
   // installed it.
-  useOfflineWarmup({ holdBoot, ready, committed: installed || standalone });
+  useOfflineWarmup({
+    holdBoot,
+    ready,
+    committed: installed || standalone,
+    updateWaiting: updateReady,
+  });
 
   // Switching designs resets everything design-scoped in the same event —
   // values, preset selection, and the pipeline's render-scoped state.

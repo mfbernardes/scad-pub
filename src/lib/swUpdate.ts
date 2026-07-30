@@ -58,6 +58,30 @@ export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void
 }
 
 /**
+ * Every worker a WARM has to reach: the one serving this page, and a WAITING
+ * one if an update has installed behind it.
+ *
+ * The waiting worker is the reason this isn't just `active`. Each build's shell
+ * cache is named after its own version, and an update's install fills only the
+ * boot-critical part of it — so a freshly-installed worker owns an almost-empty
+ * cache while the active one owns a complete one. The browser activates a
+ * waiting worker on its own once the last tab closes, and `activate` then
+ * retires the older cache: an installed app could go from fully offline-capable
+ * to unable to render, without the user doing anything but closing a tab. So
+ * the next build's worker gets told to fill its cache while the current one is
+ * still serving.
+ *
+ * Deduplicated, since `active` and `controller` are usually the same worker.
+ * Pure so the targeting is testable without a browser.
+ */
+export function warmTargets(
+  reg: Pick<ServiceWorkerRegistration, "active" | "waiting"> | undefined,
+  controller: ServiceWorker | null
+): ServiceWorker[] {
+  return [...new Set([reg?.waiting, reg?.active ?? controller].filter(Boolean))] as ServiceWorker[];
+}
+
+/**
  * Tell the service worker the page is done with its first screen, so it can
  * pull down the rest of the offline bundle — the lazy chunks, artwork, design
  * sources and the ~11 MB of pinned binaries (public/sw.js's WARM message).
@@ -69,7 +93,10 @@ export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void
 export function warmServiceWorker(): void {
   if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
   void navigator.serviceWorker.ready
-    .then((reg) => (reg.active ?? navigator.serviceWorker.controller)?.postMessage({ type: "WARM" }))
+    .then((reg) => {
+      for (const worker of warmTargets(reg, navigator.serviceWorker.controller))
+        worker.postMessage({ type: "WARM" });
+    })
     .catch(() => {
       /* offline support is best-effort */
     });
@@ -125,9 +152,20 @@ export function warmDelayMs(s: WarmupState): number | null {
  * Ask the service worker to fill the offline cache at the first uncontended
  * moment — see `warmDelayMs` for the policy. Re-arms as the session changes;
  * the worker itself memoizes the pass, so an extra call costs nothing.
+ *
+ * `updateWaiting` is not a trigger and deliberately not part of the policy: a
+ * newly installed worker doesn't make this a better moment to download 11 MB.
+ * It re-evaluates the SAME policy because there is now a second worker that
+ * needs the pass (`warmTargets`), and nothing else in the session would
+ * necessarily change to prompt one. Firing directly on the update instead —
+ * bypassing `warmDelayMs` — is exactly the contention this whole path exists to
+ * avoid: an update installing while the chooser's thumbnails are still loading
+ * would put the supplementary bundle straight back on top of them.
  */
-export function useOfflineWarmup(state: Omit<WarmupState, "hidden">): void {
-  const { holdBoot, ready, committed } = state;
+export function useOfflineWarmup(
+  state: Omit<WarmupState, "hidden"> & { updateWaiting?: boolean }
+): void {
+  const { holdBoot, ready, committed, updateWaiting = false } = state;
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const evaluate = () => {
@@ -147,7 +185,7 @@ export function useOfflineWarmup(state: Omit<WarmupState, "hidden">): void {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", evaluate);
     };
-  }, [holdBoot, ready, committed]);
+  }, [holdBoot, ready, committed, updateWaiting]);
 }
 
 export function useServiceWorkerUpdate() {

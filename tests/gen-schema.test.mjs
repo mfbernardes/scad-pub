@@ -3355,16 +3355,3 @@ test("popup.mode 'picker' with something to choose between builds fine", () => {
   assert.equal(schema.popup.mode, "picker");
   assert.equal(schema.designs.length, 2);
 });
-
-test("popup.mode 'picker' with fewer than two designs fails the build", () => {
-  assert.throws(
-    () => run("widget-popup-picker-one-design.config.json"),
-    /'popup\.mode: "picker"' is the design chooser, so it needs at least two designs[\s\S]*this config has 1[\s\S]*Use 'popup\.mode: "once"'/
-  );
-});
-
-test("popup.mode 'picker' with something to choose between builds fine", () => {
-  const { schema } = run("widget-popup-picker.config.json");
-  assert.equal(schema.popup.mode, "picker");
-  assert.equal(schema.designs.length, 2);
-});

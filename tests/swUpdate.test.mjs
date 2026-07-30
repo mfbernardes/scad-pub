@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { isWaitingUpdate, forceReload, warmDelayMs } from "../src/lib/swUpdate.ts";
+import { isWaitingUpdate, forceReload, warmDelayMs, warmTargets } from "../src/lib/swUpdate.ts";
 
 const swText = () =>
   readFileSync(fileURLToPath(new URL("../public/sw.js", import.meta.url)), "utf-8");
@@ -148,4 +148,29 @@ test("warmDelayMs waits for an uncontended moment, and an installed app never wa
   // installed app permanently unable to render offline.
   assert.equal(warmDelayMs({ ...base, holdBoot: true, committed: true }), 0);
   assert.equal(warmDelayMs({ ...base, holdBoot: true, hidden: true }), 0);
+});
+
+test("a WARM reaches the waiting worker too, so an update never activates cold", () => {
+  const active = { id: "active" };
+  const waiting = { id: "waiting" };
+
+  // First install: one worker, nothing waiting.
+  assert.deepEqual(warmTargets({ active, waiting: null }, active), [active]);
+
+  // An update has installed behind the active one. Each build's shell cache is
+  // named after its own version and an update's install fills only the boot
+  // shell, so the waiting worker owns an almost-empty cache. The browser
+  // activates it as soon as the last tab closes, and `activate` retires the old
+  // cache — leaving an installed app unable to render offline unless the
+  // waiting worker was filled first.
+  assert.deepEqual(warmTargets({ active, waiting }, active), [waiting, active]);
+
+  // Before this page is controlled (first-ever load), the controller is the
+  // only handle there is.
+  assert.deepEqual(warmTargets(undefined, active), [active]);
+  assert.deepEqual(warmTargets({ active: null, waiting: null }, active), [active]);
+  // Nothing to talk to at all.
+  assert.deepEqual(warmTargets(undefined, null), []);
+  // active and controller are normally the same object — message it once.
+  assert.deepEqual(warmTargets({ active, waiting: null }, active).length, 1);
 });
