@@ -33,10 +33,10 @@ export const HALF_VH_RATIO = 0.52;
 // at the top of the viewport. Any notch inset is added on top of it by fullH's
 // `topInset` argument, so a device with one doesn't lose part of the strip.
 //
-// "Full" used to mean the whole viewport, which made it the one state where a
-// visitor could read the form comfortably and the one state where they could
-// not see what they were editing — on a tool whose entire loop is "change the
-// text, watch the plate change". Stopping short of the top edge keeps the LIVE
+// "Full" stops short of the whole viewport deliberately: covering it would make
+// this the one state where a visitor can read the form comfortably and the one
+// state where they cannot see what they are editing — on a tool whose entire
+// loop is "change the text, watch the plate change". Stopping short keeps the LIVE
 // viewer in frame instead of adding a second render surface: the canvas's
 // bottom already tracks the sheet (`--sheet-top` in index.css), and the
 // Viewer's ResizeObserver re-fits the model into whatever box it is left with

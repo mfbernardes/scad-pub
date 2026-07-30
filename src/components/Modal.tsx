@@ -5,11 +5,10 @@
 //
 // The dialog's accessible name is its visible `title`, always: Radix wires
 // `aria-labelledby` to the DialogTitle, and per the accname spec that beats any
-// `aria-label` on the same element. There used to be a `label` prop here
-// offering an alternative name — it never took effect, and two callers were
-// passing one under the impression that it did. Anything matching a dialog by
-// name (scripts/lib/browser.mjs's openDialog, the capture script) should expect
-// the title.
+// `aria-label` on the same element — so there is deliberately no `label` prop
+// offering an alternative name, since one could never take effect. Anything
+// matching a dialog by name (scripts/lib/browser.mjs's openDialog, the capture
+// script) should expect the title.
 import type { ReactNode } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { isCoarsePointer } from "../lib/pointer";

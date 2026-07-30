@@ -122,8 +122,8 @@ function studioShadowOpacity(): number {
 // geometry the design didn't `color(...)` itself: the gold default for plain
 // objects, and the green it assigns to an uncoloured `difference()` result.
 // Geometry at one of these is treated as "uncoloured" and recoloured to the
-// theme's model colour, so plain designs still follow the light/dark theme as
-// they did on the old STL path; geometry the design coloured explicitly keeps
+// theme's model colour, so plain designs follow the light/dark theme;
+// geometry the design coloured explicitly keeps
 // its colour. Matched in the same sRGB space the 3MF loader uses (exact match).
 const OPENSCAD_AUTO_COLORS = new Set(
   ["#f9d72c", "#9dcb51"].map((hex) =>
@@ -367,8 +367,8 @@ export const Viewer = forwardRef<
   // `pan` (world units, relative to the fitted target) carried over. Fits the
   // model's actual bounding BOX (see framing.ts) rather than a
   // bounding-sphere radius — a sphere over-estimates a flat/wide model's
-  // on-screen footprint, which used to leave e.g. flat plates reading much
-  // smaller than intended. The camera's up stays +Z for every view (set once
+  // on-screen footprint, leaving a flat plate reading much smaller than
+  // intended. The camera's up stays +Z for every view (set once
   // at init), so OrbitControls keeps orbiting correctly; only the look-from
   // direction changes.
   function applyFraming(direction: THREE.Vector3, zoomRatio: number, pan: THREE.Vector3) {
@@ -858,11 +858,11 @@ export const Viewer = forwardRef<
       requestRenderRef.current = () => {};
       controls.dispose();
       dimGroupRef.current?.dispose();
-      // Release the current model's and grid's GPU resources too — previously
-      // only disposed on replacement, so a desktop⇄mobile breakpoint flip
-      // (which unmounts/remounts the whole Viewer) leaked a live geometry +
-      // material set until GC. Dispose before the renderer/context so nothing
-      // still references a torn-down GL context.
+      // Release the current model's and grid's GPU resources too, not just on
+      // replacement: a desktop⇄mobile breakpoint flip unmounts/remounts the
+      // whole Viewer, leaking a live geometry + material set until GC. Dispose
+      // before the renderer/context so nothing still references a torn-down GL
+      // context.
       if (modelRef.current) disposeObject(modelRef.current);
       if (gridRef.current) {
         gridRef.current.geometry.dispose();

@@ -6,9 +6,9 @@
 // the same param's text box in the Customize panel, which is always present and
 // fully keyboard-reachable; this is the "type on the sign" convenience over the
 // model, opened by a pointer gesture and by nothing else. There is no chip or
-// other permanent affordance over the viewer — one used to sit at the viewer's
-// top-left on mobile, where it covered the measurements panel, and the panel's
-// own text box already carries the accessible path.
+// other permanent affordance over the viewer: at the mobile viewer's top-left it
+// would cover the measurements panel, and the panel's own text box already
+// carries the accessible path.
 //
 // State (open/anchor) lives in ViewerStage so it can wire the Viewer's mesh pick
 // and suppress the one-time gesture hint while editing; this component owns the

@@ -1,120 +1,58 @@
 // config-spec.mjs — the single declarative description of scadpub.config.json's
-// surface: every top-level key, and (for the handful of keys that are
-// themselves small nested objects) every key inside them. This file is data,
-// not behaviour: three different consumers read it —
+// surface: every top-level key, and every key inside the handful that are
+// themselves small nested objects. This file is data, not behaviour; three
+// consumers read it:
 //
 //   1. gen-schema.mjs derives `KNOWN_TOP_LEVEL_KEYS` (top-level unknown-key
-//      rejection) from `Object.keys(CONFIG_SPEC)` instead of maintaining a
-//      second hand-written list.
-//   2. config-parsers.mjs's `applyGroupSpec` (see below) walks the `ui`,
-//      `viewer`, `render`, `fileImport` and `popup` nodes' `properties` to
-//      replace what used to be five near-identical stretches of
-//      "check a boolean / check an enum / assign a default" if-blocks.
-//      gen-schema.mjs's `resolveDesignList` reuses the same function per
-//      `designs[]` entry against its `presets` sub-node.
-//   3. scripts/gen-config-schema.mjs turns the whole tree into a real JSON
-//      Schema, and tests/config-spec.test.mjs cross-checks it against
-//      docs/config.md so a key can't drift out of one without the other.
+//      rejection) from `Object.keys(CONFIG_SPEC)`.
+//   2. config-parsers.mjs's `applyGroupSpec` walks the `ui`, `viewer`,
+//      `render`, `fileImport` and `popup` nodes' `properties` to check and
+//      default each field; gen-schema.mjs's `resolveDesignList` reuses it per
+//      `designs[]` entry against that entry's `presets` sub-node.
+//   3. gen-config-schema.mjs turns the tree into a real JSON Schema, and
+//      tests/config-spec.test.mjs cross-checks that against docs/config.md so
+//      a key cannot drift out of one without the other.
 //
-// What this file does NOT own: path existence, cross-field checks
-// (`defaultDesign` naming a real design, `ui.afterExport.helpTab` naming a
-// real help tab, `designs[].presets.images` keys naming real presets),
-// colour-value safety beyond "is this shape a plain object of strings", the
-// `strings`-against-i18n-catalogue check, or anything that needs file I/O to
-// answer. Those all stay exactly where they live today (gen-schema.mjs's
-// generate(), and the bespoke parsers in config-parsers.mjs) — this spec only
-// describes STRUCTURE: names, nesting, JSON types, enums, static defaults,
-// and which nested keys are recognised at all.
+// It describes STRUCTURE only: names, nesting, JSON types, enums, static
+// defaults, and which nested keys are recognised at all. Path existence,
+// cross-field checks (`defaultDesign` naming a real design,
+// `designs[].presets.images` keys naming real presets), colour-value safety
+// and the `strings`-against-i18n-catalogue check all stay in gen-schema.mjs's
+// generate() and the bespoke parsers in ./config-parsers.mjs.
 //
-// A handful of top-level keys (`colors`, `licenses`, `notices`, `strings`,
-// `help`, `designs`, `categories`, `screenshots`, `shortcuts`) carry real
-// bespoke validation logic elsewhere (or, for `help`, none at all — it's
-// passed through verbatim). They still get a spec node each — with `type`,
-// `description`, and, where it's cheap and useful for schema-emission /
-// doc-coverage, a `properties`/`items` shape — but that node is never fed to
-// `applyGroupSpec`; it exists purely so unknown-*top-level*-key rejection and
-// `gen-config-schema.mjs` cover them. Their node carries `custom: true` as a
-// marker for "the runtime behaviour lives elsewhere, don't try to derive it
-// from this shape" — nothing more than that.
+// `applyGroupSpec` applies one behaviour per axis to every field it drives: an
+// explicit `null` always means "not set"; an enum error always appends
+// ` (got <value>)`; a string is always rejected blank and stored trimmed; a
+// nested object's unrecognised key always fails the build, with the valid-key
+// list read straight off `properties`.
 //
-// Whether the emitted JSON Schema tolerates an unrecognised key is a SEPARATE
-// question, decided by its own marker, `openKeys: true` (see
-// gen-config-schema.mjs's `objectSchema`) — NOT by `custom`. Most bespoke
-// parsers are exactly as closed as an `applyGroupSpec`-driven node, they just
-// enforce it by hand instead: `designs.items` (gen-schema.mjs's own
-// `unknownNestedKeyError` loop over a design's keys), `colors.light`/
-// `colors.dark` (parseColors throws on any token outside `COLOR_TOKENS`), and
-// `pwa.themeColor`'s object form (parsePwaThemeColor throws on any key but
-// `light`/`dark`) all genuinely reject an unknown key, so none of them carry
-// `openKeys` — a config author relying on this schema for autocomplete should
-// not see a typo here silently accepted. `openKeys` is reserved for the
-// genuine exceptions: the parent `colors` object (parseColors reads only
-// `light`/`dark` off it, silently ignoring anything else — contrast its own
-// `light`/`dark` children, above), a `licenses[]`/`notices[]` entry
-// (parseLicenses/parseNotices copy the fields they know and silently drop the
-// rest, never rejecting), `logo`'s object form (copyLogoAssets reads `light`/
-// `dark` only, same silent-drop), and `strings`/`help` (a genuinely
-// open-ended key space — every i18n catalogue key, or whatever shape a help
-// pane takes — with no fixed property list to close against in the first
-// place).
-//
-// ── Field-descriptor shapes used by `properties` entries ────────────────────
-// Every property is at minimum { type, description }. `applyGroupSpec` (see
-// ./config-parsers.mjs) now applies ONE behaviour per axis to every field,
-// rather than the per-field flags (`skipOn`, `gotSuffix`, `nonBlank`,
-// `trimStore`, `wording`, `unknownKeys`, `unknownKeyError`, `messageStyle`)
-// this file used to carry solely to reproduce five parsers' accidental
-// disagreements byte-for-byte: an explicit `null` always means "not set";
-// an enum error always appends ` (got <value>)`; a string is always rejected
-// blank and stored trimmed; a nested object's unrecognised key always fails
-// the build, with the valid-key list read straight off `properties`.
-//
-// What's left, because each encodes a real distinction rather than an
-// accident: `required` (validate even when entirely absent — `popup.header`/
-// `popup.body` via `applyGroupSpec`, plus, since gen-config-schema.mjs learned
-// to emit a null alternative for every genuinely-optional field, three spots
-// enforced by bespoke non-`applyGroupSpec` code instead: `designs[].id`
-// (`checkId` in gen-schema.mjs's `resolveDesignList`), `notices[].marker` and
-// `licenses[].name`/`license`/`copyright`/`url`/`licenseUrl` (parseNotices/
-// parseLicenses in ./config-parsers.mjs) — marking these `required: true`
-// changes nothing about how they're validated (that code already throws on a
-// missing or null value; `applyGroupSpec` never even sees these nodes), it
-// only makes gen-config-schema.mjs's `objectSchema` list them in the emitted
-// schema's own `required` array and withhold the null alternative it now adds
-// to every OTHER field — see that file's `addNull`). An earlier revision of
-// this reorg carried a second, opposite marker here for a field that was
-// genuinely optional but whose bespoke parser hadn't been taught to treat an
-// explicit `null` as "unset" the way `applyGroupSpec`'s fields uniformly do
-// (`notices[].attention`/`.subsumedByFont`, `licenses[].version`/`.text`/
-// `.sourceUrl`/`.note`, every `colors.light.*`/`colors.dark.*` colour-token
-// leaf). Those parsers now treat `null` as unset like everything else, so
-// that marker had nothing left to flag and is gone — every optional field
-// genuinely accepts `null`, full stop; `tests/config-spec.test.mjs`'s
-// mechanical null-agreement sweep is what catches a future drift back into
-// that asymmetry; `custom` (object/array nodes whose runtime validation lives in a bespoke
-// parser instead, per the file-top comment — and, since this commit, also a
-// plain leaf FIELD nested inside an otherwise applyGroupSpec-driven group,
-// e.g. `render.features`/`render.fonts` or
-// `pwa.screenshots`/`pwa.categories`/`pwa.themeColor`: `applyGroupSpec` still
-// accepts the key as recognised — so it can't be rejected as unknown — but
-// skips it entirely otherwise, neither defaulting nor validating nor
-// including it in its own return value, because the bespoke code that reads
-// it (parseStringArray, parseFormat, parseFontFallback, parsePwaThemeColor,
-// generatePwaAssets) reads the RAW config object directly instead);
-// `collapseEmptyToNull` (an empty `{}` disappears entirely for a
-// pure tuning knob like `render`/`render.cache` — contrast `ui.afterExport`,
-// where the key's mere presence, even empty, is itself the "show the panel"
-// toggle); `alwaysPresent` (the opposite problem: a nested group whose OWN
-// fields carry defaults that must resolve even when the config omits the
-// group entirely — only `viewer.controls` uses it today, since it replaces
-// what used to be flat `ui.*` booleans that were always present with a
-// built-in default; see `applyGroupSpec` in ./config-parsers.mjs); `rootTypeError`
-// (a plain-string override describing a field's actual accepted shapes —
-// `fileImport` is `true`/an object/`null`, `popup` needs `header`+`body` —
-// genuinely more useful than the generic message).
+// Field-descriptor markers, every one opt-in:
+// - `custom` — runtime validation lives in a bespoke parser, so don't derive
+//   behaviour from this node's shape. On a leaf field inside an otherwise
+//   applyGroupSpec-driven group (`render.features`, `render.fonts`,
+//   `pwa.themeColor`, `pwa.screenshots`, `pwa.categories`) it also means
+//   "recognise the key, then skip it" — neither defaulted, validated, nor
+//   returned, because the bespoke reader takes the raw config value instead.
+// - `openKeys` — the emitted JSON Schema tolerates an unrecognised key.
+//   Reserved for genuinely open key spaces (`strings`, `help`) and for parsers
+//   that silently drop what they don't know (the parent `colors` object,
+//   `licenses[]`/`notices[]` entries, `logo`'s object form). NOT implied by
+//   `custom`: most bespoke parsers reject an unknown key by hand and stay as
+//   closed as an applyGroupSpec-driven node, so a config author relying on
+//   this schema for autocomplete still sees a typo rejected.
+// - `required` — the field must genuinely be present, and gen-config-schema's
+//   `addNull` withholds the null alternative it adds to every other field.
+// - `collapseEmptyToNull` — an empty `{}` disappears entirely, for a pure
+//   tuning knob like `render`/`render.cache`. Contrast `ui.afterExport`, where
+//   the key's mere presence, even empty, is itself the "show the panel" toggle.
+// - `alwaysPresent` — a nested group whose own fields carry defaults that must
+//   resolve even when the config omits the group (only `viewer.controls`).
+// - `rootTypeError` — a plain-string override naming a field's actual accepted
+//   shapes (`fileImport` is `true`/an object/`null`, `popup` needs
+//   `header`+`body`), where the generic message would be less useful.
 
-// ── Small factories for the repeated field shapes (still plain data — these
-// just save re-typing the same few keys 30 times over). ────────────────────
+// Small factories for the repeated field shapes — still plain data, they just
+// save re-typing the same few keys 30 times over.
 const bool = (defaultValue, extra = {}) => ({
   type: "boolean",
   default: defaultValue,
@@ -183,17 +121,13 @@ const fileAlt = (field, extra = {}) => ({
   ...extra,
 });
 
-// ── `ui.afterExport` — nested under `ui` below. `title`/`body` used to live
-// here too, but they were only ever a SECOND override path for two keys the
-// `strings` catalogue can already override (`exportSuccess.title`/`.body` —
-// see src/components/ExportSuccess.tsx's own fallback) — removed rather than
-// kept as a redundant mechanism; a deployment wanting different copy now sets
-// `strings["exportSuccess.title"]`/`["exportSuccess.body"]`. That leaves
-// `afterExport` meaning only "show this panel", with one real option
-// (`helpTab`) — so it takes the same `true`-or-options-object shape as
-// `fileImport` below rather than staying a plain nested object: `true` (or
-// `{}`) for defaults, `{ helpTab }` to also deep-link Help, `null`/absent for
-// no panel. Like `fileImport`, that union means this field is `custom: true`
+// `ui.afterExport` — nested under `ui` below. It means only "show this panel",
+// with one real option (`helpTab`), so it takes the same `true`-or-options-object
+// shape as `fileImport` below: `true` (or `{}`) for defaults, `{ helpTab }` to
+// also deep-link Help, `null`/absent for no panel. Copy overrides go through the
+// `strings` catalogue instead — `exportSuccess.title`/`.body`, see
+// src/components/ExportSuccess.tsx's own fallback. Like `fileImport`, that union
+// means this field is `custom: true`
 // (see the file-top comment on a plain leaf FIELD nested inside an
 // applyGroupSpec-driven group) — `parseAfterExport` in ./config-parsers.mjs
 // handles the true/object dispatch itself, reusing this node's own
@@ -214,7 +148,7 @@ const AFTER_EXPORT_SPEC = {
   },
 };
 
-// ── `viewer.controls` — nested under `viewer` below. `alwaysPresent: true`
+// `viewer.controls` — nested under `viewer` below. `alwaysPresent: true`
 // (see the file-top comment) is what makes its five booleans behave like the
 // flat `ui.*` booleans they replace: always resolved to their default even
 // when the config sets neither `viewer` nor `viewer.controls` at all, rather
@@ -232,7 +166,7 @@ const VIEWER_CONTROLS_SPEC = {
   },
 };
 
-// ── `render.cache` — nested under `render` below.
+// `render.cache` — nested under `render` below.
 const RENDER_CACHE_SPEC = {
   type: "object",
   description: "Sizes the runner's two-tier render cache.",
@@ -250,7 +184,7 @@ const RENDER_CACHE_SPEC = {
   },
 };
 
-// ── `pwa.themeColor` — nested under `pwa` below. Same SHAPE as `logo` (a
+// `pwa.themeColor` — nested under `pwa` below. Same SHAPE as `logo` (a
 // plain string used for both themes, or a { light, dark } object with either
 // side optional) — but NOT the same fallback rule: `logo`'s object form has a
 // missing side fall back to the OTHER side (better to show one logo image on
@@ -272,7 +206,7 @@ const PWA_THEME_COLOR_SPEC = {
   },
 };
 
-// ── `pwa` — manifest-only PWA chrome: install metadata, icons and theming
+// `pwa` — manifest-only PWA chrome: install metadata, icons and theming
 // that feed manifest.webmanifest and the icon rasterizer
 // (scripts/lib/pwa-assets.mjs). Unlike `viewer` (which the app itself reads
 // at runtime, and which designs.json therefore mirrors as its own nested
@@ -322,18 +256,13 @@ const PWA_SPEC = {
   },
 };
 
-// ── `designs[].presets` — nested under `designs.items` below. A `designs[]`
-// entry used to also carry `media` (three config-relative asset paths —
-// picker icon, gallery card art, a Markdown user-doc) and `review` (a
-// review-summary label map + note), each falling back to a same-named
-// annotation in the design's own .scad file when the config omitted it. Both
-// groups are GONE: a design's own metadata now lives ONLY in its .scad file
-// — `// @description`/`// @icon`/`// @image`/`// @doc` and a parameter's own
-// `// @review "<label>"` / the design's `// @reviewNote "<text>"` (see
-// docs/annotations.md) are the sole source, with no config-level override or
-// escape hatch left. `presets` is the one remaining nested group, because
-// `presets.images` itself carries two forms — see its own comment below —
-// and has no annotation counterpart at all (a bundled-preset thumbnail isn't
+// `designs[].presets` — nested under `designs.items` below. A design's own
+// metadata lives ONLY in its .scad file — `// @description`/`// @icon`/
+// `// @image`/`// @doc`, a parameter's own `// @review "<label>"`, the design's
+// `// @reviewNote "<text>"` (see docs/annotations.md) — with no config-level
+// override or escape hatch. `presets` is the one nested group here, because
+// `presets.images` itself carries two forms — see its own comment below — and
+// has no annotation counterpart at all (a bundled-preset thumbnail isn't
 // something a .scad file could name).
 //
 // `presets` is an ordinary applyGroupSpec-driven node (like `ui`/`viewer`),
@@ -394,20 +323,16 @@ export const COLOR_TOKENS = [
   "glass-border", "elevation", "font-sans", "font-display",
 ];
 
-// ── The full top-level surface, in the same grouping/order as the old
-// KNOWN_TOP_LEVEL_KEYS so a diff against history stays readable. ────────────
 export const CONFIG_SPEC = {
   $schema: {
     type: "string",
     description: "Optional pointer to a JSON Schema for editor tooling; not read by gen-schema itself.",
   },
 
-  // — App identity —
-  // (title/id/description/lang/dir stay here even though several are ALSO
-  // manifest inputs: they're document chrome and storage namespacing first,
-  // read by the running app itself — see PWA_THEME_COLOR_SPEC's neighbour
-  // `pwa` node below for the keys that are manifest/icon-rasterizer INPUTS
-  // ONLY, with no runtime reader.)
+  // title/id/description/lang/dir are document chrome and storage namespacing
+  // first, read by the running app itself, even though several are ALSO manifest
+  // inputs; the `pwa` node below holds the keys that are manifest/icon-rasterizer
+  // INPUTS ONLY, with no runtime reader.
   title: { type: "string", default: "ScadPub", description: "Browser tab title and header text." },
   id: {
     type: "string",
@@ -422,10 +347,9 @@ export const CONFIG_SPEC = {
   lang: { type: "string", default: "en", description: "Document/manifest language, a BCP-47 tag." },
   dir: { type: "enum", values: ["ltr", "rtl", "auto"], default: "ltr", description: "Document/manifest text direction." },
 
-  // — PWA (manifest-only; see PWA_THEME_COLOR_SPEC + the `pwa` node below) —
+  // Manifest-only; see PWA_THEME_COLOR_SPEC and the `pwa` node below.
   pwa: PWA_SPEC,
 
-  // — Design sources —
   source: { type: "string", default: ".", description: "Directory of Customizer-style .scad designs, relative to the config file." },
   designs: {
     type: "array",
@@ -461,10 +385,8 @@ export const CONFIG_SPEC = {
   defaultDesign: { type: "string", description: "Design id shown on a visit with no #d= deep link; must name a configured design." },
   assets: { type: "array", items: { type: "string" }, description: "Files/directories/globs to bundle verbatim; omit to follow use/include." },
 
-  // — Rendering —
-  // `render` used to be documented as wholly absent from renderHash; that's
-  // no longer true once `features`/`format`/`fonts`/`fontFallback` live here
-  // too — they're genuine render inputs and ARE hashed (an --enable flag, the
+  // `render` is not wholly absent from renderHash: `features`/`format`/
+  // `fonts`/`fontFallback` live here too, and ARE hashed (an --enable flag, the
   // export format, and bundled glyph outlines all change the rendered
   // bytes). `heavyMs`/`cache` stay display/perf-only and stay OUT of
   // renderHash, same as before. The four render-input fields are `custom:
@@ -515,7 +437,6 @@ export const CONFIG_SPEC = {
     },
   },
 
-  // — Appearance & UI behaviour —
   logo: {
     type: "string",
     custom: true,
@@ -576,11 +497,8 @@ export const CONFIG_SPEC = {
       afterExport: AFTER_EXPORT_SPEC,
     },
   },
-  // Everything display-only the 3D viewer owns, gathered in one place rather
-  // than spread across the top level (`restOnGrid`) and `ui` (`grid`, and the
-  // five per-control booleans) — see this commit's message for why that
-  // spread was the wrong boundary. None of it affects the exported bytes or
-  // the render cache.
+  // Everything display-only the 3D viewer owns, gathered in one place. None of
+  // it affects the exported bytes or the render cache.
   viewer: {
     type: "object",
     description: "The 3D viewer's presentation, framing, and per-control visibility, fixed at build time.",
@@ -623,7 +541,6 @@ export const CONFIG_SPEC = {
     },
   },
 
-  // — In-app content —
   popup: {
     type: "object",
     description: "One-off notice dialog shown over the app on load.",
@@ -757,7 +674,6 @@ export const CONFIG_SPEC = {
     },
   },
 
-  // — UI text overrides —
   strings: {
     type: "object",
     custom: true,

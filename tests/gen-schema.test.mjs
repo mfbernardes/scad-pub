@@ -699,8 +699,8 @@ test("explicit `assets` that DOES cover every use/include dependency still build
   // widget-glob.config.json's `assets` ("lib/*.scad", "**/*.svg") covers both
   // of widget.scad's walked dependencies (lib/core.scad, lib/util.scad) plus
   // its @icon asset — see the "assets: globs match files" test above for the
-  // full assertion. Re-run here only to pin down that adding the coverage
-  // check didn't turn a previously-green explicit-assets build red.
+  // full assertion. Re-run here to pin down that the coverage check leaves a
+  // valid explicit-assets build green.
   const { schema } = run("widget-glob.config.json");
   assert.deepEqual(schema.assets, ["assets/emblem.svg", "lib/core.scad", "lib/util.scad"]);
 });
@@ -821,8 +821,7 @@ test("rejects an app-level id with unsafe characters", () => {
 });
 
 test("'pwa.categories' must be an array of strings when present", () => {
-  // Asserts the corrected 'pwa.categories' path (not the stale bare
-  // 'categories' this used to say — see parseStringArray's own fix).
+  // The error names the full 'pwa.categories' path, not a bare 'categories'.
   assert.throws(
     () => run("widget-bad-categories.config.json"),
     /'pwa\.categories' must be an array of non-empty strings/
@@ -912,8 +911,7 @@ test("format defaults to 3mf, accepts stl, and rejects anything else", () => {
 
 // `viewer` gathers every display-only viewer concern in one place: the
 // presentation style, restOnGrid framing, the grid toggle's seed value, and
-// per-control visibility (viewer.controls.*) — see this commit's message for
-// why these used to be split across the top level and `ui`.
+// per-control visibility (viewer.controls.*).
 const VIEWER_DEFAULTS = {
   style: "plain",
   restOnGrid: false,
@@ -935,7 +933,7 @@ test("viewer defaults every field (style, restOnGrid, grid, controls), validates
   // the newer convention rather than a meaningful distinction.
   assert.throws(() => parseViewer("studio"), /gen-schema: 'viewer' must be an object/);
   assert.throws(() => parseViewer(["studio"]), /gen-schema: 'viewer' must be an object/);
-  // Enum errors always say what they got now (used to be viewer/popup only).
+  // Enum errors always say what they got, in every group.
   assert.throws(() => parseViewer({ style: "toon" }), /'viewer\.style' must be one of .* \(got "toon"\)/);
   assert.throws(
     () => parseViewer({ shadow: true }),
@@ -1116,9 +1114,8 @@ test("ui.showVarName defaults to false, accepts a boolean, rejects non-booleans"
 });
 
 test("ui.presetsLabel / parametersLabel moved to the i18n catalogue (strings['presets.title']/['settings.title'])", () => {
-  // These used to be `ui` fields (parseUi); they're plain chrome copy now,
-  // resolved via src/lib/i18n.ts's t() and overridable through the config's
-  // `strings` block like any other catalogue key.
+  // Plain chrome copy, not `ui` fields: resolved via src/lib/i18n.ts's t() and
+  // overridable through the config's `strings` block like any catalogue key.
   assert.equal(parseUi(undefined).presetsLabel, undefined);
   assert.equal(parseUi(undefined).parametersLabel, undefined);
 });
@@ -1134,7 +1131,7 @@ test("ui: an explicit null is equivalent to omitting the key, for every field ki
   assert.equal(parseUi({ saveImage: null }).saveImage, undefined); // no-default boolean
 });
 
-test("ui: unknown nested keys are rejected (newly enforced — used to be silently ignored)", () => {
+test("ui: unknown nested keys are rejected", () => {
   assert.throws(
     () => parseUi({ oops: true }),
     /'ui': unknown key 'oops'\.\s*\n\s*Valid keys: panelSide, panelDefault/
@@ -1185,7 +1182,7 @@ test("notices: label accepts { one, other } — 'other' required, 'one' optional
     parseNotices([{ marker: "alert", label: { one: " alert ", other: " alerts " } }]),
     [{ marker: "alert", label: { one: "alert", other: "alerts" } }]
   );
-  // `one` omitted -> falls back to `other`, matching the old labelOne-absent behaviour.
+  // `one` omitted -> falls back to `other`.
   assert.deepEqual(parseNotices([{ marker: "note", label: { other: "notes" } }]), [
     { marker: "note", label: { one: "notes", other: "notes" } },
   ]);
@@ -1203,7 +1200,7 @@ test("notices: label accepts { one, other } — 'other' required, 'one' optional
   assert.throws(() => parseNotices([{ marker: "n", label: [] }]), /'notices\[0\]\.label' must be a string/);
 });
 
-test("notices: the old labelOne field is no longer accepted (reshaped to label: { one, other })", () => {
+test("notices: labelOne is rejected, pointing at label: { one, other }", () => {
   assert.throws(
     () => parseNotices([{ marker: "alert", label: "alerts", labelOne: "alert" }]),
     /'notices\[0\]\.labelOne' is no longer supported.*label.*\{ one, other \}/s
@@ -1380,9 +1377,9 @@ test("firstSentence does not break on decimals or abbreviations", () => {
 });
 
 test("firstSentence splits before a sentence that opens with a quote", () => {
-  // The case the capital/paren-only lookahead used to miss entirely: a design
-  // documenting an enum by naming its values kept the whole paragraph as the
-  // control's label.
+  // A capital/paren-only lookahead misses this entirely, keeping the whole
+  // paragraph as the control's label for a design that documents an enum by
+  // naming its values.
   assert.equal(
     firstSentence(
       'Text alignment. "center" (default) centres both the raised lettering ' +
@@ -1776,8 +1773,8 @@ test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
   assert.throws(() => parseRender({ cache: 5 }), /'render\.cache' must be an object/);
   assert.throws(() => parseRender({ cache: { maxBytes: "lots" } }), /'render\.cache\.maxBytes' must be a non-negative number/);
   assert.throws(() => parseRender({ cache: { persistent: "yes" } }), /'render\.cache\.persistent' must be a boolean/);
-  // Unknown keys -> rejected (newly enforced — used to be silently ignored),
-  // one level down (render.cache) and at render's own level.
+  // Unknown keys are rejected one level down (render.cache) and at render's
+  // own level.
   assert.throws(
     () => parseRender({ cache: { oops: 1 } }),
     /'render\.cache': unknown key 'oops'\.\s*\n\s*Valid keys: maxEntries, maxBytes, maxEntryBytes, persistent/
@@ -1819,9 +1816,8 @@ test("parseUi: saveImage is absent by default, carried only when set, rejects no
 });
 
 test("parseUi.afterExport: true/{} means defaults, an options object sets helpTab", () => {
-  // `title`/`body` used to live here; removed — see CONFIG_SPEC's
-  // AFTER_EXPORT_SPEC comment — they were only a second override path for the
-  // catalogue's exportSuccess.title/.body keys (src/locales/en.json).
+  // No `title`/`body` here: that copy lives in the catalogue's
+  // exportSuccess.title/.body keys (src/locales/en.json).
   assert.equal(parseUi(undefined).afterExport, undefined);
   assert.equal(parseUi({}).afterExport, undefined);
   assert.deepEqual(parseUi({ afterExport: true }).afterExport, {});
@@ -1935,7 +1931,7 @@ test("parsePopup: defaults, modes, links and errors", () => {
   // the key, same as every other field.
   assert.equal("button" in parsePopup({ header: "x", body: "y", button: null }), false);
   assert.equal("footnote" in parsePopup({ header: "x", body: "y", footnote: null }), false);
-  // Unknown key -> rejected (newly enforced — used to be silently ignored).
+  // Unknown key -> rejected.
   assert.throws(
     () => parsePopup({ header: "x", body: "y", oops: true }),
     /'popup': unknown key 'oops'\.\s*\n\s*Valid keys: header, body, bodyFile, mode, button, footnote/
@@ -2528,7 +2524,7 @@ test("parseFontFallback accepts a trimmed string or null; rejects empty", () => 
 test("parseStringArray: absent or null -> [], every entry must be a non-empty string", () => {
   assert.deepEqual(parseStringArray(undefined, "features"), []);
   // `null` reads as "unset" too, same as every other render/pwa field (see
-  // applyGroupSpec) — it used to only check `undefined` and threw instead.
+  // applyGroupSpec), rather than throwing.
   assert.deepEqual(parseStringArray(null, "render.features"), []);
   assert.deepEqual(parseStringArray(null, "pwa.categories"), []);
   assert.deepEqual(parseStringArray(["a", "b"], "features"), ["a", "b"]);
@@ -3128,12 +3124,12 @@ test("a PWA/icon failure after a prior successful build leaves the previous outp
 // pwa-assets.mjs had already written the (successfully rasterized) icon/
 // splash PNGs directly to outPublicDir. That's the gap the deferred-write
 // batch (pwa-assets.mjs's `batch`/commitPwaBatch, flushed only at generate()'s
-// single commit point) closes: unlike the widget-badicon case above — which
-// already failed BEFORE anything was written even under the old code, since
-// rasterization itself is the failure — this fixture's icon is valid, so the
-// icon/splash batch fully rasterizes, and only the screenshot check after it
-// fails. Under the pre-fix code that meant new icon/splash bytes landing on
-// disk paired with the OLD scad tree/schema/manifest; this asserts they don't.
+// single commit point) closes: unlike the widget-badicon case above — where
+// rasterization itself is the failure, so nothing is written either way — this
+// fixture's icon is valid, so the icon/splash batch fully rasterizes and only
+// the screenshot check after it fails. Without the batch that lands new
+// icon/splash bytes beside the STALE scad tree/schema/manifest; this asserts
+// it doesn't.
 test("a failing screenshot leaves the previous PWA icon/splash/manifest files byte-identical (deferred-write batch)", () => {
   const out = mkdtempSync(join(tmpdir(), "gen-schema-pwatxn-"));
   const outPublicDir = join(out, "public");

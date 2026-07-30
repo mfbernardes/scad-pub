@@ -15,16 +15,12 @@
 // single byte of path data).
 //
 // This is a regex-based scrub, not a real XML parser (the project takes on no
-// XML-parsing dependency for it). It is DEFENSE-IN-DEPTH over TRUSTED operator
-// input — the design/config author's own logo/icon SVGs — NOT a guarantee
-// against adversarial SVG. A determined author can still craft input a regex
-// misses; the actual guarantee against a served SVG executing as a document
-// comes from public/_headers (`nosniff` + a `default-src 'none'; sandbox`
-// CSP). On hosts that ignore custom headers (notably GitHub Pages) that CSP is
-// absent, so this scrub is the only in-band layer there — hence it now covers
-// the obfuscations a browser itself normalizes away, but the security claim
-// remains "trusted operator input, hardened defense-in-depth", not "safe to
-// feed attacker-controlled SVG".
+// XML-parsing dependency for it), so a determined author can still craft input
+// it misses. The actual guarantee against a served SVG executing as a document
+// comes from public/_headers (`nosniff` + a `default-src 'none'; sandbox` CSP).
+// On hosts that ignore custom headers (notably GitHub Pages) that CSP is
+// absent and this scrub is the only in-band layer, which is why it covers the
+// obfuscations a browser itself normalizes away.
 //
 // It strips the three known ways an SVG becomes "active", each hardened against
 // the evasions a naive regex misses:

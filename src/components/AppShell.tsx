@@ -13,11 +13,10 @@
 // owns is layout: which breakpoint's tree is mounted, panel width, focus
 // restoration and `inert` management across a breakpoint switch, and the
 // handful of viewer/panel toggles (dimensions, grid, view) both layouts
-// share. The three self-contained pieces that used to be inline here —
-// production-readiness derivation + the Review dialog
-// (useReadinessModel.ts), the Output console's open/auto-open state machine
-// (useOutputConsole.ts), and the mobile sheet's first-visit policy
-// (useSheetPolicy.ts) — are extracted hooks this component composes, not
+// share. Three self-contained pieces — production-readiness derivation + the
+// Review dialog (useReadinessModel.ts), the Output console's open/auto-open
+// state machine (useOutputConsole.ts), and the mobile sheet's first-visit
+// policy (useSheetPolicy.ts) — are extracted hooks this component composes, not
 // logic it owns itself.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import type { Design, Schema, UiConfig, WorkerProgress } from "../openscad/types";
@@ -240,9 +239,9 @@ export const AppShell = memo(function AppShell({
   // to it ("when `ui.essentials` is enabled"). Off (the default), every param
   // is simply shown: `showAdvanced` is a constant `true` and the change
   // handler below is withheld, which is what keeps the toggle from rendering
-  // (ParamForm mounts EssentialsToggle only when handed one). It used to be
-  // passed unconditionally, so a config that never opted in still got a
-  // toggle that could hide params its operator meant to be permanent.
+  // (ParamForm mounts EssentialsToggle only when handed one). Passing it
+  // unconditionally would give a config that never opted in a toggle that can
+  // hide params its operator meant to be permanent.
   const essentialsEnabled = schema.ui?.essentials === true;
   const [showAdvanced, setShowAdvanced] = useState(() =>
     essentialsEnabled ? readLocal(ADVANCED_SETTINGS_KEY) === "true" : true

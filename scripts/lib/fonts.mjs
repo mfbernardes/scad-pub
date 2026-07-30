@@ -13,9 +13,8 @@ export { fontFaces, fontFamilyNames };
 // font can never become Fontconfig's global default fallback. Must be a
 // bundled family that isn't offered as a selectable lettering font. Absent ->
 // null -> no rule. `path` is the caller-supplied dotted path (default
-// "render.fontFallback", the field's only home since this reorg) so the
-// message names the real key instead of the stale bare "fontFallback" this
-// used to hard-code.
+// "render.fontFallback", the field's only home) so the message names the real
+// key rather than a bare "fontFallback".
 export function parseFontFallback(raw, path = "render.fontFallback") {
   if (raw == null) return null;
   if (typeof raw !== "string" || !raw.trim())

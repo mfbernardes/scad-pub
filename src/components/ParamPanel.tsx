@@ -2,12 +2,11 @@
 // Presets / Parameters tab split, parameter search + ParamForm, and a Reset
 // footer. Collapsible and resizable; state persisted to localStorage. Presets
 // live here (a tab, mirroring the mobile sheet) rather than in the top bar.
-// Files used to be a third tab here; it's now FilesModal, opened from
-// BarActions (see CommandBar.tsx) — a design that imports files is no longer
-// special-cased in this component at all. Readiness went the same way: it used
-// to be a full-width StatusStrip row above the tabs, and is now the dock pill
-// both layouts share (see StatusStrip.tsx) — which also means it survives this
-// panel being collapsed to its rail, where the row used to disappear with it.
+// Files is not a tab here: it's FilesModal, opened from BarActions (see
+// CommandBar.tsx), so a design that imports files is not special-cased in this
+// component at all. Readiness is likewise the dock pill both layouts share (see
+// StatusStrip.tsx) rather than a row above the tabs, which also means it
+// survives this panel being collapsed to its rail.
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";

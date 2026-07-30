@@ -5,14 +5,11 @@
 // convention) and returns a normalised value (or a null/[]/defaults) otherwise.
 //
 // `ui`, `viewer`, `render` and `fileImport`, plus the scalar fields of
-// `popup`, used to each hand-write the same "check a boolean / check an enum /
-// assign a default" shape once per field (15 times over, for `ui` alone), and
-// disagreed with each other about null-handling, error wording and unknown-key
-// rejection along the way. They're now driven by `applyGroupSpec` below,
-// walking the field tables in ./config-spec.mjs, which picks one behaviour per
-// axis for every field (see that file's file-top comment) instead of
-// reproducing the old disagreements. `parseColors`, `parseLicenses`,
-// `parseNotices` and `parseStrings` are NOT
+// `popup`, are driven by `applyGroupSpec` below, walking the field tables in
+// ./config-spec.mjs, which picks one behaviour per axis for every field (see
+// that file's file-top comment) — so no two groups can drift apart on
+// null-handling, error wording or unknown-key rejection. `parseColors`,
+// `parseLicenses`, `parseNotices` and `parseStrings` are NOT
 // driven by it: they carry real bespoke logic (cross-checks, defaulting rules
 // that don't fit the shared shape) that isn't worth forcing into the same
 // mould, and config-spec.mjs only registers their keys for unknown-key
@@ -21,10 +18,7 @@ import { CONFIG_SPEC, COLOR_TOKENS } from "./config-spec.mjs";
 export { COLOR_TOKENS };
 
 // `prefix(path)` renders the leading part of a validation-error message. One
-// convention everywhere now: "gen-schema: '<path>' ..." (previously `viewer`
-// alone predated this and read "config.<path> ..." with no quotes — that was
-// an accident of `viewer` being older code, not a meaningful distinction, so
-// it's gone).
+// convention everywhere: "gen-schema: '<path>' ...".
 function messagePrefix(path) {
   return `gen-schema: '${path}'`;
 }
@@ -50,10 +44,7 @@ export function optionalStringFieldError(path) {
 // The two string-field message shapes every string field now uses (see
 // config-spec.mjs's file-top comment): a field that's `required` outright, or
 // one that's optional but was set to something invalid (optionalStringFieldError,
-// above). (A third and fourth shape used to exist — "must be a non-empty
-// string" / "must be a string", picked by a per-field `nonBlank` flag — but
-// every string field rejects blank now, so there's no second shape left to
-// pick between.)
+// above). Every string field rejects blank, so there is no third shape.
 function stringFieldError(path, field) {
   if (!field.required) return optionalStringFieldError(path);
   return new Error(`${messagePrefix(path)} is required and must be a non-empty string`);
@@ -85,8 +76,7 @@ function validateFieldValue(value, field, path) {
       if (typeof value !== "boolean") throw new Error(`${prefix} must be a boolean`);
       return value;
     case "enum": {
-      // Enum errors always say what they got — strictly more informative,
-      // and every group agrees on it now (some used to omit it).
+      // Enum errors always say what they got, in every group.
       if (!field.values.includes(value))
         throw new Error(
           `${prefix} must be one of ${field.values.map((v) => `"${v}"`).join(", ")} ` +
@@ -207,7 +197,6 @@ export function parseLang(raw) {
 export const TEXT_DIRECTIONS = ["ltr", "rtl", "auto"];
 
 // Validate the optional `dir` config key — the document/manifest text direction.
-// Defaults to "ltr" (matching the previously hard-coded manifest value).
 export function parseDir(raw) {
   if (raw == null) return "ltr";
   if (!TEXT_DIRECTIONS.includes(raw))
@@ -286,8 +275,7 @@ export function parseColors(raw) {
             `  Valid tokens: ${COLOR_TOKENS.join(", ")}`
         );
       // An explicit `null` means "not set", same as every other optional
-      // field in this config — this token was previously the sole holdout,
-      // treating a present-but-null token as an invalid string instead.
+      // field in this config.
       if (value === null) continue;
       if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
         throw new Error(
@@ -597,10 +585,7 @@ export function parseNotices(raw) {
 // panel — the same true-or-options-object idiom as `parseFileImport` below,
 // reusing this field's own CONFIG_SPEC node (properties + rootTypeError) for
 // the object-shape validation exactly the way `parseFileImport` reuses
-// `CONFIG_SPEC.fileImport`. `title`/`body` used to live here too; removed (see
-// CONFIG_SPEC's AFTER_EXPORT_SPEC comment) — the `false` case is new relative
-// to the old plain-object field, which had no way to say "off" other than
-// omitting the key entirely.
+// `CONFIG_SPEC.fileImport`. `false` and an omitted key both mean "off".
 export function parseAfterExport(raw) {
   if (raw == null || raw === false) return undefined;
   if (raw === true) return {};

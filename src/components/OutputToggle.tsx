@@ -12,9 +12,9 @@
 // notices included, one per line), while the pill counts actionable items
 // (a missing font has no log line at all; a `subsumedByFont` category folds
 // into the font item; a category with five pending lines is one item). Showing
-// both at once invited the reading that one of them was lying, so the caller
-// hides this count while the pill is up (`showCount`), and the amber the bell
-// used to wear for an attention-flagged notice is gone entirely.
+// both at once invites the reading that one of them is lying, so the caller
+// hides this count while the pill is up (`showCount`), and the bell carries no
+// amber of its own for an attention-flagged notice.
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";

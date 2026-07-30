@@ -1,9 +1,9 @@
 // PanelFooter.tsx — the parameter-scoped footer row: the Live-preview
 // (auto-render) switch. Shared by the desktop ParamPanel (pinned under the
 // whole panel) and the mobile SheetTabs (pinned inside the Parameters tab);
-// only the container class differs. Reset-to-defaults used to live here too,
-// but the unified preset-diff strip (PresetDiffBar, at the top of the
-// Parameters tab) is now the single restore control — see that file.
+// only the container class differs. Reset-to-defaults is not here: the
+// preset-diff strip (PresetDiffBar, at the top of the Parameters tab) is the
+// single restore control — see that file.
 import { useAppActions } from "../lib/appActions";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";

@@ -345,8 +345,7 @@ function postModuleOnce(module: WebAssembly.Module) {
 // recover without a full page reload. Awaiting factoryPromise as part of the
 // same Promise.all means its rejection now propagates like every other
 // bootstrap input, through retryableOnce's built-in reset, so the very next
-// render() call re-attempts the ENTIRE bootstrap (factory import included),
-// not just the pieces that used to be tracked.
+// render() call re-attempts the ENTIRE bootstrap, factory import included.
 //
 // Every variable this load populates (factoryPromise, wasmBinary,
 // wasmModulePromise, assetSources, fontsConf, fontFiles) is unconditionally

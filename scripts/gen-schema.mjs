@@ -161,7 +161,6 @@ function loadConfig(configPath) {
   return config;
 }
 
-// ── App identity ────────────────────────────────────────────────────────────
 // title/id/description/lang/dir only — document chrome and storage
 // namespacing, read by the running app itself. Everything that's a
 // manifest/icon-rasterizer INPUT ONLY (shortName, icon, iconMaskable,
@@ -175,15 +174,13 @@ function parseIdentity(config) {
   const ID = checkId(config.id ?? "scadpub", "config 'id'");
   const DESCRIPTION =
     config.description ?? "Configure and export designs in your browser.";
-  // Document / manifest language and text direction. Default "en" / "ltr"
-  // (the previously hard-coded values). Validated so they're safe to interpolate
-  // into the generated <html lang dir> attributes and the manifest.
+  // Document / manifest language and text direction, validated so they're safe
+  // to interpolate into the generated <html lang dir> attributes and the manifest.
   const LANG = parseLang(config.lang);
   const DIR = parseDir(config.dir);
   return { TITLE, ID, DESCRIPTION, LANG, DIR };
 }
 
-// ── Rendering: bundled fonts ────────────────────────────────────────────────
 // Fonts are referenced by basename under /fonts. An entry is either a font
 // already present in public/fonts (the Liberation fallbacks that ship with the
 // app) or a path into the source tree (a design repo bundling its own font),
@@ -297,9 +294,9 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
         // public/fonts) — read it in place; it isn't rewritten, so no staging.
         fontPaths[name] = join(outPublicDir, "fonts", name);
       } else {
-        // Neither a source-tree path nor an already-bundled font — a silent skip
-        // here used to ship an app whose `// @font` selector lists a face that
-        // can never load.
+        // Neither a source-tree path nor an already-bundled font. A silent skip
+        // here would ship an app whose `// @font` selector lists a face that can
+        // never load.
         throw new Error(
           `gen-schema: font '${entry}' not found:\n  ${srcAbs}\n` +
             `  (and not already present in public/fonts/${name})\n` +
@@ -639,10 +636,9 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     }
     // `reviewLabels`: each declared parameter's own `// @review "<label>"`
     // annotation (see scripts/lib/params.mjs and docs/annotations.md) — the
-    // sole source now, with no config-level override left. A label can only
-    // ever be declared on a real parameter in the first place, so there's no
-    // separate cross-reference to run here (contrast the old config
-    // `review.labels`, which needed one against `params`).
+    // sole source, with no config-level override. A label can only ever be
+    // declared on a real parameter in the first place, so there's no separate
+    // cross-reference to run here.
     const reviewLabels = {};
     for (const p of params) {
       if (p.reviewLabel) reviewLabels[p.name] = p.reviewLabel;
@@ -710,9 +706,9 @@ function checkPopupMode(popup, designs) {
   );
 }
 
-// Explicit `assets` used to make the use/include walk (collectDeps) entirely
-// unnecessary — gen-schema trusted the configured set completely and never
-// checked it against what a design's `use`/`include` graph actually reaches.
+// The use/include walk (collectDeps) always runs, even when `assets` is
+// explicit, because a configured set trusted without that cross-check is never
+// verified against what a design's `use`/`include` graph actually reaches.
 // That let a design whose graph goes further than `assets` (an entry the
 // operator forgot to add, or one they trimmed on purpose expecting a
 // narrower dependency set than the design really has) build green and fail
@@ -820,9 +816,8 @@ function copyExtraCss(config, CONFIG_DIR, outScadDir, mustExist, register) {
     `extraCss '${config.extraCss}'`
   );
   const name = abs.split(/[\\/]/).pop();
-  // H6: this is exactly the collision that used to overwrite a design file
-  // silently (an extraCss basename equal to a design's) — register() now
-  // fails the build, naming both owners, instead of clobbering.
+  // H6: an extraCss basename equal to a design's would silently overwrite that
+  // design file, so register() fails the build naming both owners.
   const dest = join(outScadDir, name);
   register(dest, `extraCss '${config.extraCss}'`);
   copyFileSync(abs, dest);
@@ -944,7 +939,6 @@ export function generate({
   // Everything in the config is resolved relative to the config file's directory.
   const CONFIG_DIR = dirname(configPath);
 
-  // ── Prose sourced from files ────────────────────────────────────────────
   // popup.body / fileImport.note / licenses[].text may each be written
   // inline OR sourced from a config-relative file (the sibling '<field>File'
   // key) — see scripts/lib/prose-files.mjs. Resolved here, BEFORE
@@ -987,7 +981,6 @@ export function generate({
 
   const { TITLE, ID, DESCRIPTION, LANG, DIR } = parseIdentity(config);
 
-  // ── Design sources ────────────────────────────────────────────────────────
   // `source` defaults to "." (designs live beside the config); set it to point
   // elsewhere (e.g. "examples", a sibling checkout, or an absolute path).
   const SOURCE = resolve(CONFIG_DIR, config.source ?? ".");
@@ -1011,7 +1004,6 @@ export function generate({
   // run's manifest below (M8).
   const fontCopies = [];
 
-  // ── Rendering ─────────────────────────────────────────────────────────────
   // `features`/`format`/`fonts`/`fontFallback` now live under `render` (moved
   // in from the top level) — they're genuine render inputs, so they stay
   // folded into renderHash below exactly as before; only their config PATH
@@ -1041,7 +1033,6 @@ export function generate({
     }
   );
 
-  // ── Appearance & UI behaviour ─────────────────────────────────────────────
   // Optional per-theme colour-scheme overrides. Validated against the known CSS
   // tokens; emitted by vite.config.ts as a <style> block so a consumer project
   // can restyle the app entirely from its config. Absent -> null.
@@ -1065,7 +1056,6 @@ export function generate({
   // Absent -> null -> no import button.
   const FILE_IMPORT = parseFileImport(config.fileImport);
 
-  // ── In-app content ────────────────────────────────────────────────────────
   // Optional one-off notice dialog shown over the app on load. Validated; absent
   // -> null -> no popup.
   const POPUP = parsePopup(config.popup);
@@ -1108,10 +1098,10 @@ export function generate({
   // outScadDir is entirely generated. H6/M8: build the complete new tree in a
   // staging directory first, and only replace the live outScadDir once every
   // fallible step below (design parsing, containment checks, PWA icon
-  // generation, …) has succeeded — a build that fails partway used to leave
-  // outScadDir wiped-and-half-repopulated (or, per H6, silently
-  // cross-clobbered) instead of the previous complete output. A stage left
-  // over from a previous crashed run is wiped before use.
+  // generation, …) has succeeded, so a build that fails partway leaves the
+  // previous complete output rather than a wiped-and-half-repopulated (or, per
+  // H6, silently cross-clobbered) outScadDir. A stage left over from a previous
+  // crashed run is wiped before use.
   const stageScadDir = `${outScadDir}.staging`;
   rmSync(stageScadDir, { recursive: true, force: true });
   mkdirSync(stageScadDir, { recursive: true });
@@ -1182,12 +1172,10 @@ export function generate({
   // after the icon/splash rasterization already succeeded) leaves
   // outPublicDir completely untouched, not merely the scad tree: the old
   // icons/splashes/manifest, the old scad tree, and the old schema all still
-  // match, exactly as if this run had never happened. (Previously this
-  // comment's claim was only half true: pwa-assets.mjs wrote icons/splashes
-  // to outPublicDir as soon as they rasterized, so a LATER failure in that
-  // same call — e.g. the screenshot existence check — could leave freshly
-  // written icons paired with the stale scad tree/schema the swap below never
-  // reached. Deferring every pwa-assets.mjs write into a batch closes that.)
+  // match, exactly as if this run had never happened. Writing icons/splashes
+  // to outPublicDir as soon as they rasterize would break that: a LATER failure
+  // in the same call — e.g. the screenshot existence check — would leave fresh
+  // icons paired with the stale scad tree/schema the swap below never reached.
 
   // Generate the PWA icon set, iOS splash images and manifest.webmanifest
   // (skipped for the fixture-driven unit tests, which pass no outPublicDir).

@@ -1,9 +1,8 @@
-// framing.ts — pure math behind the viewer's box-aware camera fit. Replaces
-// the old bounding-SPHERE framing (`radius * factor`, direction-only, no
-// aspect awareness): a sphere's radius is dominated by a flat/wide plate's
-// diagonal, so fitting to it left a typical flat plate reading at only
-// ~30-40% of the pane instead of a proper "product shot" framing. This fits
-// the model's actual axis-aligned bounding BOX instead.
+// framing.ts — pure math behind the viewer's box-aware camera fit. It fits the
+// model's actual axis-aligned bounding BOX, not a bounding SPHERE
+// (`radius * factor`, direction-only, no aspect awareness): a sphere's radius is
+// dominated by a flat/wide plate's diagonal, so fitting to it leaves a typical
+// flat plate reading at only ~30-40% of the pane.
 //
 // The camera looks at `target` from `target + direction * distance`. A world
 // point's offset from `target`, projected onto the camera's own screen basis

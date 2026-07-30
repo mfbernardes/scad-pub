@@ -7,10 +7,7 @@
 //
 // That count is also the toggle's own render gate, which is why this module is
 // one function and not two: a zero means the control would do nothing if
-// pressed, so it doesn't render, so there is no zero-count label left to
-// build. (There used to be an `essentialsToggleLabel` here whose job was
-// wording that case as a plain, count-less "Show all settings" — a label for a
-// button that revealed nothing.)
+// pressed, so it doesn't render, so there is no zero-count label to build.
 import type { Param } from "../openscad/types";
 import type { Values } from "./presets";
 import { isVisible } from "./visibility";

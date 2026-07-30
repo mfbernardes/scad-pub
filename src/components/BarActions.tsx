@@ -12,14 +12,13 @@
 // was unified down to two buttons (Download + Share only) — it's a lower-frequency
 // secondary action, and this is where the app's other secondary chrome
 // (theme/help/licenses) already lives in both layouts, so it needs no new
-// overflow surface of its own. Files followed the same path: it used to be a
-// third panel tab (ParamPanel/SheetTabs), which felt out of place next to
-// Presets/Customize — it now opens FilesModal from here instead, gated on
-// `hasFiles` (the caller knows whether the design's config sets `fileImport`).
-// Live preview (auto-render) is the third: on mobile it used to pin a footer
-// row inside the sheet's Customize tab, spending ~36px of a ~385px sheet on a
-// mode PanelFooter's own doc calls "rarely toggled". It rides this menu now
-// (mobile only — desktop keeps PanelFooter, where the panel has the room).
+// overflow surface of its own. Files opens FilesModal from here rather than
+// sitting beside Presets/Customize as a panel tab, gated on `hasFiles` (the
+// caller knows whether the design's config sets `fileImport`). Live preview
+// (auto-render) rides this menu on mobile too, where a pinned footer row inside
+// the Customize tab would spend ~36px of a ~385px sheet on a mode PanelFooter's
+// own doc calls "rarely toggled"; desktop keeps PanelFooter, where the panel has
+// the room.
 import { useState } from "react";
 import { useAppActions } from "../lib/appActions";
 import { ThemeToggle } from "./ThemeToggle";

@@ -202,8 +202,8 @@ test("shouldFireInitialRender: never fires for an auto-render design (the deboun
 });
 
 test("shouldFireInitialRender: the predicate takes no readiness input at all", () => {
-  // M15: the old contract gated the first render on a `ready` signal that
-  // only a render itself produces, deadlocking heavy designs. The fix is
-  // structural — this predicate has no readiness parameter to gate on.
+  // M15: gating the first render on a `ready` signal that only a render itself
+  // produces deadlocks heavy designs. The guarantee is structural — this
+  // predicate has no readiness parameter to gate on.
   assert.equal(shouldFireInitialRender.length, 2);
 });

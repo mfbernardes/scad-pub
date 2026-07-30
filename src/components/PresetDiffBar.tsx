@@ -7,11 +7,11 @@
 // 2) markers, which share the same baseline.
 //
 // The strip is ONE line at every width, which is what the markup below is
-// arranged to guarantee. It used to spell the baseline's name twice — once in
-// the summary and again inside the action ("Revert to <name>") — with neither
-// side able to shrink: the summary was a flex item at its default
-// `min-width: auto`, so it could not go below its longest word, and the action
-// was `shrink-0`. A preset whose name ran to ~50 characters — routine once a
+// arranged to guarantee. Spelling the baseline's name twice — in the summary
+// and again inside the action ("Revert to <name>") — wraps to two lines, because
+// neither side can shrink: the summary is a flex item at its default
+// `min-width: auto`, so it cannot go below its longest word, and the action is
+// `shrink-0`. A preset whose name ran to ~50 characters — routine once a
 // name carries a qualifier and a language tag — therefore collapsed the
 // summary into a tall one-word column on a phone while the action still
 // overflowed off-screen. So: the name is said

@@ -14,11 +14,11 @@ const SECTION_RE = /^\s*\/\*\s*\[([^\]]+)\]\s*\*\/\s*$/;
 // letters/digits/underscores — so camelCase (wallThickness), PascalCase
 // (FontSize) and leading-underscore (_offset) params are all captured, not just
 // lowercase ones. ($-prefixed special variables aren't Customizer params.)
-// The trailing `\s*` used to sit AFTER the optional `(?:// [hint])?` group,
-// so a failing match (trailing text that's neither whitespace nor a valid
-// hint) let two adjacent `\s*` quantifiers backtrack against each other —
-// O(n²) on a long run of whitespace. Folding it inside the group leaves a
-// single free-length `\s*` on any given path, so a non-match fails in O(n).
+// The trailing `\s*` sits INSIDE the optional `(?:// [hint])?` group, not
+// after it: outside, a failing match (trailing text that's neither whitespace
+// nor a valid hint) lets two adjacent `\s*` quantifiers backtrack against each
+// other — O(n²) on a long run of whitespace. Inside, any given path has a
+// single free-length `\s*`, so a non-match fails in O(n).
 const PARAM_RE =
   /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?);\s*(?:\/\/\s*\[([^\]]*)\]\s*)?$/;
 // A leading line comment that documents the next parameter.
@@ -109,7 +109,7 @@ const EDITONMODEL_RE = /^@editOnModel\s*$/i;
 // above); anything that starts with a recognised keyword but doesn't match
 // that grammar — or starts with an unrecognised `@word` at all — fails the
 // build with the file and line, instead of silently degrading to plain doc
-// prose (a typo'd `@shwoIf` used to just become part of the help text).
+// prose — where a typo'd `@shwoIf` would simply become part of the help text.
 const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "advanced", "info", "review", "label", "svg", "filledby", "editonmodel"]);
 const ANNOTATION_WORD_RE = /^@([A-Za-z-]+)\b/;
 
@@ -280,10 +280,9 @@ const SENTENCE_ABBREVIATIONS = new Set(["e.g.", "i.e.", "z.b.", "d.h."]);
 
 // Sentence boundary: `.!?` + whitespace + the start of the next sentence.
 // The lookahead accepts a capital or an opening paren — as it always has —
-// plus an opening QUOTE, which is the case it used to miss: a design that
-// documents an enum by naming its values (`Text alignment. "center"
-// (default) centres …`) never split at all, so the whole paragraph became
-// the control's label. Straight and typographic quotes both count. Zero-width
+// plus an opening QUOTE, without which a design that documents an enum by
+// naming its values (`Text alignment. "center" (default) centres …`) never
+// splits at all and the whole paragraph becomes the control's label. Straight and typographic quotes both count. Zero-width
 // on both sides, so the captured sentence keeps its own terminator.
 // Source-only (built per call below) rather than a shared /g literal, whose
 // `lastIndex` would carry between calls.

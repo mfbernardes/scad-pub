@@ -3,15 +3,13 @@
 // policy, and archive extraction can be unit-tested without hitting the
 // network (files.openscad.org) or touching public/wasm/.
 //
-// M12 fixes two gaps:
-//  1. The on-disk stamp used to verify only openscad.wasm, so a modified or
-//     partially-extracted openscad.js glue was accepted as current. The stamp
-//     now records BOTH extracted files' digests (see buildStamp/stampIsCurrent).
-//  2. A non-pinned OPENSCAD_VERSION override used to download completely
-//     unverified with just a warning. resolveVerificationPolicy now requires
-//     either an explicit OPENSCAD_SHA256 checksum for the override, or an
-//     explicit ALLOW_UNVERIFIED_WASM=1 opt-out — silence is no longer an
-//     option.
+// Two M12 guarantees:
+//  1. The on-disk stamp records BOTH extracted files' digests (see
+//     buildStamp/stampIsCurrent), so a modified or partially-extracted
+//     openscad.js glue can't be accepted as current on the wasm digest alone.
+//  2. resolveVerificationPolicy requires a non-pinned OPENSCAD_VERSION override
+//     to carry either an explicit OPENSCAD_SHA256 checksum or an explicit
+//     ALLOW_UNVERIFIED_WASM=1 opt-out — silence is never an option.
 import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 

@@ -204,9 +204,9 @@ test("a clear() then a later put() leaves the new entry in place", async () => {
 
 test("overlapping put()s never jointly exceed the byte budget", async () => {
   // Budget holds exactly two 6-byte entries. Fire three put()s concurrently
-  // (no await between them) so their evict-then-write work would race under
-  // the old two-transaction design; serialized + atomic evict-and-write must
-  // still land at <= 12 bytes total no matter the interleaving.
+  // (no await between them) so their evict-then-write work would race across
+  // two separate transactions; serialized + atomic evict-and-write must still
+  // land at <= 12 bytes total no matter the interleaving.
   const cache = createStlCache({ version, maxBytes: 12, maxEntryBytes: 12 });
   await Promise.all([
     cache.put("a", entry(6)),

@@ -440,7 +440,7 @@ button:disabled { cursor: default; }
    ViewerHUD collapses to a single "View options" trigger below this breakpoint
    (AppShell passes `collapse={isMobile}`, keyed on the same 860px), so this is
    one button — it cannot grow into the export dock riding up from below, which
-   is what the desktop-style column used to do on short and narrow viewports.
+   is what a desktop-style column does on short and narrow viewports.
    scripts/smoke.mjs hit-tests every HUD button at 360x740 and 320x568, at both
    the peek and half detents, so a layout that reintroduces the overlap fails
    there rather than silently shipping. */
@@ -593,12 +593,11 @@ button:disabled { cursor: default; }
    its height.
 
    --action-dock-h is the dock's MEASURED height, published by AppShell (see
-   its handleDockHeight). It used to be a flat ~3.25rem — "tall enough for the
-   button row" — but the dock is a flex column that grows with what it holds
-   (the readiness pill, the after-export panel) and it outranks this chip
-   (z-10 vs z-9), so anything taller than that guess simply covered the chip.
-   The fallback keeps the old constant for the frame before the first
-   measurement lands. */
+   its handleDockHeight). A flat constant won't do: the dock is a flex column
+   that grows with what it holds (the readiness pill, the after-export panel)
+   and it outranks this chip (z-10 vs z-9), so anything taller than the guess
+   covers the chip. The fallback covers the frame before the first measurement
+   lands. */
 .viewer-hint {
   position: absolute;
   bottom: calc(0.75rem + var(--safe-area-bottom) + var(--action-dock-h, 3.25rem));
@@ -640,8 +639,8 @@ button:disabled { cursor: default; }
 /* The on-model text editor (ViewerEditOnModel) needs no rule here: it is
    positioned in JS, clamped to the viewer around the mesh click that opened it,
    and it carries no permanent chip — the editor is a pointer shortcut over the
-   panel's own text box. The chip it used to have lived at the mobile viewer's
-   top-left, the same slot as `.dimension-info` above, and covered it. */
+   panel's own text box. A chip at the mobile viewer's top-left would sit in the
+   same slot as `.dimension-info` above and cover it. */
 
 /* ═══════════════════════════════════════════════════════════════
    STATUS PILL — render state chip

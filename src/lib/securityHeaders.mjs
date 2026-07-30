@@ -36,8 +36,6 @@ export function extractInlineScripts(html) {
   return bodies;
 }
 
-// -- CSP / app-document headers ----------------------------------------------
-
 /**
  * The `_headers` block text (Cloudflare Pages / Netlify convention) locking
  * down the app document itself: a CSP, clickjacking protection, MIME sniffing
@@ -48,7 +46,8 @@ export function extractInlineScripts(html) {
  * because this module stays environment-free); they're quoted and appended to
  * `script-src` alongside `'self'` and `'wasm-unsafe-eval'`.
  *
- * Directive-by-directive rationale (preserve when editing):
+ * Directive-by-directive rationale — preserve it when editing, since the
+ * reason a directive is as permissive as it is lives only here:
  * - `script-src 'self' 'wasm-unsafe-eval' <hashes>`: `'wasm-unsafe-eval'` is
  *   required for the OpenSCAD-WASM module's own WebAssembly compilation
  *   (worker.ts); the hashes allow-list exactly the inline theme script by
@@ -62,9 +61,7 @@ export function extractInlineScripts(html) {
  *   overrides, per docs/config.md's `colors` block) and React components set
  *   inline `style` attributes at runtime (e.g. the viewer/panel layout code).
  *   Neither is a fixed, hashable set, so `'unsafe-inline'` stays rather than
- *   inventing a stricter directive that would break real UI — see this file's
- *   own header comment on preferring permissive-but-documented over untested
- *   strictness.
+ *   inventing a stricter directive that would break real UI.
  * - `img-src 'self' data: blob:`: the PNG export snapshot renders to a data:
  *   URL and preset/icon artwork can be inlined as data: URIs.
  * - `font-src 'self'`: bundled + imported fonts are same-origin only.

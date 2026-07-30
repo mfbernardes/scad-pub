@@ -195,11 +195,10 @@ export function createStlCache(
     }
   }
 
-  // M11: eviction and the new record's write, in ONE readwrite transaction —
-  // previously these were two separate transactions (a read-only scan, a
-  // separate delete transaction, then put()'s own write transaction later).
-  // Two overlapping put() calls could each read the pre-eviction total,
-  // decide independently how much to evict, and both write — jointly
+  // M11: eviction and the new record's write share ONE readwrite transaction.
+  // Split across separate transactions (a read-only scan, a delete, then put()'s
+  // own write), two overlapping put() calls could each read the pre-eviction
+  // total, decide independently how much to evict, and both write — jointly
   // exceeding the byte budget even though each individually respected it.
   // Combining them into one transaction (and running every put/clear through
   // the serialize() queue above, so transactions from this store are never

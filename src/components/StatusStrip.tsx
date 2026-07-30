@@ -3,12 +3,10 @@
 // stacked directly above the Download button, that opens the Review dialog
 // (ReviewDialog.tsx).
 //
-// One presentation, both layouts. It used to be a full-width row at the top of
-// the docked desktop panel and a chip on the mobile sheet's tab row; the dock
-// is where the decision it gates actually gets made, so it lives there for
-// desktop and mobile alike — over the viewer, out of the panel/sheet entirely,
-// and still visible when the desktop panel is collapsed to its rail (which used
-// to drop readiness altogether, since the row lived inside the panel).
+// One presentation, both layouts. The dock is where the decision it gates
+// actually gets made, so it lives there for desktop and mobile alike — over the
+// viewer, out of the panel/sheet entirely, and so still visible when the desktop
+// panel is collapsed to its rail. A row inside the panel would vanish with it.
 //
 // The caller mounts it only for the states that want a look at the Review
 // dialog, and not identically in both layouts: `failed` pills everywhere,
@@ -54,8 +52,8 @@ const ICON: Record<ReadinessState, typeof ReadyIcon> = {
 // the pill in step with the rest of the app's status language.
 //
 // Every fill is OPAQUE: the pill floats over the 3D viewer, so a translucent
-// tint (the old row used `bg-destructive/10`) would take its contrast from
-// whatever the model happens to be showing behind it. `--glass-bg` is the same
+// tint (`bg-destructive/10` and friends) would take its contrast from whatever
+// the model happens to be showing behind it. `--glass-bg` is the same
 // surface the dock's own card uses, so a failed pill reads as part of the dock.
 const TONE: Record<ReadinessState, string> = {
   building: "text-muted-foreground bg-(--glass-bg)",

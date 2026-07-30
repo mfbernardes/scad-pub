@@ -413,9 +413,8 @@ function Control({
 // INLINE right after the last word of the label/help text it belongs to (a
 // plain sibling in the same text flow, not a flex row item) — so when that
 // text wraps to multiple lines, the button flows with it instead of sitting
-// detached to the row's right edge at the first line's height. The detail
-// was previously reachable only through the hover-only `title` tooltip,
-// which is invisible on touch devices.
+// detached to the row's right edge at the first line's height. A hover-only
+// `title` tooltip would leave the detail unreachable on touch devices.
 function ParamHelp({ help, label }: { help: string; label: string }) {
   return (
     <Popover>

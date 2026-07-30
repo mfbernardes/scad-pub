@@ -1758,8 +1758,8 @@ async function main() {
       await readFile(fileURLToPath(new URL("../src/locales/en.json", import.meta.url)), "utf-8")
     );
     const uiText = (key) => schema.strings?.[key] ?? catalogue[key] ?? "";
-    // Panel tab names used to be config-overridable via ui.presetsLabel/
-    // parametersLabel; they're catalogue keys now (presets.title/settings.title).
+    // Panel tab names are catalogue keys (presets.title/settings.title), not
+    // config fields.
     const presetsTabName = uiText("presets.title") || "Presets";
     const paramsTabName = uiText("settings.title") || "Customize";
     const textRe = (...keys) =>

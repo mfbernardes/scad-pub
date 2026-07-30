@@ -48,7 +48,6 @@ try {
 /**
  * Queue the PWA icon set + manifest for outPublicDir and return the iOS
  * splash descriptors (see the module comment for why "queue", not "write").
- * Mirrors the logic that used to live inline in generate().
  *
  * Takes the ALREADY-PARSED `pwa` object (scripts/lib/config-parsers.mjs's
  * parsePwa — the config's `pwa` block, defaults resolved) rather than the
