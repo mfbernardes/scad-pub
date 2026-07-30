@@ -691,6 +691,28 @@ function resolveDefaultDesign(config, designs) {
   return config.defaultDesign;
 }
 
+// `popup.mode: "picker"` means one thing: the popup IS the design chooser, the
+// app's first screen (PopupModal renders the gallery from it, App parks the
+// render path behind it, and a link naming a design skips it). A deployment with
+// nothing to choose between cannot have that screen, so the config is wrong
+// rather than quietly meaning something else.
+//
+// It used to mean something else: below two designs the popup silently fell back
+// to a plain notice, which made one config value stand for two different UIs. Of
+// the consumers deciding "is this the chooser", most had to know about the
+// fallback and one forgot, dropping a single-design deployment's notice from
+// every visit whose URL named its only design. Enforcing the invariant here —
+// once, where every other config mistake is caught — is what lets all of them go
+// back to reading the mode.
+function checkPopupMode(popup, designs) {
+  if (popup?.mode !== "picker" || designs.length > 1) return;
+  throw new Error(
+    `gen-schema: 'popup.mode: "picker"' is the design chooser, so it needs at least two ` +
+      `designs to choose between — this config has ${designs.length}.\n` +
+      `  Use 'popup.mode: "once"' (or "dismissible"/"always") for a plain notice.`
+  );
+}
+
 // Explicit `assets` used to make the use/include walk (collectDeps) entirely
 // unnecessary — gen-schema trusted the configured set completely and never
 // checked it against what a design's `use`/`include` graph actually reaches.
@@ -1122,6 +1144,7 @@ export function generate({
     register: registry.register,
   });
   const defaultDesign = resolveDefaultDesign(config, designs);
+  checkPopupMode(POPUP, designs);
 
   // Shared dependency files: from the config's `assets` (files/directories) when
   // given, otherwise discovered by following each design's use/include graph.

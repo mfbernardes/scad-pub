@@ -42,7 +42,7 @@ import { PopupModal } from "./components/PopupModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Modal, MODAL_BODY } from "./components/Modal";
 import { Button } from "./components/ui/button";
-import { shouldShowPopup, rememberPopup } from "./lib/popup";
+import { shouldShowPopup, rememberPopup, isDesignChooser } from "./lib/popup";
 import type { ExportSuccessState } from "./components/ExportSuccess";
 
 // LicensesModal, HelpModal, DesignDocModal and FilesModal are interaction-only
@@ -178,6 +178,13 @@ export default function App() {
     if (remember && popup) rememberPopup(popup);
     setShowPopup(false);
   };
+  // A showing design chooser *is* the app's first screen — a grid of design
+  // thumbnails with nothing chosen yet. Until the user picks, there is nothing
+  // worth rendering, so the render path stays parked and leaves the network to
+  // those thumbnails; see useRenderPipeline's `holdBoot`. `isDesignChooser` is
+  // the same predicate PopupModal renders the gallery from, so the two cannot
+  // disagree about what this popup is.
+  const holdBoot = showPopup && isDesignChooser(popup);
   // Bumped by the popup's primary CTA to open the design picker (the obvious
   // first step). AppShell routes it to whichever layout's picker is visible.
   const [openPickerSignal, setOpenPickerSignal] = useState(0);
@@ -232,6 +239,7 @@ export default function App() {
       maxCacheEntryBytes: cacheConfig?.maxEntryBytes,
       persistentCache: cacheConfig?.persistent,
     },
+    holdBoot,
     setAnnouncement,
   });
   invalidateRef.current = invalidate;

@@ -511,8 +511,8 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
   - **`always`**: shown on every visit. No opt-out
   - **`once`** (default): shown on the first visit only. Dismissing it with **OK**, the close button, Escape, or outside click remembers it so it will not return
   - **`dismissible`**: shown on every visit until you tick **Don't show this again**. Closing without ticking the box shows it again next time
-  - **`picker`**: shows the visual design gallery on the first visit. Intended for `ui.gallery: true` deployments with multiple designs
-- **`button`**: an optional label for the primary button, overriding the default `"OK"`. Must be a non-empty string when set. Has no effect in `picker` mode with more than one design — that mode's primary action is picking a design from the gallery, not clicking a button
+  - **`picker`**: the popup IS the design chooser — the visual gallery, as the app's first screen — rather than a notice over the app. Intended for `ui.gallery: true` deployments. It needs **at least two designs** to choose between: `picker` with fewer fails the build, pointing at `"once"` for a plain notice, because a chooser with nothing to choose is a mistake in the config rather than a request for something else. While it is on screen the render path stays parked, so its thumbnails have the connection to themselves
+- **`button`**: an optional label for the primary button, overriding the default `"OK"`. Must be a non-empty string when set. Has no effect in `picker` mode — that mode's primary action is picking a design from the gallery, not clicking a button
 - **`footnote`**: an optional short line of plain text (not Markdown), shown small and muted at the bottom of the dialog in every mode, including `picker`. For a standing disclosure that doesn't belong in the main `body` message, such as a privacy note
 
 The remembered state is namespaced by the configurator's `id` and keyed by the popup's content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It's purely informational and doesn't affect renders, so it never invalidates the geometry cache.

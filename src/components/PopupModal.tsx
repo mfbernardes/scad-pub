@@ -12,6 +12,7 @@ import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
 import type { Design, PopupNotice } from "../openscad/types";
 import { DesignGallery } from "./DesignPicker";
+import { isDesignChooser } from "../lib/popup";
 
 export function PopupModal({
   popup,
@@ -48,7 +49,7 @@ export function PopupModal({
     </p>
   );
 
-  if (popup.mode === "picker" && designs.length > 1) {
+  if (isDesignChooser(popup)) {
     return (
       <Modal title={popup.header} onClose={() => onClose(true)}>
         <div className={cn(MODAL_BODY, "flex flex-col gap-3")}>

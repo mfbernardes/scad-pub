@@ -18,9 +18,29 @@ function contentHash(popup: PopupNotice): string {
 }
 
 /**
+ * Whether this popup is the design chooser rather than a notice.
+ *
+ * `picker` mode means exactly one thing: this popup IS the chooser, the app's
+ * first screen. `gen-schema`'s `checkPopupMode` refuses to build a `picker`
+ * config with fewer than two designs, so there is no second meaning to test
+ * for here — the mode alone is the answer.
+ *
+ * It reads as a one-line predicate because it used to be more, and that is
+ * worth remembering: `picker` once fell back to a plain notice below two
+ * designs, so every consumer had to ask "chooser or notice?" with the design
+ * count in hand. Three did; one tested the mode alone and silently dropped a
+ * single-design deployment's notice from any visit whose URL named its only
+ * design. Named rather than inlined so the guarantee has somewhere to live.
+ */
+export function isDesignChooser(popup: PopupNotice | null): boolean {
+  return popup?.mode === "picker";
+}
+
+/**
  * Whether the popup should be shown now. "always" shows every visit; "once" and
  * "dismissible" show unless this exact content was already remembered (see
  * rememberPopup). Returns false when no popup is configured.
+ *
  */
 export function shouldShowPopup(popup: PopupNotice | null): boolean {
   if (!popup) return false;

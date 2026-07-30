@@ -1,0 +1,33 @@
+{
+  "title": "Widget Studio",
+  "logo": "logo.svg",
+  "source": "src",
+  "assets": [
+    "lib"
+  ],
+  "fileImport": true,
+  "designs": [
+    {
+      "id": "widget",
+      "label": "Widget",
+      "group": "Gadgets"
+    },
+    {
+      "id": "widget-meta",
+      "label": "Widget (meta)"
+    }
+  ],
+  "render": {
+    "features": [
+      "textmetrics"
+    ],
+    "fonts": [
+      "Foo.ttf"
+    ]
+  },
+  "popup": {
+    "mode": "picker",
+    "header": "What are you making?",
+    "body": "Pick one."
+  }
+}

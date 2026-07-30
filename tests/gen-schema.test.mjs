@@ -3338,3 +3338,33 @@ test("sanitizeSvg strips a data: href but keeps a same-file fragment href", () =
   assert.ok(!text.includes("data:"));
   assert.ok(text.includes('href="#ok"'));
 });
+
+// --- `picker` means the chooser, and only the chooser --------------------
+// It used to fall back to a plain notice below two designs, so one config value
+// stood for two different UIs and every consumer had to know which. Enforcing
+// the invariant here is what lets them all just read the mode.
+test("popup.mode 'picker' with fewer than two designs fails the build", () => {
+  assert.throws(
+    () => run("widget-popup-picker-one-design.config.json"),
+    /'popup\.mode: "picker"' is the design chooser, so it needs at least two designs[\s\S]*this config has 1[\s\S]*Use 'popup\.mode: "once"'/
+  );
+});
+
+test("popup.mode 'picker' with something to choose between builds fine", () => {
+  const { schema } = run("widget-popup-picker.config.json");
+  assert.equal(schema.popup.mode, "picker");
+  assert.equal(schema.designs.length, 2);
+});
+
+test("popup.mode 'picker' with fewer than two designs fails the build", () => {
+  assert.throws(
+    () => run("widget-popup-picker-one-design.config.json"),
+    /'popup\.mode: "picker"' is the design chooser, so it needs at least two designs[\s\S]*this config has 1[\s\S]*Use 'popup\.mode: "once"'/
+  );
+});
+
+test("popup.mode 'picker' with something to choose between builds fine", () => {
+  const { schema } = run("widget-popup-picker.config.json");
+  assert.equal(schema.popup.mode, "picker");
+  assert.equal(schema.designs.length, 2);
+});

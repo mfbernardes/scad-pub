@@ -92,6 +92,16 @@ cancellation terminates and respawns the worker and the superseded promise rejec
 The WASM is single-threaded: no `SharedArrayBuffer`, no COOP/COEP. `dist/` is a plain static
 bundle; serve `.wasm` as `application/wasm`.
 
+**Nothing heavy is downloaded while the first screen still needs the network.**
+`useRenderPipeline`'s `holdBoot` constructs no runner at all while a design chooser is the
+first screen — spawning it there starts the ~11 MB bootstrap fetch against the chooser's own
+thumbnails, which measurably starved them. `App` derives it from `popup.ts`'s
+`isDesignChooser` — which is just `mode === "picker"`, because `gen-schema`'s `checkPopupMode`
+refuses to build a `picker` config with fewer than two designs; that mode used to fall back to
+a plain notice, and consumers disagreeing about which it was cost two bugs. Anything that moves
+that work back into mount re-creates the stall — measure a cold, throttled first visit before
+believing otherwise.
+
 ## App structure
 
 State lives in `App.tsx` — export, presets, fonts, URL state, theme, PWA notices — with render
