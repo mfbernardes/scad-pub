@@ -176,7 +176,12 @@ export default function App() {
   const [exportSuccess, setExportSuccess] = useState<ExportSuccessState | null>(null);
   const exportSuccessKeyRef = useRef(0);
   const dismissExportSuccess = useCallback(() => setExportSuccess(null), []);
-  const [showPopup, setShowPopup] = useState(() => shouldShowPopup(popup));
+  // `fromLink` skips the picker intro when the hash already names a design —
+  // see shouldShowPopup. That also means a shared link never trips the boot
+  // gate below: it renders what it was sent to render, immediately.
+  const [showPopup, setShowPopup] = useState(() =>
+    shouldShowPopup(popup, initialState.fromLink)
+  );
   const closePopup = (remember: boolean) => {
     if (remember && popup) rememberPopup(popup);
     setShowPopup(false);
@@ -294,10 +299,17 @@ export default function App() {
     [designId, resetForDesign]
   );
 
+  // Nothing is written while the chooser still owns the first screen. Not just
+  // because there is no chosen state worth mirroring yet: `persistState` puts
+  // `#d=<default>` in the URL, and on the next load `readInitialState` cannot
+  // tell that hash from one a person sent, so it would report `fromLink` and
+  // skip the very chooser the user never answered — leaving them on the default
+  // design, permanently, after a reload.
   useEffect(() => {
+    if (holdBoot) return;
     const t = setTimeout(() => persistState(design, values, presetSel), 300);
     return () => clearTimeout(t);
-  }, [design, values, presetSel]);
+  }, [design, values, presetSel, holdBoot]);
 
   // M4: consume external navigations that only change the URL hash — a
   // same-document `hashchange` (e.g. a browser/OS "navigate to #d=..." that
@@ -326,6 +338,14 @@ export default function App() {
     const applyFromHash = (hash: string) => {
       const state = parseHashState(schema, hash);
       if (!state) return;
+      // A navigation that names a design answers the chooser's question, so stop
+      // asking it — the same rule `shouldShowPopup` applies to a link at load,
+      // including not remembering the skip (a notice is left alone: navigating
+      // doesn't answer one). Deliberately BEFORE the equality guard below: a
+      // launch shortcut or hash naming the design that is already current is a
+      // state no-op, but it is not a chooser no-op — treating it as one left the
+      // chooser up and, with it, the render path parked.
+      if (isDesignChooser(popup)) setShowPopup(false);
       if (sessionStateEquals(currentSessionRef.current, state)) return;
       applyExternalStateRef.current(state);
     };

@@ -79,3 +79,19 @@ test("isDesignChooser is exactly picker mode", () => {
   assert.equal(isDesignChooser({ mode: "always", header: "Hi", body: "" }), false);
   assert.equal(isDesignChooser(null), false);
 });
+
+test("a shared link skips the design chooser, but never a notice", () => {
+  const picker = { mode: "picker", header: "Pick", body: "" };
+  assert.equal(shouldShowPopup(picker, false), true);
+  // The link already names the design — asking "what are you making?" over it
+  // is noise, and it would hold the render back for a visitor who came to see
+  // exactly one thing.
+  assert.equal(shouldShowPopup(picker, true), false);
+  // Skipping is not dismissing: a later visit to the bare URL still asks.
+  assert.equal(shouldShowPopup(picker, false), true);
+  // A notice asks nothing, so no URL can have answered it — a linked visitor is
+  // still a new visitor.
+  for (const mode of ["once", "dismissible", "always"]) {
+    assert.equal(shouldShowPopup({ mode, header: "Welcome", body: "" }, true), true, mode);
+  }
+});
