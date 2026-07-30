@@ -697,13 +697,10 @@ function resolveDefaultDesign(config, designs) {
 // nothing to choose between cannot have that screen, so the config is wrong
 // rather than quietly meaning something else.
 //
-// It used to mean something else: below two designs the popup silently fell back
-// to a plain notice, which made one config value stand for two different UIs. Of
-// the consumers deciding "is this the chooser", most had to know about the
-// fallback and one forgot, dropping a single-design deployment's notice from
-// every visit whose URL named its only design. Enforcing the invariant here —
-// once, where every other config mistake is caught — is what lets all of them go
-// back to reading the mode.
+// It used to mean something else — below two designs the popup silently fell
+// back to a plain notice — and src/lib/popup.ts's `isDesignChooser` records what
+// that cost. Enforcing the invariant here, once, where every other config
+// mistake is caught, is what lets every consumer go back to reading the mode.
 function checkPopupMode(popup, designs) {
   if (popup?.mode !== "picker" || designs.length > 1) return;
   throw new Error(

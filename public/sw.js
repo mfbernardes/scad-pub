@@ -256,25 +256,14 @@ async function precacheEssential() {
 // a pass only fetches what is actually missing.
 let warming = null;
 function warmSupplementary() {
-  warming ??= runWarmup()
-    .catch(() => {
-      /* whatever is still missing is the next trigger's problem */
-    })
-    .finally(() => {
-      warming = null;
-    });
-  return warming;
-}
-
-function runWarmup() {
-  return (async () => {
+  warming ??= (async () => {
     const cache = await caches.open(CACHE);
     // The artwork/metadata the entry links comes from the shell install
     // cached, re-parsed rather than carried over from install in a module
     // variable: WARM can only arrive at an ACTIVE worker (the page waits on
     // serviceWorker.ready), so by now that entry is always in the cache — and
-    // this pass runs once per worker, so one cached read costs nothing next to
-    // a second way of obtaining the same set.
+    // one cached read costs nothing next to a second way of obtaining the same
+    // set.
     const extra = new Set();
     const shell = await cache.match(SHELL_KEY);
     if (shell) addHtmlAssets(new Set(), extra, await shell.text());
@@ -283,8 +272,8 @@ function runWarmup() {
     // a handful of cache lookups rather than the whole bundle again. (The
     // versioned shell cache is per build, so "already there" always means this
     // build's copy; precacheBin does the same check for the binaries.)
-    const missing = [];
-    for (const url of extra) if (!(await cache.match(url))) missing.push(url);
+    const present = await Promise.all([...extra].map((url) => cache.match(url)));
+    const missing = [...extra].filter((_, i) => !present[i]);
     // Light assets first (~1.5 MB of chunks, artwork, sources, presets, docs),
     // the pinned binaries after (~11 MB). A warm-up can be cut short at any
     // point — the tab closes, the worker is terminated, the network drops — and
@@ -292,7 +281,14 @@ function runWarmup() {
     // offline. Interleaved, an interruption left an arbitrary subset of both.
     await Promise.all(missing.map((url) => cacheOne(cache, url)));
     await precacheBin(bin);
-  })();
+  })()
+    .catch(() => {
+      /* whatever is still missing is the next trigger's problem */
+    })
+    .finally(() => {
+      warming = null;
+    });
+  return warming;
 }
 
 // A new worker waits (doesn't auto-activate) so the page can prompt the user

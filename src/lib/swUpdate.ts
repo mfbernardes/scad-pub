@@ -102,6 +102,17 @@ export function warmServiceWorker(): void {
     });
 }
 
+/**
+ * Subscribe to tab visibility changes; returns the unsubscribe. Both hooks
+ * below want this — one to notice the tab going away, the other to notice it
+ * coming back — and each hand-rolling the add/remove pair is one more place for
+ * a listener to outlive its effect.
+ */
+function onVisibilityChange(handler: () => void): () => void {
+  document.addEventListener("visibilitychange", handler);
+  return () => document.removeEventListener("visibilitychange", handler);
+}
+
 /** What the offline warm-up needs to know about the session. */
 export interface WarmupState {
   /** The design chooser is the first screen — nothing may compete with it. */
@@ -180,10 +191,10 @@ export function useOfflineWarmup(
       timer = setTimeout(warmServiceWorker, delay);
     };
     evaluate();
-    document.addEventListener("visibilitychange", evaluate);
+    const unsubscribe = onVisibilityChange(evaluate);
     return () => {
       clearTimeout(timer);
-      document.removeEventListener("visibilitychange", evaluate);
+      unsubscribe();
     };
   }, [holdBoot, ready, committed, updateWaiting]);
 }
@@ -247,11 +258,11 @@ export function useServiceWorkerUpdate() {
       if (!document.hidden) check();
     };
     const timer = setInterval(check, 60 * 60 * 1000);
-    document.addEventListener("visibilitychange", onVisible);
+    const unsubscribeVisibility = onVisibilityChange(onVisible);
 
     return () => {
       sw.removeEventListener("controllerchange", onControllerChange);
-      document.removeEventListener("visibilitychange", onVisible);
+      unsubscribeVisibility();
       clearInterval(timer);
     };
   }, []);

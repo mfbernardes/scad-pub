@@ -34,9 +34,14 @@ export function PopupModal({
   const [dontShow, setDontShow] = useState(false);
 
   // "once" persists on every close; "dismissible" only when the box is ticked;
-  // "always" never persists. Shared by the incidental close and the primary CTA.
+  // "always" never persists. Shared by the incidental close and the primary CTA
+  // — both of which belong to the notice body below, so `picker` never reaches
+  // here: the chooser closes itself with `onClose(true)` when a design is
+  // picked. One predicate decides what a picker popup is (isDesignChooser), and
+  // a second, vestigial test of the mode here would be a place for the two to
+  // drift apart.
   const remember = () =>
-    popup.mode === "once" || popup.mode === "picker" || (popup.mode === "dismissible" && dontShow);
+    popup.mode === "once" || (popup.mode === "dismissible" && dontShow);
   const close = () => onClose(remember());
   const primary = () => onPrimary(remember());
 
