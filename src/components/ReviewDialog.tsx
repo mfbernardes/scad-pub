@@ -20,7 +20,10 @@
 // cleanly), and both entry points show identical buttons for the same state.
 // Either action button stays disabled while `canExport` is false (H1): a
 // friendly-failure dialog's "Download anyway" is visibly present but inert,
-// matching the dock's own safety gate instead of contradicting it.
+// matching the dock's own safety gate instead of contradicting it. Mirrors
+// ActionButtons' own disabled-reason treatment: a disabled <button> fires no
+// pointer events, so the explanation lives on a wrapping <span title>, plus
+// an aria-describedby'd sr-only note for assistive tech.
 import { useMemo } from "react";
 import type { Design, RenderResult } from "../openscad/types";
 import type { Values } from "../lib/presets";
@@ -35,6 +38,7 @@ import { t } from "../lib/i18n";
 import { AttentionItems } from "./AttentionItems";
 import { FriendlyFailureCard } from "./FriendlyFailureCard";
 import { Button } from "./ui/button";
+import { ExplainedDisabledButton } from "./ExplainedDisabledButton";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +47,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+
+// Distinct from ActionButtons' DOWNLOAD_DISABLED_HINT_ID: the dock's Download
+// button stays mounted behind this dialog, so a shared id would collide.
+const REVIEW_DOWNLOAD_DISABLED_HINT_ID = "review-download-disabled-hint";
 
 interface Props {
   open: boolean;
@@ -93,6 +101,17 @@ export function ReviewDialog({
   };
 
   const hasIssues = !!failure || attention.length > 0;
+  // Mirrors ActionButtons' `disabledReason`: a failed render (there's
+  // nothing to review, only something to explain) beats "no render has
+  // landed yet" beats "rendered, but no longer matches the live controls"
+  // (readiness "ready" && !canExport, i.e. stale).
+  const disabledReason = canExport
+    ? null
+    : failure
+      ? t("review.noResultReason")
+      : result
+        ? t("dock.staleReason")
+        : t("dock.buildingReason");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -152,9 +171,9 @@ export function ReviewDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {hasIssues ? t("review.goBackAndFix") : t("common.close")}
           </Button>
-          <Button onClick={handleDownload} disabled={!canExport}>
+          <ExplainedDisabledButton reason={disabledReason} hintId={REVIEW_DOWNLOAD_DISABLED_HINT_ID} className="w-full" onClick={handleDownload}>
             {hasIssues ? t("review.downloadAnyway") : t("action.export")}
-          </Button>
+          </ExplainedDisabledButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>
