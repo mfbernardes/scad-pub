@@ -66,8 +66,12 @@ async function checkBellCount(page, check, where) {
 
 // "Reset to defaults" confirms via an AlertDialog only when the params differ
 // from the defaults: click the button, then the dialog's Reset if it appears.
+// The button itself only mounts while something differs, and a caller that
+// toggled a switch twice is already back at the defaults it is asking for.
 async function resetDefaults(page) {
-  await page.getByRole("button", { name: "Reset to defaults" }).click();
+  const reset = page.getByRole("button", { name: "Reset to defaults" });
+  if (!(await reset.count())) return;
+  await reset.click();
   const dlg = page.getByRole("alertdialog");
   const shown = await dlg.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false);
   if (shown) await dlg.getByRole("button", { name: /^Reset$/ }).click();

@@ -17,12 +17,19 @@ border_width = 4; // [0:0.5:15]
 // How far the border ring stands above the face (mm).
 // @advanced
 border_height = 0.8; // [0:0.2:3]
+// Colour of the coin body. Set here rather than left to the viewer's own tint
+// so the export, the preview and the design's card art all agree.
+// @info Body colour
+body_color = "white";
+// Colour of the raised border ring in the export.
+// @info Border colour
+border_color = "#e0a458";
 
 /* [Text] */
 // Text embossed on the face of the coin.
 label = "ScadPub";
 // Font height (mm).
-text_size = 7; // [3:0.5:20]
+text_size = 6; // [3:0.5:20]
 // How far the text stands out from (or sinks into) the face (mm).
 // @advanced
 text_depth = 0.8; // [0.2:0.1:3]
@@ -38,7 +45,7 @@ engrave_text = false;
 
 /* [Hanging hole] */
 // Add a hole at the top edge for hanging.
-hole = true;
+hole = false;
 // Hole diameter (mm).
 // @showIf hole
 hole_diameter = 4; // [2:0.5:12]
@@ -68,15 +75,17 @@ assert(!(hole && hole_diameter >= diameter - 4),
 difference() {
   union() {
     // Main disc body.
-    cylinder(h = thickness, r = r);
+    color(body_color) cylinder(h = thickness, r = r);
 
-    // Raised border ring: a hollow cylinder sitting on top of the face.
+    // Raised border ring: a hollow cylinder sitting on top of the face, in its
+    // own colour so the export is multi-colour like the lettering below.
     if (border_width > 0 && border_height > 0)
-      translate([0, 0, thickness])
-        difference() {
-          cylinder(h = border_height, r = r);
-          cylinder(h = border_height + 0.01, r = r - border_width);
-        }
+      color(border_color)
+        translate([0, 0, thickness])
+          difference() {
+            cylinder(h = border_height, r = r);
+            cylinder(h = border_height + 0.01, r = r - border_width);
+          }
 
     // Raised text sits on the face in its own colour so the 3MF export is
     // multi-colour and the viewer tints the body to follow the theme.

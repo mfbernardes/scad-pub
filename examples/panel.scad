@@ -41,7 +41,7 @@ svg_file = "panel.svg";
 // relief. Filled in by the SVG wizard.
 // @label "Region colours & heights"
 // @filledBy svg_file
-svg_layers = "120x90, sky:#87ceeb, ground:#9acd32, house:#cd5c5c";
+svg_layers = "120x90, sky:#87ceeb, ground:#9acd32, roof:#a34343, house:#cd5c5c, door:#7d3232:0.6";
 // (Regions must not overlap: same-height overlapping regions conflict on colour.)
 
 /* [Hidden] */

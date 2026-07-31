@@ -12,7 +12,7 @@
       "presets": {
         "images": {
           "Large tag": "examples/tag-preset-large.png",
-          "No hole": "examples/tag-preset-nohole.png"
+          "With hole": "examples/tag-preset-hole.png"
         }
       }
     },
