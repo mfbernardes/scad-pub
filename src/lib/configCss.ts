@@ -1,4 +1,4 @@
-// configCss.ts — build-time chrome. Turns the active config's `colors` token map
+// configCss.ts: build-time chrome. Turns the active config's `colors` token map
 // and `extraCss` escape hatch into the CSS that vite.config.ts injects into the
 // document <head>. Pure string logic with no Vite/Node imports, so it's
 // unit-testable in isolation (see tests/configCss.test.mjs) and shared verbatim
@@ -19,7 +19,7 @@ export interface ConfigChrome {
 // characters (`; { } < > " '`) that could end the declaration, close the rule,
 // or break out of the <style> element. gen-schema already validates the
 // config's `colors` before they reach designs.json, so this is defence-in-depth
-// that also keeps colorStyle safe when called standalone — any token whose name
+// that also keeps colorStyle safe when called standalone: any token whose name
 // or value falls outside these sets is dropped rather than emitted.
 const SAFE_NAME = /^[A-Za-z0-9_-]+$/;
 const SAFE_VALUE = /^[#a-zA-Z0-9 ,.()%/-]+$/;
@@ -28,7 +28,7 @@ const SAFE_VALUE = /^[#a-zA-Z0-9 ,.()%/-]+$/;
 // index.html (<title> text, <meta content="…"> attributes). Covers both
 // contexts: `& < >` for element text, quotes for attribute values. Free-form
 // fields (title, description, shortName) can't be charset-validated like
-// colours or ids — escaping is the correct treatment.
+// colours or ids: escaping is the correct treatment.
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -61,8 +61,8 @@ export function colorStyle(colors: ConfigChrome["colors"]): string {
 }
 
 // The full <head> injection: the colour <style> first, then the consumer's
-// extraCss <link>. That order — combined with vite's post-order placement after
-// the bundled app CSS — means the escape hatch has the final say (it can even
+// extraCss <link>. That order: combined with vite's post-order placement after
+// the bundled app CSS. Means the escape hatch has the final say (it can even
 // override the colour tokens) on source order alone. Returns "" when neither is
 // configured.
 export function headStyleInjection(chrome: ConfigChrome): string {

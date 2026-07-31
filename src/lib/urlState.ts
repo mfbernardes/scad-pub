@@ -1,4 +1,4 @@
-// urlState.ts — shareable + persistent session state. The current design and
+// urlState.ts: shareable + persistent session state. The current design and
 // the parameters that differ from its defaults are encoded into the URL hash
 // (so a link reproduces an exact configuration) and mirrored to localStorage
 // (so a plain reload of the bare URL restores the last session).
@@ -17,7 +17,7 @@ export interface SessionState {
   preset: string;
 }
 
-// Only the values that differ from the design's defaults — keeps the hash short.
+// Only the values that differ from the design's defaults: keeps the hash short.
 function diffFromDefaults(design: Design, values: Values): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const p of design.params) {
@@ -43,7 +43,7 @@ function findDesign(schema: Schema, id: string | null): Design | undefined {
 }
 
 // M4: shared by the initial-load reader below AND by App's external-navigation
-// consumer (hashchange / launchQueue) — both need to parse the same "d=/v=/p="
+// consumer (hashchange / launchQueue). Both need to parse the same "d=/v=/p="
 // encoding from an arbitrary hash string, not just `location.hash` at module
 // init, so a same-document hash change or an installed-app launch target can
 // be applied after the app has already booted.
@@ -70,10 +70,10 @@ function fromHash(schema: Schema): SessionState | null {
 
 /**
  * M4: is `next` a no-op relative to `current`? Used as the external-navigation
- * loop guard in App.tsx — a `hashchange`/`launchQueue` target that already
+ * loop guard in App.tsx: a `hashchange`/`launchQueue` target that already
  * matches the live design/values/preset should not trigger a redundant
  * design-switch reset. Pure so the guard is directly unit-testable without
- * mounting React. Value equality is by JSON shape, not reference — both sides
+ * mounting React. Value equality is by JSON shape, not reference: both sides
  * are always built by `defaultsFor`/`applyDiff` over the same param list, so
  * key order (and therefore JSON.stringify output) is stable for equal values.
  */
@@ -107,7 +107,7 @@ export interface InitialState extends SessionState {
    * The URL hash named the design: a shared link, or an installed app's
    * shortcut (`./#d=<id>`, see the manifest's `shortcuts`). Distinct from a
    * localStorage restore, which reproduces a session rather than expressing an
-   * explicit choice. `shouldShowPopup` skips the design chooser for these — the
+   * explicit choice. `shouldShowPopup` skips the design chooser for these: the
    * question it asks was answered by whoever built the link.
    */
   fromLink: boolean;
@@ -134,7 +134,7 @@ export function readInitialState(schema: Schema): InitialState {
 
 // The single source of the "d=/v=/p=" hash encoding, shared by `persistState`
 // (debounced, mirrors to the URL bar + localStorage) and `buildShareUrl`
-// (synchronous, used by Share) — see docs/architecture-review.md H2. Reusing
+// (synchronous, used by Share), see docs/architecture-review.md H2. Reusing
 // one function means the two can never encode a design's state differently.
 function buildShareState(design: Design, values: Values, preset: string) {
   const diff = diffFromDefaults(design, values);
@@ -155,17 +155,17 @@ export function persistState(design: Design, values: Values, preset = "") {
   } catch {
     // Safari throws SecurityError past ~100 replaceState calls in 30s; rhythmic
     // stepper nudging at the 300ms debounce (~3.3/s) can cross that. Dropping
-    // this particular hash update is harmless — the next call, or the
+    // this particular hash update is harmless: the next call, or the
     // localStorage mirror above, keeps state in sync.
   }
 }
 
 /**
- * The share URL for the CURRENT design/values/preset, built synchronously —
+ * The share URL for the CURRENT design/values/preset, built synchronously,
  * unlike `persistState`, which is debounced 300ms behind React state, this
  * must never lag an edit (docs/architecture-review.md H2: a quick edit-then-
  * Share must not copy the pre-edit URL). Only `location.origin`/`pathname`/
- * `search` are read, since those aren't debounced or state-derived — the hash
+ * `search` are read, since those aren't debounced or state-derived: the hash
  * itself is always rebuilt from the arguments, never from `location.hash`.
  */
 export function buildShareUrl(design: Design, values: Values, preset = ""): string {

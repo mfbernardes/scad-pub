@@ -1,4 +1,4 @@
-// Tests for scripts/lib/wasm-fetch.mjs (M12) — the network-free stamp,
+// Tests for scripts/lib/wasm-fetch.mjs (M12): the network-free stamp,
 // checksum-policy, and extraction helpers scripts/fetch-wasm.mjs's CLI wrapper
 // is built on. No network access, no real archive download.
 import { test } from "node:test";

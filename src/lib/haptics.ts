@@ -1,4 +1,4 @@
-// haptics.ts — tiny vibration feedback for touch interactions. Android fires
+// haptics.ts: tiny vibration feedback for touch interactions. Android fires
 // navigator.vibrate; iOS ignores it (no-op there). Stays silent when the API is
 // unavailable or the user prefers reduced motion, so it never becomes an
 // accessibility nuisance.
@@ -8,6 +8,6 @@ export function tapFeedback(durationMs = 10): void {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     navigator.vibrate(durationMs);
   } catch {
-    /* vibration is best-effort feedback — ignore any failure */
+    /* vibration is best-effort feedback: ignore any failure */
   }
 }

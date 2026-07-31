@@ -1,22 +1,22 @@
-// i18n.ts — minimal, dependency-free translation layer, deliberately a
+// i18n.ts: minimal, dependency-free translation layer, deliberately a
 // SUBSET of a full i18n system: English-only, one bundle
 // (src/locales/en.json), no locale switching, no generated locales.json. The
 // flat dot-namespaced key -> string bundle is the source of truth; `t()`
 // resolves a key through config `strings` override -> the bundle -> the bare
 // key, and `tn()` layers CLDR plural-category selection on top (`${key}#one`
-// / `${key}#other` — the only two categories English needs). See
+// / `${key}#other`: the only two categories English needs). See
 // docs/config.md's `strings` section for the operator-facing override
 // surface (schema.strings, validated by scripts/lib/config-parsers.mjs's
 // parseStrings against src/locales/en.json).
 //
-// `makeT` is the pure, testable factory (no schema/JSON coupling — tests hand
+// `makeT` is the pure, testable factory (no schema/JSON coupling: tests hand
 // it a synthetic bundle). The module-level `t`/`tn` exports below bind it to
 // the generated schema's `strings` override, which is what the app imports.
 //
 // The `{ type: "json" }` import attribute is required because this module is
 // also imported directly by tests/i18n.test.mjs through the TS-source
 // node:test loader (see tests/ts-resolve.mjs), which falls through to Node's
-// own ESM loader for `.json` specifiers — Node requires the attribute for a
+// own ESM loader for `.json` specifiers. Node requires the attribute for a
 // native JSON import. Vite's bundler accepts the same syntax, so one import
 // works in both places.
 import en from "../locales/en.json" with { type: "json" };
@@ -59,7 +59,7 @@ export function makeT(bundle: Bundle, overrides: Bundle = {}) {
     const value = resolve(key);
     if (value === undefined) {
       // import.meta.env is Vite-injected (undefined under node:test, where the
-      // optional chain below is a no-op) — warn only in dev builds, matching
+      // optional chain below is a no-op). Warn only in dev builds, matching
       // e.g. src/lib/swUpdate.ts's import.meta.env.PROD check.
       if (import.meta.env?.DEV) console.warn(`i18n: missing key "${key}"`);
       return key;
@@ -85,7 +85,7 @@ export function makeT(bundle: Bundle, overrides: Bundle = {}) {
 
 /**
  * Picks between a singular/plural PAIR of already-resolved strings using the
- * same CLDR plural-category selection `tn()` runs on catalogue keys — for a
+ * same CLDR plural-category selection `tn()` runs on catalogue keys, for a
  * noun that isn't a catalogue key at all, e.g. a config-defined `notices[]`
  * badge label (`{ one, other }`; see docs/config.md's Notice badges section).
  * `one` is optional and falls back to `other`, mirroring `tn()`'s own

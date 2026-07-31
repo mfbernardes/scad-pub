@@ -1,4 +1,4 @@
-// progressThrottle.ts — pure throttle policy for the render worker's WASM
+// progressThrottle.ts: pure throttle policy for the render worker's WASM
 // download progress channel. Extracted from worker.ts so the "at most ~5
 // posts/sec, and only when progress actually moved" policy is unit-testable
 // without a worker/fetch/postMessage environment (see
@@ -20,7 +20,7 @@ export interface ProgressThrottleOptions {
 /**
  * Wrap a `post(loaded, total)` callback so it's actually invoked at most
  * ~`1000/minIntervalMs` times per second, AND only when progress has moved at
- * least `minDeltaFraction` since the last post — a chunky stream (large
+ * least `minDeltaFraction` since the last post: a chunky stream (large
  * reader chunks over a fast connection) would otherwise still post every
  * chunk if only the interval were enforced, and a trickle download would post
  * near-identical numbers every 200ms if only the delta were enforced. The

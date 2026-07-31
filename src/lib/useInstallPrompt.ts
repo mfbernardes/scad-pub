@@ -1,4 +1,4 @@
-// useInstallPrompt — captures the browser's `beforeinstallprompt` event so the
+// useInstallPrompt: captures the browser's `beforeinstallprompt` event so the
 // app can offer a tasteful install affordance on its own terms (a CommandBar
 // button + a one-time post-export hint) instead of the browser's mini-infobar.
 // Chromium-only; Safari/Firefox never fire the event, so `canInstall` stays

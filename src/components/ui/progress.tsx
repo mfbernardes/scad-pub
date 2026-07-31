@@ -17,7 +17,7 @@ function Progress({
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
         // A null/undefined `value` (Radix: "indeterminate", exposed as
-        // data-state="indeterminate" — no aria-valuenow either, per the WAI-ARIA
+        // data-state="indeterminate", no aria-valuenow either, per the WAI-ARIA
         // progressbar pattern) has no percentage to translate to, so it gets a
         // looping sweep animation instead of the determinate translateX; see
         // the `progress-indeterminate` keyframes in index.css.

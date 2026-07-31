@@ -1,4 +1,4 @@
-// idb.ts — the single IndexedDB database for this configurator, namespaced by
+// idb.ts: the single IndexedDB database for this configurator, namespaced by
 // APP_ID so two configs on one origin don't clobber each other. Every store
 // (user files, the STL render cache) lives in this one database; opening always
 // requests the current DB_VERSION so a single onupgradeneeded creates whatever
@@ -33,13 +33,13 @@ export function openDb(): Promise<IDBDatabase> {
         const db = req.result;
         // Don't hold the DB at an old version: if another tab (e.g. a newer
         // deploy) needs to upgrade, close so its upgrade isn't blocked. The next
-        // openDb() reopens — dbPromise is reset on the resulting close/error.
+        // openDb() reopens: dbPromise is reset on the resulting close/error.
         db.onversionchange = () => {
           db.close();
           dbPromise = undefined;
         };
         // An abnormal close (e.g. the browser force-closing the connection
-        // under storage pressure) fires "close", not "versionchange" — without
+        // under storage pressure) fires "close", not "versionchange", without
         // this, the cached connection stays dead and every later transaction
         // throws InvalidStateError for the rest of the session.
         db.onclose = () => {
@@ -51,7 +51,7 @@ export function openDb(): Promise<IDBDatabase> {
       // A pending upgrade in another tab blocks ours; fail soft rather than hang.
       req.onblocked = () => reject(req.error ?? new Error("IndexedDB upgrade blocked"));
     });
-    // Don't cache a rejected open — let the next caller retry.
+    // Don't cache a rejected open: let the next caller retry.
     dbPromise.catch(() => {
       dbPromise = undefined;
     });

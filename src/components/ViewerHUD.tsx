@@ -1,6 +1,6 @@
-// ViewerHUD.tsx — the viewer's own controls: camera views, reset, zoom, the
+// ViewerHUD.tsx: the viewer's own controls: camera views, reset, zoom, the
 // dimension overlay, the reference grid, and (in a browser tab) fullscreen.
-// One component, two presentations chosen by the `collapse` prop — the same
+// One component, two presentations chosen by the `collapse` prop: the same
 // split BarActions.tsx uses, and for the same reason: the caller knows which
 // layout it's in, and only one layout tree is ever mounted (AppShell's M7
 // split), so a viewport hook here would render a stray hidden trigger.
@@ -9,29 +9,29 @@
 //   • collapsed (mobile): ONE "View options" button opening a popover.
 //
 // Why mobile collapses. The column is fixed-height chrome anchored near the top
-// of the viewer, and at five buttons it measured 44x258px — 31% of an 844px
-// phone's height, 45% of a 568px one — standing permanently over the model on
+// of the viewer, and at five buttons it measured 44x258px: 31% of an 844px
+// phone's height, 45% of a 568px one. Standing permanently over the model on
 // the layout with the least room to spare. It also could not get out of the
 // way: the export dock rides the bottom sheet UPWARD as the sheet opens, so at
 // the half detent on a 360- or 320-wide viewport the dock came to rest on top
 // of the last one or two buttons, which were then genuinely un-tappable
 // (elementFromPoint returned the dock, not the button). Collapsing to a single
-// trigger removes the rail outright — `collapse` is keyed on the same 860px
+// trigger removes the rail outright: `collapse` is keyed on the same 860px
 // breakpoint the mobile CSS uses, so below it there is only ever one button
 // and no config can grow it. scripts/smoke.mjs hit-tests each HUD button's own
 // centre at 360x740 and 320x568 so a layout that reintroduces the overlap
 // fails there rather than shipping.
 //
 // The trade is one extra tap for controls a visitor touches rarely, against
-// standing space over the model — which is the thing they came for. Desktop
+// standing space over the model, which is the thing they came for. Desktop
 // keeps the column: it floats in open canvas there and costs nothing.
 //
 // Every inline HUD button wraps a plain `IconButton` in a shadcn Tooltip
 // (`asChild`, so the Tooltip's ref/pointer/focus handlers land on IconButton's
-// own underlying `<button>`) — visible on hover AND keyboard focus, unlike
+// own underlying `<button>`): visible on hover AND keyboard focus, unlike
 // `title` alone, while `title` stays as a no-JS/assistive fallback.
 // IconButton forwards its `ref` prop straight through to Button (React 19
-// "ref as a prop" — see IconButton.tsx's own doc), so `asChild` needs no
+// "ref as a prop", see IconButton.tsx's own doc), so `asChild` needs no
 // hand-rolled Button call to get a working ref target.
 import { useState, type ReactNode } from "react";
 import type { ViewerHandle } from "./Viewer";
@@ -82,7 +82,7 @@ interface Props {
 }
 
 // Every inline HUD button is an IconButton wrapped in the same left-anchored
-// hover/focus Tooltip, with the tooltip text mirroring the aria-label — this
+// hover/focus Tooltip, with the tooltip text mirroring the aria-label: this
 // composes that once so the buttons below stay identical in output.
 function HudTooltipButton({
   label,
@@ -113,7 +113,7 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
   const standalone = useStandalone();
   const [menuOpen, setMenuOpen] = useState(false);
   const canFullscreen = fullscreen && !standalone && fullscreenSupported();
-  // Hooks are declared above this guard, not below it — `visible` gates the
+  // Hooks are declared above this guard, not below it: `visible` gates the
   // render, never the hook order.
   if (!visible) return null;
 
@@ -134,7 +134,7 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
 
   if (collapse) {
     // The trigger names the active view, the way ViewPicker's desktop trigger
-    // does — "which way am I looking" is the one piece of HUD state worth
+    // does, "which way am I looking" is the one piece of HUD state worth
     // reading without opening the menu, and this says it without spending a
     // second element over the model (which would also widen the top inset the
     // camera fit has to clear).
@@ -155,13 +155,13 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
         <Popover open={menuOpen} onOpenChange={setMenuOpen}>
           {/* Native button so PopoverTrigger's ref reaches the DOM (Radix
               anchors to it), styled as a HUD glass button rather than a
-              top-bar one — it lives over the canvas. */}
+              top-bar one: it lives over the canvas. */}
           <PopoverTrigger
             className={cn(
               ICON_BUTTON_CLASS,
               HUD_GLASS_BTN,
               // `outline-none` suppresses index.css's global :focus-visible
-              // outline, so the replacement ring is not optional — this is a
+              // outline, so the replacement ring is not optional. This is a
               // native <button> (PopoverTrigger needs the ref), which means it
               // gets none of shadcn Button's focus styling either. Same recipe
               // as ViewPicker's trigger, the desktop twin of this control.
@@ -183,7 +183,7 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
                 </p>
                 {/* Two-up, not a nested submenu: seven short labels fit and
                     stay one tap deep, which is the whole point of collapsing
-                    the rail. The list itself is ViewPicker's — same options,
+                    the rail. The list itself is ViewPicker's: same options,
                     same active marking, same re-snap-on-repick behaviour. */}
                 <ViewOptionList
                   view={view}
@@ -234,7 +234,7 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
     <div className="viewer-hud">
       {/* ViewPicker (a separate component) renders its own trigger button,
           wrapped in the same hover/focus Tooltip as every other HUD button
-          (nested around its Popover trigger — see ViewPicker's own doc). */}
+          (nested around its Popover trigger, see ViewPicker's own doc). */}
       {viewPicker && <ViewPicker view={view} onSelect={onSelectView} />}
       {zoom && (
         <>
@@ -261,7 +261,7 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
           <RulerIcon size={18} />
         </HudTooltipButton>
       )}
-      {/* The reference grid sits beside the ruler — both are overlays drawn
+      {/* The reference grid sits beside the ruler: both are overlays drawn
           around the model rather than camera controls. Always offered: the
           config's `viewer.grid` seeds this toggle's first-ever value, it
           doesn't gate the button (see src/lib/viewerPrefs.ts). */}

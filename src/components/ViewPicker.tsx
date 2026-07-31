@@ -1,4 +1,4 @@
-// ViewPicker.tsx — the viewer's "choose a view" control: a glass HUD icon button
+// ViewPicker.tsx: the viewer's "choose a view" control: a glass HUD icon button
 // that opens a small popover menu of the standard camera views (Isometric, Top,
 // Front, …). It's an action menu, not a form select: clicking any view re-snaps
 // the camera even if it's already the current one (so it doubles as "snap back"
@@ -29,7 +29,7 @@ export function ViewPicker({ view, onSelect }: Props) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {/* Same hover/focus Tooltip treatment as the rest of the HUD
-          (ViewerHUD.tsx's IconButton-based buttons) — nested around the
+          (ViewerHUD.tsx's IconButton-based buttons): nested around the
           Popover trigger rather than composing IconButton itself here, since
           this trigger already needs to stay a plain-ref-forwarding native
           <button> serving BOTH the Tooltip's and the Popover's `asChild`;
@@ -69,7 +69,7 @@ export function ViewPicker({ view, onSelect }: Props) {
 /**
  * The list of standard views, checkmarked at the active one. Extracted so the
  * desktop popover above and the mobile HUD's collapsed menu (ViewerHUD's
- * `collapse` branch) render the SAME list — what the views are, how the active
+ * `collapse` branch) render the SAME list: what the views are, how the active
  * one is marked, and the fact that picking the current one re-snaps the camera
  * are all properties of the control, not of either layout.
  *

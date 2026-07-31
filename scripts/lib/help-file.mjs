@@ -1,4 +1,4 @@
-// help-file.mjs — splitHelpMarkdown: the "whole help tab (or single-pane
+// help-file.mjs: splitHelpMarkdown: the "whole help tab (or single-pane
 // help) from one Markdown file" split rule (see docs/config.md "Sourcing
 // help from Markdown files" and config-spec.mjs's `help` node comment).
 // Content before the first level-2 (`##`) heading becomes `intro`; each `##`
@@ -8,7 +8,7 @@
 // writes one readable Markdown file per pane instead of a handful of
 // `\n\n`-joined JSON string literals.
 //
-// Deliberately only `##` — not `#`/`###` — so a file can use a leading `#`
+// Deliberately only `##` (not `#`/`###`) so a file can use a leading `#`
 // for its own title (left as ordinary text inside `intro`) and `###` for
 // finer structure WITHIN a section's body without either being mistaken for
 // a section boundary.

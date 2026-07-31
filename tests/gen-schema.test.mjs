@@ -322,7 +322,7 @@ test("a designs[] entry's stale flat 'icon' fails the build instead of being sil
 
 test("a designs[] entry's removed 'description'/'media'/'review' keys fail the build like any other unrecognised key", () => {
   // Design metadata (description/icon/image/doc/review labels/note) comes only
-  // from the design's own .scad annotations now — these config-level fields
+  // from the design's own .scad annotations now: these config-level fields
   // were removed entirely, not just deprecated, so they fail the ordinary
   // unknown-key check like any stale key.
   assert.throws(
@@ -350,7 +350,7 @@ test("reviewLabels/reviewNote: a design's own @review/@reviewNote annotations ar
   const widget = schema.designs.find((d) => d.id === "widget");
   assert.deepEqual(widget.reviewLabels, { label: "Text", thickness: "Thickness" });
   assert.equal(widget.reviewNote, "Prints exactly as typed.");
-  // The transient annotation flag never reaches a param's own object — it's
+  // The transient annotation flag never reaches a param's own object: it's
   // folded into reviewLabels above and stripped (src/openscad/types.ts's
   // ParamBase carries no such field).
   for (const p of widget.params) assert.equal(p.reviewLabel, undefined);
@@ -382,7 +382,7 @@ test("presets.images directory form: each preset's image is found by slug, tryin
   });
   const { schema, out } = run("widget-presetimages-dir.config.json");
   const design = schema.designs.find((d) => d.id === "presetdir");
-  // "Salz (Deutsch)" has both a .svg and a .png in the directory — .svg wins
+  // "Salz (Deutsch)" has both a .svg and a .png in the directory: .svg wins
   // (the documented extension priority).
   assert.equal(design.presetImages["Salz (Deutsch)"], "scad/presetdir-preset-0.svg");
   assert.ok(existsSync(join(out, "scad", "presetdir-preset-0.svg")));
@@ -395,10 +395,10 @@ test("presets.images directory form: each preset's image is found by slug, tryin
     "scad/presetdir-preset-2.webp"
   );
   assert.equal("Punctuation | English UEB: . , ? ! (English US)" in design.presetImages, false);
-  // "No Image Here" has no matching file in the directory at all — legitimate
+  // "No Image Here" has no matching file in the directory at all: legitimate
   // (preset images are optional per preset), not a build failure.
   assert.equal("No Image Here" in design.presetImages, false);
-  // 3 of the 5 bundled presets matched an image — reported in the build log
+  // 3 of the 5 bundled presets matched an image: reported in the build log
   // so a wrong-but-existing directory (e.g. every name misspelled) is visible.
   assert.match(logged, /presets\.images: 3\/5 preset\(s\) matched an image in 'preset-images-dir'/);
 });
@@ -525,7 +525,7 @@ test("lang/dir + per-design shortcut icons + screenshot fields reach the manifes
   );
   assert.equal(manifest.lang, "pt-BR");
   assert.equal(manifest.dir, "rtl");
-  // Two designs -> auto-derived shortcuts, each carrying its design's icon —
+  // Two designs -> auto-derived shortcuts, each carrying its design's icon:
   // each design's own `// @icon` annotation.
   const widgetShortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
   assert.deepEqual(widgetShortcut.icons, [
@@ -579,7 +579,7 @@ test("a source-relative font path is referenced by basename", () => {
 });
 
 test("a configured font that resolves to no file fails a real build", () => {
-  // The existence check only bites in a real build (outPublicDir present) —
+  // The existence check only bites in a real build (outPublicDir present):
   // that's the only context where "already in public/fonts" is checkable.
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   assert.throws(
@@ -667,13 +667,13 @@ test("a missing use/include target names the missing path and the referencing fi
 // (or deliberately left out) built green and only failed once the
 // OpenSCAD-WASM worker tried to mount it in a browser, since the render
 // sandbox only ever gets the configured `assets`. generate() now always
-// walks (collectDeps), then — only in explicit-assets mode — checks the walk
+// walks (collectDeps), then (only in explicit-assets mode) checks the walk
 // against the configured set.
 
 test("explicit `assets` that omits a use/include dependency fails the build with a distinct coverage error", () => {
   // widget.scad -> lib/core.scad -> lib/util.scad (collectDeps' own walk);
   // this fixture's `assets` covers only lib/util.scad, so lib/core.scad is
-  // reachable but not bundled — exactly the gap checkAssetCoverage exists for.
+  // reachable but not bundled: exactly the gap checkAssetCoverage exists for.
   let caught;
   try {
     run("widget-assets-missing-dep.config.json");
@@ -685,7 +685,7 @@ test("explicit `assets` that omits a use/include dependency fails the build with
   assert.match(caught.message, /design 'widget'/);
   assert.match(caught.message, /lib\/core\.scad/);
   // A distinct diagnosis from collectDeps' own "dependency '...' not found:
-  // ... (referenced by ...)" (a dependency missing from disk entirely) — this
+  // ... (referenced by ...)" (a dependency missing from disk entirely): this
   // dependency DOES exist on disk, it's just not in `assets`, so the two
   // causes must never read the same. (collectDeps' message is quoted, for
   // context, inside this error's own explanatory parenthetical, so match on
@@ -698,7 +698,7 @@ test("explicit `assets` that omits a use/include dependency fails the build with
 test("explicit `assets` that DOES cover every use/include dependency still builds (no false positive)", () => {
   // widget-glob.config.json's `assets` ("lib/*.scad", "**/*.svg") covers both
   // of widget.scad's walked dependencies (lib/core.scad, lib/util.scad) plus
-  // its @icon asset — see the "assets: globs match files" test above for the
+  // its @icon asset, see the "assets: globs match files" test above for the
   // full assertion. Re-run here to pin down that the coverage check leaves a
   // valid explicit-assets build green.
   const { schema } = run("widget-glob.config.json");
@@ -755,7 +755,7 @@ test("public precache manifest lists generated runtime assets", () => {
   assert.ok(!precache.shell.includes("wasm/openscad.wasm"));
   assert.ok(!precache.shell.includes("fonts/Foo.ttf"));
   assert.match(precache.bin.cache, /^openscad-wasm-bin-/);
-  // H4: content-addressed via a `?v=<digest>` query — see versionedPath in
+  // H4: content-addressed via a `?v=<digest>` query, see versionedPath in
   // gen-schema.mjs. This fixture has no real openscad.wasm on disk, so its
   // digest is absent and the URL stays plain; Foo.ttf IS a real bundled file,
   // so its URL must carry a digest query.
@@ -830,7 +830,7 @@ test("'pwa.categories' must be an array of strings when present", () => {
 
 test("'render.features'/'pwa.categories': an explicit null is treated as unset, not an error", () => {
   // Both used to throw ("must be an array of non-empty strings (got null)")
-  // because parseStringArray only checked `undefined` — every other
+  // because parseStringArray only checked `undefined`: every other
   // render/pwa field already treats null == absent (see applyGroupSpec's own
   // comment). Building must succeed, matching a config that omits both keys.
   assert.doesNotThrow(() => run("widget-features-categories-null.config.json"));
@@ -928,7 +928,7 @@ test("viewer defaults every field (style, restOnGrid, grid, controls), validates
   assert.deepEqual(parseViewer({ style: null }), VIEWER_DEFAULTS);
   assert.deepEqual(parseViewer({ style: "studio" }), { ...VIEWER_DEFAULTS, style: "studio" });
   assert.deepEqual(parseViewer({ style: "plain" }), VIEWER_DEFAULTS);
-  // Every message now uses the one "gen-schema: '<path>' ..." prefix — viewer
+  // Every message now uses the one "gen-schema: '<path>' ..." prefix. Viewer
   // used to read "config.<path> ..." with no quotes, an accident of predating
   // the newer convention rather than a meaningful distinction.
   assert.throws(() => parseViewer("studio"), /gen-schema: 'viewer' must be an object/);
@@ -960,7 +960,7 @@ test("viewer.grid defaults to off, accepts on/off, rejects anything else", () =>
 test("viewer.controls.* each default independently and reject non-booleans", () => {
   assert.deepEqual(parseViewer(undefined).controls, VIEWER_DEFAULTS.controls);
   // Every default is always present, even when the config never mentions
-  // `viewer` (or `viewer.controls`) at all — matching the flat `ui.*`
+  // `viewer` (or `viewer.controls`) at all, matching the flat `ui.*`
   // booleans these fields replace, which were always present too.
   assert.deepEqual(parseViewer({}).controls, VIEWER_DEFAULTS.controls);
   assert.deepEqual(parseViewer({ controls: {} }).controls, VIEWER_DEFAULTS.controls);
@@ -1029,7 +1029,7 @@ test("the ScadPub version stamp reaches the schema and stays out of renderHash",
 
 test("a build with no resolvable version omits the stamp entirely", () => {
   // What a git-less build tree (release tarball, vendored copy) with no
-  // $SCADPUB_VERSION override produces — passed as "" here since an `undefined`
+  // $SCADPUB_VERSION override produces: passed as "" here since an `undefined`
   // argument would just re-trigger generate()'s own default lookup. The key is
   // absent rather than null/"", so the licenses modal shows no version line.
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
@@ -1054,7 +1054,7 @@ test("bundled package versions are read from the install and reach the schema", 
   assert.deepEqual(schema.componentVersions, componentVersions());
   assert.match(schema.componentVersions.three, /^\d+\.\d+\.\d+/);
 
-  // Injectable, and — like the ScadPub stamp — display-only, so a dependency
+  // Injectable, and (like the ScadPub stamp) display-only, so a dependency
   // bump doesn't throw away every cached render.
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   const withDeps = (components, dir) =>
@@ -1073,7 +1073,7 @@ test("bundled package versions are read from the install and reach the schema", 
 test("renderHash is stable for an unchanged config (so a rebuild doesn't bust the cache)", () => {
   // The whole point of renderHash is to invalidate persisted geometry only when
   // a render input actually changes. A non-deterministic hash would needlessly
-  // re-render everything on every deploy — pin determinism here.
+  // re-render everything on every deploy: pin determinism here.
   assert.equal(run("widget.config.json").schema.renderHash, run("widget.config.json").schema.renderHash);
 });
 
@@ -1090,8 +1090,8 @@ test("renderHash folds in the render features so an --enable change invalidates 
 test("renderHash folds in the bundled font set (glyph outlines drive text geometry)", () => {
   // widget-fonts swaps Foo.ttf for Bar.ttf; a different font yields different
   // text() geometry, so swapping it must invalidate cached renders. Note the
-  // font set only enters the hash in a real build (outPublicDir present) — the
-  // bare run() helper omits it — so generate with a public dir here.
+  // font set only enters the hash in a real build (outPublicDir present): the
+  // bare run() helper omits it, so generate with a public dir here.
   const hashWithFonts = (config) => {
     const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
     return generate({
@@ -1123,7 +1123,7 @@ test("ui.presetsLabel / parametersLabel moved to the i18n catalogue (strings['pr
 test("ui: an explicit null is equivalent to omitting the key, for every field kind (normalization: null == not set)", () => {
   // Most `ui` fields used to treat an explicit null as present-but-invalid
   // and throw; render's and fileImport's already treated it as omitted. That
-  // split was an accident of five parsers growing up separately — a
+  // split was an accident of five parsers growing up separately: a
   // hand-written JSON config has no comments to delete a line with, so an
   // explicit null is how an author says "leave this alone", not a typo.
   assert.equal(parseUi({ showVarName: null }).showVarName, false); // boolean
@@ -1276,7 +1276,7 @@ test("renderHash folds in the design routing map, so swapping two designs' files
   // H3: two configs mounting the SAME set of .scad files (widget.scad,
   // collapsible.scad) but routing the design ids to opposite files. The
   // scadFiles set is identical either way, so only the routing map itself can
-  // account for a hash difference — proving id->file is a hashed input, not
+  // account for a hash difference: proving id->file is a hashed input, not
   // just the file set.
   const gen = (aFile, bFile) => {
     const root = mkdtempSync(join(tmpdir(), "gen-schema-"));
@@ -1322,7 +1322,7 @@ test("renderHash folds in the openscad.js glue bytes, so a corrupted/updated glu
 
 test("renderHash is unaffected by presentation-only config fields (title/help/notices/theme/ui labels)", () => {
   // H3: labels, help prose, notices, theme colours and UI copy must not
-  // invalidate persisted geometry — only the render contract (routing,
+  // invalidate persisted geometry, only the render contract (routing,
   // sources, features, format, fonts, renderer code, binaries) should.
   const base = {
     source: "src",
@@ -1353,7 +1353,7 @@ test("renderHash is unaffected by presentation-only config fields (title/help/no
 test("renderHash is unaffected by sourcing prose from a file instead of writing it inline", () => {
   // popup.bodyFile / fileImport.noteFile / licenses[].textFile / help.file all
   // just inline file content into fields that were already outside renderHash
-  // (popup/fileImport/licenses/help are all presentation-only) — confirm the
+  // (popup/fileImport/licenses/help are all presentation-only): confirm the
   // file-sourced forms land at the exact same hash as a config with none of
   // that content configured at all.
   const baseline = run("widget-autodeps.config.json").schema.renderHash;
@@ -1495,7 +1495,7 @@ test("colors: an explicit null token means unset, same as an absent one", () => 
   assert.deepEqual(parseColors({ dark: { bg: null, accent: "#fff" } }), {
     dark: { accent: "#fff" },
   });
-  // An unknown token is still rejected even when its value is null — the
+  // An unknown token is still rejected even when its value is null: the
   // null-means-unset rule is about VALUES, not about excusing a typo'd key.
   assert.throws(() => parseColors({ dark: { accnt: null } }), /unknown colour token/);
 });
@@ -1722,7 +1722,7 @@ test("parseFileImport: true/object, defaults and errors", () => {
   assert.deepEqual(parseFileImport({ note: "  Add a font.  " }), { note: "Add a font." });
   // `accept`/`label`/`maxBytes` are gone, not merely deprecated: they no
   // longer drove any generic import button (each contextual control applies
-  // its own picker filter and size guard — see docs/config.md's Import file
+  // its own picker filter and size guard, see docs/config.md's Import file
   // section), so a config still setting one fails the ordinary unknown-key
   // check exactly like any other typo.
   assert.throws(
@@ -1753,8 +1753,8 @@ test("parseRender: heavyMs + cache tuning, defaults and errors", () => {
   assert.equal(parseRender(null), null);
   assert.equal(parseRender({}), null); // no recognised keys -> null (all defaults)
   // `features`/`format`/`fonts`/`fontFallback` are recognised nested keys (so
-  // they don't fail the unknown-key check below) but are `custom: true` —
-  // parseRender ignores them entirely; gen-schema.mjs reads them straight off
+  // they don't fail the unknown-key check below) but are `custom: true`.
+  // ParseRender ignores them entirely; gen-schema.mjs reads them straight off
   // `config.render` itself (see the 'config-driven features, fonts' test and
   // 'format is emitted to the schema' test, further down, for the real
   // end-to-end behaviour). A render block containing ONLY one of these still
@@ -1854,7 +1854,7 @@ test("ui.afterExport.helpTab: build succeeds when it names a real help tab, alon
   assert.equal(schema.ui.afterExport.helpTab, "Printing");
   assert.equal(schema.ui.afterExport.title, undefined);
   assert.equal(schema.ui.afterExport.body, undefined);
-  // The fixture overrides the panel's copy through `strings` instead — the
+  // The fixture overrides the panel's copy through `strings` instead: the
   // ONE mechanism for overriding this text now, not a second afterExport path.
   assert.equal(schema.strings["exportSuccess.title"], "Done");
   assert.equal(schema.strings["exportSuccess.body"], "Slice it.");
@@ -1963,7 +1963,7 @@ test("fileImport.noteFile: the referenced file's contents become 'note'", () => 
 });
 
 // resolveFileField backs popup.bodyFile / fileImport.noteFile /
-// licenses[].textFile alike (see prose-files.mjs) — each call site below
+// licenses[].textFile alike (see prose-files.mjs): each call site below
 // mirrors exactly how gen-schema.mjs's generate() wires it (same field/
 // fileField/path), so a non-string or blank value must fail validation
 // with the shared optional-string message BEFORE resolve()/readFileSync()
@@ -2084,7 +2084,7 @@ function paramsOf(scad) {
   }
 }
 
-// Same as paramsOf, but returns the FULL parseParams() result — needed for
+// Same as paramsOf, but returns the FULL parseParams() result: needed for
 // file-level metadata (`@description`/`@icon`/`@reviewNote`/…) assertions,
 // which live on `.meta` rather than `.params`.
 function parseOf(scad) {
@@ -2188,7 +2188,7 @@ test("@label overrides the first-sentence control label and keeps the doc block 
   );
   const byName = Object.fromEntries(params.map((p) => [p.name, p]));
   assert.equal(byName.locale.description, "Language & standard");
-  // The explanation isn't lost — it stays as help, so ParamForm's ⓘ popover
+  // The explanation isn't lost: it stays as help, so ParamForm's ⓘ popover
   // still offers it (it only mounts when help differs from the label).
   assert.equal(byName.locale.help, "Choose the language and Braille standard for this sign.");
   // The annotation line is consumed, not leaked into the help/label text.
@@ -2597,7 +2597,7 @@ test("a real build records the bundled fonts' embedded families + writes fonts.c
   });
   assert.deepEqual(schema.fontFamilies, ["Liberation Sans"]);
   // The face description ({ family, style }) rides along for the app's font
-  // selector — REAL_TTF is the Liberation Sans regular face.
+  // selector: REAL_TTF is the Liberation Sans regular face.
   assert.deepEqual(schema.fontFaces, [{ family: "Liberation Sans", style: "Regular" }]);
   // fonts.conf is generated into the served tree, with the configured fallback.
   const conf = readFileSync(join(out, "public", "fonts", "fonts.conf"), "utf-8");
@@ -2648,8 +2648,8 @@ test("bundleFonts warns exactly once, naming the font, when a real build copies 
   // Drives the real generate() -> bundleFonts path (not just the boolean).
   // isRiskyExternalFontCopy shells out to git itself (no seam to inject a
   // stub through generate()), so this test builds its OWN throwaway git
-  // checkout — an `outPublicDir` inside a fresh `git init` repo with an
-  // attached HEAD — rather than pointing outPublicDir at this repo's real
+  // checkout: an `outPublicDir` inside a fresh `git init` repo with an
+  // attached HEAD. Rather than pointing outPublicDir at this repo's real
   // public/ dir, which would risk writing a font into the actual checkout
   // under test.
   const checkout = mkdtempSync(join(tmpdir(), "gen-schema-extfont-checkout-"));
@@ -3013,7 +3013,7 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
   assert.ok(existsSync(fontDest));
   assert.ok(existsSync(shotDest));
   // The manifest lives ABOVE public/ (so Vite never ships it) and stores paths
-  // relative to public/ (never host-absolute — no checkout-path leak, and a
+  // relative to public/ (never host-absolute: no checkout-path leak, and a
   // stray manifest can't authorize deletes outside the output root).
   const manifestPath = join(outPublicDir, "..", ".gen-manifest.json");
   const relTo = (abs) => relative(outPublicDir, abs);
@@ -3023,7 +3023,7 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
   assert.ok(manifest1.includes(relTo(fontDest)));
   assert.ok(manifest1.includes(relTo(shotDest)));
 
-  // Reconfigure without the font/screenshot — as if the config entry was
+  // Reconfigure without the font/screenshot, as if the config entry was
   // removed or renamed.
   const cfgWithout = join(root, "without.config.json");
   writeFileSync(
@@ -3076,7 +3076,7 @@ test("a catch-all `assets` entry that re-includes a design's own .scad is idempo
     JSON.stringify({
       title: "T",
       source: "src",
-      // The catch-all picks up d.scad, which buildDesigns already copied — the
+      // The catch-all picks up d.scad, which buildDesigns already copied: the
       // same source to the same destination. That must NOT be a collision.
       assets: ["."],
       designs: [{ id: "d", label: "D" }],
@@ -3107,7 +3107,7 @@ test("a PWA/icon failure after a prior successful build leaves the previous outp
   const beforeIcon = existsSync(iconPath) ? readFileSync(iconPath) : null;
 
   // A build whose configured icon can't rasterize fails AFTER staging the new
-  // scad but before the commit — so scad, schema, and the icons must all stay
+  // scad but before the commit, so scad, schema, and the icons must all stay
   // exactly as the last good build left them (no new-scad/old-schema mismatch,
   // no clobbered/deleted last-good icon).
   assert.throws(
@@ -3119,13 +3119,13 @@ test("a PWA/icon failure after a prior successful build leaves the previous outp
   if (beforeIcon) assert.deepEqual(readFileSync(iconPath), beforeIcon);
 });
 
-// A failure LATER in generatePwaAssets than icon rasterization — the
+// A failure LATER in generatePwaAssets than icon rasterization: the
 // `pwa.screenshots[].src` existence check, which used to run after
 // pwa-assets.mjs had already written the (successfully rasterized) icon/
 // splash PNGs directly to outPublicDir. That's the gap the deferred-write
 // batch (pwa-assets.mjs's `batch`/commitPwaBatch, flushed only at generate()'s
-// single commit point) closes: unlike the widget-badicon case above — where
-// rasterization itself is the failure, so nothing is written either way — this
+// single commit point) closes: unlike the widget-badicon case above, where
+// rasterization itself is the failure, so nothing is written either way. This
 // fixture's icon is valid, so the icon/splash batch fully rasterizes and only
 // the screenshot check after it fails. Without the batch that lands new
 // icon/splash bytes beside the STALE scad tree/schema/manifest; this asserts
@@ -3209,7 +3209,7 @@ test("changing a font then failing a later step leaves the prior font bytes and 
 
   // Now swap Face.ttf to the Bold bytes and change the fallback (both would
   // rewrite the live font tree), but make the build fail at PWA rasterization
-  // via a malformed icon — after bundleFonts, before the commit.
+  // via a malformed icon: after bundleFonts, before the commit.
   copyFileSync(BOLD, join(src, "Face.ttf"));
   writeFileSync(join(root, "bad.svg"), `<svg xmlns="http://www.w3.org/2000/svg"><not-closed`);
   const bad = join(root, "bad.config.json");
@@ -3232,7 +3232,7 @@ test("changing a font then failing a later step leaves the prior font bytes and 
   assert.notDeepEqual(readFileSync(BOLD), beforeFont);
 });
 
-// M13 — browser-facing SVGs (logo, PWA icon, design picker icon) are run
+// M13: browser-facing SVGs (logo, PWA icon, design picker icon) are run
 // through scripts/lib/svg-sanitize.mjs; render-input SVGs (config `assets` /
 // a design's use/include graph, copied into public/scad/ for OpenSCAD's
 // import()/surface()) are deliberately left byte-for-byte untouched. See
@@ -3286,7 +3286,7 @@ test("a hostile logo/icon SVG is sanitized; a hostile render-input SVG asset is 
   assert.ok(!pwaIconText.includes("<foreignObject"));
 
   // Render-input SVG (a config `assets` entry, mounted for OpenSCAD's
-  // import()/surface()) is copied verbatim — sanitizing it risks perturbing
+  // import()/surface()) is copied verbatim: sanitizing it risks perturbing
   // geometry, and it's covered by the operator-trust boundary + response
   // headers instead (public/_headers), not build-time rewriting.
   const renderAssetPath = join(outPublicDir, "scad", "hostile-assets", "hostile-render.svg");

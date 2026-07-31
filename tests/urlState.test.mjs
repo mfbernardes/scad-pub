@@ -168,7 +168,7 @@ test("buildShareUrl reflects the current values synchronously, without waiting o
   // Share must never depend on that timer having fired yet.
   persistState(design, { ...DEFAULTS }); // "pre-edit" state already persisted
   const edited = { text: "just typed", n: 2, b: false };
-  // No persistState(edited, ...) call here — the debounce hasn't fired.
+  // No persistState(edited, ...) call here: the debounce hasn't fired.
   const url = buildShareUrl(design, edited);
   assert.match(url, /v=/);
   const hash = new URL(url).hash;
@@ -222,7 +222,7 @@ test("persistState survives a throttled history.replaceState (e.g. Safari)", () 
 
 test("parseHashState parses an arbitrary hash string, not just location.hash", () => {
   // Simulates a same-document `hashchange` event, which carries the new hash
-  // on `location.hash` — but also a launchQueue target, which carries it as
+  // on `location.hash`, but also a launchQueue target, which carries it as
   // part of a full target URL (`new URL(targetURL).hash`) that never touches
   // `location` at all.
   const hash = "#d=d&v=" + encodeURIComponent('{"text":"from-shortcut"}');
@@ -250,7 +250,7 @@ test("parseHashState returns null for an empty hash or an unknown design", () =>
 test("sessionStateEquals — the external-navigation loop guard", () => {
   const a = { designId: "d", values: { ...DEFAULTS }, preset: "" };
   const b = { designId: "d", values: { ...DEFAULTS }, preset: "" };
-  // Same shape, different object identity — still equal (a no-op navigation
+  // Same shape, different object identity, still equal (a no-op navigation
   // must not be treated as a state change).
   assert.equal(sessionStateEquals(a, b), true);
 
@@ -270,7 +270,7 @@ test("sessionStateEquals — the external-navigation loop guard", () => {
 
 // --- fromLink: was the design chosen by whoever built the URL? -------------
 // App reads this to skip the design chooser (src/lib/popup.ts's
-// shouldShowPopup) — a shared link, or an installed app's `./#d=<id>`
+// shouldShowPopup). A shared link, or an installed app's `./#d=<id>`
 // shortcut, arrives with the chooser's question already answered.
 test("fromLink is set only when the hash named the design", () => {
   // A shared link.
@@ -288,7 +288,7 @@ test("fromLink is set only when the hash named the design", () => {
   globalThis.localStorage.clear();
   assert.equal(readInitialState(schema).fromLink, false);
 
-  // A hash that names no known design falls through to the store/defaults —
+  // A hash that names no known design falls through to the store/defaults,
   // and is not a link either.
   globalThis.location.hash = "#d=nope";
   assert.equal(readInitialState(schema).fromLink, false);

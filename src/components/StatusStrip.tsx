@@ -1,16 +1,16 @@
-// StatusStrip.tsx — the readiness surface (src/lib/readiness.ts's
+// StatusStrip.tsx: the readiness surface (src/lib/readiness.ts's
 // ReadinessState): a raised pill in the export dock (AppShell's ActionDock),
 // stacked directly above the Download button, that opens the Review dialog
 // (ReviewDialog.tsx).
 //
 // One presentation, both layouts. The dock is where the decision it gates
-// actually gets made, so it lives there for desktop and mobile alike — over the
+// actually gets made, so it lives there for desktop and mobile alike, over the
 // viewer, out of the panel/sheet entirely, and so still visible when the desktop
 // panel is collapsed to its rail. A row inside the panel would vanish with it.
 //
 // The caller mounts it only for the states that want a look at the Review
 // dialog, and not identically in both layouts: `failed` pills everywhere,
-// `attention` on desktop only — on mobile the dock's Download button already
+// `attention` on desktop only, on mobile the dock's Download button already
 // carries an amber dot and an sr-only issue count for exactly that state, and
 // a stacked pill saying it again cost a row over the model. See AppShell's
 // `hasStatusPill` for the full reasoning. A ready model needs no announcement
@@ -20,7 +20,7 @@
 // must stay exhaustive.
 //
 // `.status-strip` is a stable hook class for the smoke/vis scripts (see
-// CLAUDE.md's script-hook convention) — kept even though no stylesheet rule
+// CLAUDE.md's script-hook convention): kept even though no stylesheet rule
 // targets it.
 import {
   CircleCheck as ReadyIcon,
@@ -34,7 +34,7 @@ import { t, tn } from "../lib/i18n";
 
 export interface StatusStripProps {
   readiness: ReadinessState;
-  /** attention.length — only meaningful (and only read) in the "attention" state. */
+  /** attention.length, only meaningful (and only read) in the "attention" state. */
   attentionCount: number;
   onOpen: () => void;
   className?: string;
@@ -47,7 +47,7 @@ const ICON: Record<ReadinessState, typeof ReadyIcon> = {
   failed: FailedIcon,
 };
 
-// Warn/success/destructive tokens only — never a bespoke colour — so a
+// Warn/success/destructive tokens only (never a bespoke colour) so a
 // deployment's `colors` override (which retargets these same tokens) keeps
 // the pill in step with the rest of the app's status language.
 //

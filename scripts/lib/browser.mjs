@@ -1,8 +1,8 @@
-// browser.mjs — the Playwright driving shared by smoke.mjs, screenshots.mjs and
+// browser.mjs: the Playwright driving shared by smoke.mjs, screenshots.mjs and
 // capture-screens.mjs: Chromium launch, render-completion polling, design
 // switching, welcome-popup dismissal, and the force-theme-then-reload dance.
 // Everything here reads the stable literal class hooks the app keeps for the
-// scripts (`.render-status`, `.command-bar__design-picker`, …) — keeping those
+// scripts (`.render-status`, `.command-bar__design-picker`, …): keeping those
 // selectors in one place so a hook rename is a one-file fix.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -36,12 +36,12 @@ export function launchChromium(options = {}) {
 /** The render-status live region ("Render status: 123 ms" / "… (cached)" /
  *  "… Failed (exit N)") rides on the Output bell via the sr-only
  *  `.render-status` hook. Both layouts render the bell (the inactive one is
- *  CSS-hidden but still in the DOM) with the same text — read the first match. */
+ *  CSS-hidden but still in the DOM) with the same text: read the first match. */
 export const renderStatusText = (page) =>
   page.locator(".render-status").first().textContent();
 
 /** Wait until a render has completed: the status text carries a "N ms" figure
- *  only for a finished render. Throws on timeout — callers that tolerate a
+ *  only for a finished render. Throws on timeout: callers that tolerate a
  *  missing render (e.g. pure screenshot capture) should `.catch()` it. */
 export async function waitRendered(page, { timeout = 60000 } = {}) {
   await page.waitForFunction(
@@ -54,9 +54,9 @@ export async function waitRendered(page, { timeout = 60000 } = {}) {
  * Switch to the design with the given picker label and kick off its render.
  * The picker is a shadcn/ui (Radix) Select with no native <option> elements, so
  * we click the trigger then the option by its visible text. Single-design
- * configs have no picker — the click is skipped. Pass `label: undefined` to
+ * configs have no picker: the click is skipped. Pass `label: undefined` to
  * skip the picker entirely and just nudge the current design to render.
- * Does not wait for completion — follow with waitRendered().
+ * Does not wait for completion: follow with waitRendered().
  */
 export async function selectDesign(page, label, { mobile = false } = {}) {
   if (label !== undefined) {
@@ -68,7 +68,7 @@ export async function selectDesign(page, label, { mobile = false } = {}) {
       await trigger.click();
       await page.getByRole("option", { name: label, exact: true }).click();
     } else {
-      // Gallery picker (ui.gallery: true) has no select — the current design's
+      // Gallery picker (ui.gallery: true) has no select. The current design's
       // name opens a card-grid dialog instead; each card is a button[data-design]
       // whose heading is exactly the design label. Mirror the capture harness.
       const openBtn = (mobile
@@ -120,7 +120,7 @@ export async function dismissWelcomePopup(page) {
     await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
     await page.keyboard.press("Escape").catch(() => {});
   } else {
-    // Picker-mode popup (popup.mode: "picker") has no CTA — it shows design
+    // Picker-mode popup (popup.mode: "picker") has no CTA. It shows design
     // cards and dismisses when one is chosen. Click the first card. The card
     // lives in the popup's own portal, not inside `.bottom-sheet`, so this
     // dismissal doesn't trip the first-visit swipe-up sheet hint (which only
@@ -131,7 +131,7 @@ export async function dismissWelcomePopup(page) {
   }
 }
 
-// Shared timeout for openDialog/waitDialogClosed below — every hand-rolled
+// Shared timeout for openDialog/waitDialogClosed below: every hand-rolled
 // dialog-visibility wait across smoke.mjs used 3000ms except two 2000ms
 // outliers (still passable via the `timeout` option), so this is the one
 // place that constant lives now.
@@ -139,9 +139,9 @@ const DIALOG_TIMEOUT = 3000;
 
 /** Wait for a `role="dialog"` with the given accessible name to become
  *  visible, then return its locator (so a caller can keep interacting with
- *  it — e.g. `.locator(...)`/`.getByRole(...)` for a footer button — without
+ *  it: e.g. `.locator(...)`/`.getByRole(...)` for a footer button, without
  *  a second `page.getByRole("dialog", { name })` lookup). Throws on timeout,
- *  same as `waitRendered` above — callers that only want to know WHETHER it
+ *  same as `waitRendered` above: callers that only want to know WHETHER it
  *  opened should `.catch()` it. */
 export async function openDialog(page, name, { timeout = DIALOG_TIMEOUT } = {}) {
   const dialog = page.getByRole("dialog", { name });
@@ -150,11 +150,11 @@ export async function openDialog(page, name, { timeout = DIALOG_TIMEOUT } = {}) 
 }
 
 /** Wait for a `role="dialog"` with the given accessible name to be gone. It
- *  only WAITS — dismissing the dialog is the caller's job.
+ *  only WAITS: dismissing the dialog is the caller's job.
  *  Playwright's "hidden" wait state matches both a fully unmounted dialog and
  *  one that's merely display:none/zero-size, covering every close pattern
  *  the app uses (a Dialog that unmounts vs. one that just hides) with a
- *  single helper. Throws on timeout — callers that tolerate a dialog staying
+ *  single helper. Throws on timeout: callers that tolerate a dialog staying
  *  open (a best-effort cleanup step) should `.catch()` it. */
 export async function waitDialogClosed(page, name, { timeout = DIALOG_TIMEOUT } = {}) {
   await page.getByRole("dialog", { name }).waitFor({ state: "hidden", timeout });

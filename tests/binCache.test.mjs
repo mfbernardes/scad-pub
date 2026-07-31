@@ -27,7 +27,7 @@ test("binCacheName falls back to a default pin when no version is given", () => 
 
 test("staleBinaryCaches selects old binary caches beyond the retained bound", () => {
   // Default retain (MAX_RETAINED_BIN_CACHES=3) keeps the current cache plus
-  // the 2 lexically-latest others — both of these fit within that bound, so
+  // the 2 lexically-latest others: both of these fit within that bound, so
   // neither is stale (H4 point 3: bounded retention, not blanket eviction).
   const current = binCacheName("2027.01.01");
   const keys = [
@@ -54,7 +54,7 @@ test("staleBinaryCaches deletes everything else when explicitly given retain=1",
 test("staleBinaryCaches evicts beyond the bound, keeping the lexically-latest others", () => {
   const current = binCacheName("2027.06.01");
   const keys = [
-    binCacheName("2025.01.01"), // oldest — should be evicted
+    binCacheName("2025.01.01"), // oldest: should be evicted
     binCacheName("2026.06.12"),
     binCacheName("2026.12.01"),
     current,

@@ -1,4 +1,4 @@
-// LicensesModal.tsx — open-source attribution notice. Lists the third-party
+// LicensesModal.tsx: open-source attribution notice. Lists the third-party
 // components shipped in this app with their license and source links, and the
 // reproducible license text where applicable, to satisfy their license terms.
 import { licenseList, mergeLicenses, type BuildVersions } from "../lib/licenses";

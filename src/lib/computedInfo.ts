@@ -1,8 +1,8 @@
-// computedInfo.ts — turn OpenSCAD's own `echo("@info", label, unit, value)`
+// computedInfo.ts: turn OpenSCAD's own `echo("@info", label, unit, value)`
 // convention into structured "calculated value" rows for the measurements
 // panel (DimensionInfo). This is a SEPARATE, purely-runtime mechanism from the
 // comment-based `// @info` annotation gen-schema.mjs attaches to Customizer
-// params (see Param.info in openscad/types.ts) — that one only works for real,
+// params (see Param.info in openscad/types.ts), that one only works for real,
 // visible Customizer params; this one lets a design surface an internal,
 // OpenSCAD-computed value (one gen-schema's static parser could never know)
 // from anywhere in its source, including inside a `/* [Hidden] */` section or
@@ -10,7 +10,7 @@
 // extend (different concern: notices/badges vs. measurement rows).
 //
 // Parses the fixed 4-arg `echo("@info", "<label>", "<unit>", <value>)`
-// convention via echoTags.ts's shared core (regex + quote-stripping) —
+// convention via echoTags.ts's shared core (regex + quote-stripping):
 // mirrors reviewOverrides.ts's `echo("@review", …)` parser, which shares that
 // same core; see echoTags.ts's own doc for the log-line shape both have in
 // common.
@@ -33,7 +33,7 @@ function formatComputedValue(raw: string, unit: string): string {
 
 /**
  * Extract "calculated value" rows from the raw OpenSCAD worker log, in the
- * order the design echoed them (author-controlled — no re-sorting). Rows are
+ * order the design echoed them (author-controlled: no re-sorting). Rows are
  * NOT de-duplicated: a design may legitimately echo the same label from
  * different branches (only one of which fires per render), so a genuine
  * repeat is preserved rather than silently dropped.

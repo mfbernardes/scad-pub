@@ -1,4 +1,4 @@
-// theme.ts — light/dark theming. Three modes: "auto" follows the OS
+// theme.ts: light/dark theming. Three modes: "auto" follows the OS
 // (prefers-color-scheme) and reacts to changes; "light"/"dark" force it. The
 // resolved theme is written to <html data-theme>, which the CSS variables key
 // off. Persisted in localStorage; a tiny inline script in index.html applies it
@@ -31,11 +31,11 @@ function systemDark(): boolean {
 // useSyncExternalStore glue so "does the OS prefer dark" is one authoritative,
 // reactive value instead of a snapshot read once at resolve time. Every
 // consumer (this hook's `resolved`, and anything built on it) re-renders
-// together on a matchMedia change — no imperative apply() can run ahead of
+// together on a matchMedia change: no imperative apply() can run ahead of
 // the React value it's meant to mirror. `typeof window` guards module-scope
 // use under the Node test runner (no DOM/matchMedia there).
 // Exported (only) so tests/theme.test.mjs can exercise the store's
-// subscribe/snapshot contract directly — this repo has no DOM-rendering test
+// subscribe/snapshot contract directly: this repo has no DOM-rendering test
 // harness (no jsdom), so a full render of the `useTheme` hook isn't feasible;
 // this is the pure unit the useSyncExternalStore call above is built from.
 export function subscribeSystemDark(onChange: () => void): () => void {
@@ -65,7 +65,7 @@ function readMode(): ThemeMode {
 // one regardless of which theme is applied, so forcing dark under a light OS
 // never updates the meta the browser actually reads, and forcing light
 // discards the configured light colour for a hardcoded white. Resolve and
-// cache both metas — and the colours their original `content` encodes — on
+// cache both metas (and the colours their original `content` encodes) on
 // first use, then keep both in sync with whichever theme is applied.
 interface ThemeColorMetas {
   light: Element | null;
@@ -108,7 +108,7 @@ export function apply(theme: Theme) {
 export function useTheme() {
   const [mode, setMode] = useState<ThemeMode>(readMode);
   // The one subscription to the OS preference, shared by every render. In
-  // "auto" mode this — not a value captured imperatively inside an effect —
+  // "auto" mode this (not a value captured imperatively inside an effect)
   // is what `resolved` derives from, so DOM state (via the effect below) and
   // the React value returned to callers (Viewer theme, BarBrand, Toaster)
   // can never diverge: a matchMedia change re-renders this hook and every
@@ -122,7 +122,7 @@ export function useTheme() {
 
   // Apply is a DOM side effect keyed off the single resolved value above, so
   // it re-runs both on an explicit mode change and on a live OS change while
-  // in auto mode — there's no separate matchMedia listener here to fall out
+  // in auto mode: there's no separate matchMedia listener here to fall out
   // of sync with it.
   useEffect(() => {
     apply(resolved);

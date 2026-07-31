@@ -1,4 +1,4 @@
-// FileInput.tsx — a hidden <input type="file"> plus a caller-supplied trigger.
+// FileInput.tsx: a hidden <input type="file"> plus a caller-supplied trigger.
 // `children` receives an `open()` callback to wire onto any button.
 import { useRef, type ReactNode } from "react";
 import { toast } from "sonner";

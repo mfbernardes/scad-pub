@@ -1,4 +1,4 @@
-/* Cascade-layer order. `components` (the app's structural CSS below — tokens,
+/* Cascade-layer order. `components` (the app's structural CSS below: tokens,
    shell layout, safe-area math, floating-overlay geometry, the bottom sheet)
    sits just below `utilities` and above `base`: Tailwind utility classes on a
    component always win, while these rules still beat preflight element resets.
@@ -10,7 +10,7 @@
 @import "tw-animate-css";
 /* The app's display face (brand, headings, tabs, buttons). A single variable
    woff2 per script subset, bundled by Vite and precached by the service worker
-   via asset-manifest.json — no external font host at runtime. */
+   via asset-manifest.json: no external font host at runtime. */
 @import "@fontsource/atkinson-hyperlegible/400.css";
 @import "@fontsource/atkinson-hyperlegible/700.css";
 
@@ -19,7 +19,7 @@
    below, switched by [data-theme="light"] and overridable per-config) stays the
    single source of truth. Here we only map Tailwind/shadcn colour *utilities*
    (bg-background, text-muted-foreground, border, …) onto those existing tokens
-   via @theme inline — we never redefine --muted/--accent themselves, so there's
+   via @theme inline: we never redefine --muted/--accent themselves, so there's
    no collision with the legacy names and the contrast ratios are unchanged. */
 @theme inline {
   --color-background: var(--bg);
@@ -66,7 +66,7 @@
   }
 }
 
-/* `font-display` — the app's display voice (brand, headings, tabs, primary
+/* `font-display`: the app's display voice (brand, headings, tabs, primary
    buttons). A real utility so it composes with tailwind-merge like any other. */
 @utility font-display {
   font-family: var(--font-display);
@@ -76,7 +76,7 @@
    theme is resolved in JS (lib/theme.ts) and set before paint (index.html). */
 @layer components {
 :root {
-  /* Blue palette — cool slate neutrals with the signature electric-blue accent
+  /* Blue palette: cool slate neutrals with the signature electric-blue accent
      and a brand-blue model, offset by a warm amber dimension callout. Every
      pair below is WCAG 2.1 AA-verified (most exceed AAA); re-verify with
      npm run smoke after any change. */
@@ -101,26 +101,26 @@
   --viewer-bg: #0e1016; /* deep slate, darker than the chrome to frame the model */
   --viewer-grid: #565f6e; /* centre axes: ~3:1 vs --viewer-bg for orientation */
   --viewer-grid-2: #20242e; /* grid lines: deliberately subtle */
-  --viewer-model: #6f93ff; /* the rendered model's material — brand blue, the hero */
-  --viewer-dim: #ffd7a1; /* dimension callouts — warm amber, contrasts the blue model */
-  /* Typography — --font-sans is the workhorse; --font-display carries the
+  --viewer-model: #6f93ff; /* the rendered model's material: brand blue, the hero */
+  --viewer-dim: #ffd7a1; /* dimension callouts: warm amber, contrasts the blue model */
+  /* Typography: --font-sans is the workhorse; --font-display carries the
      brand voice (wordmark, headings, tabs, buttons). Both are configurable
      via the config's `colors` map (unquoted family names). */
   --font-sans: system-ui, "Segoe UI", Roboto, sans-serif;
   --font-display: "Atkinson Hyperlegible", var(--font-sans);
-  /* Shape + surface tokens — configurable via colors.dark in the config.
+  /* Shape + surface tokens: configurable via colors.dark in the config.
      Moderate (not pill) radii; the floating surfaces (--surface-*) are solid,
-     not translucent glass — they read as raised panels, not frosted overlays. */
+     not translucent glass: they read as raised panels, not frosted overlays. */
   --radius: 10px;
   --radius-sm: 6px;
   --glass-bg: #252935;
   --glass-border: #343a48;
   --elevation: 0 6px 18px rgba(0, 0, 0, 0.5);
   /* Fallback only: BottomSheet measures its real header (drag handle + tab
-     row) — which can exceed this under font scaling — and AppShell writes it
+     row) (which can exceed this under font scaling) and AppShell writes it
      onto the mobile root as an inline override (see handleSheetPeekHeight /
      onPeekHeightChange), which wins once the first measurement lands. This
-     static value only matters for the brief pre-measurement flash — keep it
+     static value only matters for the brief pre-measurement flash: keep it
      roughly in sync with AppShell.tsx PEEK_HEIGHT. */
   --mobile-peek-height: 60px;
   /* iOS home-indicator inset. The bottom sheet sits directly on the viewport
@@ -131,8 +131,8 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   /* Notch / dynamic-island inset. The sheet's Full detent stops short of the
      top edge to leave a model strip (BottomSheet's FULL_TOP_GAP), and this
-     keeps a notch from eating into that strip. Published as a var — rather
-     than env() inline — for the same reason as its bottom twin: BottomSheet
+     keeps a notch from eating into that strip. Published as a var: rather
+     than env() inline, for the same reason as its bottom twin: BottomSheet
      measures it off a probe, so CSS and JS read one source of truth and a test
      can override it to simulate a device inset. */
   --safe-area-top: env(safe-area-inset-top, 0px);
@@ -161,9 +161,9 @@
   --viewer-bg: #dde2ea; /* soft cool grey, not a glaring white */
   --viewer-grid: #8b94a0; /* centre axes */
   --viewer-grid-2: #c4cad1; /* grid lines: subtle */
-  --viewer-model: #3a5fd0; /* the rendered model's material — brand blue */
-  --viewer-dim: #9c380b; /* dimension callouts — deep amber against the blue model */
-  /* Shape + surface tokens — lighter values for light mode; solid, not glass. */
+  --viewer-model: #3a5fd0; /* the rendered model's material: brand blue */
+  --viewer-dim: #9c380b; /* dimension callouts: deep amber against the blue model */
+  /* Shape + surface tokens: lighter values for light mode; solid, not glass. */
   --radius: 10px;
   --radius-sm: 6px;
   --glass-bg: #ffffff;
@@ -195,7 +195,7 @@ html, body { height: 100%; margin: 0; }
 /* Pull-to-refresh kills the WebGL drag gesture on mobile; disable it on the
    outer document. touch-action:none is scoped to the canvas below. */
 html, body { overscroll-behavior: none; }
-/* The app is a fixed-height shell (#root below) — every scrollable region is
+/* The app is a fixed-height shell (#root below): every scrollable region is
    an inner one (the param form, the preset list, the output console), and the
    document itself has nothing to scroll to. Saying so keeps a stray document
    scroll from ever STICKING: on iOS the layout viewport becomes scrollable
@@ -223,27 +223,27 @@ body {
 
 /* Base interactive-element styling now comes from Tailwind preflight + each
    component's own classes (legacy class rules or shadcn/ui utilities), so the
-   old element-level button/select/input rules are gone — they used to bleed
+   old element-level button/select/input rules are gone: they used to bleed
    into shadcn components. A cursor default is kept for un-classed buttons. */
 button { cursor: pointer; touch-action: manipulation; }
 button:disabled { cursor: default; }
 
 /* ═══════════════════════════════════════════════════════════════
-   APP SHELL — responsive layout
+   APP SHELL: responsive layout
    Desktop (≥ 860px): CommandBar + docked panel + viewer + floating controls
    Mobile  (< 860px): full-bleed viewer + BottomSheet
    ═══════════════════════════════════════════════════════════════ */
 
 .app-shell { height: 100%; }
 
-/* Desktop half — hidden on mobile */
+/* Desktop half: hidden on mobile */
 .app-shell__desktop {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-/* Mobile half — hidden on desktop */
+/* Mobile half: hidden on desktop */
 .app-shell__mobile { display: none; }
 
 @media (max-width: 860px) {
@@ -260,7 +260,7 @@ button:disabled { cursor: default; }
 
        No cap. --sheet-follow-h is the sheet reporting its OWN height, already
        clamped to its own full detent (BottomSheet's fullH), so a cap here
-       could only ever restate that arithmetic — which is exactly what it used
+       could only ever restate that arithmetic, which is exactly what it used
        to do, back when the Full detent covered the whole viewport and the cap
        had to stop the viewer collapsing to nothing. Full now stops short of
        the top edge on its own, so following the sheet all the way is what
@@ -298,11 +298,11 @@ button:disabled { cursor: default; }
    lower part would otherwise sit hidden behind the sheet). The canvas follows
    the sheet live: its bottom sits at --sheet-top (the sheet's live top edge,
    defined on .app-shell__mobile), and the Viewer's ResizeObserver re-fits the
-   model into the new box — carrying the visitor's own orbit/zoom/pan, so the
+   model into the new box. Carrying the visitor's own orbit/zoom/pan, so the
    model holds its apparent size rather than shrinking with the canvas (see
    Viewer.tsx's refitView). --sheet-top falls back to the peek height before the first
    drag and is capped at the half height, so dragging on to full doesn't shrink
-   the canvas to nothing — the sheet covers it and the Viewer pauses rendering
+   the canvas to nothing. The sheet covers it and the Viewer pauses rendering
    off-screen. */
 .app-shell__mobile-viewer {
   position: absolute;
@@ -322,7 +322,7 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   PARAM PANEL — docked collapsible/resizable panel (desktop)
+   PARAM PANEL: docked collapsible/resizable panel (desktop)
    ═══════════════════════════════════════════════════════════════ */
 
 .param-panel {
@@ -408,7 +408,7 @@ button:disabled { cursor: default; }
 .handle--left { left: -4px; }
 
 /* ═══════════════════════════════════════════════════════════════
-   VIEWER — the Three.js canvas container
+   VIEWER: the Three.js canvas container
    ═══════════════════════════════════════════════════════════════ */
 
 .viewer-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
@@ -419,7 +419,7 @@ button:disabled { cursor: default; }
 .viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
 /* ═══════════════════════════════════════════════════════════════
-   VIEWER HUD — zoom / reset / fullscreen (bottom-right, both layouts)
+   VIEWER HUD: zoom / reset / fullscreen (bottom-right, both layouts)
    ═══════════════════════════════════════════════════════════════ */
 
 .viewer-hud {
@@ -439,7 +439,7 @@ button:disabled { cursor: default; }
 /* Mobile: anchor the HUD to the upper-right, clear of the top bar.
    ViewerHUD collapses to a single "View options" trigger below this breakpoint
    (AppShell passes `collapse={isMobile}`, keyed on the same 860px), so this is
-   one button — it cannot grow into the export dock riding up from below, which
+   one button: it cannot grow into the export dock riding up from below, which
    is what a desktop-style column does on short and narrow viewports.
    scripts/smoke.mjs hit-tests every HUD button at 360x740 and 320x568, at both
    the peek and half detents, so a layout that reintroduces the overlap fails
@@ -454,7 +454,7 @@ button:disabled { cursor: default; }
 /* Touch targets: on coarse-pointer (touch) devices the tightly-stacked viewer
    HUD column and the mobile top-bar icon cluster render 32px (size-8) icon
    buttons that are mis-tap-prone. Raise their hit area to a comfortable ~44px
-   (WCAG 2.5.5) and widen the HUD gap. Glyph sizes are unchanged — only the
+   (WCAG 2.5.5) and widen the HUD gap. Glyph sizes are unchanged, only the
    touch/hit area grows. Gated to (pointer: coarse) so desktop layout and
    visual baselines are untouched. */
 @media (pointer: coarse) {
@@ -464,8 +464,8 @@ button:disabled { cursor: default; }
     min-width: 2.75rem;
     min-height: 2.75rem;
   }
-  /* The same floor for the two controls a visitor actually presses most —
-     Download and Share/Copy-link in the export dock — and for the sheet's
+  /* The same floor for the two controls a visitor actually presses most.
+     Download and Share/Copy-link in the export dock, and for the sheet's
      Presets/Customize tabs. All three were 32-33px: past WCAG 2.2's 24x24
      minimum (SC 2.5.8) but well under the 44px of SC 2.5.5 and the platform
      guidance, on the app's primary action. Height only: their widths are
@@ -477,14 +477,14 @@ button:disabled { cursor: default; }
   }
   /* Radix's Switch (36x20) and Slider thumb (20x20) sit under 24px on their
      short axis and are deliberately left that way. They meet WCAG 2.2 SC 2.5.8
-     through its spacing exception — measured, the nearest other target's centre
-     is 43-72px away against a 24px requirement — and every way of growing them
+     through its spacing exception: measured, the nearest other target's centre
+     is 43-72px away against a 24px requirement, and every way of growing them
      costs something real: a transparent ::after is NOT hit-tested by Chromium
      (verified: the pseudo computes correctly and the effective target stays
      20px), a transparent border changes the thumb's own painted size, and a
      min-height stretches the switch track. They remain short of SC 2.5.5's
-     44px, which is a AAA target; the controls a visitor presses most — the
-     dock buttons, the sheet tabs and the drag handle — are at 44px above. */
+     44px, which is a AAA target; the controls a visitor presses most: the
+     dock buttons, the sheet tabs and the drag handle. Are at 44px above. */
 }
 
 /* Light schemes give `--glass-bg` very little separation from the viewer
@@ -499,7 +499,7 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   FLOATING OVERLAY GEOMETRY — measurements panel, action cluster,
+   FLOATING OVERLAY GEOMETRY: measurements panel, action cluster,
    stale banner. Decoration lives on the components; only the
    position/inset/z (and the per-layout mobile offsets, which must
    override the base from a lower layer) stay here.
@@ -521,7 +521,7 @@ button:disabled { cursor: default; }
    binding one in practice: "everything down to the dock" let a design with
    many @info rows fill four fifths of the viewer at the sheet's half detent,
    covering the model it is annotating. The panel starts folded on mobile
-   anyway (see viewerPrefs' initialMeasureCollapsed) — this bounds what
+   anyway (see viewerPrefs' initialMeasureCollapsed): this bounds what
    unfolding it can cost. */
 @media (max-width: 860px) {
   .app-shell__mobile .dimension-info {
@@ -531,13 +531,13 @@ button:disabled { cursor: default; }
 }
 
 /* Floating bottom-center action dock: the export cluster (Download / Share),
-   plus — when shown — an ExportSuccess panel stacked above it (see
+   plus (when shown) an ExportSuccess panel stacked above it (see
    ACTION_DOCK_CLASS's own doc in AppShell.tsx). Positioning lives here, on
    the OUTER dock wrapper, not on `.action-cluster` itself: a plain flex
    column bottom-anchored by `bottom` means the panel simply pushes the
-   cluster down from a fixed bottom edge when it mounts — no height
+   cluster down from a fixed bottom edge when it mounts. No height
    measurement needed to stack the two. Desktop hovers the dock over the
-   viewer bottom; mobile rides it on the sheet's top edge — see the mobile
+   viewer bottom; mobile rides it on the sheet's top edge, see the mobile
    override below. */
 .action-dock {
   position: absolute;
@@ -548,7 +548,7 @@ button:disabled { cursor: default; }
   /* Centred by transform, so nothing else bounds it: at 320px the Download +
      Share cluster's intrinsic 326px hung 3px off BOTH edges, clipping the
      primary action. Capping it makes the cluster the flex container it already
-     is — the export label is `truncate` inside a `min-w-0` wrapper, so it
+     is: the export label is `truncate` inside a `min-w-0` wrapper, so it
      shrinks to fit instead of overflowing. */
   max-width: calc(100% - 1rem);
 }
@@ -569,10 +569,10 @@ button:disabled { cursor: default; }
   }
 }
 
-/* "Preview out of date" (manual mode) / "Updating…" (auto mode) — top-centre
+/* "Preview out of date" (manual mode) / "Updating…" (auto mode): top-centre
    over the viewer. Share one slot: StaleBanner returns null while
    autoRender is on and UpdatingChip only ever shows while it's on, so the
-   two are mutually exclusive — see UpdatingChip's own doc. */
+   two are mutually exclusive, see UpdatingChip's own doc. */
 .stale-banner, .updating-chip {
   position: absolute;
   top: calc(0.75rem + env(safe-area-inset-top, 0px));
@@ -588,7 +588,7 @@ button:disabled { cursor: default; }
   }
 }
 
-/* One-time viewer gesture hint (ViewerGestureHint) — bottom-centre, riding
+/* One-time viewer gesture hint (ViewerGestureHint): bottom-centre, riding
    above the export dock: the dock's own `bottom` (0.75rem + safe-area) plus
    its height.
 
@@ -607,7 +607,7 @@ button:disabled { cursor: default; }
 }
 
 /* Mobile: the dock rides the sheet's live top edge instead of a fixed
-   bottom offset — mirror that same relationship here. */
+   bottom offset. Mirror that same relationship here. */
 @media (max-width: 860px) {
   .app-shell__mobile .viewer-hint {
     bottom: calc(var(--sheet-top) + 0.6rem + var(--action-dock-h, 3.25rem));
@@ -618,11 +618,11 @@ button:disabled { cursor: default; }
   }
 }
 
-/* One-time "swipe up for settings" nudge (SheetSwipeHint) — mobile only, shown
+/* One-time "swipe up for settings" nudge (SheetSwipeHint): mobile only, shown
    on a first-visit peek. Centred just above the sheet's live top edge, in the
    same over-sheet slot as the gesture hint (which AppShell suppresses while
    this shows, so they never stack) and clearing the dock by the same measured
-   --action-dock-h — the readiness pill would otherwise cover this nudge, and
+   --action-dock-h: the readiness pill would otherwise cover this nudge, and
    it is a once-per-browser cue on an 8s timer, so covering it loses it for
    good. Opacity easing rides on the component's own `transition-opacity`
    utility. */
@@ -638,12 +638,12 @@ button:disabled { cursor: default; }
 
 /* The on-model text editor (ViewerEditOnModel) needs no rule here: it is
    positioned in JS, clamped to the viewer around the mesh click that opened it,
-   and it carries no permanent chip — the editor is a pointer shortcut over the
+   and it carries no permanent chip. The editor is a pointer shortcut over the
    panel's own text box. A chip at the mobile viewer's top-left would sit in the
    same slot as `.dimension-info` above and cover it. */
 
 /* ═══════════════════════════════════════════════════════════════
-   STATUS PILL — render state chip
+   STATUS PILL: render state chip
    ═══════════════════════════════════════════════════════════════ */
 
 @keyframes pill-pulse {
@@ -661,8 +661,8 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   BOTTOM SHEET — persistent detented sheet for mobile
-   Detents: peek (72 px) / half (~52 vh) / full (all but the model strip —
+   BOTTOM SHEET: persistent detented sheet for mobile
+   Detents: peek (72 px) / half (~52 vh) / full (all but the model strip,
    see --sheet-full-gap and BottomSheet's FULL_TOP_GAP)
    ═══════════════════════════════════════════════════════════════ */
 
@@ -672,7 +672,7 @@ button:disabled { cursor: default; }
    this is purely about what the visitor can see.
 
    --sheet-full-gap is published on `.app-shell__mobile` by AppShell, from the
-   value BottomSheet computes (FULL_TOP_GAP + the measured notch inset) — one
+   value BottomSheet computes (FULL_TOP_GAP + the measured notch inset): one
    definition of the number, in the module that owns the detent model. The
    `0` fallback covers the frames before that lands and anywhere the sheet
    isn't mounted; a full-height scrim is the safe direction to be wrong in,
@@ -708,7 +708,7 @@ button:disabled { cursor: default; }
      the fixed-height peek detent and clip the tab row on devices with an inset. */
 }
 
-/* Drag handle — full width, tap cycles detents */
+/* Drag handle: full width, tap cycles detents */
 .sheet-handle {
   display: flex;
   align-items: center;
@@ -721,14 +721,14 @@ button:disabled { cursor: default; }
   -webkit-user-select: none;
 }
 
-/* The drag handle is a 22px-tall strip — the one target genuinely under WCAG
+/* The drag handle is a 22px-tall strip: the one target genuinely under WCAG
    2.2 SC 2.5.8's 24x24 minimum, and it sits directly above the tab row, so the
    spacing exception doesn't clearly rescue it. The visible bar is unchanged;
    only the hit area grows.
 
    This lives HERE, immediately after the base rule, rather than up with the
    other coarse-pointer target sizes: it overrides the same `padding` shorthand,
-   at the same specificity, in the same cascade layer — so source order decides,
+   at the same specificity, in the same cascade layer, so source order decides,
    and up there it lost silently. The neighbours up there set `min-height`/
    `min-width`, which nothing else re-declares, so they are unaffected. */
 @media (pointer: coarse) {
@@ -741,7 +741,7 @@ button:disabled { cursor: default; }
   border-radius: 2px;
   background: var(--line);
   transition: background 0.12s;
-  /* Purely visual — let the handle (touch-action: none) own the pointer gesture. */
+  /* Purely visual: let the handle (touch-action: none) own the pointer gesture. */
   pointer-events: none;
 }
 
@@ -769,14 +769,14 @@ button:disabled { cursor: default; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   PARAM FORM — sticky group headers + the collapsible-group marker
+   PARAM FORM: sticky group headers + the collapsible-group marker
    (The rest of the form is utility-styled in ParamForm.tsx; the ▸ marker's
-   ::before/rotate pair stays here — the utility-variant spelling is
+   ::before/rotate pair stays here, the utility-variant spelling is
    unreadable, and reduced-motion also targets it below.)
    ═══════════════════════════════════════════════════════════════ */
 
 /* A group's header pins to the top of the scroll port while you are anywhere
-   inside that group, so the form always says which section you are reading —
+   inside that group, so the form always says which section you are reading,
    and the header stays tappable, so you can fold the group you're in from
    wherever you've scrolled to instead of hunting back up for it. That is what
    replaced the section navigator on the mobile sheet (see SheetTabs); the
@@ -785,12 +785,12 @@ button:disabled { cursor: default; }
 
    Sticky within the <details>, not the scroll container, so a header only
    holds the top for as long as its own group is on screen and the next group's
-   header pushes it out — the standard sticky-list behaviour.
+   header pushes it out: the standard sticky-list behaviour.
 
    The background is required, not decoration: without it the form's rows would
    scroll visibly THROUGH the pinned text. It has to be OPAQUE and it has to
    land on the same colour `.param-group` already shows, which is that group's
-   `bg-background/50` composited over the panel/sheet surface — both of which
+   `bg-background/50` composited over the panel/sheet surface: both of which
    are `--panel`. So: paint `--panel`, then the same 50% `--bg` layer on top.
    Reproducing the composite rather than picking one token is what keeps the
    pinned header from flashing a different shade than the group it belongs to.
@@ -808,7 +808,7 @@ button:disabled { cursor: default; }
     color-mix(in srgb, var(--bg) 50%, transparent),
     color-mix(in srgb, var(--bg) 50%, transparent)
   );
-  /* Round the fill to the group's INNER curve — the radius at the inside of
+  /* Round the fill to the group's INNER curve: the radius at the inside of
      its 1px border, which is what this sits against once the negative inline
      margins above have pushed it out to the padding edge.
      `border-radius: inherit` was doing neither job: it computed to 0 here (so
@@ -872,13 +872,13 @@ button:disabled { cursor: default; }
 } /* end @layer components */
 
 /* ═══════════════════════════════════════════════════════════════
-   FULL-DETENT MODEL STRIP — the one rule that must outrank Tailwind
+   FULL-DETENT MODEL STRIP: the one rule that must outrank Tailwind
    ═══════════════════════════════════════════════════════════════ */
 
 /* At the Full detent the sheet stops short of the top edge and leaves a live
    model strip (BottomSheet's FULL_TOP_GAP). The background is `inert` there
    (AppShell's M16 wiring), so the top bar, the export dock, the HUD and the
-   measurements panel are all non-interactive already — leaving them drawn
+   measurements panel are all non-interactive already: leaving them drawn
    would just cover the strip with controls nobody can press. Hiding them hands
    the whole strip to the model. `display: none` rather than opacity so
    Viewer's chrome-inset math (CHROME_SELECTORS) sees zero-size rects and
@@ -889,7 +889,7 @@ button:disabled { cursor: default; }
    `display` from Tailwind's own `grid` / `flex` utilities, which a
    components-layer rule can never beat. Inside `utilities` the cascade is back
    to plain specificity, and (0,3,0) here comfortably outranks a single utility
-   class — so one rule covers all four overlays instead of two mechanisms
+   class, so one rule covers all four overlays instead of two mechanisms
    covering two each. */
 @layer utilities {
   .app-shell__mobile[data-sheet-detent="full"] .mobile-top-bar,

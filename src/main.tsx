@@ -5,7 +5,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
 
 // StrictMode is dev-only (React's production build is a no-op for its extra
-// checks, so this costs nothing in the shipped bundle — see
+// checks, so this costs nothing in the shipped bundle, see
 // docs/architecture-review.md L1). It is safe here only because worker
 // construction happens inside a useEffect with matching cleanup (see
 // useRenderPipeline.ts): spawned as a render-time side effect instead, Strict
@@ -20,7 +20,7 @@ import "./index.css";
 // Root error boundary: an uncaught render error anywhere in the tree (not just
 // the Viewer or the SVG wizard, which have their own scoped boundaries) would
 // otherwise unmount past `#root` and leave a blank page with no on-screen
-// signal. This is the last line of defence — reload is the only generally
+// signal. This is the last line of defence: reload is the only generally
 // correct recovery at this scope, since app state itself may be what's broken.
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

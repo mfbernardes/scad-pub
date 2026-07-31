@@ -1,4 +1,4 @@
-// Tests src/lib/friendlyErrors.ts — the pure mapping from a failed
+// Tests src/lib/friendlyErrors.ts: the pure mapping from a failed
 // RenderResult to friendly headline/body/technical-details copy. See
 // src/lib/diagnostics.ts for the ASSERT_RE/WARNING_RE this reuses rather than
 // duplicates.
@@ -26,7 +26,7 @@ test("a fatal bootstrap failure wins priority over everything else", () => {
     fatal: true,
     log: [
       "[error] fetch failed (500 Internal Server Error): wasm/openscad.wasm",
-      // Even an assert line present alongside a fatal failure must not win —
+      // Even an assert line present alongside a fatal failure must not win:
       // bootstrap never got as far as running OpenSCAD in the first place.
       "[err] ERROR: Assertion 'x' failed in file f.scad, line 1",
     ],

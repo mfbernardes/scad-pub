@@ -1,4 +1,4 @@
-// capture-screens.mjs — capture a screenshot of every ScadPub view, in both
+// capture-screens.mjs: capture a screenshot of every ScadPub view, in both
 // the light and dark themes, at the desktop and mobile layouts, then bundle
 // them into a single zip.
 //
@@ -7,7 +7,7 @@
 // PNGs under screenshots/captures/<viewport>/<theme>/ and zips them to
 // screenshots/scadpub-screenshots.zip. On mobile it also walks the bottom sheet
 // through all three detents (peek/half/full) and each of its tabs (Presets,
-// Parameters) — Files is a toolbar-opened dialog now, not a tab, so it's
+// Parameters). Files is a toolbar-opened dialog now, not a tab, so it's
 // captured alongside Help/Licenses instead. Output lives under the gitignored
 // screenshots/ dir. Needs Chromium (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or a
 // `playwright install chromium`).
@@ -52,20 +52,20 @@ async function shot(page, dir, name) {
 /** Wait for a dialog the next shot is *supposed* to contain, and FAIL if it
  *  never opened. A capture script is allowed to skip things a config doesn't
  *  have, but "the trigger selector stopped matching" must not read the same as
- *  "captured fine" — that shipped a help screenshot with no dialog in it for
+ *  "captured fine", that shipped a help screenshot with no dialog in it for
  *  who knows how long. Anything genuinely optional stays guarded by `count()`
  *  before it gets here (see the Files dialog below).
  *
  *  Waits on `[data-slot="dialog-content"]`, NOT `[role="dialog"]`: Radix gives
- *  its Popover content that role too, so on mobile — where these triggers live
- *  inside the "⋮" overflow — the popover we just opened satisfies a bare
+ *  its Popover content that role too, so on mobile, where these triggers live
+ *  inside the "⋮" overflow. The popover we just opened satisfies a bare
  *  role wait all by itself. A missed trigger click would then leave the
  *  popover up and "pass" instantly, capturing the overflow menu instead of the
  *  dialog: the same false pass in a new costume.
  *
  *  `expectedName` additionally pins WHICH dialog opened. A dialog's accessible
- *  name is its visible TITLE — Radix points `aria-labelledby` at the
- *  DialogTitle, which beats Modal's own `aria-label` — so only pass a title a
+ *  name is its visible TITLE. Radix points `aria-labelledby` at the
+ *  DialogTitle, which beats Modal's own `aria-label`, so only pass a title a
  *  config cannot rewrite. "Open-source licenses" is hardcoded in
  *  LicensesModal; the Help title (`help.title`) and the Files title (an i18n
  *  key) are both overridable, so those get the structural check alone. */
@@ -137,7 +137,7 @@ async function captureViewport(context, base, kind, theme) {
     await sleep(250);
   }
 
-  // 2. Landing view — Tag design (the console auto-opens on its default notices).
+  // 2. Landing view. Tag design (the console auto-opens on its default notices).
   await shot(page, dir, "02-home-tag");
 
   // 3. Coin design.
@@ -175,7 +175,7 @@ async function captureViewport(context, base, kind, theme) {
     await sleep(200);
   }
 
-  // 8 / 5. Output console. The Output bell lives in the top bar in both layouts —
+  // 8 / 5. Output console. The Output bell lives in the top bar in both layouts:
   // the mobile top bar and the desktop CommandBar.
   const outputSel =
     kind === "mobile"
@@ -196,7 +196,7 @@ async function captureViewport(context, base, kind, theme) {
     await sleep(150);
   };
 
-  // Files dialog (BarActions' "Files" action — a toolbar icon on desktop, a
+  // Files dialog (BarActions' "Files" action: a toolbar icon on desktop, a
   // row in the mobile overflow). Only rendered when the config sets
   // `fileImport` (this repo's example config does); skip gracefully otherwise,
   // same guard as smoke.mjs's own file-import check, closing any overflow
@@ -207,7 +207,7 @@ async function captureViewport(context, base, kind, theme) {
   if (await filesBtn.count()) {
     await filesBtn.click().catch(() => {});
     // No expected name: the Files title comes from the i18n catalogue, so a
-    // `strings` override may rename it — the structural check still holds.
+    // `strings` override may rename it. The structural check still holds.
     await requireDialog(page, filesName);
     await sleep(300);
     await shot(page, dir, filesName);
@@ -275,7 +275,7 @@ async function main() {
     server.close();
   }
   // Bundle into a single zip (entries relative to screenshots/ → captures/...).
-  // Pure Node via fflate — no system `zip` binary needed (same principle as
+  // Pure Node via fflate: no system `zip` binary needed (same principle as
   // fetch-wasm.mjs, which unzips with fflate).
   const files = {};
   for (const entry of readdirSync(OUT_DIR, { recursive: true, withFileTypes: true })) {

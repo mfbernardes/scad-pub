@@ -1,4 +1,4 @@
-// ThemeToggle.tsx — the light → dark → auto cycle button, shared by the desktop
+// ThemeToggle.tsx: the light → dark → auto cycle button, shared by the desktop
 // CommandBar and the mobile top bar so both layouts offer the same control.
 import { Sun as SunIcon, Moon as MoonIcon, SunMoon as AutoThemeIcon } from "lucide-react";
 import { IconButton } from "./IconButton";

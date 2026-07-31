@@ -58,7 +58,7 @@ test("an empty or blank override falls through to git", () => {
 });
 
 test("returns undefined when git can't answer", () => {
-  // git missing, not a repository, dubious ownership, no commits — all surface
+  // git missing, not a repository, dubious ownership, no commits: all surface
   // as an empty run() result. A build must never fail over a missing stamp.
   assert.equal(scadpubVersion({ env: {}, git: gitStub("") }), undefined);
   assert.equal(scadpubVersion({ env: {}, git: gitStub("\n") }), undefined);
@@ -83,7 +83,7 @@ test("cleans up whatever it is handed", () => {
 });
 
 test("describes this checkout when it is a real git repository", (t) => {
-  // Integration check against the actual repo — skipped where the tests run
+  // Integration check against the actual repo: skipped where the tests run
   // from a git-less tree (release tarball, vendored copy), which is exactly the
   // case that must yield undefined rather than throw.
   let inRepo = true;

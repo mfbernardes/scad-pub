@@ -1,4 +1,4 @@
-// e2e-svg-wizard.mjs — manual end-to-end for the @svg field wizard. Drives the
+// e2e-svg-wizard.mjs: manual end-to-end for the @svg field wizard. Drives the
 // BUILT app: opens the tag design's @svg field, drops an SVG with issues, walks
 // the wizard (check -> fix -> use), and confirms the fixed SVG imports and the
 // 3D render updates. Run: node scripts/e2e-svg-wizard.mjs (after npm run build).
@@ -98,7 +98,7 @@ try {
   const layersVal = await page.locator('.param[data-param="svg_layers"] input').first().inputValue();
   check(/left:red/.test(layersVal) && /right:blue/.test(layersVal),
     `svg_layers derived from the drawing's colours (${layersVal})`);
-  // The drawing's canvas leads the string — without it the design can't centre
+  // The drawing's canvas leads the string, without it the design can't centre
   // the regions, which it imports uncentred to keep them registered.
   check(/^60x40,/.test(layersVal), `svg_layers leads with the drawing's canvas (${layersVal})`);
   await waitRendered(page, { timeout: 60000 });

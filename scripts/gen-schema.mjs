@@ -1,4 +1,4 @@
-// gen-schema.mjs — derive the configurator's parameter schema from a directory
+// gen-schema.mjs: derive the configurator's parameter schema from a directory
 // of OpenSCAD designs, parsing OpenSCAD's own Customizer syntax
 // (SECTION_RE / PARAM_RE, skipping the [Hidden] section). Generic: the source
 // directory, the design list, the always-on OpenSCAD features and the bundled
@@ -93,28 +93,28 @@ export { splitHelpMarkdown } from "./lib/help-file.mjs";
 
 // Every top-level key gen-schema (or its helpers) reads from scadpub.config.json.
 // A key outside this set is almost always a typo (`popups`, `fontfallback`, …)
-// that would otherwise be silently ignored, so — matching gen-schema's fail-fast
-// convention for unknown *nested* keys (colour tokens, license fields) — an
+// that would otherwise be silently ignored, so, matching gen-schema's fail-fast
+// convention for unknown *nested* keys (colour tokens, license fields): an
 // unrecognised top-level key fails the build. `$schema` is allowed so a config
 // can point at a JSON Schema for editor tooling without tripping the check.
-// Derived from scripts/lib/config-spec.mjs — the single declarative surface
-// description — rather than hand-maintained here; re-exported (not just used
+// Derived from scripts/lib/config-spec.mjs: the single declarative surface
+// description. Rather than hand-maintained here; re-exported (not just used
 // internally) because tests/gen-schema.test.mjs imports it directly.
 export { KNOWN_TOP_LEVEL_KEYS };
 
 // Extensions tried, in order, for a `designs[].presets.images` DIRECTORY
-// entry's per-preset lookup (see buildDesigns) — the same three image types
+// entry's per-preset lookup (see buildDesigns): the same three image types
 // the map form documents accepting (docs/config.md).
 const PRESET_IMAGE_EXTENSIONS = [".svg", ".png", ".webp"];
 
 // Path to the bundled English UI-text catalogue (src/locales/en.json),
-// resolved relative to this file rather than the config being built — it's
+// resolved relative to this file rather than the config being built: it's
 // part of the app, not the consumer's project. `strings` overrides are
 // validated against its key set (see parseStrings): a config key that isn't a
 // real catalogue key would otherwise be silently ignored by every `t()` call.
 const EN_CATALOG_PATH = fileURLToPath(new URL("../src/locales/en.json", import.meta.url));
 
-// Fail early and clearly when a configured path doesn't exist — these are the
+// Fail early and clearly when a configured path doesn't exist: these are the
 // most common ways a config drifts from the designs it points at.
 const makeMustExist = (configPath) => (abs, what) => {
   if (!existsSync(abs))
@@ -126,8 +126,8 @@ const makeMustExist = (configPath) => (abs, what) => {
 };
 
 // An id namespaces storage and is interpolated into a default filename
-// (`${id}.scad`), the URL deep link (`#d=${id}`), manifest shortcuts, and —
-// for the app-level id — the theme key inside index.html's inline pre-paint
+// (`${id}.scad`), the URL deep link (`#d=${id}`), manifest shortcuts, and,
+// for the app-level id: the theme key inside index.html's inline pre-paint
 // <script> string literal, so restrict it to a safe, path/URL/script-friendly
 // character set. Used for both the app id and every design id.
 const checkId = (id, what = "design id") => {
@@ -147,7 +147,7 @@ const extOf = (relPath) => {
 };
 
 // Load + sanity-check the config. Catches genuinely typo'd / stale top-level
-// keys — a whole-key typo would otherwise be silently ignored (see
+// keys: a whole-key typo would otherwise be silently ignored (see
 // KNOWN_TOP_LEVEL_KEYS).
 function loadConfig(configPath) {
   const config = JSON.parse(readFileSync(configPath, "utf-8"));
@@ -161,12 +161,12 @@ function loadConfig(configPath) {
   return config;
 }
 
-// title/id/description/lang/dir only — document chrome and storage
+// title/id/description/lang/dir only: document chrome and storage
 // namespacing, read by the running app itself. Everything that's a
 // manifest/icon-rasterizer INPUT ONLY (shortName, icon, iconMaskable,
 // themeColor/themeColorLight, backgroundColor, categories, screenshots,
-// shortcuts, install) now lives under the config's `pwa` block — see
-// parsePwa (scripts/lib/config-parsers.mjs) and CONFIG_SPEC.pwa's comment —
+// shortcuts, install) now lives under the config's `pwa` block, see
+// parsePwa (scripts/lib/config-parsers.mjs) and CONFIG_SPEC.pwa's comment,
 // and is computed separately, below, so it can feed both `generatePwaAssets`
 // and (unchanged) designs.json's own flat `themeColor`/`themeColorLight` keys.
 function parseIdentity(config) {
@@ -185,26 +185,26 @@ function parseIdentity(config) {
 // already present in public/fonts (the Liberation fallbacks that ship with the
 // app) or a path into the source tree (a design repo bundling its own font),
 // which we copy into public/fonts so it is served like the rest. Also writes
-// the fontconfig config the renderer mounts — optionally pinning a weak
+// the fontconfig config the renderer mounts: optionally pinning a weak
 // last-resort fallback family (config.render.fontFallback) so an imported font
 // can't hijack Fontconfig's global default; generated into the served tree
 // (and hashed into renderHash) so the matching rules stay config-driven.
 // `fonts`/`fontFallback` moved under `render` (from the top level) since this
-// commit — both are genuine render inputs, so they stay part of renderHash
+// commit: both are genuine render inputs, so they stay part of renderHash
 // exactly as before; only where they're READ from the config changed.
 // `register`/`checkContained` are the H5/H6 helpers from createAssetTools:
 // a source-tree font is checked against SOURCE containment (a font path is a
 // source-owned path, like a design or asset) and its destination is
 // registered so two `fonts` entries that share a basename from different
 // source directories collide loudly instead of one silently overwriting the
-// other. `fontCopies` collects every dest this call actually wrote — the
+// other. `fontCopies` collects every dest this call actually wrote: the
 // tracked Liberation fallbacks under public/fonts are never written here (the
 // "already present" branch below is a no-op), so they never enter the list
 // and stay outside the M8 generated-font lifecycle the caller reconciles.
 //
-// M9 — the transient-copy warning: the M8 reconciliation above (see
+// M9: the transient-copy warning: the M8 reconciliation above (see
 // destinations.mjs) means a font copied from outside the current build's own
-// config is never a permanent leak — the NEXT build against this checkout's
+// config is never a permanent leak. The NEXT build against this checkout's
 // own config removes it. The real exposure is the window in between: if
 // someone runs `git add -A` in that window, the untracked font rides along
 // into an unrelated commit. `runGitQuiet`/`isRiskyExternalFontCopy` decide,
@@ -219,7 +219,7 @@ function runGitQuiet(dir, args) {
   try {
     return execFileSync("git", ["-C", dir, ...args], {
       encoding: "utf8",
-      // Inherit nothing on stdin, capture stdout, discard git's diagnostics —
+      // Inherit nothing on stdin, capture stdout, discard git's diagnostics:
       // a build must never fail, or get noisier, just because this probe ran.
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 5000,
@@ -232,13 +232,13 @@ function runGitQuiet(dir, args) {
 // True only when copying `srcAbs` to `outPublicDir/fonts/` risks landing an
 // external deployment's font where a `git add -A` could sweep it into a
 // commit:
-//   - `outPublicDir` must sit inside a git working tree at all — a release
+//   - `outPublicDir` must sit inside a git working tree at all. A release
 //     tarball or an npm-packed tree isn't one, and nothing there is ever
 //     `git add`-ed from.
 //   - that checkout's HEAD must be ATTACHED to a branch. A checkout built
-//     purely to be thrown away — e.g. a consumer's tools/build-site.sh, which
+//     purely to be thrown away: e.g. a consumer's tools/build-site.sh, which
 //     `git checkout --detach`s a fresh ScadPub clone into a directory ITS OWN
-//     .gitignore excludes, purely to build against its own config — is never
+//     .gitignore excludes, purely to build against its own config. Is never
 //     the target of a stray `git add -A`. Flagging it would cry wolf on
 //     exactly the workflow the M8 reconciliation already handles silently
 //     every run.
@@ -256,12 +256,12 @@ export function isRiskyExternalFontCopy(outPublicDir, srcAbs, git = runGitQuiet)
 }
 
 function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained, register, fontCopies } = {}) {
-  // The font tree is generated output too, so — like the scad tree — it is
+  // The font tree is generated output too, so (like the scad tree) it is
   // validated, digested and family/face-read here but NOT written into the live
   // public/fonts until generate()'s commit point (see the caller). Otherwise a
   // later fallible step (design parsing, asset validation, PWA rasterization)
   // would leave a replaced font (or a rewritten fonts.conf) paired with the
-  // PREVIOUS build's scad/schema — an internally inconsistent last-good set.
+  // PREVIOUS build's scad/schema: an internally inconsistent last-good set.
   // `fontWrites` are the deferred source->dest copies; `fontsConf` is the
   // rendered config content to write at commit; `fontPaths` maps each font name
   // to where its bytes can be READ right now (its source file, or an
@@ -291,7 +291,7 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
         }
       } else if (existsSync(join(outPublicDir, "fonts", name))) {
         // An already-bundled font (e.g. the Liberation fallbacks tracked under
-        // public/fonts) — read it in place; it isn't rewritten, so no staging.
+        // public/fonts): read it in place; it isn't rewritten, so no staging.
         fontPaths[name] = join(outPublicDir, "fonts", name);
       } else {
         // Neither a source-tree path nor an already-bundled font. A silent skip
@@ -309,7 +309,7 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
   const FONT_FALLBACK = parseFontFallback(config.render?.fontFallback, "render.fontFallback");
   const fontsConf = outPublicDir ? renderFontsConf(FONT_FALLBACK) : null;
   // The bundled fonts' real embedded family names, so the app can decide font
-  // availability by family rather than filename — plus their face descriptions
+  // availability by family rather than filename, plus their face descriptions
   // ({ family, style }), which the app's font selector lists under friendly
   // names. Read from each font's current source location; only meaningful in a
   // real build (outPublicDir present).
@@ -348,14 +348,14 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
   return { FONTS, FONT_FAMILIES, FONT_FACES, fontPaths, fontsConf, fontWrites };
 }
 
-// Copy a BROWSER-FACING file (logo, design picker icon, PWA icon — always
+// Copy a BROWSER-FACING file (logo, design picker icon, PWA icon, always
 // rendered in an <img>/<use>/CSS context, never fed to OpenSCAD) from `src` to
-// `dest`. An .svg source is run through sanitizeSvg() first (M13 — see
+// `dest`. An .svg source is run through sanitizeSvg() first (M13, see
 // docs/config.md "SVG asset trust model" and scripts/lib/svg-sanitize.mjs):
 // cheap defense-in-depth so a served SVG can't execute as an active document
 // if it's ever navigated to directly, without needing to trust every byte of
 // operator-supplied markup. Anything else (PNG, …) copies verbatim. Deliberately
-// NOT used for render-input assets (copyAsset, below) — those are geometry
+// NOT used for render-input assets (copyAsset, below): those are geometry
 // OpenSCAD's import()/surface() reads, not display markup, and are covered by
 // the operator-input trust boundary + public/_headers instead.
 function copyBrowserFacing(src, dest) {
@@ -375,7 +375,7 @@ function copyLogoAssets(config, CONFIG_DIR, outScadDir, mustExist, register) {
   if (!config.logo) return null;
   // Map each resolved source to the URL it was copied to, so a single source
   // used for both themes is copied once and two distinct sources never clobber
-  // each other — even when they share a basename (light/logo.svg vs
+  // each other, even when they share a basename (light/logo.svg vs
   // dark/logo.svg), which a flat basename would silently overwrite. `register`
   // (H6) additionally catches a logo basename colliding with some other
   // generated output class (a design, asset, icon, doc, or extraCss) sharing
@@ -426,7 +426,7 @@ function resolveDesignList(config, SOURCE) {
     }
     return raw;
   };
-  // `designs[].presets.images` alone additionally accepts a plain STRING — a
+  // `designs[].presets.images` alone additionally accepts a plain STRING: a
   // config-relative directory, looked up per-preset by slug in buildDesigns
   // (scripts/lib/preset-slug.mjs) instead of naming every preset by hand. The
   // map form's shape check (checkStringMap above) still applies to the object
@@ -454,9 +454,9 @@ function resolveDesignList(config, SOURCE) {
       const id = checkId(d.id);
       // A designs[] entry's own keys (id/label/file/heavy/group/presets)
       // never got the same unknown-key rejection every other nested group
-      // has — a stale or mistyped key (a flat 'icon', or a leftover
+      // has: a stale or mistyped key (a flat 'icon', or a leftover
       // 'description'/'media'/'review' from before a design's own metadata
-      // became the sole source — see docs/annotations.md) was silently
+      // became the sole source, see docs/annotations.md) was silently
       // dropped instead of failing the build. Reuse the exact same error
       // (`unknownNestedKeyError`, the one `applyGroupSpec` itself raises for
       // 'presets' below) against the spec's own `designs.items.properties`,
@@ -469,7 +469,7 @@ function resolveDesignList(config, SOURCE) {
         if (!(key in CONFIG_SPEC.designs.items.properties))
           throw unknownNestedKeyError(`designs[${id}]`, CONFIG_SPEC.designs.items, key);
       // Preset-image presentation, nested under `presets`. `applyGroupSpec`
-      // gives it unknown-key rejection for free — see config-spec.mjs's
+      // gives it unknown-key rejection for free, see config-spec.mjs's
       // DESIGN_PRESETS_SPEC comment. `presets.images` is `custom: true` (its
       // value needs a cross-reference against parse results only
       // buildDesigns has), so this only validates the surrounding object's
@@ -509,8 +509,8 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     const presetRel = d.file.replace(/\.scad$/, ".json");
     const presetAbs = join(SOURCE, presetRel);
     // H5: the sibling parameterSets file is copied into the served tree like the
-    // .scad above, so it must clear the same symlink-containment check first —
-    // otherwise a <name>.json symlinked outside SOURCE would be followed and its
+    // .scad above, so it must clear the same symlink-containment check first.
+    // Otherwise a <name>.json symlinked outside SOURCE would be followed and its
     // target copied into public/scad/ (exactly the escape checkContained refuses
     // for the design's own source). checkContained throws on an escape.
     const presets = existsSync(presetAbs) ? [presetRel] : [];
@@ -519,7 +519,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       copyAsset(presetRel);
     }
     // Description/icon/image/doc come ONLY from the design's own annotations
-    // now — `// @description`/`// @icon`/`// @image`/`// @doc` (see
+    // now: `// @description`/`// @icon`/`// @image`/`// @doc` (see
     // docs/annotations.md); there is no config-level override left. Each
     // path resolves relative to the design's own .scad file, i.e. within
     // SOURCE, so each is also checked to stay contained in it. Copy icon/
@@ -567,16 +567,16 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     }
     // Bundled-preset thumbnails (`designs[].presets.images`), either form:
     //   - MAP: each key must name an actual preset in the sibling
-    //     parameterSets file — the same typo-protection stance as the rest of
+    //     parameterSets file. The same typo-protection stance as the rest of
     //     the config, so a stale/misspelled preset name fails the build
     //     instead of silently rendering a text-only card forever. Each value
     //     is a config-relative image path, copied under a deterministic
-    //     `<id>-preset-<n>.<ext>` name (n = insertion order — the preset NAME
+    //     `<id>-preset-<n>.<ext>` name (n = insertion order: the preset NAME
     //     itself, not the filename, is what the UI keys off of).
     //   - DIRECTORY: every bundled preset's image is looked up by slugifying
     //     its name (scripts/lib/preset-slug.mjs) and trying the supported
     //     extensions in turn. A preset with no matching file simply has no
-    //     image — preset images are optional per preset either way — but the
+    //     image (preset images are optional per preset either way) but the
     //     directory itself must exist, and the match count is logged so a
     //     wrong-but-existing directory (e.g. every name misspelled) is
     //     visible in the build log rather than silently yielding zero images.
@@ -635,7 +635,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       if (!Object.keys(presetImages).length) presetImages = undefined;
     }
     // `reviewLabels`: each declared parameter's own `// @review "<label>"`
-    // annotation (see scripts/lib/params.mjs and docs/annotations.md) — the
+    // annotation (see scripts/lib/params.mjs and docs/annotations.md). The
     // sole source, with no config-level override. A label can only ever be
     // declared on a real parameter in the first place, so there's no separate
     // cross-reference to run here.
@@ -644,14 +644,14 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       if (p.reviewLabel) reviewLabels[p.name] = p.reviewLabel;
     }
     // `reviewNote`: the design's own file-level `// @reviewNote "<text>"`
-    // annotation — the sole source now, with no config-level override left.
+    // annotation. The sole source now, with no config-level override left.
     const reviewNote = meta.reviewNote ?? null;
     // Strip the transient `reviewLabel` annotation flag off each param before
     // it reaches designs.json: it's already folded into `reviewLabels` above,
     // and src/openscad/types.ts's ParamBase carries no such field. That's
     // deliberate, not an oversight: types.ts sits in worker.ts's hashed
     // import closure (scripts/lib/worker-deps.mjs feeds scripts/lib/hash.mjs's
-    // computeRenderHash), so any edit to it — comments included — changes
+    // computeRenderHash), so any edit to it (comments included) changes
     // renderHash and evicts every deployment's persisted render cache. Real
     // edits are fine, just worth batching deliberately.
     const cleanParams = params.map(({ reviewLabel, ...rest }) => rest);
@@ -693,8 +693,8 @@ function resolveDefaultDesign(config, designs) {
 // nothing to choose between cannot have that screen, so the config is wrong
 // rather than quietly meaning something else.
 //
-// It used to mean something else — below two designs the popup silently fell
-// back to a plain notice — and src/lib/popup.ts's `isDesignChooser` records what
+// It used to mean something else: below two designs the popup silently fell
+// back to a plain notice, and src/lib/popup.ts's `isDesignChooser` records what
 // that cost. Enforcing the invariant here, once, where every other config
 // mistake is caught, is what lets every consumer go back to reading the mode.
 function checkPopupMode(popup, designs) {
@@ -731,7 +731,7 @@ function checkPopupMode(popup, designs) {
 // but isn't in the set gen-schema was told to bundle.
 function checkAssetCoverage(designs, walkedByDesign, assets) {
   // A design's use/include graph may legitimately reach another design's own
-  // .scad file — buildDesigns/copyAsset already stages every design file
+  // .scad file: buildDesigns/copyAsset already stages every design file
   // regardless of `assets`, so that's covered too, not just the configured set.
   const designFiles = new Set(designs.map((d) => d.file));
   const uncovered = walkedByDesign
@@ -751,8 +751,8 @@ function checkAssetCoverage(designs, walkedByDesign, assets) {
   );
 }
 
-// Resolve one help "pane" — the top-level `help` object itself, or a single
-// `help.tabs[]` entry — against its optional `file` key (see docs/config.md
+// Resolve one help "pane": the top-level `help` object itself, or a single
+// `help.tabs[]` entry. Against its optional `file` key (see docs/config.md
 // "Sourcing help from Markdown files" and scripts/lib/help-file.mjs). `file`
 // is an alternative to writing `sections` (and `intro`) inline: the
 // referenced Markdown file's content before the first `##` heading becomes
@@ -763,7 +763,7 @@ function resolveHelpPane(raw, CONFIG_DIR, mustExist, what) {
   if (raw?.file == null) return raw;
   // Validate BEFORE resolving: same shape as prose-files.mjs's resolveFileField
   // (this is the same "<field>File" idiom, just with `sections` synthesized
-  // from Markdown instead of a single string) — a non-string or blank value
+  // from Markdown instead of a single string). A non-string or blank value
   // must fail with the usual optional-string message, not escape as a raw
   // Node TypeError out of node:path's resolve() below.
   if (typeof raw.file !== "string" || !raw.file.trim())
@@ -780,13 +780,13 @@ function resolveHelpPane(raw, CONFIG_DIR, mustExist, what) {
 }
 
 // Optional `help` config block, with any `file` (top-level, or per-tab)
-// resolved to its derived `intro`/`sections` first — see resolveHelpPane
+// resolved to its derived `intro`/`sections` first, see resolveHelpPane
 // above. Everything else about `help` is passed through verbatim (see
 // CONFIG_SPEC.help's comment): this is the only pre-processing it gets.
 export function resolveHelp(raw, CONFIG_DIR, mustExist) {
   if (raw == null) return null;
   // `help` has never had its own shape check (see CONFIG_SPEC.help's
-  // comment: "passed through verbatim") — a non-object value passes through
+  // comment: "passed through verbatim"). A non-object value passes through
   // completely unchanged here too, exactly as before this function existed.
   // Only a genuine object gets the 'file' treatment below.
   if (typeof raw !== "object" || Array.isArray(raw)) return raw;
@@ -825,16 +825,16 @@ function copyExtraCss(config, CONFIG_DIR, outScadDir, mustExist, register) {
 }
 
 // v2 precache manifest, read by public/sw.js at install:
-//   shell — small runtime assets cached into the per-build shell cache;
-//   bin   — the big version-pinned binaries (the ~10 MB WASM + fonts),
+//   shell. Small runtime assets cached into the per-build shell cache;
+//   bin. The big version-pinned binaries (the ~10 MB WASM + fonts),
 //           warmed into the render worker's own BIN_CACHE (same cache,
-//           same keys — no double store) so offline rendering works even
+//           same keys: no double store) so offline rendering works even
 //           before the first render.
 // H4: append a `?v=<digest>` query to a binary asset's served path so its
 // fetch/Cache-Storage identity is content-addressed. Mirrors
 // src/lib/assetUrl.ts's versionedAssetUrl exactly (that file is TypeScript,
 // loaded by the worker/main-thread runtime; this one is the same one-line
-// scheme applied where gen-schema writes the SW's warm-up URL list — both
+// scheme applied where gen-schema writes the SW's warm-up URL list: both
 // sides must compute byte-identical strings for a given (path, digest) so a
 // Cache Storage entry worker.ts writes is the exact one the service worker's
 // warm-up either finds already present or writes itself).
@@ -844,8 +844,8 @@ function versionedPath(path, digest) {
 
 function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo, extraCss, iconFiles }) {
   // M8: precache only the icon files the PWA-asset step actually wrote
-  // (`iconFiles`), not a fixed assumed set — otherwise a missing rasterizer
-  // (or one that failed, though that now fails the build outright — see
+  // (`iconFiles`), not a fixed assumed set. Otherwise a missing rasterizer
+  // (or one that failed, though that now fails the build outright, see
   // pwa-assets.mjs) would have the service worker try to precache PNGs that
   // were never generated.
   const shell = new Set([
@@ -854,7 +854,7 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
     // H3: the render worker fetches the WASM glue and fonts.conf content-
     // addressed (versionedAssetUrl in worker.ts), so precache the SAME
     // ?v=<digest> URLs here. Cache Storage matches the query string, so an
-    // unversioned shell entry is a miss for the worker's versioned request —
+    // unversioned shell entry is a miss for the worker's versioned request:
     // an app taken offline before its first render would fail to bootstrap.
     versionedPath("wasm/openscad.js", schema.binAssets?.glue),
     versionedPath("fonts/fonts.conf", schema.binAssets?.fontsConf),
@@ -877,9 +877,9 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
     shell: [...shell].sort(),
     bin: {
       cache: `openscad-wasm-bin-${WASM_VERSION}`,
-      // H4: content-addressed via versionedPath — see its comment. Must match
+      // H4: content-addressed via versionedPath, see its comment. Must match
       // exactly what worker.ts fetches for the same file (resolveWasmModule
-      // for the wasm, cachedBuffer for the fonts — both derive the query from
+      // for the wasm, cachedBuffer for the fonts: both derive the query from
       // schema.binAssets), so the service worker's
       // warm-up and the worker's own first-render fetch always agree on the
       // Cache Storage key for a given build's bytes.
@@ -896,14 +896,14 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
 }
 
 // designs.json vs. scadpub.config.json shape: mirror the config's grouping
-// here when the app shares the concept (as `viewer` does — see
+// here when the app shares the concept (as `viewer` does, see
 // src/openscad/types.ts's Schema comment); keep this file's existing flat
 // shape when it doesn't. `render.features`/`.format`/`.fonts`/`.fontFallback`
 // land as this schema's own flat `features`/`format`/`fonts`/`fontFallback`
 // (the app already reads those flat; only `render.heavyMs`/`.cache` nest,
 // under `render`, since that pairing IS its own build-time-tuning concept).
 // `pwa` (shortName/icon/iconMaskable/backgroundColor/categories/screenshots/
-// shortcuts/themeColor/install) doesn't appear here at all — every one of its
+// shortcuts/themeColor/install) doesn't appear here at all: every one of its
 // keys is a manifest.webmanifest / icon-rasterizer input with no runtime
 // reader, so there is no app-facing "pwa" concept to mirror it into.
 
@@ -941,7 +941,7 @@ export function generate({
 
   // popup.body / fileImport.note / licenses[].text may each be written
   // inline OR sourced from a config-relative file (the sibling '<field>File'
-  // key) — see scripts/lib/prose-files.mjs. Resolved here, BEFORE
+  // key), see scripts/lib/prose-files.mjs. Resolved here, BEFORE
   // parsePopup/parseFileImport/parseLicenses run below, so each sees its
   // field already populated exactly as if it had been written inline; this
   // content is inlined into designs.json and never reaches the browser as
@@ -988,7 +988,7 @@ export function generate({
 
   // SOURCE-bound asset resolution (source-relative paths, config `assets`
   // expansion, the use/include dep-graph walk) plus the symlink-containment
-  // policy (H5) — see scripts/lib/assets.mjs. Created early so bundleFonts
+  // policy (H5), see scripts/lib/assets.mjs. Created early so bundleFonts
   // below (a source-owned path, like a design or dependency) can use it too.
   const { relPosix, expandConfiguredAssets, collectDeps, checkContained } = createAssetTools({
     SOURCE,
@@ -1000,23 +1000,23 @@ export function generate({
   // write aimed at the same path fails the build, naming both owners.
   const registry = createDestinationRegistry();
   // Font files copied from SOURCE this run (not the tracked/already-bundled
-  // ones bundleFonts leaves untouched) — reconciled against the previous
+  // ones bundleFonts leaves untouched): reconciled against the previous
   // run's manifest below (M8).
   const fontCopies = [];
 
   // `features`/`format`/`fonts`/`fontFallback` now live under `render` (moved
-  // in from the top level) — they're genuine render inputs, so they stay
+  // in from the top level): they're genuine render inputs, so they stay
   // folded into renderHash below exactly as before; only their config PATH
   // moved. `render.heavyMs`/`render.cache` are display/perf tuning and stay
-  // OUT of renderHash — see CONFIG_SPEC.render's comment and RENDER below.
+  // OUT of renderHash, see CONFIG_SPEC.render's comment and RENDER below.
   const FEATURES = parseStringArray(config.render?.features, "render.features");
   const FORMAT = parseFormat(config.render?.format, "render.format");
   // The 3D viewer's presentation, framing (restOnGrid) and per-control
-  // visibility — all display-only, so VIEWER reaches the schema without
+  // visibility: all display-only, so VIEWER reaches the schema without
   // touching renderHash.
   const VIEWER = parseViewer(config.viewer);
   // Optional build-time render tuning (heavy-render threshold + cache
-  // sizing) — NOT features/format/fonts/fontFallback, which parseRender
+  // sizing), NOT features/format/fonts/fontFallback, which parseRender
   // deliberately ignores (see its own comment); those are computed above/
   // below instead. Validated; absent -> null -> the app keeps its built-in
   // defaults.
@@ -1038,18 +1038,18 @@ export function generate({
   // can restyle the app entirely from its config. Absent -> null.
   const COLORS = parseColors(config.colors);
   // Build-time UI behaviour config (panel side, default state, etc.). `install`
-  // moved to `pwa.install` (see PWA below) — it's spliced back onto UI just
+  // moved to `pwa.install` (see PWA below): it's spliced back onto UI just
   // below so `schema.ui.install` still carries it, unmoved: App.tsx reads
   // `schema.ui?.install`, and this reorg only moves the CONFIG surface, not
   // designs.json's shape (see gen-schema.mjs's schema-assembly comment).
   const UI = { ...parseUi(config.ui) };
-  // Manifest-only PWA chrome (install metadata, icons, theming) — see
+  // Manifest-only PWA chrome (install metadata, icons, theming), see
   // CONFIG_SPEC.pwa's comment for why none of this is mirrored into
   // designs.json as its own "pwa" object. Always resolves (like parseUi/
   // parseViewer), defaults throughout when `config.pwa` is entirely absent.
   const PWA = parsePwa(config.pwa);
   UI.install = PWA.install;
-  // `shortName` moved to `pwa.shortName`, still falling back to `title` —
+  // `shortName` moved to `pwa.shortName`, still falling back to `title`:
   // matches designs.json's existing flat `shortName` field exactly.
   const SHORT_NAME = PWA.shortName ?? TITLE;
   // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
@@ -1060,15 +1060,15 @@ export function generate({
   // -> null -> no popup.
   const POPUP = parsePopup(config.popup);
   // Optional help content; passed through verbatim (any `file` resolved to
-  // its derived intro/sections first — see resolveHelp). Absent -> null ->
+  // its derived intro/sections first, see resolveHelp). Absent -> null ->
   // the app falls back to its generic, project-agnostic default help.
   const HELP = resolveHelp(config.help, CONFIG_DIR, mustExist);
-  // ui.afterExport.helpTab (if set) must name an existing Help tab — checked
+  // ui.afterExport.helpTab (if set) must name an existing Help tab: checked
   // here rather than inside parseUi (config-parsers.mjs) because it's a
   // cross-field validation against HELP, only available now. Mirrors
   // HelpModal's own tab-list logic (top-level `help.sections` synthesize a
-  // leading tab labelled "Overview" when `help.tabs` are also present — see
-  // HelpModal.tsx's own HelpModal() — so a value that passes here is
+  // leading tab labelled "Overview" when `help.tabs` are also present, see
+  // HelpModal.tsx's own HelpModal(), so a value that passes here is
   // guaranteed to match a real tab the modal renders).
   if (UI.afterExport?.helpTab) {
     const tabLabels = HELP?.tabs?.length
@@ -1090,7 +1090,7 @@ export function generate({
   // appended (never replacing the built-ins) by the in-app licenses modal.
   const LICENSES_EXTRA = parseLicenses(config.licenses);
   // Optional per-deployment UI text overrides (config's `strings` key),
-  // validated against the bundled English catalogue's key set — see
+  // validated against the bundled English catalogue's key set, see
   // src/lib/i18n.ts and docs/config.md's `strings` section. Absent -> {}.
   const EN_CATALOG_KEYS = Object.keys(JSON.parse(readFileSync(EN_CATALOG_PATH, "utf-8")));
   const STRINGS = parseStrings(config.strings, EN_CATALOG_KEYS);
@@ -1136,13 +1136,13 @@ export function generate({
   // Shared dependency files: from the config's `assets` (files/directories) when
   // given, otherwise discovered by following each design's use/include graph.
   //
-  // Either way, the use/include graph is now ALWAYS walked (collectDeps) —
-  // even when `assets` is explicit — purely to check it against the
+  // Either way, the use/include graph is now ALWAYS walked (collectDeps),
+  // even when `assets` is explicit: purely to check it against the
   // configured set below (checkAssetCoverage); explicit `assets` still wins
   // as the actual set of files copied. See checkAssetCoverage's own comment
   // for why this closes a real silent-failure gap, and for how its error
   // stays distinct from collectDeps' own "not found" (a dependency missing
-  // from disk, not merely missing from `assets`) — that one can still throw
+  // from disk, not merely missing from `assets`), that one can still throw
   // right here, unchanged, since collectDeps runs its existence check
   // regardless of which branch below ends up using the result.
   const assets = new Set();
@@ -1160,12 +1160,12 @@ export function generate({
   // The staged scad tree is complete, but it is NOT committed to the live
   // outScadDir yet: the swap is deferred to the very end (below), after the
   // fallible PWA generation and once the schema is in hand, so the whole
-  // output — render sources, PWA/font assets, and designs.json — commits as
+  // output (render sources, PWA/font assets, and designs.json) commits as
   // one unit. generatePwaAssets() itself never writes a byte: every icon,
   // splash, screenshot copy and manifest.webmanifest it would produce is
   // QUEUED into the `batch` it returns (see pwa-assets.mjs's write()/copy()
   // helpers and its module comment) instead of touching outPublicDir
-  // directly. The queue is only flushed — via commitPwaBatch — at the commit
+  // directly. The queue is only flushed (via commitPwaBatch) at the commit
   // point below, in the same breath as the scad-tree rename and the font-tree
   // copy. So a throw anywhere in generatePwaAssets (a malformed configured
   // icon, or a `pwa.screenshots[].src` that doesn't exist, validated well
@@ -1174,14 +1174,14 @@ export function generate({
   // icons/splashes/manifest, the old scad tree, and the old schema all still
   // match, exactly as if this run had never happened. Writing icons/splashes
   // to outPublicDir as soon as they rasterize would break that: a LATER failure
-  // in the same call — e.g. the screenshot existence check — would leave fresh
+  // in the same call (e.g. the screenshot existence check) would leave fresh
   // icons paired with the stale scad tree/schema the swap below never reached.
 
   // Generate the PWA icon set, iOS splash images and manifest.webmanifest
   // (skipped for the fixture-driven unit tests, which pass no outPublicDir).
-  // Nothing is written here — see the commit-point comment above. Returns the
+  // Nothing is written here, see the commit-point comment above. Returns the
   // iOS splash <link> descriptors vite injects into index.html, the icon
-  // files that will be written (M8), and the pending write batch itself —
+  // files that will be written (M8), and the pending write batch itself:
   // flushed below, and also the source of the written-path list the M8
   // lifecycle reconciliation below derives from it. It reads design
   // picker-icon dimensions from the STAGING scad dir (scadDir), since the
@@ -1217,7 +1217,7 @@ export function generate({
     format: FORMAT,
     fontPaths,
     fontsConf,
-    // H3: the id -> file routing map is part of the render contract — two
+    // H3: the id -> file routing map is part of the render contract. Two
     // designs swapping files preserves the mounted file set but changes which
     // model a cache keyed by design id should render.
     designRouting: designs.map((d) => ({ id: d.id, file: d.file })),
@@ -1227,7 +1227,7 @@ export function generate({
 
   // H4: per-file content digests for the big binary assets (wasm, glue, fonts,
   // fonts.conf). Appended as a `?v=<digest>` query on their fetch URLs (worker.ts
-  // AND the precache-manifest `bin.urls` below use the identical scheme — see
+  // AND the precache-manifest `bin.urls` below use the identical scheme, see
   // src/lib/assetUrl.ts's versionedAssetUrl) so the fetch/Cache-Storage identity
   // is content-addressed, not just the combined renderHash used for L2 geometry.
   const BIN_ASSETS = outPublicDir
@@ -1243,15 +1243,15 @@ export function generate({
     // Which ScadPub built this site (`git describe` of the ScadPub checkout, or
     // $SCADPUB_VERSION). Shown in the open-source licenses modal; omitted from
     // the JSON entirely when the build tree carries no git metadata. Display
-    // only — deliberately NOT part of renderHash, since it can't affect geometry
+    // only: deliberately NOT part of renderHash, since it can't affect geometry
     // (a code change that can already hashes the renderer's own sources).
     ...(version ? { scadpubVersion: version } : {}),
     // Versions of the bundled third-party packages, read from the node_modules
     // this build bundles from (scripts/lib/dep-versions.mjs). The licenses modal
     // reads them instead of carrying literals that drift from the dependency.
-    // Display-only, like the stamp above — kept out of renderHash.
+    // Display-only, like the stamp above: kept out of renderHash.
     componentVersions: components,
-    // H4: per-file digests for wasm/glue/fonts/fonts.conf — see BIN_ASSETS above.
+    // H4: per-file digests for wasm/glue/fonts/fonts.conf, see BIN_ASSETS above.
     binAssets: BIN_ASSETS,
     title: TITLE,
     shortName: SHORT_NAME,
@@ -1260,7 +1260,7 @@ export function generate({
     lang: LANG,
     dir: DIR,
     strings: STRINGS,
-    // `pwa.themeColor.{dark,light}` in the config, still flat here — see the
+    // `pwa.themeColor.{dark,light}` in the config, still flat here, see the
     // module-level comment above generate() (and CONFIG_SPEC.pwa's own) for
     // why designs.json doesn't grow a nested "pwa" object to match: nothing
     // under `pwa` has a runtime reader, so this stays shaped for consumption
@@ -1289,8 +1289,8 @@ export function generate({
     designs: designs.map(({ abs, ...d }) => d),
   };
 
-  // COMMIT POINT (H6/M8): every fallible step — design parsing, containment
-  // checks, PWA rasterization — has now succeeded and the schema is in hand, so
+  // COMMIT POINT (H6/M8): every fallible step. Design parsing, containment
+  // checks, PWA rasterization. Has now succeeded and the schema is in hand, so
   // atomically swap the staged scad tree into the live location. Everything
   // past here (font copies, precache manifest, reconciliation, designs.json) is
   // a plain non-fallible write, so scad sources, PWA/font assets, and the
@@ -1303,7 +1303,7 @@ export function generate({
   // are committed here too (deferred from bundleFonts and generatePwaAssets
   // respectively): copy the source-referenced fonts into public/fonts, write
   // fonts.conf, and flush every entry generatePwaAssets queued instead of
-  // writing directly (commitPwaBatch — see pwa-assets.mjs) — now that all
+  // writing directly (commitPwaBatch, see pwa-assets.mjs). Now that all
   // fallible work (design parsing, PWA rasterization, the screenshot
   // existence check) has already succeeded. A source font overwriting a
   // same-named previous one, a rewritten fonts.conf, and a replaced icon/
@@ -1321,9 +1321,9 @@ export function generate({
   if (outPublicDir) {
     writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo, extraCss, iconFiles });
     // M8: reconcile the generated files this run wrote OUTSIDE outScadDir
-    // (which was fully replaced as a unit just above) — source-copied fonts under
+    // (which was fully replaced as a unit just above). Source-copied fonts under
     // public/fonts, plus the PWA root assets (icons, splashes, manifest,
-    // screenshots) — against what a previous run generated, so removing or
+    // screenshots). Against what a previous run generated, so removing or
     // renaming a config entry (a dropped font, a renamed screenshot) doesn't
     // leave a stale, still-deployable file behind. Scoped to paths THIS tool
     // recorded writing previously; a tracked bundled .ttf or an unrelated
@@ -1361,10 +1361,10 @@ function main() {
     outScadDir: join(WEB, "public", "scad"),
     outPublicDir: join(WEB, "public"),
     // H3: the renderer's source fixes the OpenSCAD CLI contract (flags,
-    // mounting), so its bytes belong in renderHash — a worker change
+    // mounting), so its bytes belong in renderHash. A worker change
     // invalidates the cache. Derived (not hand-listed) as worker.ts's full
     // local-import closure, so a new helper worker.ts starts importing is
-    // automatically covered — see scripts/lib/worker-deps.mjs.
+    // automatically covered, see scripts/lib/worker-deps.mjs.
     rendererFiles: resolveWorkerDependencyClosure(join(WEB, "src", "openscad", "worker.ts")),
   });
   console.log(

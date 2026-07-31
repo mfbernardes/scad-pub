@@ -1,4 +1,4 @@
-// Unit tests for scripts/lib/svg-sanitize.mjs — the defense-in-depth scrub for
+// Unit tests for scripts/lib/svg-sanitize.mjs: the defense-in-depth scrub for
 // browser-facing SVGs (logo/icons). Covers the plain cases plus the evasion
 // vectors from the review (#13): namespaced <script>/<foreignObject>, multiline
 // event-handler values, and whitespace/entity-obfuscated URI schemes.

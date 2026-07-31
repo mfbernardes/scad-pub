@@ -1,4 +1,4 @@
-// diagnostics.ts — turn the raw OpenSCAD worker log into friendly, structured
+// diagnostics.ts: turn the raw OpenSCAD worker log into friendly, structured
 // notices and the count badges shown on the "OpenSCAD output" panel.
 //
 // The notice categories are CONFIG-DRIVEN (schema.notices, built from the
@@ -43,7 +43,7 @@ export interface BadgeCount {
   /** Optional fill colour; falls back to the default badge styling. */
   color?: string;
   /** Whether this category is flagged `attention: true` in config (always
-   *  true for the hardcoded "assert" badge) — decides whether the console's
+   *  true for the hardcoded "assert" badge). Decides whether the console's
    *  count chip reads as amber-urgent or plain neutral (see docs/config.md's
    *  Notice badges section), and feeds readiness.ts's attention items. The
    *  Messages bell itself never goes amber off the back of it: urgency is the
@@ -55,7 +55,7 @@ export interface BadgeCount {
 // routes ECHO to stderr, so accept both streams (like WARNING/ERROR below).
 const ECHO_RE = /^\[(?:out|err)\]\s*ECHO:\s*"(.*)"\s*$/;
 // Hardcoded OpenSCAD diagnostics (not configurable). Exported so
-// friendlyErrors.ts's failed-render mapping can recognise the same lines —
+// friendlyErrors.ts's failed-render mapping can recognise the same lines:
 // the Notices list and the friendly failure card can never disagree about
 // what counts as a warning/assert line.
 export const WARNING_RE = /^\[(?:out|err)\]\s*WARNING:\s*(.*)$/;
@@ -63,7 +63,7 @@ export const WARNING_RE = /^\[(?:out|err)\]\s*WARNING:\s*(.*)$/;
 export const ASSERT_RE = /^\[(?:out|err)\]\s*ERROR:\s*(Assertion\b.*)$/;
 
 // A line classified into a diagnostic, plus the key of the badge it contributes
-// to (if any — warnings get a notice but no badge). `null` for plain output
+// to (if any: warnings get a notice but no badge). `null` for plain output
 // lines. The badge's label/colour come from the category map in countBadges, so
 // only the key is carried here.
 interface Classified extends Diagnostic {
@@ -135,7 +135,7 @@ export function parseDiagnostics(
  * assert badge comes last. Only badges with a non-zero count are returned.
  * Counts are over raw matching log lines (not de-duplicated) so repeated notices
  * still tally. Each category's badge noun is resolved from its `{ one, other }`
- * pair via `selectPlural` against the FINAL tally — singular/plural has to wait
+ * pair via `selectPlural` against the FINAL tally: singular/plural has to wait
  * until every line is counted, unlike the fixed "asserts" noun below.
  */
 export function countBadges(

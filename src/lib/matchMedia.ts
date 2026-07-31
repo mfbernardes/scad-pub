@@ -1,4 +1,4 @@
-// subscribeMatchMedia — the `subscribe` half of a useSyncExternalStore store
+// subscribeMatchMedia: the `subscribe` half of a useSyncExternalStore store
 // backed by a media query. Shared by useIsMobile and useStandalone, whose
 // subscriptions are identical and differ only in the query; each keeps its own
 // snapshot function, since what they read off the match differs (useStandalone

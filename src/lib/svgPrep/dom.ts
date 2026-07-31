@@ -1,6 +1,6 @@
 // Small DOM helpers shared by the SVG checks/fixes. The module operates on a
 // standard DOM `Element` (the SVG root), so it runs unchanged with the browser's
-// DOMParser and, in tests/Node, with @xmldom/xmldom — both implement this subset.
+// DOMParser and, in tests/Node, with @xmldom/xmldom: both implement this subset.
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 export const INK_NS = "http://www.inkscape.org/namespaces/inkscape";

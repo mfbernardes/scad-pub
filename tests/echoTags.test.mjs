@@ -1,6 +1,6 @@
 // Tests the shared echo("@tag", …) parsing core (src/lib/echoTags.ts) that
 // computedInfo.ts/reviewOverrides.ts each build their own public parser on
-// top of — see those two's own test files for the end-to-end behavior (dedup
+// top of, see those two's own test files for the end-to-end behavior (dedup
 // semantics, public shapes) this module doesn't own itself.
 import { test } from "node:test";
 import assert from "node:assert/strict";

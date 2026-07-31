@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from "react";
 /** Batches a hot-path value stream (e.g. pointer-move) into at most one
  *  imperative `write` per animation frame, bypassing React state entirely.
  *  Call `schedule(value)` on every update; call `cancel()` to drop any
- *  pending frame before a caller commits the value through React state —
+ *  pending frame before a caller commits the value through React state:
  *  otherwise a frame queued just before commit can fire afterward and
  *  clobber the just-committed DOM state with a stale value. */
 export function useRafBatchedWrite<T>(write: (value: T) => void) {

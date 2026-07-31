@@ -1,4 +1,4 @@
-// ResetButton.tsx — "Reset to defaults" with an accidental-click guard: it
+// ResetButton.tsx: "Reset to defaults" with an accidental-click guard: it
 // confirms via an AlertDialog only when there are unsaved changes (current
 // parameter values differ from the design's defaults); otherwise it's a no-op.
 import { useMemo, useState, type ReactNode } from "react";

@@ -1,6 +1,6 @@
 // Unit tests for the build-time <head> CSS assembly (src/lib/configCss.ts) that
-// vite.config.ts injects. Locks down the consumer-facing theming behaviour —
-// the `colors` token map and the `extraCss` escape hatch — without spinning up
+// vite.config.ts injects. Locks down the consumer-facing theming behaviour:
+// the `colors` token map and the `extraCss` escape hatch, without spinning up
 // Vite. The module is pure (no imports), so Node's type-stripping loads it as-is.
 import { test } from "node:test";
 import assert from "node:assert/strict";

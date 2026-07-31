@@ -1,4 +1,4 @@
-// useRenderPipeline.ts — the render orchestration extracted from App.tsx: owns
+// useRenderPipeline.ts: the render orchestration extracted from App.tsx: owns
 // the OpenSCAD runner, the content-stable render key, the debounced
 // auto-render loop, the heavy-render brake, and everything a render produces
 // (result, rendered values snapshot). App composes it with useFileImports
@@ -9,13 +9,13 @@
 // attempt is stamped with the pipeline's current `epoch`, a generation
 // counter bumped by resetForDesign (design switch) and invalidate
 // (render-input invalidation, e.g. a file import). A completion is only
-// committed to state if its epoch is still current — an older epoch's async
+// committed to state if its epoch is still current: an older epoch's async
 // completion is silently discarded, even if the runner itself never rejected
 // it with SupersededError (that only fires when a *newer render call* on the
 // same runner preempts an in-flight one; a design switch with auto-render off
 // may not issue a new call for a while, leaving the stale completion nothing
 // but the epoch check to catch). A successful, on-epoch completion becomes the
-// pipeline's `snapshot` (see renderState.ts) — the only thing exportable, and
+// pipeline's `snapshot` (see renderState.ts): the only thing exportable, and
 // only while it stays current per `isSnapshotCurrent`.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -38,7 +38,7 @@ import {
 } from "./renderState";
 import { t } from "./i18n";
 
-/** The subset of OpenSCADRunner's API the pipeline depends on — narrow enough
+/** The subset of OpenSCADRunner's API the pipeline depends on: narrow enough
  * that tests can inject a fake runner without a real worker/WASM/IndexedDB. */
 export interface RunnerLike {
   render(req: Omit<RenderRequest, "id">): Promise<RenderResult>;
@@ -66,8 +66,8 @@ export interface RenderPipelineArgs {
   };
   /**
    * Hold the whole render path back: construct no runner, spawn no worker,
-   * request no render. Set while the app's *first screen is a chooser* — see
-   * popup.ts's `isDesignChooser` — where rendering the default design is
+   * request no render. Set while the app's *first screen is a chooser*, see
+   * popup.ts's `isDesignChooser`, where rendering the default design is
    * speculative anyway and its bootstrap download (the ~10 MB WASM binary plus
    * the bundled fonts) would otherwise starve the very images that chooser is
    * made of. Released the moment the user picks; nothing about the pipeline's
@@ -92,12 +92,12 @@ export function useRenderPipeline({
   createRunner,
 }: RenderPipelineArgs) {
   const [result, setResult] = useState<RenderResult | null>(null);
-  // The renderKey `result` was produced for (success OR failure) — distinct
+  // The renderKey `result` was produced for (success OR failure): distinct
   // from `renderedKey` below (success-only). Used only to compute
   // `stalePreview`: a *fresh* failure for the current key must read as
   // "Failed", not "stale", so staleness has to mean "no completed attempt
   // (of either outcome) exists for the current controls yet", not "no
-  // successful one does" — otherwise a failed render for unchanged controls
+  // successful one does". Otherwise a failed render for unchanged controls
   // would perpetually and incorrectly read as an out-of-date preview.
   const [resultKey, setResultKey] = useState("");
   const [rendering, setRendering] = useState(false);
@@ -116,15 +116,15 @@ export function useRenderPipeline({
   const [renderMetrics, setRenderMetrics] = useState<RenderMetrics>(emptyMetrics);
   // The values snapshot behind the *previous* render, used only to compute
   // which params changed for the metrics above. Deliberately NOT a doRender
-  // dependency (see the comment on doRender's useCallback below) — updated
+  // dependency (see the comment on doRender's useCallback below): updated
   // imperatively inside doRender instead, so adding it can't recreate the
   // callback and disturb the debounce/auto-render invariants.
   const prevRenderedValuesRef = useRef<Values>(initialValues);
   const [ready, setReady] = useState(false);
   // The render worker's bootstrap-download progress (WASM binary, on a Cache
-  // Storage miss — see worker.ts/runner.ts). null before any progress has
+  // Storage miss, see worker.ts/runner.ts). null before any progress has
   // arrived, and cleared the moment the worker announces readiness (the
-  // ViewerStage loading overlay only ever shows this pre-ready — see its own
+  // ViewerStage loading overlay only ever shows this pre-ready, see its own
   // "Getting things ready…" vs. "Building your preview…" copy).
   const [progress, setProgress] = useState<WorkerProgress | null>(null);
   const [autoRender, setAutoRender] = useState(!design.heavy);
@@ -135,7 +135,7 @@ export function useRenderPipeline({
 
   // Bumped by resetForDesign (design switch) and invalidate (render-input
   // invalidation). doRender captures the epoch at render start and compares it
-  // at commit time — a mismatch means a newer generation has begun and this
+  // at commit time: a mismatch means a newer generation has begun and this
   // completion must never touch state (see file header).
   const epochRef = useRef(0);
   // Guarantees "exactly one" initial automatic render per design view for
@@ -162,13 +162,13 @@ export function useRenderPipeline({
   // The renderKey the live controls currently want, mirrored on every render so
   // an async completion can tell whether it is still what's on screen. epochRef
   // catches a design switch or render-input invalidation; this catches a plain
-  // values *revert* to an already-rendered key, which those don't — see the
+  // values *revert* to an already-rendered key, which those don't, see the
   // commit-time currency check in doRender.
   const renderKeyRef = useRef(renderKey);
   renderKeyRef.current = renderKey;
 
   // Freshness is now reported the same way in both auto and manual mode: no
-  // completed attempt — success or failure — exists yet for the live
+  // completed attempt (success or failure) exists yet for the live
   // controls. (Previously gated on `!autoRender`, which meant a stale result
   // was reported as current during the whole 400 ms auto-render debounce.)
   const stalePreview = renderKey !== resultKey;
@@ -183,7 +183,7 @@ export function useRenderPipeline({
       // Guards a narrow window that should be unreachable in practice: the
       // runner-ownership effect below always runs (and populates runnerRef)
       // before any effect that can call doRender, because it's declared
-      // first — see that effect's comment. Kept as a defensive no-op rather
+      // first, see that effect's comment. Kept as a defensive no-op rather
       // than a non-null assertion so a future reordering fails safe instead
       // of throwing mid-render.
       const activeRunner = runnerRef.current;
@@ -204,7 +204,7 @@ export function useRenderPipeline({
         // state at all: a design switch or render-input invalidation while
         // this render was in flight bumps the epoch, and `resolveRenderCommit`
         // discards anything no longer on the current one. A discarded outcome
-        // must not touch `result`, `rendering`, or the snapshot — whichever
+        // must not touch `result`, `rendering`, or the snapshot: whichever
         // render started the current epoch owns that state now.
         const commit = resolveRenderCommit(epochRef.current, renderKeyRef.current, {
           startEpoch,
@@ -217,7 +217,7 @@ export function useRenderPipeline({
         if (commit.discarded) {
           // A "superseded" discard (the controls reverted to an already-rendered
           // key while this render was in flight) leaves no other render running
-          // — the runner is latest-wins — so this render still owns the spinner
+          //  (the runner is latest-wins) so this render still owns the spinner
           // and must clear it. An "epoch" discard is owned by a newer generation
           // that manages `rendering` itself; don't touch it here (see the catch
           // block's SupersededError note for the same reasoning).
@@ -228,11 +228,11 @@ export function useRenderPipeline({
         if (commit.ok) {
           setReady(true);
           setSnapshot(commit.snapshot);
-          // Diff against the previous render's snapshot (not the dep array —
+          // Diff against the previous render's snapshot (not the dep array,
           // see prevRenderedValuesRef above) to attribute the metric to
           // whichever params actually changed since last time. Only a fresh
           // render can become `slowest` (the only place `changed` is shown), so
-          // skip the per-param diff on cache hits — the hottest render path.
+          // skip the per-param diff on cache hits: the hottest render path.
           const changed = r.cached
             ? []
             : changedParamLabels(design.params, prevRenderedValuesRef.current, values);
@@ -257,11 +257,11 @@ export function useRenderPipeline({
       } catch (e) {
         if (isStaleEpoch(startEpoch, epochRef.current)) return;
         // Superseded: a newer render is already in flight and now owns the
-        // spinner state — deliberately do NOT setRendering(false) here, or the
+        // spinner state. Deliberately do NOT setRendering(false) here, or the
         // indicator would flicker off under the render that replaced this one.
         if (e instanceof SupersededError) return;
         // A hard failure (worker crash, message error) rejects instead of
-        // resolving with ok:false — surface it like a failed render rather
+        // resolving with ok:false. Surface it like a failed render rather
         // than silently stopping the spinner over a stale model.
         lastKeyRef.current = "";
         setRendering(false);
@@ -278,7 +278,7 @@ export function useRenderPipeline({
   // Worker ownership lives in an effect, not render (see
   // docs/architecture-review.md L1): constructing OpenSCADRunner spawns a
   // worker as a side effect, so that has to happen in an effect's setup, never
-  // inline during the render body — a render-time `if (!runnerRef.current)
+  // inline during the render body. A render-time `if (!runnerRef.current)
   // runnerRef.current = new OpenSCADRunner(...)` would spawn (and leak) a
   // second worker under Strict Mode's extra dev render pass, since that pass
   // is discarded without ever running effects/cleanup.
@@ -287,7 +287,7 @@ export function useRenderPipeline({
   // runnerRef) before the auto-render and initial-render effects below, which
   // call doRender and therefore need a live runner. React fires a component's
   // effects in declaration order within one commit, so ordering here is what
-  // guarantees that — not a coincidence to preserve carelessly.
+  // guarantees that, not a coincidence to preserve carelessly.
   //
   // Strict Mode's dev-only mount -> cleanup -> remount replay exercises this
   // effect twice on the same component instance (refs like runnerRef and
@@ -296,7 +296,7 @@ export function useRenderPipeline({
   // remounting constructs a second one. Any render that got as far as calling
   // `activeRunner.render(...)` against the first runner has its promise
   // rejected with SupersededError by that dispose (OpenSCADRunner.dispose
-  // rejects all pending renders) — doRender's catch block treats that as
+  // rejects all pending renders): doRender's catch block treats that as
   // "superseded, another render owns the spinner now" and returns without
   // touching state, so epoch/snapshot state can't be corrupted by the replay.
   // `initialRenderFiredRef` (a ref, so it also survives the replay) stops the
@@ -327,8 +327,8 @@ export function useRenderPipeline({
       // replay, the first pass sets the flag and starts the initial render on
       // runner A; disposing A rejects that render with SupersededError (so it
       // never commits and `rendering` stays true), and without this reset the
-      // remount's initial-render effect would skip — because the flag survived
-      // the replay — leaving a manual-mode (heavy) design, whose ONLY render
+      // remount's initial-render effect would skip, because the flag survived
+      // the replay: leaving a manual-mode (heavy) design, whose ONLY render
       // trigger is that effect, stuck on the loading overlay. Resetting here
       // lets the replacement runner B get its own initial render. In production
       // (no replay) this cleanup runs only on real unmount, so the "exactly one
@@ -349,7 +349,7 @@ export function useRenderPipeline({
   }, [doRender, autoRender, holdBoot]);
 
   // First view of a design always renders exactly once, even when auto-render
-  // is off (heavy designs start in manual mode) — so the user never faces an
+  // is off (heavy designs start in manual mode), so the user never faces an
   // empty canvas stuck on "Getting things ready...". Deliberately does NOT
   // wait on `ready`: the worker only emits ready once a render begins, so
   // gating the first render on readiness is circular and never fires (see
@@ -357,7 +357,7 @@ export function useRenderPipeline({
   // resetForDesign) guarantees this fires at most once per design view;
   // doRender's own epoch check makes a mid-flight design switch safe.
   useEffect(() => {
-    // shouldFireInitialRender deliberately takes no `ready` argument — see
+    // shouldFireInitialRender deliberately takes no `ready` argument, see
     // its doc comment and docs/architecture-review.md M15. `holdBoot` is
     // separate from it because it is not about *this* design's state at all:
     // it says the app hasn't started yet. Once it clears, this effect re-runs
@@ -395,8 +395,8 @@ export function useRenderPipeline({
     setAutoRender(!next.heavy);
     setRenderMetrics(emptyMetrics);
     initialRenderFiredRef.current = false;
-    // Seed the diff baseline with the new design's defaults — what App resets
-    // `values` to on a switch — so the first render after a switch reports no
+    // Seed the diff baseline with the new design's defaults: what App resets
+    // `values` to on a switch, so the first render after a switch reports no
     // "changed" params (mirrors how the initial mount seeds initialValues),
     // rather than spuriously attributing the previous design's params.
     prevRenderedValuesRef.current = defaultsFor(next);

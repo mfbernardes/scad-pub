@@ -1,9 +1,9 @@
-// contactShadow.ts — a soft baked "contact shadow" under the model for the
+// contactShadow.ts: a soft baked "contact shadow" under the model for the
 // studio viewer style (config `viewer.style: "studio"`). Instead of a live
 // shadow map (whose penumbra can't get this soft without VSM bleeding), the
 // model's depth is rendered once per geometry change from an orthographic
 // camera at the ground looking up, blurred in two passes, and displayed on a
-// transparent ground plane — the technique of three.js's webgl_shadow_contact
+// transparent ground plane: the technique of three.js's webgl_shadow_contact
 // example, adapted to this viewer's Z-up world. Baking only on geometry swap
 // keeps the per-frame cost at zero, so the invalidation-driven render loop
 // (and the smoke test's idle render-count check) is unaffected.
@@ -12,7 +12,7 @@
 // looks down onto the ground plane; orbiting under the model would otherwise
 // leave a dark blob hanging in space. So the viewer feeds it a camera-elevation
 // fade (setFade / shadowViewFade) alongside the theme's base strength
-// (setOpacity) — see applyOpacity below. The fade is recomputed only on the
+// (setOpacity), see applyOpacity below. The fade is recomputed only on the
 // renders that already happen, never on a timer.
 import * as THREE from "three";
 import { HorizontalBlurShader } from "three/examples/jsm/shaders/HorizontalBlurShader.js";
@@ -32,7 +32,7 @@ const DARKNESS = 1;
 // The display plane sits a hair below the model's base to avoid z-fighting.
 const GROUND_OFFSET = 0.05;
 // The depth camera starts this far below the base: a model resting exactly on
-// the ground would otherwise have its base faces — the main shadow casters —
+// the ground would otherwise have its base faces (the main shadow casters)
 // clipped away on the camera's near plane.
 const CAM_EPSILON = 0.1;
 // View-fade window, in degrees of camera elevation above the ground plane. A
@@ -84,7 +84,7 @@ export interface ContactShadow {
   /**
    * Re-render the shadow from the current scene. Call after the model is
    * positioned; `hide` lists non-model objects (grid, overlays) that must not
-   * cast. Renders into internal targets only — the default framebuffer, and
+   * cast. Renders into internal targets only: the default framebuffer, and
    * therefore the viewer's render counter, are untouched.
    */
   bake(renderer: THREE.WebGLRenderer, scene: THREE.Scene, hide: (THREE.Object3D | null)[]): void;
@@ -98,7 +98,7 @@ export function createContactShadow(): ContactShadow {
 
   // The display opacity is the product of two independently-owned factors: the
   // theme's base strength (setOpacity) and the camera-elevation fade
-  // (setFade). Held separately so neither caller clobbers the other — the
+  // (setFade). Held separately so neither caller clobbers the other: the
   // theme effect and a geometry swap both re-assert the base while the view
   // fade is being driven every render.
   let baseOpacity = 0.42;
@@ -111,7 +111,7 @@ export function createContactShadow(): ContactShadow {
 
   // A unit XY plane (already facing +Z in this Z-up world), scaled to the
   // model footprint by setFootprint. Y is mirrored because the shadow camera
-  // below looks *up* (+Z) — its view flips the Y axis relative to the plane's
+  // below looks *up* (+Z): its view flips the Y axis relative to the plane's
   // UV layout, exactly as in the upstream example. DoubleSide keeps the
   // negative scale from culling the quad.
   const planeGeo = new THREE.PlaneGeometry(1, 1);
@@ -146,7 +146,7 @@ export function createContactShadow(): ContactShadow {
   group.add(shadowCam);
 
   // Depth-as-darkness: near the ground → dark, fading with height. The
-  // replaced line is pinned to the installed three's ShaderLib/depth output —
+  // replaced line is pinned to the installed three's ShaderLib/depth output:
   // re-verify it on a three upgrade (a failed replace shows as a solid quad).
   const depthMat = new THREE.MeshDepthMaterial();
   depthMat.onBeforeCompile = (shader) => {
@@ -163,7 +163,7 @@ export function createContactShadow(): ContactShadow {
   depthMat.depthWrite = false;
 
   // DoubleSide because the up-looking shadow camera sees the +Z-facing blur
-  // quad from behind — with default front-side culling the pass would draw
+  // quad from behind, with default front-side culling the pass would draw
   // nothing and the ping-pong would erase the shadow instead of blurring it.
   const hBlur = new THREE.ShaderMaterial({
     ...HorizontalBlurShader,

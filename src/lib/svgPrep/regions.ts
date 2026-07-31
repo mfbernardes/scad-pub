@@ -35,13 +35,13 @@ export interface LayerEntry {
 
 /** A written region height, as a consuming design will read it: a plain decimal,
  *  no sign and no exponent. Deliberately narrower than the browser's number
- *  input, which also accepts `1e3` and `-2` — a design's own parser typically
+ *  input, which also accepts `1e3` and `-2`: a design's own parser typically
  *  cannot, and hard-fails the render rather than falling back. */
 const HEIGHT_RE = /^(?:\d+\.?\d*|\.\d+)$/;
 
 /** Whether a written height is one a consuming design can use: a plain positive
- *  decimal. An empty height is not "invalid" — it means "inherit the design's
- *  relief height" — so callers check for that themselves. */
+ *  decimal. An empty height is not "invalid": it means "inherit the design's
+ *  relief height", so callers check for that themselves. */
 export function isUsableHeight(text: string): boolean {
   const t = text.trim();
   return HEIGHT_RE.test(t) && Number(t) > 0;
@@ -49,7 +49,7 @@ export function isUsableHeight(text: string): boolean {
 
 /** The ids of regions in `spec` that wrote a height a consuming design would
  *  reject (`0`, `-1`, `1e3`, `tall`). Empty when every height is usable or
- *  omitted — the wizard blocks completion on a non-empty result. */
+ *  omitted: the wizard blocks completion on a non-empty result. */
 export function unusableHeightRegions(spec: string): string[] {
   return parseLayerSpec(spec)
     .entries.filter((e) => e.height !== "" && !isUsableHeight(e.height))
@@ -170,7 +170,7 @@ export function deriveRegions(root: Element): Region[] {
   return regions;
 }
 
-/** Prefer the bare-token shorthand when the id already names its colour — the id
+/** Prefer the bare-token shorthand when the id already names its colour: the id
  *  itself (a CSS colour name) or the `c<hex>` slug of a `#hex` colour, as
  *  produced by group-by-colour. A bare token expands back into the colour, so
  *  `"gray, c8b0000"` ≡ `"gray:gray, c8b0000:#8b0000"`. */
@@ -189,7 +189,7 @@ const CANVAS_SIGNIFICANT_DIGITS = 6;
  *
  *  Not `gFormat`: that switches to exponent notation above ~1e6
  *  ("1.00000e+6"), which neither this module's own CANVAS_ENTRY_RE nor the
- *  consuming design's parser accepts — a viewBox of `0 0 1000000 500000` would
+ *  consuming design's parser accepts. A viewBox of `0 0 1000000 500000` would
  *  be read back as a region id. And not a fixed number of decimal places: a
  *  viewBox is scale-free, so a fixed scale destroys a small one (`0.00005` at
  *  four places rounds to `0.0001`, doubling the aspect ratio it is there to
@@ -207,7 +207,7 @@ function decimalFormat(n: number): string {
 
 /** The drawing's canvas as a `"<width>x<height>"` entry, or "" when it declares
  *  no viewBox. Regions are imported uncentred to keep them registered with each
- *  other, which leaves the consuming design unable to measure the drawing — this
+ *  other, which leaves the consuming design unable to measure the drawing: this
  *  is what tells it the proportions to place them by. */
 export function canvasEntry(root: Element): string {
   const vb = parseViewBox(root);
@@ -217,9 +217,9 @@ export function canvasEntry(root: Element): string {
   const [dw, dh] = [decimalFormat(w), decimalFormat(h)];
   const entry = `${dw}x${dh}`;
   // Never emit something our own reader would reject or misread. A viewBox
-  // extreme enough to defeat the formatting — |n| >= 1e21, where toFixed
-  // returns exponent notation, or below ~1e-100, where it underflows to zero —
-  // simply forgoes the canvas hint and leaves the design corner-anchoring.
+  // extreme enough to defeat the formatting: |n| >= 1e21, where toFixed
+  // returns exponent notation, or below ~1e-100, where it underflows to zero.
+  // Simply forgoes the canvas hint and leaves the design corner-anchoring.
   const usable = isCanvasEntry(entry) && Number(dw) > 0 && Number(dh) > 0;
   return usable ? entry : "";
 }

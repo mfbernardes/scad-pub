@@ -1,4 +1,4 @@
-// renderMetrics.ts — local-only, in-session render performance telemetry.
+// renderMetrics.ts: local-only, in-session render performance telemetry.
 // Pure data + functions (mirrors renderStatus.ts): no persistence, no network,
 // just enough state to answer "how long did that take, and was it the cache
 // or a fresh build?" plus, for the slowest fresh render this session, which

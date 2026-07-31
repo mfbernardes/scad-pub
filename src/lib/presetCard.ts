@@ -1,8 +1,8 @@
-// presetCard.ts — presentation-only parsing of a bundled preset's NAME into
+// presetCard.ts: presentation-only parsing of a bundled preset's NAME into
 // the pieces its picker card renders (PresetPicker.tsx's bundled-preset
 // list): an optional small overline, the title, and an optional trailing
 // badge. This is purely a display convention (documented in docs/config.md's
-// "Bundled presets" note) — the stored preset name and the OpenSCAD
+// "Bundled presets" note): the stored preset name and the OpenSCAD
 // parameterSets file format are both untouched; only how the existing name is
 // SPLIT for display changes.
 //
@@ -22,7 +22,7 @@ export interface PresetCardName {
   badge?: string;
 }
 
-// Trailing "(...)" with no nested parens — greedy on the part before it so
+// Trailing "(...)" with no nested parens: greedy on the part before it so
 // only the LAST parenthetical is captured (a title that itself legitimately
 // ends in "(word) (Lang)" still splits on the final one). Hoisted to module
 // scope rather than re-literalized inside parsePresetCardName.

@@ -1,8 +1,8 @@
-// reviewSummary.ts — pure derivation of a review summary's row list: a
+// reviewSummary.ts: pure derivation of a review summary's row list: a
 // design's curated `reviewLabels` (gathered by gen-schema from each
-// parameter's own `// @review "<label>"` annotation — see
+// parameter's own `// @review "<label>"` annotation, see
 // docs/annotations.md; there is no config-level source), each label's live
-// formatted value (honouring any `echo("@review", …)` override — see
+// formatted value (honouring any `echo("@review", …)` override, see
 // reviewOverrides.ts), plus one overall bounding-box "Dimensions" row. No
 // React or DOM: it depends only on the schema/values types plus ./visibility
 // and ./format, so the status strip/dialog can drive it directly and
@@ -10,7 +10,7 @@
 // harness.
 //
 // Value formatting is src/lib/format.ts's shared `mm`/`formatParamValue`, the
-// same functions DimensionInfo.tsx's `@info` rows use — see that module's own
+// same functions DimensionInfo.tsx's `@info` rows use, see that module's own
 // doc. A review summary and the viewer's measurements panel can never
 // disagree about what a value says, because they're the same code, not a
 // hand-kept-in-sync copy.
@@ -19,7 +19,7 @@ import type { Values } from "./presets";
 import { isVisible } from "./visibility";
 import { mm, formatParamValue } from "./format";
 
-/** Axis-aligned bounding-box size in millimetres — structurally the same
+/** Axis-aligned bounding-box size in millimetres: structurally the same
  *  shape as Viewer.tsx's own `Dimensions`, kept local so this dependency-
  *  light lib module never has to import a component file just for a type. */
 export interface BoundingBoxSize {
@@ -44,9 +44,9 @@ export function formatBoundingBox(size: BoundingBoxSize): string {
 
 /**
  * The review summary's row list: one row per `reviewLabels` entry (each
- * gathered from a parameter's own `// @review "<label>"` annotation — see
+ * gathered from a parameter's own `// @review "<label>"` annotation, see
  * docs/annotations.md), in the order gen-schema walked this design's parsed
- * params to build that object — i.e. the design's own param-declaration
+ * params to build that object. I.e. the design's own param-declaration
  * order in its `.scad` file, not a curated or alphabetical one. Several
  * params sharing one label merge into a SINGLE row, their formatted values
  * joined by " / ". A param whose value isn't worth a row (`formatParamValue`
@@ -55,15 +55,15 @@ export function formatBoundingBox(size: BoundingBoxSize): string {
  *
  * `reviewOverrides` (reviewOverrides.ts's `echo("@review", param, value)`
  * map) lets a param's row show what the design actually RENDERED instead of
- * its raw stored value — e.g. a lettering profile that uppercases free text:
+ * its raw stored value: e.g. a lettering profile that uppercases free text:
  * typed "gate 12", printed "GATE 12". When a param has an override, that
  * value is used verbatim (skipping `formatParamValue` entirely, including
- * its "empty string -> no row" rule — an override is always author-supplied,
+ * its "empty string -> no row" rule: an override is always author-supplied,
  * never blank by accident). Absent an override, a param's row is formatted
  * exactly as before.
  *
  * Finally, when `size` is known, one overall bounding-box "Dimensions" row
- * is appended after the curated rows — never the other `@info`/computed
+ * is appended after the curated rows, never the other `@info`/computed
  * metric rows (rim height, wall thickness, plate thickness, …), which stay
  * available elsewhere. Returns `[]` when `reviewLabels` is unset and `size`
  * is null.

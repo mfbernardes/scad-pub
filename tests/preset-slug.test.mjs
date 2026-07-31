@@ -1,4 +1,4 @@
-// Unit tests for scripts/lib/preset-slug.mjs — the preset-thumbnail slug
+// Unit tests for scripts/lib/preset-slug.mjs: the preset-thumbnail slug
 // rule for designs[].presets.images' directory form (see docs/config.md).
 // Must match a downstream consumer's Python slug() byte for byte; several
 // cases below are drawn from a real deployment's presetImages map, so a

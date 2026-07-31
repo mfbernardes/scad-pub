@@ -1,7 +1,7 @@
-// SvgWizard.tsx — the in-app "Prepare SVG" wizard. Walks a dropped/loaded SVG
+// SvgWizard.tsx: the in-app "Prepare SVG" wizard. Walks a dropped/loaded SVG
 // through check → fix → colours using the generic engine in src/lib/svgPrep,
 // then hands the host a fixed SVG plus (when the field binds colours) a derived
-// layers string. The configurator's own 3D viewer is the preview — this dialog
+// layers string. The configurator's own 3D viewer is the preview: this dialog
 // only reports what it checked, fixed and derived.
 import { useMemo, useRef, useState } from "react";
 import {
@@ -132,7 +132,7 @@ export function SvgWizard({
 
   const applyAndAdvance = () => {
     // The engine's one-call host contract: fix, (optionally) derive colours,
-    // re-check, and serialise — the same result the host applies on finish.
+    // re-check, and serialise. The same result the host applies on finish.
     const res = prepareSvg(parsed.root!, { deriveColours });
     setFixed({ svg: res.svg, changes: res.changes, findings: res.findings, regions: res.regions });
     setLayers(res.layers ?? "");

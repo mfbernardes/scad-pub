@@ -1,4 +1,4 @@
-// DesignPicker.tsx — the shadcn Select used to switch designs. Shared by the
+// DesignPicker.tsx: the shadcn Select used to switch designs. Shared by the
 // desktop CommandBar and the mobile top bar (each wraps it differently and
 // handles the single-design fallback in its own markup).
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -24,7 +24,7 @@ interface Props {
   /**
    * Monotonically-increasing signal: each increment asks this picker to open
    * (used by the intro popup's "start designing" CTA). Ignored unless `active`,
-   * so only the visible layout's picker opens — both bars mount at once.
+   * so only the visible layout's picker opens: both bars mount at once.
    */
   openSignal?: number;
   /** Whether this instance belongs to the currently-shown layout (desktop vs mobile). */
@@ -152,7 +152,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, active = tr
       lastSignal.current = openSignal;
       // Deliberate: `openSignal` is an external one-shot broadcast (a CTA
       // click elsewhere in the tree), not state derived from props, so it
-      // can't be computed during render — a ref already tracks "last seen"
+      // can't be computed during render. A ref already tracks "last seen"
       // to make this idempotent against re-renders.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (active) setOpen(true);

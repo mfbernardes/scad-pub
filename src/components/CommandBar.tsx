@@ -1,8 +1,8 @@
-// CommandBar.tsx — top bar: brand, design picker (shadcn Select), status +
+// CommandBar.tsx: top bar: brand, design picker (shadcn Select), status +
 // action icons (theme / help / licenses). Presets are a tab in the parameter
 // panel (mirroring the mobile sheet), not a top-bar popover; notices surface
 // via the auto-opening output console; PWA install is demoted to the Help
-// modal — so the bar stays lean.
+// modal, so the bar stays lean.
 import { memo } from "react";
 import { BookOpen as GuideIcon } from "lucide-react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
@@ -26,7 +26,7 @@ interface Props {
   stalePreview: boolean;
   outputOpen: boolean;
   noticeCount: number;
-  /** Whether the bell may show `noticeCount` as a corner badge — false while the
+  /** Whether the bell may show `noticeCount` as a corner badge: false while the
    *  readiness pill owns the on-screen count (see OutputToggle's `showCount`). */
   showCount: boolean;
   onToggleOutput: () => void;
@@ -34,10 +34,10 @@ interface Props {
   openPickerSignal: number;
   /** Whether the desktop bar is the visible layout (so only its picker opens). */
   pickerActive: boolean;
-  /** Save-image (PNG) — relocated here from the export dock (BarActions.tsx). */
+  /** Save-image (PNG): relocated here from the export dock (BarActions.tsx). */
   onSavePng?: () => void;
   canSavePng?: boolean;
-  /** Shows BarActions' Files action — set when the config's `fileImport` is
+  /** Shows BarActions' Files action: set when the config's `fileImport` is
    *  present. See AppShell's `hasFiles`. */
   hasFiles?: boolean;
 }

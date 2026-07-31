@@ -1,4 +1,4 @@
-// fontFallback.ts — a one-click replacement font whose family the renderer
+// fontFallback.ts: a one-click replacement font whose family the renderer
 // can actually use, shared by ParamForm's inline missing-font hint and
 // AttentionItems' review-surface warning card (see readiness.ts's
 // FontFallbackItem) so both compute the exact same suggestion for the exact

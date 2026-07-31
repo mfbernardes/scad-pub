@@ -1,4 +1,4 @@
-// presets.ts — OpenSCAD Customizer preset (parameterSets) import/export plus
+// presets.ts: OpenSCAD Customizer preset (parameterSets) import/export plus
 // browser-local persistence. The on-disk format matches OpenSCAD's own
 // `<file>.json` so presets round-trip with the desktop Customizer
 // (openscad -p file.json -P "Set name").
@@ -22,9 +22,9 @@ export function defaultsFor(design: Design): Values {
 }
 
 /**
- * Serialise named parameter sets to OpenSCAD's `parameterSets` file format —
+ * Serialise named parameter sets to OpenSCAD's `parameterSets` file format:
  * every value stored as a plain string, exactly as the desktop Customizer
- * writes them — so an exported file round-trips (openscad -p file.json).
+ * writes them, so an exported file round-trips (openscad -p file.json).
  */
 export function toParameterSetsFile(
   design: Design,

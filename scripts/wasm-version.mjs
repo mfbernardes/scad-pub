@@ -1,8 +1,8 @@
-// wasm-version.mjs — the single source of the pinned OpenSCAD WebAssembly
+// wasm-version.mjs: the single source of the pinned OpenSCAD WebAssembly
 // snapshot version. Consumed by:
 //   - scripts/fetch-wasm.mjs   (what to download + checksum-verify)
 //   - scripts/gen-schema.mjs   (emitted as schema.wasmVersion, which names the
-//     render worker's binary cache AND the service worker's warm target — see
+//     render worker's binary cache AND the service worker's warm target, see
 //     src/openscad/worker.ts BIN_CACHE and public/sw.js)
 // Bumping the version here re-pins everything in one edit. The checksum is
 // only enforced when the version matches the pin (an env override skips it).

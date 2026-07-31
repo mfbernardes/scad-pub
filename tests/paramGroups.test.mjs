@@ -1,6 +1,6 @@
 // Tests visibleGroups, the shared visible-section computation behind both the
 // parameter form (ParamForm) and the "Jump to section" navigator
-// (ParamPanel/SheetTabs) — so the two can never disagree on which sections show.
+// (ParamPanel/SheetTabs), so the two can never disagree on which sections show.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { visibleGroups } from "../src/lib/paramGroups.ts";

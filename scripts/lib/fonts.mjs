@@ -1,8 +1,8 @@
-// fonts.mjs (build side) — the bundled fonts' family extraction and the
+// fonts.mjs (build side): the bundled fonts' family extraction and the
 // fontconfig config the renderer mounts. The `name`-table parser itself lives
 // in the shared src/lib/fontNameTable.mjs so this build code and the browser's
 // src/lib/fonts.ts run byte-identical parsing (the app matches a design's font
-// against this build-time data — the two must never disagree).
+// against this build-time data: the two must never disagree).
 import { fontFaces, fontFamilyNames } from "../../src/lib/fontNameTable.mjs";
 import { xmlEscape } from "./config-parsers.mjs";
 
@@ -27,7 +27,7 @@ export function parseFontFallback(raw, path = "render.fontFallback") {
 // The fontconfig config the renderer mounts at /fonts/fonts.conf. Optionally
 // pins a weak last-resort family so an unmatched/absent family resolves to a
 // deterministic bundled face instead of whatever Fontconfig last scanned (which
-// can be a user-imported font) — keeping OpenSCAD's own substitution stable.
+// can be a user-imported font): keeping OpenSCAD's own substitution stable.
 export function renderFontsConf(fallback) {
   const rule = fallback
     ? `  <match target="pattern">\n` +

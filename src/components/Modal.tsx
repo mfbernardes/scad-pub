@@ -1,11 +1,11 @@
-// Modal.tsx — shared dialog shell built on the shadcn/ui Dialog (Radix): portal,
+// Modal.tsx: shared dialog shell built on the shadcn/ui Dialog (Radix): portal,
 // overlay, focus trap, Escape + outside-click close, and a built-in close
 // button. Mounted only while open (callers conditionally render it), so the
 // dialog is always `open`.
 //
 // The dialog's accessible name is its visible `title`, always: Radix wires
 // `aria-labelledby` to the DialogTitle, and per the accname spec that beats any
-// `aria-label` on the same element — so there is deliberately no `label` prop
+// `aria-label` on the same element, so there is deliberately no `label` prop
 // offering an alternative name, since one could never take effect. Anything
 // matching a dialog by name (scripts/lib/browser.mjs's openDialog, the capture
 // script) should expect the title.

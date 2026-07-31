@@ -1,7 +1,7 @@
-// worker.ts — runs OpenSCAD-WASM off the main thread. Keeps the UI responsive
+// worker.ts: runs OpenSCAD-WASM off the main thread. Keeps the UI responsive
 // during renders (callMain is synchronous and CPU-bound). Fetches the WASM, the
 // shared .scad dependency files, and the bundled fonts once per worker instance
-// (memoized, not re-fetched per render — see ensureAssets/loadDesignSource),
+// (memoized, not re-fetched per render, see ensureAssets/loadDesignSource),
 // then instantiates a fresh module per render (the reliable pattern; Emscripten's
 // exit state isn't meant to be reused). The compiled wasm bytes are cached in
 // Cache Storage so only the first render of a session pays the download; the
@@ -9,7 +9,7 @@
 // worker's lifetime, not persisted to Cache Storage.
 //
 // A WebAssembly.Module is itself structured-cloneable, so the runner
-// (runner.ts) hands one back to whatever worker instance it spawns next —
+// (runner.ts) hands one back to whatever worker instance it spawns next,
 // see self.onmessage's "module"/"warmup" cases and postModuleOnce below.
 // That makes latest-wins cancellation's terminate+respawn cost only
 // re-instantiation on the new worker, not a repeat fetch+compile of the
@@ -77,10 +77,10 @@ function postProgress(loaded: number, total: number | null) {
 }
 
 // Drain a Response's body via its stream reader, invoking `onProgress` after
-// every chunk (throttling, if any, is the caller's concern — see
+// every chunk (throttling, if any, is the caller's concern, see
 // makeProgressThrottle). Falls back to a plain buffered read (no progress) for
 // an environment/response with no readable stream, e.g. an opaque response or
-// a test double — additive, never a hard requirement.
+// a test double: additive, never a hard requirement.
 async function readWithProgress(
   res: Response,
   onProgress: (loaded: number, total: number | null) => void
@@ -89,12 +89,12 @@ async function readWithProgress(
   if (!reader) return new Uint8Array(await res.arrayBuffer());
 
   // A compressing intermediary (gzip/br) reports the WIRE size in
-  // Content-Length, not the decoded byte count the reader actually yields —
+  // Content-Length, not the decoded byte count the reader actually yields:
   // trust the header only when the response declares no content-encoding.
   const totalHeader = res.headers.get("content-length");
   const declared =
     totalHeader && !res.headers.get("content-encoding") ? Number(totalHeader) : NaN;
-  // A missing/unparseable Content-Length means "size unknown" (null) — decided
+  // A missing/unparseable Content-Length means "size unknown" (null): decided
   // once here rather than re-tested for every chunk below.
   const total = Number.isFinite(declared) ? declared : null;
 
@@ -118,7 +118,7 @@ async function readWithProgress(
 }
 
 // Serialize a BIN_CACHE download with any other same-origin context fetching
-// the same URL — concretely the service worker's install-time warm-up
+// the same URL: concretely the service worker's install-time warm-up
 // (public/sw.js's precacheBin), which targets the same cache and the same
 // content-addressed URLs. Web Locks are origin-scoped and shared across
 // dedicated workers and the service worker: whoever wins the per-URL lock
@@ -126,7 +126,7 @@ async function readWithProgress(
 // the bytes already there, no matter how long the download took. The lock
 // auto-releases if its holder dies mid-download (e.g. this worker is
 // terminated by latest-wins cancellation), so a waiter can always proceed.
-// The name must match precacheBin's — both sides build it by hand from this
+// The name must match precacheBin's: both sides build it by hand from this
 // same prefix + the full fetch URL. Where Web Locks are unsupported, run
 // unlocked: the pre-lock behavior, a rare duplicate download at worst.
 function withBinLock<T>(url: string, fn: () => Promise<T>): Promise<T> {
@@ -135,7 +135,7 @@ function withBinLock<T>(url: string, fn: () => Promise<T>): Promise<T> {
   return locks.request(`openscad-bin-fetch:${url}`, fn) as Promise<T>;
 }
 
-// Cache-first fetch of a small immutable binary into an ArrayBuffer — today
+// Cache-first fetch of a small immutable binary into an ArrayBuffer: today
 // only the bundled font files. The wasm binary takes its own path
 // (resolveWasmModule below): it needs streaming compilation from the real
 // Response and download-progress reporting, neither of which these small,
@@ -147,13 +147,13 @@ async function cachedBuffer(url: string): Promise<ArrayBuffer> {
   if (hit) return hit.arrayBuffer();
   return withBinLock(url, async () => {
     // The service worker's warm-up may have filled the entry while we
-    // waited for the lock — see withBinLock.
+    // waited for the lock, see withBinLock.
     const filled = await cache.match(url);
     if (filled) return filled.arrayBuffer();
     const res = await checkedFetch(url);
     // M1: a Cache Storage write failure (quota, private browsing, a blocked
     // storage backend) must degrade to uncached bytes for THIS render rather
-    // than fail bootstrap outright — the fetch itself already succeeded, and
+    // than fail bootstrap outright. The fetch itself already succeeded, and
     // failing to persist it just means the next worker/session pays the
     // download again, not that this render can't proceed.
     try {
@@ -166,33 +166,33 @@ async function cachedBuffer(url: string): Promise<ArrayBuffer> {
 }
 
 // Obtain the wasm binary at `url` as a compiled WebAssembly.Module (preferred)
-// or raw bytes (only when compilation itself fails — the caller hands those to
+// or raw bytes (only when compilation itself fails: the caller hands those to
 // the Emscripten glue to instantiate itself). Exactly one of the two fields is
 // non-null. The three acquisition paths all live here so ensureAssets' wasm
 // branch commits the outcome in one place:
 //  - no Cache Storage: plain fetch + compile from bytes.
-//  - cache HIT: WebAssembly.compileStreaming from the real cached Response —
-//    compiling from a Response (not a re-hydrated ArrayBuffer) is what makes
+//  - cache HIT: WebAssembly.compileStreaming from the real cached Response.
+//    Compiling from a Response (not a re-hydrated ArrayBuffer) is what makes
 //    the result eligible for the engine's persistent, URL-keyed code cache.
 //    compileStreaming can reject on a mismatched Content-Type (e.g. an entry
 //    written before the response reliably carried application/wasm) even
-//    though the cached bytes are fine — re-match (the failed attempt may have
+//    though the cached bytes are fine. Re-match (the failed attempt may have
 //    drained the body) and compile from bytes rather than treating a good
 //    cache entry as a miss. A hit reports no download progress: there is no
 //    download for the UI to report on.
 //  - cache MISS (taken under withBinLock, so the service worker's warm-up
 //    can never download the same URL in parallel): one network fetch, read
-//    three ways via clones made before anything drains — compileStreaming
+//    three ways via clones made before anything drains. CompileStreaming
 //    consumes the Response's own body, the byte-level progress read
 //    (throttled, see makeProgressThrottle) runs against one clone, and an
 //    UNTOUCHED clone becomes the cache entry. The cache write must be a real
 //    clone of the network response, never a Response rebuilt from the
 //    accumulated bytes: a synthesized Response carries url === "", and the
-//    engine's persistent code cache keys compiled wasm by the response URL —
-//    a URL-less entry would silently disqualify every later session's
+//    engine's persistent code cache keys compiled wasm by the response URL.
+//    A URL-less entry would silently disqualify every later session's
 //    compileStreaming(hit) from that cache. (M1: a Cache Storage write
 //    failure degrades to uncached bytes for this render rather than failing
-//    bootstrap — the fetch itself already succeeded.)
+//    bootstrap, the fetch itself already succeeded.)
 async function resolveWasmModule(
   url: string
 ): Promise<{ module: WebAssembly.Module | null; bytes: ArrayBuffer | null }> {
@@ -218,7 +218,7 @@ async function resolveWasmModule(
 
   return withBinLock(url, async () => {
     // The service worker's warm-up may have filled the entry while we
-    // waited for the lock — see withBinLock.
+    // waited for the lock, see withBinLock.
     const filled = await cache.match(url);
     if (filled) return fromCached(cache, filled);
 
@@ -251,7 +251,7 @@ interface OpenSCADInstance {
 let factoryPromise: Promise<OpenSCADFactory> | null = null;
 let wasmBinary: ArrayBuffer | null = null;
 let wasmModulePromise: Promise<WebAssembly.Module | null> | null = null;
-// A module handed to us by the runner (see self.onmessage's "module" case) —
+// A module handed to us by the runner (see self.onmessage's "module" case):
 // compiled by a PREVIOUS worker instance in the same runner's lifetime.
 // Set once, before ensureAssets ever runs (spawn() posts it synchronously
 // after construction), so ensureAssets' wasm branch can check it and skip
@@ -261,7 +261,7 @@ let receivedModule: WebAssembly.Module | null = null;
 let assetSources: Record<string, string> | null = null;
 const designSources: Record<string, string> = {};
 // M10: the untrusted user-file set most recently sent by the runner, kept
-// across renders (this module-level state — unlike the WASM instance — DOES
+// across renders (this module-level state (unlike the WASM instance) DOES
 // survive from one render to the next; only the Emscripten module itself is
 // re-instantiated per render). runner.ts omits `userFiles` from a render
 // request entirely when it's unchanged since the last message THIS worker
@@ -275,7 +275,7 @@ async function loadFactory(): Promise<OpenSCADFactory> {
   // H3/M12: content-address the WASM glue (openscad.js) by schema.binAssets.glue,
   // exactly as the wasm binary and fonts are below. The glue is a render input
   // folded into renderHash, so a deploy that changes it MUST change its fetch
-  // URL — otherwise the service worker's stale-while-revalidate route can serve
+  // URL: otherwise the service worker's stale-while-revalidate route can serve
   // the old glue to the new bundle and persist that geometry under the new
   // renderHash. `?v=<digest>` makes each build's glue a distinct URL.
   const mod = await import(
@@ -288,7 +288,7 @@ async function loadFactory(): Promise<OpenSCADFactory> {
 }
 
 // M1: a bootstrap (asset-loading) failure is categorically different from a
-// model failure (bad OpenSCAD source/parameters) — it means the render
+// model failure (bad OpenSCAD source/parameters). It means the render
 // pipeline itself never got off the ground, so the UI shouldn't say "that
 // combination of settings didn't work" about it, and a retry means re-running
 // bootstrap, not re-running OpenSCAD with different defines. Thrown out of
@@ -322,26 +322,26 @@ function postModuleOnce(module: WebAssembly.Module) {
     // DataCloneError (or similar): this browser can't structured-clone a
     // WebAssembly.Module across the worker boundary. The runner never
     // receives one to hand to a future worker, so bootstrap there degrades
-    // to warmup-only — still strictly better than waiting for the first
+    // to warmup-only, still strictly better than waiting for the first
     // debounced render message, just without the compile-skip.
   }
 }
 
 // One-shot, memoized asset load. The four independent downloads (WASM
 // fetch+compile, shared .scad sources, fonts.conf, font binaries) run in
-// parallel — serialized they made the cold first render pay each round-trip
+// parallel: serialized they made the cold first render pay each round-trip
 // back to back. Memoizing the whole promise also makes concurrent callers
 // share one load instead of racing the per-variable checks.
 //
 // M1: this is now genuinely ONE atomic bootstrap transaction, via
-// retryableOnce (retryableOnce.ts) — a rejected attempt is NOT memoized, so
+// retryableOnce (retryableOnce.ts). A rejected attempt is NOT memoized, so
 // the very next render() call re-attempts the entire bootstrap from scratch.
 // Previously `factoryPromise = loadFactory()` was assigned but never awaited
 // as part of the Promise.all below, so a rejected dynamic import (e.g. a bad
 // deploy, a network blip on the glue file) was invisible here: the load
 // resolved successfully anyway, the memoized promise stayed resolved forever,
 // and every later render's `await factoryPromise!` in render() threw the SAME
-// stale rejection — an ordinary-looking failed render that could never
+// stale rejection. An ordinary-looking failed render that could never
 // recover without a full page reload. Awaiting factoryPromise as part of the
 // same Promise.all means its rejection now propagates like every other
 // bootstrap input, through retryableOnce's built-in reset, so the very next
@@ -350,7 +350,7 @@ function postModuleOnce(module: WebAssembly.Module) {
 // Every variable this load populates (factoryPromise, wasmBinary,
 // wasmModulePromise, assetSources, fontsConf, fontFiles) is unconditionally
 // reassigned at the top of the next attempt, so the only state that must be
-// unwound on failure is the memoized promise itself — which retryableOnce
+// unwound on failure is the memoized promise itself, which retryableOnce
 // handles generically.
 const ensureAssets = retryableOnce(async () => {
   void cleanupOldCaches();
@@ -363,7 +363,7 @@ const ensureAssets = retryableOnce(async () => {
       (async () => {
         // H4: versioned by schema.binAssets.wasm so a rebuild that changes the
         // pinned wasm bytes without a wasmVersion bump (or a same-name font
-        // swap, below) can never be served from a stale Cache Storage entry —
+        // swap, below) can never be served from a stale Cache Storage entry,
         // see versionedAssetUrl's comment.
         const url = versionedAssetUrl(
           "wasm/openscad.wasm",
@@ -372,7 +372,7 @@ const ensureAssets = retryableOnce(async () => {
 
         if (receivedModule) {
           // Handed to us by the runner at spawn time (self.onmessage's
-          // "module" case) — a PREVIOUS worker instance already paid for the
+          // "module" case): a PREVIOUS worker instance already paid for the
           // fetch+compile, so skip both. Never echoed back (postModuleOnce is
           // for modules THIS worker compiled; the runner already holds this
           // one). The wasm bytes may never reach Cache Storage from this
@@ -386,8 +386,8 @@ const ensureAssets = retryableOnce(async () => {
         }
 
         // The one commit point for every acquisition path inside
-        // resolveWasmModule: a compiled module supersedes the raw bytes —
-        // free the ~10 MB buffer and report the module to the runner so a
+        // resolveWasmModule: a compiled module supersedes the raw bytes.
+        // Free the ~10 MB buffer and report the module to the runner so a
         // future respawn can skip straight to instantiation. Only an
         // outright compile failure keeps the bytes, for render()'s
         // instantiateWasm-less glue path.
@@ -407,7 +407,7 @@ const ensureAssets = retryableOnce(async () => {
       })(),
       (async () => {
         // H3: content-address fonts.conf by schema.binAssets.fontsConf for the
-        // same reason as the wasm/glue/font binaries — Fontconfig rules are a
+        // same reason as the wasm/glue/font binaries. Fontconfig rules are a
         // render input folded into renderHash, so a change must not be served
         // stale under an unchanged URL by the service worker's SWR route.
         fontsConf = await (
@@ -420,7 +420,7 @@ const ensureAssets = retryableOnce(async () => {
         ).text();
       })(),
       (async () => {
-        // H4: same content-addressed treatment as the wasm binary above — a
+        // H4: same content-addressed treatment as the wasm binary above. A
         // font swapped in without renaming gets a new digest, hence a new URL,
         // so the old bytes already in Cache Storage are never mistaken for it.
         const fontDigests = (schema as { binAssets?: { fonts?: Record<string, string> } }).binAssets
@@ -484,7 +484,7 @@ async function render(req: RenderRequest): Promise<RenderResult> {
 
   if (wasmModule) {
     // instantiateWasm short-circuits the glue's own instantiation, so it
-    // never touches wasmBinary — omitting it here is what lets ensureAssets
+    // never touches wasmBinary: omitting it here is what lets ensureAssets
     // free the ~10 MB buffer as soon as a module exists (see the wasm
     // branch's `wasmBinary = null`).
     opts.instantiateWasm = (
@@ -495,7 +495,7 @@ async function render(req: RenderRequest): Promise<RenderResult> {
       return {};
     };
   } else {
-    // No compiled module (compile/compileStreaming failed) — hand the raw
+    // No compiled module (compile/compileStreaming failed): hand the raw
     // bytes to the glue and let it instantiate itself.
     opts.wasmBinary = wasmBinary!;
   }
@@ -521,7 +521,7 @@ async function render(req: RenderRequest): Promise<RenderResult> {
   for (const [path, src] of Object.entries(assetSources!)) mount(path, src);
 
   // M10: `req.userFiles` present means the runner is sending a (possibly
-  // updated) file set — replace the cache; absent means "unchanged, reuse
+  // updated) file set. Replace the cache; absent means "unchanged, reuse
   // what you already have" (see cachedUserFiles's comment).
   if (req.userFiles) cachedUserFiles = req.userFiles;
 
@@ -612,12 +612,12 @@ self.onmessage = async (e: MessageEvent<RenderRequest | WorkerCommand>) => {
   if ("type" in data) {
     if (data.type === "module") {
       // A module a PREVIOUS worker instance (this runner's lifetime) already
-      // compiled — see ensureAssets' wasm branch, which checks this before
+      // compiled, see ensureAssets' wasm branch, which checks this before
       // touching the network or Cache Storage at all.
       receivedModule = data.module;
     }
     // Either way ("module" or "warmup"), kick bootstrap now rather than
-    // waiting for the first render message — closes the cold-start gap the
+    // waiting for the first render message: closes the cold-start gap the
     // UI's 400ms render debounce would otherwise leave idle.
     void ensureAssets().catch(() => {});
     return;
@@ -630,14 +630,14 @@ self.onmessage = async (e: MessageEvent<RenderRequest | WorkerCommand>) => {
       result.stl.buffer as ArrayBuffer,
     ]);
   } catch (err) {
-    // M1: a BootstrapError means asset loading itself failed — never even got
-    // to running OpenSCAD — as opposed to an ordinary model failure (bad
+    // M1: a BootstrapError means asset loading itself failed, never even got
+    // to running OpenSCAD, as opposed to an ordinary model failure (bad
     // source/parameters). `fatal: true` lets a caller tell those apart (e.g.
     // to avoid an "that combination of settings didn't work" message about a
     // renderer that never started) rather than looking identical to a normal
     // failed render. ensureAssets()'s memoized promise was already reset by
     // retryableOnce (retryableOnce.ts), so the very next render() call
-    // retries bootstrap from scratch — no worker respawn is needed for the
+    // retries bootstrap from scratch. No worker respawn is needed for the
     // retry to happen.
     const fatal = err instanceof Error && err.name === "BootstrapError";
     const result: RenderResult = {

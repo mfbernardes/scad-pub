@@ -1,4 +1,4 @@
-// useAppNotices.ts — the app-level persistent notices, extracted from App.tsx:
+// useAppNotices.ts: the app-level persistent notices, extracted from App.tsx:
 // stale-bundle (hard) and service-worker-update (soft) reload prompts, and the
 // offline indicator. All Sonner toasts with stable ids so a notice replaces
 // its previous instance instead of stacking.

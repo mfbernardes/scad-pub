@@ -51,7 +51,7 @@ function setNavigator(value) {
 }
 
 // M3: forceReload (the "force update" nuclear escape hatch) must touch only
-// THIS app's own registration/scope and shell caches — never every worker or
+// THIS app's own registration/scope and shell caches, never every worker or
 // cache on the origin, which would also wipe an unrelated ScadPub config (or
 // any other app) sharing the origin. `APP_ID` defaults to "scadpub" outside a
 // Vite build (see src/lib/appId.ts), so the fixtures below use that.
@@ -75,7 +75,7 @@ test("forceReload unregisters only the given registration, never looks up others
   await forceReload(reg);
 
   assert.equal(unregistered, 1);
-  assert.equal(getRegistrationCalled, false); // short-circuited — reg was already supplied
+  assert.equal(getRegistrationCalled, false); // short-circuited: reg was already supplied
   assert.equal(reloaded, true);
 });
 
@@ -83,7 +83,7 @@ test("forceReload deletes only this app's own shell caches — two ScadPub scope
   const existing = new Set([
     "scadpub-shell-v1", // this app's own (default APP_ID outside a build)
     "otherapp-shell-v1", // a different ScadPub config on the same origin
-    "openscad-wasm-bin-123.4.0", // the shared binary cache — never touched by force-update
+    "openscad-wasm-bin-123.4.0", // the shared binary cache, never touched by force-update
     "some-unrelated-service-worker-cache-shell-thing", // an unrelated worker's cache that happens to contain "-shell-"
   ]);
   const deleted = [];
@@ -131,15 +131,15 @@ test("warmDelayMs waits for an uncontended moment, and an installed app never wa
   const base = { holdBoot: false, ready: false, committed: false, hidden: false };
   // Nothing has happened yet: a visitor still reading the first screen.
   assert.equal(warmDelayMs(base), null);
-  // The render worker's own bootstrap landed — the heavy download the app
+  // The render worker's own bootstrap landed: the heavy download the app
   // actually needed is done, so follow it after a short settle.
   assert.equal(warmDelayMs({ ...base, ready: true }), 2000);
   // Installed, or launched as the installed app: offline completeness is the
   // point, and it must not depend on the user having rendered anything.
   assert.equal(warmDelayMs({ ...base, committed: true }), 0);
-  // Looked away — free bandwidth.
+  // Looked away: free bandwidth.
   assert.equal(warmDelayMs({ ...base, hidden: true }), 0);
-  // The design chooser holds back the `ready` trigger — its thumbnails own the
+  // The design chooser holds back the `ready` trigger: its thumbnails own the
   // connection while someone is choosing.
   assert.equal(warmDelayMs({ ...base, holdBoot: true, ready: true }), null);
   // …but it must not veto the other two. Someone who installs from the chooser
@@ -161,7 +161,7 @@ test("a WARM reaches the waiting worker too, so an update never activates cold",
   // named after its own version and an update's install fills only the boot
   // shell, so the waiting worker owns an almost-empty cache. The browser
   // activates it as soon as the last tab closes, and `activate` retires the old
-  // cache — leaving an installed app unable to render offline unless the
+  // cache: leaving an installed app unable to render offline unless the
   // waiting worker was filled first.
   assert.deepEqual(warmTargets({ active, waiting }, active), [waiting, active]);
 
@@ -171,6 +171,6 @@ test("a WARM reaches the waiting worker too, so an update never activates cold",
   assert.deepEqual(warmTargets({ active: null, waiting: null }, active), [active]);
   // Nothing to talk to at all.
   assert.deepEqual(warmTargets(undefined, null), []);
-  // active and controller are normally the same object — message it once.
+  // active and controller are normally the same object: message it once.
   assert.deepEqual(warmTargets({ active, waiting: null }, active).length, 1);
 });

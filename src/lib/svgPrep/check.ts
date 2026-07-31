@@ -108,8 +108,8 @@ export function check(root: Element, layers: string[] = []): Finding[] {
   }
 
   // Canvas-background trap: OpenSCAD fills every shape, so a rectangle covering
-  // the whole viewBox imports as one solid block that buries all other detail —
-  // the drawing extrudes as a single featureless slab. The commonest cause of a
+  // the whole viewBox imports as one solid block that buries all other detail.
+  // The drawing extrudes as a single featureless slab. The commonest cause of a
   // map/pictogram that renders as one block.
   const backgrounds = canvasBackgrounds(root);
   if (backgrounds.length > 0) {

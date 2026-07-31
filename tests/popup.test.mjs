@@ -67,8 +67,8 @@ test("changing the button label re-shows a remembered popup", () => {
 });
 
 // --- The picker popup is the app's first screen, not a notice over one -----
-// `picker` means the chooser and only the chooser — gen-schema's checkPopupMode
-// refuses to build one with fewer than two designs — so every consumer
+// `picker` means the chooser and only the chooser: gen-schema's checkPopupMode
+// refuses to build one with fewer than two designs, so every consumer
 // (PopupModal's body, App's boot gate, App's dismiss-on-navigation, the
 // linked-visit suppression below) reads the mode and cannot disagree.
 test("isDesignChooser is exactly picker mode", () => {
@@ -83,13 +83,13 @@ test("isDesignChooser is exactly picker mode", () => {
 test("a shared link skips the design chooser, but never a notice", () => {
   const picker = { mode: "picker", header: "Pick", body: "" };
   assert.equal(shouldShowPopup(picker, false), true);
-  // The link already names the design — asking "what are you making?" over it
+  // The link already names the design: asking "what are you making?" over it
   // is noise, and it would hold the render back for a visitor who came to see
   // exactly one thing.
   assert.equal(shouldShowPopup(picker, true), false);
   // Skipping is not dismissing: a later visit to the bare URL still asks.
   assert.equal(shouldShowPopup(picker, false), true);
-  // A notice asks nothing, so no URL can have answered it — a linked visitor is
+  // A notice asks nothing, so no URL can have answered it: a linked visitor is
   // still a new visitor.
   for (const mode of ["once", "dismissible", "always"]) {
     assert.equal(shouldShowPopup({ mode, header: "Welcome", body: "" }, true), true, mode);

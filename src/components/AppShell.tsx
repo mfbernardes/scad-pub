@@ -1,8 +1,8 @@
-// AppShell.tsx — responsive layout shell. Owns the full-bleed viewer canvas with:
+// AppShell.tsx: responsive layout shell. Owns the full-bleed viewer canvas with:
 //   Desktop (≥ 860px): CommandBar + docked ParamPanel + ActionCluster + ViewerHUD
 //   Mobile (< 860px):  full-bleed viewer + top bar + BottomSheet + floating ActionCluster
-// Both layouts float the same compact action cluster over the viewer bottom —
-// mobile no longer reserves a solid footer band. The mobile HUD is a single
+// Both layouts float the same compact action cluster over the viewer bottom.
+// Mobile no longer reserves a solid footer band. The mobile HUD is a single
 // collapsed trigger rather than the desktop column (see ViewerHUD's own doc),
 // and the sheet's Full detent stops short of the top edge, leaving a live
 // model strip; the chrome floating over that band is hidden there, driven by
@@ -13,10 +13,10 @@
 // owns is layout: which breakpoint's tree is mounted, panel width, focus
 // restoration and `inert` management across a breakpoint switch, and the
 // handful of viewer/panel toggles (dimensions, grid, view) both layouts
-// share. Three self-contained pieces — production-readiness derivation + the
+// share. Three self-contained pieces: production-readiness derivation + the
 // Review dialog (useReadinessModel.ts), the Output console's open/auto-open
 // state machine (useOutputConsole.ts), and the mobile sheet's first-visit
-// policy (useSheetPolicy.ts) — are extracted hooks this component composes, not
+// policy (useSheetPolicy.ts). Are extracted hooks this component composes, not
 // logic it owns itself.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import type { Design, Schema, UiConfig, WorkerProgress } from "../openscad/types";
@@ -26,11 +26,11 @@ import type { RenderMetrics } from "../lib/renderMetrics";
 import type { ViewerHandle, Dimensions } from "./Viewer";
 
 // Peek shows just the drag handle + the tab bar (Presets/Parameters),
-// ending at the tab underline — no sliver of the tab's content.
+// ending at the tab underline: no sliver of the tab's content.
 const PEEK_HEIGHT = 60;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
 const EMPTY_LOG: string[] = [];
-// The floating action cluster that wraps the ActionButtons row — a solid raised
+// The floating action cluster that wraps the ActionButtons row: a solid raised
 // card shared verbatim by the desktop and mobile clusters so a tweak to
 // padding/border lands once.
 const ACTION_CLUSTER_CLASS =
@@ -39,12 +39,12 @@ const ACTION_CLUSTER_CLASS =
 // after-export panel riding above it). Positioning (absolute/bottom/left/
 // transform, plus the mobile sheet-follow override) lives on `.action-dock`
 // in index.css; a plain flex column here means an ExportSuccess panel simply
-// pushes the cluster down from a fixed bottom edge — no height measurement
+// pushes the cluster down from a fixed bottom edge: no height measurement
 // needed to stack the two.
 const ACTION_DOCK_CLASS = "action-dock flex flex-col items-center gap-2";
 // Off-screen until focused, shared verbatim by the two skip links below so a
 // tweak to the focused position/chrome lands once. `.skip-link` carries no
-// stylesheet rule — it's a script hook (see CLAUDE.md), so the decoration
+// stylesheet rule: it's a script hook (see CLAUDE.md), so the decoration
 // lives here.
 const SKIP_LINK_CLASS =
   "skip-link absolute left-2 -top-12 z-[200] rounded-(--radius-sm) border border-brand bg-card px-[0.7rem] py-[0.4rem] text-foreground touch-manipulation [transition:top_0.15s_ease] focus:top-2";
@@ -101,7 +101,7 @@ const ADVANCED_SETTINGS_KEY = ns("settings.advanced");
 // The bottom-anchored dock: the ActionButtons cluster, with an optional
 // after-export panel riding above it (see ACTION_DOCK_CLASS's own doc). The
 // desktop and mobile layouts each mount this verbatim inside their own
-// positioning context (.app-shell__mobile / __desktop) — extracted so a tweak
+// positioning context (.app-shell__mobile / __desktop): extracted so a tweak
 // to either half's markup only has to land once instead of twice in step.
 function ActionDock({
   exportSuccess,
@@ -116,16 +116,16 @@ function ActionDock({
   onDismissExportSuccess: () => void;
   actionButtonsProps: ComponentProps<typeof ActionButtons>;
   /** The readiness pill, stacked directly above the cluster (StatusStrip).
-   *  Undefined in the states that shouldn't announce anything — see
+   *  Undefined in the states that shouldn't announce anything, see
    *  `dockStatusPill` below. */
   statusPill?: Omit<StatusStripProps, "className">;
-  /** Reports the dock's live height (px) whenever it changes — see the
+  /** Reports the dock's live height (px) whenever it changes, see the
    *  `--action-dock-h` effect in AppShell for what reads it. */
   onHeightChange?: (heightPx: number) => void;
 }) {
   // The dock is a flex column whose height depends on what it currently holds
   // (cluster alone, + readiness pill, + after-export panel), and the chips that
-  // sit above it have to clear whatever that is — so measure rather than let
+  // sit above it have to clear whatever that is, so measure rather than let
   // them guess. See the CSS note on `--action-dock-h`.
   const dockRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -160,7 +160,7 @@ interface Props {
   design: Design;
   designs: Design[];
   values: Values;
-  /** Values behind the current render — what the measurements panel reads. */
+  /** Values behind the current render: what the measurements panel reads. */
   renderedValues: Values;
   /** Local-only render performance telemetry, shown in the Output console's Metrics tab. */
   renderMetrics: RenderMetrics;
@@ -171,7 +171,7 @@ interface Props {
   presetBaseline: Values | null;
   /** The selected preset's display name, or null when no preset is selected. */
   presetName: string | null;
-  /** Values the current params are diffed against — presetBaseline, or design defaults. */
+  /** Values the current params are diffed against: presetBaseline, or design defaults. */
   baseline: Values;
   /** Names of params whose value differs from `baseline`. */
   changedParams: Set<string>;
@@ -185,7 +185,7 @@ interface Props {
   loadProgress: WorkerProgress | null;
   autoRender: boolean;
   stalePreview: boolean;
-  /** A successful render that still matches the live controls — the only
+  /** A successful render that still matches the live controls: the only
    * state Download/Image may act on. See docs/architecture-review.md H1. */
   exportable: boolean;
   theme: "dark" | "light";
@@ -194,11 +194,11 @@ interface Props {
   openPickerSignal: number;
   /** Whether the config's welcome popup (schema.popup) is currently up. It is
    *  the one modal that opens unbidden on a first visit and covers the whole
-   *  app, so the first-visit sheet nudge holds until it's gone — see
+   *  app, so the first-visit sheet nudge holds until it's gone, see
    *  `sheetHintArmed` below. */
   introOpen: boolean;
   /** Non-null right after a successful export, when the config's
-   *  `ui.afterExport` opts into the panel — see ExportSuccess.tsx. Null the
+   *  `ui.afterExport` opts into the panel, see ExportSuccess.tsx. Null the
    *  rest of the time, including when `ui.afterExport` is unset. */
   exportSuccess: ExportSuccessState | null;
   onDismissExportSuccess: () => void;
@@ -235,7 +235,7 @@ export const AppShell = memo(function AppShell({
 }: Props) {
   const actions = useAppActions();
   // `ui.essentials` is what decides whether `@advanced` params are hideable at
-  // all — docs/config.md and docs/annotations.md both scope the whole feature
+  // all: docs/config.md and docs/annotations.md both scope the whole feature
   // to it ("when `ui.essentials` is enabled"). Off (the default), every param
   // is simply shown: `showAdvanced` is a constant `true` and the change
   // handler below is withheld, which is what keeps the toggle from rendering
@@ -253,7 +253,7 @@ export const AppShell = memo(function AppShell({
   const handleShowAdvancedChange = essentialsEnabled ? changeShowAdvanced : undefined;
   const desktopViewerRef = useRef<ViewerHandle>(null);
   const mobileViewerRef = useRef<ViewerHandle>(null);
-  // The mobile layout root — its --sheet-follow-h CSS var sizes the viewer so it
+  // The mobile layout root: its --sheet-follow-h CSS var sizes the viewer so it
   // tracks the sheet live (see handleSheetFollow / .app-shell__mobile-viewer).
   // HTMLElement, not HTMLDivElement: this root is the <main> landmark (see the
   // layout split below). Only style/dataset are read off it.
@@ -262,7 +262,7 @@ export const AppShell = memo(function AppShell({
   // we never run two three.js renderers / RAF loops / STL parses at once.
   const isMobile = useIsMobile();
   // The active Viewer's bounding-box size (mm), reported via onMeasure. Local
-  // viewer glue like the PNG-snapshot handler — it needs the viewer, not App.
+  // viewer glue like the PNG-snapshot handler: it needs the viewer, not App.
   const [measured, setMeasured] = useState<Dimensions | null>(null);
   // Whether the viewer overlays arrowed W×D×H dimension lines on the model, plus
   // the top-left measurements panel (bounding box + per-design @info). Off by
@@ -272,7 +272,7 @@ export const AppShell = memo(function AppShell({
   const toggleDimensions = useCallback(() => setShowDimensions((v) => !v), []);
   // Whether that measurements panel is folded to its headline. Held here, not
   // in DimensionInfo, because the panel unmounts on every ruler-off, cleared
-  // render and design switch — local state made the visitor re-fold it each
+  // render and design switch: local state made the visitor re-fold it each
   // time. Starts folded on mobile, where the expanded panel would cover the
   // model outright (see viewerPrefs' initialMeasureCollapsed); after that the
   // visitor's own choice persists, like the grid.
@@ -287,7 +287,7 @@ export const AppShell = memo(function AppShell({
     });
   }, []);
   // Whether the viewer draws its reference grid. Unlike the other HUD controls
-  // this isn't config-gated — the button is always offered; `viewer.grid` only
+  // this isn't config-gated: the button is always offered; `viewer.grid` only
   // seeds the first-ever value, after which the visitor's own choice persists
   // (see src/lib/viewerPrefs.ts). Shared across both layouts, like the
   // dimension toggle above, so it survives a desktop⇄mobile breakpoint switch.
@@ -309,7 +309,7 @@ export const AppShell = memo(function AppShell({
   // Off-iOS the inset is 0.
   const safeAreaBottom = useSafeAreaBottom();
   // First-visit mobile bottom-sheet policy, the sheet's detent state, and the
-  // "swipe up for settings" nudge's visibility — see useSheetPolicy.ts. Layout
+  // "swipe up for settings" nudge's visibility, see useSheetPolicy.ts. Layout
   // (handleDetentChange, handleSheetFollow, the mobileBackgroundRef `inert`
   // effect below) still reads/drives `sheetDetent` directly; only the
   // first-visit policy that seeds it lives in the hook.
@@ -321,8 +321,8 @@ export const AppShell = memo(function AppShell({
     result,
   });
 
-  // Panel tab + search state (see M7): hoisted here — above the desktop/mobile
-  // split below — so ONLY the active layout mounts (ParamPanel or SheetTabs,
+  // Panel tab + search state (see M7): hoisted here. Above the desktop/mobile
+  // split below, so ONLY the active layout mounts (ParamPanel or SheetTabs,
   // never both), yet a breakpoint change (or a real rotation) doesn't reset
   // the tab, clear the search box, or drop focus, since neither component owns
   // this state locally anymore.
@@ -331,7 +331,7 @@ export const AppShell = memo(function AppShell({
   // held focus just before the switch (tracked by ParamSearch's onFocus/onBlur
   // via searchFocusedRef). Runs in a layout effect so it fires after the new
   // layout's DOM (with the same #param-search-input id) is committed, before
-  // the browser paints — otherwise the switch would silently drop focus to
+  // the browser paints: otherwise the switch would silently drop focus to
   // <body>.
   // Bind the ref to a local so the focus/blur handlers mutate a value the
   // React Compiler sees as a ref (`react-hooks/refs`, off here) rather than a
@@ -355,7 +355,7 @@ export const AppShell = memo(function AppShell({
 
   // M16: at the Full sheet detent the sheet visually covers the mobile
   // background (top bar + viewer + floating controls), so treat that detent
-  // as modal — mark the background `inert` (removes it from both the tab
+  // as modal. Mark the background `inert` (removes it from both the tab
   // order and the accessibility tree) so keyboard/AT users can't reach a
   // covered control. BottomSheet handles the complementary half: trapping
   // focus inside the sheet and restoring it on close. Non-modal at
@@ -373,7 +373,7 @@ export const AppShell = memo(function AppShell({
   const viewerControls = schema.viewer?.controls ?? {};
   const panelSide = ui.panelSide ?? "left";
   const panelDefaultOpen = (ui.panelDefault ?? "open") === "open";
-  // Variable names are developer detail — hidden unless a config opts in.
+  // Variable names are developer detail: hidden unless a config opts in.
   const showVarName = ui.showVarName === true;
   // Whether the viewer offers the measure (dimensions) toggle. Off hides the HUD
   // ruler button; the overlay + panel are only reachable through it, so they
@@ -391,12 +391,12 @@ export const AppShell = memo(function AppShell({
   // Whether the viewer offers the fullscreen toggle (where it works at all).
   const showFullscreen = viewerControls.fullscreen !== false;
   // Optional after-export success panel (see ExportSuccess.tsx). Undefined
-  // when the config never set `ui.afterExport` — `exportSuccess` stays null
+  // when the config never set `ui.afterExport`: `exportSuccess` stays null
   // forever in that case (App.tsx never sets it), so the panel just never mounts.
   const afterExport = ui.afterExport;
 
   const log = result?.log ?? EMPTY_LOG;
-  // Gates the toolbar's "Files" action (BarActions) — the actual FilesModal
+  // Gates the toolbar's "Files" action (BarActions): the actual FilesModal
   // (import button + imported-file list) is hosted in App.tsx alongside
   // Help/Licenses/DesignDoc, opened via AppActions' `showFiles`. Neither
   // ParamPanel nor SheetTabs knows about file imports anymore now that Files
@@ -420,7 +420,7 @@ export const AppShell = memo(function AppShell({
   const fontSuggestion = (schema.fontFamilies ?? [])[0] ?? null;
   // Every face the renderer can actually use, display-ordered: the bundled
   // faces (parsed at build time into schema.fontFaces) merged with the faces of
-  // any imported font — so the font selector's list updates the moment a font
+  // any imported font, so the font selector's list updates the moment a font
   // is imported. Feeds ParamForm's FontSelect.
   const installedFonts = useMemo(() => {
     const imported: FontFaceInfo[] = [];
@@ -433,20 +433,20 @@ export const AppShell = memo(function AppShell({
   // The SVG drawings the renderer can resolve right now: the bundled assets
   // (schema.assets) plus any imported `.svg`. An `@svg` control compares its
   // filename value against this so removing an in-use drawing surfaces a
-  // missing-file hint at the control — the SVG mirror of the missing-font hint.
+  // missing-file hint at the control: the SVG mirror of the missing-font hint.
   const availableSvgFiles = useMemo(
     () => svgPresent([...(schema.assets ?? []), ...Object.keys(userFiles)]),
     [schema.assets, userFiles]
   );
 
-  // Rows from `echo("@info", label, unit, value)` — internally-calculated
+  // Rows from `echo("@info", label, unit, value)`: internally-calculated
   // values the design surfaced at render time (see lib/computedInfo.ts).
   const computedInfo = useMemo(() => parseComputedInfo(log), [log]);
 
   // Production-readiness derivation (diagnostics/notices → count badges →
   // attention items → readiness → failure card state), plus the Review
   // dialog's open/closed state and the dock Download button's routing through
-  // it — see useReadinessModel.ts. `availableFontFamilies` is computed above
+  // it, see useReadinessModel.ts. `availableFontFamilies` is computed above
   // (ParamPanel/SheetTabs need the same set), so it's threaded in rather than
   // recomputed.
   const {
@@ -482,13 +482,13 @@ export const AppShell = memo(function AppShell({
 
   // Output console open/closed state + its auto-open-on-problem machine (see
   // useOutputConsole.ts). Opening the console has to collapse an expanded
-  // sheet to peek — the overlay's fixed anchor sits just above the peek tab
-  // row — but that hook has no reason to know about sheet state, so the
+  // sheet to peek: the overlay's fixed anchor sits just above the peek tab
+  // row, but that hook has no reason to know about sheet state, so the
   // collapse is injected as a callback instead. Wrapped in its own
   // zero-dependency useCallback (setSheetDetent is a useState setter, always
   // identity-stable) so this stays identity-stable too, which keeps
-  // useOutputConsole's `openOutput` — and therefore `toggleOutput`, handed to
-  // the memo'd CommandBar — stable across renders as well.
+  // useOutputConsole's `openOutput`, and therefore `toggleOutput`, handed to
+  // the memo'd CommandBar: stable across renders as well.
   const collapseSheetToPeek = useCallback(() => setSheetDetent("peek"), [setSheetDetent]);
   const { outputOpen, openOutput, closeOutput, toggleOutput } = useOutputConsole({
     diagnostics,
@@ -497,25 +497,25 @@ export const AppShell = memo(function AppShell({
   });
 
   // Raising the sheet off peek (dragging the handle OR tapping a tab) would slide
-  // its content up under the overlay — close the overlay on any such change so
+  // its content up under the overlay: close the overlay on any such change so
   // the two are never shown at once.
   const handleDetentChange = useCallback((d: SheetDetent) => {
     setSheetDetent(d);
     if (d !== "peek") {
       closeOutput();
       // The visitor has opened the sheet, so the first-visit nudge has done its
-      // job — retire it for good. Without this a keyboard user who expands then
+      // job: retire it for good. Without this a keyboard user who expands then
       // collapses the sheet before the timeout would see the hint return.
       dismissSheetHint();
     }
   }, [setSheetDetent, closeOutput, dismissSheetHint]);
 
   // Size the mobile viewer to follow the sheet's live height: write the sheet
-  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge —
+  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge,
   // and, through the Viewer's ResizeObserver, re-fits the model into the new
   // box so it holds its size instead of shrinking with the canvas (see
   // Viewer.tsx's refitView). The CSS caps it at the half height, and
-  // data-sheet-dragging toggles the easing — see .app-shell__mobile-viewer.
+  // data-sheet-dragging toggles the easing, see .app-shell__mobile-viewer.
   const handleSheetFollow = useCallback((heightPx: number, dragging: boolean) => {
     const el = mobileRootRef.current;
     if (!el) return;
@@ -530,7 +530,7 @@ export const AppShell = memo(function AppShell({
   // Mirror the sheet's Full-detent top gap into --sheet-full-gap, so the
   // stylesheet can anchor to the model strip (the scrim starts below it)
   // without re-deriving `FULL_TOP_GAP + notch inset` in CSS. Same pattern as
-  // the peek height below — BottomSheet owns the detent model, so it owns the
+  // the peek height below. BottomSheet owns the detent model, so it owns the
   // number, and this just republishes it.
   const handleSheetFullGap = useCallback((gapPx: number) => {
     const el = mobileRootRef.current;
@@ -546,8 +546,8 @@ export const AppShell = memo(function AppShell({
 
   // Mirror the export dock's measured height into --action-dock-h, the offset
   // the over-viewer chips (ViewerGestureHint, SheetSwipeHint) stack themselves
-  // by. The dock is a flex column that grows with what it holds — the readiness
-  // pill, the after-export panel — and it outranks both chips (z-10 vs z-9), so
+  // by. The dock is a flex column that grows with what it holds: the readiness
+  // pill, the after-export panel, and it outranks both chips (z-10 vs z-9), so
   // a static "height of the button cluster" guess meant anything taller than
   // the cluster simply covered them. Written on the shell root (rather than a
   // per-layout one) because both layouts' chips read it and only one layout is
@@ -558,7 +558,7 @@ export const AppShell = memo(function AppShell({
   }, []);
 
   // "View messages" (the review dialog's notice-attention cards) closes the
-  // dialog and opens the console — the same anchor-above-peek behaviour as
+  // dialog and opens the console: the same anchor-above-peek behaviour as
   // the bell.
   const openMessagesFromReview = useCallback(() => {
     setReviewOpen(false);
@@ -566,7 +566,7 @@ export const AppShell = memo(function AppShell({
   }, [setReviewOpen, openOutput]);
 
   // Whether the dock shows its readiness pill (StatusStrip). "ready" needs no
-  // announcement — the Download button right below it is the confirmation —
+  // announcement (the Download button right below it is the confirmation)
   // and "building" is already narrated by the viewer's own loading overlay, so
   // a pill in either state would be noise over the model. That leaves the two
   // states that want a look at the Review dialog, and mobile takes only one of
@@ -575,7 +575,7 @@ export const AppShell = memo(function AppShell({
   //   • "failed" pills on both layouts. A failure needs words; there is no
   //     other surface that says the model did not come out.
   //   • "attention" pills on DESKTOP ONLY. On mobile the pill was a second
-  //     visual for a signal the dock already carries — ActionButtons puts an
+  //     visual for a signal the dock already carries. ActionButtons puts an
   //     amber dot on Download itself (plus an sr-only issue count via
   //     `aria-describedby`), and clicking Download in that state opens this
   //     very dialog rather than exporting. Saying it twice cost a whole
@@ -586,14 +586,14 @@ export const AppShell = memo(function AppShell({
   // this from `isMobile` yields exactly one answer per render.
   //
   // It also gates the Messages bell's numeric badge (`showCount` below), so the
-  // pill's issue count is never on screen beside the bell's message count — see
+  // pill's issue count is never on screen beside the bell's message count, see
   // OutputToggle.tsx for why those two tallies legitimately differ. Dropping
   // the mobile attention pill hands that corner back to the bell's own count,
   // which is the contract working as intended: one tally on screen, not none.
   const hasStatusPill = readiness === "failed" || (!isMobile && readiness === "attention");
 
 
-  // Prop bundles shared verbatim by the two layout trees — each invocation
+  // Prop bundles shared verbatim by the two layout trees: each invocation
   // below adds only its layout-specific bits (viewer ref, active flag, …).
   const stageProps = {
     design,
@@ -615,8 +615,8 @@ export const AppShell = memo(function AppShell({
     renderedValues,
     values,
     computedInfo,
-    // While the first-visit "swipe up for settings" nudge is up — or still
-    // waiting to arm — suppress the viewer's own gesture hint so the two
+    // While the first-visit "swipe up for settings" nudge is up, or still
+    // waiting to arm: suppress the viewer's own gesture hint so the two
     // one-time chips never stack over the sheet's top edge (they share that
     // slot) and the sheet nudge always goes first. Only ever true on mobile.
     suppressGestureHint: isMobile && showSheetHint,
@@ -673,7 +673,7 @@ export const AppShell = memo(function AppShell({
           past the toolbar/viewer chrome straight to the parameter form, which
           saves more tabbing than a main-content jump alone, so it stays
           alongside rather than being replaced. Only the active layout is
-          mounted below (see M7 — a breakpoint change swaps the whole tree), so
+          mounted below (see M7: a breakpoint change swaps the whole tree), so
           each href always matches the one target that actually exists:
           #params(-mobile), and #main-content on the mounted branch's root. */}
       <a className={SKIP_LINK_CLASS} href="#main-content">
@@ -695,9 +695,9 @@ export const AppShell = memo(function AppShell({
           around the split. .app-shell is a plain block, not flex, so both
           roots resolve their own height:100% against it and any box spliced
           in between would have to re-declare that height to avoid collapsing
-          them. That's the only real cost of a wrapper — the overlays below
+          them. That's the only real cost of a wrapper: the overlays below
           anchor to these roots' own `position: relative`, which a wrapper
-          would not disturb — but with two otherwise entirely different trees
+          would not disturb, but with two otherwise entirely different trees
           it buys back only three lines. Since exactly one branch is ever
           mounted, the duplicated id and heading resolve to one of each in the
           live tree. */}
@@ -721,7 +721,7 @@ export const AppShell = memo(function AppShell({
         >
           {pageHeading}
           {/* Background content: viewer, top bar, floating controls. Marked
-              `inert` while the sheet is at the Full detent (M16) — Full
+              `inert` while the sheet is at the Full detent (M16). Full
               visually covers this content, so it's removed from the tab
               order and the accessibility tree rather than left as a hidden
               focus trap. See the mobileBackgroundRef effect above. */}
@@ -736,11 +736,11 @@ export const AppShell = memo(function AppShell({
                 mobile
               />
 
-              {/* Mobile top bar — logo left, design centered, actions right
+              {/* Mobile top bar: logo left, design centered, actions right
                   (mirrors desktop). Normally z-10 (below the bottom sheet,
                   z-30, so the full-detent sheet covers it and its drag handle
                   stays grabbable). While the output console is open it lifts
-                  to z-[33] — above the scrim (z-[31]) and console (z-[32]) —
+                  to z-[33] (above the scrim (z-[31]) and console (z-[32]))
                   so the design picker/⋮/bell stay tappable; the console only
                   opens at the peek detent, so this never fights the
                   full-detent sheet. */}
@@ -795,7 +795,7 @@ export const AppShell = memo(function AppShell({
                     onSavePng={showSaveImage ? handleSavePng : undefined}
                     canSavePng={exportable}
                     hasFiles={hasFiles}
-                    // Live preview lives in the ⋮ menu on mobile — the sheet's
+                    // Live preview lives in the ⋮ menu on mobile: the sheet's
                     // Customize tab has no footer row to spare (see SheetTabs).
                     autoRender={autoRender}
                   />
@@ -803,7 +803,7 @@ export const AppShell = memo(function AppShell({
               </div>
             </div>
 
-            {/* Floating action dock — the readiness pill and an optional
+            {/* Floating action dock: the readiness pill and an optional
                 after-export panel stacked above the same compact card the
                 desktop floats over its viewer, riding just above the sheet's
                 top edge (it follows the sheet up to the half detent via
@@ -825,8 +825,8 @@ export const AppShell = memo(function AppShell({
           </div>
 
           {/* Output console (mobile): a dismissible overlay that slides up just
-              above the COLLAPSED (peek) sheet — the sheet's tab row stays visible
-              and tappable beneath it — with a scrim dimming only the viewer.
+              above the COLLAPSED (peek) sheet. The sheet's tab row stays visible
+              and tappable beneath it, with a scrim dimming only the viewer.
               Only ever shown at the peek detent (handleDetentChange closes it
               on any other change), so it never competes with the Full-detent
               modal sheet above. */}
@@ -843,7 +843,7 @@ export const AppShell = memo(function AppShell({
             className="absolute inset-x-0 bottom-[calc(var(--safe-area-bottom)+var(--mobile-peek-height))] z-[32] max-h-[55vh] rounded-t-(--radius) border-b-0 shadow-(--elevation)"
           />
 
-          {/* Persistent bottom sheet. Modal at the Full detent — see
+          {/* Persistent bottom sheet. Modal at the Full detent, see
               BottomSheet's own focus-trap/restore effect, and the
               mobileBackgroundRef inert wiring above for its background half. */}
           <BottomSheet
@@ -890,10 +890,10 @@ export const AppShell = memo(function AppShell({
           </BottomSheet>
 
           {/* One-time first-visit nudge: shown only once there's something to
-              nudge towards (sheetHintArmed — otherwise it fades behind the boot
+              nudge towards (sheetHintArmed: otherwise it fades behind the boot
               overlay or the welcome popup) and while the sheet is still at peek
               (raising it dismisses the hint), riding just above the sheet's top
-              edge. Actionable (not aria-hidden) — see SheetSwipeHint. */}
+              edge. Actionable (not aria-hidden), see SheetSwipeHint. */}
           {showSheetHint && sheetDetent === "peek" && sheetHintArmed && (
             <SheetSwipeHint onDismiss={dismissSheetHint} />
           )}
@@ -925,8 +925,8 @@ export const AppShell = memo(function AppShell({
           {/* The landmark starts BELOW CommandBar: CommandBar renders a
               <header>, i.e. the banner landmark, and a banner nested inside
               <main> is a landmark-nesting violation (axe
-              landmark-banner-is-top-level). Mobile has no <header> — its top
-              bar is a plain div — so that branch's root carries the landmark
+              landmark-banner-is-top-level). Mobile has no <header>: its top
+              bar is a plain div, so that branch's root carries the landmark
               directly. */}
           <main
             id="main-content"
@@ -974,7 +974,7 @@ export const AppShell = memo(function AppShell({
             <div className="app-shell__viewer">
               <ViewerStage {...stageProps} viewerRef={desktopViewerRef} active>
                 {/* Floating controls live inside viewer-wrap so they hover over the
-                    canvas — which shrinks when the output console docks below it —
+                    canvas (which shrinks when the output console docks below it)
                     rather than overlapping the console's notices. The readiness
                     pill and an optional after-export panel stack above the dock
                     (see ACTION_DOCK_CLASS), exactly as they do on mobile. */}
@@ -989,7 +989,7 @@ export const AppShell = memo(function AppShell({
                 <ViewerHUD {...hudProps} viewerRef={desktopViewerRef} />
               </ViewerStage>
 
-              {/* Output console — inline below viewer */}
+              {/* Output console: inline below viewer */}
               <OutputConsole {...outputProps} className="max-h-56" />
             </div>
           </main>

@@ -140,7 +140,7 @@ test("headersFor: /*.svg suffix pattern crosses slashes (matches nested paths, n
 test("headersFor: multiple matching rules combine their (distinct) headers into one response", () => {
   const rules = parseHeadersFile(SAMPLE);
   // "/icon.svg" matches the exact rule (CSP + nosniff) AND the /* catch-all
-  // (a different CSP + X-Frame-Options) — all three header NAMES appear.
+  // (a different CSP + X-Frame-Options): all three header NAMES appear.
   const h = headersFor(rules, "/icon.svg");
   // Both the exact /icon.svg rule and the /*.svg rule match "/icon.svg" and
   // each set X-Content-Type-Options, so the (duplicate) value is joined too.
@@ -150,13 +150,13 @@ test("headersFor: multiple matching rules combine their (distinct) headers into 
 });
 
 // Cloudflare Pages does not let a later matching rule's value replace an
-// earlier one's for the SAME header name — it joins both with ", " into one
+// earlier one's for the SAME header name: it joins both with ", " into one
 // header ("If a header is applied twice in the _headers file, the values are
 // joined with a comma separator", per Cloudflare's own docs). For
 // Content-Security-Policy specifically this is exactly the mechanism that
 // makes "both policies enforced" true: a comma-separated CSP header value is
 // a list of policies the browser enforces as their intersection, so this is
-// NOT a redundant string-format detail — an override implementation would
+// NOT a redundant string-format detail. An override implementation would
 // silently drop the stricter /scad/*-style policy wherever it overlaps
 // another rule.
 test("headersFor: a later matching rule's same-named header is comma-joined, not overridden", () => {
@@ -187,7 +187,7 @@ test("headersFor: /icon.svg's CSP and the appended app CSP comma-join into one p
   // Mirrors the real dist/_headers shape: public/_headers's /icon.svg block
   // (unchanged) followed by the securityHeaders vite plugin's appended /*
   // block. The joined value must contain BOTH policies verbatim, comma-
-  // separated — that's what makes the browser enforce their intersection.
+  // separated: that's what makes the browser enforce their intersection.
   const rules = parseHeadersFile(`
 /icon.svg
   Content-Security-Policy: default-src 'none'; sandbox

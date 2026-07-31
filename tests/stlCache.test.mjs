@@ -1,7 +1,7 @@
 // Tests the real persistent L2 render cache (src/lib/stlCache.ts) against an
 // in-memory IndexedDB (fake-indexeddb). The runner tests use a hand-written
-// store stand-in, so the actual IndexedDB logic — version-on-change wipe, the
-// byte-budget LRU eviction, the entry-size cap and clear() — lives only here.
+// store stand-in, so the actual IndexedDB logic: version-on-change wipe, the
+// byte-budget LRU eviction, the entry-size cap and clear(). Lives only here.
 import "fake-indexeddb/auto";
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -11,7 +11,7 @@ const { openDb, reqToPromise, STL_META_STORE } = await import("../src/lib/idb.ts
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 // M11: put() now budgets the COMPLETE record (STL bytes + a capped log), not
-// just STL bytes — an empty log here keeps every byte-budget assertion below
+// just STL bytes. An empty log here keeps every byte-budget assertion below
 // about STL bytes exactly as it was before that change; log-byte accounting
 // itself is covered by its own dedicated tests further down.
 const entry = (n, over = {}) => ({
@@ -177,7 +177,7 @@ test("a write that started before clear() is not repopulated after it", async ()
   // eviction/version-check work, not just an empty store.
   await cache.put("seed", entry(4));
 
-  // Fire a put() and clear() back-to-back with no await between them — the
+  // Fire a put() and clear() back-to-back with no await between them: the
   // put() is still in flight (its internal ensureVersion/evictAndWrite work
   // hasn't settled) when clear() is queued. Without serialization, the put()
   // could complete its transaction AFTER clear()'s, leaving "k" behind.
@@ -229,7 +229,7 @@ test("an oversized log is truncated to a bounded size, keeping the most recent l
   const got = await cache.get("k");
   const totalChars = got.log.reduce((s, l) => s + l.length, 0);
   assert.ok(totalChars < 25_000, `stored log grew to ${totalChars} chars, budget was ~20000`);
-  // The most recent line must survive (it's usually the most actionable —
+  // The most recent line must survive (it's usually the most actionable:
   // the final error/echo of a render), and a truncation marker precedes it.
   assert.equal(got.log[got.log.length - 1], bigLog[bigLog.length - 1]);
   assert.match(got.log[0], /truncated/);
@@ -245,7 +245,7 @@ test("a log within budget is stored verbatim", async () => {
 
 test("a large log alone can push a record over maxEntryBytes even with tiny STL bytes", async () => {
   // maxEntryBytes is small enough that STL bytes alone would fit, but the
-  // (budgeted) log's byte cost is counted too — proving the budget covers the
+  // (budgeted) log's byte cost is counted too: proving the budget covers the
   // COMPLETE record, not STL bytes in isolation.
   const cache = createStlCache({ version, maxBytes: 1000, maxEntryBytes: 100 });
   const log = ["x".repeat(500)]; // well within MAX_LOG_CHARS, but > 100 bytes as UTF-16

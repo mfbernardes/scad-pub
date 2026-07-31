@@ -1,4 +1,4 @@
-// fileStore.ts — persist user-uploaded files (fonts, SVGs and any other asset a
+// fileStore.ts: persist user-uploaded files (fonts, SVGs and any other asset a
 // design references) in IndexedDB so they survive reloads and don't need
 // re-uploading each session. Keyed by filename; values are the raw bytes. The
 // database is shared (see idb.ts) and namespaced per configurator (appId).
@@ -52,6 +52,6 @@ export async function loadFiles(): Promise<Record<string, Uint8Array>> {
     (keys as string[]).forEach((k, i) => (out[k] = new Uint8Array(values[i])));
     return out;
   } catch {
-    return {}; // private mode / unavailable IndexedDB — files are just session-only
+    return {}; // private mode / unavailable IndexedDB: files are just session-only
   }
 }

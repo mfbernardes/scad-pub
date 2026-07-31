@@ -1,4 +1,4 @@
-// Unit tests for scripts/lib/dep-versions.mjs — the installed versions of the
+// Unit tests for scripts/lib/dep-versions.mjs: the installed versions of the
 // bundled packages that feed the licenses modal. The interesting case is a
 // package whose `exports` map refuses "./package.json" (three does), where the
 // version has to come from walking up out of the resolved entry point.
@@ -21,7 +21,7 @@ test("resolves every bundled package to a concrete version", () => {
 
 test("resolves a package whose exports map hides package.json", () => {
   // three's package.json is not in its `exports`, so a direct
-  // require("three/package.json") throws ERR_PACKAGE_PATH_NOT_EXPORTED — if the
+  // require("three/package.json") throws ERR_PACKAGE_PATH_NOT_EXPORTED: if the
   // walk-up fallback regressed, three would silently lose its version.
   assert.throws(() => require_.resolve("three/package.json"));
   assert.match(componentVersions({ packages: ["three"] }).three, /^\d+\.\d+\.\d+/);

@@ -1,4 +1,4 @@
-// paramGroups.ts — the single source of truth for a design's VISIBLE parameter
+// paramGroups.ts: the single source of truth for a design's VISIBLE parameter
 // sections. It is the exact filter ParamForm applies to build its <details>
 // groups, extracted so a second consumer (the "Jump to section" navigator in
 // ParamPanel/SheetTabs) can derive its option list from the SAME computation
@@ -16,9 +16,9 @@ export interface VisibleGroup {
 
 export interface VisibleGroupsOptions {
   /** Search query (case-insensitive); matches a param's name, description, or
-   *  full help text — so a term that only appears in the detail still matches. */
+   *  full help text, so a term that only appears in the detail still matches. */
   search?: string;
-  /** Include `@advanced` params. false hides them — the essentials view. */
+  /** Include `@advanced` params. false hides them: the essentials view. */
   showAdvanced?: boolean;
 }
 

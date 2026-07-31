@@ -1,4 +1,4 @@
-// UpdatingChip.tsx — compact top-centre chip shown over the viewer while a
+// UpdatingChip.tsx: compact top-centre chip shown over the viewer while a
 // re-render replaces an already-visible model (see ViewerStage). Auto-render
 // mode only: manual mode already has StaleBanner's own "Updating…" state for
 // this (StaleBanner returns null while autoRender is on, so the two can

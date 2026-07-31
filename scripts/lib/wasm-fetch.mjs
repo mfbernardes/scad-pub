@@ -1,4 +1,4 @@
-// wasm-fetch.mjs — pure, testable helpers for scripts/fetch-wasm.mjs (M12).
+// wasm-fetch.mjs: pure, testable helpers for scripts/fetch-wasm.mjs (M12).
 // Extracted from the downloader script so the stamp format, override-checksum
 // policy, and archive extraction can be unit-tested without hitting the
 // network (files.openscad.org) or touching public/wasm/.
@@ -9,7 +9,7 @@
 //     openscad.js glue can't be accepted as current on the wasm digest alone.
 //  2. resolveVerificationPolicy requires a non-pinned OPENSCAD_VERSION override
 //     to carry either an explicit OPENSCAD_SHA256 checksum or an explicit
-//     ALLOW_UNVERIFIED_WASM=1 opt-out — silence is never an option.
+//     ALLOW_UNVERIFIED_WASM=1 opt-out: silence is never an option.
 import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 
@@ -27,8 +27,8 @@ export function sha256(buf) {
  * verified for a requested `version`:
  *   - the pinned version always verifies against the committed checksum;
  *   - a non-pinned override REQUIRES either an explicit `overrideSha256`
- *     (verified like the pin) or an explicit `allowUnverified` opt-out —
- *     an override can no longer silently ship unverified bytes.
+ *     (verified like the pin) or an explicit `allowUnverified` opt-out.
+ *     An override can no longer silently ship unverified bytes.
  * Throws (does not return `{ verify: false }` implicitly) when neither is
  * given, so a caller can't accidentally proceed unverified.
  */
@@ -62,7 +62,7 @@ export function verifyArchive(zipBytes, policy) {
 }
 
 /**
- * Extract ASSETS from the archive bytes. Throws when any asset is missing —
+ * Extract ASSETS from the archive bytes. Throws when any asset is missing:
  * a partial or corrupt archive must never be accepted as if it were complete.
  */
 export function extractAssets(zipBytes) {
@@ -90,7 +90,7 @@ export function buildStamp(version, entries) {
  * True when `stamp` matches `version` and EVERY asset's on-disk digest
  * (`onDiskDigests`, keyed by asset name) matches what the stamp recorded.
  * A pre-M12 stamp (no `files`) or a stamp missing an asset's digest is never
- * current — corruption or a substituted file (of either asset) forces a
+ * current: corruption or a substituted file (of either asset) forces a
  * re-fetch instead of being silently trusted.
  */
 export function stampIsCurrent(stamp, version, onDiskDigests) {

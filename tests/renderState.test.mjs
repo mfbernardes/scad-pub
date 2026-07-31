@@ -1,4 +1,4 @@
-// Tests the pure render-provenance rules in src/lib/renderState.ts — the
+// Tests the pure render-provenance rules in src/lib/renderState.ts: the
 // epoch/currentness/exportability logic behind docs/architecture-review.md H1
 // (render result provenance) and M15 (heavy-design first render). Kept as
 // pure-function tests per the review's "Render pipeline harness" plan:
@@ -92,7 +92,7 @@ test("resolveRenderCommit: a same-epoch failure produces no snapshot", () => {
 
 test("resolveRenderCommit: an older-epoch completion is discarded outright, success or not", () => {
   // Required test: edit then export before the debounce fires is really "the
-  // renderKey moved on"; this test covers the sibling case — the *epoch*
+  // renderKey moved on"; this test covers the sibling case. The *epoch*
   // moved on (design switch / invalidation) while a render was in flight.
   const discardedOk = resolveRenderCommit(1, "key-A", outcome({ startEpoch: 0, result: ok() }));
   const discardedFail = resolveRenderCommit(1, "key-A", outcome({ startEpoch: 0, result: fail() }));
@@ -103,7 +103,7 @@ test("resolveRenderCommit: an older-epoch completion is discarded outright, succ
 test("resolveRenderCommit: a same-epoch completion whose key no longer matches the live controls is discarded as superseded (H1)", () => {
   // The revert race: render B is in flight; the user reverts to already-rendered
   // key A, which doRender short-circuits (so B is never superseded on the
-  // runner). When B completes, the live renderKey is A again — B must be
+  // runner). When B completes, the live renderKey is A again: B must be
   // discarded so it can't overwrite the current A preview, and the reason must
   // be "superseded" (not "epoch") so the caller clears the now-orphaned spinner.
   const discardedOk = resolveRenderCommit(0, "key-A", outcome({ renderKey: "key-B", result: ok() }));
@@ -113,14 +113,14 @@ test("resolveRenderCommit: a same-epoch completion whose key no longer matches t
 });
 
 test("resolveRenderCommit: an epoch change wins over a key match (design switch beats currency)", () => {
-  // If both the epoch moved AND the key differs, epoch discard takes priority —
+  // If both the epoch moved AND the key differs, epoch discard takes priority:
   // a newer generation owns `rendering`, so the caller must NOT clear it.
   const commit = resolveRenderCommit(1, "b-key", outcome({ startEpoch: 0, renderKey: "a-key", result: ok() }));
   assert.deepEqual(commit, { discarded: true, reason: "epoch" });
 });
 
 // ---- Required scenario: resolve design A's deferred render AFTER switching
-// to design B — A must never become visible or exportable under B ----
+// to design B. A must never become visible or exportable under B ----
 test("scenario: design A resolves after switching to design B (epoch discard)", () => {
   // Design A starts rendering under epoch 0.
   const startEpoch = 0;
@@ -184,7 +184,7 @@ test("scenario: a newer in-flight render blocks export, including after it fails
   assert.equal(commit.discarded, false);
   assert.equal(commit.ok, false);
   // The old snapshot is untouched by a failure (resolveRenderCommit produces
-  // no snapshot on failure), so it remains what it was — still not current,
+  // no snapshot on failure), so it remains what it was, still not current,
   // still not exportable, against the now-failed live key.
   assert.equal(isSnapshotExportable(snapshot, liveRenderKey, "design-a"), false);
 });
@@ -203,7 +203,7 @@ test("shouldFireInitialRender: never fires for an auto-render design (the deboun
 
 test("shouldFireInitialRender: the predicate takes no readiness input at all", () => {
   // M15: gating the first render on a `ready` signal that only a render itself
-  // produces deadlocks heavy designs. The guarantee is structural — this
+  // produces deadlocks heavy designs. The guarantee is structural: this
   // predicate has no readiness parameter to gate on.
   assert.equal(shouldFireInitialRender.length, 2);
 });

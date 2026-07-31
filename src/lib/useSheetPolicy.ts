@@ -1,4 +1,4 @@
-// useSheetPolicy.ts — the mobile bottom-sheet's first-visit opening policy
+// useSheetPolicy.ts: the mobile bottom-sheet's first-visit opening policy
 // (see the pure src/lib/sheetPolicy.ts) plus the ongoing detent/hint state it
 // seeds, extracted from AppShell. On a mobile visitor's genuine first visit
 // the settings sheet opens partway ("half" on a tall viewport, "peek" on a
@@ -8,8 +8,8 @@
 // no storage, and shows no hint.
 //
 // AppShell still owns the sheet's DRAG-DRIVEN transitions (handleDetentChange,
-// handleSheetFollow, the mobileBackgroundRef `inert` wiring) — those are
-// layout, reacting to the BottomSheet component itself — and reads
+// handleSheetFollow, the mobileBackgroundRef `inert` wiring): those are
+// layout, reacting to the BottomSheet component itself, and reads
 // `setSheetDetent` back out of this hook to drive them. What lives here is the
 // POLICY: what the detent and the hint should be BEFORE the visitor has
 // touched anything, and when it's safe to show the hint at all.
@@ -22,7 +22,7 @@ import { stageLoading } from "./renderStatus";
 
 export interface UseSheetPolicyArgs {
   isMobile: boolean;
-  /** Whether the config's welcome popup (schema.popup) is currently up — see
+  /** Whether the config's welcome popup (schema.popup) is currently up, see
    *  `sheetHintArmed` below. */
   introOpen: boolean;
   ready: boolean;
@@ -33,24 +33,24 @@ export interface UseSheetPolicyArgs {
 export interface SheetPolicyModel {
   sheetDetent: SheetDetent;
   setSheetDetent: (d: SheetDetent) => void;
-  /** Whether to show the one-time "Swipe up for settings" nudge — true only
+  /** Whether to show the one-time "Swipe up for settings" nudge: true only
    *  on a first-visit mount that resolved to peek (a half-open sheet needs no
    *  nudge). Dismissed on the first sheet interaction or a timeout
    *  (SheetSwipeHint), and permanently false thereafter for this session. */
   showSheetHint: boolean;
   dismissSheetHint: () => void;
   /**
-   * Whether it's safe to actually show the nudge right now — true once
+   * Whether it's safe to actually show the nudge right now: true once
    * there's something to nudge the visitor TOWARDS. The nudge's fade timeout
    * runs from the moment it mounts (SheetSwipeHint), so it must not mount
-   * while the visitor can't act on it — otherwise the whole once-per-browser
+   * while the visitor can't act on it: otherwise the whole once-per-browser
    * nudge expires unseen and, since the introduced flag was written on mount,
    * never comes back. Two ways that happens, both invisible on a fast machine
    * and both certain on a slow phone:
-   *   • first-run boot — a cold ~10 MB engine download plus the first render
+   *   • first-run boot. A cold ~10 MB engine download plus the first render
    *     easily outlasts the timeout, leaving the nudge to fade behind the
    *     "Getting things ready…" overlay. Same signal ViewerGestureHint arms on.
-   *   • the config's welcome popup — the one modal that opens by itself on a
+   *   • the config's welcome popup: the one modal that opens by itself on a
    *     first visit and covers everything, including this chip. A visitor who
    *     reads it (or, in `popup.mode: "picker"`, browses the design cards) for
    *     longer than the timeout would come out the other side to nothing.
@@ -73,8 +73,8 @@ export function useSheetPolicy({
   // two useState initializers, because the detent and the hint share one
   // decision: the detent branch SETS the introduced flag, so a second
   // initializer re-reading it could no longer tell this was a first visit.
-  // Deciding both together — before that write is observable to any later
-  // read — keeps them consistent, and the write itself is the once-per-browser
+  // Deciding both together: before that write is observable to any later
+  // read. Keeps them consistent, and the write itself is the once-per-browser
   // guard (the flag exists ever after, so `firstVisitPeek` can only ever be
   // true on this mount).
   const initialSheet = useRef<{ detent: SheetDetent; firstVisitPeek: boolean } | null>(null);

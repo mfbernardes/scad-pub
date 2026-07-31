@@ -1,4 +1,4 @@
-// shareability.ts — decides whether the current design/values/imported-files
+// shareability.ts: decides whether the current design/values/imported-files
 // combination is fully described by a plain share URL, or whether it depends
 // on bytes that live only in this browser's IndexedDB (an imported font, an
 // SVG the wizard prepared, or a generic imported file such as a `surface()`
@@ -39,7 +39,7 @@ function importedFontFaces(userFiles: Record<string, Uint8Array>): Map<string, s
     try {
       faces = fontFaces(bytes);
     } catch {
-      continue; // unparseable font bytes — nothing to key by, skip
+      continue; // unparseable font bytes: nothing to key by, skip
     }
     for (const { family, style } of faces) {
       const key = faceKeyOf(family, style);
@@ -71,12 +71,12 @@ export function computeShareability(
 
     if (p.isFont) {
       // Portability is a FACE property, not a family one: a design may select
-      // `Family:style=Italic` while the app bundles only Family Regular/Bold —
-      // a recipient still can't reproduce the Italic face. Compare the exact
+      // `Family:style=Italic` while the app bundles only Family Regular/Bold.
+      // A recipient still can't reproduce the Italic face. Compare the exact
       // face (family+style), and when it isn't bundled, name the specific
       // imported file that supplies THAT face (not merely the family's first).
       const face = faceKeyOf(familyOf(value), styleOf(value));
-      if (bundledFaces.has(face)) continue; // this exact face ships with the app — portable
+      if (bundledFaces.has(face)) continue; // this exact face ships with the app: portable
       const fileName = importedFaces.get(face);
       // Only an *imported* font is a share-completeness problem; a face that's
       // neither bundled nor imported is already broken independent of sharing

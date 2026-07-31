@@ -1,6 +1,6 @@
-// coin.scad — a parametric coin / medallion that pairs with tag.scad as a
+// coin.scad: a parametric coin / medallion that pairs with tag.scad as a
 // second example design. Exercises circular geometry, a border ring, raised /
-// engraved text, and an optional hanging hole — a different parameter set
+// engraved text, and an optional hanging hole: a different parameter set
 // from the rectangular tag so the design switcher feels meaningful.
 
 // @description Round coin with an embossed emblem.
@@ -24,7 +24,7 @@ text_size = 7; // [3:0.5:20]
 // How far the text stands out from (or sinks into) the face (mm).
 text_depth = 0.8; // [0.2:0.1:3]
 // Font family / style. Defaults to a font ScadPub doesn't bundle, to
-// demonstrate the "font isn't loaded" hint — import it (or click the bundled
+// demonstrate the "font isn't loaded" hint: import it (or click the bundled
 // fallback the hint offers) to render the real face.
 // @font
 font = "DejaVu Sans:style=Bold";
@@ -66,7 +66,7 @@ difference() {
     // Main disc body.
     cylinder(h = thickness, r = r);
 
-    // Raised border ring — a hollow cylinder sitting on top of the face.
+    // Raised border ring: a hollow cylinder sitting on top of the face.
     if (border_width > 0 && border_height > 0)
       translate([0, 0, thickness])
         difference() {

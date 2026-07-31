@@ -1,19 +1,19 @@
-// defaultHelp.ts — the generic, project-agnostic help shown when a config does
+// defaultHelp.ts: the generic, project-agnostic help shown when a config does
 // not supply its own `help`. It documents only universal configurator features
 // (no design-specific wording), in the Markdown subset the Markdown component
-// renders, and speaks to a non-technical maker — no OpenSCAD knowledge assumed.
+// renders, and speaks to a non-technical maker: no OpenSCAD knowledge assumed.
 // A deployment can override any of this via `help` in its config.
 //
-// This is PROSE ABOUT THE UI, so it goes stale silently — nothing type-checks a
+// This is PROSE ABOUT THE UI, so it goes stale silently: nothing type-checks a
 // sentence against the component it describes. When a control moves, is renamed,
 // or changes layout, fix it here in the same commit. Two recurring traps:
-//   • Several controls live in different places per layout — Live preview, Save
+//   • Several controls live in different places per layout. Live preview, Save
 //     image, theme, Help, licenses and Files are top-bar/panel items on desktop
 //     and sit behind the mobile top bar's "⋮" overflow (BarActions). Say both,
 //     or the instruction is wrong for half the visitors.
 //   • Names here must be the strings the visitor actually sees: the catalogue
 //     (src/locales/en.json) for anything routed through t()/tn(), the component
-//     otherwise. The tab names are the exception — `strings["presets.title"]` /
+//     otherwise. The tab names are the exception: `strings["presets.title"]` /
 //     `strings["settings.title"]` can rename them, but a config that renames
 //     tabs supplies its own `help` too, so the defaults are the right thing to
 //     name.

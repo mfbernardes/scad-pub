@@ -1,13 +1,13 @@
-// SectionNavigator.tsx — a lightweight "Jump to section" control shown above the
+// SectionNavigator.tsx: a lightweight "Jump to section" control shown above the
 // parameter form. It orients a visitor in a long form WITHOUT restoring a guided
 // stepper: no completion state, no locked steps, no required order, no Review
 // stage. The form stays freely editable in any order; picking a section merely
 // opens it, scrolls it into view, and focuses its summary (see ParamForm's
-// `openSection`). It's an action menu, not a select — re-selecting the current
+// `openSection`). It's an action menu, not a select: re-selecting the current
 // section re-scrolls to it (handy after scrolling away).
 //
-// The section list is derived by the parent from lib/paramGroups.ts — the SAME
-// visible-section computation the form renders — so it narrows in lockstep as a
+// The section list is derived by the parent from lib/paramGroups.ts: the SAME
+// visible-section computation the form renders, so it narrows in lockstep as a
 // search filters or the essentials toggle hides advanced params.
 import { useState } from "react";
 import { List as JumpIcon } from "lucide-react";
@@ -61,7 +61,7 @@ export function SectionNavigator({ sections, onSelect, compact = false, classNam
       <PopoverContent
         align="start"
         // Wrap long labels and scroll a long list; never clip (also holds up
-        // under browser zoom). Not width-locked to the trigger — the compact
+        // under browser zoom). Not width-locked to the trigger: the compact
         // icon trigger is far narrower than a readable menu.
         className="section-nav-list max-h-[min(60vh,20rem)] w-auto min-w-[12rem] max-w-[min(20rem,80vw)] overflow-y-auto p-1"
       >

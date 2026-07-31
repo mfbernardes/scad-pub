@@ -5,7 +5,7 @@
 // files carry JSX, which Node's native strip-types neither registers as a
 // loadable extension nor transforms, so the `load` hook below transpiles them
 // with the TypeScript compiler (already a devDependency) using the automatic
-// JSX runtime — matching tsconfig's `jsx: "react-jsx"`. Registered via
+// JSX runtime, matching tsconfig's `jsx: "react-jsx"`. Registered via
 // tests/register-ts.mjs (node --import).
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";

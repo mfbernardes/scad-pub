@@ -1,5 +1,5 @@
 // Tests the parser that turns OpenSCAD's `echo("@info", label, unit, value)`
-// convention into "calculated value" rows for the measurements panel — a
+// convention into "calculated value" rows for the measurements panel: a
 // separate, purely-runtime mechanism from the comment-based `// @info`
 // annotation (see gen-schema.mjs / diagnostics.test.mjs for that one).
 import { test } from "node:test";

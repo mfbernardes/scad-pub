@@ -1,4 +1,4 @@
-// preset-slug.mjs — the preset-thumbnail slug rule for `designs[].presets.images`'
+// preset-slug.mjs: the preset-thumbnail slug rule for `designs[].presets.images`'
 // directory form (see docs/config.md). Reverse-engineered from, and must match
 // byte-for-byte, a downstream consumer's own thumbnail-rendering script (a
 // Python one-liner): replace "×" with "x",

@@ -1,8 +1,8 @@
 // Tests the localization core (src/lib/i18n.ts): the makeT() factory's
 // override/fallback chain, {var} interpolation, and tn()'s CLDR
 // plural-category selection. The layer is intentionally a SUBSET of a full
-// i18n system — English-only, one bundle (src/locales/en.json), no locale
-// switching — so there's no en/de key-parity check here (that's
+// i18n system. English-only, one bundle (src/locales/en.json), no locale
+// switching, so there's no en/de key-parity check here (that's
 // tests/i18nCoverage.test.mjs's job in reverse: catching a DEAD key). This
 // file instead asserts every catalogue value is a non-empty string, the
 // real-world analogue of the donor branch's "every catalogue value is a

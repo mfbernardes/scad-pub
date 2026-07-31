@@ -1,9 +1,9 @@
-// DesignDocModal.tsx — shows a single design's own user documentation. Unlike
+// DesignDocModal.tsx: shows a single design's own user documentation. Unlike
 // the app-global HelpModal (how the configurator works), this is scoped to the
 // active design: its Markdown doc lives beside the .scad and is copied to a
 // served URL (design.doc) by gen-schema. It's fetched on open (kept out of the
 // initial designs.json to keep that lean) and rendered through the same safe
-// Markdown subset — now including `#`/`##`/`###` headings.
+// Markdown subset: now including `#`/`##`/`###` headings.
 import { useEffect, useState } from "react";
 import type { Design } from "../openscad/types";
 import { assetUrl } from "../lib/assetUrl";
@@ -13,7 +13,7 @@ import { Markdown } from "./Markdown";
 
 // Typography for the doc body (the Markdown renderer emits bare h2/h3/h4/p/ul).
 // Mirrors HelpModal's HELP_BODY, extended to cover the heading levels a full doc
-// uses. Kept local — the doc modal is the only consumer.
+// uses. Kept local: the doc modal is the only consumer.
 const DOC_BODY = cn(
   MODAL_BODY,
   "[&_h2]:mt-[1.1rem] [&_h2]:mb-1 [&_h2]:text-[1.05rem] [&_h2]:font-semibold [&_h2]:text-brand first:[&_h2]:mt-0",

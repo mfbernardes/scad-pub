@@ -16,7 +16,7 @@ import { elementPoints, parseViewBox } from "./geometry";
 // artboard drawn a hair inside the frame.
 const COVER_FRAC = 0.9;
 
-/** Whether any ancestor of (or the element itself) carries a transform — in
+/** Whether any ancestor of (or the element itself) carries a transform: in
  *  which case its raw coordinates can't be trusted against the viewBox, so we
  *  don't judge it a background. */
 function transformedContext(el: Element): boolean {
@@ -41,7 +41,7 @@ function numAttr(el: Element, name: string, vbSpan: number, fallback: number): n
 }
 
 /** Whether a point set is (approximately) the four corners of its own
- *  axis-aligned bounding box — i.e. a rectangle. Duplicated/closing points are
+ *  axis-aligned bounding box: i.e. a rectangle. Duplicated/closing points are
  *  tolerated; anything with a point off the corners (a triangle, an L-shape) is
  *  not a rectangle. */
 function isAxisAlignedRectangle(pts: Array<[number, number]>): boolean {
@@ -90,7 +90,7 @@ function solidRectBox(el: Element, vbW: number, vbH: number): [number, number, n
   }
   if (name === "path") {
     const d = el.getAttribute("d") ?? "";
-    // More than one subpath (a second M) means a frame/ring with a hole — real
+    // More than one subpath (a second M) means a frame/ring with a hole: real
     // artwork, never a solid background.
     if ((d.match(/[Mm]/g)?.length ?? 0) !== 1) return null;
     const pts = elementPoints(el);
@@ -131,7 +131,7 @@ function coversViewBox(
 }
 
 /**
- * The shapes that cover the whole canvas as a solid rectangle — the backgrounds
+ * The shapes that cover the whole canvas as a solid rectangle: the backgrounds
  * that would make the drawing import as one solid block. Returned only when at
  * least one OTHER importable shape exists (a lone full-canvas rectangle is a
  * deliberate solid tile, not a background burying detail). Skipped entirely when

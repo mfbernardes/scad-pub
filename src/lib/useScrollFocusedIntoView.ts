@@ -1,4 +1,4 @@
-// useScrollFocusedIntoView.ts — keep a focused field clear of the on-screen
+// useScrollFocusedIntoView.ts: keep a focused field clear of the on-screen
 // keyboard on touch devices. When a text/number/select field inside a scroll
 // container gains focus, scroll it to the vertical centre of its scroller so
 // the software keyboard can't occlude it. iOS in particular does not shrink
@@ -6,22 +6,22 @@
 // bottom sheet or modal would otherwise sit behind it.
 //
 // It scrolls THAT SCROLLER AND NOTHING ELSE, by assigning its scrollTop
-// directly. `Element.scrollIntoView()` — which this used to call — walks up and
+// directly. `Element.scrollIntoView()` (which this used to call) walks up and
 // scrolls every scrollable ancestor including the layout viewport, and on iOS
 // that is a trap: while the keyboard is up the visual viewport is shorter than
 // the layout viewport, so the document becomes scrollable and gets scrolled;
 // when the keyboard dismisses the visual viewport grows back, but that document
-// scroll offset stays. The whole fixed-height app shell then sits shifted up —
+// scroll offset stays. The whole fixed-height app shell then sits shifted up:
 // the model clipped off the top, a band of page background exposed below the
-// sheet — for a shell that is never meant to scroll at all.
+// sheet, for a shell that is never meant to scroll at all.
 //
 // Generic and dependency-free. Gated to coarse-pointer (touch) devices so it
-// never fires on desktop — no layout or visual-baseline impact there.
+// never fires on desktop: no layout or visual-baseline impact there.
 import { useEffect, type RefObject } from "react";
 import { isCoarsePointer } from "./pointer";
 
 // The input types a keyboard actually pops for. Buttons/checkboxes/sliders are
-// intentionally excluded — they don't summon a keyboard.
+// intentionally excluded: they don't summon a keyboard.
 const FIELD_SELECTOR = "input, textarea, select";
 // Let the keyboard begin animating in (and the browser settle any layout) before
 // we scroll, so the centring lands against the final viewport.
@@ -29,7 +29,7 @@ const SETTLE_MS = 300;
 
 /**
  * The nearest vertically-scrollable ancestor of `el`, searched no further up
- * than `root`. Returns null when the field isn't inside one — in which case
+ * than `root`. Returns null when the field isn't inside one: in which case
  * there is nothing this hook may scroll, and it does nothing rather than
  * falling back to the document.
  */

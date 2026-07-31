@@ -44,7 +44,7 @@ test("isVisible: no condition is always visible", () => {
 });
 
 test("isVisible: a genuinely malformed expression fails safe (control stays visible)", () => {
-  // scripts/lib/params.mjs is the primary gate — it rejects an unsupported
+  // scripts/lib/params.mjs is the primary gate: it rejects an unsupported
   // clause shape at generate time, so a shipped schema.json's showIf strings
   // are always well-formed. This exercises the runtime's own defense-in-depth:
   // evalClause throws on a relational operator (an unsupported clause shape,
@@ -64,7 +64,7 @@ test("evalShowIf: param name absent from values is falsy", () => {
 test("evalShowIf: relational operators (<, >, >=) are NOT supported — throws rather than reading as a falsy lookup", () => {
   // The evaluator only understands == / != / bare-bool / !. A relational
   // clause isn't a recognised comparison and isn't a bare identifier lookup
-  // either, so — matching the build-time grammar in scripts/lib/params.mjs —
+  // either, so (matching the build-time grammar in scripts/lib/params.mjs)
   // it throws instead of silently hiding the control. isVisible (above) is
   // what actually fails safe for a caller; evalShowIf itself surfaces the error.
   assert.throws(() => evalShowIf("char_size > 10", V), /unsupported @showIf clause/);

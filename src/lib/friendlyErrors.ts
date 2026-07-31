@@ -1,22 +1,22 @@
-// friendlyErrors.ts — maps a failed RenderResult onto friendly copy: a title,
+// friendlyErrors.ts: maps a failed RenderResult onto friendly copy: a title,
 // an optional body, and a short "technical details" tail. Deliberately NOT a
-// React component or hook — a pure function over the render outcome (its
+// React component or hook: a pure function over the render outcome (its
 // three titles resolve through i18n.ts's `t()`, itself a pure function, so
 // this stays framework-free), kept dependency-free (besides diagnostics.ts's
 // own regexes) so tests/friendlyErrors.test.mjs can drive every branch
 // directly. The three titles are also the shared copy behind
 // useRenderPipeline.ts's render-failed toast (`t("error.generic")`), so the
-// toast and this module's generic fallback can never drift apart — see
+// toast and this module's generic fallback can never drift apart, see
 // src/locales/en.json's `error.*` keys.
 //
 // Priority, matching how a render can fail:
-//  1. A fatal bootstrap failure (RenderResult.fatal — see worker.ts's
+//  1. A fatal bootstrap failure (RenderResult.fatal, see worker.ts's
 //     BootstrapError): the render pipeline never even got to running
 //     OpenSCAD, so "that combination of settings didn't work" would be a
-//     lie. Body is always null — there's no model-level detail to show.
+//     lie. Body is always null: there's no model-level detail to show.
 //  2. A failed `assert()`: OpenSCAD halts at the FIRST one, so its authored
 //     message (the string literal the design's author wrote as assert()'s
-//     second argument) is the single most actionable thing to show — reused
+//     second argument) is the single most actionable thing to show. Reused
 //     verbatim, quote-stripped, as the card's body.
 //  3. Any other nonzero exit: the generic "didn't work" copy, matching the
 //     existing failure toast text exactly so the toast and a future Notices
@@ -31,12 +31,12 @@ import { t } from "./i18n";
 
 export interface FriendlyErrorInfo {
   title: string;
-  /** The assert's authored message, verbatim and unquoted — null for every
+  /** The assert's authored message, verbatim and unquoted: null for every
    *  other failure kind (fatal or generic), which have no model-level detail
    *  to show as a body. */
   body: string | null;
   /** A short, deduped tail of the log's ERROR:/WARNING:/bootstrap-error
-   *  lines — a "Show technical details" disclosure's content. Never the
+   *  lines. A "Show technical details" disclosure's content. Never the
    *  whole log. */
   technical: string[];
 }
@@ -45,7 +45,7 @@ export interface FriendlyErrorInfo {
 const DEFAULT_MAX_TECHNICAL = 5;
 
 // A worker bootstrap failure (worker.ts's BootstrapError, caught in
-// self.onmessage) logs a single `[error] <message>` line — a distinct,
+// self.onmessage) logs a single `[error] <message>` line: a distinct,
 // internal convention from OpenSCAD's own `[out]/[err] ERROR:`/`WARNING:`
 // lines (ASSERT_RE/WARNING_RE), since bootstrap never got as far as running
 // OpenSCAD at all.
@@ -54,7 +54,7 @@ const BOOTSTRAP_LOG_RE = /^\[error\]\s*(.*)$/;
 // The authored message inside `assert(cond, "message")`, exactly as OpenSCAD
 // prints it: `Assertion '<cond>' failed: "<message>" in file <path>, line
 // <N>`. An assert() call with no message argument omits the `: "<message>"`
-// part entirely (`Assertion '<cond>' failed in file <path>, line <N>`) — this
+// part entirely (`Assertion '<cond>' failed in file <path>, line <N>`). This
 // returns null then, so the caller falls back to the raw assertion text.
 function assertMessage(assertionText: string): string | null {
   const m = assertionText.match(/failed:\s*"([\s\S]*)"\s+in file\b/);
@@ -62,7 +62,7 @@ function assertMessage(assertionText: string): string | null {
 }
 
 /** ERROR:/WARNING:/bootstrap-error lines from the raw worker log, in order,
- *  deduped, capped to a short tail — used as `technical` for every failure
+ *  deduped, capped to a short tail. Used as `technical` for every failure
  *  kind. Naturally includes a failed assert's own raw line (condition + file
  *  + line, not just its authored message) alongside any further ERROR/WARNING
  *  lines, since OpenSCAD can still emit e.g. a font-fallback WARNING before
@@ -90,7 +90,7 @@ function technicalTail(log: string[], max: number): string[] {
 }
 
 /**
- * Map a failed render onto friendly copy — `null` for a missing or
+ * Map a failed render onto friendly copy: `null` for a missing or
  * successful result (nothing to say). See the file header for the priority
  * order.
  */
@@ -105,7 +105,7 @@ export function friendlyRenderError(result: RenderResult | null): FriendlyErrorI
       technical,
     };
 
-  // OpenSCAD halts at the first failed assert() — later lines matching
+  // OpenSCAD halts at the first failed assert(): later lines matching
   // ASSERT_RE (rare: e.g. a nested/earlier assert already logged before the
   // one that actually aborted the run) are still folded into `technical`
   // above, but only the FIRST one's authored message becomes the body.

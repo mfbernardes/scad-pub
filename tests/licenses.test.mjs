@@ -1,6 +1,6 @@
 // The built-in open-source attributions (src/lib/licenses.ts) and the build-time
 // versions they carry: ScadPub's own stamp, the OpenSCAD WASM snapshot, and the
-// installed versions of the bundled npm packages. No version may be a literal —
+// installed versions of the bundled npm packages. No version may be a literal:
 // that's how the list came to claim React 18.3 while the app bundled 19.x.
 import { test } from "node:test";
 import assert from "node:assert/strict";

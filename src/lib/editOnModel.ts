@@ -1,4 +1,4 @@
-// editOnModel.ts — pure, DOM-free helpers for the "type on the sign" feature:
+// editOnModel.ts: pure, DOM-free helpers for the "type on the sign" feature:
 // direct on-model text editing. A design marks one plain string param
 // `// @editOnModel` (see docs/annotations.md); the viewer then lets the user
 // edit that value by clicking the rendered mesh, which opens a floating inline

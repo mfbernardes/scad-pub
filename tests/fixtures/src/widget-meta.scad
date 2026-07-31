@@ -1,4 +1,4 @@
-// Fixture design carrying file-level @description/@icon/@doc metadata — the
+// Fixture design carrying file-level @description/@icon/@doc metadata: the
 // sole source for a design's picker description/icon/doc, since config-level
 // designs[].description/media no longer exist (see docs/annotations.md).
 // @description A little widget.

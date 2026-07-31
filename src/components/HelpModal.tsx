@@ -1,4 +1,4 @@
-// HelpModal.tsx — renders the user guide from structured content. The content
+// HelpModal.tsx: renders the user guide from structured content. The content
 // is project-agnostic by default (DEFAULT_HELP) and fully overridable via the
 // config's `help`, so no design-specific copy is baked into the app. A config
 // may group its guide into many tabs (`help.tabs`); without tabs it renders as
@@ -17,7 +17,7 @@ import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
 
    `[&_p]:m-0` zeroes the browser's paragraph margins so a section's first
    paragraph sits directly under its <h3> (which brings its own `mb-1`). That
-   held while every section body was one paragraph — but a body with two
+   held while every section body was one paragraph, but a body with two
    would then run them together, since a blank line in the source becomes a
    second <p> with no gap. The sibling rules restore that gap for exactly the
    paragraphs that follow something: p-after-p and p-after-list. */
@@ -55,18 +55,18 @@ function HelpSections({
 }
 
 /** Tab strip + panels, built on the shared Radix Tabs primitive (which provides
- *  the full ARIA tabs pattern — roving tabindex, arrow/Home/End nav — for free). */
+ *  the full ARIA tabs pattern (roving tabindex, arrow/Home/End nav) for free). */
 function HelpTabs({ tabs, initialTab }: { tabs: HelpTab[]; initialTab?: string }) {
   // `initialTab` (from ui.afterExport's "Open printing help" action, or any
-  // other future deep link) picks which tab is active on mount — matched by
+  // other future deep link) picks which tab is active on mount: matched by
   // its exact label; an unmatched or omitted value falls back to the first
   // tab, same as before this prop existed. Radix Tabs' `defaultValue` is
-  // uncontrolled, so this only matters at mount — fine here since HelpModal
+  // uncontrolled, so this only matters at mount: fine here since HelpModal
   // remounts fresh every time it opens (see App.tsx's `{showHelp && <HelpModal/>}`).
   const matched = initialTab ? tabs.findIndex((t) => t.label === initialTab) : -1;
   const defaultValue = matched >= 0 ? String(matched) : "0";
   // `min-h-0 flex-1` lets this tab block fill the dialog's remaining height and,
-  // crucially, shrink below its content — otherwise the default `min-height:auto`
+  // crucially, shrink below its content: otherwise the default `min-height:auto`
   // makes it grow past the dialog, which clips (rather than scrolls) long tabs.
   return (
     <Tabs defaultValue={defaultValue} className="min-h-0 flex-1 gap-0">
@@ -110,7 +110,7 @@ export function HelpModal({
   canInstall?: boolean;
   onInstall?: () => void;
   /** Deep-link to a specific tab by its exact label (e.g. from the after-export
-   *  panel's "Open printing help" action) — see HelpTabs' own doc. */
+   *  panel's "Open printing help" action), see HelpTabs' own doc. */
   initialTab?: string;
 }) {
   const content = help ?? DEFAULT_HELP;

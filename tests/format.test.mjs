@@ -1,4 +1,4 @@
-// Unit tests for src/lib/format.ts — the shared display formatting behind the
+// Unit tests for src/lib/format.ts: the shared display formatting behind the
 // viewer's measurements panel (DimensionInfo.tsx) and the pre-download review
 // summary (reviewSummary.ts): millimetre figures and a parameter's current
 // value rendered the same way wherever a visitor sees it.

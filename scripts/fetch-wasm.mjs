@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// fetch-wasm.mjs — download the OpenSCAD WebAssembly "web" snapshot into
+// fetch-wasm.mjs: download the OpenSCAD WebAssembly "web" snapshot into
 // public/wasm/. Pinned to the SAME OpenSCAD version as the test suite
 // (tests/setup_openscad.sh), so in-browser renders match the committed
 // reference geometry. This snapshot ships Manifold and the textmetrics feature.
@@ -7,11 +7,11 @@
 //
 // Pure Node (no bash/curl/unzip needed), so it runs the same on Windows, macOS,
 // and Linux. The npm predev/prebuild hooks call this on every run; an idempotent
-// stamp keeps it cheap — only a first run, a version bump, or on-disk drift
+// stamp keeps it cheap, only a first run, a version bump, or on-disk drift
 // (see isCurrent()) hits the network.
 //
 // M12: the stamp/checksum/extraction logic lives in scripts/lib/wasm-fetch.mjs
-// (network-free, unit-testable — see tests/wasm-fetch.test.mjs); this file is
+// (network-free, unit-testable, see tests/wasm-fetch.test.mjs); this file is
 // the thin CLI wrapper that does the actual I/O.
 
 import { existsSync } from "node:fs";
@@ -44,7 +44,7 @@ const die = (msg) => {
 // Idempotent guard: skip the download when both extracted assets are already
 // present, were fetched for the requested version, AND their on-disk bytes
 // still hash to what the stamp recorded (M12: both openscad.wasm AND
-// openscad.js — verifying only the wasm let a modified/partial glue file pass
+// openscad.js: verifying only the wasm let a modified/partial glue file pass
 // as current). Set FORCE=1 to always re-download. A pre-M12 stamp (no
 // per-file digests) is treated as not current.
 async function isCurrent() {
@@ -69,7 +69,7 @@ if (await isCurrent()) {
 }
 
 // M12: a non-pinned OPENSCAD_VERSION override no longer downloads silently
-// unverified — it requires either an explicit OPENSCAD_SHA256 checksum or an
+// unverified. It requires either an explicit OPENSCAD_SHA256 checksum or an
 // explicit ALLOW_UNVERIFIED_WASM=1 opt-out.
 let policy;
 try {

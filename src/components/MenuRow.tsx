@@ -1,4 +1,4 @@
-// MenuRow.tsx — one row of a popover menu: an icon, a label, and whatever the
+// MenuRow.tsx: one row of a popover menu: an icon, a label, and whatever the
 // caller puts after them. The app has several popover menus (the top bar's "⋮"
 // overflow, the viewer's collapsed "View options", the section navigator, the
 // preset footer's "⋮") and they were each spelling the same row out by
@@ -7,8 +7,8 @@
 //
 // Exported as BOTH a component and a class string, the same pairing
 // IconButton.tsx uses (see ICON_BUTTON_CLASS's own doc): a caller that has to
-// render something other than a plain <button> — a <Label> wrapping a Switch,
-// a Radix trigger that owns its own element — takes the class and keeps the
+// render something other than a plain <button>. A <Label> wrapping a Switch,
+// a Radix trigger that owns its own element. Takes the class and keeps the
 // look without contorting itself into this component.
 import type { ReactNode } from "react";
 import { cn } from "../lib/utils";
@@ -26,13 +26,13 @@ interface Props {
   /**
    * For a row that toggles rather than acts: announces on/off state to
    * assistive tech, and marks the row when on. A toggle row usually should NOT
-   * close its menu — the visitor wants to see the result and often flip it
-   * straight back — which is the caller's decision, not this component's.
+   * close its menu: the visitor wants to see the result and often flip it
+   * straight back, which is the caller's decision, not this component's.
    */
   pressed?: boolean;
   /** Leading icon. Sized by the caller (16px matches the rows in use). */
   icon?: ReactNode;
-  /** Trailing content — a Switch, a shortcut hint, a badge. */
+  /** Trailing content: a Switch, a shortcut hint, a badge. */
   children?: ReactNode;
   className?: string;
   /** Overrides the accessible name when `label` isn't plain text. */

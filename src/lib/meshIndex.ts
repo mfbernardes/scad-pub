@@ -1,4 +1,4 @@
-// meshIndex.ts — collapse a loader's non-indexed geometry back to an indexed mesh.
+// meshIndex.ts: collapse a loader's non-indexed geometry back to an indexed mesh.
 //
 // three's ThreeMFLoader builds *non-indexed* geometry for coloured meshes
 // (buildVertexColorMesh dereferences every triangle corner into a flat
@@ -6,8 +6,8 @@
 // Safari/WebKit's Metal-backed WebGL corrupts the tail of a large enough
 // attribute buffer: the model renders correctly in Chrome, but the vertices
 // past the threshold come out as garbage spikes in Safari. A finely-facetted
-// coloured design inflates past that threshold — the geometry emitted last
-// (at the tail of the buffer) is what breaks, while the rest renders fine —
+// coloured design inflates past that threshold: the geometry emitted last
+// (at the tail of the buffer) is what breaks, while the rest renders fine,
 // and a coarser variant of the same model that stays under it renders cleanly.
 //
 // Re-indexing deduplicates by position + colour (a hard colour edge keeps its

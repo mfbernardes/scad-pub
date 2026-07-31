@@ -1,10 +1,10 @@
-// screenshots.mjs — light + dark visual-regression of the built UI. Serves
+// screenshots.mjs: light + dark visual-regression of the built UI. Serves
 // dist/ in-process, drives headless Chromium at a fixed viewport, and compares
 // a full-page screenshot of each theme against a committed baseline.
 //
 // The WebGL viewer and everything whose presence/content depends on render
 // timing (see MASK_CSS) are masked, so the check covers the deterministic
-// chrome (top bar, parameter form, action row) only — the 3D canvas is
+// chrome (top bar, parameter form, action row) only: the 3D canvas is
 // non-deterministic across GPUs and is exercised by smoke.mjs.
 //
 // Baselines are environment-pinned (font rendering differs across OSes), like
@@ -37,13 +37,13 @@ const MASK_CSS = `
      render lands, so its presence depends on render timing. */
   .dimension-info { visibility: hidden !important; }
   /* Output console: auto-opens when the default design's render surfaces its
-     notices — open/closed depends on render timing — and its Log tab carries
+     notices (open/closed depends on render timing) and its Log tab carries
      run-dependent OpenSCAD output. display:none (not visibility) so an opened
      console also doesn't shift the layout relative to a closed one. */
   .output-console { display: none !important; }
   /* Output bell: its corner wears a render-status dot (pulsing while a render
-     runs) or a pending-notice count badge once the render surfaces notices —
-     both change with render progress. */
+     runs) or a pending-notice count badge once the render surfaces notices.
+     Both change with render progress. */
   .command-bar__output { visibility: hidden !important; }
 `;
 
@@ -57,7 +57,7 @@ async function shoot(page, base, theme) {
   await page.getByRole("tab", { name: "Customize" }).first().click().catch(() => {});
   await page.waitForSelector(".param-form", { timeout: 30000 });
   // Wait for the render to actually finish before shooting, so the render-gated
-  // viewer chrome that ISN'T masked — the status strip, the HUD — is
+  // viewer chrome that ISN'T masked (the status strip, the HUD) is
   // deterministically present rather than sometimes caught mid-build. The
   // canvas + loading overlay themselves stay
   // masked (MASK_CSS); this only pins the surrounding chrome's state.

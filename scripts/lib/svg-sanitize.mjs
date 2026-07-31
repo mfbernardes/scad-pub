@@ -1,4 +1,4 @@
-// svg-sanitize.mjs — minimal defense-in-depth for BROWSER-FACING SVGs (the app
+// svg-sanitize.mjs: minimal defense-in-depth for BROWSER-FACING SVGs (the app
 // logo, PWA icon, and per-design picker icon). See M13 in
 // docs/architecture-review.md and the "SVG asset trust model" section of
 // docs/config.md for the full policy: design/config sources are trusted
@@ -7,7 +7,7 @@
 //
 // Deliberately NOT applied to render-input SVGs copied into public/scad/ by
 // copyAsset() (config `assets` / a design's use/include graph, consumed by
-// OpenSCAD's import()/surface()) — those bytes are geometry, and this module
+// OpenSCAD's import()/surface()): those bytes are geometry, and this module
 // does not parse SVG well enough to guarantee it never perturbs a path,
 // transform or viewBox. Those rely on the operator-input trust boundary plus
 // the response headers in public/_headers instead (nosniff + a locked-down
@@ -24,17 +24,17 @@
 //
 // It strips the three known ways an SVG becomes "active", each hardened against
 // the evasions a naive regex misses:
-//   1. <script> and <foreignObject> elements — INCLUDING a namespace prefix
+//   1. <script> and <foreignObject> elements, INCLUDING a namespace prefix
 //      (`<svg:script>`, `<s:foreignObject>`), and empty/self-closing forms.
-//   2. `on*=` event-handler attributes — including values that span multiple
+//   2. `on*=` event-handler attributes, including values that span multiple
 //      lines (dotAll), e.g. onload="\n  alert(1)\n".
 //   3. `href`/`xlink:href` values carrying a URI *scheme* (http:, file:, data:,
-//      javascript:, …) — checked AFTER normalizing away the whitespace/control
+//      javascript:, …). Checked AFTER normalizing away the whitespace/control
 //      chars and HTML entities a browser ignores when reading a scheme, so
 //      "jav&#x61;script:", "java\tscript:" and "javascript&#58;…" are caught.
 //      A same-document fragment ("#gradient1") or a scheme-less relative path
 //      is left alone (routine for gradients/clip-paths/<use>).
-// Returns { text, removed } — `removed` is a list of short labels for what was
+// Returns { text, removed }: `removed` is a list of short labels for what was
 // stripped, empty when the input was already inert, so callers can log it.
 
 // An optional XML namespace prefix on an element name, e.g. the `svg:` in
@@ -48,7 +48,7 @@ const FOREIGN_OBJECT_RE = new RegExp(
   `<${NS}foreignObject\\b[^>]*>[\\s\\S]*?<\\/${NS}foreignObject\\s*>|<${NS}foreignObject\\b[^>]*\\/\\s*>`,
   "gi"
 );
-// on<word>="..." / '...' — the `s` (dotAll) flag lets a quoted value cross
+// on<word>="..." / '...': the `s` (dotAll) flag lets a quoted value cross
 // newlines, so a line-wrapped handler value is still matched and removed.
 const EVENT_ATTR_RE = /\son[a-z]+\s*=\s*(".*?"|'.*?')/gis;
 // Every href / xlink:href attribute, captured so its value can be normalized
@@ -79,7 +79,7 @@ function deobfuscateScheme(value) {
     .replace(/&#(\d+);?/g, (_, d) => codePoint(parseInt(d, 10)))
     .replace(/&colon;/gi, ":");
   // Drop ASCII whitespace and C0/DEL control chars (code point <= 0x20, or
-  // 0x7f) — the ones a browser ignores when reading a URL scheme. Done by
+  // 0x7f): the ones a browser ignores when reading a URL scheme. Done by
   // code point rather than a control-char regex literal (avoids no-control-regex).
   let out = "";
   for (const ch of decoded) {
@@ -90,7 +90,7 @@ function deobfuscateScheme(value) {
 }
 
 // A value "carries a scheme" if, after de-obfuscation, it begins with
-// `<scheme>:` — as opposed to a same-document fragment ("#id") or a scheme-less
+// `<scheme>:`, as opposed to a same-document fragment ("#id") or a scheme-less
 // relative path, both of which are safe and preserved.
 function hasUriScheme(value) {
   const v = deobfuscateScheme(value);
@@ -104,7 +104,7 @@ function stripSchemeHrefs(text, removed) {
       hit = true;
       return "";
     }
-    return match; // scheme-less (fragment/relative) — keep byte-for-byte
+    return match; // scheme-less (fragment/relative): keep byte-for-byte
   });
   if (hit) removed.push("scheme href/xlink:href (incl. javascript:/external)");
   return out;

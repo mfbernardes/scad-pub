@@ -1,24 +1,24 @@
-// PresetDiffBar.tsx — Tier 1 of the unified preset diff/restore UX: a thin
+// PresetDiffBar.tsx: Tier 1 of the unified preset diff/restore UX: a thin
 // status strip at the top of the Parameters tab, shown only while the current
 // values have drifted from the baseline (the selected preset, or the design's
-// defaults when none is selected). Neutral/slate styling throughout — drifting
+// defaults when none is selected). Neutral/slate styling throughout: drifting
 // from a preset is informational, not a warning (warn/amber stays reserved for
 // stale previews and asserts). See ParamForm for the matching per-field (Tier
 // 2) markers, which share the same baseline.
 //
 // The strip is ONE line at every width, which is what the markup below is
-// arranged to guarantee. Spelling the baseline's name twice — in the summary
-// and again inside the action ("Revert to <name>") — wraps to two lines, because
+// arranged to guarantee. Spelling the baseline's name twice: in the summary
+// and again inside the action ("Revert to <name>"). Wraps to two lines, because
 // neither side can shrink: the summary is a flex item at its default
 // `min-width: auto`, so it cannot go below its longest word, and the action is
-// `shrink-0`. A preset whose name ran to ~50 characters — routine once a
-// name carries a qualifier and a language tag — therefore collapsed the
+// `shrink-0`. A preset whose name ran to ~50 characters: routine once a
+// name carries a qualifier and a language tag. Therefore collapsed the
 // summary into a tall one-word column on a phone while the action still
 // overflowed off-screen. So: the name is said
 // once, in the summary, which is `min-w-0` + `truncate` and carries the full
 // text in `title`; the action is the bare verb, with the full "Revert to
 // <name>" kept on its aria-label/title for assistive tech and hover. One
-// presentation for both layouts — the docked desktop panel is resizable and
+// presentation for both layouts: the docked desktop panel is resizable and
 // narrows to the same problem.
 import type { Design } from "../openscad/types";
 import type { Values } from "../lib/presets";

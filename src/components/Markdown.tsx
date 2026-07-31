@@ -1,4 +1,4 @@
-// Markdown.tsx — a deliberately tiny, safe Markdown renderer for help content
+// Markdown.tsx: a deliberately tiny, safe Markdown renderer for help content
 // (no library, no dangerouslySetInnerHTML). Supports the block + inline subset
 // the help text needs: blank-line-separated paragraphs, `#`/`##`/`###` ATX
 // headings, `- ` bullet lists, and inline **bold**, `code`, and [text](url)

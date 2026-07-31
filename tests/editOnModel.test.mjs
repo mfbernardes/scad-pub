@@ -1,4 +1,4 @@
-// editOnModel.test.mjs — the DOM-free logic behind on-model text editing:
+// editOnModel.test.mjs: the DOM-free logic behind on-model text editing:
 // the click-vs-drag gesture gate, the editor position clamping, and the
 // design's editOnModel-param lookup. These are the bits worth pinning without
 // a browser; the three.js raycast + React wiring are exercised by smoke.mjs.
@@ -80,7 +80,7 @@ test("clampEditorPosition (mobile): a hit is pinned into the top ~40% of the vie
 
 test("clampEditorPosition: an editor larger than the bounds still yields the margin", () => {
   // Degenerate case (card wider AND taller than a tiny viewer): never NaN,
-  // never negative — falls back to the margin so the card at least starts
+  // never negative. Falls back to the margin so the card at least starts
   // on-screen rather than being pushed off it.
   const tiny = { width: 100, height: 100 };
   const big = { width: 240, height: 200 };

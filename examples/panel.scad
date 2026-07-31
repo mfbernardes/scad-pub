@@ -1,4 +1,4 @@
-// panel.scad — extrude an SVG drawing as a relief on a base plate. Demonstrates
+// panel.scad: extrude an SVG drawing as a relief on a base plate. Demonstrates
 // the @svg field wizard's colour binding: drop a multi-colour SVG and the wizard
 // reads each named region's colour into `svg_layers`; every region is then
 // imported and coloured separately (per-region colour survives a 3MF export). A
@@ -40,7 +40,7 @@ svg_file = "panel.svg";
 // relief. Filled in by the SVG wizard.
 // @filledBy svg_file
 svg_layers = "120x90, sky:#87ceeb, ground:#9acd32, house:#cd5c5c";
-// (Regions must not overlap — same-height overlapping regions conflict on colour.)
+// (Regions must not overlap: same-height overlapping regions conflict on colour.)
 
 /* [Hidden] */
 $fa = $preview ? 12 : 4;
@@ -52,7 +52,7 @@ $fs = $preview ? 2 : 0.4;
 // its colour ("gray" == "gray:gray", "c8b0000" == "c8b0000:#8b0000"); a third
 // field is that region's own relief height in mm, and without one the region
 // uses relief_height. One further entry, "<width>x<height>", names the drawing's
-// own canvas (its viewBox size) — see svg_relief for why that is needed. Blank
+// own canvas (its viewBox size), see svg_relief for why that is needed. Blank
 // means no per-region colour (single relief).
 
 function _is_ws(c) = c == " " || c == "\t" || c == "\n" || c == "\r";
@@ -74,7 +74,7 @@ function _bare_colour(id) =
   let (body = _slice(id, 1, len(id) - 1))
   (len(id) == 7 || len(id) == 9) && id[0] == "c" && _all_hex(body) ? str("#", body) : id;
 function _is_digit(c) = c >= "0" && c <= "9";
-// A decimal number, or undef — OpenSCAD has no atof(), and both the height and
+// A decimal number, or undef. OpenSCAD has no atof(), and both the height and
 // the canvas fields are numbers inside a string. All digits go into one integer
 // and the point is applied once at the end, so "2.5" comes back exactly.
 function _num(s, i = 0, acc = 0, dec = -1, seen = false) =
@@ -119,7 +119,7 @@ module rounded_rect(w, h, r) {
 }
 
 // The drawing fit inside the usable area (inside the margin), preserving its
-// aspect ratio — scaled to the box's smaller side so resizing the panel scales
+// aspect ratio: scaled to the box's smaller side so resizing the panel scales
 // the drawing proportionally instead of stretching it, then clipped so nothing
 // runs off the plate. resize() with two non-zero axes would stretch each to fill
 // the box (distorting the drawing), so only one axis is driven and the other
@@ -127,14 +127,14 @@ module rounded_rect(w, h, r) {
 //
 // A blank layers list extrudes the whole drawing in one colour, centred on its
 // own bounding box. Otherwise each region is imported by id and coloured under
-// one shared fit transform so they stay registered — import(center=true) centres
+// one shared fit transform so they stay registered: import(center=true) centres
 // on the imported geometry's OWN bounding box, so using it per region would pull
 // the drawing apart, and the drawing must instead fill its "0 0 W H" viewBox.
 // That also leaves OpenSCAD with no way to measure the fitted drawing, which is
 // what `canvas` is for: with it the group is centred on the panel, without it it
 // is corner-anchored and only lands centred when the drawing's proportions match
 // the panel's. resize() scales z along with x/y, so the tallest region's height
-// is pinned in the fit — otherwise every relief height would be multiplied by the
+// is pinned in the fit. Otherwise every relief height would be multiplied by the
 // fit factor.
 module svg_relief(layers, canvas) {
   usable_w = panel_width - 2 * margin;

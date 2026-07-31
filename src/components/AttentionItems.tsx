@@ -1,10 +1,10 @@
-// AttentionItems.tsx — warning-card rendering for src/lib/readiness.ts's
+// AttentionItems.tsx: warning-card rendering for src/lib/readiness.ts's
 // AttentionItem list: a font param whose selected family isn't loaded, a
 // flagged notice category with a pending notice, or a bare OpenSCAD
 // warning/assert diagnostic not already covered by a notice category. Used by
 // ReviewDialog. Ported (simplified) from a donor branch's design-reference
 // component: no "go to setting" action, since ReviewDialog is not anchored
-// near any particular control — Import font / Use a bundled font / View
+// near any particular control. Import font / Use a bundled font / View
 // messages cover the surfaces this repo needs.
 import { AlertTriangle as WarningIcon } from "lucide-react";
 import type { Design } from "../openscad/types";
@@ -19,10 +19,10 @@ import { Button } from "./ui/button";
 
 interface Props {
   attention: AttentionItem[];
-  /** The active design — looked up per font-fallback item to compute its
+  /** The active design: looked up per font-fallback item to compute its
    *  one-click bundled-font replacement (src/lib/fontFallback.ts). */
   design: Design;
-  /** Live parameter values — a font-fallback item's fallback is computed
+  /** Live parameter values: a font-fallback item's fallback is computed
    *  against the CURRENT value, same as ParamForm's own inline hint. */
   values: Values;
   availableFontFamilies?: Set<string>;
@@ -123,7 +123,7 @@ export function AttentionItems({
                 </>
               ) : (
                 // A bare OpenSCAD WARNING:/assert() diagnostic (readiness.ts's
-                // DiagnosticAttentionItem) — the raw message IS the card's
+                // DiagnosticAttentionItem). The raw message IS the card's
                 // headline (unlike a notice item, there's no separate
                 // count/label to template), same "View messages" action.
                 <>

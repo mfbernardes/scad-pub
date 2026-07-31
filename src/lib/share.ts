@@ -1,4 +1,4 @@
-// share.ts — thin wrappers over the Web Share API (OUTBOUND sharing): hand a
+// share.ts: thin wrappers over the Web Share API (OUTBOUND sharing): hand a
 // link or an exported model file to the OS share sheet on capable devices
 // (mobile especially). Each reports how it went so callers can fall back to
 // clipboard / download. This is distinct from the manifest share_target /
@@ -7,7 +7,7 @@
 export type ShareOutcome = "shared" | "cancelled" | "unsupported" | "failed";
 
 // The Web Share API also exists on desktop, but routing an export or a link to
-// the OS share sheet there is worse than a plain download / clipboard copy — the
+// the OS share sheet there is worse than a plain download / clipboard copy: the
 // user can't actually get the file into Downloads. Restrict outbound sharing to
 // touch devices: a coarse pointer with no hover is the signal for a phone/tablet
 // rather than a mouse-driven desktop (a merely-narrow desktop window still reads
@@ -22,7 +22,7 @@ function isTouchDevice(): boolean {
 
 /** Whether shareUrl()/shareFile() would actually attempt the native OS share
  *  sheet on this device (a touch device exposing `navigator.share`) rather
- *  than falling straight to clipboard/download — the same test those
+ *  than falling straight to clipboard/download: the same test those
  *  functions apply internally. ActionButtons uses this to pick an icon and
  *  label that match the Share button's real behavior instead of always
  *  implying "copy a link". The capability doesn't change mid-session, so
@@ -37,7 +37,7 @@ export function canShareNatively(): boolean {
 }
 
 function outcomeFromError(e: unknown): ShareOutcome {
-  // A user dismissing the share sheet rejects with AbortError — not a failure,
+  // A user dismissing the share sheet rejects with AbortError, not a failure,
   // and the caller must NOT then fall back (the user already declined).
   return (e as { name?: string })?.name === "AbortError" ? "cancelled" : "failed";
 }
@@ -55,7 +55,7 @@ export async function shareUrl(url: string, title?: string): Promise<ShareOutcom
 
 /** Share a file via the sheet, or run the caller's save/download fallback when
  *  sharing is unavailable or fails. A user-cancelled sheet does NOT fall back
- *  (the user already declined) — callers stop announcing on "cancelled". */
+ *  (the user already declined): callers stop announcing on "cancelled". */
 export async function shareFileOrFallback(
   file: File,
   fallback: () => void

@@ -1,4 +1,4 @@
-// renderStatus.ts — the render-status state machine, shared by whatever chrome
+// renderStatus.ts: the render-status state machine, shared by whatever chrome
 // surfaces it. Currently the Output bell (OutputToggle) wears it as a corner
 // dot; kept framework-free (pure data + a derive function) so any indicator can
 // read the same states without drift.
@@ -10,7 +10,7 @@ export interface RenderStatusInput {
   rendering: boolean;
   ready: boolean;
   result: RenderResult | null;
-  /** Auto-render off AND params changed since the last render — preview is out of date. */
+  /** Auto-render off AND params changed since the last render: preview is out of date. */
   stale?: boolean;
 }
 
@@ -33,12 +33,12 @@ export const STATE_STYLES: Record<RenderState, { pill?: string; dot: string; pul
  *
  * Deliberately not `!result?.ok`: a design left in manual mode (`heavy`) never
  * renders on its own, yet its stage is up and usable, and a failed render is a
- * state the visitor can see and act on too — neither is "still loading".
+ * state the visitor can see and act on too. Neither is "still loading".
  *
  * Two consumers, one definition so they can't drift: ViewerStage draws the
  * overlay from it, and AppShell arms the one-time first-visit sheet nudge on it
- * (a chip teaching the visitor how to use the app has no business being up — or
- * burning its fade timeout — while the app has nothing to show). See
+ * (a chip teaching the visitor how to use the app has no business being up, or
+ * burning its fade timeout, while the app has nothing to show). See
  * SheetSwipeHint.tsx.
  */
 export function stageLoading({ ready, rendering, result }: RenderStatusInput): boolean {
@@ -50,11 +50,11 @@ export function deriveRenderStatus({ rendering, ready, result, stale = false }: 
   state: RenderState;
   text: string;
 } {
-  // Keep the "N ms" / "Failed (exit N)" shapes below stable — the smoke and
+  // Keep the "N ms" / "Failed (exit N)" shapes below stable: the smoke and
   // capture scripts wait on them via the `.render-status` hook.
   if (!ready) return { state: "loading", text: "Getting ready…" };
   if (rendering) return { state: "rendering", text: "Updating preview…" };
-  // The preview no longer matches the controls — surfaced before "ok" so a
+  // The preview no longer matches the controls: surfaced before "ok" so a
   // happy green "214 ms" never masks unrendered changes.
   if (stale) return { state: "stale", text: "Preview out of date" };
   if (!result) return { state: "idle", text: "Idle" };
