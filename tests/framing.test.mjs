@@ -18,9 +18,11 @@ import {
   insetFitFraction,
   aspectAwareFit,
   insetTargetOffset,
+  outgrowsFrame,
   MIN_USABLE_FRACTION,
   NO_INSETS,
   DEFAULT_FIT_FRACTION,
+  OUTGROW_REFIT_RATIO,
 } from "../src/components/framing.ts";
 
 // A DOM-rect-shaped literal, so the inset math can be exercised without a DOM.
@@ -347,6 +349,43 @@ test("the fit keeps the model clear of the chrome it was told about (integration
       }
     }
   }
+});
+
+// ── outgrowsFrame: the margin behind Viewer.tsx's outgrew-the-frame refit ──
+
+test("outgrowsFrame: comfortably under the margin is not overflow", () => {
+  assert.equal(outgrowsFrame(100, 100), false); // exact fit
+  assert.equal(outgrowsFrame(110, 100), false); // 10% over, under the default 15% margin
+});
+
+test("outgrowsFrame: past the margin is overflow", () => {
+  assert.equal(outgrowsFrame(116, 100), true);
+  assert.equal(outgrowsFrame(200, 100), true);
+});
+
+test("outgrowsFrame: right at the margin is not (a strict '>', not '>=')", () => {
+  assert.equal(outgrowsFrame(100 * (1 + OUTGROW_REFIT_RATIO), 100), false);
+});
+
+test("outgrowsFrame: shrinking (or holding steady) is never overflow, whatever the ratio", () => {
+  assert.equal(outgrowsFrame(90, 100), false);
+  assert.equal(outgrowsFrame(100, 100), false);
+});
+
+test("outgrowsFrame: a custom ratio overrides the default margin", () => {
+  assert.equal(outgrowsFrame(105, 100, 0.1), false);
+  assert.equal(outgrowsFrame(115, 100, 0.1), true);
+});
+
+test("outgrowsFrame: a degenerate current distance never reports overflow", () => {
+  assert.equal(outgrowsFrame(100, 0), false);
+  assert.equal(outgrowsFrame(100, -5), false);
+  assert.equal(outgrowsFrame(100, NaN), false);
+});
+
+test("outgrowsFrame: a non-finite required distance never reports overflow", () => {
+  assert.equal(outgrowsFrame(NaN, 100), false);
+  assert.equal(outgrowsFrame(Infinity, 100), false);
 });
 
 // ── aspectAwareFit: rescue an axis that provably cannot bind ────────────────
