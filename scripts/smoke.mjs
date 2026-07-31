@@ -1775,10 +1775,15 @@ async function main() {
       issues: textRe("review.issueCount#one", "review.issueCount#other"),
     };
     console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);
-    await waitRendered(page, ids[0]);
 
     const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName, labels };
+    // The popup is cleared BEFORE the first render wait, and the order is
+    // load-bearing: a `picker` popup IS the design chooser, and App holds the
+    // whole render path back while it owns the first screen (useRenderPipeline's
+    // `holdBoot`), so no render can even start until a card is picked. Waiting
+    // first would sit through the timeout on every picker-mode deployment.
     await checkWelcomePopup(ctx);
+    await waitRendered(page, ids[0]);
     await checkFileImport(ctx);
     await checkThemeToggle(ctx);
     await checkIdleRenderCount(ctx);
