@@ -375,14 +375,13 @@ function Control({
         />
       );
     case "enum": {
-      // The full label of the selected choice as a `title`, so a value too
-      // long to fit the trigger (now ellipsis-truncated, not hard-clipped,
-      // see ui/select.tsx) is still readable on hover: e.g. a long language
-      // name at a narrow panel width.
+      // The full label of the selected choice as a `title`: the trigger
+      // wraps to 2 lines (ui/select.tsx's `wrap`) but a choice long enough to
+      // still clip is readable on hover.
       const selectedLabel = param.choices.find((c) => c.value === String(value))?.label;
       return (
         <Select value={String(value)} onValueChange={(v) => onChange(v)}>
-          <SelectTrigger className="w-full" aria-label={label} title={selectedLabel}>
+          <SelectTrigger className="w-full" aria-label={label} title={selectedLabel} wrap>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

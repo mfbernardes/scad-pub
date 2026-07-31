@@ -17,26 +17,43 @@ function SelectValue({
 function SelectTrigger({
   className,
   size = "default",
+  wrap = false,
   children,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default";
+  /**
+   * Let a long selected value wrap to 2 lines instead of ellipsis-truncating
+   * to 1. Opt-in (default false): a toolbar-style trigger (e.g. the compact
+   * design switcher in a fixed-height header) needs to stay single-line, so
+   * this only applies where a caller asks for it (the param form's enum
+   * control, FontSelect).
+   */
+  wrap?: boolean;
 }) {
+  // The value slot deliberately does NOT get `flex` (unlike the trigger
+  // itself): `text-overflow: ellipsis` never applies to a flex container
+  // (only to a block container's single line of inline content). Every
+  // current SelectValue only ever holds plain text (SelectItem's optional
+  // icon/description render outside ItemText, so they never reach the
+  // trigger, see SelectItem's own doc), and being a flex ITEM of this
+  // trigger row is enough to blockify it, so plain `truncate` here reliably
+  // shows an ellipsis instead of a hard clip with no
+  // `flex`/`items-center`/`gap-2` fighting it for `display`. `wrap` swaps
+  // that for `line-clamp-2` plus an explicit `whitespace-normal` (a direct
+  // rule on the value always wins over the trigger row's own
+  // `whitespace-nowrap`, inherited or not), and trades the trigger's fixed
+  // height for a min-height so 2 lines have room to grow into.
+  const wrapClasses = wrap
+    ? "data-[size=default]:h-auto data-[size=default]:min-h-9 data-[size=sm]:h-auto data-[size=sm]:min-h-8 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:line-clamp-2 *:data-[slot=select-value]:whitespace-normal *:data-[slot=select-value]:text-left"
+    : "data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate";
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        // The value slot deliberately does NOT get `flex` (unlike the trigger
-        // itself): `text-overflow: ellipsis` never applies to a flex
-        // container (only to a block container's single line of inline
-        // content). Every current SelectValue only ever holds plain text
-        // (SelectItem's optional icon/description render outside ItemText,
-        // so they never reach the trigger, see SelectItem's own doc), and
-        // being a flex ITEM of this trigger row is enough to blockify it, so
-        // plain `truncate` here reliably shows an ellipsis instead of a hard
-        // clip with no `flex`/`items-center`/`gap-2` fighting it for `display`.
-        "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive flex w-fit items-center justify-between gap-2 rounded-md border bg-card px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 cursor-pointer",
+        "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive flex w-fit items-center justify-between gap-2 rounded-md border bg-card px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 cursor-pointer",
+        wrapClasses,
         className
       )}
       {...props}

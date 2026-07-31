@@ -356,6 +356,7 @@ export function PresetPicker({
                         type="button"
                         className={cardClass(isSelected)}
                         aria-pressed={isSelected}
+                        title={p.name}
                         onClick={() => applyBundled(p)}
                       >
                         <Thumbnail src={image!} />
@@ -367,13 +368,17 @@ export function PresetPicker({
                             <CheckIcon size={12} />
                           </span>
                         )}
+                        {/* min-h-[2lh] (not a fixed rem value) keeps the
+                            2-line-clamped name's reserved space in step with
+                            its own line-height, so cards in a row stay even
+                            whether the title wraps or not. */}
                         <span className="preset-picker__card-body flex min-h-14 flex-col gap-0.5 px-2 py-[0.4rem]">
                           {parsed.overline && (
                             <span className="truncate text-[0.66rem] font-semibold uppercase tracking-[0.03em] text-muted-foreground">
                               {parsed.overline}
                             </span>
                           )}
-                          <span className="truncate text-[0.82rem] font-medium text-foreground">{parsed.title}</span>
+                          <span className="line-clamp-2 min-h-[2lh] text-[0.82rem] font-medium text-foreground">{parsed.title}</span>
                           {parsed.badge && (
                             <span className="w-fit rounded-full bg-muted px-[0.4rem] py-[0.05rem] text-[0.66rem] text-muted-foreground">
                               {parsed.badge}
