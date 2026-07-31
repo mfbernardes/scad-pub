@@ -179,13 +179,76 @@ const ENV_ROTATION_X = Math.PI / 2;
 // only ~0.27 of what it gives a top face, while the base reaches every
 // direction equally, so raising the base lifts the walls (and the undersides)
 // without touching the top by much.
-const ENV_OVERHEAD = 0.97;
+//
+// Trimmed from 0.97 (see git history) to make room for the much stronger key
+// below: this field depends only on elevation (see the fragment shader), so
+// two faces at the same elevation get identical radiance from it NO MATTER
+// their azimuth: by construction, rotating the whole field about world Z
+// (its axis of symmetry) leaves it unchanged, so it cannot see the difference
+// between a prismatic letter-stroke's two opposing ~45° bevels. That
+// symmetry is exactly the bug this file was changed to fix: only a light
+// with an azimuth of its own (the key/fill pair below) can tell those two
+// faces apart. Reclaiming some of this field's headroom lets that pair be
+// strong enough to matter without blowing out the top face it still has to
+// keep near-white (see the key/fill comment below for the budget).
+const ENV_OVERHEAD = 0.9;
 const ENV_BASE = 0.23;
 // Angular softness of the field's edge, as cosines of the angle from "up":
 // the radiance ramps from base to full between these. Wide and soft, so
 // curved geometry (Braille domes, letter bevels) shades smoothly.
 const ENV_EDGE0 = 0.1;
 const ENV_EDGE1 = 0.95;
+
+// ── Key + fill: the only azimuthally-aware light in the rig ────────────────
+// Prismatic lettering (roof()-cut strokes) is a ridge of two ~45° bevels at
+// the SAME elevation but opposite azimuths. The environment above is a
+// function of elevation only, so by construction it cannot tell those two
+// faces apart; whatever separates them has to come from a light with an
+// azimuth of its own. Two design choices follow from that:
+//
+// 1. Neither light's azimuth may line up with the camera's. The default
+//    camera sits at world azimuth ≈ −53° (see cam.position.set below and
+//    VIEW_DIRECTIONS.isometric); a light near that azimuth lights the two
+//    bevel faces the camera can see almost equally (both lean "towards" the
+//    viewer/light together), which is exactly the flat, un-emphasized look
+//    this rig replaces. KEY sits on world +X (azimuth 0°) and FILL on world
+//    −Y (azimuth −90°) instead: respectively ~53° and ~37° from the
+//    camera's azimuth, and 90° from each other, so between them almost
+//    every stroke direction (the vertical stems that dominate digits via
+//    KEY, the horizontal/curved strokes via FILL) gets a lit bevel and a
+//    shaded one rather than two equally-grey ones. FILL is deliberately the
+//    weaker of the pair: it exists so no stroke direction reads as
+//    perfectly flat, not to compete with KEY for which family of strokes
+//    reads most strongly.
+// 2. Both sit at a LOW elevation (14°/10°) rather than the old single key's
+//    ~55°. What a shallow angle buys is efficiency, not raw contrast: at any
+//    elevation below 45° the ridge's shaded bevel faces away and gets nothing
+//    from the light at all, and the lit one catches cos(45° − elevation) of
+//    it (shrinking only mildly as the light drops), while the leak onto the
+//    TOP face, the thing that must stay near-white, is sin(elevation), which
+//    collapses near the horizon. Bevel contrast per unit of top-face headroom
+//    spent therefore rises steeply at low elevation, which is why
+//    ENV_OVERHEAD only needed a modest trim (above) rather than a large one
+//    to keep the top face at about full albedo with these lights added.
+const KEY_INTENSITY = 0.95;
+const KEY_AZIMUTH_ELEVATION_DEG = { azimuth: 0, elevation: 14 }; // world +X, low and raking
+const FILL_INTENSITY = 0.55;
+const FILL_AZIMUTH_ELEVATION_DEG = { azimuth: -90, elevation: 10 }; // world −Y, low and raking
+
+// Direction (azimuth/elevation, both in degrees, measured in the world's
+// X/Y/Z the same way the camera views do) to a THREE.DirectionalLight
+// position. Distance is arbitrary for a directional light (only the
+// direction matters), so a fixed radius keeps the numbers above readable as
+// angles instead of raw XYZ.
+function lightPosition(azimuthDeg: number, elevationDeg: number, radius = 200): THREE.Vector3 {
+  const az = THREE.MathUtils.degToRad(azimuthDeg);
+  const el = THREE.MathUtils.degToRad(elevationDeg);
+  return new THREE.Vector3(
+    radius * Math.cos(el) * Math.cos(az),
+    radius * Math.cos(el) * Math.sin(az),
+    radius * Math.sin(el)
+  );
+}
 
 function studioEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
   const sky = new THREE.Mesh(
@@ -639,25 +702,40 @@ export const Viewer = forwardRef<
       // RoomEnvironment is not: it is an enclosed room whose walls carry most
       // of its light, and measured against this scene its irradiance on a
       // vertical wall is ~1.17x what a top face gets, which is exactly the
-      // sticker look) plus a modest key for direction. Totals put a top face
-      // at about full albedo: a near-white plate must read near-white, the
-      // same concern the plain rig's hemisphere solves below, and a vertical
-      // wall at roughly half of it.
+      // sticker look) plus the key/fill pair below for direction. Totals put a
+      // top face at about full albedo: a near-white plate must read near-white,
+      // the same concern the plain rig's hemisphere solves below. A plate's own
+      // outer wall stays visibly darker than its top on every side; the one
+      // wall that happens to face the key directly (the same low grazing angle
+      // that makes the key so effective on a letter bevel also makes it
+      // effective on a much bigger flat wall) is the tightest case, landing
+      // around four-fifths of the top's measured brightness rather than the
+      // roughly-half a wall facing away sits at. Narrower than the single-key
+      // rig this replaced, but checked against real renders (both themes) to
+      // confirm the top never stops reading as the brighter face: if the
+      // numbers above move, recheck a plate's four walls against its top, not
+      // just a letter's two bevels.
       renderer.toneMapping = THREE.NeutralToneMapping;
       renderer.toneMappingExposure = 1.0;
       envTexture = studioEnvironment(renderer);
       scene.environment = envTexture;
       scene.environmentIntensity = studioEnvIntensity();
       scene.environmentRotation.set(ENV_ROTATION_X, 0, 0);
-      // A single key at ~55° elevation, off to the front-right. It is
-      // deliberately soft: the environment already separates top from side, so
-      // the key's job is only to break the symmetry. The two walls facing the
-      // camera pick up a little of it (in different amounts) while the two
-      // facing away get none, which is what turns the edge line into a
-      // readable box rather than a flat outline.
-      const key = new THREE.DirectionalLight(0xffffff, 0.5);
-      key.position.set(90, -120, 190);
+      // Key + fill: see the constants above for the full reasoning. In short,
+      // both sit off-camera-axis and low to the horizon so they rake across a
+      // prismatic letter-stroke's two ~45° bevels, which the azimuth-blind
+      // environment cannot separate, without dumping much of that intensity
+      // onto the top face.
+      const key = new THREE.DirectionalLight(0xffffff, KEY_INTENSITY);
+      key.position.copy(
+        lightPosition(KEY_AZIMUTH_ELEVATION_DEG.azimuth, KEY_AZIMUTH_ELEVATION_DEG.elevation)
+      );
       scene.add(key);
+      const fill = new THREE.DirectionalLight(0xffffff, FILL_INTENSITY);
+      fill.position.copy(
+        lightPosition(FILL_AZIMUTH_ELEVATION_DEG.azimuth, FILL_AZIMUTH_ELEVATION_DEG.elevation)
+      );
+      scene.add(fill);
       const shadow = createContactShadow();
       scene.add(shadow.group);
       shadowRef.current = shadow;
