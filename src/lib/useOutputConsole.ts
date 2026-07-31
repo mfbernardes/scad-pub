@@ -8,7 +8,7 @@
 //
 // AppShell supplies the parsed diagnostics (diagnostics.ts, itself fed by
 // useReadinessModel) and a `collapseSheet` callback. The overlay's fixed
-// anchor sits just above the mobile sheet's peek tab row and would overlap an
+// anchor sits immediately above the mobile sheet's peek tab row and would overlap an
 // expanded sheet otherwise, but that sheet's detent state lives outside this
 // hook (see useSheetPolicy.ts): rather than reach into it directly, opening
 // the console goes through this injected callback, so AppShell owns wiring
@@ -53,7 +53,7 @@ export function useOutputConsole({
   outputOpenRef.current = outputOpen;
 
   // Open the overlay and collapse the sheet to peek, so the overlay's fixed
-  // anchor (just above the peek tab row) never overlaps an expanded sheet.
+  // anchor (immediately above the peek tab row) never overlaps an expanded sheet.
   const openOutput = useCallback(() => {
     setOutputOpen(true);
     collapseSheet();

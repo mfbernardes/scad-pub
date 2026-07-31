@@ -47,7 +47,7 @@ interface Props {
   /**
    * The design's own relief height (from the field's `height=` binding), shown as
    * the placeholder each per-region height falls back to. Null when the field
-   * binds none, in which case the heights are still editable, just without a
+   * binds none, in which case the heights are still editable, but without a
    * number to show.
    */
   defaultHeight?: number | null;
@@ -145,7 +145,7 @@ export function SvgWizard({
   const spec = parseLayerSpec(layers);
   // A height a design's own parser can't use is caught here rather than at
   // render time: the number input happily accepts 0, -2 and 1e3, and a design
-  // typically hard-fails on those instead of falling back to its relief height.
+  // hard-fails on those instead of falling back to its relief height.
   const badHeights = new Set(deriveColours ? unusableHeightRegions(layers) : []);
   const blockedByHeight = badHeights.size > 0;
 

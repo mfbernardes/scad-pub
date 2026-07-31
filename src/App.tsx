@@ -304,11 +304,11 @@ export default function App() {
     [designId, resetForDesign]
   );
 
-  // Nothing is written while the chooser still owns the first screen. Not just
+  // Nothing is written while the chooser still owns the first screen. Not only
   // because there is no chosen state worth mirroring yet: `persistState` puts
   // `#d=<default>` in the URL, and on the next load `readInitialState` cannot
   // tell that hash from one a person sent, so it would report `fromLink` and
-  // skip the very chooser the user never answered. Leaving them on the default
+  // skip the chooser the user never answered. Leaving them on the default
   // design, permanently, after a reload.
   useEffect(() => {
     if (holdBoot) return;
@@ -444,7 +444,7 @@ export default function App() {
   }, [canInstall, promptInstall]);
 
   // Gated on `exportable` (a successful render that still matches the live
-  // controls, not just "some render succeeded at some point") and named from
+  // controls, not only "some render succeeded at some point") and named from
   // the exported snapshot's own designId rather than the live `design.id`, so
   // a design switch racing the export can never mislabel the bytes it sends
   // out. See docs/architecture-review.md H1.
@@ -499,7 +499,7 @@ export default function App() {
   const copyLink = useCallback(async () => {
     // Built synchronously from the live design/values/preset, never from
     // `location.href`, which only reflects the last debounced `persistState`
-    // write and can lag a just-made edit by up to 300ms.
+    // write and can lag a recently made edit by up to 300ms.
     const url = buildShareUrl(design, values, presetSel);
     const warning = shareabilityWarning(shareability);
     // Native share sheet where available (mobile); otherwise copy to clipboard.

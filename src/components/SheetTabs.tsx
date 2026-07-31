@@ -146,7 +146,7 @@ export function SheetTabs({
               which scroll away as content should. Same reason ParamPanel's
               scroller drops its `p-3` top. */}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2">
-            {/* The form toolbar is now just the search field, full width, and
+            {/* The form toolbar is now only the search field, full width, and
                 still INSIDE the scroll container so it hands its ~44px back to
                 the form as soon as the visitor scrolls. Its two former
                 neighbours both left for somewhere they read better:

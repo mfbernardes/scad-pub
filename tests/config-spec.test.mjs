@@ -73,7 +73,7 @@ function docMentionsKey(doc, key) {
 }
 
 // Keys config-spec.mjs carries that genuinely aren't given a standalone
-// `` `key` `` mention in docs/config.md: each is documented, just not in a
+// `` `key` `` mention in docs/config.md: each is documented, but not in a
 // form this mechanical scan can find (see the comment at each entry).
 const SPEC_KEYS_NOT_MECHANICALLY_IN_DOCS = new Set([
   // Mentioned as `"$schema"` (with the quotes inside the backticks, since

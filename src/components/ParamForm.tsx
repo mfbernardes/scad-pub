@@ -82,7 +82,7 @@ interface Props {
    * The sheet's half detent is the only state where a phone visitor can see
    * the model and the controls at once, and it was showing one or two
    * parameters out of sixteen: a stacked row costs the label's height PLUS the
-   * control's, and a label is often two lines. Side-by-side makes a row
+   * control's, and a label can run to two lines. Side-by-side makes a row
    * `max(label, control)` instead of their sum. Numbers with a slider and
    * `@svg` fields still stack (their controls genuinely need the width) so
    * this narrows rows rather than cramping them.

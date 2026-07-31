@@ -55,7 +55,7 @@ export async function waitRendered(page, { timeout = 60000 } = {}) {
  * The picker is a shadcn/ui (Radix) Select with no native <option> elements, so
  * we click the trigger then the option by its visible text. Single-design
  * configs have no picker: the click is skipped. Pass `label: undefined` to
- * skip the picker entirely and just nudge the current design to render.
+ * skip the picker entirely and nudge the current design to render.
  * Does not wait for completion: follow with waitRendered().
  */
 export async function selectDesign(page, label, { mobile = false } = {}) {
@@ -153,7 +153,7 @@ export async function openDialog(page, name, { timeout = DIALOG_TIMEOUT } = {}) 
  *  only WAITS: dismissing the dialog is the caller's job.
  *  Playwright's "hidden" wait state matches both a fully unmounted dialog and
  *  one that's merely display:none/zero-size, covering every close pattern
- *  the app uses (a Dialog that unmounts vs. one that just hides) with a
+ *  the app uses (a Dialog that unmounts vs. one that only hides) with a
  *  single helper. Throws on timeout: callers that tolerate a dialog staying
  *  open (a best-effort cleanup step) should `.catch()` it. */
 export async function waitDialogClosed(page, name, { timeout = DIALOG_TIMEOUT } = {}) {

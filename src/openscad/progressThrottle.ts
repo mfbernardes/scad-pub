@@ -24,7 +24,7 @@ export interface ProgressThrottleOptions {
  * reader chunks over a fast connection) would otherwise still post every
  * chunk if only the interval were enforced, and a trickle download would post
  * near-identical numbers every 200ms if only the delta were enforced. The
- * very first report is always posted unconditionally (there's nothing to
+ * first report is always posted unconditionally (there's nothing to
  * throttle against yet, and a consumer waiting on "any progress at all" to
  * leave its initial state should not wait a full interval for it).
  */

@@ -664,7 +664,7 @@ test("a fatal bootstrap result forces the next render to resend user files (same
 // `if (!runnerRef.current) runnerRef.current = new OpenSCADRunner(...)` in
 // useRenderPipeline.ts into a useEffect whose setup constructs the runner and
 // whose cleanup disposes it. React's dev-only Strict Mode replays a
-// component's effects as mount -> cleanup -> remount on the very first mount,
+// component's effects as mount -> cleanup -> remount on the first mount,
 // which (for that effect) means: construct runner A, dispose runner A,
 // construct runner B. These tests exercise that exact sequence directly
 // against OpenSCADRunner (no React/jsdom available in this suite) to prove
@@ -815,7 +815,7 @@ test("a DataCloneError posting the module falls back to warmup and is never retr
     w1.emit(ok(w1.last.id));
     assert.equal((await b).ok, true);
 
-    // The module was dropped for good, not just skipped once: a FURTHER
+    // The module was dropped for good, not only skipped once: a FURTHER
     // respawn (via worker-error recovery this time) also gets a plain
     // warmup. No second attempt to post the now-discarded module.
     w1.emitError("boom");

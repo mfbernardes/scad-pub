@@ -51,7 +51,7 @@
 //   shapes (`fileImport` is `true`/an object/`null`, `popup` needs
 //   `header`+`body`), where the generic message would be less useful.
 
-// Small factories for the repeated field shapes, still plain data, they just
+// Small factories for the repeated field shapes, still plain data, they only
 // save re-typing the same few keys 30 times over.
 const bool = (defaultValue, extra = {}) => ({
   type: "boolean",
@@ -455,7 +455,7 @@ export const CONFIG_SPEC = {
     custom: true,
     // parseColors (scripts/lib/config-parsers.mjs) reads only `light`/`dark`
     // off this object and silently ignores anything else: genuinely open,
-    // unlike its own `light`/`dark` children just below, which throw on any
+    // unlike its own `light`/`dark` children immediately below, which throw on any
     // token outside COLOR_TOKENS and so do NOT carry `openKeys`.
     openKeys: true,
     description: "Optional per-theme CSS colour/design-token overrides.",

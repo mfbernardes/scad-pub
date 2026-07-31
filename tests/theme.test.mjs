@@ -64,7 +64,7 @@ test("auto follows the OS preference", () => {
 test("apply sets <html data-theme> and updates both theme-color metas", () => {
   apply("dark");
   assert.equal(globalThis.document.documentElement.dataset.theme, "dark");
-  // Both metas, not just the (first, dark-media) one a plain querySelector
+  // Both metas, not only the (first, dark-media) one a plain querySelector
   // would grab: get the configured dark colour.
   assert.equal(darkMeta.content, "#111111");
   assert.equal(lightMeta.content, "#111111");
@@ -111,7 +111,7 @@ test("subscribeSystemDark notifies on a matchMedia change with no other interact
   unsubscribe();
   assert.equal(changeListener, null, "unsubscribe removes the listener");
 
-  // No listener left: a further flip does not throw and is simply unheard.
+  // No listener left: a further flip does not throw and is unheard.
   systemPrefersDark = true;
   assert.equal(getSystemDarkSnapshot(), true);
 });

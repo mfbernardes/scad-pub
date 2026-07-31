@@ -11,7 +11,7 @@ const { openDb, reqToPromise, STL_META_STORE } = await import("../src/lib/idb.ts
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 // M11: put() now budgets the COMPLETE record (STL bytes + a capped log), not
-// just STL bytes. An empty log here keeps every byte-budget assertion below
+// only STL bytes. An empty log here keeps every byte-budget assertion below
 // about STL bytes exactly as it was before that change; log-byte accounting
 // itself is covered by its own dedicated tests further down.
 const entry = (n, over = {}) => ({
@@ -35,11 +35,11 @@ beforeEach(() => {
 // memoizes its DB connection at module scope, so once it has resolved once,
 // nothing here can force indexedDB.open() to be called again to exercise this
 // failure path (short of a real versionchange/close, which fake-indexeddb
-// doesn't trigger for us). Runs first so the very first open is the one that
+// doesn't trigger for us). Runs first so the first open is the one that
 // fails.
 test("a transient version-check failure is retried by a later operation, not stuck forever", async () => {
   // Simulate one transient IndexedDB failure (e.g. a blocked upgrade) on the
-  // very first open this process makes, then let opens succeed normally.
+  // first open this process makes, then let opens succeed normally.
   const realOpen = indexedDB.open.bind(indexedDB);
   let failNext = true;
   indexedDB.open = (...args) => {
@@ -63,7 +63,7 @@ test("a transient version-check failure is retried by a later operation, not stu
     // earlier failure as permanently done.
     await cache.put("k", entry(8));
     assert.ok(await cache.get("k"));
-    // Prove the version check actually completed (not just that get/put
+    // Prove the version check actually completed (not only that get/put
     // worked): the version stamp must be persisted, which only happens once
     // checkVersion() runs to completion.
     const db = await openDb();
@@ -174,7 +174,7 @@ test("an empty staleDefines array is treated the same as absent", async () => {
 test("a write that started before clear() is not repopulated after it", async () => {
   const cache = createStlCache({ version });
   // Seed one entry so the write below has to compete with clear()'s own
-  // eviction/version-check work, not just an empty store.
+  // eviction/version-check work, not only an empty store.
   await cache.put("seed", entry(4));
 
   // Fire a put() and clear() back-to-back with no await between them: the

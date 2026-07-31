@@ -12,7 +12,7 @@ const SECTION_RE = /^\s*\/\*\s*\[([^\]]+)\]\s*\*\/\s*$/;
 // name = default; // [hint]
 // The name uses OpenSCAD's identifier grammar: a letter or underscore, then
 // letters/digits/underscores, so camelCase (wallThickness), PascalCase
-// (FontSize) and leading-underscore (_offset) params are all captured, not just
+// (FontSize) and leading-underscore (_offset) params are all captured, not only
 // lowercase ones. ($-prefixed special variables aren't Customizer params.)
 // The trailing `\s*` sits INSIDE the optional `(?:// [hint])?` group, not
 // after it: outside, a failing match (trailing text that's neither whitespace
@@ -109,7 +109,7 @@ const EDITONMODEL_RE = /^@editOnModel\s*$/i;
 // above); anything that starts with a recognised keyword but doesn't match
 // that grammar (or starts with an unrecognised `@word` at all) fails the
 // build with the file and line, instead of silently degrading to plain doc
-// prose, where a typo'd `@shwoIf` would simply become part of the help text.
+// prose, where a typo'd `@shwoIf` would become part of the help text.
 const KNOWN_ANNOTATIONS = new Set(["showif", "show-if", "font", "advanced", "info", "review", "label", "svg", "filledby", "editonmodel"]);
 const ANNOTATION_WORD_RE = /^@([A-Za-z-]+)\b/;
 
@@ -535,7 +535,7 @@ export function parseParams(absPath) {
       // worker.ts's hashed import closure (scripts/lib/worker-deps.mjs feeds
       // scripts/lib/hash.mjs's computeRenderHash), so any edit to it.
       // Comments included. Changes renderHash and evicts every deployment's
-      // persisted render cache. Real edits are fine, just worth batching
+      // persisted render cache. Real edits are fine, but worth batching
       // deliberately rather than trickling in one field at a time.
       if (pendingReview) p.reviewLabel = pendingReview;
       // Mark a string SVG field for the in-app wizard (see `// @svg`), and a

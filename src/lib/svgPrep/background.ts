@@ -1,6 +1,6 @@
 // Canvas-background detection: find a solid rectangle that covers (nearly) the
 // whole viewBox. OpenSCAD's import() ignores fill/stroke and fills EVERY closed
-// shape, so a full-canvas rectangle — the "artboard"/background many editors emit
+// shape, so a full-canvas rectangle — the "artboard"/background editors emit
 // — imports as one solid block that buries every other shape inside it (the
 // drawing extrudes as a single featureless slab). Detected here so the checker
 // can warn and the Fix step can drop it. Restricted to genuine rectangles

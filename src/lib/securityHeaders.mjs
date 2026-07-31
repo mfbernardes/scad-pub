@@ -167,7 +167,7 @@ function splitPattern(pattern) {
 // semantics: `*` matches any run of characters INCLUDING `/`, so `/*.svg`
 // matches both `/icon.svg` and a nested `/scad/foo/bar.svg`. The splat
 // crosses slashes, it isn't scoped to one path segment the way a router glob
-// often is. That's deliberate here too: `public/_headers`'s `/*.svg` rule is
+// can be. That's deliberate here too: `public/_headers`'s `/*.svg` rule is
 // meant to catch every served SVG regardless of depth.
 function matchesPattern(pattern, pathname) {
   const { prefix, suffix } = splitPattern(pattern);
@@ -181,7 +181,7 @@ function matchesPattern(pattern, pathname) {
 
 /**
  * The merged headers a Cloudflare Pages host would send for `pathname`,
- * applying every matching rule IN FILE ORDER, not just the first match.
+ * applying every matching rule IN FILE ORDER, not only the first match.
  * That's the real host behaviour `public/_headers`'s own layout relies on (a
  * request under `/scad/*` gets that rule's CSP *and* whatever the trailing
  * `/*` block this repo's securityHeaders vite plugin appends adds), so a test

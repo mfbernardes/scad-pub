@@ -154,7 +154,7 @@ async function cachedBuffer(url: string): Promise<ArrayBuffer> {
     // M1: a Cache Storage write failure (quota, private browsing, a blocked
     // storage backend) must degrade to uncached bytes for THIS render rather
     // than fail bootstrap outright. The fetch itself already succeeded, and
-    // failing to persist it just means the next worker/session pays the
+    // failing to persist it means the next worker/session pays the
     // download again, not that this render can't proceed.
     try {
       await cache.put(url, res.clone());
@@ -323,7 +323,7 @@ function postModuleOnce(module: WebAssembly.Module) {
     // WebAssembly.Module across the worker boundary. The runner never
     // receives one to hand to a future worker, so bootstrap there degrades
     // to warmup-only, still strictly better than waiting for the first
-    // debounced render message, just without the compile-skip.
+    // debounced render message, but without the compile-skip.
   }
 }
 
@@ -335,7 +335,7 @@ function postModuleOnce(module: WebAssembly.Module) {
 //
 // M1: this is now genuinely ONE atomic bootstrap transaction, via
 // retryableOnce (retryableOnce.ts). A rejected attempt is NOT memoized, so
-// the very next render() call re-attempts the entire bootstrap from scratch.
+// the next render() call re-attempts the entire bootstrap from scratch.
 // Previously `factoryPromise = loadFactory()` was assigned but never awaited
 // as part of the Promise.all below, so a rejected dynamic import (e.g. a bad
 // deploy, a network blip on the glue file) was invisible here: the load
@@ -344,7 +344,7 @@ function postModuleOnce(module: WebAssembly.Module) {
 // stale rejection. An ordinary-looking failed render that could never
 // recover without a full page reload. Awaiting factoryPromise as part of the
 // same Promise.all means its rejection now propagates like every other
-// bootstrap input, through retryableOnce's built-in reset, so the very next
+// bootstrap input, through retryableOnce's built-in reset, so the next
 // render() call re-attempts the ENTIRE bootstrap, factory import included.
 //
 // Every variable this load populates (factoryPromise, wasmBinary,
@@ -357,7 +357,7 @@ const ensureAssets = retryableOnce(async () => {
   factoryPromise = loadFactory();
   try {
     await Promise.all([
-      // M1: included directly (not just assigned above) so its rejection is
+      // M1: included directly (not only assigned above) so its rejection is
       // part of THIS Promise.all and reaches the catch below.
       factoryPromise,
       (async () => {
@@ -377,7 +377,7 @@ const ensureAssets = retryableOnce(async () => {
           // for modules THIS worker compiled; the runner already holds this
           // one). The wasm bytes may never reach Cache Storage from this
           // worker as a result, but that's fine: the service worker warms
-          // BIN_CACHE at install, and the very first worker of a session
+          // BIN_CACHE at install, and the first worker of a session
           // (which had no module to receive) already wrote it on its own
           // cache miss.
           wasmModulePromise = Promise.resolve(receivedModule);
@@ -636,7 +636,7 @@ self.onmessage = async (e: MessageEvent<RenderRequest | WorkerCommand>) => {
     // to avoid an "that combination of settings didn't work" message about a
     // renderer that never started) rather than looking identical to a normal
     // failed render. ensureAssets()'s memoized promise was already reset by
-    // retryableOnce (retryableOnce.ts), so the very next render() call
+    // retryableOnce (retryableOnce.ts), so the next render() call
     // retries bootstrap from scratch. No worker respawn is needed for the
     // retry to happen.
     const fatal = err instanceof Error && err.name === "BootstrapError";

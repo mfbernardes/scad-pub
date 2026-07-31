@@ -19,7 +19,7 @@ export function LicensesModal({
    *  name (see mergeLicenses) rather than appended blindly, so a component the
    *  config bundles for its own reasons doesn't show up twice when it's also
    *  one of ScadPub's own built-ins (never replacing the built-in's legal
-   *  fields). A config entry with no matching built-in is simply appended. */
+   *  fields). A config entry with no matching built-in is appended. */
   extra?: SoftwareLicense[];
   onClose: () => void;
 }) {

@@ -141,7 +141,7 @@ export function check(root: Element, layers: string[] = []): Finding[] {
 
   // CSS-styled fills: OpenSCAD ignores <style> entirely, so a region painted only
   // through a stylesheet rule imports (and derives) as black. applyFixes resolves
-  // simple .class/#id/tag rules onto the shapes; flag any shape that still has no
+  // plain .class/#id/tag rules onto the shapes; flag any shape that still has no
   // effective fill while a <style> block is present (an unresolved compound rule).
   if (els.some((el) => localName(el) === "style")) {
     const styled = shapes.filter(

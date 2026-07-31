@@ -25,7 +25,7 @@ import type { RenderResult } from "../openscad/types";
 import type { RenderMetrics } from "../lib/renderMetrics";
 import type { ViewerHandle, Dimensions } from "./Viewer";
 
-// Peek shows just the drag handle + the tab bar (Presets/Parameters),
+// Peek shows only the drag handle + the tab bar (Presets/Parameters),
 // ending at the tab underline: no sliver of the tab's content.
 const PEEK_HEIGHT = 60;
 // Stable empty-log identity so idle re-renders don't break memo'd children.
@@ -38,7 +38,7 @@ const ACTION_CLUSTER_CLASS =
 // The bottom-anchored dock wrapping the action cluster (and, when shown, the
 // after-export panel riding above it). Positioning (absolute/bottom/left/
 // transform, plus the mobile sheet-follow override) lives on `.action-dock`
-// in index.css; a plain flex column here means an ExportSuccess panel simply
+// in index.css; a plain flex column here means an ExportSuccess panel
 // pushes the cluster down from a fixed bottom edge: no height measurement
 // needed to stack the two.
 const ACTION_DOCK_CLASS = "action-dock flex flex-col items-center gap-2";
@@ -237,7 +237,7 @@ export const AppShell = memo(function AppShell({
   // `ui.essentials` is what decides whether `@advanced` params are hideable at
   // all: docs/config.md and docs/annotations.md both scope the whole feature
   // to it ("when `ui.essentials` is enabled"). Off (the default), every param
-  // is simply shown: `showAdvanced` is a constant `true` and the change
+  // is shown: `showAdvanced` is a constant `true` and the change
   // handler below is withheld, which is what keeps the toggle from rendering
   // (ParamForm mounts EssentialsToggle only when handed one). Passing it
   // unconditionally would give a config that never opted in a toggle that can
@@ -328,7 +328,7 @@ export const AppShell = memo(function AppShell({
   // this state locally anymore.
   const panelState = usePanelState(bundled.length > 0);
   // Restore keyboard focus to the search input across a layout switch when it
-  // held focus just before the switch (tracked by ParamSearch's onFocus/onBlur
+  // held focus immediately before the switch (tracked by ParamSearch's onFocus/onBlur
   // via searchFocusedRef). Runs in a layout effect so it fires after the new
   // layout's DOM (with the same #param-search-input id) is committed, before
   // the browser paints: otherwise the switch would silently drop focus to
@@ -392,7 +392,7 @@ export const AppShell = memo(function AppShell({
   const showFullscreen = viewerControls.fullscreen !== false;
   // Optional after-export success panel (see ExportSuccess.tsx). Undefined
   // when the config never set `ui.afterExport`: `exportSuccess` stays null
-  // forever in that case (App.tsx never sets it), so the panel just never mounts.
+  // forever in that case (App.tsx never sets it), so the panel never mounts.
   const afterExport = ui.afterExport;
 
   const log = result?.log ?? EMPTY_LOG;
@@ -482,7 +482,7 @@ export const AppShell = memo(function AppShell({
 
   // Output console open/closed state + its auto-open-on-problem machine (see
   // useOutputConsole.ts). Opening the console has to collapse an expanded
-  // sheet to peek: the overlay's fixed anchor sits just above the peek tab
+  // sheet to peek: the overlay's fixed anchor sits immediately above the peek tab
   // row, but that hook has no reason to know about sheet state, so the
   // collapse is injected as a callback instead. Wrapped in its own
   // zero-dependency useCallback (setSheetDetent is a useState setter, always
@@ -531,7 +531,7 @@ export const AppShell = memo(function AppShell({
   // stylesheet can anchor to the model strip (the scrim starts below it)
   // without re-deriving `FULL_TOP_GAP + notch inset` in CSS. Same pattern as
   // the peek height below. BottomSheet owns the detent model, so it owns the
-  // number, and this just republishes it.
+  // number, and this republishes it.
   const handleSheetFullGap = useCallback((gapPx: number) => {
     const el = mobileRootRef.current;
     if (!el) return;
@@ -549,7 +549,7 @@ export const AppShell = memo(function AppShell({
   // by. The dock is a flex column that grows with what it holds: the readiness
   // pill, the after-export panel, and it outranks both chips (z-10 vs z-9), so
   // a static "height of the button cluster" guess meant anything taller than
-  // the cluster simply covered them. Written on the shell root (rather than a
+  // the cluster covered them. Written on the shell root (rather than a
   // per-layout one) because both layouts' chips read it and only one layout is
   // ever mounted. See `.viewer-hint` / `.sheet-hint` in index.css.
   const shellRef = useRef<HTMLDivElement>(null);
@@ -578,7 +578,7 @@ export const AppShell = memo(function AppShell({
   //     visual for a signal the dock already carries. ActionButtons puts an
   //     amber dot on Download itself (plus an sr-only issue count via
   //     `aria-describedby`), and clicking Download in that state opens this
-  //     very dialog rather than exporting. Saying it twice cost a whole
+  //     dialog rather than exporting. Saying it twice cost a whole
   //     stacked row over the model, on the layout with no room to spare; the
   //     desktop dock floats in open canvas, so it keeps the fuller wording.
   //
@@ -805,7 +805,7 @@ export const AppShell = memo(function AppShell({
 
             {/* Floating action dock: the readiness pill and an optional
                 after-export panel stacked above the same compact card the
-                desktop floats over its viewer, riding just above the sheet's
+                desktop floats over its viewer, riding immediately above the sheet's
                 top edge (it follows the sheet up to the half detent via
                 --sheet-follow-h) instead of a solid docked footer band that
                 would reserve a strip of the viewport. The pill is the mobile
@@ -824,8 +824,8 @@ export const AppShell = memo(function AppShell({
             <ViewerHUD {...hudProps} viewerRef={mobileViewerRef} />
           </div>
 
-          {/* Output console (mobile): a dismissible overlay that slides up just
-              above the COLLAPSED (peek) sheet. The sheet's tab row stays visible
+          {/* Output console (mobile): a dismissible overlay that slides up
+              immediately above the COLLAPSED (peek) sheet. The sheet's tab row stays visible
               and tappable beneath it, with a scrim dimming only the viewer.
               Only ever shown at the peek detent (handleDetentChange closes it
               on any other change), so it never competes with the Full-detent
@@ -892,7 +892,7 @@ export const AppShell = memo(function AppShell({
           {/* One-time first-visit nudge: shown only once there's something to
               nudge towards (sheetHintArmed: otherwise it fades behind the boot
               overlay or the welcome popup) and while the sheet is still at peek
-              (raising it dismisses the hint), riding just above the sheet's top
+              (raising it dismisses the hint), riding immediately above the sheet's top
               edge. Actionable (not aria-hidden), see SheetSwipeHint. */}
           {showSheetHint && sheetDetent === "peek" && sheetHintArmed && (
             <SheetSwipeHint onDismiss={dismissSheetHint} />

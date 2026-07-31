@@ -2,7 +2,7 @@
 // config (each notice category's `color`). Shown in the OutputConsole's
 // Notices tab. A category not flagged `attention: true` renders neutral
 // ("secondary") rather than amber. An informational note shouldn't read as
-// urgent just because it has a count (see docs/config.md's Notice badges
+// urgent because it has a count (see docs/config.md's Notice badges
 // section for the `attention` flag); asserts are
 // always destructive-red, and any category's own explicit `color` override
 // always wins visually regardless of its attention flag.

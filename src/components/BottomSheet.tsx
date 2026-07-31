@@ -75,7 +75,7 @@ function halfH(containerH: number, inset: number) {
 }
 // Full stops FULL_TOP_GAP (plus any notch inset, passed in as `topInset`)
 // short of the top edge so the live viewer stays in frame, see FULL_TOP_GAP's
-// own doc. Floored at the half height so a very short viewport: a landscape
+// own doc. Floored at the half height so a short viewport: a landscape
 // phone, where half is already most of the screen. Can never resolve "full"
 // to something SMALLER than "half", which would make the detent order
 // non-monotonic and break the nearest-detent snap in onPointerUp.
@@ -222,7 +222,7 @@ export function BottomSheet({
   // ResizeObserver on it fires exactly when the box the sheet must fit
   // actually changes (orientation flip, a breakpoint reflow), which is both
   // narrower and more reliable than listening for window resize and hoping it
-  // corresponds. Seeded from window.innerHeight so the very first paint has a
+  // corresponds. Seeded from window.innerHeight so the first paint has a
   // sane height; the observer corrects it in the same frame.
   const [containerH, setContainerH] = useState(() =>
     typeof window === "undefined" ? 0 : window.innerHeight
@@ -313,7 +313,7 @@ export function BottomSheet({
     const delta = dragStart.current.y - e.clientY;
     const currentH = dragStart.current.height;
     dragStart.current = null;
-    // Drop any pending rAF write so a frame queued just before pointer-up
+    // Drop any pending rAF write so a frame queued immediately before pointer-up
     // can't fire after React commits the settled detent below.
     cancelHeightFrame();
     setDragging(false);
@@ -386,12 +386,12 @@ export function BottomSheet({
   //  - trap focus two ways: (1) Tab/Shift+Tab are intercepted directly and
   //    wrapped to the other end of the trap's focusable list. Needed
   //    because tabbing off the LAST focusable element doesn't move focus to
-  //    any DOM node (the browser just leaves the document, and
+  //    any DOM node (the browser leaves the document, and
   //    document.activeElement falls back to <body> without a `focusin`
   //    event ever firing), so a focusin-only redirect can't catch it; (2) a
   //    `focusin` listener still redirects any focus that lands outside the
   //    trap by other means (e.g. a programmatic .focus() call).
-  //  - Escape collapses to Half from anywhere in the trap, not just the
+  //  - Escape collapses to Half from anywhere in the trap, not only the
   //    drag handle (onHandleKeyDown above only fires when the handle itself
   //    has focus).
   const scrimRef = useRef<HTMLButtonElement>(null);

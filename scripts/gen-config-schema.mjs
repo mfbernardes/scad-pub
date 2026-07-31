@@ -129,7 +129,7 @@ function nodeToSchema(node) {
   // `"color"` (config-spec.mjs's `color()` factory) is a real, distinct type
   // for config-parsers.mjs's own validateFieldValue dispatch, but it isn't a
   // legal JSON Schema type: a schema-consuming editor would reject the
-  // whole document over it. It's just a CSS-colour-flavoured string as far as
+  // whole document over it. It's only a CSS-colour-flavoured string as far as
   // shape goes (color()'s description already spells out the colour-string
   // meaning this collapse would otherwise lose), so it's emitted as "string"
   // like every other colour-valued field in this config

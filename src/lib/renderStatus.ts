@@ -27,7 +27,7 @@ export const STATE_STYLES: Record<RenderState, { pill?: string; dot: string; pul
 
 /**
  * Whether the viewer stage is still behind its pre-first-render loading
- * overlay: the engine is bootstrapping ("Getting things ready…"), or the very
+ * overlay: the engine is bootstrapping ("Getting things ready…"), or the
  * first render of this mount is running with nothing yet on the canvas
  * ("Building your preview…"). In other words, nothing has EVER been shown.
  *

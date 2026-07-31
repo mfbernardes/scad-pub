@@ -372,7 +372,7 @@ test("deriveAttention: an omitted diagnostics input behaves like an empty one (e
 // represented via `notices` above. This isn't deriveAttention's own job to
 // filter (AppShell does the level !== "notice" filtering before calling in,
 // see its own comment), but confirms a `diagnostics` entry and a `notices`
-// entry for "the same" category simply produce two distinct items rather than
+// entry for "the same" category produce two distinct items rather than
 // deriveAttention silently merging or deduping them: the caller owns not
 // double-supplying the same category both ways.
 test("deriveAttention: diagnostics and notices are independent inputs — no implicit de-duplication between them", () => {

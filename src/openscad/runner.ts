@@ -115,7 +115,7 @@ function strongDigest(bytes: Uint8Array): string {
 // pattern, see useFileImports.ts) must still be detected as a different file
 // set on the next render(); recomputing the digest fresh each call is what
 // makes that possible (see the "mutate in place" runner.test.mjs case). Files
-// are typically small (fonts/SVGs/data: KBs, not MBs), so a full re-hash per
+// are small (fonts/SVGs/data: KBs, not MBs), so a full re-hash per
 // render stays cheap; the actually expensive part this finding also calls
 // out (retransmitting unchanged bytes to the worker on every render) is
 // addressed separately in OpenSCADRunner.render() by only including
@@ -132,7 +132,7 @@ export function fileSignature(files: RenderRequest["userFiles"]): string {
 
 // Content-stable cache key shared by both tiers. The user-file signature (not an
 // ephemeral session counter) is baked in so the key reproduces across reloads:
-// changing files simply yields a different key, and stale entries age out via
+// changing files yields a different key, and stale entries age out via
 // LRU instead of needing an explicit cache wipe. `version` carries the build's
 // renderHash, so a deploy that changes any render input invalidates old entries.
 function cacheKey(req: Omit<RenderRequest, "id">, version: string): string {
@@ -163,7 +163,7 @@ export class OpenSCADRunner {
   // Forwards the worker's bootstrap-download progress (see worker.ts's
   // resolveWasmModule). Suppressed once `readyFired` is set (below):
   // a late/stale message from a respawned worker (spawn() resets bootstrap,
-  // which typically hits Cache Storage and posts nothing, but isn't
+  // which usually hits Cache Storage and posts nothing, but isn't
   // guaranteed to) must never resurrect the pre-ready loading UI after the
   // app has already moved on.
   private readonly onProgress?: (p: WorkerProgress) => void;
@@ -176,7 +176,7 @@ export class OpenSCADRunner {
   // costs only re-instantiation there, not a repeat fetch+compile of the
   // ~10 MB wasm binary. Stays set across a respawn (unlike lastSentFileSig,
   // which spawn() explicitly resets): a compiled module is valid for any
-  // worker instance sharing this runner's lifetime, not just the one that
+  // worker instance sharing this runner's lifetime, not only the one that
   // produced it. Nulled for good the moment postMessage() can't
   // structured-clone it (DataCloneError): no future worker will fare any
   // better, so the feature degrades to warmup-only rather than retrying.

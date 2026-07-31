@@ -101,7 +101,7 @@ export function selectPlural(count: number, forms: { one?: string; other: string
 
 // Route through `unknown`: the generated JSON is validated at runtime by
 // schema.ts; a direct `as Schema` structural-checks the raw literal, which a
-// deployment's `strings` (many string-literal keys) can't satisfy vs
+// deployment's `strings` (string-literal keys) can't satisfy vs
 // Record<string, string>.
 const schema = schemaJson as unknown as Schema;
 const bound = makeT(en as Bundle, schema.strings ?? {});

@@ -215,7 +215,7 @@ test("persistState survives a throttled history.replaceState (e.g. Safari)", () 
 });
 
 // M4: App.tsx's external-navigation consumer (hashchange / launchQueue) needs
-// to parse an arbitrary hash string — not just `location.hash` at module init
+// to parse an arbitrary hash string — not only `location.hash` at module init
 // — and needs a pure loop guard so applying a same-document hashchange (or a
 // queued installed-app launch target) doesn't spin. Both pieces are pure
 // helpers, tested directly here without mounting the App component.

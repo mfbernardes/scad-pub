@@ -61,7 +61,7 @@ export function shouldShowPopup(popup: PopupNotice | null, fromLink = false): bo
 }
 
 /** Persist that the user has dismissed this popup, so it won't show again.
- *  Storage unavailable: the popup simply shows again next visit. */
+ *  Storage unavailable: the popup shows again next visit. */
 export function rememberPopup(popup: PopupNotice): void {
   writeLocal(ns(KEY), contentHash(popup));
 }

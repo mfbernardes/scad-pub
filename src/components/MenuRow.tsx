@@ -26,7 +26,7 @@ interface Props {
   /**
    * For a row that toggles rather than acts: announces on/off state to
    * assistive tech, and marks the row when on. A toggle row usually should NOT
-   * close its menu: the visitor wants to see the result and often flip it
+   * close its menu: the visitor wants to see the result and flip it again
    * straight back, which is the caller's decision, not this component's.
    */
   pressed?: boolean;

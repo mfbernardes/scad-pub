@@ -78,7 +78,7 @@ export function parseColor(token: string | null | undefined): Rgb | null {
  *  own CSS parser when available (so it accepts every CSS colour, not only the
  *  ones we name), and falls back to a best-effort check in non-DOM (test)
  *  contexts. A derived region colour that fails this is still handed to OpenSCAD
- *  verbatim: it just can't be previewed as a swatch. */
+ *  verbatim: it cannot be previewed as a swatch. */
 export function isRenderableColor(token: string | null | undefined): boolean {
   if (!token) return false;
   const t = token.trim();

@@ -12,7 +12,7 @@ interface BeforeInstallPromptEvent extends Event {
 
 export function useInstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
-  // Latches on `appinstalled`: the user has just committed to keeping this app,
+  // Latches on `appinstalled`: the user has committed to keeping this app,
   // which is what tells the offline warm-up to stop being polite about
   // bandwidth (see swUpdate.ts's useOfflineWarmup). Only ever true for the tab
   // that saw the event; a later *launch* of the installed app is recognised by

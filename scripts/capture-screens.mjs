@@ -58,7 +58,7 @@ async function shot(page, dir, name) {
  *
  *  Waits on `[data-slot="dialog-content"]`, NOT `[role="dialog"]`: Radix gives
  *  its Popover content that role too, so on mobile, where these triggers live
- *  inside the "⋮" overflow. The popover we just opened satisfies a bare
+ *  inside the "⋮" overflow. The popover we opened satisfies a bare
  *  role wait all by itself. A missed trigger click would then leave the
  *  popover up and "pass" instantly, capturing the overflow menu instead of the
  *  dialog: the same false pass in a new costume.

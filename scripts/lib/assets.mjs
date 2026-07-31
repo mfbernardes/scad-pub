@@ -6,7 +6,7 @@
 // they're built once per generate() run by `createAssetTools`.
 //
 // Symlink policy (H5): every path this module resolves is canonicalized with
-// `realpathSync` and checked against the canonical SOURCE root, not just the
+// `realpathSync` and checked against the canonical SOURCE root, not only the
 // lexical path, which a symlink can trivially point away from. A symlink
 // (file or directory, anywhere in the tree: a design, an explicit asset, a
 // directory/glob match, or a use/include target) is allowed only when its

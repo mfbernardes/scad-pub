@@ -48,7 +48,7 @@ export function isSnapshotCurrent(
  * Whether `snapshot` may be exported (Download/Image): it must be a
  * successful render (never true for a null/failed result) AND current per
  * `isSnapshotCurrent`. A stale-but-successful snapshot may still be shown as
- * a labeled-stale preview (see stalePreview) it just can't be exported.
+ * a labeled-stale preview (see stalePreview) it cannot be exported.
  */
 export function isSnapshotExportable(
   snapshot: RenderSnapshot | null,

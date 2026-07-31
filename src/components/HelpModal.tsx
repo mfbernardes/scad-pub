@@ -1,7 +1,7 @@
 // HelpModal.tsx: renders the user guide from structured content. The content
 // is project-agnostic by default (DEFAULT_HELP) and fully overridable via the
 // config's `help`, so no design-specific copy is baked into the app. A config
-// may group its guide into many tabs (`help.tabs`); without tabs it renders as
+// may group its guide into multiple tabs (`help.tabs`); without tabs it renders as
 // a single pane exactly as before.
 import { Modal, MODAL_BODY, MODAL_INTRO } from "./Modal";
 import { Markdown } from "./Markdown";

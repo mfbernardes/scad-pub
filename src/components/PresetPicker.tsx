@@ -41,7 +41,7 @@ import {
 } from "./ui/alert-dialog";
 
 /* One preset row. `preset-picker__item` is a JS hook too (the roving-focus
-   querySelector below), not just styling. Rows read as tappable cards: a
+   querySelector below), not only styling. Rows read as tappable cards: a
    ready-made preset is a choice, not a line in a list; the selected one keeps
    its accent fill. */
 const itemClass = (isSelected: boolean) =>
@@ -133,7 +133,7 @@ export function PresetPicker({
   const sectionsRef = useRef<HTMLDivElement>(null);
 
   // Roving arrow-key navigation across every preset row: the rows are plain
-  // buttons (natively tabbable), so this just layers Up/Down/Home/End
+  // buttons (natively tabbable), so this only layers Up/Down/Home/End
   // movement on top for keyboard users, like a typical listbox would give.
   const onListKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;

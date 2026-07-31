@@ -2,7 +2,7 @@
 // from what's actually installed. Pure data-in/data-out so the grouping,
 // value-preservation and dedupe rules are unit-testable without React.
 //
-// The selector shows every face the renderer can really use (bundled ∪
+// The selector shows every face the renderer can actually use (bundled ∪
 // imported) under friendly names ("Liberation Sans Bold"), plus: kept
 // selectable but clearly marked. Any design-suggested face (enum choice) or
 // currently-selected value that is NOT loaded, so a preset naming an

@@ -98,7 +98,7 @@ export { splitHelpMarkdown } from "./lib/help-file.mjs";
 // unrecognised top-level key fails the build. `$schema` is allowed so a config
 // can point at a JSON Schema for editor tooling without tripping the check.
 // Derived from scripts/lib/config-spec.mjs: the single declarative surface
-// description. Rather than hand-maintained here; re-exported (not just used
+// description. Rather than hand-maintained here; re-exported (not only used
 // internally) because tests/gen-schema.test.mjs imports it directly.
 export { KNOWN_TOP_LEVEL_KEYS };
 
@@ -220,7 +220,7 @@ function runGitQuiet(dir, args) {
     return execFileSync("git", ["-C", dir, ...args], {
       encoding: "utf8",
       // Inherit nothing on stdin, capture stdout, discard git's diagnostics:
-      // a build must never fail, or get noisier, just because this probe ran.
+      // a build must never fail, or get noisier, because this probe ran.
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 5000,
     }).trim();
@@ -505,7 +505,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     const { params, sections, collapsedSections, meta } = parseParams(abs);
     copyAsset(d.file);
     // Auto-detect a sibling OpenSCAD parameterSets file: <name>.scad -> <name>.json
-    // next to it. One file can hold many named sets; absent -> no bundled presets.
+    // next to it. One file can hold multiple named sets; absent -> no bundled presets.
     const presetRel = d.file.replace(/\.scad$/, ".json");
     const presetAbs = join(SOURCE, presetRel);
     // H5: the sibling parameterSets file is copied into the served tree like the
@@ -575,7 +575,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     //     itself, not the filename, is what the UI keys off of).
     //   - DIRECTORY: every bundled preset's image is looked up by slugifying
     //     its name (scripts/lib/preset-slug.mjs) and trying the supported
-    //     extensions in turn. A preset with no matching file simply has no
+    //     extensions in turn. A preset with no matching file has no
     //     image (preset images are optional per preset either way) but the
     //     directory itself must exist, and the match count is logged so a
     //     wrong-but-existing directory (e.g. every name misspelled) is
@@ -653,7 +653,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // import closure (scripts/lib/worker-deps.mjs feeds scripts/lib/hash.mjs's
     // computeRenderHash), so any edit to it (comments included) changes
     // renderHash and evicts every deployment's persisted render cache. Real
-    // edits are fine, just worth batching deliberately.
+    // edits are fine, but worth batching deliberately.
     const cleanParams = params.map(({ reviewLabel, ...rest }) => rest);
     return {
       ...d,
@@ -711,12 +711,12 @@ function checkPopupMode(popup, designs) {
 // verified against what a design's `use`/`include` graph actually reaches.
 // That let a design whose graph goes further than `assets` (an entry the
 // operator forgot to add, or one they trimmed on purpose expecting a
-// narrower dependency set than the design really has) build green and fail
+// narrower dependency set than the design actually has) build green and fail
 // only once the OpenSCAD-WASM worker tries to mount it in someone's browser
 // — the render sandbox mounts exactly `assets` (plus each design's own
 // file), nothing more. generate() now runs collectDeps unconditionally (see
 // its own comment) so this can be checked at build time instead, matching
-// gen-schema's fail-fast stance everywhere else: a warning here would just be
+// gen-schema's fail-fast stance everywhere else: a warning here would only be
 // a slower version of the same runtime failure.
 //
 // `walkedByDesign` is `[{ id, deps: Set<relPosixPath> }]`, one entry per
@@ -732,7 +732,7 @@ function checkPopupMode(popup, designs) {
 function checkAssetCoverage(designs, walkedByDesign, assets) {
   // A design's use/include graph may legitimately reach another design's own
   // .scad file: buildDesigns/copyAsset already stages every design file
-  // regardless of `assets`, so that's covered too, not just the configured set.
+  // regardless of `assets`, so that's covered too, not only the configured set.
   const designFiles = new Set(designs.map((d) => d.file));
   const uncovered = walkedByDesign
     .map(({ id, deps }) => ({
@@ -762,7 +762,7 @@ function checkAssetCoverage(designs, walkedByDesign, assets) {
 function resolveHelpPane(raw, CONFIG_DIR, mustExist, what) {
   if (raw?.file == null) return raw;
   // Validate BEFORE resolving: same shape as prose-files.mjs's resolveFileField
-  // (this is the same "<field>File" idiom, just with `sections` synthesized
+  // (this is the same "<field>File" idiom, but with `sections` synthesized
   // from Markdown instead of a single string). A non-string or blank value
   // must fail with the usual optional-string message, not escape as a raw
   // Node TypeError out of node:path's resolve() below.
@@ -1038,8 +1038,8 @@ export function generate({
   // can restyle the app entirely from its config. Absent -> null.
   const COLORS = parseColors(config.colors);
   // Build-time UI behaviour config (panel side, default state, etc.). `install`
-  // moved to `pwa.install` (see PWA below): it's spliced back onto UI just
-  // below so `schema.ui.install` still carries it, unmoved: App.tsx reads
+  // moved to `pwa.install` (see PWA below): it's spliced back onto UI
+  // immediately below so `schema.ui.install` still carries it, unmoved: App.tsx reads
   // `schema.ui?.install`, and this reorg only moves the CONFIG surface, not
   // designs.json's shape (see gen-schema.mjs's schema-assembly comment).
   const UI = { ...parseUi(config.ui) };
@@ -1158,7 +1158,7 @@ export function generate({
   const extraCss = copyExtraCss(config, CONFIG_DIR, stageScadDir, mustExist, registry.register);
 
   // The staged scad tree is complete, but it is NOT committed to the live
-  // outScadDir yet: the swap is deferred to the very end (below), after the
+  // outScadDir yet: the swap is deferred to the end (below), after the
   // fallible PWA generation and once the schema is in hand, so the whole
   // output (render sources, PWA/font assets, and designs.json) commits as
   // one unit. generatePwaAssets() itself never writes a byte: every icon,
@@ -1229,7 +1229,7 @@ export function generate({
   // fonts.conf). Appended as a `?v=<digest>` query on their fetch URLs (worker.ts
   // AND the precache-manifest `bin.urls` below use the identical scheme, see
   // src/lib/assetUrl.ts's versionedAssetUrl) so the fetch/Cache-Storage identity
-  // is content-addressed, not just the combined renderHash used for L2 geometry.
+  // is content-addressed, not only the combined renderHash used for L2 geometry.
   const BIN_ASSETS = outPublicDir
     ? computeBinAssetVersions({ fontPaths, fontsConf, outPublicDir })
     : {};
@@ -1321,7 +1321,7 @@ export function generate({
   if (outPublicDir) {
     writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo, extraCss, iconFiles });
     // M8: reconcile the generated files this run wrote OUTSIDE outScadDir
-    // (which was fully replaced as a unit just above). Source-copied fonts under
+    // (which was fully replaced as a unit immediately above). Source-copied fonts under
     // public/fonts, plus the PWA root assets (icons, splashes, manifest,
     // screenshots). Against what a previous run generated, so removing or
     // renaming a config entry (a dropped font, a renamed screenshot) doesn't

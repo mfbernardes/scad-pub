@@ -44,7 +44,7 @@ function findDesign(schema: Schema, id: string | null): Design | undefined {
 
 // M4: shared by the initial-load reader below AND by App's external-navigation
 // consumer (hashchange / launchQueue). Both need to parse the same "d=/v=/p="
-// encoding from an arbitrary hash string, not just `location.hash` at module
+// encoding from an arbitrary hash string, not only `location.hash` at module
 // init, so a same-document hash change or an installed-app launch target can
 // be applied after the app has already booted.
 export function parseHashState(schema: Schema, hash: string): SessionState | null {
@@ -163,7 +163,7 @@ export function persistState(design: Design, values: Values, preset = "") {
 /**
  * The share URL for the CURRENT design/values/preset, built synchronously,
  * unlike `persistState`, which is debounced 300ms behind React state, this
- * must never lag an edit (docs/architecture-review.md H2: a quick edit-then-
+ * must never lag an edit (docs/architecture-review.md H2: a fast edit-then-
  * Share must not copy the pre-edit URL). Only `location.origin`/`pathname`/
  * `search` are read, since those aren't debounced or state-derived: the hash
  * itself is always rebuilt from the arguments, never from `location.hash`.

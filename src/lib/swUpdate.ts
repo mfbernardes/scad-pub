@@ -30,7 +30,7 @@ export function isWaitingUpdate(state: string, hasController: boolean): boolean 
  * app) can share an origin; a force-update for one must not unregister or
  * evict another's offline state.
  *
- * Exported (not just used internally by `forceUpdate` below) so its scoping
+ * Exported (not only used internally by `forceUpdate` below) so its scoping
  * behavior is directly unit-testable without a real browser.
  */
 export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void> {
@@ -38,7 +38,7 @@ export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void
     if ("serviceWorker" in navigator) {
       // Prefer the registration this hook already holds for its own scope
       // (set by the effect below); fall back to looking it up by BASE_URL if
-      // called before that completes (e.g. `forceUpdate` fired very early).
+      // called before that completes (e.g. `forceUpdate` fired early).
       const r =
         reg ?? (await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL));
       await r?.unregister();
@@ -61,7 +61,7 @@ export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void
  * Every worker a WARM has to reach: the one serving this page, and a WAITING
  * one if an update has installed behind it.
  *
- * The waiting worker is the reason this isn't just `active`. Each build's shell
+ * The waiting worker is the reason this isn't only `active`. Each build's shell
  * cache is named after its own version, and an update's install fills only the
  * boot-critical part of it, so a freshly-installed worker owns an almost-empty
  * cache while the active one owns a complete one. The browser activates a

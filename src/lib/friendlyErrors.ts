@@ -64,7 +64,7 @@ function assertMessage(assertionText: string): string | null {
 /** ERROR:/WARNING:/bootstrap-error lines from the raw worker log, in order,
  *  deduped, capped to a short tail. Used as `technical` for every failure
  *  kind. Naturally includes a failed assert's own raw line (condition + file
- *  + line, not just its authored message) alongside any further ERROR/WARNING
+ *  + line, not only its authored message) alongside any further ERROR/WARNING
  *  lines, since OpenSCAD can still emit e.g. a font-fallback WARNING before
  *  halting at the assert. */
 function technicalTail(log: string[], max: number): string[] {

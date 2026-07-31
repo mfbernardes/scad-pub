@@ -18,7 +18,7 @@
 //      "v1.4.0-3-gab12cd6" past one, the abbreviated commit ("ab12cd6") when the
 //      checkout has no tags at all (e.g. a shallow CI clone: fetch tags, or
 //      fetch-depth: 0, for the tag form), plus "-dirty" for a modified tree.
-//   3. undefined. No git, no repository, no override. The stamp is simply
+//   3. undefined. No git, no repository, no override. The stamp is
 //      omitted from the schema and the modal shows no version line.
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -34,7 +34,7 @@ const MAX_LEN = 64;
  * A version string fit for a schema field and a line of UI text: first line
  * only, no control characters, whitespace collapsed, length-capped. Returns ""
  * when nothing usable is left (the caller then falls through / omits the stamp).
- * Applied to the operator-supplied override too, not just git's output.
+ * Applied to the operator-supplied override too, not only git's output.
  */
 function clean(raw) {
   if (typeof raw !== "string") return "";

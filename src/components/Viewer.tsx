@@ -281,7 +281,7 @@ export const Viewer = forwardRef<
   // Single-material geometry that tracks the theme (the STL path's one mesh).
   const themedMaterialsRef = useRef<ThemedMaterial[]>([]);
   // Per-vertex-coloured geometry (the 3MF path): the live colour attribute plus
-  // a copy of its original colours, so a theme switch can re-tint just the
+  // a copy of its original colours, so a theme switch can re-tint only the
   // vertices that carried an OpenSCAD auto-colour.
   const themedVertexRef = useRef<{ attr: THREE.BufferAttribute; original: Float32Array }[]>([]);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -841,7 +841,7 @@ export const Viewer = forwardRef<
     ro.observe(mount);
 
     // Initial paint: ResizeObserver's first callback normally fires async
-    // shortly after observe(), but request one explicitly too so the very
+    // shortly after observe(), but request one explicitly too so the
     // first frame doesn't wait on it.
     requestRender();
 
@@ -858,7 +858,7 @@ export const Viewer = forwardRef<
       requestRenderRef.current = () => {};
       controls.dispose();
       dimGroupRef.current?.dispose();
-      // Release the current model's and grid's GPU resources too, not just on
+      // Release the current model's and grid's GPU resources too, not only on
       // replacement: a desktop⇄mobile breakpoint flip unmounts/remounts the
       // whole Viewer, leaking a live geometry + material set until GC. Dispose
       // before the renderer/context so nothing still references a torn-down GL
@@ -892,7 +892,7 @@ export const Viewer = forwardRef<
     if (!scene) return;
     const raf = requestAnimationFrame(() => {
       scene.background = cssColor("--viewer-bg", "#0f1115");
-      // Rebuilt (not just recoloured) so a live theme switch picks up the new
+      // Rebuilt (not only recoloured) so a live theme switch picks up the new
       // --viewer-grid/-2 values. Read fresh from the closure, like
       // showDimensions below; the [showGrid] effect handles plain toggles.
       syncGrid(showGrid);
@@ -1093,7 +1093,7 @@ export const Viewer = forwardRef<
     // are read fresh here rather than via the dep array: a preset change doesn't
     // clear the old geometry, so reframing must wait for the new model to arrive
     // (this effect) and use *its* bounds, not the stale ones. frameView() reads
-    // modelSizeRef (just set above) to fit the model's actual bounding box,
+    // modelSizeRef (set above) to fit the model's actual bounding box,
     // see framing.ts: rather than a bounding-sphere radius.
     const frameKey = reframeOnPreset ? `${designId}\n${presetId}` : designId;
     if (framedKeyRef.current !== frameKey) {

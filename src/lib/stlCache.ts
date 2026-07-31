@@ -29,7 +29,7 @@ export const MB = 1024 * 1024;
 const DEFAULT_MAX_BYTES = 256 * MB;
 const DEFAULT_MAX_ENTRY_BYTES = 64 * MB;
 // M11: cap a record's persisted log independent of the STL byte budget above
-// — an unusually chatty render (many ECHO/warning lines) shouldn't be able to
+// — an unusually chatty render (a long ECHO/warning log) shouldn't be able to
 // grow a stored record without limit while its size mostly evades the STL-only
 // byte accounting a naive budget would use. Kept generous (a real render log
 // is normally a few dozen short lines) but bounded.
@@ -45,7 +45,7 @@ export interface StoredStl {
   exitCode: number;
   ms: number;
   /**
-   * M11: correctness-relevant, not just informational. A truthy entry means
+   * M11: correctness-relevant, not only informational. A truthy entry means
    * this result was rendered against parameters the design source no longer
    * fully declares (see orphanedDefines/worker.ts). Must round-trip through
    * the store so a later cache hit still carries the reload prompt the UI
@@ -113,7 +113,7 @@ function recordBytes(stlBytes: number, log: readonly string[]): number {
 //   - a clear() and a put() can never interleave. A write already in flight
 //     when clear() is called completes (and is visible) BEFORE clear() runs,
 //     or clear() completes fully before a later put() begins. Either way, an
-//     older write can never repopulate the store just after a clear.
+//     older write can never repopulate the store immediately after a clear.
 //   - overlapping put()s never race the same evict-then-write budget check:
 //     each one now sees the true post-previous-write state, so the combined
 //     effect of several concurrent put() calls can't exceed the byte budget
@@ -157,7 +157,7 @@ export function createStlCache(
   // checkVersion's own memoization (versionChecked) already gives it
   // effectively-once semantics without needing the mutation queue: at most
   // one real checkVersion() runs, and every other caller (concurrent or
-  // nested) just awaits that same promise.
+  // nested) awaits that same promise.
   let versionChecked: Promise<void> | undefined;
   function ensureVersion(): Promise<void> {
     if (!versionChecked)
@@ -290,7 +290,7 @@ export function createStlCache(
           await evictAndWrite(key, data, bytes, Math.floor(maxBytes / 2));
         }
       } catch {
-        /* best-effort: a failed persist just means this stays L1-only */
+        /* best-effort: a failed persist means this stays L1-only */
       }
     });
   }

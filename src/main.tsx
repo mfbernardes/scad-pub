@@ -17,10 +17,10 @@ import "./index.css";
 // The service worker is registered from within the app (see lib/swUpdate.ts) so
 // the same place that registers it can surface the "update available" prompt.
 //
-// Root error boundary: an uncaught render error anywhere in the tree (not just
+// Root error boundary: an uncaught render error anywhere in the tree (not only
 // the Viewer or the SVG wizard, which have their own scoped boundaries) would
 // otherwise unmount past `#root` and leave a blank page with no on-screen
-// signal. This is the last line of defence: reload is the only generally
+// signal. This is the last line of defence: reload is the only
 // correct recovery at this scope, since app state itself may be what's broken.
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

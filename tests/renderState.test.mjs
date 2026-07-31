@@ -91,7 +91,7 @@ test("resolveRenderCommit: a same-epoch failure produces no snapshot", () => {
 });
 
 test("resolveRenderCommit: an older-epoch completion is discarded outright, success or not", () => {
-  // Required test: edit then export before the debounce fires is really "the
+  // Required test: edit then export before the debounce fires is genuinely "the
   // renderKey moved on"; this test covers the sibling case. The *epoch*
   // moved on (design switch / invalidation) while a render was in flight.
   const discardedOk = resolveRenderCommit(1, "key-A", outcome({ startEpoch: 0, result: ok() }));

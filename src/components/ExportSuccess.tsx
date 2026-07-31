@@ -63,7 +63,7 @@ export function ExportSuccess({
       className="export-success flex w-full max-w-[min(92vw,26rem)] items-start gap-2 rounded-lg border border-(color:--glass-border) bg-(--glass-bg) px-3 py-[0.55rem] text-[0.82rem] shadow-(--elevation)"
       role="status"
       // Polite: announces the title without stealing focus from wherever the
-      // visitor's attention already is (they just clicked Download).
+      // visitor's attention already is (they have clicked Download).
       aria-live="polite"
     >
       <div className="min-w-0 flex-1">

@@ -114,9 +114,9 @@ export function useReadinessModel({
   // for why `level === "notice"` is excluded here.
   //
   // Only surfaced for a render that actually SUCCEEDED: a currently-FAILED
-  // render's own diagnostics (e.g. the very assert that failed it) are
+  // render's own diagnostics (e.g. the assert that failed it) are
   // already explained by the Review dialog's friendly-failure card (see
-  // `failure` below). Stacking them as attention items too would just
+  // `failure` below). Stacking them as attention items too would only
   // repeat the same message under a second heading. readinessState's own
   // failed > attention precedence already keeps the overall readiness state
   // correct either way, but the Review dialog renders `attention` cards

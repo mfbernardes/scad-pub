@@ -63,7 +63,7 @@ interface FillRule {
   fill: string;
 }
 
-// Parse `<style>` text for simple `selector { … fill: X … }` rules using a
+// Parse `<style>` text for plain `selector { … fill: X … }` rules using a
 // class (`.c`), id (`#i`) or element (`tag`) selector. OpenSCAD's import ignores
 // `<style>` entirely, so these fills are invisible to it and to colour
 // derivation; resolving them onto the shapes is what keeps a CSS-styled export
@@ -109,7 +109,7 @@ export function styleRuleFill(el: Element, rules: FillRule[]): string | null {
   return best ? best.fill : null;
 }
 
-/** Resolve simple `<style>` class/id/tag fill rules onto the shapes and groups
+/** Resolve plain `<style>` class/id/tag fill rules onto the shapes and groups
  *  that rely on them (setting an inline `fill`), so colour derivation reads the
  *  drawing's real colours instead of defaulting to black. Appearance-preserving
  *  and geometry-neutral (OpenSCAD ignores both the stylesheet and the fill). */

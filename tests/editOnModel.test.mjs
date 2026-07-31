@@ -14,7 +14,7 @@ import {
 
 test("isModelClick: a still (or tiny) pointer pair is a click", () => {
   assert.equal(isModelClick({ down: { x: 100, y: 100 }, up: { x: 100, y: 100 } }), true);
-  // Just under the threshold (3-4-5 triangle, 5px) still counts.
+  // Under the threshold (3-4-5 triangle, 5px) still counts.
   assert.equal(isModelClick({ down: { x: 0, y: 0 }, up: { x: 3, y: 4 } }), true);
 });
 

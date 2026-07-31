@@ -1,6 +1,6 @@
 // visibility.ts: evaluate a parameter's `@showIf` expression against the
 // current values to decide whether its control is shown. Deliberately tiny and
-// safe (no eval): an OR of ANDs of simple clauses. Hidden parameters are still
+// safe (no eval): an OR of ANDs of atomic clauses. Hidden parameters are still
 // sent to OpenSCAD unchanged: visibility is a UI nicety only.
 //
 // M9: gen-schema.mjs (scripts/lib/params.mjs) is the PRIMARY gate. It rejects

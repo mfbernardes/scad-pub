@@ -25,7 +25,7 @@ function loadSvgWizard() {
 // (offline, build-hash drift after a deploy, an ad blocker on the chunk URL, …)
 // is cached by the browser's module map for the document's lifetime: re-running
 // the same dynamic `import()` (even from a freshly minted `lazy()` wrapper)
-// just re-throws the cached rejection, so there is no in-place re-fetch. The
+// re-throws the cached rejection, so there is no in-place re-fetch. The
 // only reliable recovery is a full reload, which re-requests every chunk from
 // the network; the error fallback below offers exactly that (see finding #14).
 const SvgWizardLazy = lazy(loadSvgWizard);
@@ -82,9 +82,9 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
   const [pending, setPending] = useState<{ text: string; fileName: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The value points at a drawing the renderer can't resolve (typically an
+  // The value points at a drawing the renderer can't resolve (usually an
   // imported SVG the user has since removed). The drop zone below is the fix:
-  // prepare/import it again, so the hint just names what's gone.
+  // prepare/import it again, so the hint names what's gone.
   const missing = availableSvgFiles ? isSvgMissing(value, availableSvgFiles) : false;
 
   const loadFile = async (file: File) => {

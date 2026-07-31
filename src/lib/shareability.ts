@@ -89,7 +89,7 @@ export function computeShareability(
 
     if (Object.prototype.hasOwnProperty.call(userFiles, value)) {
       // Covers both the SVG-wizard case (an `@svg` field pointing at the file
-      // it just mounted) and a generic imported file referenced by name (e.g.
+      // it mounted this session) and a generic imported file referenced by name (e.g.
       // a `surface()` data file supplied through the generic file-import button).
       localOnly.push({ kind: p.svg ? "svg" : "file", param: p.name, name: value });
     }

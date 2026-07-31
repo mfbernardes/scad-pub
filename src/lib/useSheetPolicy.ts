@@ -48,7 +48,7 @@ export interface SheetPolicyModel {
    * never comes back. Two ways that happens, both invisible on a fast machine
    * and both certain on a slow phone:
    *   • first-run boot. A cold ~10 MB engine download plus the first render
-   *     easily outlasts the timeout, leaving the nudge to fade behind the
+   *     outlasts the timeout, leaving the nudge to fade behind the
    *     "Getting things ready…" overlay. Same signal ViewerGestureHint arms on.
    *   • the config's welcome popup: the one modal that opens by itself on a
    *     first visit and covers everything, including this chip. A visitor who

@@ -102,7 +102,7 @@ export interface RenderResult {
    * True when this failure means the renderer's asset bootstrap (WASM/glue
    * import, shared sources, fonts) never completed, as opposed to an
    * ordinary model failure (bad OpenSCAD source/parameters). See M1: the
-   * worker resets its bootstrap state on such a failure, so the very next
+   * worker resets its bootstrap state on such a failure, so the next
    * render() call retries the whole bootstrap automatically. A caller may use
    * this to avoid presenting a "that combination of settings didn't work"
    * message about a renderer that never started, or to surface a distinct
@@ -325,7 +325,7 @@ export interface HelpSection {
 }
 
 /** One tab of the in-app help: a labelled group of sections with its own
- *  optional intro. A config may supply many tabs; the Help modal renders a tab
+ *  optional intro. A config may supply multiple tabs; the Help modal renders a tab
  *  strip when any are present. */
 export interface HelpTab {
   /** Tab-strip label. */
@@ -344,7 +344,7 @@ export interface HelpContent {
   intro?: string;
   /** Single-pane sections (the default form). */
   sections?: HelpSection[];
-  /** When present, the modal renders a tab strip; many tabs are supported. */
+  /** When present, the modal renders a tab strip; multiple tabs are supported. */
   tabs?: HelpTab[];
 }
 

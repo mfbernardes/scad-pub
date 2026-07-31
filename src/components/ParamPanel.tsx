@@ -178,7 +178,7 @@ export function ParamPanel({
   const onPointerUp = useCallback(() => {
     if (!dragging.current) return;
     dragging.current = false;
-    // Drop any pending rAF write so a frame queued just before pointer-up
+    // Drop any pending rAF write so a frame queued immediately before pointer-up
     // can't fire after React commits the settled width below.
     cancelWidthFrame();
     // Write the final width imperatively first: when liveWidthRef equals the

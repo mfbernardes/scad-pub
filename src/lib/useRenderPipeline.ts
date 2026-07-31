@@ -69,7 +69,7 @@ export interface RenderPipelineArgs {
    * request no render. Set while the app's *first screen is a chooser*, see
    * popup.ts's `isDesignChooser`, where rendering the default design is
    * speculative anyway and its bootstrap download (the ~10 MB WASM binary plus
-   * the bundled fonts) would otherwise starve the very images that chooser is
+   * the bundled fonts) would otherwise starve the images that chooser is
    * made of. Released the moment the user picks; nothing about the pipeline's
    * behaviour after that differs.
    */
@@ -323,7 +323,7 @@ export function useRenderPipeline({
       runnerRef.current?.dispose();
       runnerRef.current = null;
       // Re-arm the initial-render one-shot: it was armed against the runner we
-      // just disposed. Under Strict Mode's dev mount -> cleanup -> remount
+      // disposed. Under Strict Mode's dev mount -> cleanup -> remount
       // replay, the first pass sets the flag and starts the initial render on
       // runner A; disposing A rejects that render with SupersededError (so it
       // never commits and `rendering` stays true), and without this reset the

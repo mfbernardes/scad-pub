@@ -236,7 +236,7 @@ async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
   await gotoFiles();
   check((await row().count()) > 0, "imported file persists across reload");
 
-  // (d) The row's own X removes just that file, and the empty state returns.
+  // (d) The row's own X removes only that file, and the empty state returns.
   await page.getByRole("button", { name: new RegExp(`Remove ${importedName}`, "i") }).click();
   await row().waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
   check((await row().count()) === 0, "row remove deletes the file");
@@ -366,7 +366,7 @@ async function checkIdleRenderCount({ page, check }) {
 // Inject axe-core via evaluate (the DevTools runtime channel), NOT
 // page.addScriptTag: serve-dist now sends the built dist/_headers, whose CSP
 // rightly refuses an inline <script> tag, and loosening the page's policy
-// (bypassCSP, or an 'unsafe-inline' carve-out) just to measure accessibility
+// (bypassCSP, or an 'unsafe-inline' carve-out) only to measure accessibility
 // would stop this suite from exercising the exact headers a real deploy
 // sends. Runtime evaluation is tooling-plane and not governed by the page's
 // CSP.
@@ -388,7 +388,7 @@ async function checkAxe({ page, check }) {
   // wait was flaky (the transition outlasts a short sleep on slower CI); wait
   // for all running CSS transitions/animations to actually settle instead.
   const settle = async () => {
-    await page.waitForTimeout(50); // let a just-started transition register first
+    await page.waitForTimeout(50); // let a newly started transition register first
     await page
       .waitForFunction(
         () => document.getAnimations().every((a) => a.playState !== "running"),
@@ -497,7 +497,7 @@ async function checkPresetCardGrid({ page, check, schema, presetsTabName, params
   check((await cards.locator("img").count()) >= 1, "at least one preset card renders its thumbnail image");
   // Cards are still plain buttons: clicking one applies the preset, same as
   // the list variant (checkBundledPresets already exercises apply/URL/reload
-  // — this just confirms the card path routes through the same handler).
+  // — this confirms the card path routes through the same handler).
   const firstCardText = (await cards.first().textContent())?.trim() ?? "";
   await cards.first().click();
   await waitRendered(page, `${design.id} + preset card "${firstCardText}"`);
@@ -662,7 +662,7 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
   // The other half of the contract needs a design in the OPPOSITE state. The
   // dogfood config pairs "tag" (attention by default) with "panel" (a clean
   // SVG-extrusion design, no font/notice concerns); a config without such a
-  // known-clean design just doesn't exercise it. A clean design must show NO
+  // known-clean design does not exercise it. A clean design must show NO
   // pill at all: the ready state is deliberately silent.
   if (ids.includes("panel")) {
     await selectDesign(page, "panel");
@@ -991,7 +991,7 @@ async function checkEditOnModel({ page, check, ids, paramsTabName }) {
 
 // "Jump to section" navigator (SectionNavigator.tsx): a compact control above
 // the form on designs with >= 4 visible sections. Present on such a design,
-// absent on a simple one; selecting a section opens + scrolls + focuses it; and
+// absent on a single-section one; selecting a section opens + scrolls + focuses it; and
 // a narrowing search shrinks (or removes) the option set. Located by the
 // trigger's accessible name and the option/section DOM hooks.
 async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }) {
@@ -1008,7 +1008,7 @@ async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }
   const gotoParams = () =>
     page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
 
-  // (a) Present on a multi-section design; absent on a simple one.
+  // (a) Present on a multi-section design; absent on a single-section one.
   await selectDesign(page, navDesign);
   await gotoParams();
   await trigger.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
@@ -1062,7 +1062,7 @@ async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }
 
   // (c) A narrowing search shrinks the option set. Searching a single param's
   //     exact name matches (at least) that one param, so sections without it
-  //     drop out: often below the threshold, which removes the navigator
+  //     drop out: below the threshold, which removes the navigator
   //     entirely (a 0-option shrink). Either way the count must fall.
   await trigger.first().click();
   const before = await page.locator(".section-nav-item").count();
@@ -1132,10 +1132,10 @@ async function checkSignageDesign({ page, check, ids, schema }) {
 // Crossing the breakpoint UNMOUNTS one layout tree and mounts the other, and
 // the incoming tree stands up a fresh three.js Viewer (a new WebGL context,
 // plus the environment/IBL setup a `viewer.style: "studio"` config asks for).
-// That work is main-thread-bound and lands at the very end of a long run, so
+// That work is main-thread-bound and lands at the end of a long run, so
 // it can take a few seconds on a software GL stack with a big config: far
 // longer than the 3s the rest of this section's waits use. Generous on
-// purpose: a layout that never swaps still fails, just later.
+// purpose: a layout that never swaps still fails, only later.
 const LAYOUT_SWAP_MS = 20000;
 
 async function checkResponsiveLayout({ browser, base, check, schema, paramsTabName }) {
@@ -1183,7 +1183,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     // neighbours are gone from this layout by design: the "+N more" essentials
     // chip is the form's own closing row now, and the section navigator is
     // desktop-only (both still exist, see the desktop checks above and the
-    // end-of-form check below: they just don't stand a row here anymore).
+    // end-of-form check below: they no longer stand a row here).
     // This is the sheet's vertical budget, so guard it against creeping back.
     const toolbarControls = await page
       .locator(".sheet-toolbar")
@@ -1242,7 +1242,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
       if (await back.count()) await back.first().click();
       await page.waitForTimeout(300);
     } else {
-      // Absent is a real state, not just "config has no advanced params": it's
+      // Absent is a real state, not only "config has no advanced params": it's
       // also every design whose advanced params are all @showIf-hidden right
       // now, and every config that leaves `ui.essentials` off.
       console.log("  (no essentials toggle on this design — nothing reachable to reveal)");
@@ -1280,7 +1280,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     );
 
     // Back to mobile: the sheet detent set above (Half) must not have reset
-    // to Peek just because the layout remounted.
+    // to Peek because the layout remounted.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForSelector(".app-shell__mobile", { timeout: LAYOUT_SWAP_MS });
     check(
@@ -1424,7 +1424,7 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
         (await page.getByRole("status").filter({ hasText: /settings/i }).count()) >= 1,
         "the swipe-up nudge has an accessible name (role=status, not aria-hidden)"
       );
-      // …and it must be VISIBLE, not just mounted: the nudge shares its
+      // …and it must be VISIBLE, not only mounted: the nudge shares its
       // over-sheet slot with the export dock, which outranks it (z-10 vs z-9)
       // and grows with what it holds. A readiness pill, an after-export panel.
       // The dogfood config's first design carries a default attention issue, so

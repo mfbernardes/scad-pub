@@ -7,7 +7,7 @@ export function assetUrl(path: string): string {
 }
 
 // H4: append a `?v=<digest>` query so a binary asset's fetch/Cache-Storage
-// identity is content-addressed, not just a stable filename. worker.ts uses
+// identity is content-addressed, not only a stable filename. worker.ts uses
 // this for every request it makes into its version-pinned BIN_CACHE (the wasm
 // binary, bundled fonts); the digests come from schema.binAssets (see
 // types.ts), computed at build time in scripts/lib/hash.mjs. The service

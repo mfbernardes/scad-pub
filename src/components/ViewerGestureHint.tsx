@@ -52,7 +52,7 @@ export function ViewerGestureHint({ resultOk, suppressed = false }: { resultOk: 
     // viewer always lands on the canvas/overlay underneath, never the hint.
     // Listen at the document level (capture, so it sees the event before any
     // handler stops propagation) and check it actually happened inside the
-    // viewer, not just anywhere on screen.
+    // viewer, not only anywhere on screen.
     const onPointerDown = (e: PointerEvent) => {
       if ((e.target as Element | null)?.closest(".viewer-wrap")) dismiss();
     };

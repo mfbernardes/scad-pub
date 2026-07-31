@@ -301,7 +301,7 @@ self.addEventListener("message", (event) => {
   // The page is past its first screen and the network is free: pull down
   // the rest of the offline bundle now (src/lib/swUpdate.ts's
   // warmServiceWorker). Nothing else triggers this: a visit whose page closes
-  // first simply stays warmed by the fetch handler instead.
+  // first stays warmed by the fetch handler instead.
   if (type === "WARM") event.waitUntil(warmSupplementary());
 });
 

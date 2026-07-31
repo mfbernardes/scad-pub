@@ -35,7 +35,7 @@ export interface LayerEntry {
 
 /** A written region height, as a consuming design will read it: a plain decimal,
  *  no sign and no exponent. Deliberately narrower than the browser's number
- *  input, which also accepts `1e3` and `-2`: a design's own parser typically
+ *  input, which also accepts `1e3` and `-2`: a design's own parser
  *  cannot, and hard-fails the render rather than falling back. */
 const HEIGHT_RE = /^(?:\d+\.?\d*|\.\d+)$/;
 
@@ -219,7 +219,7 @@ export function canvasEntry(root: Element): string {
   // Never emit something our own reader would reject or misread. A viewBox
   // extreme enough to defeat the formatting: |n| >= 1e21, where toFixed
   // returns exponent notation, or below ~1e-100, where it underflows to zero.
-  // Simply forgoes the canvas hint and leaves the design corner-anchoring.
+  // Forgoes the canvas hint and leaves the design corner-anchoring.
   const usable = isCanvasEntry(entry) && Number(dw) > 0 && Number(dh) > 0;
   return usable ? entry : "";
 }

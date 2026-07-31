@@ -12,7 +12,7 @@
 //   2. Whatever's left of a leading "Category | " prefix becomes a small
 //      overline above the title, e.g. "Signs | Door plate (Imperial)"
 //      -> overline "Signs", title "Door plate", badge "Imperial".
-//   3. A name with neither yields just a title (the name itself).
+//   3. A name with neither yields only a title (the name itself).
 //
 // A malformed edge case (e.g. "() (Metric)", or a "|" with nothing on one
 // side) degrades gracefully to a plain title rather than an empty label.

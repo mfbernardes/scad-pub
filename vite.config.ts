@@ -47,7 +47,7 @@ function readSchema(): {
 // hard-coded to one project). Runs with `order: "post"` so the bundled app CSS
 // <link> has already been injected: the colour <style> and the extraCss <link>
 // land *after* it, giving consumer styles the final say (the escape hatch can
-// override the app's own rules by source order, not just specificity). The CSS
+// override the app's own rules by source order, not only specificity). The CSS
 // assembly lives in src/lib/configCss.ts so it's unit-testable without Vite.
 function configHtml(s: ReturnType<typeof readSchema>): Plugin {
   const headInjection = headStyleInjection(s);
@@ -114,7 +114,7 @@ function filesUnder(dir: string): string[] {
 // sw.js: the browser never detects a new worker and the "update available"
 // prompt never fires (src/lib/swUpdate.ts only flags an update when a *new* worker
 // reaches `waiting`). The version hashes every emitted chunk/asset's CONTENT
-// (not just its content-hashed filename, which only changes for assets Vite
+// (not only its content-hashed filename, which only changes for assets Vite
 // itself fingerprints) plus every file under public/, so a stable-URL asset
 // like extraCss, a design's <id>-doc.md, an icon, or the manifest also bumps
 // it. sw.js itself is excluded (it's what we're about to rewrite). Replaces

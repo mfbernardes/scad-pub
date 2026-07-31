@@ -129,7 +129,7 @@ export function applyGroupSpec(raw, node, path) {
   const out = {};
   for (const [key, field] of Object.entries(node.properties)) {
     // A `custom: true` FIELD (as opposed to a custom top-level node, see
-    // config-spec.mjs's file-top comment) is recognised here just enough to
+    // config-spec.mjs's file-top comment) is recognised here only enough to
     // pass the unknown-key check above; it is otherwise entirely the bespoke
     // reader's problem (parseStringArray/parseFormat/parseFontFallback/
     // parsePwaThemeColor/generatePwaAssets, reading the RAW config object

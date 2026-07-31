@@ -5,7 +5,7 @@
 // `caches`/`fetch` behavior faked, everything else (event dispatch, install/
 // activate/fetch handling) is the genuine sw.js code, and asserts the
 // transactional-install/scoped-shell-key/awaited-write behavior the review
-// called for, not just source-text pattern matching (see tests/swUpdate.test.mjs
+// called for, not only source-text pattern matching (see tests/swUpdate.test.mjs
 // for the lighter-weight text assertions that remain useful alongside this).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -416,7 +416,7 @@ test("a WARM message pulls down the rest of the offline bundle, once", async () 
 test("WARM covers the entry's linked artwork, even at a worker that never ran install", async () => {
   // The artwork list is re-derived from the cached shell rather than carried
   // over from install in memory, so a worker revived after termination (or a
-  // second tab's WARM) covers it just the same.
+  // second tab's WARM) covers it the same way.
   const routes = warmRoutes();
   const ICON = `https://example.test/${NS}/icon.svg`;
   routes.set(SCOPE_URL, {

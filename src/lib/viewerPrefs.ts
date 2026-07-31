@@ -13,7 +13,7 @@ import { ns } from "./appId";
 // suffix leaves room to retire the stored format without colliding with it.
 export const GRID_PREF_KEY = ns("viewer.grid.v1");
 
-/** The slice of the generated schema this resolver reads: just `viewer.grid`. */
+/** The slice of the generated schema this resolver reads: only `viewer.grid`. */
 export type GridConfig = {
   viewer?: {
     grid?: "off" | "on";

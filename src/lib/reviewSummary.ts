@@ -21,7 +21,7 @@ import { mm, formatParamValue } from "./format";
 
 /** Axis-aligned bounding-box size in millimetres: structurally the same
  *  shape as Viewer.tsx's own `Dimensions`, kept local so this dependency-
- *  light lib module never has to import a component file just for a type. */
+ *  light lib module never has to import a component file only for a type. */
 export interface BoundingBoxSize {
   x: number;
   y: number;

@@ -76,7 +76,7 @@ export function clampEditorPosition(
   let left: number;
   let top: number;
   if (hit) {
-    // Centre the card horizontally on the hit; sit it just below the hit on
+    // Centre the card horizontally on the hit; sit it immediately below the hit on
     // desktop (so the pointer/finger isn't over the input on open).
     left = hit.x - editor.width / 2;
     top = mobile ? margin : hit.y + margin;

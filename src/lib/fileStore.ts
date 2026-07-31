@@ -11,7 +11,7 @@ function tx<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<
 }
 
 // Persistence is best-effort: a failure (private mode, blocked upgrade, quota)
-// just means the file is session-only, so swallow it rather than surface an
+// means the file is session-only, so swallow it rather than surface an
 // unhandled rejection to callers that fire-and-forget these writes.
 export async function saveFile(name: string, bytes: Uint8Array): Promise<void> {
   // Store a plain ArrayBuffer (structured-clone friendly, no view offset issues).
@@ -52,6 +52,6 @@ export async function loadFiles(): Promise<Record<string, Uint8Array>> {
     (keys as string[]).forEach((k, i) => (out[k] = new Uint8Array(values[i])));
     return out;
   } catch {
-    return {}; // private mode / unavailable IndexedDB: files are just session-only
+    return {}; // private mode / unavailable IndexedDB: files are session-only
   }
 }

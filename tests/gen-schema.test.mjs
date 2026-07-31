@@ -130,7 +130,7 @@ test("// @collapsed marks sections collapsed; others stay open", () => {
   const { schema } = run("collapse.config.json");
   const d = schema.designs[0];
   assert.deepEqual(d.sections, ["Basics", "Shape", "Advanced"]);
-  // "Basics" is annotated before the very first header (the section === null edge).
+  // "Basics" is annotated before the first header (the section === null edge).
   assert.deepEqual(d.collapsedSections, ["Basics", "Advanced"]);
   // collapsible.scad has no sibling .json, so no presets are auto-detected.
   assert.deepEqual(d.presets, []);
@@ -197,7 +197,7 @@ test("number hint forms: min:step:max, min:max, max-only; empty segments are rej
   assert.equal(byName.b.step, undefined);
   assert.deepEqual({ min: byName.c.min, max: byName.c.max }, { min: 0, max: 10 });
   // Invalid (empty-segment) hints fall back to a plain number input: no
-  // min/max/step, just the default.
+  // min/max/step, only the default.
   assert.equal(byName.d.min, undefined);
   assert.equal(byName.d.max, undefined);
   assert.equal(byName.d.type, "number");
@@ -323,7 +323,7 @@ test("a designs[] entry's stale flat 'icon' fails the build instead of being sil
 test("a designs[] entry's removed 'description'/'media'/'review' keys fail the build like any other unrecognised key", () => {
   // Design metadata (description/icon/image/doc/review labels/note) comes only
   // from the design's own .scad annotations now: these config-level fields
-  // were removed entirely, not just deprecated, so they fail the ordinary
+  // were removed entirely, not only deprecated, so they fail the ordinary
   // unknown-key check like any stale key.
   assert.throws(
     () => run("widget-designs-stale-description.config.json"),
@@ -686,7 +686,7 @@ test("explicit `assets` that omits a use/include dependency fails the build with
   assert.match(caught.message, /lib\/core\.scad/);
   // A distinct diagnosis from collectDeps' own "dependency '...' not found:
   // ... (referenced by ...)" (a dependency missing from disk entirely): this
-  // dependency DOES exist on disk, it's just not in `assets`, so the two
+  // dependency DOES exist on disk, it is not in `assets`, so the two
   // causes must never read the same. (collectDeps' message is quoted, for
   // context, inside this error's own explanatory parenthetical, so match on
   // its distinguishing "referenced by" rather than the more generic "not
@@ -1030,7 +1030,7 @@ test("the ScadPub version stamp reaches the schema and stays out of renderHash",
 test("a build with no resolvable version omits the stamp entirely", () => {
   // What a git-less build tree (release tarball, vendored copy) with no
   // $SCADPUB_VERSION override produces: passed as "" here since an `undefined`
-  // argument would just re-trigger generate()'s own default lookup. The key is
+  // argument would only re-trigger generate()'s own default lookup. The key is
   // absent rather than null/"", so the licenses modal shows no version line.
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   const schema = generate({
@@ -1277,7 +1277,7 @@ test("renderHash folds in the design routing map, so swapping two designs' files
   // collapsible.scad) but routing the design ids to opposite files. The
   // scadFiles set is identical either way, so only the routing map itself can
   // account for a hash difference: proving id->file is a hashed input, not
-  // just the file set.
+  // only the file set.
   const gen = (aFile, bFile) => {
     const root = mkdtempSync(join(tmpdir(), "gen-schema-"));
     writeFileSync(
@@ -1352,7 +1352,7 @@ test("renderHash is unaffected by presentation-only config fields (title/help/no
 
 test("renderHash is unaffected by sourcing prose from a file instead of writing it inline", () => {
   // popup.bodyFile / fileImport.noteFile / licenses[].textFile / help.file all
-  // just inline file content into fields that were already outside renderHash
+  // only inline file content into fields that were already outside renderHash
   // (popup/fileImport/licenses/help are all presentation-only): confirm the
   // file-sourced forms land at the exact same hash as a config with none of
   // that content configured at all.
@@ -2645,7 +2645,7 @@ test("isRiskyExternalFontCopy: attached branch + font from outside the checkout 
 });
 
 test("bundleFonts warns exactly once, naming the font, when a real build copies an external font from an actively-developed checkout", () => {
-  // Drives the real generate() -> bundleFonts path (not just the boolean).
+  // Drives the real generate() -> bundleFonts path (not only the boolean).
   // isRiskyExternalFontCopy shells out to git itself (no seam to inject a
   // stub through generate()), so this test builds its OWN throwaway git
   // checkout: an `outPublicDir` inside a fresh `git init` repo with an
@@ -3228,7 +3228,7 @@ test("changing a font then failing a later step leaves the prior font bytes and 
   // The last-good font bytes and fonts.conf must be untouched.
   assert.deepEqual(readFileSync(fontDest), beforeFont, "font bytes must survive the failed build");
   assert.deepEqual(readFileSync(confDest), beforeConf, "fonts.conf must survive the failed build");
-  // Sanity: the Bold source really is different bytes, so the assertion above is meaningful.
+  // Sanity: the Bold source is genuinely different bytes, so the assertion above is meaningful.
   assert.notDeepEqual(readFileSync(BOLD), beforeFont);
 });
 
@@ -3338,7 +3338,7 @@ test("sanitizeSvg strips a data: href but keeps a same-file fragment href", () =
 // --- `picker` means the chooser, and only the chooser --------------------
 // It used to fall back to a plain notice below two designs, so one config value
 // stood for two different UIs and every consumer had to know which. Enforcing
-// the invariant here is what lets them all just read the mode.
+// the invariant here is what lets them all read the mode.
 test("popup.mode 'picker' with fewer than two designs fails the build", () => {
   assert.throws(
     () => run("widget-popup-picker-one-design.config.json"),

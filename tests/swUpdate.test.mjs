@@ -12,7 +12,7 @@ const swText = () =>
 test("a freshly-installed worker is an update only when a controller exists", () => {
   // installed + an existing controller => a real update (old worker is live)
   assert.equal(isWaitingUpdate("installed", true), true);
-  // installed but no controller => the very first install, not an update
+  // installed but no controller => the first install, not an update
   assert.equal(isWaitingUpdate("installed", false), false);
   // any other lifecycle state is never an update prompt
   assert.equal(isWaitingUpdate("installing", true), false);

@@ -65,7 +65,7 @@ export type AttentionItem = FontFallbackItem | NoticeAttentionItem | DiagnosticA
 /**
  * One notice category's live pending count this render, alongside its
  * config-declared `attention` flag. The caller (AppShell) already computes
- * per-category counts via diagnostics.ts's `countBadges`; this just pairs
+ * per-category counts via diagnostics.ts's `countBadges`; this pairs
  * that count with the flag so `deriveAttention` can decide which categories
  * matter, without reaching back into the raw log itself.
  */
@@ -108,7 +108,7 @@ export interface DeriveAttentionInputs {
    * by `notices`; including it again here would double-count it). The caller
    * (AppShell) also excludes a currently-FAILED render's own diagnostics,
    * see its own comment: those are already explained by the Review dialog's
-   * friendly-failure card, so repeating them as attention items would just
+   * friendly-failure card, so repeating them as attention items would only
    * show the same message twice. Defaults to none, so existing callers/tests
    * that don't pass it are unaffected.
    */

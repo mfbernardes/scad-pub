@@ -96,7 +96,7 @@ export function generatePwaAssets({
   // descriptor, in commit order. Nothing under `outPublicDir` is touched
   // until the caller passes this to commitPwaBatch. `write`/`copy` default to
   // pushing onto `batch` directly; the splash loop below passes its own local
-  // array instead, so a mid-loop failure discards just that sub-batch (see
+  // array instead, so a mid-loop failure discards only that sub-batch (see
   // there) rather than the whole thing.
   const batch = [];
   const write = (name, data, label, sink = batch) => {
@@ -239,7 +239,7 @@ export function generatePwaAssets({
   // ship zero splashes, not the first N, see the catch below. Merging the
   // whole sub-batch into `batch` only after every device succeeds is what
   // makes that true even now that nothing writes eagerly: an early device's
-  // descriptor sitting unmerged in `splashBatch` can simply be dropped on the
+  // descriptor sitting unmerged in `splashBatch` can be dropped on the
   // floor, no on-disk cleanup required, and `appleSplash` (the manifest/
   // index.html metadata) is only ever assigned from the same successful set,
   // so it can never describe a splash `batch` doesn't also contain.
@@ -277,7 +277,7 @@ export function generatePwaAssets({
       appleSplash = splashDescriptors;
     } catch (err) {
       console.warn(`gen-schema: splash generation failed (${err.message})`);
-      // splashBatch/splashDescriptors are simply discarded (never merged), so
+      // splashBatch/splashDescriptors are discarded (never merged), so
       // a partial device set can never end up queued, let alone written.
       appleSplash = [];
     }

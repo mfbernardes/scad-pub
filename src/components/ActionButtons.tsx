@@ -45,7 +45,7 @@ interface Props {
    * useRenderPipeline's `exportable` / docs/architecture-review.md H1). Only
    * gates the direct-export path (`readiness === "ready"`): an
    * attention/failed/building render still gets a clickable Download button,
-   * just routed through the Review dialog instead of exporting. */
+   * routed through the Review dialog instead of exporting. */
   canExport: boolean;
   readiness: ReadinessState;
   /** attention.length: drives the amber dot + sr-only hint. */
