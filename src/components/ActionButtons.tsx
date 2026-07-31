@@ -14,6 +14,7 @@
 // action that doesn't need standing real estate here.
 import { useAppActions } from "../lib/appActions";
 import { Button } from "./ui/button";
+import { ExplainedDisabledButton } from "./ExplainedDisabledButton";
 import { Download as DownloadIcon, Share2 as ShareIcon, Link2 as LinkIcon } from "lucide-react";
 import type { ReadinessState } from "../lib/readiness";
 import { canShareNatively } from "../lib/share";
@@ -73,44 +74,36 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
       : readiness === "ready" && !canExport
         ? t("dock.staleReason")
         : null;
-  const disabled = disabledReason !== null;
 
   return (
     <>
-      {/* A disabled <button> fires no pointer events, so its own `title`
-          never shows: the explanatory title lives on this wrapping span
-          instead. Sizing classes (min-w-0, the narrow-viewport flex-1) move
-          here too, so it (not the Button) is the actual `.action-cluster`
-          flex item. */}
-      <span className="inline-flex min-w-0 max-[360px]:flex-1" title={disabledReason ?? undefined}>
-        <Button
-          size="sm"
-          variant="default"
-          className="action-export w-full min-w-0 justify-center gap-[0.35rem] whitespace-nowrap hover:bg-primary hover:brightness-[1.08]"
-          onClick={onDownloadClick}
-          disabled={disabled}
-          aria-label={exportAria}
-          title={exportAria}
-          aria-describedby={disabledReason ? DOWNLOAD_DISABLED_HINT_ID : hasAttention ? EXPORT_ATTENTION_HINT_ID : undefined}
-        >
-          <DownloadIcon size={16} aria-hidden="true" className="shrink-0" />
-          <span className="action-export__label min-w-0 truncate">{t("action.export")}</span>
-          {/* Visual "something here still needs a look" signal: same amber
-              treatment as the status strip. Decorative only; the sr-only hint
-              below carries the actual meaning. */}
-          {hasAttention && (
-            <span aria-hidden="true" className="action-export__attention size-[6px] shrink-0 rounded-full bg-warn" />
-          )}
-        </Button>
-      </span>
+      {/* Sizing classes (min-w-0, the narrow-viewport flex-1) go on the
+          wrapping span, so it (not the Button) is the actual
+          `.action-cluster` flex item. */}
+      <ExplainedDisabledButton
+        reason={disabledReason}
+        hintId={DOWNLOAD_DISABLED_HINT_ID}
+        ariaDescribedBy={hasAttention ? EXPORT_ATTENTION_HINT_ID : undefined}
+        wrapperClassName="max-[360px]:flex-1"
+        size="sm"
+        variant="default"
+        className="action-export w-full min-w-0 justify-center gap-[0.35rem] whitespace-nowrap hover:bg-primary hover:brightness-[1.08]"
+        onClick={onDownloadClick}
+        aria-label={exportAria}
+        title={exportAria}
+      >
+        <DownloadIcon size={16} aria-hidden="true" className="shrink-0" />
+        <span className="action-export__label min-w-0 truncate">{t("action.export")}</span>
+        {/* Visual "something here still needs a look" signal: same amber
+            treatment as the status strip. Decorative only; the sr-only hint
+            below carries the actual meaning. */}
+        {hasAttention && (
+          <span aria-hidden="true" className="action-export__attention size-[6px] shrink-0 rounded-full bg-warn" />
+        )}
+      </ExplainedDisabledButton>
       {hasAttention && (
         <span id={EXPORT_ATTENTION_HINT_ID} className="sr-only">
           {tn("review.issueCount", attentionCount)}
-        </span>
-      )}
-      {disabledReason && (
-        <span id={DOWNLOAD_DISABLED_HINT_ID} className="sr-only">
-          {disabledReason}
         </span>
       )}
       {/* Share honesty: the label/icon/aria-label match what a click will

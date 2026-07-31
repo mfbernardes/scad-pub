@@ -137,6 +137,33 @@ export interface Box3Like {
 const _corner = new THREE.Vector3();
 const _rel = new THREE.Vector3();
 
+/** How far past "just fits" a model must grow, as a fraction of the current
+ *  framing's distance, before Viewer.tsx's outgrew-the-frame refit (its
+ *  geometry-swap effect) reacts. A margin rather than a hard clip line, so an
+ *  ordinary render-to-render change doesn't retrigger a refit the visitor
+ *  would read as the camera jumping around underneath them. */
+export const OUTGROW_REFIT_RATIO = 0.15;
+
+/**
+ * Whether a model needing `requiredDistance` to fit the current frame (i.e.
+ * `frameDistanceForBox` run against the box's NEW size, from the camera's
+ * current position/direction) has outgrown a camera actually sitting at
+ * `currentDistance` — split out from that geometry math so the margin is
+ * unit-testable on its own. See `OUTGROW_REFIT_RATIO` for the default.
+ */
+export function outgrowsFrame(
+  requiredDistance: number,
+  currentDistance: number,
+  ratio: number = OUTGROW_REFIT_RATIO
+): boolean {
+  return (
+    Number.isFinite(requiredDistance) &&
+    Number.isFinite(currentDistance) &&
+    currentDistance > 0 &&
+    requiredDistance > currentDistance * (1 + ratio)
+  );
+}
+
 /**
  * Camera distance from `target`, looking from `direction` (a unit-ish
  * vector, defensively renormalised), so a perspective camera of vertical

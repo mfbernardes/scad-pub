@@ -82,7 +82,12 @@ export function DesignGallery({
         {grouped.map((run, index) => (
           <section key={run.group ?? `ungrouped-${index}`} className="mb-4">
             {run.group && <h3 className="mb-2 text-sm font-semibold text-brand">{run.group}</h3>}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {/* 2 columns below `sm` (phones), same as PresetPicker's imaged
+                preset grid, so a chooser of a dozen designs isn't a dozen
+                full-width screens of swiping; 3 from `lg` up, unchanged from
+                before. Art/text scale down at the base size for the narrower
+                phone card and grow back at `sm`. */}
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
               {run.items.map((design) => {
                 const current = design.id === value;
                 return (
@@ -105,21 +110,25 @@ export function DesignGallery({
                             loading="lazy"
                             width={64}
                             height={64}
-                            className="h-16 w-16 object-contain"
+                            className="h-12 w-12 object-contain sm:h-16 sm:w-16"
                           />
                         ) : (
-                          <span className="text-3xl font-bold text-muted-foreground" aria-hidden="true">{design.label.charAt(0)}</span>
+                          <span className="text-xl font-bold text-muted-foreground sm:text-3xl" aria-hidden="true">{design.label.charAt(0)}</span>
                         )}
                       </span>
                     )}
                     {current && (
-                      <span className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-hidden="true">
-                        <CheckIcon size={14} />
+                      <span className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground sm:right-2 sm:top-2 sm:size-6" aria-hidden="true">
+                        <CheckIcon size={12} />
                       </span>
                     )}
-                    <span className="flex min-h-20 flex-col gap-1 px-3 py-2">
-                      <strong className="text-sm text-foreground">{design.label}</strong>
-                      {design.description && <span className="line-clamp-2 text-xs text-muted-foreground">{design.description}</span>}
+                    <span className="flex min-h-14 flex-col gap-1 px-2 py-1.5 sm:min-h-20 sm:px-3 sm:py-2">
+                      <strong className="text-xs text-foreground sm:text-sm">{design.label}</strong>
+                      {design.description && (
+                        <span className="line-clamp-1 text-[0.7rem] text-muted-foreground sm:line-clamp-2 sm:text-xs">
+                          {design.description}
+                        </span>
+                      )}
                     </span>
                   </button>
                 );

@@ -24,8 +24,10 @@ import {
   insetFitFraction,
   aspectAwareFit,
   insetTargetOffset,
+  outgrowsFrame,
   DEFAULT_FIT_FRACTION,
   type Box3Like,
+  type FitFraction,
   type Insets,
 } from "./framing";
 
@@ -425,6 +427,28 @@ export const Viewer = forwardRef<
   // them. null until the first model is framed.
   const fitStateRef = useRef<{ distance: number; target: THREE.Vector3 } | null>(null);
 
+  // The canvas size and fit fraction shared by applyFraming and
+  // refitIfOutgrown. null for a zero-sized canvas (display:none, or a layout
+  // not yet resolved), which can't be fitted to — callers leave the current
+  // framing alone rather than solving against it. Two corrections feed the
+  // fit fraction, in this order:
+  //  1. aspectAwareFit: on a canvas far from square (a portrait phone, or
+  //     the sheet's full-detent model strip) one axis provably can't bind,
+  //     so raise the one that does. Otherwise the model reads small in a
+  //     mostly-empty frame. A no-op at ordinary aspect ratios.
+  //  2. insetFitFraction: shrink whatever that produced to the region the
+  //     chrome leaves clear, so the solve fits the model into THAT rather
+  //     than the full canvas. Second, so a corrected target still yields to
+  //     the top bar/dock/HUD instead of sliding under them.
+  function currentFit(mount: HTMLElement): { w: number; h: number; fit: FitFraction; insets: Insets } | null {
+    const w = mount.clientWidth;
+    const h = mount.clientHeight;
+    if (w <= 0 || h <= 0) return null;
+    const insets = chromeInsets(mount);
+    const fit = insetFitFraction(aspectAwareFit(DEFAULT_FIT_FRACTION, w / h), w, h, insets);
+    return { w, h, fit, insets };
+  }
+
   // Solve and apply a framing for the current model, looking from
   // `direction`, at `zoomRatio` × the fit distance (1 = the fit itself) with
   // `pan` (world units, relative to the fitted target) carried over. Fits the
@@ -444,22 +468,11 @@ export const Viewer = forwardRef<
     // A zero-sized canvas (display:none, or a layout not yet resolved) can't
     // be fitted to, and solving against it would poison fitStateRef for the
     // resize that follows. Leave the current framing alone.
-    const w = mount.clientWidth;
-    const h = mount.clientHeight;
-    if (w <= 0 || h <= 0) return;
+    const current = currentFit(mount);
+    if (!current) return;
+    const { w, h, fit, insets } = current;
 
     const box = framedBox(size);
-    const insets = chromeInsets(mount);
-    // Two corrections, in this order:
-    //  1. aspectAwareFit: on a canvas far from square (a portrait phone, or
-    //     the sheet's full-detent model strip) one axis provably can't bind,
-    //     so raise the one that does. Otherwise the model reads small in a
-    //     mostly-empty frame. A no-op at ordinary aspect ratios.
-    //  2. insetFitFraction: shrink whatever that produced to the region the
-    //     chrome leaves clear, so the solve fits the model into THAT rather
-    //     than the full canvas. Second, so a corrected target still yields to
-    //     the top bar/dock/HUD instead of sliding under them.
-    const fit = insetFitFraction(aspectAwareFit(DEFAULT_FIT_FRACTION, w / h), w, h, insets);
 
     const target = new THREE.Vector3(0, 0, 0);
     const distance = frameDistanceForBox(box, target, direction, w / h, cam.fov, fit);
@@ -518,6 +531,32 @@ export const Viewer = forwardRef<
     applyFraming(direction, zoomRatio, controls.target.clone().sub(fit.target));
   }
   refitRef.current = refitView;
+
+  // A parameter tweak just rendered new geometry from the same design+preset
+  // (frameKey unchanged, see the [stl] effect below), so the camera was left
+  // where the visitor had it rather than reframed from scratch. If the new
+  // box has grown past what that framing can show — long auto-sized text is
+  // the case this exists for — refit like Reset view, but along the
+  // visitor's own current orbit direction rather than snapping to the
+  // design's default view. Checked against the box's actual position (the
+  // live orbit target, which may carry a pan), not a fresh centred fit, so a
+  // deliberate pan isn't itself mistaken for overflow. Left alone on shrink.
+  function refitIfOutgrown(box: Box3Like) {
+    const cam = camRef.current;
+    const controls = controlsRef.current;
+    const mount = mountRef.current;
+    if (!cam || !controls || !mount) return;
+    const current = currentFit(mount);
+    if (!current) return;
+    const { w, h, fit } = current;
+
+    const direction = cam.position.clone().sub(controls.target);
+    const currentDistance = direction.length();
+    const requiredDistance = frameDistanceForBox(box, controls.target, direction, w / h, cam.fov, fit);
+    if (outgrowsFrame(requiredDistance, currentDistance)) {
+      applyFraming(direction, 1, new THREE.Vector3());
+    }
+  }
 
   // Rebuild the dimension overlay from the current model size + theme, matching
   // the `show` flag: removes any existing overlay first (disposing its GPU
@@ -1178,6 +1217,7 @@ export const Viewer = forwardRef<
       frameView(); // moves the camera, which self-invalidates via controls' "change" event
       framedKeyRef.current = frameKey;
     } else {
+      refitIfOutgrown(framedBox(size)); // grown past the current view? re-fit; a no-op otherwise
       requestRenderRef.current(); // same framing (e.g. a param tweak): camera didn't move, so invalidate explicitly
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

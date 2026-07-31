@@ -1,6 +1,7 @@
 // scad.ts: convert UI parameter values to/from OpenSCAD -D expressions and the
 // string form used by OpenSCAD's Customizer preset (parameterSets) JSON.
 import type { Param, ParamValue } from "../openscad/types";
+import { clampNumber } from "./numberDraft";
 
 export function escapeScadString(s: string): string {
   return s
@@ -47,10 +48,7 @@ export function fromPresetString(param: Param, raw: string): ParamValue {
       // crafted URL hash must not sneak past as a real value.
       const n = raw.trim() === "" ? NaN : Number(raw);
       if (!Number.isFinite(n)) return param.default;
-      let v = n;
-      if (param.min !== undefined) v = Math.max(param.min, v);
-      if (param.max !== undefined) v = Math.min(param.max, v);
-      return v;
+      return clampNumber(param, n);
     }
     case "boolean":
       return raw === "true" || raw === "1";

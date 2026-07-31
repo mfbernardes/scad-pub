@@ -10,6 +10,7 @@ import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { displayValue } from "../lib/paramDiff";
 import { visibleGroups } from "../lib/paramGroups";
+import { clampNumber, committedNumber, finiteDraft, typedCommitValue } from "../lib/numberDraft";
 import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
 import { fontFallback } from "../lib/fontFallback";
 import { EssentialsToggle } from "./EssentialsToggle";
@@ -182,10 +183,6 @@ function asFiniteNumber(value: ParamValue | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function committedNumber(param: Extract<Param, { type: "number" }>, value: ParamValue): number {
-  return asFiniteNumber(value) ?? param.default;
-}
-
 /**
  * Revert one parameter to the baseline, and, for an `@svg` field, its bound
  * `layers=` parameter with it. The two are written together by the SVG wizard
@@ -203,19 +200,6 @@ function revertToBaseline(
   if (bound && bound in baseline) onChange(bound, baseline[bound]);
 }
 
-function finiteDraft(raw: string): number | null {
-  if (raw.trim() === "") return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
-}
-
-function clampNumber(param: Extract<Param, { type: "number" }>, value: number): number {
-  let v = value;
-  if (param.min !== undefined) v = Math.max(param.min, v);
-  if (param.max !== undefined) v = Math.min(param.max, v);
-  return v;
-}
-
 function NumberControl({
   param,
   value,
@@ -231,12 +215,13 @@ function NumberControl({
   const [draft, setDraft] = useState(String(committed));
   const hasRange = param.min !== undefined && param.max !== undefined;
   // While the input is focused, an external `committed` change (our own
-  // clamped onChange echoing back through props) must NOT stomp the user's
+  // onChange echoing back through props) must NOT stomp the user's
   // in-progress keystrokes: e.g. typing "2" en route to "25" in a min=10
-  // field commits (clamped) 10, and re-syncing the draft from that would
-  // force the field back to "10" mid-type. Blur already normalises the draft,
-  // and an external value change (e.g. a preset apply) while unfocused should
-  // still resync immediately.
+  // field commits nothing yet (typedCommitValue, below), but re-syncing the
+  // draft from `committed` on every render would still force the field back
+  // to whatever was last committed mid-type. Blur already normalises the
+  // draft, and an external value change (e.g. a preset apply) while unfocused
+  // should still resync immediately.
   const focusedRef = useRef(false);
 
   useEffect(() => {
@@ -248,6 +233,14 @@ function NumberControl({
     const v = clampNumber(param, n);
     setDraft(String(v));
     onChange(v);
+  };
+
+  // Shared by blur and Enter: clamp whatever's left typed, commit it, and
+  // normalise the draft text to match (e.g. a raw value beyond the range).
+  const commitDraft = () => {
+    const v = clampNumber(param, finiteDraft(draft) ?? param.default);
+    setDraft(String(v));
+    if (v !== committed) onChange(v);
   };
 
   return (
@@ -280,16 +273,20 @@ function NumberControl({
         onChange={(e) => {
           const raw = e.target.value;
           setDraft(raw);
-          const n = finiteDraft(raw);
-          if (n !== null) onChange(clampNumber(param, n));
+          // Only commit a draft already within range (typedCommitValue): a
+          // partial or out-of-range keystroke (e.g. "2" en route to "25" in a
+          // min=10 field) keeps the draft text but leaves the previous
+          // committed value live, instead of flashing the clamped bound into
+          // the preview and queuing a render for it.
+          const v = typedCommitValue(param, raw);
+          if (v !== null) onChange(v);
         }}
-        // Clamp on commit so intermediate keystrokes stay typeable, and
-        // normalise the draft text itself (e.g. a raw value beyond the range).
         onBlur={() => {
           focusedRef.current = false;
-          const v = clampNumber(param, finiteDraft(draft) ?? param.default);
-          setDraft(String(v));
-          if (v !== committed) onChange(v);
+          commitDraft();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commitDraft();
         }}
       />
     </div>
@@ -375,14 +372,13 @@ function Control({
         />
       );
     case "enum": {
-      // The full label of the selected choice as a `title`, so a value too
-      // long to fit the trigger (now ellipsis-truncated, not hard-clipped,
-      // see ui/select.tsx) is still readable on hover: e.g. a long language
-      // name at a narrow panel width.
+      // The full label of the selected choice as a `title`: the trigger
+      // wraps to 2 lines (ui/select.tsx's `wrap`) but a choice long enough to
+      // still clip is readable on hover.
       const selectedLabel = param.choices.find((c) => c.value === String(value))?.label;
       return (
         <Select value={String(value)} onValueChange={(v) => onChange(v)}>
-          <SelectTrigger className="w-full" aria-label={label} title={selectedLabel}>
+          <SelectTrigger className="w-full" aria-label={label} title={selectedLabel} wrap>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

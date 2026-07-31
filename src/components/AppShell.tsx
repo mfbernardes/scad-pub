@@ -488,12 +488,15 @@ export const AppShell = memo(function AppShell({
   // zero-dependency useCallback (setSheetDetent is a useState setter, always
   // identity-stable) so this stays identity-stable too, which keeps
   // useOutputConsole's `openOutput`, and therefore `toggleOutput`, handed to
-  // the memo'd CommandBar: stable across renders as well.
+  // the memo'd CommandBar: stable across renders as well. `sheetAtPeek` gates
+  // the hook's own auto-open-on-problem edge (see its doc): a new warning
+  // while the sheet sits at half/full leaves the visitor mid-edit alone.
   const collapseSheetToPeek = useCallback(() => setSheetDetent("peek"), [setSheetDetent]);
-  const { outputOpen, openOutput, closeOutput, toggleOutput } = useOutputConsole({
+  const { outputOpen, openOutput, closeOutput, toggleOutput, tab, setTab } = useOutputConsole({
     diagnostics,
     defaultOpen: schema.ui?.outputDefault === "open",
     collapseSheet: collapseSheetToPeek,
+    sheetAtPeek: sheetDetent === "peek",
   });
 
   // Raising the sheet off peek (dragging the handle OR tapping a tab) would slide
@@ -648,6 +651,8 @@ export const AppShell = memo(function AppShell({
     metrics: renderMetrics,
     open: outputOpen,
     onClose: closeOutput,
+    tab,
+    onTabChange: setTab,
     failure,
   };
   const actionButtonsProps = {
