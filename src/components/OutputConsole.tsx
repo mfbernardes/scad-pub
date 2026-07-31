@@ -1,8 +1,9 @@
 // OutputConsole.tsx: bottom drawer with Notices + Log tabs (shadcn/ui Tabs).
 // Auto-opens when a render first surfaces a notice/assert; also toggled by the
 // Output button. Diagnostics/badges are computed once by the parent (AppShell)
-// and passed in.
-import { useState } from "react";
+// and passed in. The active tab is owned by useOutputConsole.ts, not a local
+// `useState` here: this component unmounts on close, so a local tab state
+// would forget which tab was active every time the console reopens.
 import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
 import { type RenderMetrics, formatDuration } from "../lib/renderMetrics";
 import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
@@ -32,6 +33,10 @@ interface Props {
   metrics: RenderMetrics;
   open: boolean;
   onClose: () => void;
+  /** The active tab ("notices" | "log" | "metrics"), lifted to
+   *  useOutputConsole.ts so it survives close/reopen. */
+  tab: string;
+  onTabChange: (tab: string) => void;
   /** friendlyRenderError(result): when set, the Notices tab leads with this
    *  {title, body} instead of the raw diagnostics list, with the technical
    *  tail tucked into a collapsed "Raw output" details block (the Log tab
@@ -41,9 +46,18 @@ interface Props {
   className?: string;
 }
 
-export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose, failure, className }: Props) {
-  const [tab, setTab] = useState("notices");
-
+export function OutputConsole({
+  log,
+  diagnostics,
+  badges,
+  metrics,
+  open,
+  onClose,
+  tab,
+  onTabChange,
+  failure,
+  className,
+}: Props) {
   if (!open) return null;
 
   return (
@@ -52,7 +66,7 @@ export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose
       role="region"
       aria-label={t("console.title")}
     >
-      <Tabs value={tab} onValueChange={setTab} className="gap-0">
+      <Tabs value={tab} onValueChange={onTabChange} className="gap-0">
         {/* The close button must survive a narrow viewport. At 320px the
             title + three tabs measured 355px against a 320px row, and since
             nothing here could shrink, `ml-auto` pushed Close clean off the
