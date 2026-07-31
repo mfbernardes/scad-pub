@@ -21,7 +21,7 @@
 // the room.
 import { useState } from "react";
 import { useAppActions } from "../lib/appActions";
-import { ThemeToggle } from "./ThemeToggle";
+import { ThemeToggle, THEME_MODE } from "./ThemeToggle";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
 import { MenuRow, MENU_ROW_CLASS } from "./MenuRow";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -36,18 +36,9 @@ import {
   EllipsisVertical as MoreIcon,
   Paperclip as FilesIcon,
   RefreshCw as LivePreviewIcon,
-  Sun as SunIcon,
-  Moon as MoonIcon,
-  SunMoon as AutoThemeIcon,
 } from "lucide-react";
 
 type ThemeMode = "light" | "dark" | "auto";
-
-const THEME_ICON: Record<ThemeMode, React.ReactNode> = {
-  light: <SunIcon size={16} />,
-  dark: <MoonIcon size={16} />,
-  auto: <AutoThemeIcon size={16} />,
-};
 
 // One wording for the licenses control in both presentations.
 const LICENSES_LABEL = "Open-source licenses";
@@ -90,6 +81,11 @@ export function BarActions({
   const [open, setOpen] = useState(false);
   // Help/licenses/Save-image/Files close the menu; theme cycles in place.
   const openModal = (fn: () => void) => () => { fn(); setOpen(false); };
+  // Names the CURRENT mode ("Theme: Auto"), not the next one THEME_MODE's
+  // `nextLabel` describes: the collapsed row's only state feedback is this
+  // label updating in place (see the row below), so it has to say what mode
+  // is active now.
+  const themeLabel = t("theme.label", { mode: t(THEME_MODE[themeMode].nameKey) });
 
   if (collapse) {
     return (
@@ -140,8 +136,11 @@ export function BarActions({
             <MenuRow label="Files" icon={<FilesIcon size={16} />} onClick={openModal(showFiles)} />
           )}
           {/* Cycles in place: the visitor usually wants to see the theme
-              change, so this row deliberately leaves the menu open. */}
-          <MenuRow label="Theme" icon={THEME_ICON[themeMode]} onClick={cycleTheme} aria-label="Toggle theme" />
+              change, so this row deliberately leaves the menu open — naming
+              the current mode in the label (themeLabel) is the only feedback
+              a tap did anything, since the first cycle step can be a visual
+              no-op (auto -> light under a light OS). */}
+          <MenuRow label={themeLabel} icon={THEME_MODE[themeMode].icon} onClick={cycleTheme} />
           <MenuRow label="Help" icon={<HelpIcon size={16} />} onClick={openModal(() => showHelp())} />
           <MenuRow label={LICENSES_LABEL} icon={<InfoIcon size={16} />} onClick={openModal(showLicenses)} />
         </PopoverContent>

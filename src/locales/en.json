@@ -98,5 +98,10 @@
   "settings.showAllCount#other": "Show all settings ({count} more)",
   "settings.showEssential": "Show essential settings",
   "settings.livePreview": "Live preview",
-  "settings.livePreviewTitle": "Update the preview automatically as you change settings"
+  "settings.livePreviewTitle": "Update the preview automatically as you change settings",
+
+  "theme.label": "Theme: {mode}",
+  "theme.modeAuto": "Auto",
+  "theme.modeLight": "Light",
+  "theme.modeDark": "Dark"
 }
