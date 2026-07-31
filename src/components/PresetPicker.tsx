@@ -2,11 +2,11 @@
 // "Save current as…" row. Used as a popover on desktop (CommandBar) and as the
 // Presets tab on mobile.
 //
-// The three list-management actions — save-as, import, export — stand in the
-// footer on BOTH layouts. Mobile used to collapse them behind a "Manage"
-// popover to buy back the sheet's vertical room, but the popover's own trigger
-// row cost a full row of the tab anyway, so the saving was one row for three
-// actions moved a tap away — not a trade worth making.
+// The three list-management actions — save-as, import, export — render two
+// ways, chosen by the `compact` prop: two standing rows on desktop, one row on
+// the mobile sheet. Both presentations compose the SAME
+// `saveField`/`importButton`/`exportButton` below, so what the actions do
+// can't drift between them.
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Design } from "../openscad/types";
@@ -26,8 +26,9 @@ import { IconButton } from "./IconButton";
 import { FileInput } from "./FileInput";
 import { Thumbnail } from "./Thumbnail";
 import { Input } from "./ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { cn } from "../lib/utils";
-import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon, Check as CheckIcon } from "lucide-react";
+import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon, Check as CheckIcon, EllipsisVertical as MoreIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -84,6 +85,18 @@ interface Props {
   onPresetsChange: () => void;
   /** When true, renders inline (no popover wrapper). Used in mobile sheet tabs. */
   inline?: boolean;
+  /**
+   * Fold the footer into ONE row (mobile) instead of two standing rows
+   * (desktop): the save field keeps the row, and import/export — the two
+   * actions a first-time visitor never needs — move into a "⋮" overflow at its
+   * end.
+   *
+   * Two `border-t`-separated rows are ~95px of a mobile sheet whose half detent
+   * is ~330-380px, so the cards someone came for got about one and a half rows.
+   * Collapsing all three actions behind one overflow trigger was worse still:
+   * the trigger row cost a full row anyway and bought back nothing.
+   */
+  compact?: boolean;
   onClose?: () => void;
 }
 
@@ -97,8 +110,11 @@ export function PresetPicker({
   onSelectedChange,
   onPresetsChange,
   inline = false,
+  compact = false,
   onClose,
 }: Props) {
+  // Whether the compact footer's import/export overflow is open (compact only).
+  const [manageOpen, setManageOpen] = useState(false);
   // Overridable via the config's `strings` block (src/locales/en.json's
   // presets.title) — see docs/config.md's "Text overrides".
   const presetsLabel = t("presets.title");
@@ -200,9 +216,11 @@ export function PresetPicker({
     onPresetsChange();
   };
 
-  // The "save these settings as…" field + its Save button.
+  // The "save these settings as…" field + its Save button. Shared verbatim by
+  // both footers, so the two presentations can never drift on what saving
+  // actually does. `min-w-0` lets it shrink beside the compact overflow.
   const saveField = values ? (
-    <div className="flex items-center gap-[0.4rem]">
+    <div className="flex min-w-0 flex-1 items-center gap-[0.4rem]">
       <Input
         type="text"
         name="preset-name"
@@ -224,13 +242,15 @@ export function PresetPicker({
 
   // Import / export saved presets as an OpenSCAD parameterSets file — the same
   // format the desktop Customizer reads and writes, so presets carry between
-  // the two.
+  // the two. Shared by both footers like `saveField`, bar the width/alignment
+  // and the coarse-pointer height each layout needs.
   const importButton = (
     <FileInput accept=".json,application/json" onFile={handleImport}>
       {(open) => (
         <Button
           variant="ghost"
           size="sm"
+          className={compact ? "min-h-11 w-full justify-start" : undefined}
           onClick={open}
           title="Import presets from an OpenSCAD parameterSets file"
         >
@@ -243,7 +263,7 @@ export function PresetPicker({
     <Button
       variant="ghost"
       size="sm"
-      className="ml-auto"
+      className={compact ? "min-h-11 w-full justify-start" : "ml-auto"}
       onClick={handleExport}
       disabled={userPresets.length === 0}
       title={
@@ -256,8 +276,8 @@ export function PresetPicker({
     </Button>
   );
 
-  // Both layouts: the save row and the import/export row stand permanently.
-  const footer = (
+  // Desktop: both rows stand permanently, where the docked panel has the room.
+  const standingFooter = () => (
     <>
       {saveField && (
         <div className="shrink-0 border-t px-[0.6rem] py-2">{saveField}</div>
@@ -267,6 +287,39 @@ export function PresetPicker({
         {exportButton}
       </div>
     </>
+  );
+
+  // Mobile: the save field keeps the one row it was going to cost anyway, and
+  // import/export sit in the "⋮" at its end. Both footers are FUNCTIONS, not
+  // values: PresetPicker re-renders on every parameter change (it takes
+  // `values`), and building the branch that isn't used — a whole Popover tree,
+  // either way — on each of those was pure waste.
+  const compactFooter = () => (
+    <div className="flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-[0.4rem]">
+      {saveField}
+      <Popover open={manageOpen} onOpenChange={setManageOpen}>
+        {/* `outline-none` suppresses index.css's global :focus-visible
+            outline, so the replacement ring is required — this is a native
+            <button> (PopoverTrigger needs the ref) and gets none of shadcn
+            Button's focus styling. `size-11` keeps it at the coarse-pointer
+            target floor the dock buttons and sheet tabs share; `ml-auto` pins
+            it to the end when there is no save field to push it there. */}
+        <PopoverTrigger
+          className="ml-auto inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-(--radius-sm) border-none bg-transparent text-muted-foreground outline-none transition-[color,box-shadow] hover:text-brand focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:text-brand"
+          aria-label={t("presets.manage")}
+          title={t("presets.manage")}
+        >
+          <MoreIcon size={17} aria-hidden="true" />
+        </PopoverTrigger>
+        {/* Opens upward: the trigger sits at the bottom of the sheet. */}
+        <PopoverContent side="top" align="end" collisionPadding={8} className="w-56 p-2">
+          <div className="flex flex-col gap-[0.1rem]">
+            {importButton}
+            {exportButton}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 
   const content = (
@@ -391,7 +444,7 @@ export function PresetPicker({
         )}
       </div>
 
-      {footer}
+      {compact ? compactFooter() : standingFooter()}
     </div>
   );
 

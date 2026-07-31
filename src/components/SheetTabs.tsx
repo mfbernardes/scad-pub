@@ -189,6 +189,7 @@ export function SheetTabs({
             onSelectedChange={selectedPresetChange}
             onPresetsChange={presetsChange}
             inline
+            compact
           />
         </TabsContent>
       </div>
