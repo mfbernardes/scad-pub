@@ -62,7 +62,7 @@
     "fake-indexeddb": "^6.2.5",
     "fflate": "^0.8.3",
     "globals": "^17.7.0",
-    "markdownlint-cli2": "^0.23.1",
+    "markdownlint-cli2": "^0.23.2",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.62.0",
     "pngjs": "^7.0.0",
