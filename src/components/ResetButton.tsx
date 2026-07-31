@@ -4,16 +4,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Design } from "../openscad/types";
 import { defaultsFor, type Values } from "../lib/presets";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "./ui/alert-dialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 function isModified(design: Design, values: Values): boolean {
   const defaults = defaultsFor(design);
@@ -44,20 +35,15 @@ export function ResetButton({ design, values, onReset, className, children }: Pr
       >
         {children}
       </button>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset to defaults?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This discards your current parameter changes for “{design.label}”.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={onReset}>Reset</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Reset to defaults?"
+        description={`This discards your current parameter changes for “${design.label}”.`}
+        cancelLabel="Cancel"
+        confirmLabel="Reset"
+        onConfirm={onReset}
+      />
     </>
   );
 }

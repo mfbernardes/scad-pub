@@ -20,7 +20,7 @@ import {
 } from "../lib/presets";
 import { downloadBlob } from "../lib/download";
 import { parsePresetCardName } from "../lib/presetCard";
-import { t } from "../lib/i18n";
+import { t, tn } from "../lib/i18n";
 import { Button } from "./ui/button";
 import { IconButton } from "./IconButton";
 import { FileInput } from "./FileInput";
@@ -29,16 +29,7 @@ import { Input } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { cn } from "../lib/utils";
 import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon, Check as CheckIcon, EllipsisVertical as MoreIcon } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "./ui/alert-dialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 /* One preset row. `preset-picker__item` is a JS hook too (the roving-focus
    querySelector below), not only styling. Rows read as tappable cards: a
@@ -72,6 +63,20 @@ const cardClass = (isSelected: boolean) =>
     "preset-picker__item preset-picker__card relative flex w-full flex-col overflow-hidden rounded-lg border bg-background/40 text-left outline-none",
     isSelected ? "border-primary" : "border-border enabled:hover:border-brand"
   );
+
+// English conjunction join ("A, B, and C") for the import-collision dialog's
+// name list, module-level like i18n.ts's own EN_PLURAL_RULES since it's cheap
+// to share and pointless to reconstruct per render.
+const LIST_FORMAT = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
+/** Summarises colliding preset names for the import dialog: every name when
+ *  there are few, else the first `max` with an "N more" tail folded into the
+ *  same conjunction join, so "A, B, C, and 2 more" reads as one sentence
+ *  instead of a truncated dump. */
+function summarizeCollisions(names: string[], max = 3): string {
+  if (names.length <= max) return LIST_FORMAT.format(names);
+  return LIST_FORMAT.format([...names.slice(0, max), tn("presets.moreCount", names.length - max)]);
+}
 
 interface Props {
   design: Design;
@@ -130,6 +135,20 @@ export function PresetPicker({
   // confirmation dialog is open. Deleting a saved preset is un-undoable, so it
   // gets the same AlertDialog guard as ResetButton's "reset to defaults".
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  // A save whose name collides with an existing saved preset, pending
+  // confirmation, or null when no such dialog is open. Overwriting a saved
+  // preset by typing its exact name is exactly as un-undoable as Delete, so
+  // it gets the same guard — see handleSave.
+  const [pendingSave, setPendingSave] = useState<{ name: string; values: Values } | null>(null);
+  // An import whose file collides with one or more existing saved preset
+  // names, pending confirmation, or null when no such dialog is open. Holds
+  // the FULL parsed file so confirming can apply it — see handleImport.
+  // Collisions are derived from this against `userPresets` where needed
+  // rather than stored, since they're just a filter over the same two.
+  const [pendingImport, setPendingImport] = useState<ParsedSet[] | null>(null);
+  const pendingImportCollisions = pendingImport
+    ? pendingImport.map((s) => s.name).filter((name) => userPresets.includes(name))
+    : [];
   const sectionsRef = useRef<HTMLDivElement>(null);
 
   // Roving arrow-key navigation across every preset row: the rows are plain
@@ -171,13 +190,26 @@ export function PresetPicker({
     if (selected === `user:${design.id}:${name}`) onSelectedChange("");
   };
 
-  const handleSave = () => {
-    const name = saveName.trim();
-    if (!name || !values) return;
-    savePreset(design.id, name, values);
+  // Writes the preset and clears the field. Shared by the direct save and the
+  // collision dialog's confirm, so the two paths can't drift on what saving
+  // actually does.
+  const doSave = (name: string, v: Values) => {
+    savePreset(design.id, name, v);
     onPresetsChange();
     onSelectedChange(`user:${design.id}:${name}`);
     setSaveName("");
+  };
+
+  const handleSave = () => {
+    const name = saveName.trim();
+    if (!name || !values) return;
+    // Exact-name match, the same rule savePreset merges by (store[designId][name]):
+    // a collision here IS the overwrite about to happen, not a near-miss.
+    if (userPresets.includes(name)) {
+      setPendingSave({ name, values });
+      return;
+    }
+    doSave(name, values);
   };
 
   // Export your saved presets as an OpenSCAD parameterSets file (round-trips
@@ -196,6 +228,13 @@ export function PresetPicker({
     );
   };
 
+  // Writes every set in the parsed file. Shared by the silent no-collision
+  // path and the collision dialog's confirm.
+  const doImport = (sets: ParsedSet[]) => {
+    for (const set of sets) savePreset(design.id, set.name, set.values);
+    onPresetsChange();
+  };
+
   // Import a parameterSets file (from this app or the desktop Customizer): each
   // named set becomes one of your saved presets.
   const handleImport = async (file: File) => {
@@ -212,8 +251,12 @@ export function PresetPicker({
       toast.error(`"${file.name}" has no parameter sets to import.`);
       return;
     }
-    for (const set of parsed) savePreset(design.id, set.name, set.values);
-    onPresetsChange();
+    const collisions = parsed.map((s) => s.name).filter((name) => userPresets.includes(name));
+    if (collisions.length > 0) {
+      setPendingImport(parsed);
+      return;
+    }
+    doImport(parsed);
   };
 
   // The "save these settings as…" field + its Save button. Shared verbatim by
@@ -454,27 +497,48 @@ export function PresetPicker({
   );
 
   const deleteDialog = (
-    <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete preset?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This permanently deletes your saved preset “{deleteTarget}”.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => {
-              if (deleteTarget) handleDelete(deleteTarget);
-              setDeleteTarget(null);
-            }}
-          >
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      open={deleteTarget !== null}
+      onOpenChange={(open) => !open && setDeleteTarget(null)}
+      title="Delete preset?"
+      description={`This permanently deletes your saved preset “${deleteTarget}”.`}
+      cancelLabel="Cancel"
+      confirmLabel="Delete"
+      onConfirm={() => {
+        if (deleteTarget) handleDelete(deleteTarget);
+        setDeleteTarget(null);
+      }}
+    />
+  );
+
+  const saveCollisionDialog = (
+    <ConfirmDialog
+      open={pendingSave !== null}
+      onOpenChange={(open) => !open && setPendingSave(null)}
+      title={t("presets.replaceTitle")}
+      description={t("presets.replaceBody", { name: pendingSave?.name ?? "" })}
+      cancelLabel={t("presets.cancel")}
+      confirmLabel={t("presets.replace")}
+      onConfirm={() => {
+        if (pendingSave) doSave(pendingSave.name, pendingSave.values);
+        setPendingSave(null);
+      }}
+    />
+  );
+
+  const importCollisionDialog = (
+    <ConfirmDialog
+      open={pendingImport !== null}
+      onOpenChange={(open) => !open && setPendingImport(null)}
+      title={tn("presets.importCollisionTitle", pendingImportCollisions.length)}
+      description={t("presets.importCollisionBody", { names: summarizeCollisions(pendingImportCollisions) })}
+      cancelLabel={t("presets.cancel")}
+      confirmLabel={t("presets.replace")}
+      onConfirm={() => {
+        if (pendingImport) doImport(pendingImport);
+        setPendingImport(null);
+      }}
+    />
   );
 
   if (inline)
@@ -482,6 +546,8 @@ export function PresetPicker({
       <>
         {content}
         {deleteDialog}
+        {saveCollisionDialog}
+        {importCollisionDialog}
       </>
     );
 
@@ -497,6 +563,8 @@ export function PresetPicker({
       </div>
       {content}
       {deleteDialog}
+      {saveCollisionDialog}
+      {importCollisionDialog}
     </div>
   );
 }

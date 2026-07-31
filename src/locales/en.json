@@ -25,6 +25,15 @@
 
   "presets.title": "Presets",
   "presets.manage": "Manage",
+  "presets.cancel": "Cancel",
+  "presets.replace": "Replace",
+  "presets.replaceTitle": "Replace preset?",
+  "presets.replaceBody": "A saved preset named “{name}” already exists. Replacing it can't be undone.",
+  "presets.importCollisionTitle#one": "Replace {count} matching preset?",
+  "presets.importCollisionTitle#other": "Replace {count} matching presets?",
+  "presets.importCollisionBody": "This will replace: {names}. Any other presets in the file will be added as new entries.",
+  "presets.moreCount#one": "{count} more",
+  "presets.moreCount#other": "{count} more",
 
   "action.export": "Download for 3D printing",
   "action.share": "Share",
