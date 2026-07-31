@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 
 let systemPrefersDark = true;
 // A minimal mock matchMedia MediaQueryList that supports exactly one
-// "change" listener — enough to prove the M5 store's subscribe/unsubscribe
+// "change" listener: enough to prove the M5 store's subscribe/unsubscribe
 // contract without a real browser.
 let changeListener = null;
 globalThis.window = {
@@ -22,7 +22,7 @@ globalThis.window = {
 };
 
 // A minimal stand-in for index.html's two media-scoped theme-color metas
-// (dark listed first, then light — see apply()'s comment), used to pin the
+// (dark listed first, then light, see apply()'s comment), used to pin the
 // "both metas get updated with the *configured* colour for the applied
 // theme" fix. `apply()` reads and caches these on first use, so this single
 // document/meta pair is shared across the tests below (mirroring the single
@@ -64,8 +64,8 @@ test("auto follows the OS preference", () => {
 test("apply sets <html data-theme> and updates both theme-color metas", () => {
   apply("dark");
   assert.equal(globalThis.document.documentElement.dataset.theme, "dark");
-  // Both metas — not just the (first, dark-media) one a plain querySelector
-  // would grab — get the configured dark colour.
+  // Both metas, not only the (first, dark-media) one a plain querySelector
+  // would grab: get the configured dark colour.
   assert.equal(darkMeta.content, "#111111");
   assert.equal(lightMeta.content, "#111111");
 
@@ -80,8 +80,8 @@ test("apply sets <html data-theme> and updates both theme-color metas", () => {
 // M5: in auto mode, `useTheme`'s `resolved` is driven by
 // useSyncExternalStore(subscribeSystemDark, getSystemDarkSnapshot) rather
 // than a value computed once and left stale until an unrelated render. These
-// tests exercise that store directly — the pure unit the hook is built
-// from — proving a bare `matchMedia` "change" event (no other interaction)
+// tests exercise that store directly: the pure unit the hook is built
+// from. Proving a bare `matchMedia` "change" event (no other interaction)
 // both notifies subscribers and immediately changes what the snapshot
 // getter returns, so every consumer reading it (DOM token via `apply` in
 // the hook's effect, BarBrand's `theme` prop, Toaster's `theme` prop, and
@@ -97,7 +97,7 @@ test("subscribeSystemDark notifies on a matchMedia change with no other interact
   });
 
   // Flip the OS preference and fire the mocked MediaQueryList's "change"
-  // event — nothing else touches the app.
+  // event: nothing else touches the app.
   systemPrefersDark = false;
   assert.ok(changeListener, "subscribe must register a change listener");
   changeListener();
@@ -111,7 +111,7 @@ test("subscribeSystemDark notifies on a matchMedia change with no other interact
   unsubscribe();
   assert.equal(changeListener, null, "unsubscribe removes the listener");
 
-  // No listener left — a further flip does not throw and is simply unheard.
+  // No listener left: a further flip does not throw and is unheard.
   systemPrefersDark = true;
   assert.equal(getSystemDarkSnapshot(), true);
 });

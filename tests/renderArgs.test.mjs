@@ -1,5 +1,5 @@
 // Tests the render worker's pure helpers (src/openscad/renderArgs.ts): the
-// untrusted-filename handling (a security boundary — uploads must not escape
+// untrusted-filename handling (a security boundary: uploads must not escape
 // their mount dir) and the build-time format -> OpenSCAD CLI-args mapping. These
 // run in the real worker (worker.ts) but were unreachable from `npm test` until
 // they were extracted here.
@@ -132,7 +132,7 @@ test("mountDir yields the parent dir of a source-relative mount path", () => {
   assert.equal(mountDir("sub/lib.scad"), "/sub");
   assert.equal(mountDir("a/b/c.scad"), "/a/b");
   // A top-level file mounts at the FS root, whose parent is "" (mkdirp makes
-  // nothing) — the invariant worker.ts relies on for its default design.
+  // nothing): the invariant worker.ts relies on for its default design.
   assert.equal(mountDir("tag.scad"), "");
 });
 

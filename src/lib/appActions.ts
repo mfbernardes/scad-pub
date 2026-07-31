@@ -1,4 +1,4 @@
-// appActions — context for the app-level action callbacks (render, export,
+// appActions: context for the app-level action callbacks (render, export,
 // value/preset changes, file imports, theme, …). App owns them; the panels read
 // them here instead of having the whole bundle drilled through AppShell.
 //
@@ -33,12 +33,12 @@ export interface AppActions {
   autoRenderChange: (v: boolean) => void;
   cycleTheme: () => void;
   /** Opens the Help modal, optionally scrolled straight to a tab (matched by
-   *  its exact `help.tabs[].label` — see HelpModal's `initialTab`). Omit for
+   *  its exact `help.tabs[].label`, see HelpModal's `initialTab`). Omit for
    *  the modal's default landing tab. */
   showHelp: (tab?: string) => void;
   showDesignDoc: () => void;
   showLicenses: () => void;
-  /** Opens FilesModal (the imported-file manager) — see BarActions' "Files"
+  /** Opens FilesModal (the imported-file manager), see BarActions' "Files"
    *  action, which is the only entry point into it. */
   showFiles: () => void;
 }

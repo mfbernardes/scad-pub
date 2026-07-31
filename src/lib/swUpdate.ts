@@ -1,4 +1,4 @@
-// swUpdate.ts — register the service worker and surface "a new version is
+// swUpdate.ts: register the service worker and surface "a new version is
 // available" to the UI. The worker no longer auto-activates (see public/sw.js):
 // when an update finishes installing while an old worker still controls the
 // page, it sits in `waiting`; we detect that and let the user apply it, which
@@ -24,13 +24,13 @@ export function isWaitingUpdate(state: string, hasController: boolean): boolean 
  * intact so the reload doesn't re-download ~10 MB. Best-effort: it reloads
  * regardless.
  *
- * M3: scoped to THIS app only — never every worker/cache on the origin. The
+ * M3: scoped to THIS app only, never every worker/cache on the origin. The
  * app-id/scope namespacing (`APP_ID`, `sw.js`'s `?ns=` param, `${APP_ID}-shell-*`
  * cache names) exists specifically so multiple ScadPub configs (or any other
  * app) can share an origin; a force-update for one must not unregister or
  * evict another's offline state.
  *
- * Exported (not just used internally by `forceUpdate` below) so its scoping
+ * Exported (not only used internally by `forceUpdate` below) so its scoping
  * behavior is directly unit-testable without a real browser.
  */
 export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void> {
@@ -38,7 +38,7 @@ export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void
     if ("serviceWorker" in navigator) {
       // Prefer the registration this hook already holds for its own scope
       // (set by the effect below); fall back to looking it up by BASE_URL if
-      // called before that completes (e.g. `forceUpdate` fired very early).
+      // called before that completes (e.g. `forceUpdate` fired early).
       const r =
         reg ?? (await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL));
       await r?.unregister();
@@ -51,7 +51,7 @@ export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void
       );
     }
   } catch {
-    /* best-effort — reload anyway */
+    /* best-effort: reload anyway */
   } finally {
     location.reload();
   }
@@ -61,9 +61,9 @@ export async function forceReload(reg?: ServiceWorkerRegistration): Promise<void
  * Every worker a WARM has to reach: the one serving this page, and a WAITING
  * one if an update has installed behind it.
  *
- * The waiting worker is the reason this isn't just `active`. Each build's shell
+ * The waiting worker is the reason this isn't only `active`. Each build's shell
  * cache is named after its own version, and an update's install fills only the
- * boot-critical part of it — so a freshly-installed worker owns an almost-empty
+ * boot-critical part of it, so a freshly-installed worker owns an almost-empty
  * cache while the active one owns a complete one. The browser activates a
  * waiting worker on its own once the last tab closes, and `activate` then
  * retires the older cache: an installed app could go from fully offline-capable
@@ -83,12 +83,12 @@ export function warmTargets(
 
 /**
  * Tell the service worker the page is done with its first screen, so it can
- * pull down the rest of the offline bundle — the lazy chunks, artwork, design
+ * pull down the rest of the offline bundle: the lazy chunks, artwork, design
  * sources and the ~11 MB of pinned binaries (public/sw.js's WARM message).
  * Install deliberately caches only the boot-critical shell; without this call
  * the offline bundle still fills in through the fetch handler as things get
  * used, so a page that never reaches this (closed early, JS error) degrades
- * rather than breaks. Safe to call repeatedly — the worker memoizes the pass.
+ * rather than breaks. Safe to call repeatedly: the worker memoizes the pass.
  */
 export function warmServiceWorker(): void {
   if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
@@ -104,8 +104,8 @@ export function warmServiceWorker(): void {
 
 /**
  * Subscribe to tab visibility changes; returns the unsubscribe. Both hooks
- * below want this — one to notice the tab going away, the other to notice it
- * coming back — and each hand-rolling the add/remove pair is one more place for
+ * below want this: one to notice the tab going away, the other to notice it
+ * coming back, and each hand-rolling the add/remove pair is one more place for
  * a listener to outlive its effect.
  */
 function onVisibilityChange(handler: () => void): () => void {
@@ -115,7 +115,7 @@ function onVisibilityChange(handler: () => void): () => void {
 
 /** What the offline warm-up needs to know about the session. */
 export interface WarmupState {
-  /** The design chooser is the first screen — nothing may compete with it. */
+  /** The design chooser is the first screen: nothing may compete with it. */
   holdBoot: boolean;
   /** The render worker finished its own bootstrap download. */
   ready: boolean;
@@ -134,19 +134,19 @@ export interface WarmupState {
  * whichever comes first of three moments where bandwidth is provably not
  * contended:
  *
- *   - `committed` — installed, or launched as the installed app. Offline
+ *   - `committed`. Installed, or launched as the installed app. Offline
  *     completeness is the whole point of installing, so this outranks
  *     politeness and warms with no delay. It is also the only trigger that
  *     fires for someone who never renders at all.
- *   - `hidden` — the user has looked away. Free bandwidth by definition, and
+ *   - `hidden`: the user has looked away. Free bandwidth by definition, and
  *     the pass outlives the page (the worker holds it in `waitUntil`).
- *   - `ready` — the render worker's own bootstrap is done, i.e. the heavy
+ *   - `ready`: the render worker's own bootstrap is done, i.e. the heavy
  *     download the app actually needed has landed. A short delay lets the
  *     first render's own work settle first.
  *
  * `holdBoot` vetoes only the last of those. It must NOT veto the other two, or
  * the case this exists for goes uncovered: someone who installs from the
- * chooser and never picks a design would never warm — not on that visit and
+ * chooser and never picks a design would never warm, not on that visit and
  * not on any later launch, since the chooser they never dismissed comes back
  * every time, leaving an installed app permanently unable to render offline.
  * Politeness about ~240 kB of thumbnails is worth it for a first visit in a
@@ -161,15 +161,15 @@ export function warmDelayMs(s: WarmupState): number | null {
 
 /**
  * Ask the service worker to fill the offline cache at the first uncontended
- * moment — see `warmDelayMs` for the policy. Re-arms as the session changes;
+ * moment, see `warmDelayMs` for the policy. Re-arms as the session changes;
  * the worker itself memoizes the pass, so an extra call costs nothing.
  *
  * `updateWaiting` is not a trigger and deliberately not part of the policy: a
  * newly installed worker doesn't make this a better moment to download 11 MB.
  * It re-evaluates the SAME policy because there is now a second worker that
  * needs the pass (`warmTargets`), and nothing else in the session would
- * necessarily change to prompt one. Firing directly on the update instead —
- * bypassing `warmDelayMs` — is exactly the contention this whole path exists to
+ * necessarily change to prompt one. Firing directly on the update instead:
+ * bypassing `warmDelayMs`. Is exactly the contention this whole path exists to
  * avoid: an update installing while the chooser's thumbnails are still loading
  * would put the supplementary bundle straight back on top of them.
  */
@@ -202,7 +202,7 @@ export function useOfflineWarmup(
 export function useServiceWorkerUpdate() {
   const [updateReady, setUpdateReady] = useState(false);
   const waitingRef = useRef<ServiceWorker | null>(null);
-  // This app's own scoped registration — captured so forceUpdate's escape
+  // This app's own scoped registration: captured so forceUpdate's escape
   // hatch (M3) can target only it, never every worker on the origin.
   const regRef = useRef<ServiceWorkerRegistration | undefined>(undefined);
   // Set when the user accepts, so the resulting controllerchange reloads (and a
@@ -271,7 +271,7 @@ export function useServiceWorkerUpdate() {
     applyingRef.current = true;
     const w = waitingRef.current;
     if (w) w.postMessage({ type: "SKIP_WAITING" });
-    else location.reload(); // no waiting worker (shouldn't happen) — hard reload
+    else location.reload(); // no waiting worker (shouldn't happen): hard reload
   };
 
   // Reload onto the newest build. Prefer the graceful waiting-worker handoff;

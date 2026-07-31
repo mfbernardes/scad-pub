@@ -1,4 +1,4 @@
-// ViewerGestureHint.tsx — a one-time, non-blocking chip over the viewer
+// ViewerGestureHint.tsx: a one-time, non-blocking chip over the viewer
 // bottom-centre teaching the orbit gesture ("Drag to rotate · Scroll to
 // zoom" / "… Pinch to zoom" on a coarse pointer). Mounted by ViewerStage
 // (shared by both layouts, so this lands once), positioned via the
@@ -6,7 +6,7 @@
 // desktop/mobile split, offset above it).
 //
 // Shown only once real geometry has been shown (the first successful
-// render) — never over the pre-first-render loading overlay. Fades on the
+// render), never over the pre-first-render loading overlay. Fades on the
 // first pointerdown anywhere inside the viewer, or after a timeout,
 // remembering either way via a namespaced localStorage once-flag (see
 // appId.ts's `ns()`, the same pattern AppShell already uses for its
@@ -21,20 +21,20 @@ import { t } from "../lib/i18n";
 
 const HINT_SEEN_KEY = ns("hint.viewer.v1");
 // How long the hint stays up before auto-fading if the visitor never touches
-// the viewer — generous enough to read a short sentence, short enough not to
+// the viewer: generous enough to read a short sentence, short enough not to
 // linger indefinitely over the model.
 const FADE_TIMEOUT_MS = 8000;
 
 export function ViewerGestureHint({ resultOk, suppressed = false }: { resultOk: boolean; suppressed?: boolean }) {
   // Sticky: once the first successful render has landed this mount, stays
-  // true even if a later edit fails or is mid-render — the hint is about
+  // true even if a later edit fails or is mid-render. The hint is about
   // "you've now seen a model", not "the model is currently fine".
   const hasRenderedOnceRef = useRef(false);
   if (resultOk) hasRenderedOnceRef.current = true;
 
   const [dismissed, setDismissed] = useState(() => readLocal(HINT_SEEN_KEY) !== null);
   // `suppressed` (the on-model editor is open) hides the hint without
-  // dismissing it — they'd otherwise overlap over the model — so it can still
+  // dismissing it (they'd otherwise overlap over the model) so it can still
   // show later once the editor closes, until the visitor interacts or it fades.
   const visible = !dismissed && !suppressed && hasRenderedOnceRef.current;
 
@@ -49,10 +49,10 @@ export function ViewerGestureHint({ resultOk, suppressed = false }: { resultOk: 
     if (!visible) return;
     const timer = setTimeout(dismiss, FADE_TIMEOUT_MS);
     // Pointer-events:none on the chip itself means a pointerdown on the
-    // viewer always lands on the canvas/overlay underneath, never the hint —
-    // listen at the document level (capture, so it sees the event before any
+    // viewer always lands on the canvas/overlay underneath, never the hint.
+    // Listen at the document level (capture, so it sees the event before any
     // handler stops propagation) and check it actually happened inside the
-    // viewer, not just anywhere on screen.
+    // viewer, not only anywhere on screen.
     const onPointerDown = (e: PointerEvent) => {
       if ((e.target as Element | null)?.closest(".viewer-wrap")) dismiss();
     };

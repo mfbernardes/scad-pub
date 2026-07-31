@@ -1,4 +1,4 @@
-// Unit tests for src/lib/fontChoices.ts — the grouped option list behind the
+// Unit tests for src/lib/fontChoices.ts: the grouped option list behind the
 // font selector: every installed face under a friendly name, design-suggested
 // or selected-but-missing faces kept visible, and stored/enum values preserved
 // so listing never dirties a value or breaks preset matching.
@@ -40,7 +40,7 @@ test("every installed face is listed with a friendly label and canonical value",
       ["DejaVu Sans:style=Bold", "DejaVu Sans Bold", true],
     ]
   );
-  // The selected value names an installed face — nothing is "missing".
+  // The selected value names an installed face: nothing is "missing".
   assert.deepEqual(missing, []);
 });
 

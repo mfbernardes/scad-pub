@@ -1,4 +1,4 @@
-// Unit tests for scripts/lib/prose-files.mjs's resolveFileField — the shared
+// Unit tests for scripts/lib/prose-files.mjs's resolveFileField: the shared
 // "<field>/<field>File" resolution behind popup.body/bodyFile,
 // fileImport.note/noteFile and licenses[].text/textFile (see docs/config.md).
 import { test } from "node:test";

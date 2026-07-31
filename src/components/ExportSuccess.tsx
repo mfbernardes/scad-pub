@@ -1,21 +1,21 @@
-// ExportSuccess.tsx — compact, non-modal panel shown above the action dock
+// ExportSuccess.tsx: compact, non-modal panel shown above the action dock
 // right after a successful model export, when the config opts in via
 // `ui.afterExport` (see docs/config.md and scripts/gen-schema.mjs's
 // cross-validation of `helpTab` against the config's help tabs). Off
-// entirely — never mounted at all — when `ui.afterExport` is absent from the
+// entirely (never mounted at all) when `ui.afterExport` is absent from the
 // config; see App.tsx's exportModel.
 //
 // Deliberately NOT a Radix Dialog: it never traps focus and never covers the
 // action dock it sits above (glass styling matches StaleBanner/the action
-// cluster — see AppShell's shared ACTION_DOCK_CLASS), so a visitor can keep
+// cluster, see AppShell's shared ACTION_DOCK_CLASS), so a visitor can keep
 // exporting/sharing/tweaking without dismissing it first. App.tsx only ever
-// sets this state AFTER awaiting exportModel's share-or-download outcome —
-// never before — so this panel can never appear over, or race, the native
+// sets this state AFTER awaiting exportModel's share-or-download outcome,
+// never before, so this panel can never appear over, or race, the native
 // share sheet.
 //
 // Ported (simplified) from a donor branch's design-reference component: a
 // single generic title/body (exportSuccess.title/exportSuccess.body in
-// src/locales/en.json) regardless of share-vs-download outcome — the donor
+// src/locales/en.json) regardless of share-vs-download outcome. The donor
 // distinguished "shared" from "downloaded" wording via a dedicated
 // exportOutcome.ts; one plain default is all this repo needs, so that extra
 // machinery isn't ported.
@@ -41,7 +41,7 @@ export function ExportSuccess({
   onDismiss,
 }: {
   state: ExportSuccessState;
-  /** Config `ui.afterExport.helpTab` — shows the "Open printing help" action,
+  /** Config `ui.afterExport.helpTab`: shows the "Open printing help" action,
    *  deep-linking Help to that tab, only when set. gen-schema's build-time
    *  validation guarantees a set value always names a real Help tab. */
   helpTab?: string;
@@ -63,7 +63,7 @@ export function ExportSuccess({
       className="export-success flex w-full max-w-[min(92vw,26rem)] items-start gap-2 rounded-lg border border-(color:--glass-border) bg-(--glass-bg) px-3 py-[0.55rem] text-[0.82rem] shadow-(--elevation)"
       role="status"
       // Polite: announces the title without stealing focus from wherever the
-      // visitor's attention already is (they just clicked Download).
+      // visitor's attention already is (they have clicked Download).
       aria-live="polite"
     >
       <div className="min-w-0 flex-1">

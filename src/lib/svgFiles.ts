@@ -1,8 +1,8 @@
-// svgFiles.ts — decide which SVG drawings the renderer can resolve right now:
+// svgFiles.ts: decide which SVG drawings the renderer can resolve right now:
 // the bundled assets plus any user-imported `.svg`, matched by filename (an
 // `@svg` parameter's value references the mounted file by name). Pure
 // data-in/data-out so the missing-SVG detection is unit-testable without React,
-// mirroring fontChoices/fonts — availability is decided in the app, not guessed
+// mirroring fontChoices/fonts: availability is decided in the app, not guessed
 // from render output.
 
 /** True when a filename looks like an SVG the renderer can mount/import. */
@@ -10,7 +10,7 @@ export function isSvgFile(name: string): boolean {
   return /\.svg$/i.test(name.trim());
 }
 
-/** Strip any directory part from a name — a mounted file lives at the FS root,
+/** Strip any directory part from a name: a mounted file lives at the FS root,
  *  so an `@svg` value and a stored file both key on the bare basename. */
 export function svgBaseName(name: string): string {
   return name.trim().split(/[\\/]/).pop() || name.trim();
@@ -32,7 +32,7 @@ export function svgPresent(names: Iterable<string>): Set<string> {
 /**
  * Whether an `@svg` control's current value names a file that isn't present.
  * Only authoritative when the present set is non-empty (there are bundled
- * assets or imports to compare against) — an empty set means "we can't be
+ * assets or imports to compare against): an empty set means "we can't be
  * sure", so it never reports a value as missing, mirroring the font hint's
  * `available?.size` guard.
  */

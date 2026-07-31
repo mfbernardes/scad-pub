@@ -1,4 +1,4 @@
-// appId.ts — the configurator's stable id, used to namespace this deployment's
+// appId.ts: the configurator's stable id, used to namespace this deployment's
 // browser storage (localStorage / IndexedDB / Cache Storage) so two configs
 // served from the same origin don't read or clobber each other's data. Injected
 // at build by Vite (`define`, from the config's `id`); falls back to

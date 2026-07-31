@@ -1,4 +1,4 @@
-// BarBrand.tsx — the top-bar brand: the config's per-theme logo when one is
+// BarBrand.tsx: the top-bar brand: the config's per-theme logo when one is
 // supplied, else the title text. Shared by the desktop CommandBar and the
 // mobile top bar (their wrappers differ; the content is identical).
 import type { Schema } from "../openscad/types";
@@ -28,7 +28,7 @@ export function BarBrand({
     />
   ) : (
     // Wordmark treatment for the plain-title fallback: display face + an
-    // accent full stop — a tiny, title-agnostic brand mark that reads as
+    // accent full stop. A tiny, title-agnostic brand mark that reads as
     // deliberate design rather than a default header.
     <span className={cn("font-display tracking-tight", titleClassName)}>
       {schema.title}

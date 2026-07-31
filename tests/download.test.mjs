@@ -46,7 +46,7 @@ test("downloadBlob defers object-URL revocation past the click", (t) => {
   };
   try {
     downloadBlob(new Blob(["x"]), "model.stl");
-    // The click already happened, but revocation must not have fired yet — a
+    // The click already happened, but revocation must not have fired yet: a
     // synchronous revoke is exactly the WebKit race this fix avoids.
     assert.equal(created[0].clicked, true);
     assert.equal(revoked, null);

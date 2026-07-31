@@ -1,4 +1,4 @@
-// popup.ts — decides whether the configurable notice dialog (schema.popup)
+// popup.ts: decides whether the configurable notice dialog (schema.popup)
 // should be shown, and remembers a dismissal. Persistence is namespaced by the
 // app id so two configs on one origin don't share a flag, and is keyed by a
 // content hash of the popup so changing its text re-shows it to returning users.
@@ -23,7 +23,7 @@ function contentHash(popup: PopupNotice): string {
  * `picker` mode means exactly one thing: this popup IS the chooser, the app's
  * first screen. `gen-schema`'s `checkPopupMode` refuses to build a `picker`
  * config with fewer than two designs, so there is no second meaning to test
- * for here — the mode alone is the answer.
+ * for here: the mode alone is the answer.
  *
  * It reads as a one-line predicate because it used to be more, and that is
  * worth remembering: `picker` once fell back to a plain notice below two
@@ -41,10 +41,10 @@ export function isDesignChooser(popup: PopupNotice | null): boolean {
  * "dismissible" show unless this exact content was already remembered (see
  * rememberPopup). Returns false when no popup is configured.
  *
- * `fromLink` (the URL hash named a design — a shared link or an installed app's
+ * `fromLink` (the URL hash named a design: a shared link or an installed app's
  * `./#d=<id>` shortcut) suppresses the design *chooser*, and only that: the
  * visitor arrived with the choice already made, so asking again is noise over
- * someone's link. It is deliberately not remembered — skipping a question is
+ * someone's link. It is deliberately not remembered: skipping a question is
  * not answering it, and a later visit to the bare URL still gets the chooser.
  *
  * A notice is never suppressed: it asks nothing, so a URL cannot have answered
@@ -55,13 +55,13 @@ export function shouldShowPopup(popup: PopupNotice | null, fromLink = false): bo
   if (!popup) return false;
   if (fromLink && isDesignChooser(popup)) return false;
   if (popup.mode === "always") return true;
-  // Storage blocked (private mode, etc.) reads as null ≠ hash — fail open and
+  // Storage blocked (private mode, etc.) reads as null ≠ hash: fail open and
   // show the notice.
   return readLocal(ns(KEY)) !== contentHash(popup);
 }
 
 /** Persist that the user has dismissed this popup, so it won't show again.
- *  Storage unavailable — the popup simply shows again next visit. */
+ *  Storage unavailable: the popup shows again next visit. */
 export function rememberPopup(popup: PopupNotice): void {
   writeLocal(ns(KEY), contentHash(popup));
 }

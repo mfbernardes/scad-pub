@@ -47,7 +47,7 @@ interface Props {
   presetBaseline: Values | null;
   /** The selected preset's display name, or null when no preset is selected. */
   presetName: string | null;
-  /** Values the current params are diffed against — presetBaseline, or design defaults. */
+  /** Values the current params are diffed against: presetBaseline, or design defaults. */
   baseline: Values;
   /** Names of params whose value differs from `baseline`. */
   changedParams: Set<string>;
@@ -60,7 +60,7 @@ interface Props {
   /** SVG basenames the renderer can resolve (bundled assets ∪ imports), for the
    *  `@svg` control's missing-file hint. */
   availableSvgFiles?: Set<string>;
-  /** Called when a tab is tapped — used to raise a collapsed (peek) sheet. */
+  /** Called when a tab is tapped: used to raise a collapsed (peek) sheet. */
   onActivate?: () => void;
   /** Show the underlying OpenSCAD variable name beside each label (default true). */
   showVarName?: boolean;
@@ -69,7 +69,7 @@ interface Props {
    *  which is what withholds the essentials toggle entirely (see AppShell). */
   onShowAdvancedChange?: (show: boolean) => void;
   /** Active tab + search query, hoisted to AppShell (usePanelState) so they
-   *  survive a desktop/mobile remount — see docs/architecture-review.md M7. */
+   *  survive a desktop/mobile remount, see docs/architecture-review.md M7. */
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   search: string;
@@ -105,7 +105,7 @@ export function SheetTabs({
 }: Props) {
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
   // Overridable via the config's `strings` block (src/locales/en.json's
-  // presets.title/settings.title) — see docs/config.md's "Text overrides".
+  // presets.title/settings.title), see docs/config.md's "Text overrides".
   const presetsLabel = t("presets.title");
   const parametersLabel = t("settings.title");
   // Presets first on mobile, then Customize.
@@ -146,18 +146,18 @@ export function SheetTabs({
               which scroll away as content should. Same reason ParamPanel's
               scroller drops its `p-3` top. */}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2">
-            {/* The form toolbar is now just the search field, full width, and
+            {/* The form toolbar is now only the search field, full width, and
                 still INSIDE the scroll container so it hands its ~44px back to
                 the form as soon as the visitor scrolls. Its two former
                 neighbours both left for somewhere they read better:
                   • essentials ("+N more") is a MODE, not a find-the-setting
-                    control — it's the closing row of the form itself now (see
+                    control. It's the closing row of the form itself now (see
                     EssentialsToggle);
                   • the section navigator is desktop-only. Sticky group headers
                     (`.param-group > summary` in index.css) keep the visitor
                     oriented while scrolling and let them fold the group they're
                     in from wherever they are, which is most of what the jump
-                    menu was for — and unlike the menu it costs no standing row. */}
+                    menu was for, and unlike the menu it costs no standing row. */}
             <div className="sheet-toolbar mt-2">
               <ParamSearch
                 value={search}
@@ -171,7 +171,7 @@ export function SheetTabs({
             {/* `compact`: control beside label wherever the control doesn't
                 need the full row, plus a tighter vertical rhythm. The sheet's
                 half detent is the only state where a phone shows the model and
-                the controls together, and its form port is ~380px — a stacked
+                the controls together, and its form port is ~380px: a stacked
                 row costs the label's height plus the control's, which fitted
                 two of sixteen parameters in it. See ParamForm's `compact`
                 doc. The docked desktop panel keeps the stacked layout. */}

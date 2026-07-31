@@ -1,29 +1,29 @@
-// assets.mjs — resolving a design's shared .scad (and other) dependencies into
+// assets.mjs: resolving a design's shared .scad (and other) dependencies into
 // the set of source-relative files gen-schema copies into public/scad. Two
 // sources of truth: the config's `assets` list (files, whole directories, or
-// globs) via `expandConfiguredAssets`, or — when that's omitted — each design's
+// globs) via `expandConfiguredAssets`, or (when that's omitted) each design's
 // `use`/`include` graph via `collectDeps`. The helpers close over SOURCE, so
 // they're built once per generate() run by `createAssetTools`.
 //
 // Symlink policy (H5): every path this module resolves is canonicalized with
-// `realpathSync` and checked against the canonical SOURCE root — not just the
+// `realpathSync` and checked against the canonical SOURCE root, not only the
 // lexical path, which a symlink can trivially point away from. A symlink
-// (file or directory, anywhere in the tree — a design, an explicit asset, a
+// (file or directory, anywhere in the tree: a design, an explicit asset, a
 // directory/glob match, or a use/include target) is allowed only when its
 // *resolved target* also stays under canonical SOURCE; one that escapes is
 // rejected with the same "escapes the source root" diagnostic as a lexical
 // `../` escape. This is a containment allowlist, not a "reject all symlinks"
 // policy, so a design tree can still use symlinks for internal organisation.
 // Destination paths (what gets written under public/scad/, and the mounted
-// path the renderer's use/include sees) stay the *lexical* path — the
-// symlink's own location in the tree — never the resolved target's location,
+// path the renderer's use/include sees) stay the *lexical* path: the
+// symlink's own location in the tree, never the resolved target's location,
 // so a design's use/include graph keeps resolving exactly as it does on disk.
 // Symlink cycles (a link resolving back to one of its own ancestor
 // directories) are caught explicitly during traversal and fail with a
 // dedicated diagnostic instead of recursing indefinitely; a symlink chain long
 // enough to trip the OS's own ELOOP is reported the same way.
 //
-// Config-owned paths (app icon, iconMaskable, screenshots, logo, extraCss —
+// Config-owned paths (app icon, iconMaskable, screenshots, logo, extraCss:
 // resolved relative to the config file's directory, CONFIG_DIR) are a
 // separate trust boundary and are NOT checked against SOURCE here; they obey
 // only `mustExist` (gen-schema.mjs / pwa-assets.mjs). The config author who
@@ -49,7 +49,7 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
   const REAL_SOURCE = realpathSync(SOURCE);
 
   // A source-relative POSIX path (the key the renderer mounts files under).
-  // Lexical, by design (see module comment) — not the realpath.
+  // Lexical, by design (see module comment), not the realpath.
   const relPosix = (absPath) => relative(SOURCE, absPath).split(sep).join("/");
 
   // Resolve an existing path to its canonical form and enforce the symlink
@@ -88,7 +88,7 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
   // a dependency to `join(outScadDir, relPosix(abs))`, so an escaping path
   // (e.g. `use <../../secret.scad>`, a config `assets`/`designs[].file` entry
   // doing the same, or a symlink resolving outside SOURCE) would otherwise
-  // write — or read — outside the source root. `referencedFrom` names the
+  // write (or read) outside the source root. `referencedFrom` names the
   // file that pointed at `abs`.
   const checkContained = (abs, what, referencedFrom) => {
     resolveReal(abs, what, referencedFrom);
@@ -97,10 +97,10 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
 
   // List a directory's entries, resolving each symlink (file or directory)
   // against the containment policy above. A broken symlink is skipped rather
-  // than failing the build — the same tolerance a plain missing file would
+  // than failing the build: the same tolerance a plain missing file would
   // get from a bare `fs.existsSync` scan. Returns `{ name, real, isDir,
   // isFile }`; `real` is the canonical path used for cycle/dedupe tracking by
-  // the walkers below (never for building destination paths — see module
+  // the walkers below (never for building destination paths, see module
   // comment).
   const listSafe = (absDir, referencedFrom) =>
     readdirSync(absDir, { withFileTypes: true }).flatMap((entry) => {
@@ -111,7 +111,7 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
         try {
           st = statSync(real);
         } catch {
-          return []; // broken symlink target — ignore
+          return []; // broken symlink target: ignore
         }
         return [{ name: entry.name, real, isDir: st.isDirectory(), isFile: st.isFile() }];
       }
@@ -125,7 +125,7 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
   // the current recursion stack: a directory (or a directory-resolving
   // symlink) that points back at one of them is a cycle and fails with a
   // diagnostic instead of recursing forever. Cycle detection uses ONLY the
-  // ancestor stack — deliberately not a global visited-by-realpath set. Two
+  // ancestor stack: deliberately not a global visited-by-realpath set. Two
   // distinct lexical paths that resolve to the same real directory (e.g.
   // `real/` and a sibling `alias -> real`) are separate mount points a design
   // may `use`/`include` independently, so both must be emitted; suppressing
@@ -169,7 +169,7 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
   };
 
   // A glob entry uses `*` or `?` wildcards rather than naming a concrete file or
-  // directory. (`[`…`]` classes aren't supported — they'd be matched literally.)
+  // directory. (`[`…`]` classes aren't supported: they'd be matched literally.)
   const isGlob = (entry) => /[*?]/.test(entry);
 
   // Compile one glob path-segment (no slashes) to an anchored RegExp: `*` spans
@@ -188,7 +188,7 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
   // Match files under SOURCE against a POSIX glob. `*`/`?` match within a single
   // path segment; `**` spans zero or more directories (so `lib/**/*.scad` reaches
   // nested files, `**/*.svg` every svg in the tree, `lib/**` every file under
-  // lib). Only files match — directories are traversed, never emitted, mirroring
+  // lib). Only files match: directories are traversed, never emitted, mirroring
   // copyAsset which copies a file. Returns source-relative POSIX paths. Symlinks
   // encountered during the walk obey the same containment/cycle policy as every
   // other traversal in this module.
@@ -196,7 +196,7 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
     const referencedFrom = `${configPath} (asset pattern '${pattern}')`;
     const segments = pattern.split("/").filter(Boolean);
     const out = [];
-    // Cycle detection uses only the ancestor stack (see walkFiles) — no global
+    // Cycle detection uses only the ancestor stack (see walkFiles): no global
     // visited-by-realpath set, so a symlink alias to an already-matched real
     // directory still contributes its own distinct lexical path.
     const descend = (e, parts, cb, ancestors) => {

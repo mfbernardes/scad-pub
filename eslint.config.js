@@ -1,4 +1,4 @@
-// Flat ESLint config (ESM — package.json has "type": "module").
+// Flat ESLint config (ESM: package.json has "type": "module").
 // Kept intentionally lean: typescript-eslint's non-type-checked "recommended"
 // set (fast, no tsconfig project wiring) plus react-hooks, which is the
 // highest-value rule set for this codebase's heavy use of custom hooks
@@ -12,7 +12,7 @@ const unusedVarsOptions = {
   argsIgnorePattern: '^_',
   varsIgnorePattern: '^_',
   // `const { abs, ...d } = design` to drop a field while keeping the rest is
-  // a deliberate pattern in gen-schema.mjs — the discarded sibling isn't a bug.
+  // a deliberate pattern in gen-schema.mjs: the discarded sibling isn't a bug.
   ignoreRestSiblings: true,
 };
 
@@ -21,7 +21,7 @@ export default tseslint.config(
     ignores: [
       'node_modules/',
       'dist/',
-      // gen-schema.mjs output — never edited by hand, see CLAUDE.md
+      // gen-schema.mjs output, never edited by hand, see CLAUDE.md
       'public/scad/',
       'public/wasm/',
       'src/generated/',
@@ -31,7 +31,7 @@ export default tseslint.config(
       'public/apple-splash-*.png',
       'public/precache-manifest.json',
       'public/fonts/fonts.conf',
-      // shadcn-scaffolded primitives — vendored, not hand-authored
+      // shadcn-scaffolded primitives: vendored, not hand-authored
       'src/components/ui/',
       'tests/screenshots/',
       'screenshots/',
@@ -43,7 +43,7 @@ export default tseslint.config(
 
   // TypeScript app source: typescript-eslint's "recommended" (non-type-checked,
   // so `npm run lint` stays fast and needs no tsconfig project wiring) plus
-  // react-hooks — the highest-value rule set for this codebase's heavy use of
+  // react-hooks. The highest-value rule set for this codebase's heavy use of
   // custom hooks (useRenderPipeline, useFileImports, ...).
   {
     files: ['src/**/*.{ts,tsx}'],
@@ -58,7 +58,7 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       // react-hooks v7 added `refs` to its recommended set. It flags the
       // deliberate ref-mirror / lazy-ref-init architecture this codebase is
-      // built on — `latest.current = props` to forward the freshest callbacks
+      // built on: `latest.current = props` to forward the freshest callbacks
       // through identity-stable wrappers (appActions.ts, useRafBatchedWrite,
       // useRenderPipeline, …) and `if (!ref.current) ref.current = …` lazy
       // init. Both are React-endorsed patterns, documented in CLAUDE.md as the
@@ -69,10 +69,10 @@ export default tseslint.config(
       // during render" pattern, or carry a justified inline disable (see
       // docs/architecture-review.md L2). Kept at 'warn' rather than 'error' so
       // a legitimate future case reads as advice in-editor, but CI/pre-commit
-      // still gate on it — the repo is triaged to 0 warnings and both run
+      // still gate on it: the repo is triaged to 0 warnings and both run
       // `eslint . --max-warnings 0`.
       'react-hooks/set-state-in-effect': 'warn',
-      // Style-only rules that don't indicate real bugs — keep the signal
+      // Style-only rules that don't indicate real bugs: keep the signal
       // focused on correctness/react-hooks rather than drowning in noise
       // from a first-time lint pass over an existing codebase.
       '@typescript-eslint/no-explicit-any': 'off',
@@ -109,7 +109,7 @@ export default tseslint.config(
     },
   },
 
-  // Hand-written service worker (public/sw.js is tracked, not generated —
+  // Hand-written service worker (public/sw.js is tracked, not generated,
   // see CLAUDE.md). Runs in the ServiceWorker global scope.
   {
     files: ['public/sw.js'],
@@ -122,7 +122,7 @@ export default tseslint.config(
 
   // Build/dev scripts and the node:test suite run under plain Node, but
   // several (the Playwright-driven ones) also embed inline callbacks
-  // (page.evaluate/waitForFunction) that execute in the browser — so both
+  // (page.evaluate/waitForFunction) that execute in the browser, so both
   // global sets apply to the same file.
   {
     files: ['scripts/**/*.mjs', 'tests/**/*.mjs'],
@@ -135,7 +135,7 @@ export default tseslint.config(
     rules: {
       'no-unused-vars': ['warn', unusedVarsOptions],
       // Fake event-emitter test doubles use `this.onX && this.onX(...)` to
-      // conditionally invoke a handler — a deliberate short-circuit call,
+      // conditionally invoke a handler: a deliberate short-circuit call,
       // not a stray expression.
       'no-unused-expressions': ['error', { allowShortCircuit: true }],
     },

@@ -1,4 +1,4 @@
-// stlCache.ts — persistent L2 cache for rendered STL, in IndexedDB. The
+// stlCache.ts: persistent L2 cache for rendered STL, in IndexedDB. The
 // in-memory LRU inside OpenSCADRunner is the fast L1 tier in front of this one;
 // L2 survives reloads so reopening the page (or revisiting a configuration)
 // serves instantly instead of re-running OpenSCAD.
@@ -21,7 +21,7 @@ import {
 // changes are caught automatically by the build's renderHash, which the runner
 // combines with this: scad sources, fonts, features and wasm, plus the renderer
 // source (worker.ts) whose OpenSCAD flags (--backend / --export-format) gen-schema
-// now folds in. Bump this only for changes renderHash can't see — the stored-
+// now folds in. Bump this only for changes renderHash can't see: the stored-
 // record shape or the keying scheme itself. Imported by the runner.
 export const CACHE_VERSION = 1;
 
@@ -29,7 +29,7 @@ export const MB = 1024 * 1024;
 const DEFAULT_MAX_BYTES = 256 * MB;
 const DEFAULT_MAX_ENTRY_BYTES = 64 * MB;
 // M11: cap a record's persisted log independent of the STL byte budget above
-// — an unusually chatty render (many ECHO/warning lines) shouldn't be able to
+// — an unusually chatty render (a long ECHO/warning log) shouldn't be able to
 // grow a stored record without limit while its size mostly evades the STL-only
 // byte accounting a naive budget would use. Kept generous (a real render log
 // is normally a few dozen short lines) but bounded.
@@ -45,7 +45,7 @@ export interface StoredStl {
   exitCode: number;
   ms: number;
   /**
-   * M11: correctness-relevant, not just informational — a truthy entry means
+   * M11: correctness-relevant, not only informational. A truthy entry means
    * this result was rendered against parameters the design source no longer
    * fully declares (see orphanedDefines/worker.ts). Must round-trip through
    * the store so a later cache hit still carries the reload prompt the UI
@@ -82,7 +82,7 @@ function isQuotaError(e: unknown): boolean {
 }
 
 // M11: cap a log array to at most MAX_LOG_CHARS characters, keeping the most
-// RECENT lines (the tail is what a user/debugger cares about — a truncated
+// RECENT lines (the tail is what a user/debugger cares about: a truncated
 // build's earliest ECHOs matter less than its final error) and prefixing a
 // marker when anything was dropped, so a persisted record's true byte cost
 // stays bounded regardless of how chatty a render was.
@@ -101,7 +101,7 @@ function budgetLog(log: readonly string[]): string[] {
 }
 
 // M11: the COMPLETE persisted-record size a budget/eviction decision should
-// use — the STL payload plus its (already log-budgeted) text, not STL bytes
+// use. The STL payload plus its (already log-budgeted) text, not STL bytes
 // alone. UTF-16 code units are counted as 2 bytes each, a safe upper bound for
 // the log's actual storage cost.
 function recordBytes(stlBytes: number, log: readonly string[]): number {
@@ -110,11 +110,11 @@ function recordBytes(stlBytes: number, log: readonly string[]): number {
 
 // M11: serialize every mutation (put/clear) through one promise chain per
 // store instance, so:
-//   - a clear() and a put() can never interleave — a write already in flight
+//   - a clear() and a put() can never interleave. A write already in flight
 //     when clear() is called completes (and is visible) BEFORE clear() runs,
 //     or clear() completes fully before a later put() begins. Either way, an
-//     older write can never repopulate the store just after a clear.
-//   - overlapping put()s never race the same evict-then-write budget check —
+//     older write can never repopulate the store immediately after a clear.
+//   - overlapping put()s never race the same evict-then-write budget check:
 //     each one now sees the true post-previous-write state, so the combined
 //     effect of several concurrent put() calls can't exceed the byte budget
 //     the way two callers each separately observing "under budget" could.
@@ -141,29 +141,29 @@ export function createStlCache(
     opts.maxEntryBytes ?? Math.min(maxBytes, DEFAULT_MAX_ENTRY_BYTES)
   );
   // Identifies the renderer build; when it changes, every stored entry is stale
-  // (the runner also keys by it, so they'd never match) — clear to reclaim space.
+  // (the runner also keys by it, so they'd never match): clear to reclaim space.
   const version = opts.version ?? String(CACHE_VERSION);
 
   // M11: every mutation (the version-wipe below, put, clear) goes through this
-  // one queue so they never interleave — see createMutationQueue's comment.
+  // one queue so they never interleave, see createMutationQueue's comment.
   const serialize = createMutationQueue();
 
   // Run the one-time version check at most once; reused by get/put. NOT
   // routed through serialize(): put()/clear() call ensureVersion() from
   // WITHIN their own serialize()'d callback (see below), so queuing
-  // checkVersion on that SAME shared chain would deadlock — the inner
+  // checkVersion on that SAME shared chain would deadlock. The inner
   // serialize() call would queue itself after the chain position the outer,
   // still-pending callback already occupies, so neither could ever finish.
   // checkVersion's own memoization (versionChecked) already gives it
   // effectively-once semantics without needing the mutation queue: at most
   // one real checkVersion() runs, and every other caller (concurrent or
-  // nested) just awaits that same promise.
+  // nested) awaits that same promise.
   let versionChecked: Promise<void> | undefined;
   function ensureVersion(): Promise<void> {
     if (!versionChecked)
       versionChecked = checkVersion().catch(() => {
         // A transient failure (blocked upgrade, etc.) must not be memoized as
-        // done — the next get/put should retry, or a stale-version wipe might
+        // done: the next get/put should retry, or a stale-version wipe might
         // never run this session and crowd out current entries.
         versionChecked = undefined;
       });
@@ -191,15 +191,14 @@ export function createStlCache(
       const meta = await reqToPromise<MetaRecord | undefined>(store.get(key));
       if (meta) store.put({ ...meta, lastAccess: Date.now() }, key);
     } catch {
-      /* a missed LRU touch only affects eviction order — ignore */
+      /* a missed LRU touch only affects eviction order: ignore */
     }
   }
 
-  // M11: eviction and the new record's write, in ONE readwrite transaction —
-  // previously these were two separate transactions (a read-only scan, a
-  // separate delete transaction, then put()'s own write transaction later).
-  // Two overlapping put() calls could each read the pre-eviction total,
-  // decide independently how much to evict, and both write — jointly
+  // M11: eviction and the new record's write share ONE readwrite transaction.
+  // Split across separate transactions (a read-only scan, a delete, then put()'s
+  // own write), two overlapping put() calls could each read the pre-eviction
+  // total, decide independently how much to evict, and both write: jointly
   // exceeding the byte budget even though each individually respected it.
   // Combining them into one transaction (and running every put/clear through
   // the serialize() queue above, so transactions from this store are never
@@ -260,13 +259,13 @@ export function createStlCache(
 
   async function put(key: string, value: StoredStl): Promise<void> {
     // M11: budget the COMPLETE record (STL bytes + a capped log), not STL
-    // bytes alone — an unbounded log array could otherwise inflate storage
+    // bytes alone. An unbounded log array could otherwise inflate storage
     // past what the byte budget was meant to bound.
     const log = budgetLog(value.log);
     const stlBytes = value.stl.byteLength;
     const bytes = recordBytes(stlBytes, log);
     if (maxBytes <= 0 || bytes > maxEntryBytes || bytes > maxBytes) return;
-    // Copy the bytes now, synchronously, into a standalone ArrayBuffer — the
+    // Copy the bytes now, synchronously, into a standalone ArrayBuffer: the
     // source view is shared with the live render result and the writes below
     // are async.
     const buf = value.stl.buffer.slice(value.stl.byteOffset, value.stl.byteOffset + stlBytes);
@@ -275,7 +274,7 @@ export function createStlCache(
       log,
       exitCode: value.exitCode,
       ms: value.ms,
-      // M11: staleDefines must round-trip — a skewed result served later from
+      // M11: staleDefines must round-trip. A skewed result served later from
       // this record needs to still carry its reload prompt (see StoredStl).
       ...(value.staleDefines?.length ? { staleDefines: value.staleDefines } : {}),
     };
@@ -291,7 +290,7 @@ export function createStlCache(
           await evictAndWrite(key, data, bytes, Math.floor(maxBytes / 2));
         }
       } catch {
-        /* best-effort: a failed persist just means this stays L1-only */
+        /* best-effort: a failed persist means this stays L1-only */
       }
     });
   }

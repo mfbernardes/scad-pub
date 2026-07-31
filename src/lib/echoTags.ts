@@ -25,7 +25,7 @@ import { escapeRegExp } from "./diagnostics";
  * a bracketed vector) so callers format it themselves. Matching on quote
  * pairs (not comma-splitting) means a quoted argument or the raw value
  * containing an embedded comma is still handled correctly. Returns one array
- * of captured groups per matching line, in log order — `quotedArgCount` plain
+ * of captured groups per matching line, in log order: `quotedArgCount` plain
  * strings followed by the raw final-argument text.
  */
 export function parseEchoTag(log: string[], tag: string, quotedArgCount: number): string[][] {

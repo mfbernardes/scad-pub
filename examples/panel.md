@@ -5,7 +5,7 @@ content plan: explain what the panel design exports, list the steps to prepare a
 
 # Configure a relief panel
 
-Turn any SVG drawing into a coloured relief plaque: a flat base plate with your artwork raised from its surface. A multi-colour SVG keeps each region's colour through to the printed model.
+Turn any SVG drawing into a coloured relief plaque: a flat base plate with your artwork raised from its surface. A multi-colour SVG keeps each region’s colour through to the printed model.
 
 ## What you get
 
@@ -19,7 +19,7 @@ The panel design exports a printable 3MF with the relief and colour data include
 
 Use the SVG wizard before you tune the panel dimensions:
 
-- Open **Prepare SVG…** and drop in your drawing. The wizard checks it, fixes common issues, and reads each named region's colour.
+- Open **Prepare SVG…** and drop in your drawing. The wizard checks it, fixes common issues, and reads each named region’s colour.
 - Adjust the panel size and **Relief height** until the preview looks right.
 - Press **Download 3MF** and slice it as you would any other mesh.
 

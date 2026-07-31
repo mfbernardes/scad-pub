@@ -1,6 +1,6 @@
 // Tests hiddenAdvancedCount, the pure count behind the essentials toggle's
 // "Show all settings (N more)" label AND its render gate (EssentialsToggle.tsx
-// returns null on zero) — the two are the same number on purpose, so a count
+// returns null on zero): the two are the same number on purpose, so a count
 // of zero can't produce a button that reveals nothing.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -44,7 +44,7 @@ test("hiddenAdvancedCount: a malformed @showIf fails open (still counted)", () =
 
 // The regression this gate exists for: a design that DECLARES advanced params
 // but has none currently reachable. "Does the design have an advanced param
-// anywhere" — the condition EssentialsToggle used to render on — is true here,
+// anywhere" (the condition EssentialsToggle used to render on) is true here,
 // while the count is zero, so the toggle would have offered "Show all
 // settings", revealed nothing when pressed, and renamed itself. Every advanced
 // param being @showIf-hidden at a design's own defaults is the real shape of

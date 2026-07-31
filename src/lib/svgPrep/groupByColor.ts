@@ -2,7 +2,7 @@
 // alone defines the regions. Shapes already inside a named <g id> region are
 // left alone (re-running is a no-op).
 // Refuses (returns an error, no change) when a loose shape sits under a
-// transform/clip/mask, since moving it would shift the geometry — group by
+// transform/clip/mask, since moving it would shift the geometry: group by
 // colour in the editor instead.
 
 import { SHAPE_TAGS, SVG_NS, hasStructuralChildren, iterElements, localName } from "./dom";
@@ -35,7 +35,7 @@ function pruneEmptyGroups(root: Element): void {
   }
 }
 
-/** Whether the shape already sits inside a `<g id>` — a named region the
+/** Whether the shape already sits inside a `<g id>`: a named region the
  *  designer (or an earlier group-by-colour run) chose. Such shapes are left
  *  where they are, which also makes group-by-colour idempotent. */
 function inNamedRegion(sh: Element, root: Element): boolean {
@@ -90,7 +90,7 @@ export function groupByColor(root: Element): GroupByColorResult {
     };
   }
 
-  // New groups are created in the shapes' deepest common ancestor — moving a
+  // New groups are created in the shapes' deepest common ancestor: moving a
   // shape within one container is safe, and OpenSCAD's import(id=…) applies
   // ancestor transforms, so a container-level transform (e.g. the
   // viewBox-origin fix's wrapper) keeps the regions registered. Only a

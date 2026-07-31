@@ -32,17 +32,17 @@ ScadPub packages the configurator, renderer, offline shell, and export flow into
 - **Parameter form** generated from OpenSCAD Customizer syntax; never drifts from the design.
 - **Conditional parameters**: `// @showIf <expr>` hides irrelevant controls. See [docs/annotations.md](docs/annotations.md).
 - **Collapsible groups**: `// @collapsed` above a section header starts it folded. See [docs/annotations.md](docs/annotations.md).
-- **Presets**: a picker has **Ready-made** and **Saved by you** sections. Save the current parameters as a named preset. Bundled presets use OpenSCAD's `parameterSets` JSON format, so they round-trip with the desktop Customizer.
+- **Presets**: a picker has **Ready-made** and **Saved by you** sections. Save the current parameters as a named preset. Bundled presets use OpenSCAD’s `parameterSets` JSON format, so they round-trip with the desktop Customizer.
 - **Responsive UI**: the desktop layout uses a full-bleed 3D canvas with a docked, resizable parameter panel. The mobile layout uses the same canvas with a persistent, detented bottom sheet. The theme switch and render-status indicator sit in the top bar on both layouts.
 - **Theme tokens**: shadcn/ui, Radix primitives, and Tailwind v4 sit on AA-tuned colour tokens. Deployments can override colours, radii, and fonts from the config.
-- **Progressive Web App (PWA)**: the app is installable and works offline after the first visit. The service worker precaches the boot-critical shell at install and fills in the rest — runtime assets, plus the renderer's own binary cache — at the first moment nothing is competing for the connection, so a first visit's own content isn't queued behind megabytes of offline bundle. Installing (or launching the installed app) warms it immediately, so an installed app is always complete offline whether or not that session rendered anything. The install affordance appears only when the browser offers it, plus a one-time post-export hint. See [docs/config.md](docs/config.md#ui-behaviour-and-pwa).
+- **Progressive Web App (PWA)**: the app is installable and works offline after the first visit. The service worker precaches the boot-critical shell at install and fills in the rest (runtime assets, plus the renderer’s own binary cache) at the first moment nothing is competing for the connection, so a first visit’s own content isn’t queued behind megabytes of offline bundle. Installing (or launching the installed app) warms it immediately, so an installed app is always complete offline whether or not that session rendered anything. The install affordance appears only when the browser offers it, plus a one-time post-export hint. See [docs/config.md](docs/config.md#ui-behaviour-and-pwa).
 - **Persistent user files**: uploaded fonts, Scalable Vector Graphics (SVG) files, and other referenced files are stored in IndexedDB and re-applied on next visit.
 - **Light/dark theme**: follows the operating system by default, toggles from the top bar, and persists.
 - **Accessibility**: Web Content Accessibility Guidelines (WCAG) 2.1 AA coverage includes keyboard-trapped modals, visible focus rings, live regions, `rem`-based font size, forced-colors support, and 320 px reflow. The axe-core smoke test fails on any serious or critical violation.
-- **Notices & log**: OpenSCAD `echo` notices, warnings, and `assert` failures appear in a **Messages** console opened from the top-bar bell. The bell shows a count badge while notices are pending, unless the readiness pill is up — that pill counts issues to review, so the bell stands down rather than showing a second, differently-derived number beside it. See [docs/config.md](docs/config.md#notice-badges-notices).
+- **Notices & log**: OpenSCAD `echo` notices, warnings, and `assert` failures appear in a **Messages** console opened from the top-bar bell. The bell shows a count badge while notices are pending, unless the readiness pill is up, that pill counts issues to review, so the bell stands down rather than showing a second, differently-derived number beside it. See [docs/config.md](docs/config.md#notice-badges-notices).
 - **Share & export**: design, non-default parameters, and selected preset are encoded in the URL hash. Devices that support the Web Share API use the native share sheet. Other devices copy a link or download a colour-bearing 3MF or PNG.
 - **Live preview with brake**: the preview re-renders after a debounce. Designs flagged `heavy` start in manual mode. Any render slower than ~6 s pauses live updates for that design.
-- **Import files**: importing is contextual — fonts import from a design's font menu (**Import font…**), SVGs from the **Prepare SVG…** control. The optional `fileImport` config adds a **Files** dialog that only *manages* what's imported (list, remove, clear). Imported fonts are mounted for OpenSCAD by family name; imported SVGs are referenced with `import()`. See [docs/config.md](docs/config.md#import-file-fileimport).
+- **Import files**: importing is contextual. Fonts import from a design’s font menu (**Import font…**), SVGs from the **Prepare SVG…** control. The optional `fileImport` config adds a **Files** dialog that only *manages* what’s imported (list, remove, clear). Imported fonts are mounted for OpenSCAD by family name; imported SVGs are referenced with `import()`. See [docs/config.md](docs/config.md#import-file-fileimport).
 - **Help**: the `?` button shows a config-driven user guide with one or more tabs. See [docs/config.md](docs/config.md#help-content-help).
 - **Open-source notice**: the ⓘ button lists bundled third-party components with licenses and source links, including the ScadPub version the site was built from (`git describe` of the building checkout, so it also works when ScadPub is forked, submoduled, or built from a sibling directory). A deployment can append its own notices via config. See [docs/config.md](docs/config.md#open-source-notices-licenses).
 
@@ -79,7 +79,7 @@ scadpub.config.json the config: title, branding, designs, help
 .github/workflows/ci.yml  unit tests + build + headless smoke; uploads dist
 ```
 
-The OpenSCAD WASM is version-pinned in `scripts/wasm-version.mjs` (`PINNED_WASM_VERSION`) and checksum-verified; `scripts/fetch-wasm.mjs` does the actual download. Set `OPENSCAD_VERSION` to fetch a different (unverified — no checksum) version.
+The OpenSCAD WASM is version-pinned in `scripts/wasm-version.mjs` (`PINNED_WASM_VERSION`) and checksum-verified; `scripts/fetch-wasm.mjs` does the actual download. Set `OPENSCAD_VERSION` to fetch a different (unverified: no checksum) version.
 
 ## Configure deployments
 
@@ -136,7 +136,7 @@ Serve `.wasm` files with `Content-Type: application/wasm`.
 These limits come from the bundled assets and the client-side OpenSCAD runtime:
 
 - Only the Liberation font set is bundled. Designs requiring other fonts may render differently with the fallback.
-- Imported files are referenced by name; a design's `import("x.svg")` must match the uploaded file's name. Fonts are matched by family via fontconfig, so their filename doesn't matter.
+- Imported files are referenced by name; a design’s `import("x.svg")` must match the uploaded file’s name. Fonts are matched by family via fontconfig, so their filename doesn’t matter.
 - The in-browser preview uses the same pinned OpenSCAD version as the native CLI but is not byte-identical in all cases.
 - No live OpenCSG preview; auto-render is debounced. Large text at fine facets is slower and uses more memory.
 

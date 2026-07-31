@@ -1,4 +1,4 @@
-// ViewerEditOnModel.tsx — the floating inline text editor a click/tap on the
+// ViewerEditOnModel.tsx: the floating inline text editor a click/tap on the
 // rendered mesh opens: direct on-model editing for a design that declares an
 // `@editOnModel` string param (see src/lib/editOnModel.ts + docs/annotations.md).
 //
@@ -6,15 +6,15 @@
 // the same param's text box in the Customize panel, which is always present and
 // fully keyboard-reachable; this is the "type on the sign" convenience over the
 // model, opened by a pointer gesture and by nothing else. There is no chip or
-// other permanent affordance over the viewer — one used to sit at the viewer's
-// top-left on mobile, where it covered the measurements panel, and the panel's
-// own text box already carries the accessible path.
+// other permanent affordance over the viewer: at the mobile viewer's top-left it
+// would cover the measurements panel, and the panel's own text box already
+// carries the accessible path.
 //
 // State (open/anchor) lives in ViewerStage so it can wire the Viewer's mesh pick
 // and suppress the one-time gesture hint while editing; this component owns the
 // card's clamped positioning and focus handling. Each keystroke calls the same
-// AppActions `change(param, value)` the panel's text box does — identical
-// debounced auto-render, StaleBanner, everything — so there's no special render
+// AppActions `change(param, value)` the panel's text box does: identical
+// debounced auto-render, StaleBanner, everything, so there's no special render
 // path here.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Param } from "../openscad/types";
@@ -23,7 +23,7 @@ import { useAppActions } from "../lib/appActions";
 import { clampEditorPosition, type Point } from "../lib/editOnModel";
 import { t } from "../lib/i18n";
 
-// The editor input's id — a fixed literal is fine because at most one editor is
+// The editor input's id: a fixed literal is fine because at most one editor is
 // open at a time (ViewerStage's single open flag), and it lets the <label>
 // associate and the mount effect focus without a forwarded ref through the
 // shared Input primitive.
@@ -102,7 +102,7 @@ export function ViewerEditOnModel({ param, value, anchor, mobile, wrapRef, onClo
       aria-label={t("editOnModel.open")}
       style={{ left: 0, top: 0, width: "15rem", maxWidth: "calc(100% - 1rem)" }}
     >
-      {/* The associated <label> is the input's accessible name — no aria-label
+      {/* The associated <label> is the input's accessible name: no aria-label
           on the input too (that would be a second, competing label source). */}
       <label htmlFor={EDITOR_INPUT_ID} className="text-[0.72rem] font-medium text-muted-foreground">
         {label}

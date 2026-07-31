@@ -1,8 +1,8 @@
-// StaleBanner.tsx — floating "preview out of date" alert over the viewer. This
+// StaleBanner.tsx: floating "preview out of date" alert over the viewer. This
 // is the primary signal that what you're looking at no longer matches the
 // controls: auto-render is off and a parameter changed since the last render.
 // The whole banner is the render call-to-action. While a manual render runs it
-// shows progress, so heavy renders — the main reason auto-render is ever off —
+// shows progress, so heavy renders (the main reason auto-render is ever off)
 // aren't silent. It renders nothing while the preview is live (auto-render on,
 // or nothing has changed), so the viewer chrome stays clean in the common case.
 import { RefreshCw as RefreshIcon } from "lucide-react";
@@ -19,7 +19,7 @@ interface Props {
 }
 
 export function StaleBanner({ autoRender, rendering, stalePreview, onRender, className = "" }: Props) {
-  // Auto-render keeps the preview live — the banner is a manual-mode concern only.
+  // Auto-render keeps the preview live: the banner is a manual-mode concern only.
   if (autoRender) return null;
   if (!rendering && !stalePreview) return null;
 
@@ -42,7 +42,7 @@ export function StaleBanner({ autoRender, rendering, stalePreview, onRender, cla
         </>
       ) : (
         <>
-          {/* Amber pulsing dot — "attention, but not an error". */}
+          {/* Amber pulsing dot: "attention, but not an error". */}
           <span
             className="size-[7px] shrink-0 animate-[pill-pulse_1.4s_ease-in-out_infinite] rounded-full bg-warn motion-reduce:animate-none"
             aria-hidden="true"

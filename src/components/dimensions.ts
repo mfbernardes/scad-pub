@@ -1,7 +1,7 @@
-// dimensions.ts — builds a 3D dimension-annotation overlay for the viewer: an
+// dimensions.ts: builds a 3D dimension-annotation overlay for the viewer: an
 // extension line + arrow-tipped dimension line + billboarded "NN.N mm" label for
 // each axis of a centred model's bounding box (width × depth × height). Like the
-// DimensionInfo panel, the figures are measured from the loaded mesh's bounds —
+// DimensionInfo panel, the figures are measured from the loaded mesh's bounds:
 // wholly downstream of the exported geometry, purely informative, never part of a
 // print.
 //
@@ -15,7 +15,7 @@ export interface DimensionsGroup extends THREE.Group {
   dispose(): void;
 }
 
-// Format a measurement like the reference CAD callouts — always one decimal,
+// Format a measurement like the reference CAD callouts, always one decimal,
 // so 120 reads "120.0 mm" and 8 reads "8.0 mm". Each dimension label here is
 // its own standalone billboarded sprite, so the " mm" unit is baked into
 // every one rather than trailing a joined "W × D × H" string.
@@ -42,7 +42,7 @@ function makeLabel(text: string, color: THREE.Color, worldHeight: number): THREE
   canvas.width = Math.ceil(textW + pad * 2);
   canvas.height = Math.ceil(fontPx + pad * 2);
 
-  // measureText is reset when the canvas is resized — restate the font.
+  // measureText is reset when the canvas is resized: restate the font.
   ctx.font = `600 ${fontPx}px system-ui, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -120,7 +120,7 @@ export function buildDimensions(size: THREE.Vector3, color: THREE.Color): Dimens
   const Y = new THREE.Vector3(0, 1, 0);
   const Z = new THREE.Vector3(0, 0, 1);
 
-  // Width (X) — along the lower front edge, offset out in −Y.
+  // Width (X): along the lower front edge, offset out in −Y.
   dim(
     new THREE.Vector3(-hx, -hy - gap, -hz),
     new THREE.Vector3(hx, -hy - gap, -hz),
@@ -130,7 +130,7 @@ export function buildDimensions(size: THREE.Vector3, color: THREE.Color): Dimens
     new THREE.Vector3(0, -1, 0),
     size.x
   );
-  // Depth (Y) — along the lower right edge, offset out in +X.
+  // Depth (Y): along the lower right edge, offset out in +X.
   dim(
     new THREE.Vector3(hx + gap, -hy, -hz),
     new THREE.Vector3(hx + gap, hy, -hz),
@@ -140,7 +140,7 @@ export function buildDimensions(size: THREE.Vector3, color: THREE.Color): Dimens
     new THREE.Vector3(1, 0, 0),
     size.y
   );
-  // Height (Z) — along the front left vertical edge, offset out in −X.
+  // Height (Z): along the front left vertical edge, offset out in −X.
   dim(
     new THREE.Vector3(-hx - gap, -hy, -hz),
     new THREE.Vector3(-hx - gap, -hy, hz),

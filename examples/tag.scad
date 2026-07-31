@@ -1,6 +1,6 @@
-// tag.scad — a small, self-contained example design that exercises the whole
+// tag.scad: a small, self-contained example design that exercises the whole
 // configurator: Customizer sections, slider/checkbox/string parameters, a
-// [Hidden] block, a `// @showIf` conditional control — and, importantly, both
+// [Hidden] block, a `// @showIf` conditional control, and, importantly, both
 // uploadable file kinds:
 //   • text() uses a font (try the "Import file" button to add your own TTF/OTF,
 //     then set `font` to its family name),
@@ -39,7 +39,7 @@ text_depth = 1; // [0.4:0.1:3]
 // @info Font
 // @review "Typeface"
 font = "Liberation Sans:style=Bold";
-// Colour of the raised text — any OpenSCAD colour name or "#rrggbb". Exported
+// Colour of the raised text: any OpenSCAD colour name or "#rrggbb". Exported
 // into the 3MF so the viewer (and colour-capable slicers) show it.
 // @info Text colour
 text_color = "#e23b3b";

@@ -24,7 +24,7 @@ export type ViewerStyle = "plain" | "studio";
 export interface ViewerControls {
   /**
    * Whether the viewer's measure (dimensions) toggle is offered (default true).
-   * Set false to hide the ruler button — and with it the W×D×H overlay and the
+   * Set false to hide the ruler button, and with it the W×D×H overlay and the
    * measurements/@info panel, which are only reachable through that toggle.
    */
   measure?: boolean;
@@ -60,7 +60,7 @@ export interface ViewerConfig {
    * Whether the viewer starts with its reference grid drawn (default "off").
    * Unlike `controls` below this does NOT gate a control: the HUD's grid
    * toggle is always offered regardless. It only seeds that toggle's value on
-   * a visitor's first-ever load — once they've used the toggle, their
+   * a visitor's first-ever load, once they've used the toggle, their
    * persisted choice wins (see src/lib/viewerPrefs.ts).
    */
   grid?: "off" | "on";
@@ -93,16 +93,16 @@ export interface RenderResult {
   cached?: boolean;
   /**
    * Parameter names the request tried to define but the freshly-fetched `.scad`
-   * source no longer declares — a sign this JS bundle is stale relative to the
+   * source no longer declares: a sign this JS bundle is stale relative to the
    * deployed sources (see `orphanedDefines`). Present only when non-empty; the
    * UI uses it to prompt the user to reload.
    */
   staleDefines?: string[];
   /**
    * True when this failure means the renderer's asset bootstrap (WASM/glue
-   * import, shared sources, fonts) never completed — as opposed to an
+   * import, shared sources, fonts) never completed, as opposed to an
    * ordinary model failure (bad OpenSCAD source/parameters). See M1: the
-   * worker resets its bootstrap state on such a failure, so the very next
+   * worker resets its bootstrap state on such a failure, so the next
    * render() call retries the whole bootstrap automatically. A caller may use
    * this to avoid presenting a "that combination of settings didn't work"
    * message about a renderer that never started, or to surface a distinct
@@ -115,9 +115,9 @@ export interface RenderResult {
 /**
  * A throttled progress update posted by the render worker while it downloads
  * a large bootstrap asset (currently only the ~10 MB WASM binary, on a Cache
- * Storage miss — see worker.ts's resolveWasmModule). Never posted on a
+ * Storage miss, see worker.ts's resolveWasmModule). Never posted on a
  * cache hit (nothing to report progress on), and never once the worker's
- * `{ type: "ready" }` message has fired for this worker instance — see
+ * `{ type: "ready" }` message has fired for this worker instance, see
  * runner.ts's `onProgress` doc.
  */
 export interface WorkerProgress {
@@ -137,7 +137,7 @@ export interface WorkerProgress {
 /**
  * Worker -> runner: sent once a render worker has compiled a
  * WebAssembly.Module ITSELF (never sent for a module the worker instead
- * received from the runner — see `WorkerCommand`'s "module" case and
+ * received from the runner, see `WorkerCommand`'s "module" case and
  * worker.ts's `postModuleOnce`). The runner keeps it and hands it to the
  * NEXT worker it spawns (see runner.ts's `spawn()`), so a respawn after
  * latest-wins cancellation costs only re-instantiation, not a repeat
@@ -150,7 +150,7 @@ export interface WorkerModuleMessage {
 }
 
 /**
- * Runner -> worker control messages, posted once immediately after spawn() —
+ * Runner -> worker control messages, posted once immediately after spawn():
  * before the first render request, and safely before the worker's module
  * script has necessarily finished evaluating (a module worker queues
  * messages until it installs its onmessage handler). `RenderRequest` carries
@@ -160,7 +160,7 @@ export interface WorkerModuleMessage {
  *    this runner's lifetime) compiled, instead of re-fetching/recompiling
  *    the wasm binary from scratch.
  *  - "warmup": nothing to reuse yet (the runner's first-ever worker, or a
- *    browser that can't structured-clone a WebAssembly.Module) — still
+ *    browser that can't structured-clone a WebAssembly.Module), still
  *    starts asset bootstrap at spawn time rather than waiting for the first
  *    (400ms-debounced) render message.
  */
@@ -224,7 +224,7 @@ export type Param = ParamBase &
          * This dropdown selects an OpenSCAD `font` family. Set by gen-schema from an
          * explicit `// @font` annotation. Lets a design keep the native `// [...]`
          * dropdown (rendered by the desktop Customizer) while still getting the
-         * in-app availability check / import affordance — see the `string` member.
+         * in-app availability check / import affordance, see the `string` member.
          */
         isFont?: boolean;
       }
@@ -249,8 +249,8 @@ export type Param = ParamBase &
          * This string is the design's on-model editable text. Set by gen-schema
          * from an explicit `// @editOnModel` annotation (valid only on a plain,
          * non-font string param, at most one per design). The viewer lets the
-         * user edit it directly on the rendered mesh — a click/tap opens a
-         * floating inline text editor over the model — in addition to the panel's
+         * user edit it directly on the rendered mesh: a click/tap opens a
+         * floating inline text editor over the model. In addition to the panel's
          * own text box. See src/lib/editOnModel.ts and ViewerEditOnModel.tsx.
          */
         editOnModel?: true;
@@ -283,7 +283,7 @@ export interface Design {
   /**
    * Optional bundled-preset thumbnails (config's `designs[].presets.images`;
    * see docs/config.md). Maps a bundled preset's EXACT name (as it appears in
-   * the sibling parameterSets file) to a served image URL — gen-schema fails
+   * the sibling parameterSets file) to a served image URL: gen-schema fails
    * the build if a key doesn't match a real bundled preset name. When set
    * (non-empty), PresetPicker renders that design's bundled presets as a card
    * grid (src/lib/presetCard.ts parses each name into overline/title/badge)
@@ -297,7 +297,7 @@ export interface Design {
   /**
    * Curated label overrides for a review summary, gathered from each
    * declared parameter's own `// @review "<label>"` annotation (see
-   * docs/annotations.md) — there is no config-level source. Maps a
+   * docs/annotations.md): there is no config-level source. Maps a
    * parameter's name to the label its value is shown under in the summary,
    * in the order gen-schema walks this design's parsed params (file order),
    * not insertion/alphabetical order. Several params sharing the same label
@@ -308,7 +308,7 @@ export interface Design {
   /**
    * Optional short explanatory note for a review summary, from the design's
    * own file-level `// @reviewNote "<text>"` annotation (see
-   * docs/annotations.md) — there is no config-level source — e.g. "Text
+   * docs/annotations.md) (there is no config-level source) e.g. "Text
    * prints in capitals even though you typed it in lowercase." A generic
    * hook for a design whose output transforms a parameter's raw value in a
    * way worth calling out; the design's own comment supplies the wording,
@@ -325,7 +325,7 @@ export interface HelpSection {
 }
 
 /** One tab of the in-app help: a labelled group of sections with its own
- *  optional intro. A config may supply many tabs; the Help modal renders a tab
+ *  optional intro. A config may supply multiple tabs; the Help modal renders a tab
  *  strip when any are present. */
 export interface HelpTab {
   /** Tab-strip label. */
@@ -344,7 +344,7 @@ export interface HelpContent {
   intro?: string;
   /** Single-pane sections (the default form). */
   sections?: HelpSection[];
-  /** When present, the modal renders a tab strip; many tabs are supported. */
+  /** When present, the modal renders a tab strip; multiple tabs are supported. */
   tabs?: HelpTab[];
 }
 
@@ -420,12 +420,12 @@ export interface NoticeCategory {
   /** The design-defined marker, matched as `: <marker>:` within an echo. */
   marker: string;
   /**
-   * Badge / notice noun, already normalised to both CLDR forms — `other` is
+   * Badge / notice noun, already normalised to both CLDR forms: `other` is
    * the plural/default form, `one` the singular (config's plain-string
    * shorthand sets both to the same word; defaults to the marker when
    * `notices[].label` is entirely absent). Select between them with
    * `src/lib/i18n.ts`'s `selectPlural(count, label)` rather than a bespoke
-   * `count === 1` check — the same Intl.PluralRules-backed logic `tn()` uses
+   * `count === 1` check: the same Intl.PluralRules-backed logic `tn()` uses
    * for catalogue keys.
    */
   label: { one: string; other: string };
@@ -435,7 +435,7 @@ export interface NoticeCategory {
   attention?: boolean;
   /**
    * Whether this category's notices are a SYMPTOM of a missing font rather
-   * than their own independently-actionable issue — e.g. a design that warns
+   * than their own independently-actionable issue: e.g. a design that warns
    * about text overflowing once Fontconfig substituted a different family.
    * Only meaningful alongside `attention: true` (an unflagged category never
    * reaches the attention list in the first place): while a substitute font
@@ -457,7 +457,7 @@ export type PopupMode = "always" | "once" | "dismissible" | "picker";
 export interface PopupNotice {
   /** Dialog header / title. */
   header: string;
-  /** Dialog body — a Markdown-subset string (supports links). */
+  /** Dialog body: a Markdown-subset string (supports links). */
   body: string;
   /**
    * Display policy: "always" (every visit), "once" (first visit only), or
@@ -466,7 +466,7 @@ export interface PopupNotice {
   mode: PopupMode;
   /**
    * Label for the primary (confirm) button. Defaults to "OK". A consumer can
-   * set an action-oriented call to action ("Start designing", "Let's go") —
+   * set an action-oriented call to action ("Start designing", "Let's go"):
    * clicking it closes the popup and, when there's more than one design, opens
    * the design picker so the user's obvious next step is to choose what to make.
    */
@@ -482,7 +482,7 @@ export interface PopupNotice {
 
 // Rule this commit establishes: `designs.json` (the `Schema` below, and the
 // types describing it) is the APP-FACING artifact and is free to differ from
-// scadpub.config.json's own surface where the app's needs genuinely differ —
+// scadpub.config.json's own surface where the app's needs genuinely differ,
 // but where both express the same grouping (as `viewer` now does on both
 // sides: style/restOnGrid/grid/controls.*), they mirror each other rather
 // than drifting into two different shapes for one idea. See scripts/lib/
@@ -500,12 +500,12 @@ export interface UiConfig {
   install?: "auto" | "off";
   /**
    * Whether each parameter control shows the underlying OpenSCAD variable name
-   * alongside its label (default false — it's developer detail). Shown as
+   * alongside its label (default false: it's developer detail). Shown as
    * visually-secondary monospace text when enabled.
    */
   showVarName?: boolean;
   /**
-   * Whether the "Save image (PNG)" action is offered (default true — the button
+   * Whether the "Save image (PNG)" action is offered (default true: the button
    * is shown). Set false to hide the Save-image (PNG) action entirely, in both
    * the desktop and mobile secondary-action surfaces.
    */
@@ -517,10 +517,10 @@ export interface UiConfig {
   /**
    * Optional inline success panel shown above the action dock after a
    * successful export (see src/components/ExportSuccess.tsx). Absent -> the
-   * feature is off entirely — no panel is ever shown, on any export. The
+   * feature is off entirely: no panel is ever shown, on any export. The
    * panel's headline/body always come from the i18n catalogue
    * (`exportSuccess.title`/`.body` in src/locales/en.json, overridable via the
-   * config's `strings` block like any other chrome text) — this object used
+   * config's `strings` block like any other chrome text): this object used
    * to carry its own separate `title`/`body` override fields, a second path
    * to the same two keys; removed. None of these fields affect geometry
    * (absent from renderHash).
@@ -529,7 +529,7 @@ export interface UiConfig {
     /**
      * Help-modal tab label to deep-link the panel's "Open printing help"
      * action to (HelpModal's `initialTab`). Validated at build time against
-     * this config's `help` tabs — gen-schema fails the build if no tab
+     * this config's `help` tabs: gen-schema fails the build if no tab
      * carries this exact label. Omit to hide the action entirely.
      */
     helpTab?: string;
@@ -547,14 +547,14 @@ export interface Schema {
   renderHash?: string;
   /**
    * The pinned OpenSCAD WebAssembly snapshot version (set by gen-schema from
-   * scripts/wasm-version.mjs). Names the render worker's binary cache — and
-   * the service worker warms the same cache — so a WASM bump evicts stale
+   * scripts/wasm-version.mjs). Names the render worker's binary cache, and
+   * the service worker warms the same cache, so a WASM bump evicts stale
    * binaries everywhere in one edit.
    */
   wasmVersion?: string;
   /**
    * H4: per-file content digests (short sha256 hex) for the render worker's big
-   * binary assets — the pinned wasm binary and each bundled font. The worker
+   * binary assets. The pinned wasm binary and each bundled font. The worker
    * (worker.ts) and the service worker's precache warm-up (via
    * precache-manifest.json's `bin.urls`, generated from this same field) both
    * append `?v=<digest>` to a binary's fetch URL, so the fetch/Cache-Storage
@@ -570,7 +570,7 @@ export interface Schema {
     fonts?: Record<string, string>;
   };
   /**
-   * The ScadPub version this site was built with — `git describe` of the
+   * The ScadPub version this site was built with: `git describe` of the
    * ScadPub checkout that ran the build (or the $SCADPUB_VERSION override); see
    * scripts/lib/version.mjs. Displayed in the open-source licenses modal.
    * Absent when the build tree carried no git metadata and no override.
@@ -626,7 +626,7 @@ export interface Schema {
   /** Model format OpenSCAD exports and the viewer parses (build-time; default "3mf"). */
   format: ModelFormat;
   /**
-   * The 3D viewer's presentation, framing, and per-control visibility — see
+   * The 3D viewer's presentation, framing, and per-control visibility, see
    * `ViewerConfig`. Display-only in every field: none of it affects the
    * exported bytes or the render cache.
    */
@@ -642,20 +642,20 @@ export interface Schema {
    * Embedded family names of the bundled fonts (extracted from their `name`
    * tables at build time). The app matches a design's `font` parameter against
    * this set (plus the families of any user-imported fonts) to decide
-   * availability — by real family name, not filename. Empty when no bundled
+   * availability, by real family name, not filename. Empty when no bundled
    * font's family could be read.
    */
   fontFamilies: string[];
   /**
    * Face descriptions of the bundled fonts ({ family, style }, from their
    * `name` tables at build time), display-ordered. The app's font selector
-   * lists these — merged with the faces of any user-imported fonts — under
+   * lists these (merged with the faces of any user-imported fonts) under
    * friendly names ("Liberation Sans Bold") instead of raw Fontconfig strings.
    */
   fontFaces?: { family: string; style: string }[];
   /**
    * Optional generic "Import file" control in the preset panel. Lets the user
-   * supply any file their designs reference but the app can't bundle — a font, an
+   * supply any file their designs reference but the app can't bundle: a font, an
    * SVG to `import()`, a `surface()` data file, etc. Fonts (by extension) are
    * mounted where OpenSCAD's fontconfig finds them; every other file is mounted
    * at the render FS root so a design can reference it by name. Null/absent hides

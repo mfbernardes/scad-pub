@@ -1,4 +1,4 @@
-// editOnModel.test.mjs — the DOM-free logic behind on-model text editing:
+// editOnModel.test.mjs: the DOM-free logic behind on-model text editing:
 // the click-vs-drag gesture gate, the editor position clamping, and the
 // design's editOnModel-param lookup. These are the bits worth pinning without
 // a browser; the three.js raycast + React wiring are exercised by smoke.mjs.
@@ -14,7 +14,7 @@ import {
 
 test("isModelClick: a still (or tiny) pointer pair is a click", () => {
   assert.equal(isModelClick({ down: { x: 100, y: 100 }, up: { x: 100, y: 100 } }), true);
-  // Just under the threshold (3-4-5 triangle, 5px) still counts.
+  // Under the threshold (3-4-5 triangle, 5px) still counts.
   assert.equal(isModelClick({ down: { x: 0, y: 0 }, up: { x: 3, y: 4 } }), true);
 });
 
@@ -80,7 +80,7 @@ test("clampEditorPosition (mobile): a hit is pinned into the top ~40% of the vie
 
 test("clampEditorPosition: an editor larger than the bounds still yields the margin", () => {
   // Degenerate case (card wider AND taller than a tiny viewer): never NaN,
-  // never negative — falls back to the margin so the card at least starts
+  // never negative. Falls back to the margin so the card at least starts
   // on-screen rather than being pushed off it.
   const tiny = { width: 100, height: 100 };
   const big = { width: 240, height: 200 };

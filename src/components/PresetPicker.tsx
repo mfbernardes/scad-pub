@@ -1,8 +1,8 @@
-// PresetPicker.tsx — a plain preset list (Bundled / Yours), with a
+// PresetPicker.tsx: a plain preset list (Bundled / Yours), with a
 // "Save current as…" row. Used as a popover on desktop (CommandBar) and as the
 // Presets tab on mobile.
 //
-// The three list-management actions — save-as, import, export — render two
+// The three list-management actions (save-as, import, export) render two
 // ways, chosen by the `compact` prop: two standing rows on desktop, one row on
 // the mobile sheet. Both presentations compose the SAME
 // `saveField`/`importButton`/`exportButton` below, so what the actions do
@@ -41,7 +41,7 @@ import {
 } from "./ui/alert-dialog";
 
 /* One preset row. `preset-picker__item` is a JS hook too (the roving-focus
-   querySelector below), not just styling. Rows read as tappable cards — a
+   querySelector below), not only styling. Rows read as tappable cards: a
    ready-made preset is a choice, not a line in a list; the selected one keeps
    its accent fill. */
 const itemClass = (isSelected: boolean) =>
@@ -59,7 +59,7 @@ const itemClass = (isSelected: boolean) =>
 const sectionHeadingClass =
   "font-display mt-2 mb-[0.2rem] px-[0.4rem] text-[0.72rem] font-semibold uppercase tracking-[0.04em] text-muted-foreground";
 
-// One bundled-preset card (design.presetImages is set) — same art treatment
+// One bundled-preset card (design.presetImages is set): same art treatment
 // as DesignGallery.tsx's design cards: an aspect-[4/3] object-cover
 // thumbnail, a selected-state checkmark badge instead of a filled
 // background (the plain list's `itemClass` fill would clash with a photo),
@@ -87,8 +87,8 @@ interface Props {
   inline?: boolean;
   /**
    * Fold the footer into ONE row (mobile) instead of two standing rows
-   * (desktop): the save field keeps the row, and import/export — the two
-   * actions a first-time visitor never needs — move into a "⋮" overflow at its
+   * (desktop): the save field keeps the row, and import/export. The two
+   * actions a first-time visitor never needs. Move into a "⋮" overflow at its
    * end.
    *
    * Two `border-t`-separated rows are ~95px of a mobile sheet whose half detent
@@ -116,7 +116,7 @@ export function PresetPicker({
   // Whether the compact footer's import/export overflow is open (compact only).
   const [manageOpen, setManageOpen] = useState(false);
   // Overridable via the config's `strings` block (src/locales/en.json's
-  // presets.title) — see docs/config.md's "Text overrides".
+  // presets.title), see docs/config.md's "Text overrides".
   const presetsLabel = t("presets.title");
   // Preset images are optional per preset (docs/config.md's "Bundled presets"
   // note). A bundled preset that has a configured image renders as a card; one
@@ -132,8 +132,8 @@ export function PresetPicker({
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const sectionsRef = useRef<HTMLDivElement>(null);
 
-  // Roving arrow-key navigation across every preset row — the rows are plain
-  // buttons (natively tabbable), so this just layers Up/Down/Home/End
+  // Roving arrow-key navigation across every preset row: the rows are plain
+  // buttons (natively tabbable), so this only layers Up/Down/Home/End
   // movement on top for keyboard users, like a typical listbox would give.
   const onListKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
@@ -240,7 +240,7 @@ export function PresetPicker({
     </div>
   ) : null;
 
-  // Import / export saved presets as an OpenSCAD parameterSets file — the same
+  // Import / export saved presets as an OpenSCAD parameterSets file: the same
   // format the desktop Customizer reads and writes, so presets carry between
   // the two. Shared by both footers like `saveField`, bar the width/alignment
   // and the coarse-pointer height each layout needs.
@@ -292,14 +292,14 @@ export function PresetPicker({
   // Mobile: the save field keeps the one row it was going to cost anyway, and
   // import/export sit in the "⋮" at its end. Both footers are FUNCTIONS, not
   // values: PresetPicker re-renders on every parameter change (it takes
-  // `values`), and building the branch that isn't used — a whole Popover tree,
-  // either way — on each of those was pure waste.
+  // `values`), and building the branch that isn't used. A whole Popover tree,
+  // either way, on each of those was pure waste.
   const compactFooter = () => (
     <div className="flex shrink-0 items-center gap-[0.4rem] border-t px-[0.6rem] py-[0.4rem]">
       {saveField}
       <Popover open={manageOpen} onOpenChange={setManageOpen}>
         {/* `outline-none` suppresses index.css's global :focus-visible
-            outline, so the replacement ring is required — this is a native
+            outline, so the replacement ring is required. This is a native
             <button> (PopoverTrigger needs the ref) and gets none of shadcn
             Button's focus styling. `size-11` keeps it at the coarse-pointer
             target floor the dock buttons and sheet tabs share; `ml-auto` pins

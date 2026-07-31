@@ -1,4 +1,4 @@
-// licenses.ts — open-source attribution notice for ScadPub itself and the
+// licenses.ts: open-source attribution notice for ScadPub itself and the
 // third-party components shipped in this app. Listed to satisfy each
 // component's license terms (attribution + license/source availability).
 // Build-only tooling (Vite, TypeScript, etc.) is not bundled into what we
@@ -6,7 +6,7 @@
 //
 // No version here is a literal: every one is supplied by the build (see
 // BuildVersions below) so an attribution can't claim a version the app doesn't
-// ship. Hand-copied literals drifted in exactly that way — the list read
+// ship. Hand-copied literals drifted in exactly that way: the list read
 // "React 18.3" while the app bundled 19.x. What's hard-coded is only what a
 // dependency bump can't invalidate: names, copyright lines, license texts.
 import oflText from "../licenses/OFL-1.1.txt?raw";
@@ -18,14 +18,14 @@ import type { SoftwareLicense } from "../openscad/types";
  * rather than a wrong one.
  */
 export interface BuildVersions {
-  /** ScadPub itself — `git describe` of the building checkout (schema.scadpubVersion). */
+  /** ScadPub itself: `git describe` of the building checkout (schema.scadpubVersion). */
   scadpub?: string;
   /** The pinned OpenSCAD WASM snapshot the renderer fetches (schema.wasmVersion). */
   openscad?: string;
   /**
    * Installed npm versions of the bundled packages, keyed by package name
    * (schema.componentVersions, from scripts/lib/dep-versions.mjs). Read from
-   * the node_modules Vite bundles from — not imported from the packages
+   * the node_modules Vite bundles from, not imported from the packages
    * themselves, which would pull three.js into this modal's eager chunk (it is
    * statically imported by App.tsx) and undo the Viewer's lazy-load split.
    */
@@ -133,7 +133,7 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
     },
     {
       name: "Atkinson Hyperlegible",
-      // The Fontsource package's version — the typeface's own release is not
+      // The Fontsource package's version: the typeface's own release is not
       // recorded in what we bundle, and the package is what we redistribute.
       version: pkg("@fontsource/atkinson-hyperlegible"),
       license: "OFL-1.1",
@@ -152,7 +152,7 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
 /**
  * Merges a deployment's config-supplied `licenses[]` entries into the built-in
  * list, matching on `name` (trimmed, case-insensitive) instead of appending
- * blindly — the same typeface can legitimately be bundled twice for different
+ * blindly: the same typeface can legitimately be bundled twice for different
  * reasons (ScadPub's own chrome font vs. a deployment's render font), and
  * without this a shared name shows up as two attributions for what a reader
  * sees as one component.
@@ -167,7 +167,7 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
  * survive, combined into a single line rather than one replacing the other.
  *
  * A same-name entry that disagrees on `license` or `copyright` is treated as a
- * genuinely different component that happens to share a name — it is kept as
+ * genuinely different component that happens to share a name: it is kept as
  * its own separate entry rather than merged, since silently blending
  * conflicting legal facts would misattribute one of them.
  *

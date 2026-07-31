@@ -1,12 +1,12 @@
 # Third-party licenses
 
-ScadPub's own source code is **MIT** (see [LICENSE](LICENSE)). It bundles the
+ScadPub’s own source code is **MIT** (see [LICENSE](LICENSE)). It bundles the
 third-party components below. This file is informational, not legal advice.
 
 ## Your `.scad` models are not affected
 
 The models you publish are **input data** to OpenSCAD, not a derivative work of
-it — running them through the engine no more licenses them than compiling
+it: running them through the engine no more licenses them than compiling
 proprietary source with GCC licenses your source. **You may bundle proprietary
 `.scad` models in the output and distribute (or sell) the resulting site**,
 regardless of the licenses below.
@@ -31,20 +31,20 @@ regardless of the licenses below.
 
 OpenSCAD-WASM is the only strong-copyleft component. ScadPub loads it as a
 **separate WebAssembly module in a Web Worker** and invokes it like a subprocess
-(it feeds `.scad` in and reads geometry out); it does **not** link OpenSCAD's
-code into ScadPub's own JavaScript or derive from OpenSCAD source. That is a
-"mere aggregation" of two independently-licensed programs, so ScadPub's own code
+(it feeds `.scad` in and reads geometry out); it does **not** link OpenSCAD’s
+code into ScadPub’s own JavaScript or derive from OpenSCAD source. That is a
+“mere aggregation” of two independently-licensed programs, so ScadPub’s own code
 stays under MIT.
 
 When you **distribute a built site**, you redistribute OpenSCAD-WASM, so you must
 honor its GPL: keep its license and attribution (ScadPub surfaces this in the
 in-app **ⓘ Open-source licenses** panel and `src/lib/licenses.ts`) and point
-recipients to its corresponding source — the public pinned snapshot URL above.
-This obligation is limited to that one component; it does not reach ScadPub's MIT
+recipients to its corresponding source. The public pinned snapshot URL above.
+This obligation is limited to that one component; it does not reach ScadPub’s MIT
 code or your `.scad` models.
 
 > If you want to avoid shipping any GPL component, you would need to replace the
-> in-browser OpenSCAD-WASM engine — there is currently no permissively-licensed
+> in-browser OpenSCAD-WASM engine: there is currently no permissively-licensed
 > drop-in equivalent.
 
 ## Build / test only (NOT redistributed in `dist/`)

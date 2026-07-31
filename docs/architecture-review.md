@@ -50,11 +50,11 @@ existing `checkId` on the app id in `generate()`.
 ### 3. A thrown render failure is invisible in the app
 
 `doRender`'s catch (`src/App.tsx:190-194`) distinguishes `SupersededError`
-(correctly swallowed) from everything else, but the "everything else"
+(correctly swallowed) from everything else, but the “everything else”
 branch only resets `lastKeyRef` and the spinner. A worker crash surfaced via
 `runner`'s `failInflight` (worker `onerror`/`onmessageerror`,
 `runner.ts:195-203`) therefore shows **no toast and no console entry**; only
-structured `r.ok === false` results get the "Render failed" toast
+structured `r.ok === false` results get the “Render failed” toast
 (`App.tsx:177-181`). The UI stops spinning with a stale model on
 screen. Add an error toast (or synthesize a failure `RenderResult`) in that
 branch.
@@ -65,7 +65,7 @@ The superseding render owns the spinner now. That invariant (a
 superseding render always follows a supersession) is load-bearing and
 undocumented at the site that depends on it.
 
-### 4. The visual-regression mask targets classes that don't exist
+### 4. The visual-regression mask targets classes that don’t exist
 
 `scripts/screenshots.mjs:29-30` masks `.viewer, .viewer-overlay` (real) and
 `.status, .log, .diagnostics`, but no element in `src/` carries `status`,
@@ -129,7 +129,7 @@ per-section check functions would pay for itself on the next change.
 
 ### 8. `capture-screens.mjs` shells out to a system `zip`
 
-`capture-screens.mjs:223` uses `execFileSync("zip", …)`. The repo's own
+`capture-screens.mjs:223` uses `execFileSync("zip", …)`. The repo’s own
 tooling principle is pure-Node/cross-platform (`fetch-wasm.mjs:8`, "no
 bash/curl/unzip needed"), and Windows has no `zip`. `fflate` is already a
 dependency (used to *unzip* in `fetch-wasm.mjs`) and can write the archive.
@@ -142,7 +142,7 @@ The logic layer is well covered (19 `src/lib`+`src/openscad` modules plus a
 1,064-line `gen-schema` suite). Not covered by anything faster than the
 single-config smoke run: `worker.ts` (the WASM driver; `renderArgs.ts`
 exists precisely because its helpers were unreachable from `npm test`,
-`renderArgs.test.mjs:1-4`), every React component, and every hook. That's a
+`renderArgs.test.mjs:1-4`), every React component, and every hook. That’s a
 defensible trade-off for a UI this size, but `worker.ts`'s pure parts
 (mount-path computation, orphaned-define scan already in `scad.ts`) should
 keep migrating out to testable modules as they grow.
@@ -151,7 +151,7 @@ keep migrating out to testable modules as they grow.
 
 `.github/workflows/ci.yml` runs typecheck + unit + smoke, but:
 
-- **`npm run vis` never runs in CI**: visual regressions aren't gated
+- **`npm run vis` never runs in CI**: visual regressions aren’t gated
   anywhere. The baselines are environment-pinned, so the honest options are
   a dedicated pinned runner/container for vis, or accepting (and
   documenting) that vis is local-only.
@@ -183,7 +183,7 @@ keep migrating out to testable modules as they grow.
 
 ## Strengths worth preserving
 
-Recorded so a future refactor doesn't accidentally regress them:
+Recorded so a future refactor doesn’t accidentally regress them:
 
 - **Latest-wins render cancellation**: terminate-and-respawn, staleness
   guards on both the worker handle and the async L2 lookup

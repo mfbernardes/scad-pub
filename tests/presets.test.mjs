@@ -95,7 +95,7 @@ test("toParameterSetsFile → parseParameterSetsFile round-trips typed values", 
 });
 
 test("parameterSets strings parse back to typed values", () => {
-  // On disk everything is a string — OpenSCAD's own format.
+  // On disk everything is a string. OpenSCAD's own format.
   const file = {
     fileFormatVersion: "1",
     parameterSets: {

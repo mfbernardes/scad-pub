@@ -1,4 +1,4 @@
-// smoke.mjs — end-to-end check of the built app in a real browser, all in one
+// smoke.mjs: end-to-end check of the built app in a real browser, all in one
 // process (an in-process static server for dist/ + headless Chromium). Confirms
 // the default design auto-renders, every design in the config renders, and a 3MF
 // + PNG export work via the UI. Design-specific checks run only when that design
@@ -28,7 +28,7 @@ import {
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
-// means it may be shut — so click the Output bell when it's not already open.
+// means it may be shut, so click the Output bell when it's not already open.
 // The bell's label is "Open Messages" while closed.
 async function openConsole(page) {
   if (await page.locator(".output-console").count()) return;
@@ -38,7 +38,7 @@ async function openConsole(page) {
 }
 
 // How many messages the Output bell currently has pending, read from its
-// `data-notice-count` hook rather than the "(N notices)" in its aria-label —
+// `data-notice-count` hook rather than the "(N notices)" in its aria-label:
 // the count has to be readable whether or not the badge is rendering it (see
 // OutputToggle's `showCount`), and a hook doesn't break when the copy changes.
 async function bellNoticeCount(page) {
@@ -47,7 +47,7 @@ async function bellNoticeCount(page) {
 }
 
 // The bell's count badge shows exactly when there are messages to count AND no
-// readiness pill is up to own the count instead — see OutputToggle.tsx for why
+// readiness pill is up to own the count instead, see OutputToggle.tsx for why
 // the bell's message tally and the pill's issue tally legitimately differ.
 // Asserted as a biconditional so it says something in every config and every
 // readiness state, rather than skipping when a state doesn't match one shape:
@@ -65,7 +65,7 @@ async function checkBellCount(page, check, where) {
 }
 
 // "Reset to defaults" confirms via an AlertDialog only when the params differ
-// from the defaults — click the button, then the dialog's Reset if it appears.
+// from the defaults: click the button, then the dialog's Reset if it appears.
 async function resetDefaults(page) {
   await page.getByRole("button", { name: "Reset to defaults" }).click();
   const dlg = page.getByRole("alertdialog");
@@ -92,7 +92,7 @@ async function selectDesign(page, id) {
 
 // Configurable popup (schema.popup): a welcome notice on load. It overlays
 // the app behind a modal backdrop that intercepts pointer events, so dismiss
-// it before driving the UI — ticking "Don't show this again" (when the mode
+// it before driving the UI: ticking "Don't show this again" (when the mode
 // offers it) persists the dismissal so it stays gone across the reloads the
 // later checks perform. The dialog's accessible name is the configured
 // header, so look it up from the schema rather than hardcoding one config's.
@@ -120,7 +120,7 @@ async function checkWelcomePopup({ page, check, schema }) {
     }
     if (schema.popup.mode === "picker" && schema.designs.length > 1) {
       // Picker mode embeds the design gallery directly and has NO primary CTA
-      // button — the visitor's next step (choosing what to make) IS the popup.
+      // button: the visitor's next step (choosing what to make) IS the popup.
       // Picking a card selects that design and dismisses the popup.
       const card = popup.locator("button[data-design]").first();
       check((await card.count()) > 0, "picker popup shows selectable design cards");
@@ -162,13 +162,13 @@ async function checkWelcomePopup({ page, check, schema }) {
 }
 
 // File import is CONTEXTUAL now: the Files action (BarActions, a toolbar icon
-// button opening the FilesModal) only MANAGES imported files — it lists them
+// button opening the FilesModal) only MANAGES imported files. It lists them
 // (name, type, size), removes one via its row X, and clears all, plus an empty
-// state — and carries NO generic import button. Importing happens at the
+// state, and carries NO generic import button. Importing happens at the
 // control that needs the file. This check (a) confirms the management-only
 // dialog + empty state, then (b) drives a real import through a contextual
-// control — the tag design's `@font` param renders a FontSelect whose hidden
-// file input is the same addFile path as its in-dropdown "Import font…" — and
+// control: the tag design's `@font` param renders a FontSelect whose hidden
+// file input is the same addFile path as its in-dropdown "Import font…", and
 // verifies the file surfaces in the list with its type/size, persists across a
 // reload (IndexedDB), removes via the row X, and clears via "Clear all".
 async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
@@ -178,10 +178,10 @@ async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
     return;
   }
   // FilesModal (a Dialog) doesn't persist across a reload, so it must be
-  // re-opened each time — exact match: a substring "Files" would also catch
+  // re-opened each time: exact match: a substring "Files" would also catch
   // "Clear all imported files" once the modal is open.
   // FilesModal is code-split (App.tsx loads it through `lazy()`), so the dialog
-  // mounts a tick or two after the click rather than synchronously — wait for it
+  // mounts a tick or two after the click rather than synchronously: wait for it
   // here rather than at each call site, so neither an assertion nor the Escape
   // in closeFiles below can run against a dialog that hasn't appeared yet.
   const gotoFiles = async () => {
@@ -236,7 +236,7 @@ async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
   await gotoFiles();
   check((await row().count()) > 0, "imported file persists across reload");
 
-  // (d) The row's own X removes just that file, and the empty state returns.
+  // (d) The row's own X removes only that file, and the empty state returns.
   await page.getByRole("button", { name: new RegExp(`Remove ${importedName}`, "i") }).click();
   await row().waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
   check((await row().count()) === 0, "row remove deletes the file");
@@ -261,8 +261,8 @@ async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
   // can abort that still-uncommitted transaction (page unload cancels in-flight
   // IDB txns), leaving the file on disk to be restored on the next load. Wait for
   // the persisted store to actually be empty before reloading so this assertion
-  // tests the guarantee, not the race. The store name is "fonts" — its original
-  // purpose — kept stable so older builds' files still load (see idb.ts).
+  // tests the guarantee, not the race. The store name is "fonts": its original
+  // purpose. Kept stable so older builds' files still load (see idb.ts).
   const dbName = schema?.id || "scadpub";
   await page
     .waitForFunction(
@@ -272,7 +272,7 @@ async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
           try {
             req = indexedDB.open(name);
           } catch {
-            return resolve(true); // storage unavailable — nothing persisted
+            return resolve(true); // storage unavailable: nothing persisted
           }
           req.onerror = () => resolve(true);
           req.onsuccess = () => {
@@ -300,7 +300,7 @@ async function checkFileImport({ page, check, ids, schema, paramsTabName }) {
   await waitRendered(page, ids[0]);
   await gotoFiles();
   check((await row().count()) === 0, "cleared file stays cleared after reload");
-  // Close it — later checks click other toolbar/panel controls, and an open
+  // Close it: later checks click other toolbar/panel controls, and an open
   // dialog's overlay would intercept those clicks.
   await closeFiles();
 }
@@ -365,8 +365,8 @@ async function checkIdleRenderCount({ page, check }) {
 
 // Inject axe-core via evaluate (the DevTools runtime channel), NOT
 // page.addScriptTag: serve-dist now sends the built dist/_headers, whose CSP
-// rightly refuses an inline <script> tag — and loosening the page's policy
-// (bypassCSP, or an 'unsafe-inline' carve-out) just to measure accessibility
+// rightly refuses an inline <script> tag, and loosening the page's policy
+// (bypassCSP, or an 'unsafe-inline' carve-out) only to measure accessibility
 // would stop this suite from exercising the exact headers a real deploy
 // sends. Runtime evaluation is tooling-plane and not governed by the page's
 // CSP.
@@ -388,7 +388,7 @@ async function checkAxe({ page, check }) {
   // wait was flaky (the transition outlasts a short sleep on slower CI); wait
   // for all running CSS transitions/animations to actually settle instead.
   const settle = async () => {
-    await page.waitForTimeout(50); // let a just-started transition register first
+    await page.waitForTimeout(50); // let a newly started transition register first
     await page
       .waitForFunction(
         () => document.getAnimations().every((a) => a.playState !== "running"),
@@ -428,7 +428,7 @@ async function checkEveryDesignRenders({ page, ids }) {
   for (const id of ids) await selectDesign(page, id);
 }
 
-// Bundled presets — exercised on the first design that ships any. Desktop
+// Bundled presets: exercised on the first design that ships any. Desktop
 // presets live in the panel's Presets tab (a button list), applied by click.
 async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTabName }) {
   console.log("=== bundled presets ===");
@@ -497,7 +497,7 @@ async function checkPresetCardGrid({ page, check, schema, presetsTabName, params
   check((await cards.locator("img").count()) >= 1, "at least one preset card renders its thumbnail image");
   // Cards are still plain buttons: clicking one applies the preset, same as
   // the list variant (checkBundledPresets already exercises apply/URL/reload
-  // — this just confirms the card path routes through the same handler).
+  // — this confirms the card path routes through the same handler).
   const firstCardText = (await cards.first().textContent())?.trim() ?? "";
   await cards.first().click();
   await waitRendered(page, `${design.id} + preset card "${firstCardText}"`);
@@ -537,7 +537,7 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
 // design.
 //
 // The example "tag" design (ids[0]) carries an attention-flagged notice by
-// default (both an emblem and a label shown at once — see tag.scad's own
+// default (both an emblem and a label shown at once, see tag.scad's own
 // comment), so Download opens the Review dialog (ReviewDialog.tsx) armed with
 // "Download anyway" instead of exporting immediately (ActionButtons.tsx's
 // onDownloadClick). Arm the download listener BEFORE the click so the event
@@ -550,7 +550,7 @@ async function checkExports({ page, check, ids, dir, schema }) {
   // not of the suite: only a "ready" render exports straight from the dock
   // (AppShell's onDownloadClick). The dogfood config's first design ("tag")
   // carries a default attention issue, but another config's first design may be
-  // clean — so branch on what actually happened and assert the matching
+  // clean, so branch on what actually happened and assert the matching
   // contract either way, instead of assuming one config's shape.
   const downloadPromise = page.waitForEvent("download");
   await page.click('[aria-label^="Download "]');
@@ -570,7 +570,7 @@ async function checkExports({ page, check, ids, dir, schema }) {
   await model.saveAs(modelOut);
   check((await stat(modelOut)).size > 0, `${await model.suggestedFilename()} (${(await stat(modelOut)).size} bytes)`);
 
-  // Save PNG lives in the top-bar overflow — but a deployment can hide it with
+  // Save PNG lives in the top-bar overflow, but a deployment can hide it with
   // `ui.saveImage: false`, in which case there's nothing to click.
   if (schema.ui?.saveImage === false) {
     console.log("=== save PNG (disabled via ui.saveImage — skipped) ===");
@@ -593,7 +593,7 @@ async function checkExports({ page, check, ids, dir, schema }) {
 }
 
 // The unified export dock (ActionButtons.tsx): exactly two buttons (Download
-// + Share), no separate Image button — Save-image moved to the top-bar
+// + Share), no separate Image button. Save-image moved to the top-bar
 // overflow (BarActions.tsx), exercised above by checkExports' PNG click.
 async function checkExportDock({ page, check }) {
   console.log("=== export dock (two buttons, no Image button) ===");
@@ -604,12 +604,12 @@ async function checkExportDock({ page, check }) {
 }
 
 // Status pill (StatusStrip.tsx) + Review dialog (ReviewDialog.tsx): the
-// readiness surface in the export dock — above the Download button, same
-// component in both layouts — that opens the dialog. It is mounted ONLY for
+// readiness surface in the export dock. Above the Download button, same
+// component in both layouts, that opens the dialog. It is mounted ONLY for
 // the attention/failed states (a ready model needs no announcement; see
 // StatusStrip's own doc), so "present" and "absent" are both assertions here.
 // Which footer actions the dialog offers is keyed on the LIVE readiness state,
-// not on how it was opened — so branch on what the first design actually
+// not on how it was opened, so branch on what the first design actually
 // reports (the dogfood config's "tag" carries a default attention issue;
 // another config's first design may be clean) rather than assuming one
 // config's shape. The pill's own copy is resolved through the i18n catalogue +
@@ -662,8 +662,8 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
   // The other half of the contract needs a design in the OPPOSITE state. The
   // dogfood config pairs "tag" (attention by default) with "panel" (a clean
   // SVG-extrusion design, no font/notice concerns); a config without such a
-  // known-clean design just doesn't exercise it. A clean design must show NO
-  // pill at all — the ready state is deliberately silent.
+  // known-clean design does not exercise it. A clean design must show NO
+  // pill at all: the ready state is deliberately silent.
   if (ids.includes("panel")) {
     await selectDesign(page, "panel");
     await page.waitForTimeout(300);
@@ -671,7 +671,7 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
       (await page.locator(".status-strip").count()) === 0,
       "no status pill on a clean design (ready is silent — the Download button is the confirmation)"
     );
-    // …and with no pill to own it, the count comes back to the bell — the other
+    // …and with no pill to own it, the count comes back to the bell: the other
     // half of the `showCount` contract, same biconditional.
     await checkBellCount(page, check, "panel");
     // Back to the design the rest of the suite expects to be selected.
@@ -681,7 +681,7 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
   }
 }
 
-// After-export panel (ExportSuccess.tsx, ui.afterExport — the dogfood config
+// After-export panel (ExportSuccess.tsx, ui.afterExport: the dogfood config
 // sets `helpTab: "Printing"`). Exercised by re-downloading the first design.
 async function checkAfterExport({ page, check, ids, schema }) {
   if (!schema.ui?.afterExport) {
@@ -712,7 +712,7 @@ async function checkAfterExport({ page, check, ids, schema }) {
     // across configs. Modal.tsx's `aria-label={label ?? title}` sets an
     // `aria-label="Help"` attribute, but Radix's DialogContent also wires
     // `aria-labelledby` to the rendered DialogTitle (the config's `help.title`,
-    // defaulting to "How to use this configurator") — and per the ARIA
+    // defaulting to "How to use this configurator"), and per the ARIA
     // accessible-name algorithm, aria-labelledby wins over aria-label, so the
     // dialog's actual accessible name is that title text, not "Help". Locate
     // it structurally instead (any dialog containing the deep-linked tab),
@@ -734,7 +734,7 @@ async function checkAfterExport({ page, check, ids, schema }) {
 async function checkPreviewControls({ page, check }) {
   console.log("=== preview controls (share link + live preview) ===");
   // Headless Chromium never implements navigator.share, so canShareNatively()
-  // is always false here — the Share button always renders its clipboard-copy
+  // is always false here: the Share button always renders its clipboard-copy
   // form (see ActionButtons.tsx's NATIVE_SHARE / share.ts's own doc).
   check(
     (await page.locator('[aria-label="Copy link"]').count()) >= 1,
@@ -757,7 +757,7 @@ async function checkServiceWorker({ page, check, base }) {
     "sw.js activates a waiting worker on a SKIP_WAITING message"
   );
   // An install handler is fine (it precaches the app shell for offline use),
-  // but it must not call skipWaiting — a new worker has to wait so the page
+  // but it must not call skipWaiting: a new worker has to wait so the page
   // can prompt the user (see the SKIP_WAITING message handler above).
   const installHandler =
     swText.match(/addEventListener\(\s*["']install["'][\s\S]*?(?=addEventListener\(|$)/)?.[0] ?? "";
@@ -771,7 +771,7 @@ async function checkServiceWorker({ page, check, base }) {
 // of ui.showVarName), shared by the tag + signage checks.
 const paramRow = (page, name) => page.locator(`.param[data-param="${name}"]`);
 
-// @showIf + @collapsed — exercised on the example "tag" design when present.
+// @showIf + @collapsed: exercised on the example "tag" design when present.
 // Param rows are located by their stable data-param hook, which exists
 // regardless of ui.showVarName, so this block runs in every config.
 async function checkTagDesign({ page, check, ids, paramsTabName }) {
@@ -781,7 +781,7 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   }
   console.log("=== conditional visibility (@showIf, tag) ===");
   await selectDesign(page, "tag");
-  // A bundled preset may still be selected from the earlier presets check —
+  // A bundled preset may still be selected from the earlier presets check,
   // while one is selected, the preset-diff strip's restore action reverts to
   // the PRESET rather than the design's defaults (see PresetDiffBar), which
   // would break the deterministic "Reset to defaults" flow below. Clear the
@@ -794,7 +794,7 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   await page.reload({ waitUntil: "load" });
   await waitRendered(page, "tag reloaded");
   // The reload above re-derives the panel's tab (Presets when the design ships
-  // bundled presets, else Customize) — land on Customize explicitly since the
+  // bundled presets, else Customize): land on Customize explicitly since the
   // checks below drive parameter controls.
   await page.getByRole("tab", { name: paramsTabName }).click().catch(() => {});
 
@@ -810,7 +810,7 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   await quality.locator("summary").click();
   check(await facet.isVisible(), "opening the group reveals its params");
 
-  // Boolean params are switches now — toggle by click, read aria-checked.
+  // Boolean params are switches now: toggle by click, read aria-checked.
   const holeSwitch = paramRow(page, "hole").getByRole("switch");
   if ((await holeSwitch.getAttribute("aria-checked")) !== "true")
     await holeSwitch.click(); // ensure on (an applied preset may have turned it off)
@@ -879,7 +879,7 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   await waitRendered(page, "tag");
 }
 
-// On-model text editing ("type on the sign") — exercised on the example "tag"
+// On-model text editing ("type on the sign"): exercised on the example "tag"
 // design, whose `label` param is annotated `// @editOnModel`. Covers the pointer
 // path (click the mesh → floating editor → type → panel + render follow),
 // Escape-reverts, and axe with the editor open. The feature is deliberately
@@ -929,7 +929,7 @@ async function checkEditOnModel({ page, check, ids, paramsTabName }) {
   check(await clickModel(), "clicking the model opens the inline text editor");
 
   // Type a new value ON THE MODEL and confirm both the render re-runs and the
-  // panel's own text box follows — same change() the panel input calls.
+  // panel's own text box follows: same change() the panel input calls.
   const typed = "SMOKE-EDIT";
   const statusBefore = (await renderStatusText(page)) ?? "";
   await editorInput.fill(typed);
@@ -950,7 +950,7 @@ async function checkEditOnModel({ page, check, ids, paramsTabName }) {
   await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
   check((await labelInput().inputValue()) === typed, "the panel's text input shows the on-model edit");
 
-  // Reopen from the mesh — focus must land in the input, so typing needs no
+  // Reopen from the mesh: focus must land in the input, so typing needs no
   // second click.
   check(await clickModel(), "clicking the model reopens the editor");
   check(
@@ -991,7 +991,7 @@ async function checkEditOnModel({ page, check, ids, paramsTabName }) {
 
 // "Jump to section" navigator (SectionNavigator.tsx): a compact control above
 // the form on designs with >= 4 visible sections. Present on such a design,
-// absent on a simple one; selecting a section opens + scrolls + focuses it; and
+// absent on a single-section one; selecting a section opens + scrolls + focuses it; and
 // a narrowing search shrinks (or removes) the option set. Located by the
 // trigger's accessible name and the option/section DOM hooks.
 async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }) {
@@ -1008,7 +1008,7 @@ async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }
   const gotoParams = () =>
     page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
 
-  // (a) Present on a multi-section design; absent on a simple one.
+  // (a) Present on a multi-section design; absent on a single-section one.
   await selectDesign(page, navDesign);
   await gotoParams();
   await trigger.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
@@ -1024,7 +1024,7 @@ async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }
   }
 
   // (b) Selecting a section opens it, scrolls it in, and focuses its summary.
-  //     Prefer a currently-collapsed section (a stronger test — it wasn't open);
+  //     Prefer a currently-collapsed section (a stronger test: it wasn't open);
   //     fall back to the last section (which still re-scrolls/focuses).
   await trigger.first().click();
   const items = page.locator(".section-nav-item");
@@ -1062,7 +1062,7 @@ async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }
 
   // (c) A narrowing search shrinks the option set. Searching a single param's
   //     exact name matches (at least) that one param, so sections without it
-  //     drop out — often below the threshold, which removes the navigator
+  //     drop out: below the threshold, which removes the navigator
   //     entirely (a 0-option shrink). Either way the count must fall.
   await trigger.first().click();
   const before = await page.locator(".section-nav-item").count();
@@ -1081,7 +1081,7 @@ async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }
   await search.fill(""); // restore for whatever runs next
 }
 
-// @showIf arrow_style — exercised on a "signage" design when present. (No
+// @showIf arrow_style: exercised on a "signage" design when present. (No
 // notice expectation here: a well-tuned config renders its defaults
 // advisory-free; the notice/assert badge machinery is covered by "tag".)
 // Params are located by their stable `data-param` hook, which exists
@@ -1098,14 +1098,14 @@ async function checkSignageDesign({ page, check, ids, schema }) {
   const arrowStyle = paramRow(page, "arrow_style");
   check((await arrowStyle.count()) === 0, "arrow_style hidden when arrow = none");
   // Enums are Radix Selects: open the row's trigger, then click the option.
-  // Match exactly — several arrow options contain "right" (Up-right, Turn
+  // Match exactly: several arrow options contain "right" (Up-right, Turn
   // right…), so a substring match would be ambiguous.
   await paramRow(page, "arrow").locator('[data-slot="select-trigger"]').click();
   await page.getByRole("option", { name: "Right", exact: true }).click();
   // `@showIf arrow != none` is now satisfied, but a config can also mark
   // arrow_style `@advanced`; under `ui.essentials` an advanced param stays
   // hidden until "Show all settings" is on (that hiding is orthogonal to
-  // @showIf — see EssentialsToggle / lib/essentials.ts). Reveal it first so
+  // @showIf, see EssentialsToggle / lib/essentials.ts). Reveal it first so
   // this check tests @showIf in isolation, whatever config drives the build.
   const arrowStyleAdvanced = (schema?.designs ?? [])
     .find((d) => d.id === "signage")
@@ -1127,15 +1127,15 @@ async function checkSignageDesign({ page, check, ids, schema }) {
 //    search focus, and (on the way back) the sheet's detent.
 //  - M16: at Peek/Half the mobile background stays keyboard-reachable
 //    (not `inert`); at Full it's `inert` and focus is trapped inside the
-//    sheet — Tab never lands on a covered background control — with Escape
+//    sheet (Tab never lands on a covered background control) with Escape
 //    collapsing back out and focus returning to the sheet.
 // Crossing the breakpoint UNMOUNTS one layout tree and mounts the other, and
 // the incoming tree stands up a fresh three.js Viewer (a new WebGL context,
 // plus the environment/IBL setup a `viewer.style: "studio"` config asks for).
-// That work is main-thread-bound and lands at the very end of a long run, so
-// it can take a few seconds on a software GL stack with a big config — far
+// That work is main-thread-bound and lands at the end of a long run, so
+// it can take a few seconds on a software GL stack with a big config: far
 // longer than the 3s the rest of this section's waits use. Generous on
-// purpose: a layout that never swaps still fails, just later.
+// purpose: a layout that never swaps still fails, only later.
 const LAYOUT_SWAP_MS = 20000;
 
 async function checkResponsiveLayout({ browser, base, check, schema, paramsTabName }) {
@@ -1160,7 +1160,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     await dismissWelcomePopup(page);
     await waitRenderDone(page).catch(() => {});
 
-    // Only the active (mobile) layout is in the DOM — the desktop tree isn't
+    // Only the active (mobile) layout is in the DOM: the desktop tree isn't
     // mounted at all.
     check(
       (await page.locator(".app-shell__mobile").count()) === 1 &&
@@ -1171,7 +1171,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     // Raise the sheet to Half and switch to the Parameters tab (tapping a tab
     // at Peek also raises it, but starting from Half keeps this deterministic
     // regardless of the landing tab). The design may land on Presets (bundled
-    // presets), so ParamForm only mounts once Parameters is active — Radix
+    // presets), so ParamForm only mounts once Parameters is active. Radix
     // Tabs unmounts inactive tab content.
     await page.locator(".sheet-handle").click(); // peek -> half
     await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
@@ -1182,8 +1182,8 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     // The sheet's form toolbar is the search field ALONE. Its two former
     // neighbours are gone from this layout by design: the "+N more" essentials
     // chip is the form's own closing row now, and the section navigator is
-    // desktop-only (both still exist — see the desktop checks above and the
-    // end-of-form check below — they just don't stand a row here anymore).
+    // desktop-only (both still exist, see the desktop checks above and the
+    // end-of-form check below: they no longer stand a row here).
     // This is the sheet's vertical budget, so guard it against creeping back.
     const toolbarControls = await page
       .locator(".sheet-toolbar")
@@ -1202,7 +1202,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     check(toolbarControls === 0, `the sheet toolbar carries no extra controls (${toolbarControls})`);
 
     // Sticky group headers are what took over the navigator's orientation job,
-    // so assert the actual computed behaviour rather than the class — a
+    // so assert the actual computed behaviour rather than the class: a
     // `position: static` regression here would silently leave the mobile form
     // with no way to tell which section you're reading.
     const summaryPosition = await page
@@ -1212,7 +1212,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
       .catch(() => null);
     check(summaryPosition === "sticky", `param-group headers are sticky (${summaryPosition})`);
 
-    // Essentials lives at the END of the form now — after the last group, not
+    // Essentials lives at the END of the form now: after the last group, not
     // in a row above it. Only present when the design actually has `@advanced`
     // params (EssentialsToggle renders nothing otherwise).
     const essentials = page.locator(".param-form .essentials-toggle");
@@ -1227,7 +1227,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
       );
       // If it's on screen it must have something to do. The toggle renders only
       // while its count is non-zero (EssentialsToggle), so pressing it has to
-      // move the number of visible param rows — a toggle that reveals nothing
+      // move the number of visible param rows: a toggle that reveals nothing
       // and then renames itself is the regression this guards.
       const shown = () => page.locator(".param:visible").count();
       const before = await shown();
@@ -1242,7 +1242,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
       if (await back.count()) await back.first().click();
       await page.waitForTimeout(300);
     } else {
-      // Absent is a real state, not just "config has no advanced params": it's
+      // Absent is a real state, not only "config has no advanced params": it's
       // also every design whose advanced params are all @showIf-hidden right
       // now, and every config that leaves `ui.essentials` off.
       console.log("  (no essentials toggle on this design — nothing reachable to reveal)");
@@ -1280,7 +1280,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     );
 
     // Back to mobile: the sheet detent set above (Half) must not have reset
-    // to Peek just because the layout remounted.
+    // to Peek because the layout remounted.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForSelector(".app-shell__mobile", { timeout: LAYOUT_SWAP_MS });
     check(
@@ -1289,7 +1289,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     );
 
     console.log("=== mobile bottom sheet: focus at peek/half/full (M16) ===");
-    // Peek/Half: non-modal — the background (top bar etc.) is not inert and
+    // Peek/Half: non-modal. The background (top bar etc.) is not inert and
     // stays keyboard-reachable. Currently at Half (set above); cycle the
     // handle taps (cycleDetent order is peek -> half -> full -> peek) back to
     // Peek deterministically.
@@ -1316,7 +1316,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
       "background is not inert at half"
     );
 
-    // Full: modal — background goes inert, and Tab must never escape the sheet.
+    // Full: modal. Background goes inert, and Tab must never escape the sheet.
     await page.locator(".sheet-handle").click(); // half -> full
     await page.waitForSelector(".bottom-sheet--full", { timeout: 3000 });
     check(
@@ -1362,7 +1362,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
 
 // First-visit mobile sheet policy (src/lib/sheetPolicy.ts): a fresh (never
 // visited) mobile context boots the settings sheet to a viewport-driven detent
-// — "half" on a tall portrait, "peek" on a short portrait or landscape — and
+//  ("half" on a tall portrait, "peek" on a short portrait or landscape) and
 // shows the one-time "swipe up for settings" nudge ONLY when that resolves to
 // peek. Each sub-case uses its own fresh context so localStorage starts empty
 // (a genuine first visit); the app writes the introduced flag once it mounts,
@@ -1370,7 +1370,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
 //
 // `firstVisit` below waits out the first render on purpose: the nudge only
 // arms once the stage is past its pre-first-render loading overlay (AppShell's
-// `sheetHintArmed`), and its fade timeout runs from there — so sampling before
+// `sheetHintArmed`), and its fade timeout runs from there, so sampling before
 // the render would find nothing, and sampling long after it would race the
 // fade. Don't drop the waitRenderDone.
 async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
@@ -1424,9 +1424,9 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
         (await page.getByRole("status").filter({ hasText: /settings/i }).count()) >= 1,
         "the swipe-up nudge has an accessible name (role=status, not aria-hidden)"
       );
-      // …and it must be VISIBLE, not just mounted: the nudge shares its
+      // …and it must be VISIBLE, not only mounted: the nudge shares its
       // over-sheet slot with the export dock, which outranks it (z-10 vs z-9)
-      // and grows with what it holds — a readiness pill, an after-export panel.
+      // and grows with what it holds. A readiness pill, an after-export panel.
       // The dogfood config's first design carries a default attention issue, so
       // this first visit has a pill up, which is exactly the case that used to
       // cover an 8-second, once-per-browser nudge. Geometry, not counts: both
@@ -1465,21 +1465,21 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
 // The viewer HUD must stay reachable at every detent, on the narrow and short
 // viewports where it used not to. The HUD is anchored to the top of the viewer
 // while the export dock rides the sheet UPWARD, and the dock outranks it (z-10
-// vs z-5) — so at the half detent on a 360- or 320-wide phone the dock came to
+// vs z-5), so at the half detent on a 360- or 320-wide phone the dock came to
 // rest ON the rail's last buttons. Counting elements cannot see that (both are
 // mounted and "visible"), so this hit-tests each button's own centre, which is
 // what a finger does.
 //
 // The full detent is excluded on purpose: the sheet legitimately covers the
 // background there, AppShell marks it `inert`, and the chrome over the model
-// strip is hidden outright — all checked by the M16 block above.
-// Mirrors BottomSheet's DETENT_ORDER — the order Arrow Up/Down step through.
+// strip is hidden outright. All checked by the M16 block above.
+// Mirrors BottomSheet's DETENT_ORDER: the order Arrow Up/Down step through.
 const DETENTS = ["peek", "half", "full"];
 
 // The app is a fixed-height shell: `#root` is 100dvh and every scrollable
 // region is an inner one, so the DOCUMENT must never be scrollable. When it is,
 // iOS ends up scrolling it while the software keyboard is up and does not undo
-// it afterwards — the whole shell sits shifted above its own viewport, with the
+// it afterwards: the whole shell sits shifted above its own viewport, with the
 // model clipped off the top and page background exposed below the sheet.
 //
 // Checked at the mobile breakpoint with the sheet expanded and a text field
@@ -1487,7 +1487,7 @@ const DETENTS = ["peek", "half", "full"];
 //
 // The `overflow: hidden` assertion is the one with teeth. The scrollTop one
 // states the user-visible invariant, but headless Chromium has no software
-// keyboard and never makes the document overflow, so it cannot fail here —
+// keyboard and never makes the document overflow, so it cannot fail here:
 // verified by reverting the fix, which trips the overflow check alone. Keep
 // both: one is the property, the other is the mechanism that guarantees it.
 async function checkDocumentNeverScrolls({ browser, base, check }) {
@@ -1504,7 +1504,7 @@ async function checkDocumentNeverScrolls({ browser, base, check }) {
     await dismissWelcomePopup(page);
     await waitRenderDone(page).catch(() => {});
 
-    // Raise the sheet and put a text field in focus — a real keyboard would be
+    // Raise the sheet and put a text field in focus: a real keyboard would be
     // up at this point on a device.
     await page.locator(".sheet-handle").focus();
     await page.keyboard.press("ArrowUp");
@@ -1545,7 +1545,7 @@ async function checkDocumentNeverScrolls({ browser, base, check }) {
 }
 
 // Nothing may sit outside the viewport horizontally, and the page must never
-// scroll sideways. Checked at 320px — the narrowest phone still in use, and the
+// scroll sideways. Checked at 320px: the narrowest phone still in use, and the
 // width where two controls had escaped: the export dock (centred by a
 // transform, so nothing bounded its intrinsic 326px) hung off both edges, and
 // the Messages console's Close button was pushed clean off the right, leaving
@@ -1614,7 +1614,7 @@ async function checkNothingOffscreen({ browser, base, check }) {
 
 // Square opaque children painted over a ROUNDED parent that doesn't clip them.
 // The parent's border curve is left stranded outside the child's fill, so the
-// corner reads as a notch — which is what a sticky group header did to every
+// corner reads as a notch, which is what a sticky group header did to every
 // `.param-group` card, in both layouts and both themes.
 //
 // Expressed as the general property rather than as a check on that one header:
@@ -1653,7 +1653,7 @@ const CORNER_SCAN = `(() => {
 
 async function checkRoundedCorners({ page, check, paramsTabName }) {
   console.log("=== rounded corners: no square fill over a rounded parent ===");
-  // Scan the params form in both its open and collapsed group states — the
+  // Scan the params form in both its open and collapsed group states: the
   // header is a different box in each, and only one of them was caught by eye.
   await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
   await page.waitForTimeout(300);
@@ -1694,7 +1694,7 @@ async function checkViewerHudReachable({ browser, base, check }) {
         for (let i = 0; i < DETENTS.indexOf(detent); i++) await page.keyboard.press("ArrowUp");
         // Assert we actually GOT there before measuring. Swallowing this (as a
         // bare `.catch(() => {})` would) turns a step that didn't take into a
-        // green "half" result measured at peek — the failure mode this whole
+        // green "half" result measured at peek: the failure mode this whole
         // check exists to catch, reported as a pass.
         const reached = await page
           .waitForSelector(`.bottom-sheet--${detent}`, { timeout: 3000 })
@@ -1702,7 +1702,7 @@ async function checkViewerHudReachable({ browser, base, check }) {
           .catch(() => false);
         check(reached, `${width}x${height}: sheet reached the ${detent} detent`);
         if (!reached) continue;
-        // Let the dock's `bottom` transition settle before measuring — it
+        // Let the dock's `bottom` transition settle before measuring: it
         // mirrors the sheet's own 0.28s ease (see .action-dock in index.css).
         await page.waitForTimeout(450);
         const covered = await page.evaluate(() =>
@@ -1750,7 +1750,7 @@ async function main() {
     for (const d of designs) designLabels[d.id] = d.label;
     const ids = designs.map((d) => d.id);
     // Chrome copy comes from the i18n catalogue (src/locales/en.json), which a
-    // deployment overrides per key via the config's `strings` block — so build
+    // deployment overrides per key via the config's `strings` block, so build
     // the matchers from what the app will ACTUALLY render, not from stock
     // English. Plural keys carry `#one`/`#other` variants (either may show, so
     // accept both) with a `{count}` placeholder standing in for a number.
@@ -1758,8 +1758,8 @@ async function main() {
       await readFile(fileURLToPath(new URL("../src/locales/en.json", import.meta.url)), "utf-8")
     );
     const uiText = (key) => schema.strings?.[key] ?? catalogue[key] ?? "";
-    // Panel tab names used to be config-overridable via ui.presetsLabel/
-    // parametersLabel; they're catalogue keys now (presets.title/settings.title).
+    // Panel tab names are catalogue keys (presets.title/settings.title), not
+    // config fields.
     const presetsTabName = uiText("presets.title") || "Presets";
     const paramsTabName = uiText("settings.title") || "Customize";
     const textRe = (...keys) =>

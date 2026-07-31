@@ -1,6 +1,6 @@
-// renderMetrics.ts — local-only, in-session render performance telemetry.
+// renderMetrics.ts: local-only, in-session render performance telemetry.
 // Pure data + functions (mirrors renderStatus.ts): no persistence, no network,
-// just enough state to answer "how long did that take, and was it the cache
+// only enough state to answer "how long did that take, and was it the cache
 // or a fresh build?" plus, for the slowest fresh render this session, which
 // params had changed since the render before it. Consumed by the Output
 // console's Metrics tab (see useRenderPipeline.ts for where it's recorded).
@@ -39,7 +39,7 @@ export function changedParamLabels(params: Param[], prev: Values, next: Values):
 /**
  * Fold a freshly-finished render into the session's metrics. `last` always
  * becomes the new metric; `slowest` only ever advances to a *fresh* render
- * (cached hits are fast by construction and would just be noise) that took
+ * (cached hits are fast by construction and would only be noise) that took
  * longer than whatever was previously recorded.
  */
 export function recordRender(prev: RenderMetrics, metric: RenderMetric): RenderMetrics {

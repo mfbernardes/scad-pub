@@ -1,8 +1,8 @@
-// views.ts — the standard camera presets offered by the viewer's view picker.
+// views.ts: the standard camera presets offered by the viewer's view picker.
 // OpenSCAD is Z-up, so every preset keeps the camera's up vector at +Z and only
 // varies the direction it looks from. Top/Bottom would put the up vector on the
 // line of sight (gimbal lock) and changing the up vector mid-session breaks
-// OrbitControls, so those two are nudged slightly off-axis instead — close
+// OrbitControls, so those two are nudged slightly off-axis instead: close
 // enough to read as a plan view while keeping a stable +Z up and orbiting.
 export type ViewName =
   | "isometric"

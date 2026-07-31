@@ -1,9 +1,9 @@
-// visibility.ts — evaluate a parameter's `@showIf` expression against the
+// visibility.ts: evaluate a parameter's `@showIf` expression against the
 // current values to decide whether its control is shown. Deliberately tiny and
-// safe (no eval): an OR of ANDs of simple clauses. Hidden parameters are still
-// sent to OpenSCAD unchanged — visibility is a UI nicety only.
+// safe (no eval): an OR of ANDs of atomic clauses. Hidden parameters are still
+// sent to OpenSCAD unchanged: visibility is a UI nicety only.
 //
-// M9: gen-schema.mjs (scripts/lib/params.mjs) is the PRIMARY gate — it rejects
+// M9: gen-schema.mjs (scripts/lib/params.mjs) is the PRIMARY gate. It rejects
 // an unsupported clause shape (a relational operator, stray tokens, …) at
 // generate time, so a shipped schema.json's showIf strings are always
 // well-formed. The strict clause regexes here mirror that build-time grammar
@@ -30,7 +30,7 @@ function coerce(token: string): string | number | boolean {
   return t.replace(/^["']|["']$/g, "");
 }
 
-// Supported clause shapes — same grammar scripts/lib/params.mjs validates at
+// Supported clause shapes: same grammar scripts/lib/params.mjs validates at
 // generate time. Anything else (a relational operator, malformed syntax) is
 // NOT a recognised comparison and NOT treated as a falsy bare lookup: it
 // throws, so callers can tell "hidden" apart from "malformed".

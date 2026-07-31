@@ -1,4 +1,4 @@
-// retryableOnce.ts — M1: a promise-memoizing helper for "run this expensive
+// retryableOnce.ts: M1: a promise-memoizing helper for "run this expensive
 // setup once per success, but if it fails, let the NEXT call retry from
 // scratch" instead of replaying the same rejection forever.
 //
@@ -12,12 +12,12 @@
 //
 // The bug this fixes (see docs/architecture-review.md M1): a loader that
 // kicks off several independent async pieces MUST have every one of them
-// actually be part of what `load()`'s returned promise awaits — a piece that
+// actually be part of what `load()`'s returned promise awaits. A piece that
 // is started but never awaited (e.g. assigned to an outer variable and used
 // later, but not included in a Promise.all) can reject WITHOUT that rejection
 // ever reaching here, so a partial failure looks like success: `run()`
-// memoizes a promise that resolves, and every later call — and every later
-// read of the outer variable the errant piece populated — is stuck with
+// memoizes a promise that resolves, and every later call, and every later
+// read of the outer variable the errant piece populated. Is stuck with
 // whatever broken/undefined state that piece left behind, with no retry path
 // short of a full reload. This helper only prevents the OTHER half of that
 // bug (a rejection that DOES reach `load()` staying memoized forever); the

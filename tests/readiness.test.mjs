@@ -138,7 +138,7 @@ test("deriveAttention: a font param hidden by @showIf is never flagged", () => {
 });
 
 test("deriveAttention: a font param demoted to @advanced (essentials-hidden) is STILL flagged — the view doesn't decide visibility here", () => {
-  // No `advanced` filtering happens in readiness.ts at all — see its own doc:
+  // No `advanced` filtering happens in readiness.ts at all, see its own doc:
   // the essentials/all settings view is UI-only, the param's value is still
   // sent to OpenSCAD unchanged whichever view is showing.
   const items = deriveAttention({
@@ -297,7 +297,7 @@ test("deriveAttention: a subsumedByFont category IS folded when a multi-font des
 test("deriveAttention: a subsumedByFont category is NOT folded when a second, @showIf-hidden font is also missing", () => {
   // The hidden font shows no fallback card, but its value still reaches
   // OpenSCAD, so it can be the real cause of the notice. Two fonts are missing,
-  // so which one the notice is about is ambiguous — keep the notice listed, or
+  // so which one the notice is about is ambiguous: keep the notice listed, or
   // it would vanish with no card left to carry it.
   const items = deriveAttention({
     params: [fontParam(), fontParam({ name: "font2", showIf: "show_text" })],
@@ -368,12 +368,12 @@ test("deriveAttention: an omitted diagnostics input behaves like an empty one (e
 });
 
 // A config-notice-category diagnostic (diagnostics.ts's `level: "notice"`) is
-// never something a caller should pass through `diagnostics` — it's already
+// never something a caller should pass through `diagnostics`. It's already
 // represented via `notices` above. This isn't deriveAttention's own job to
-// filter (AppShell does the level !== "notice" filtering before calling in —
+// filter (AppShell does the level !== "notice" filtering before calling in,
 // see its own comment), but confirms a `diagnostics` entry and a `notices`
-// entry for "the same" category simply produce two distinct items rather than
-// deriveAttention silently merging or deduping them — the caller owns not
+// entry for "the same" category produce two distinct items rather than
+// deriveAttention silently merging or deduping them: the caller owns not
 // double-supplying the same category both ways.
 test("deriveAttention: diagnostics and notices are independent inputs — no implicit de-duplication between them", () => {
   const items = deriveAttention({
@@ -416,11 +416,11 @@ test("readinessState: precedence — failed beats attention", () => {
 // The scenario item 1 explicitly calls out: a FAILED render whose own log
 // carries the assert-failure diagnostic that failed it. AppShell only feeds
 // deriveAttention's `diagnostics` input on a render that actually succeeded
-// (see its own comment — a failed render's diagnostics are already explained
+// (see its own comment: a failed render's diagnostics are already explained
 // by the Review dialog's friendly-failure card), so in practice a failed
 // render's `attention` array never contains a diagnostic item at all; this
 // pins readinessState's OWN precedence for the case where it did anyway
-// (e.g. a future caller that doesn't apply that gate) — failed still wins,
+// (e.g. a future caller that doesn't apply that gate). Failed still wins,
 // matching how main behaved (Download was disabled outright on a failed
 // render, so attentionIssues never surfaced there either).
 test("readinessState: precedence — failed beats attention even for a diagnostic (assert-failure) item", () => {

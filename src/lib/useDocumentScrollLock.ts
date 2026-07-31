@@ -1,10 +1,10 @@
-// useDocumentScrollLock.ts — hold the document at scroll offset 0.
+// useDocumentScrollLock.ts: hold the document at scroll offset 0.
 //
 // The app is a fixed-height shell: `#root` is `100dvh`, every scrollable region
 // is an inner one, and `html, body { overflow: hidden }` says the document has
 // nothing to scroll. None of that stops a BROWSER from scrolling the layout
 // viewport itself, and iOS Safari does exactly that while the software keyboard
-// is up — the visual viewport shrinks, the layout viewport doesn't, so the
+// is up: the visual viewport shrinks, the layout viewport doesn't, so the
 // document becomes scrollable and Safari scrolls it to reveal the focused
 // field. Dismissing the keyboard restores the visual viewport but not that
 // offset, so the shell is left sitting above its own viewport: the model
@@ -15,11 +15,11 @@
 // and putting it back is always right.
 //
 // Two triggers, because neither alone covers it:
-//   • `visualViewport` resize/scroll — fires when the keyboard opens AND when
+//   • `visualViewport` resize/scroll. Fires when the keyboard opens AND when
 //     it closes, which is the moment that needs the correction. Only restore
 //     once the visual viewport is (near) full height again: correcting mid-
 //     keyboard would fight Safari while it is still trying to reveal the field.
-//   • the document's own `scroll` — a catch-all for anything else that moves
+//   • the document's own `scroll`. A catch-all for anything else that moves
 //     it (a programmatic focus, an anchor jump), where waiting for a viewport
 //     event would leave the shell visibly offset.
 //
@@ -48,7 +48,7 @@ export function useDocumentScrollLock() {
     const vv = window.visualViewport;
     const onViewportChange = () => {
       if (!vv) return;
-      // Still shrunk — the keyboard is up, and Safari owns the offset until
+      // Still shrunk: the keyboard is up, and Safari owns the offset until
       // it goes away.
       if (vv.height < document.documentElement.clientHeight - KEYBOARD_GONE_SLACK_PX) return;
       reset();

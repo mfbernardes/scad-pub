@@ -1,6 +1,6 @@
 // The pure half of useScrollFocusedIntoView: where a scroller must land to
 // centre a focused field in it. The hook itself needs a DOM and a coarse
-// pointer; this covers the arithmetic and — more importantly — the clamping,
+// pointer; this covers the arithmetic and (more importantly) the clamping,
 // which is what keeps the correction inside the scroller instead of asking for
 // an offset the browser would resolve by scrolling something further up.
 import { test } from "node:test";
@@ -30,7 +30,7 @@ test("a field already centred asks for no movement", () => {
 });
 
 test("clamps to the scroller's own range rather than overscrolling", () => {
-  // The first field in a long form can't be centred — that would need a
+  // The first field in a long form can't be centred, that would need a
   // negative scrollTop, which the browser would resolve by scrolling an
   // ANCESTOR (the document, on iOS). Clamped to 0 instead.
   assert.equal(

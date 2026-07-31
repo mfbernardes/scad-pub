@@ -1,4 +1,4 @@
-// hash.mjs — computeRenderHash: a content hash over everything that determines a
+// hash.mjs: computeRenderHash: a content hash over everything that determines a
 // render's STL output. Folded into schema.renderHash (the render cache key) so
 // any of it changing in a deploy invalidates persisted geometry automatically.
 import { readFileSync } from "node:fs";
@@ -6,19 +6,19 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 
 // The render-contract manifest hashed below (H3) is:
-//   - design ROUTING: the id -> file map (designRouting) — swapping which file
+//   - design ROUTING: the id -> file map (designRouting). Swapping which file
 //     an id points at must invalidate a cache keyed by design id, even though
 //     the set of mounted files is unchanged.
 //   - mounted SOURCES: every design/dependency .scad's relative path + bytes
 //     (scadFiles, read from SOURCE).
 //   - FEATURES + FORMAT: the OpenSCAD --enable/--export-format flags.
 //   - BINARY ASSETS: the bundled font bytes + fonts.conf, and (in a real
-//     build) the pinned openscad.wasm AND openscad.js glue — both extracted
+//     build) the pinned openscad.wasm AND openscad.js glue. Both extracted
 //     files the worker fetches and runs (M12 verifies both on disk; this
 //     folds both into the cache key so a corrupted/updated glue file also
 //     busts stale geometry).
 //   - RENDERER CODE: every local (`./`, `../`) source file transitively
-//     imported by src/openscad/worker.ts — derived by resolveWorkerDependencyClosure
+//     imported by src/openscad/worker.ts: derived by resolveWorkerDependencyClosure
 //     (scripts/lib/worker-deps.mjs) rather than hand-maintained, so a new
 //     import (e.g. a helper worker.ts starts pulling in) is automatically
 //     covered without anyone remembering to add it here. See
@@ -26,7 +26,7 @@ import { createHash } from "node:crypto";
 // Recipe version bumped for H3 (routing map, closure-derived renderer files,
 // and openscad.js glue are new hash inputs versus v2).
 //
-// Deliberately EXCLUDED — presentation-only, cannot affect exported geometry:
+// Deliberately EXCLUDED: presentation-only, cannot affect exported geometry:
 // title/description/help/notices/licenses/popup/colors/ui/logo/extraCss,
 // param labels/help text/section names/collapsed state, design description/
 // icon/doc, viewer (presentation + framing only), and wasmVersion itself
@@ -57,12 +57,12 @@ export function computeRenderHash({
     try {
       h.update(readFileSync(join(SOURCE, rel)));
     } catch {
-      /* unreadable source — its absence is itself part of the hash */
+      /* unreadable source: its absence is itself part of the hash */
     }
   }
   h.update(`features\0${[...features].sort().join(",")}\0`);
   // The export format is an OpenSCAD output flag, so it changes the rendered
-  // bytes — fold it in so switching format invalidates persisted geometry.
+  // bytes: fold it in so switching format invalidates persisted geometry.
   h.update(`format\0${format}\0`);
   if (outPublicDir) {
     // The render contract lives in app code, not the schema: hashing the worker
@@ -84,7 +84,7 @@ export function computeRenderHash({
         /* font not readable here */
       }
     }
-    // fontconfig matching rules — they steer which glyphs the text() geometry
+    // fontconfig matching rules: they steer which glyphs the text() geometry
     // uses. Hash the rendered content (identical bytes to the file written at
     // commit), so this is stable whether or not the copy has landed yet.
     if (fontsConf != null) {
@@ -99,7 +99,7 @@ export function computeRenderHash({
     // openscad.js: the Emscripten glue the worker dynamically imports
     // (loadFactory in worker.ts). It runs alongside the wasm binary and can
     // change the render contract (different flag handling, FS glue) even
-    // when the .wasm itself is unchanged — see M12.
+    // when the .wasm itself is unchanged, see M12.
     try {
       h.update(readFileSync(join(outPublicDir, "wasm", "openscad.js")));
     } catch {
@@ -109,7 +109,7 @@ export function computeRenderHash({
   return h.digest("hex").slice(0, 16);
 }
 
-// computeBinAssetVersions — per-file content digests for the render worker's
+// computeBinAssetVersions, per-file content digests for the render worker's
 // big binary assets (H4). computeRenderHash above already folds these same
 // bytes into ONE combined hash so a change invalidates persisted L2 geometry,
 // but H4 found a separate problem: the *fetch/cache identity* (worker.ts's
@@ -139,12 +139,12 @@ export function computeBinAssetVersions({ fontPaths = {}, fontsConf = null, outP
   const result = {
     wasm: digestFile(join(outPublicDir, "wasm", "openscad.wasm")),
     // The Emscripten glue the worker dynamically imports alongside the wasm
-    // binary (see M12/H3) — versioned too so a glue-only change also busts
+    // binary (see M12/H3): versioned too so a glue-only change also busts
     // any stale copy a browser had cached.
     glue: digestFile(join(outPublicDir, "wasm", "openscad.js")),
     // fonts.conf and the fonts are digested from their pre-commit sources
     // (rendered content / source files), identical to the bytes written at
-    // commit — see bundleFonts / computeRenderHash.
+    // commit, see bundleFonts / computeRenderHash.
     fontsConf: fontsConf != null ? digestBytes(Buffer.from(fontsConf)) : undefined,
     fonts: {},
   };

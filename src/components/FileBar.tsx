@@ -1,10 +1,10 @@
-// FileBar.tsx — the imported-file MANAGER: it lists the files a user has
+// FileBar.tsx: the imported-file MANAGER: it lists the files a user has
 // imported (name, type, size) with a per-file remove and a "Clear all" action.
-// Importing is contextual now — it happens at the control that needs the file
-// (a font control's "Import font…", an SVG control's "Prepare SVG…") — so this
+// Importing is contextual now: it happens at the control that needs the file
+// (a font control's "Import font…", an SVG control's "Prepare SVG…"), so this
 // surface no longer carries a generic import button; it only manages what those
 // controls have added. Hosted inside FilesModal (opened from the toolbar's
-// "Files" action — see BarActions.tsx). `fileImport` still gates whether the
+// "Files" action, see BarActions.tsx). `fileImport` still gates whether the
 // Files action exists at all; its optional `note` renders here as guidance.
 import type { FileImport } from "../openscad/types";
 import { isFontFile } from "../openscad/renderArgs";

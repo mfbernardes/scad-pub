@@ -1,4 +1,4 @@
-// widget-review-annot.scad — a tiny fixture design exercising the
+// widget-review-annot.scad: a tiny fixture design exercising the
 // `// @review` / `// @reviewNote` annotations (tests/gen-schema.test.mjs).
 // @reviewNote "Prints exactly as typed."
 

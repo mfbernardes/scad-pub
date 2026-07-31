@@ -1,9 +1,9 @@
-// SvgPrepareControl.tsx — the field control for an `// @svg` parameter. Instead
+// SvgPrepareControl.tsx: the field control for an `// @svg` parameter. Instead
 // of a raw path text box, it offers a drop zone / "Prepare SVG…" button that
 // loads a drawing into the SvgWizard. On completion it writes the fixed SVG into
 // the render's virtual filesystem, points this parameter at it, and (when the
 // field binds `layers=<param>`) writes the derived colour string into that
-// second parameter — then the normal auto-render picks it up.
+// second parameter: then the normal auto-render picks it up.
 import { lazy, Suspense, useState } from "react";
 import { Upload as UploadIcon, FileCode as FileCodeIcon } from "lucide-react";
 import type { SvgFieldMeta } from "../openscad/types";
@@ -24,8 +24,8 @@ function loadSvgWizard() {
 // `react-hooks/static-components` is satisfied). A rejected chunk load
 // (offline, build-hash drift after a deploy, an ad blocker on the chunk URL, …)
 // is cached by the browser's module map for the document's lifetime: re-running
-// the same dynamic `import()` — even from a freshly minted `lazy()` wrapper —
-// just re-throws the cached rejection, so there is no in-place re-fetch. The
+// the same dynamic `import()` (even from a freshly minted `lazy()` wrapper)
+// re-throws the cached rejection, so there is no in-place re-fetch. The
 // only reliable recovery is a full reload, which re-requests every chunk from
 // the network; the error fallback below offers exactly that (see finding #14).
 const SvgWizardLazy = lazy(loadSvgWizard);
@@ -45,14 +45,14 @@ interface Props {
   onChange: (v: string) => void;
   /**
    * SVG basenames the renderer can resolve right now (bundled assets ∪ imported
-   * `.svg`). When the current value names a file that isn't in it — e.g. an
-   * imported drawing the user later removed — an actionable "not imported" hint
+   * `.svg`). When the current value names a file that isn't in it: e.g. an
+   * imported drawing the user later removed. An actionable "not imported" hint
    * is shown, mirroring ParamForm's missing-font hint.
    */
   availableSvgFiles?: Set<string>;
   /**
-   * Current value of the parameter named by the field's `height=` binding — the
-   * relief height a region falls back to — so the wizard can show it. Null when
+   * Current value of the parameter named by the field's `height=` binding: the
+   * relief height a region falls back to, so the wizard can show it. Null when
    * the field binds none.
    */
   defaultHeight?: number | null;
@@ -67,7 +67,7 @@ function baseName(name: string): string {
 const MAX_SVG_BYTES = 2 * 1024 * 1024; // 2 MB
 
 /** A dropped/picked file must look like an SVG. The native picker's `accept`
- *  filters its own dialog, but a drag-drop bypasses it — so re-check here. */
+ *  filters its own dialog, but a drag-drop bypasses it, so re-check here. */
 function svgRejectionReason(file: File): string | null {
   const isSvg =
     file.type === "image/svg+xml" || /\.svg$/i.test(file.name);
@@ -82,9 +82,9 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
   const [pending, setPending] = useState<{ text: string; fileName: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The value points at a drawing the renderer can't resolve (typically an
-  // imported SVG the user has since removed). The drop zone below is the fix —
-  // prepare/import it again — so the hint just names what's gone.
+  // The value points at a drawing the renderer can't resolve (usually an
+  // imported SVG the user has since removed). The drop zone below is the fix:
+  // prepare/import it again, so the hint names what's gone.
   const missing = availableSvgFiles ? isSvgMissing(value, availableSvgFiles) : false;
 
   const loadFile = async (file: File) => {
@@ -186,7 +186,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
                   type="button"
                   size="sm"
                   // The browser caches the failed chunk load for the page's
-                  // life, so an in-place retry can't re-fetch it (see #14) — a
+                  // life, so an in-place retry can't re-fetch it (see #14): a
                   // reload re-requests every chunk from the network.
                   onClick={() => window.location.reload()}
                 >

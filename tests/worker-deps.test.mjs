@@ -1,4 +1,4 @@
-// Tests for scripts/lib/worker-deps.mjs — the H3 static import-closure
+// Tests for scripts/lib/worker-deps.mjs: the H3 static import-closure
 // resolver that derives the render worker's dependency list for renderHash
 // instead of a hand-maintained file list.
 import { test } from "node:test";
@@ -135,7 +135,7 @@ test("the real render worker's closure includes renderArgs.ts and scad.ts (geome
   assert.ok(names.includes("src/openscad/worker.ts"));
   assert.ok(names.includes("src/openscad/renderArgs.ts"));
   assert.ok(names.includes("src/lib/scad.ts"));
-  // The generated schema JSON is a data import, not a further source file —
+  // The generated schema JSON is a data import, not a further source file:
   // it must not appear as a "dependency" to parse for more imports.
   assert.ok(!names.some((n) => n.endsWith(".json")));
 });

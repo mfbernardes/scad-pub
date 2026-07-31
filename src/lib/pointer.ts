@@ -1,4 +1,4 @@
-// pointer.ts — one-shot coarse-pointer test (touch-primary devices), shared by
+// pointer.ts: one-shot coarse-pointer test (touch-primary devices), shared by
 // the touch-gated behaviours: dialogs that shouldn't steal focus / pop the
 // mobile keyboard on open, the viewer gesture hint's touch wording, and the
 // scroll-focused-into-view keyboard avoidance. A plain snapshot (not reactive

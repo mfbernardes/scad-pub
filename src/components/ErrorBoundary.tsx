@@ -1,9 +1,9 @@
-// ErrorBoundary.tsx — a generic, reusable error boundary. Contains a
+// ErrorBoundary.tsx: a generic, reusable error boundary. Contains a
 // rendering error to its subtree instead of letting it unmount an ancestor
 // (or, at the root, the whole app), and clears itself when `resetKey`
 // changes so a caller can offer retry by remounting under a fresh key.
 // Used scoped to the Viewer (a new render result is the reset signal), the
-// lazily-loaded SVG wizard (a bumped attempt counter is the reset signal —
+// lazily-loaded SVG wizard (a bumped attempt counter is the reset signal,
 // see SvgPrepareControl.tsx), and at the app root in main.tsx.
 import { Component, type ReactNode } from "react";
 

@@ -1,4 +1,4 @@
-// useDebounce — the value, delayed: returns `value` but only after it has held
+// useDebounce: the value, delayed: returns `value` but only after it has held
 // steady for `ms`. Each change resets the timer, so rapid updates collapse into
 // one. Used for the parameter search box so filtering doesn't run per keystroke.
 import { useEffect, useState } from "react";

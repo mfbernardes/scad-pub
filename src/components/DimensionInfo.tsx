@@ -1,14 +1,14 @@
-// DimensionInfo.tsx — the viewer's measurements panel, shown while the dimension
+// DimensionInfo.tsx: the viewer's measurements panel, shown while the dimension
 // overlay is on. Its first line is always the model's bounding box (W × D × H,
 // in mm); beneath it sit any per-design facts the design marked with a `// @info`
 // annotation in its .scad source (e.g. the engraved text, a font height), then
 // any rows the design surfaced at render time via
-// `echo("@info", label, unit, value)` (see lib/computedInfo.ts) — the mechanism
+// `echo("@info", label, unit, value)` (see lib/computedInfo.ts): the mechanism
 // for values OpenSCAD itself computes internally, which gen-schema's static
 // parser could never know. All of it is measured/read downstream of the
-// export — purely informative, never part of a print.
+// export: purely informative, never part of a print.
 //
-// `mm`/`formatValue` are src/lib/format.ts's shared `mm`/`formatParamValue` —
+// `mm`/`formatValue` are src/lib/format.ts's shared `mm`/`formatParamValue`:
 // the same functions reviewSummary.ts's curated review rows use, so this
 // panel and a pre-download review summary can never disagree about what a
 // value says (see format.ts's own doc).
@@ -25,14 +25,14 @@ interface Props {
   design: Design;
   /** Bounding-box size in millimetres (the headline "Dimensions" line). */
   size: Dimensions;
-  /** Values behind the current render — not the live controls — so the figures
+  /** Values behind the current render (not the live controls) so the figures
    *  change in step with the measured geometry, only once a render lands. */
   values: Values;
-  /** Render is behind the controls (manual mode) — the figures, like the model,
+  /** Render is behind the controls (manual mode): the figures, like the model,
    *  don't yet reflect the latest edits. */
   stale?: boolean;
   /** Runtime "calculated value" rows from `echo("@info", label, unit, value)`
-   *  in the design's .scad source — see lib/computedInfo.ts. Rendered as plain
+   *  in the design's .scad source, see lib/computedInfo.ts. Rendered as plain
    *  rows after the bounding box and param-@info rows, in echo order. */
   computed?: ComputedInfo[];
   /** Folded down to the bounding-box headline alone, so the panel can get out
@@ -82,8 +82,8 @@ export function DimensionInfo({
       // (per-layout offsets). The panel itself is pointer-events-none, with
       // only the fold button and the detail rows opting back in: the rows need
       // it so a long list can still be scrolled (a touch landing on a row
-      // scroll-chains to this container), but everything else — the headline,
-      // the padding, the whole card when it's folded — stays transparent to
+      // scroll-chains to this container), but everything else. The headline,
+      // the padding, the whole card when it's folded. Stays transparent to
       // pointers so a drag that starts over the panel orbits the model behind
       // it instead of being swallowed.
       className={cn(

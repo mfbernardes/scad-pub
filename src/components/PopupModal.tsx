@@ -1,4 +1,4 @@
-// PopupModal.tsx — the configurable notice dialog (schema.popup). Reuses the
+// PopupModal.tsx: the configurable notice dialog (schema.popup). Reuses the
 // shared Modal shell (focus trap, Escape, backdrop) and the Markdown renderer
 // so the body supports links and basic formatting. The "dismissible" mode adds
 // a "Don't show this again" checkbox; "once" remembers on any close; "always"
@@ -25,7 +25,7 @@ export function PopupModal({
   popup: PopupNotice;
   /** Incidental close (backdrop / Escape / X). `remember` persists the dismissal. */
   onClose: (remember: boolean) => void;
-  /** The primary button — closes and advances (e.g. opens the design picker). */
+  /** The primary button: closes and advances (e.g. opens the design picker). */
   onPrimary: (remember: boolean) => void;
   designs: Design[];
   designId: string;
@@ -45,7 +45,7 @@ export function PopupModal({
   const close = () => onClose(remember());
   const primary = () => onPrimary(remember());
 
-  // Small, muted standing disclosure — same treatment in every mode, incl.
+  // Small, muted standing disclosure: same treatment in every mode, incl.
   // the picker below (plain text, not Markdown: it's meant for a short,
   // config-fixed line, not free-form content).
   const footnote = popup.footnote && (

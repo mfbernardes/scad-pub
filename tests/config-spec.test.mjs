@@ -1,7 +1,7 @@
 // Unit tests for scripts/lib/config-spec.mjs and the two things it feeds:
 // the committed scadpub.config.schema.json (scripts/gen-config-schema.mjs)
 // and docs/config.md's key coverage. These are the drift guards the previous
-// hand-maintained-in-five-places setup didn't have — see CONFIG_SPEC's
+// hand-maintained-in-five-places setup didn't have, see CONFIG_SPEC's
 // file-top comment and the commit that introduced it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -41,7 +41,7 @@ test("scadpub.config.schema.json is up to date with config-spec.mjs", () => {
   );
 });
 
-// Every key CONFIG_SPEC knows about, flattened to bare names (not paths) —
+// Every key CONFIG_SPEC knows about, flattened to bare names (not paths):
 // the same name reused at different nesting levels (e.g. `id` on the config
 // itself and on a `designs[]` entry) only needs to be documented once.
 function flattenSpecKeys(spec) {
@@ -65,7 +65,7 @@ function flattenSpecKeys(spec) {
 
 // docs/config.md documents most keys as `**\`key\`**` (a bold reference
 // bullet) and the CSS colour tokens as `` `--token` `` (the custom-property
-// name a `colors.<theme>.<token>` value ultimately sets) — both conventions
+// name a `colors.<theme>.<token>` value ultimately sets): both conventions
 // wrap the bare name in single backticks, so a plain `` `name` ``/`` `--name`
 // `` substring search catches either.
 function docMentionsKey(doc, key) {
@@ -73,7 +73,7 @@ function docMentionsKey(doc, key) {
 }
 
 // Keys config-spec.mjs carries that genuinely aren't given a standalone
-// `` `key` `` mention in docs/config.md — each is documented, just not in a
+// `` `key` `` mention in docs/config.md: each is documented, but not in a
 // form this mechanical scan can find (see the comment at each entry).
 const SPEC_KEYS_NOT_MECHANICALLY_IN_DOCS = new Set([
   // Mentioned as `"$schema"` (with the quotes inside the backticks, since
@@ -83,13 +83,13 @@ const SPEC_KEYS_NOT_MECHANICALLY_IN_DOCS = new Set([
   // backtick span), not bare `heavy`.
   "heavy",
   // `licenses[].version` is only covered by prose ("the rest are optional")
-  // alongside `text`/`sourceUrl`/`note`, which — unlike `version` — do get
+  // alongside `text`/`sourceUrl`/`note`, which (unlike `version`) do get
   // their own standalone mention elsewhere in the file.
   "version",
 ]);
 
 // docs/config.md also uses the `**\`key\`**` bullet convention for four
-// popup.mode ENUM VALUES ("shown on every visit"), not key names — same
+// popup.mode ENUM VALUES ("shown on every visit"), not key names: same
 // markdown shape, different meaning, so the scan below has to know about
 // them explicitly rather than mistaking them for undocumented keys.
 const DOC_BOLD_CODE_NOT_A_KEY = new Set(["always", "once", "dismissible", "picker"]);
@@ -161,12 +161,12 @@ test("src/lib/schema.ts's hand-typed enum lists match config-spec.mjs", () => {
 // This is the test the PR review asked for, driven mechanically off
 // CONFIG_SPEC itself rather than a hand-picked sample: `walkSpecPaths` below
 // enumerates every settable path in the tree (a top-level key, a nested
-// group's own key, and — via a synthetic "[]" path segment — every field of
+// group's own key, and (via a synthetic "[]" path segment) every field of
 // an array's entry template, at any depth: `colors.light.<token>`,
 // `designs[].presets.images`, …). For each path this builds a real,
 // otherwise-valid scadpub.config.json (`baseConfig()`, below) with ONLY that
 // one field set to an explicit `null`, and runs it through the actual
-// `generate()` gen-schema.mjs itself calls at build time — no re-implemented
+// `generate()` gen-schema.mjs itself calls at build time: no re-implemented
 // validation, no assumptions about which fields "should" be nullable.
 //
 // The baseline config is deliberately minimal: every field this sweep isn't
@@ -176,10 +176,10 @@ test("src/lib/schema.ts's hand-typed enum lists match config-spec.mjs", () => {
 // path as gen-schema.mjs gets (every other fixture-driven test exercises it).
 // The exceptions are the handful of genuine cross-field dependencies a
 // missing shell would crash THIS TEST's own path navigation on, or would
-// accidentally fail for a reason unrelated to the field under test — see each
+// accidentally fail for a reason unrelated to the field under test, see each
 // baseConfig() key's own comment.
 test("emitted schema nullability matches the real parser, for every CONFIG_SPEC field", () => {
-  // A minimal, dependency-free design: no `use`/`include`, no `// @icon` — so
+  // A minimal, dependency-free design: no `use`/`include`, no `// @icon`, so
   // no other file needs to exist for buildDesigns to accept it, and 'assets'
   // auto-discovery (collectDeps) trivially finds nothing to walk.
   const root = mkdtempSync(join(tmpdir(), "config-null-agreement-"));
@@ -188,7 +188,7 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
     `/* [Main] */\n// A demo parameter.\nlabel = "hi";\n`
   );
   // Real, existing files for the two fields gen-schema.mjs unconditionally
-  // stats/reads regardless of outPublicDir (copyLogoAssets, copyExtraCss) —
+  // stats/reads regardless of outPublicDir (copyLogoAssets, copyExtraCss):
   // every OTHER file-backed field (pwa.icon, render.fonts, …) is only ever
   // read when outPublicDir is given, which this sweep never passes.
   const logoAbs = join(FIXTURES, "logo.svg");
@@ -200,7 +200,7 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
   // The one baseline every per-field config is cloned from. `source` is
   // deliberately absent: the config file lives directly in `root` (alongside
   // widget.scad), so 'source''s own built-in default ('.') already resolves
-  // there — meaning setting 'source' to null (this sweep's own test of that
+  // there. Meaning setting 'source' to null (this sweep's own test of that
   // field) changes nothing about where designs are found either.
   function baseConfig() {
     return {
@@ -211,7 +211,7 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
           // A shell, not a populated value: only present so
           // 'designs[].presets.images' has an object to navigate into when
           // ITS OWN nullability is under test (see setNull below). Absent
-          // otherwise, presets.images stays unset — checkPresetImages treats
+          // otherwise, presets.images stays unset: checkPresetImages treats
           // that exactly like an absent 'presets' object.
           presets: {},
         },
@@ -221,7 +221,7 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
       // back to it (and vice versa) without a crash.
       logo: { light: logoAbs, dark: logoAbs },
       extraCss: extraCssAbs,
-      // header/body are popup's only REQUIRED fields — present so every
+      // header/body are popup's only REQUIRED fields: present so every
       // OTHER popup.* field's own null-test still parses a valid popup.
       popup: { header: "Welcome", body: "Inline popup body." },
       // Inline form (not 'noteFile'): populating 'note' means a null
@@ -230,7 +230,7 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
       fileImport: { note: "Inline guidance." },
       // Empty-object shells purely so a *nested* field one level down
       // ('ui.afterExport.helpTab', 'viewer.controls.measure', …) has a real
-      // object to set a key on — see setNull's own "container" comment.
+      // object to set a key on, see setNull's own "container" comment.
       // Deliberately WITHOUT a real 'helpTab' value: gen-schema.mjs
       // cross-checks a non-null helpTab against real 'help.tabs[].label's,
       // and this sweep has no reason to also exercise that unrelated check.
@@ -241,7 +241,7 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
       colors: { light: {}, dark: {} },
       // marker is notices[]'s only required field. 'label' is a shell (not a
       // real singular/plural pair the test cares about) purely so
-      // 'notices[].label.one'/'.other' have a real object to set a key on —
+      // 'notices[].label.one'/'.other' have a real object to set a key on,
       // see setNull's own "container" comment. 'other' must be a real
       // non-empty string since it's the object form's own required key
       // (independent of the whole 'label' field's optionality), or every
@@ -266,7 +266,7 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
 
   // Set the value at `path` (a segment list; "[]" means "index 0 of the
   // array named by the PRECEDING segment") to `null`, mutating `config` in
-  // place. Every intermediate container must already exist in `config` —
+  // place. Every intermediate container must already exist in `config`:
   // that's baseConfig()'s job (see its own shell comments); a missing one
   // means the baseline needs a new shell, not that this helper should paper
   // over it, so it throws a clear, path-naming error instead of a bare
@@ -291,7 +291,7 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
   // Enumerate every settable path in CONFIG_SPEC: one entry per key found in
   // any node's `properties` (at any depth an array's `items` recurses
   // through, marked "[]"), mirroring flattenSpecKeys above but keeping the
-  // full path instead of collapsing to a bare name — this is the "walk the
+  // full path instead of collapsing to a bare name. This is the "walk the
   // spec" the PR review asked for, not a hand-picked sample.
   function walkSpecPaths(spec) {
     const paths = [];
@@ -314,7 +314,7 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
   // rather than the config: does the schema fragment at `path` permit a
   // `null` instance? Transparently looks inside an `anyOf` union (fileImport/
   // logo/pwa.themeColor's primitive-or-object shape, designs[].presets.images's
-  // string-or-object one, and — since gen-config-schema.mjs's own addNull —
+  // string-or-object one, and (since gen-config-schema.mjs's own addNull)
   // every enum) for whichever branch actually carries `properties`/`items`,
   // since that's the branch a deeper path segment needs to descend into.
   function schemaBranchWith(node, key) {

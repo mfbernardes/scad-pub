@@ -1,4 +1,4 @@
-// runner.ts — main-thread client for the OpenSCAD render worker. Latest-wins:
+// runner.ts: main-thread client for the OpenSCAD render worker. Latest-wins:
 // because callMain is blocking and cannot be interrupted in-place, a render that
 // supersedes one still in flight cancels it by terminating and respawning the
 // worker (the superseded promise rejects with SupersededError).
@@ -14,7 +14,7 @@ import type { RenderRequest, RenderResult, WorkerModuleMessage, WorkerProgress }
 import { detectMountCollisions } from "./renderArgs";
 
 // M10: a user file set that sanitizes to a colliding mount path (see
-// detectMountCollisions) is a request-shape error, not a render outcome — it's
+// detectMountCollisions) is a request-shape error, not a render outcome. It's
 // rejected before touching either cache tier or the worker, so the caller
 // finds out immediately which raw names collided rather than getting a render
 // of whichever one happened to mount last.
@@ -83,7 +83,7 @@ function hasFiles(files: RenderRequest["userFiles"]): files is Record<string, Ui
 
 // M10: FNV-1a-64 (BigInt), one pass over the bytes. `seed` lets the same byte
 // stream produce two statistically-independent 64-bit outputs cheaply (see
-// strongDigest) instead of one 32-bit output — the review reproduced an actual
+// strongDigest) instead of one 32-bit output: the review reproduced an actual
 // same-name/same-length collision against the previous 32-bit FNV-1a, which a
 // 64-bit (let alone combined 128-bit-equivalent) space makes practically
 // unreachable for a same-length forged collision.
@@ -103,21 +103,21 @@ function fnv1a64(bytes: Uint8Array, seed: bigint): string {
 // (different seeds) concatenated into a 128-bit-equivalent hex string.
 // crypto.subtle.digest (SHA-256) is async, which would break the synchronous
 // `fileSignature` contract useRenderPipeline.ts's renderKey useMemo relies on
-// (`useMemo(() => fileSignature(userFiles), [userFiles])`) — staying
+// (`useMemo(() => fileSignature(userFiles), [userFiles])`). Staying
 // synchronous keeps that call site unchanged while making a same-length
 // collision astronomically less likely than the previous single 32-bit pass.
 function strongDigest(bytes: Uint8Array): string {
   return fnv1a64(bytes, 0xcbf29ce484222325n) + fnv1a64(bytes, 0x84222325cbf29ce4n);
 }
 
-// M10: NOT memoized by object identity — a caller that mutates a Uint8Array's
+// M10: NOT memoized by object identity. A caller that mutates a Uint8Array's
 // bytes in place (rather than supplying a new object, the app's normal
-// pattern — see useFileImports.ts) must still be detected as a different file
+// pattern, see useFileImports.ts) must still be detected as a different file
 // set on the next render(); recomputing the digest fresh each call is what
 // makes that possible (see the "mutate in place" runner.test.mjs case). Files
-// are typically small (fonts/SVGs/data — KBs, not MBs), so a full re-hash per
+// are small (fonts/SVGs/data: KBs, not MBs), so a full re-hash per
 // render stays cheap; the actually expensive part this finding also calls
-// out — retransmitting unchanged bytes to the worker on every render — is
+// out (retransmitting unchanged bytes to the worker on every render) is
 // addressed separately in OpenSCADRunner.render() by only including
 // `userFiles` in the postMessage payload when this signature has changed
 // since the last message a given worker instance received.
@@ -132,7 +132,7 @@ export function fileSignature(files: RenderRequest["userFiles"]): string {
 
 // Content-stable cache key shared by both tiers. The user-file signature (not an
 // ephemeral session counter) is baked in so the key reproduces across reloads:
-// changing files simply yields a different key, and stale entries age out via
+// changing files yields a different key, and stale entries age out via
 // LRU instead of needing an explicit cache wipe. `version` carries the build's
 // renderHash, so a deploy that changes any render input invalidates old entries.
 function cacheKey(req: Omit<RenderRequest, "id">, version: string): string {
@@ -161,29 +161,29 @@ export class OpenSCADRunner {
   private readonly store?: StlCacheStore;
   private readonly onReady?: () => void;
   // Forwards the worker's bootstrap-download progress (see worker.ts's
-  // resolveWasmModule). Suppressed once `readyFired` is set (below) —
+  // resolveWasmModule). Suppressed once `readyFired` is set (below):
   // a late/stale message from a respawned worker (spawn() resets bootstrap,
-  // which typically hits Cache Storage and posts nothing, but isn't
+  // which usually hits Cache Storage and posts nothing, but isn't
   // guaranteed to) must never resurrect the pre-ready loading UI after the
   // app has already moved on.
   private readonly onProgress?: (p: WorkerProgress) => void;
   private readyFired = false;
   private workerFailed = false;
   // A module a PREVIOUS worker instance compiled itself (see worker.ts's
-  // postModuleOnce) — never one the worker merely received back, since that
+  // postModuleOnce), never one the worker merely received back, since that
   // worker never re-echoes it. spawn() hands this to the next worker it
   // creates so a respawn (latest-wins cancellation, or worker recovery)
   // costs only re-instantiation there, not a repeat fetch+compile of the
   // ~10 MB wasm binary. Stays set across a respawn (unlike lastSentFileSig,
-  // which spawn() explicitly resets) — a compiled module is valid for any
-  // worker instance sharing this runner's lifetime, not just the one that
+  // which spawn() explicitly resets): a compiled module is valid for any
+  // worker instance sharing this runner's lifetime, not only the one that
   // produced it. Nulled for good the moment postMessage() can't
   // structured-clone it (DataCloneError): no future worker will fare any
   // better, so the feature degrades to warmup-only rather than retrying.
   private compiledModule: WebAssembly.Module | null = null;
   // M10: the user-file signature last actually POSTED to the current worker
   // instance (as opposed to served from a cache tier without ever reaching
-  // the worker). null after spawn() — a fresh worker's module scope starts
+  // the worker). null after spawn(). A fresh worker's module scope starts
   // with no mounted user files, so the first post to it must always include
   // them regardless of what a previous (now-terminated) worker last saw.
   private lastSentFileSig: string | null = null;
@@ -192,7 +192,7 @@ export class OpenSCADRunner {
     opts: {
       onReady?: () => void;
       /** Forwarded the worker's bootstrap-download progress (see WorkerProgress).
-       *  Never called after onReady has fired once — see the field's own doc. */
+       *  Never called after onReady has fired once, see the field's own doc. */
       onProgress?: (p: WorkerProgress) => void;
       cacheSize?: number;
       cacheBytes?: number;
@@ -232,7 +232,7 @@ export class OpenSCADRunner {
   }
 
   /**
-   * Drop every cached render — the in-memory LRU (L1) and the persistent store
+   * Drop every cached render: the in-memory LRU (L1) and the persistent store
    * (L2). Used when the set of user files changes (import/clear), so previously
    * rendered geometry can't be served and the persisted cache doesn't accrete
    * entries for file sets that no longer exist.
@@ -270,7 +270,7 @@ export class OpenSCADRunner {
     this.workerFailed = false;
     // M10: a fresh worker's module scope holds no mounted user files (see
     // worker.ts's `cachedUserFiles`), so whatever this runner last sent to a
-    // now-terminated worker is irrelevant — the next render() must send the
+    // now-terminated worker is irrelevant. The next render() must send the
     // full current file set again, not skip it as "unchanged".
     this.lastSentFileSig = null;
     const worker = new Worker(new URL("./worker.ts", import.meta.url), {
@@ -294,13 +294,13 @@ export class OpenSCADRunner {
         | WorkerProgress
         | WorkerModuleMessage;
       if ("type" in data && data.type === "progress") {
-        // Suppressed once ready has fired — see onProgress's doc comment.
+        // Suppressed once ready has fired, see onProgress's doc comment.
         if (!this.readyFired) this.onProgress?.(data);
         return;
       }
       if ("type" in data && data.type === "module") {
         // This worker compiled the wasm module itself (a module we handed IT
-        // is never echoed back — see worker.ts's postModuleOnce). Keep it for
+        // is never echoed back, see worker.ts's postModuleOnce). Keep it for
         // the NEXT spawn() so a future respawn can skip straight to
         // instantiation.
         this.compiledModule = data.module;
@@ -326,7 +326,7 @@ export class OpenSCADRunner {
           // when we posted it, and this worker is reused for the retry (a fatal
           // result arrives as a normal message, not onerror, so spawn() never
           // runs and lastSentFileSig is retained). Forget the sent signature so
-          // the next render resends the full file set — otherwise the retry
+          // the next render resends the full file set: otherwise the retry
           // omits the unchanged bytes and the worker mounts nothing, producing
           // (and caching) wrong geometry under a key that claims those files
           // were present.
@@ -334,7 +334,7 @@ export class OpenSCADRunner {
           if (this.inflightKey) {
             this.remember(this.inflightKey, result); // L1
             // M11: staleDefines is correctness-relevant (it's what tells the
-            // UI "reload — this build is skewed relative to the design
+            // UI "reload: this build is skewed relative to the design
             // source"), so it must survive an L2 round-trip exactly like every
             // other field here; omitting it would let a later reload serve a
             // skewed successful result with no reload warning attached.
@@ -345,7 +345,7 @@ export class OpenSCADRunner {
                 exitCode: result.exitCode,
                 ms: result.ms,
                 ...(result.staleDefines?.length ? { staleDefines: result.staleDefines } : {}),
-              }); // L2, write-through (serialized by the store itself — see stlCache.ts)
+              }); // L2, write-through (serialized by the store itself, see stlCache.ts)
           }
           this.inflightId = null;
           this.inflightKey = null;
@@ -356,7 +356,7 @@ export class OpenSCADRunner {
 
     // Bootstrap warm-up: post immediately, before any render request, so
     // asset loading starts at spawn time instead of waiting for the first
-    // (400ms-debounced) render message — see worker.ts's self.onmessage
+    // (400ms-debounced) render message, see worker.ts's self.onmessage
     // "module"/"warmup" cases. A module worker queues messages until its
     // module script evaluates and installs the onmessage handler set up
     // above, so posting right here (synchronously, before that has
@@ -366,8 +366,8 @@ export class OpenSCADRunner {
         worker.postMessage({ type: "module", module: this.compiledModule });
       } catch {
         // DataCloneError (or similar): this browser can't structured-clone a
-        // WebAssembly.Module across the worker boundary. Drop it for good —
-        // no future worker will fare any better either — and degrade to a
+        // WebAssembly.Module across the worker boundary. Drop it for good:
+        // no future worker will fare any better either, and degrade to a
         // plain warm-up instead of leaving the next respawn to retry the
         // same failing post.
         this.compiledModule = null;
@@ -400,8 +400,8 @@ export class OpenSCADRunner {
   }
 
   async render(req: Omit<RenderRequest, "id">): Promise<RenderResult> {
-    // M10: reject a colliding user-file set up front — before it can consume
-    // an id, touch either cache tier, or reach the worker — so the caller
+    // M10: reject a colliding user-file set up front. Before it can consume
+    // an id, touch either cache tier, or reach the worker, so the caller
     // finds out immediately which raw names collided. (worker.ts carries a
     // defense-in-depth copy of this same check, since it's the actual
     // mounting authority; this one gives faster, richer feedback without a
@@ -416,7 +416,7 @@ export class OpenSCADRunner {
     // even if the new result can be served from a cache.
     if (this.inflightId !== null) this.cancelInflight();
 
-    // L1: in-memory LRU (synchronous — no await before the worker post when
+    // L1: in-memory LRU (synchronous: no await before the worker post when
     // there's no L2 store, so the latest-wins/timing contract is unchanged).
     const cached = this.cache.get(key);
     if (cached) {
@@ -426,7 +426,7 @@ export class OpenSCADRunner {
     }
 
     // L2: persistent store. The lookup is async, so a newer render() can land
-    // while we await it — the latestId guard rejects this one if so.
+    // while we await it: the latestId guard rejects this one if so.
     if (this.store) {
       let stored: StoredStl | undefined;
       try {
@@ -459,8 +459,8 @@ export class OpenSCADRunner {
     this.inflightId = id;
     this.inflightKey = key;
     // M10: only include `userFiles` in the postMessage payload when the file
-    // set has changed since the last message THIS worker instance received —
-    // worker.ts retains the last-mounted set across renders (its module scope
+    // set has changed since the last message THIS worker instance received.
+    // Worker.ts retains the last-mounted set across renders (its module scope
     // survives even though it instantiates a fresh WASM module per render),
     // so re-sending unchanged bytes (a full structured-clone copy) on every
     // param-only render is pure waste. spawn() resets lastSentFileSig to null,

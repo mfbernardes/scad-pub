@@ -50,7 +50,7 @@ export function fixViewBoxOrigin(root: Element): string[] {
 }
 
 // Whether the element sets its own fill (a `fill=` attribute or a `fill:` in its
-// `style` attribute) — in which case a stylesheet rule must not override it.
+// `style` attribute). In which case a stylesheet rule must not override it.
 export function hasOwnFill(el: Element): boolean {
   if (/(?:^|;)\s*fill\s*:/i.test(el.getAttribute("style") ?? "")) return true;
   return el.getAttribute("fill") !== null;
@@ -63,7 +63,7 @@ interface FillRule {
   fill: string;
 }
 
-// Parse `<style>` text for simple `selector { … fill: X … }` rules using a
+// Parse `<style>` text for plain `selector { … fill: X … }` rules using a
 // class (`.c`), id (`#i`) or element (`tag`) selector. OpenSCAD's import ignores
 // `<style>` entirely, so these fills are invisible to it and to colour
 // derivation; resolving them onto the shapes is what keeps a CSS-styled export
@@ -85,7 +85,7 @@ function parseStyleFillRules(root: Element): FillRule[] {
         if (/^\.[-\w]+$/.test(s)) rules.push({ rank: 1, name: s.slice(1), fill });
         else if (/^#[-\w]+$/.test(s)) rules.push({ rank: 2, name: s.slice(1), fill });
         else if (/^[a-zA-Z][\w-]*$/.test(s)) rules.push({ rank: 0, name: s.toLowerCase(), fill });
-        // anything else is a compound/complex selector — left for `check` to flag
+        // anything else is a compound/complex selector: left for `check` to flag
       }
     }
   }
@@ -109,7 +109,7 @@ export function styleRuleFill(el: Element, rules: FillRule[]): string | null {
   return best ? best.fill : null;
 }
 
-/** Resolve simple `<style>` class/id/tag fill rules onto the shapes and groups
+/** Resolve plain `<style>` class/id/tag fill rules onto the shapes and groups
  *  that rely on them (setting an inline `fill`), so colour derivation reads the
  *  drawing's real colours instead of defaulting to black. Appearance-preserving
  *  and geometry-neutral (OpenSCAD ignores both the stylesheet and the fill). */

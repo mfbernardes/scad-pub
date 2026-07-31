@@ -101,7 +101,7 @@ for (const [shapeName, shape] of Object.entries(SHAPES)) {
         assert.ok(fracWidth <= DEFAULT_FIT_FRACTION.width + 1e-6, `fracWidth ${fracWidth} exceeds width target`);
         assert.ok(fracHeight <= DEFAULT_FIT_FRACTION.height + 1e-6, `fracHeight ${fracHeight} exceeds height target`);
         // At least one axis actually binds (reaches its own target), or the
-        // fit isn't doing its job — a degenerate "backed off forever" result
+        // fit isn't doing its job: a degenerate "backed off forever" result
         // would trivially pass the overfill check above.
         const bindsWidth = Math.abs(fracWidth - DEFAULT_FIT_FRACTION.width) < 1e-6;
         const bindsHeight = Math.abs(fracHeight - DEFAULT_FIT_FRACTION.height) < 1e-6;
@@ -132,7 +132,7 @@ test("degenerate direction falls back instead of NaN/throwing", () => {
 test("an off-centre box (restOnGrid: target at the base, not the box's own centre) still fits every corner", () => {
   // Mirrors Viewer.tsx's restOnGrid mode: the box sits ABOVE the orbit target
   // (target at z=0, the grid; box spans z=[0, height]) rather than being
-  // centred on it — frameDistanceForBox must handle this asymmetry directly
+  // centred on it. FrameDistanceForBox must handle this asymmetry directly
   // (it projects each corner individually) rather than assuming symmetry.
   const groundedBox = { min: new THREE.Vector3(-40, -20, 0), max: new THREE.Vector3(40, 20, 30) };
   const target = new THREE.Vector3(0, 0, 0);
@@ -158,7 +158,7 @@ test("cameraBasis stays finite for a near-top view (direction parallel to world-
 // ── Chrome insets ───────────────────────────────────────────────────────
 // The measured mobile geometry these cases use (390x785 canvas at the sheet's
 // peek detent, and the overlays over it) comes from the built app driven at a
-// 390x844 viewport — so the "reads as a <edge> inset" expectations below are
+// 390x844 viewport, so the "reads as a <edge> inset" expectations below are
 // the real chrome, not invented rectangles.
 
 const CANVAS = rect(0, 0, 390, 785);
@@ -178,8 +178,8 @@ test("edgeInset: a full-width top bar reads as a top inset", () => {
 test("edgeInset: a top-left corner box reads as a top inset down to its lower edge", () => {
   // The nearest-edge rule at its weakest: a corner box has no single honest
   // edge, and the loser's axis is over-counted. Nothing the viewer feeds in is
-  // one — the measurements panel, its only corner overlay, is left out of the
-  // fit entirely (Viewer.tsx's chromeInsets) — but the behaviour is pinned
+  // one: the measurements panel, its only corner overlay, is left out of the
+  // fit entirely (Viewer.tsx's chromeInsets), but the behaviour is pinned
   // here so a future caller knows what it would get.
   assert.deepEqual(edgeInset(rect(12, 64, 278, 36), CANVAS), insets({ top: 100 }));
 });
@@ -276,7 +276,7 @@ test("insetTargetOffset: a bigger inset (or a farther camera) offsets more; a ta
 });
 
 // Where the box's own centre lands on screen, in pixels from the canvas top /
-// left, once `offset` has been applied to the orbit target — the whole point
+// left, once `offset` has been applied to the orbit target: the whole point
 // of the inset math, re-derived here rather than re-imported.
 function projectedCentrePx(dir, distance, offset, canvasWidthPx, canvasHeightPx) {
   const { dir: unit, right, up } = cameraBasis(dir);
@@ -353,7 +353,7 @@ test("the fit keeps the model clear of the chrome it was told about (integration
 
 test("aspectAwareFit leaves ordinary (near-square) aspects exactly alone", () => {
   // The neutral band covers every desktop viewer pane and the mobile sheet's
-  // half detent, so the tuned defaults are untouched there — identity, not
+  // half detent, so the tuned defaults are untouched there: identity, not
   // merely equal values, so a caller can detect the no-op.
   for (const aspect of [0.8, 1, 1.34, 1.6]) {
     assert.equal(aspectAwareFit(DEFAULT_FIT_FRACTION, aspect), DEFAULT_FIT_FRACTION, `aspect ${aspect}`);
@@ -422,7 +422,7 @@ test("singleEdgeInset measures each edge from the right side of the canvas", () 
 });
 
 test("singleEdgeInset clamps to the canvas and ignores an overlay clear of it", () => {
-  // Extends past both edges — the inset can never exceed the canvas.
+  // Extends past both edges: the inset can never exceed the canvas.
   const huge = rect(-50, -50, 1000, 2000);
   assert.deepEqual(singleEdgeInset(huge, CANVAS, "top"), insets({ top: CANVAS.bottom }));
   // Entirely outside: contributes nothing, same as edgeInset.

@@ -1,4 +1,4 @@
-// dep-versions.mjs (build side) — the installed versions of the third-party
+// dep-versions.mjs (build side): the installed versions of the third-party
 // packages the app actually bundles, read at build time and emitted as
 // schema.componentVersions for the open-source licenses modal.
 //
@@ -12,7 +12,7 @@
 //     names the wrong version is worse than one that names none.
 //
 // So the versions come from the same node_modules Vite bundles from, resolved
-// against THIS checkout (see version.mjs on why the ScadPub dir, not the cwd) —
+// against THIS checkout (see version.mjs on why the ScadPub dir, not the cwd):
 // a consumer project's build stamps whatever its own install resolved.
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -35,7 +35,7 @@ export const BUNDLED_PACKAGES = [
 /**
  * The installed version of one package, or undefined when it can't be read.
  * Tries `<name>/package.json` first, then walks up from the resolved entry
- * point — packages with an `exports` map often refuse the direct path (three
+ * point: packages with an `exports` map can refuse the direct path (three
  * does), so the walk-up is the load-bearing path, not a rare fallback.
  */
 function packageVersion(name, req) {
@@ -50,7 +50,7 @@ function packageVersion(name, req) {
     const json = read(req.resolve(`${name}/package.json`));
     if (json?.version) return json.version;
   } catch {
-    /* exports-restricted or absent — try the entry point below */
+    /* exports-restricted or absent: try the entry point below */
   }
   let dir;
   try {
@@ -77,8 +77,8 @@ function packageVersion(name, req) {
 
 /**
  * Installed versions of the bundled packages, keyed by package name. Packages
- * that can't be resolved are simply absent (their attribution then shows no
- * version rather than a stale one) — a missing bundled dependency fails the
+ * that can't be resolved are absent (their attribution then shows no
+ * version rather than a stale one): a missing bundled dependency fails the
  * vite build a moment later on its own, so this is not the place to throw.
  * @param {object} [opts]
  * @param {string} [opts.dir]  Checkout whose node_modules to resolve against.

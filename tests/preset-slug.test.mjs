@@ -1,9 +1,8 @@
-// Unit tests for scripts/lib/preset-slug.mjs — the preset-thumbnail slug
+// Unit tests for scripts/lib/preset-slug.mjs: the preset-thumbnail slug
 // rule for designs[].presets.images' directory form (see docs/config.md).
-// Must match taktildots' tools/render-preset-images.sh Python slug() byte
-// for byte; several cases below are drawn directly from that repo's real
-// scadpub.config.json presetImages map (a repo this rule was reverse-
-// engineered from), so a regression here would also break its migration.
+// Must match a downstream consumer's Python slug() byte for byte; several
+// cases below are drawn from a real deployment's presetImages map, so a
+// regression here would also break that deployment's thumbnail lookup.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { presetSlug, slugifyPresetNames } from "../scripts/lib/preset-slug.mjs";
@@ -28,12 +27,12 @@ test("presetSlug: the '|' and em/en-dash separators collapse like any other punc
 });
 
 test("presetSlug: non-ASCII German letters (ü, ß) are not [a-z0-9] and become dashes", () => {
-  // Real name from taktildots' signage presetImages map.
+  // Real name from a deployment's signage presetImages map.
   assert.equal(
     presetSlug("Tür | Büro, vier Senkbohrungen (Deutsch)"),
     "t-r-b-ro-vier-senkbohrungen-deutsch"
   );
-  // Real name from taktildots' learning_tile presetImages map: "Große"
+  // Real name from a deployment's learning-tile presetImages map: "Große"
   // lowercases to "große", and "ß" (already lowercase) still isn't [a-z0-9].
   assert.equal(
     presetSlug("Basisschrift | Große Fliesen 40 mm, Kinder (Deutsch)"),
@@ -48,14 +47,14 @@ test("presetSlug: a name that is ENTIRELY non-ASCII/space collapses to an empty 
 });
 
 test("presetSlug: '×' becomes 'x' (kept as an alphanumeric), unlike other punctuation", () => {
-  // Real names from taktildots' map design: without the '×'->'x' special
+  // Real names from a deployment's map design: without the '×'->'x' special
   // case these would lose the dimension entirely ("90-70" instead of "90x70").
   assert.equal(presetSlug("Klein — 90×70 mm (Deutsch)"), "klein-90x70-mm-deutsch");
   assert.equal(presetSlug("Groß — 160×120 mm (Deutsch)"), "gro-160x120-mm-deutsch");
 });
 
 test("slugifyPresetNames: two names that slug identically are disambiguated in order", () => {
-  // Real pair from taktildots' learning_tile presetImages map: both names
+  // Real pair from a deployment's learning-tile presetImages map: both names
   // are "Punctuation | English UEB: " followed by punctuation-only content,
   // so both slug to the same base and the second gets a numeric suffix.
   const names = [

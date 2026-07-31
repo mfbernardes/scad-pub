@@ -1,4 +1,4 @@
-// useStandalone — true when the app runs as an installed PWA (its own window),
+// useStandalone: true when the app runs as an installed PWA (its own window),
 // via the standalone display-mode or iOS Safari's navigator.standalone. Used to
 // hide affordances that only make sense in a browser tab (e.g. fullscreen).
 import { useSyncExternalStore } from "react";
@@ -13,7 +13,7 @@ function isStandalone(): boolean {
   );
 }
 
-// Module scope keeps these referentially stable — see subscribeMatchMedia.
+// Module scope keeps these referentially stable, see subscribeMatchMedia.
 const subscribe = subscribeMatchMedia(QUERY);
 const getServerSnapshot = (): boolean => false;
 

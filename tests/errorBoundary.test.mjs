@@ -1,10 +1,10 @@
 // Tests ErrorBoundary's pure state-transition logic (M14): a caught error
 // must show a fallback, and changing `resetKey` (the mechanism callers use to
-// offer retry — see SvgPrepareControl's `wizardAttempt` and Viewer's
+// offer retry, see SvgPrepareControl's `wizardAttempt` and Viewer's
 // `result`) must clear that error and let children render again. This repo
 // has no DOM-rendering test harness (no jsdom), so instead of mounting a real
-// tree we exercise the class component's static lifecycle methods directly —
-// they're pure functions of (error | props, state) — and call `render()`
+// tree we exercise the class component's static lifecycle methods directly:
+// they're pure functions of (error | props, state), and call `render()`
 // against a hand-built `this`, which is valid since it only reads
 // `this.state`/`this.props` and returns a plain React element tree.
 import { test } from "node:test";

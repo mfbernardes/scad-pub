@@ -1,4 +1,4 @@
-// useFileImports.ts — user-imported files (fonts, SVGs): the in-memory map,
+// useFileImports.ts: user-imported files (fonts, SVGs): the in-memory map,
 // its IndexedDB persistence (fileStore), and the render-cache invalidation an
 // import implies. Extracted from App.tsx; composed with useRenderPipeline,
 // whose invalidate() is passed in.
@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { loadFiles, saveFile, deleteFile, clearFiles } from "./fileStore";
 
 export interface FileImportsArgs {
-  /** Imported files are render inputs — every change invalidates the cache. */
+  /** Imported files are render inputs: every change invalidates the cache. */
   invalidate: () => void;
   setAnnouncement: (msg: string) => void;
 }

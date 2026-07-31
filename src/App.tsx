@@ -47,11 +47,11 @@ import { shouldShowPopup, rememberPopup, isDesignChooser } from "./lib/popup";
 import type { ExportSuccessState } from "./components/ExportSuccess";
 
 // LicensesModal, HelpModal, DesignDocModal and FilesModal are interaction-only
-// surfaces most sessions never open — LicensesModal in particular drags in the
+// surfaces most sessions never open. LicensesModal in particular drags in the
 // raw OFL-1.1 license text (src/lib/licenses.ts) and HelpModal the built-in
 // help copy (src/lib/defaultHelp.ts). Load each behind a module-scope `lazy()`
 // (created once, not per render, so `react-hooks/static-components` is
-// satisfied — see SvgPrepareControl.tsx for the same pattern) so they land in
+// satisfied, see SvgPrepareControl.tsx for the same pattern) so they land in
 // their own chunks instead of the eager main bundle.
 //
 // The thunks are named so warmModalChunks() below can pull the same dynamic
@@ -79,10 +79,10 @@ const FilesModal = lazy(loadFilesModal);
 // first time React renders it), so the dialog mounts a tick or two after the
 // click rather than synchronously as it did when statically imported. That is
 // below the threshold of a frame for a real user, but it IS observable to a
-// driver that asserts immediately after clicking — hence the explicit wait in
+// driver that asserts immediately after clicking, hence the explicit wait in
 // scripts/smoke.mjs's gotoFiles().
 //
-// A rejected warm-up is ignored on purpose — the click path re-requests through
+// A rejected warm-up is ignored on purpose: the click path re-requests through
 // `lazy()`, which is where a real failure belongs (see the ErrorBoundary
 // wrapping the modal group in the JSX below); swallowing it here must not
 // mask that.
@@ -162,21 +162,21 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   // Set alongside showHelp whenever a caller (e.g. the after-export panel's
   // "Open printing help") asks for a specific tab; cleared (undefined) by the
-  // generic Help affordances, which never pass one — see showHelpModal below.
+  // generic Help affordances, which never pass one, see showHelpModal below.
   const [helpInitialTab, setHelpInitialTab] = useState<string | undefined>(undefined);
   const [showDesignDoc, setShowDesignDoc] = useState(false);
-  // FilesModal (the imported-file manager) — hosted here like Help/Licenses/
+  // FilesModal (the imported-file manager): hosted here like Help/Licenses/
   // DesignDoc, opened only via BarActions' "Files" action (gated on
-  // `schema.fileImport` being set — see AppShell's `hasFiles`).
+  // `schema.fileImport` being set, see AppShell's `hasFiles`).
   const [showFiles, setShowFiles] = useState(false);
   // Non-null right after a successful export while `ui.afterExport` is
-  // configured — see ExportSuccess.tsx. `key` increments so the panel's
+  // configured, see ExportSuccess.tsx. `key` increments so the panel's
   // auto-hide timer restarts even when two exports in a row reuse the same
   // (or no) title/body override.
   const [exportSuccess, setExportSuccess] = useState<ExportSuccessState | null>(null);
   const exportSuccessKeyRef = useRef(0);
   const dismissExportSuccess = useCallback(() => setExportSuccess(null), []);
-  // `fromLink` skips the picker intro when the hash already names a design —
+  // `fromLink` skips the picker intro when the hash already names a design,
   // see shouldShowPopup. That also means a shared link never trips the boot
   // gate below: it renders what it was sent to render, immediately.
   const [showPopup, setShowPopup] = useState(() =>
@@ -186,7 +186,7 @@ export default function App() {
     if (remember && popup) rememberPopup(popup);
     setShowPopup(false);
   };
-  // A showing design chooser *is* the app's first screen — a grid of design
+  // A showing design chooser *is* the app's first screen: a grid of design
   // thumbnails with nothing chosen yet. Until the user picks, there is nothing
   // worth rendering, so the render path stays parked and leaves the network to
   // those thumbnails; see useRenderPipeline's `holdBoot`. `isDesignChooser` is
@@ -201,7 +201,7 @@ export default function App() {
     if (schema.designs.length > 1) setOpenPickerSignal((n) => n + 1);
   };
 
-  // File imports and the render pipeline are mutually coupled — imports feed
+  // File imports and the render pipeline are mutually coupled: imports feed
   // the render key, and an import must invalidate the render cache. The ref
   // breaks the ordering cycle: imports call the pipeline's latest invalidate
   // through it (same latest-wins idiom as the AppActions provider).
@@ -210,7 +210,7 @@ export default function App() {
     invalidate: useCallback(() => invalidateRef.current(), []),
     setAnnouncement,
   });
-  // Every user-supplied file currently loaded (name + byte size) — FilesModal's
+  // Every user-supplied file currently loaded (name + byte size). FilesModal's
   // own list. Derived here (not in AppShell) since FilesModal is hosted
   // alongside Help/Licenses/DesignDoc, not drilled through the layout split.
   const loadedFiles = useMemo(
@@ -253,7 +253,7 @@ export default function App() {
   invalidateRef.current = invalidate;
 
   // Fill the offline cache at the first moment nothing is competing for the
-  // connection — installed/standalone, hidden, or the render worker's own
+  // connection: installed/standalone, hidden, or the render worker's own
   // bootstrap having landed. The policy lives in `warmDelayMs`; `standalone`
   // recognises a launch of the installed app, `installed` the visit that
   // installed it.
@@ -264,7 +264,7 @@ export default function App() {
     updateWaiting: updateReady,
   });
 
-  // Switching designs resets everything design-scoped in the same event —
+  // Switching designs resets everything design-scoped in the same event:
   // values, preset selection, and the pipeline's render-scoped state.
   const handleDesignChange = useCallback(
     (id: string) => {
@@ -282,7 +282,7 @@ export default function App() {
 
   // M4: the ONE place external URL state (a same-document hashchange, or an
   // installed-app launch target queued via the Web App Launch Handler) is
-  // applied to React state — atomically, the same way a design switch is.
+  // applied to React state. Atomically, the same way a design switch is.
   // Reuses handleDesignChange's own design/values/preset reset so the render
   // pipeline's epoch still advances and a stale render can never land under
   // the newly-applied design. When the design is unchanged (e.g. a launch
@@ -304,11 +304,11 @@ export default function App() {
     [designId, resetForDesign]
   );
 
-  // Nothing is written while the chooser still owns the first screen. Not just
+  // Nothing is written while the chooser still owns the first screen. Not only
   // because there is no chosen state worth mirroring yet: `persistState` puts
   // `#d=<default>` in the URL, and on the next load `readInitialState` cannot
   // tell that hash from one a person sent, so it would report `fromLink` and
-  // skip the very chooser the user never answered — leaving them on the default
+  // skip the chooser the user never answered. Leaving them on the default
   // design, permanently, after a reload.
   useEffect(() => {
     if (holdBoot) return;
@@ -316,11 +316,11 @@ export default function App() {
     return () => clearTimeout(t);
   }, [design, values, presetSel, holdBoot]);
 
-  // M4: consume external navigations that only change the URL hash — a
+  // M4: consume external navigations that only change the URL hash. A
   // same-document `hashchange` (e.g. a browser/OS "navigate to #d=..." that
   // doesn't reload the document) and the Web App Launch Handler's queued
   // target for an installed app opened via a manifest shortcut
-  // (`navigate-existing` — see scripts/lib/pwa-assets.mjs). Neither fires a
+  // (`navigate-existing`, see scripts/lib/pwa-assets.mjs). Neither fires a
   // full module reload, so without this the address bar/launch target would
   // update while the mounted app's design/value/preset state stays put.
   // `persistState` above writes via `history.replaceState`, which per spec
@@ -330,7 +330,7 @@ export default function App() {
   // loop).
   // Read imperatively inside the effect below via refs (not effect deps), so
   // the hashchange/launchQueue subscription is set up once at mount rather
-  // than being torn down and re-added on every keystroke — the effect only
+  // than being torn down and re-added on every keystroke: the effect only
   // needs the LATEST design/values/preset at the moment a hash actually
   // arrives, the same "mirror the latest without retriggering" idiom used by
   // autoRenderRef in useRenderPipeline.ts.
@@ -344,11 +344,11 @@ export default function App() {
       const state = parseHashState(schema, hash);
       if (!state) return;
       // A navigation that names a design answers the chooser's question, so stop
-      // asking it — the same rule `shouldShowPopup` applies to a link at load,
+      // asking it: the same rule `shouldShowPopup` applies to a link at load,
       // including not remembering the skip (a notice is left alone: navigating
       // doesn't answer one). Deliberately BEFORE the equality guard below: a
       // launch shortcut or hash naming the design that is already current is a
-      // state no-op, but it is not a chooser no-op — treating it as one left the
+      // state no-op, but it is not a chooser no-op. Treating it as one left the
       // chooser up and, with it, the render path parked.
       if (isDesignChooser(popup)) setShowPopup(false);
       if (sessionStateEquals(currentSessionRef.current, state)) return;
@@ -367,7 +367,7 @@ export default function App() {
       try {
         applyFromHash(new URL(params.targetURL).hash);
       } catch {
-        /* malformed launch target — ignore */
+        /* malformed launch target: ignore */
       }
     });
 
@@ -375,7 +375,7 @@ export default function App() {
   }, []);
 
   // Clear stale presets the instant the design changes (during render, not an
-  // effect — the documented "adjusting state when a prop changes" pattern),
+  // effect: the documented "adjusting state when a prop changes" pattern),
   // so a design switch never briefly shows the previous design's presets
   // while the fetch below is in flight.
   const [bundledPresetsDesignId, setBundledPresetsDesignId] = useState(designId);
@@ -389,7 +389,7 @@ export default function App() {
     return () => { active = false; };
   }, [design]);
 
-  // Warm the lazily-split modal chunks once the browser is idle — see
+  // Warm the lazily-split modal chunks once the browser is idle, see
   // warmModalChunks. requestIdleCallback where it exists (not Safari <17), a
   // macrotask otherwise; either way this lands after first paint and after the
   // render worker has had its turn.
@@ -407,7 +407,7 @@ export default function App() {
     setValues((v) => ({ ...v, [name]: value })), []);
 
   // The unified preset-diff baseline: the selected preset's values when one is
-  // selected, else null (meaning "compare against defaults" — see `baseline`
+  // selected, else null (meaning "compare against defaults", see `baseline`
   // below). Resolved from `presetSel` rather than stored separately so it can
   // never drift out of sync with the picker's own selection.
   const parsedPreset = useMemo(() => parsePresetId(presetSel), [presetSel]);
@@ -429,11 +429,11 @@ export default function App() {
 
   // One-time, post-export install nudge: only when the browser actually offers
   // install, the config allows it, and we haven't shown it before. Demoted per
-  // the UX plan — never a standing prompt.
+  // the UX plan, never a standing prompt.
   const offerInstallHint = useCallback(() => {
     if (!canInstall || installMode === "off") return;
     if (readLocal(INSTALL_HINT_KEY)) return;
-    // Storage unavailable — skip the hint rather than risk repeating it.
+    // Storage unavailable: skip the hint rather than risk repeating it.
     if (!writeLocal(INSTALL_HINT_KEY, "1")) return;
     toast("Install this configurator for quick, offline access?", {
       id: "install-hint",
@@ -444,7 +444,7 @@ export default function App() {
   }, [canInstall, promptInstall]);
 
   // Gated on `exportable` (a successful render that still matches the live
-  // controls, not just "some render succeeded at some point") and named from
+  // controls, not only "some render succeeded at some point") and named from
   // the exported snapshot's own designId rather than the live `design.id`, so
   // a design switch racing the export can never mislabel the bytes it sends
   // out. See docs/architecture-review.md H1.
@@ -458,9 +458,9 @@ export default function App() {
       new File([blob], name, { type: blob.type }),
       () => downloadBlob(blob, name)
     );
-    if (outcome === "cancelled") return; // user dismissed the sheet — don't also download
+    if (outcome === "cancelled") return; // user dismissed the sheet: don't also download
     if (afterExportConfig) {
-      // The panel is this deployment's one and only post-export surface — it
+      // The panel is this deployment's one and only post-export surface: it
       // replaces the plain announcement toast entirely rather than stacking
       // with it (see the precedence rule below for the install hint too).
       exportSuccessKeyRef.current += 1;
@@ -469,14 +469,14 @@ export default function App() {
       setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
     }
     // The install-hint toast and the after-export panel are both "here's what
-    // to do next" surfaces — never stack two of those on the same export.
+    // to do next" surfaces, never stack two of those on the same export.
     if (!afterExportConfig) offerInstallHint();
   }, [exportable, snapshot, offerInstallHint, setAnnouncement]);
 
   const savePng = useCallback(async (url: string) => {
     if (!exportable || !snapshot) return;
     const name = `${snapshot.designId}.png`;
-    // The snapshot is a data: URL — turn it into a File so it can go to the
+    // The snapshot is a data: URL. Turn it into a File so it can go to the
     // native share sheet (like the model export); fall back to a download.
     const blob = await (await fetch(url)).blob();
     const outcome = await shareFileOrFallback(
@@ -497,14 +497,14 @@ export default function App() {
   );
 
   const copyLink = useCallback(async () => {
-    // Built synchronously from the live design/values/preset — never from
+    // Built synchronously from the live design/values/preset, never from
     // `location.href`, which only reflects the last debounced `persistState`
-    // write and can lag a just-made edit by up to 300ms.
+    // write and can lag a recently made edit by up to 300ms.
     const url = buildShareUrl(design, values, presetSel);
     const warning = shareabilityWarning(shareability);
     // Native share sheet where available (mobile); otherwise copy to clipboard.
     // Either way, a local-only dependency gets an explicit warning naming the
-    // missing files — the plain URL is copied/shared regardless (no upload;
+    // missing files: the plain URL is copied/shared regardless (no upload;
     // see docs/architecture-review.md H2), but never silently implied complete.
     const outcome = await shareUrl(url, schema.title);
     if (outcome === "cancelled") return;
@@ -586,7 +586,7 @@ export default function App() {
         />
       )}
       {/* Each of these four is lazy-loaded (see the module-scope `lazy()` calls
-          above), so a single Suspense boundary covers the group — a pending
+          above), so a single Suspense boundary covers the group: a pending
           chunk load suspends only this fragment, never AppShell or Toaster.
           The ErrorBoundary contains a failed chunk load (offline, an
           ad-blocked chunk URL, a stale hash after a deploy) to this fragment
@@ -616,7 +616,7 @@ export default function App() {
                   // The browser caches a rejected dynamic import for the
                   // document's lifetime, so an in-place retry can't re-fetch
                   // the chunk (see SvgPrepareControl.tsx's wizard fallback for
-                  // the same reasoning) — only a full reload re-requests it.
+                  // the same reasoning), only a full reload re-requests it.
                   onClick={() => window.location.reload()}
                 >
                   {t("error.reload")}

@@ -1,5 +1,5 @@
 // Tests the pure derivations in src/lib/renderStatus.ts. The one with teeth is
-// `stageLoading` — "nothing has EVER been on the canvas this mount" — which two
+// `stageLoading` ("nothing has EVER been on the canvas this mount") which two
 // unrelated places read: ViewerStage's loading overlay and AppShell's arming of
 // the one-time first-visit sheet nudge (whose fade timeout starts when it
 // mounts, so mounting it while this is true burns the whole once-per-browser
@@ -24,7 +24,7 @@ test("stageLoading: the first render of this mount, with nothing yet shown, is l
 });
 
 test("stageLoading: a re-render over an existing result is NOT loading", () => {
-  // The canvas still shows the previous model — the overlay would hide it, and
+  // The canvas still shows the previous model: the overlay would hide it, and
   // the sheet nudge is perfectly actionable here.
   assert.equal(stageLoading({ ready: true, rendering: true, result: okResult }), false);
 });

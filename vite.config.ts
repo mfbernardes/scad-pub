@@ -47,7 +47,7 @@ function readSchema(): {
 // hard-coded to one project). Runs with `order: "post"` so the bundled app CSS
 // <link> has already been injected: the colour <style> and the extraCss <link>
 // land *after* it, giving consumer styles the final say (the escape hatch can
-// override the app's own rules by source order, not just specificity). The CSS
+// override the app's own rules by source order, not only specificity). The CSS
 // assembly lives in src/lib/configCss.ts so it's unit-testable without Vite.
 function configHtml(s: ReturnType<typeof readSchema>): Plugin {
   const headInjection = headStyleInjection(s);
@@ -64,9 +64,9 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
     s.description ?? "Configure and export designs in your browser."
   );
   const appleTitle = escapeHtml(s.shortName ?? s.title ?? "ScadPub");
-  // iOS launch images — one <link> per generated splash (empty string when none).
+  // iOS launch images: one <link> per generated splash (empty string when none).
   // `media`/`href` are fully derived by gen-schema from a fixed device table
-  // (integers) and the `apple-splash-<w>x<h>.png` filename — no config/user input
+  // (integers) and the `apple-splash-<w>x<h>.png` filename: no config/user input
   // reaches them, so the raw attribute interpolation below is safe.
   const appleSplashLinks = (s.appleSplash ?? [])
     .map((sp) => `<link rel="apple-touch-startup-image" media="${sp.media}" href="${sp.href}" />`)
@@ -83,7 +83,7 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
           .replace(/%APP_DESCRIPTION%/g, () => description)
           .replace(/%APP_THEME_COLOR_DARK%/g, darkColor)
           .replace(/%APP_THEME_COLOR_LIGHT%/g, lightColor)
-          // Per-config theme storage key for the pre-paint script — matches
+          // Per-config theme storage key for the pre-paint script: matches
           // ns("theme") in src/lib/theme.ts (default id → "scadpub.theme").
           // The id lands inside the inline script's string literal; gen-schema
           // charset-validates it (checkId) so it can't break out.
@@ -111,11 +111,11 @@ function filesUnder(dir: string): string[] {
 
 // Stamp a per-build version into the shipped service worker. sw.js lives in
 // public/ (copied verbatim), so without this every deploy ships a byte-identical
-// sw.js — the browser never detects a new worker and the "update available"
+// sw.js: the browser never detects a new worker and the "update available"
 // prompt never fires (src/lib/swUpdate.ts only flags an update when a *new* worker
 // reaches `waiting`). The version hashes every emitted chunk/asset's CONTENT
-// (not just its content-hashed filename, which only changes for assets Vite
-// itself fingerprints) plus every file under public/ — so a stable-URL asset
+// (not only its content-hashed filename, which only changes for assets Vite
+// itself fingerprints) plus every file under public/, so a stable-URL asset
 // like extraCss, a design's <id>-doc.md, an icon, or the manifest also bumps
 // it. sw.js itself is excluded (it's what we're about to rewrite). Replaces
 // the `__SW_VERSION__` placeholder in dist/sw.js after the bundle is written.
@@ -154,7 +154,7 @@ function swVersion(): Plugin {
         if (src.includes("__SW_VERSION__"))
           writeFileSync(swPath, src.replace(/__SW_VERSION__/g, version));
       } catch {
-        /* no sw.js in this build (e.g. a non-default target) — skip */
+        /* no sw.js in this build (e.g. a non-default target): skip */
       }
     },
   };
@@ -162,10 +162,10 @@ function swVersion(): Plugin {
 
 // Inject resource hints for the render-critical chunks into the built
 // index.html. Two birds:
-//  1. Startup speed — the browser fetches the render worker and the lazy
+//  1. Startup speed: the browser fetches the render worker and the lazy
 //     three.js Viewer chunk in parallel with the entry instead of discovering
 //     them after it executes.
-//  2. Deterministic offline — sw.js precaches by parsing index.html's
+//  2. Deterministic offline: sw.js precaches by parsing index.html's
 //     src/href attributes (plus Vite's asset-manifest, which does NOT list
 //     worker chunks), so without these links the worker chunk was only ever
 //     cached opportunistically at runtime. The links make install-time
@@ -205,7 +205,7 @@ function preloadLinks(): Plugin {
         const html = readFileSync(htmlPath, "utf-8");
         writeFileSync(htmlPath, html.replace("</head>", () => `  ${links.join("\n    ")}\n  </head>`));
       } catch {
-        /* no index.html in this build target — skip */
+        /* no index.html in this build target: skip */
       }
     },
   };
@@ -215,11 +215,11 @@ function preloadLinks(): Plugin {
 // referrer/permissions hardening) to dist/_headers at build time. The CSP's
 // script-src needs the exact hash of the inline pre-paint theme script in
 // index.html, and that script's body is per-config (%APP_THEME_KEY% is the
-// active config's storage namespace, substituted by configHtml above) — so the
+// active config's storage namespace, substituted by configHtml above), so the
 // hash can't be a literal here, it's computed from the actual built HTML.
 // Runs at closeBundle, like swVersion/preloadLinks, because dist/index.html
-// and dist/_headers (copied from public/) only exist once the bundle — and
-// every other index.html-mutating plugin — has already run; ordering after
+// and dist/_headers (copied from public/) only exist once the bundle, and
+// every other index.html-mutating plugin: has already run; ordering after
 // preloadLinks (the last index.html mutator above) keeps this hashing the
 // final bytes, though preloadLinks only ever touches <link> tags, never
 // <script>, so today the ordering doesn't change the hash either way.
@@ -227,7 +227,7 @@ function preloadLinks(): Plugin {
 // Deliberately APPENDS a `/*` block after public/_headers's own content
 // rather than replacing it: on Cloudflare Pages (and Netlify) every matching
 // rule applies to a request, so `/scad/*` still gets both its own restrictive
-// `default-src 'none'; sandbox` block AND this `/*` block — the browser
+// `default-src 'none'; sandbox` block AND this `/*` block. The browser
 // enforces the intersection of the two CSPs, which is only ever MORE
 // restrictive than either alone, never a weakening. See
 // src/lib/securityHeaders.mjs for the policy itself and its rationale.
@@ -252,7 +252,7 @@ function securityHeaders(): Plugin {
         writeFileSync(headersPath, `${existing.replace(/\n*$/, "\n")}\n${block}`);
       } catch {
         /* no index.html or _headers in this build target (e.g. a host with no
-           Cloudflare/Netlify _headers convention) — skip */
+           Cloudflare/Netlify _headers convention). Skip */
       }
     },
   };
@@ -291,8 +291,8 @@ export default defineConfig(({ command }) => {
       // literal so the unused centring branch in the viewer drops out.
       __APP_REST_ON_GRID__: JSON.stringify(schema.viewer?.restOnGrid ?? false),
       // The viewer's presentation (config `viewer.style`). A literal so the
-      // unused style branch — and, for "plain", the studio-only
-      // environment/shadow modules — tree-shake out of the bundle. The
+      // unused style branch, and, for "plain", the studio-only
+      // environment/shadow modules: tree-shake out of the bundle. The
       // reference grid is not a define: it's a runtime toggle seeded by
       // `viewer.grid` (src/lib/viewerPrefs.ts).
       __APP_VIEWER_STYLE__: JSON.stringify(schema.viewer?.style ?? "plain"),

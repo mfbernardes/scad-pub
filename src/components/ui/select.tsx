@@ -30,9 +30,9 @@ function SelectTrigger({
         // The value slot deliberately does NOT get `flex` (unlike the trigger
         // itself): `text-overflow: ellipsis` never applies to a flex
         // container (only to a block container's single line of inline
-        // content) — every current SelectValue only ever holds plain text
+        // content). Every current SelectValue only ever holds plain text
         // (SelectItem's optional icon/description render outside ItemText,
-        // so they never reach the trigger — see SelectItem's own doc), and
+        // so they never reach the trigger, see SelectItem's own doc), and
         // being a flex ITEM of this trigger row is enough to blockify it, so
         // plain `truncate` here reliably shows an ellipsis instead of a hard
         // clip with no `flex`/`items-center`/`gap-2` fighting it for `display`.

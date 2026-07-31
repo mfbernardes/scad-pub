@@ -429,7 +429,7 @@ test("unusableHeightRegions names only the regions that wrote a bad height", () 
 test("the canvas entry keeps a small viewBox's proportions, not a fixed scale", () => {
   // A viewBox is scale-free, so a fixed number of decimal places destroys a
   // small one: at four places 0.00001 rounds to 0 (losing the hint entirely)
-  // and 0.00005 to 0.0001 (doubling the very ratio the entry carries).
+  // and 0.00005 to 0.0001 (doubling the ratio the entry carries).
   assert.equal(
     canvasEntry(parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0.00001 0.00002"/>')),
     "0.00001x0.00002",
@@ -461,7 +461,7 @@ test("the canvas entry keeps a small viewBox's proportions, not a fixed scale", 
 
 test("the canvas entry stays in the decimal notation its own reader accepts", () => {
   // %g-style formatting would render this as "1.00000e+6x500000", which
-  // isCanvasEntry rejects — the entry would then be read back as a region id.
+  // isCanvasEntry rejects: the entry would then be read back as a region id.
   const big = canvasEntry(
     parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000000 500000"/>'),
   );

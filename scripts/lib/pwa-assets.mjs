@@ -1,16 +1,16 @@
-// pwa-assets.mjs — generate the installable-PWA assets from the config: the app
+// pwa-assets.mjs: generate the installable-PWA assets from the config: the app
 // icon (SVG + rasterized 192/512/512-maskable/180 PNGs), the iOS launch
 // ("splash") images, and manifest.webmanifest (with categories, screenshots and
 // per-design shortcuts). Runs only in a real build (generate() passes
 // outPublicDir); the fixture-driven unit tests skip it.
 //
 // Nothing in this module touches disk. `generatePwaAssets` QUEUES every file
-// it would produce — as `{ dest, data }` / `{ dest, src }` entries — into the
+// it would produce (as `{ dest, data }` / `{ dest, src }` entries) into the
 // `batch` array it returns, instead of writing directly; `commitPwaBatch`
 // (also exported) is the only function here that calls writeFileSync/
 // copyFileSync, and only when the caller invokes it explicitly. generate()
-// (gen-schema.mjs) collects this batch alongside every other fallible step —
-// design parsing, the staged scad tree — and only flushes it, via
+// (gen-schema.mjs) collects this batch alongside every other fallible step:
+// design parsing, the staged scad tree, and only flushes it, via
 // commitPwaBatch, at its own single commit point, once nothing left can
 // throw. That's what makes a late failure here (a `pwa.screenshots[].src`
 // that doesn't exist, checked well after the icon/splash rasterization below)
@@ -42,16 +42,15 @@ let Resvg = null;
 try {
   ({ Resvg } = await import("@resvg/resvg-js"));
 } catch {
-  /* not installed — icon rasterization will be skipped */
+  /* not installed: icon rasterization will be skipped */
 }
 
 /**
  * Queue the PWA icon set + manifest for outPublicDir and return the iOS
  * splash descriptors (see the module comment for why "queue", not "write").
- * Mirrors the logic that used to live inline in generate().
  *
  * Takes the ALREADY-PARSED `pwa` object (scripts/lib/config-parsers.mjs's
- * parsePwa — the config's `pwa` block, defaults resolved) rather than the
+ * parsePwa: the config's `pwa` block, defaults resolved) rather than the
  * raw config: this is the one place in `scripts/`
  * outside the parse layer that used to reach into `config.icon`/
  * `.iconMaskable`/`.screenshots`/`.shortcuts` directly, which meant it had to
@@ -83,7 +82,7 @@ export function generatePwaAssets({
   register,
   // Where design picker-icon files (`d.icon` = "scad/<id>-icon.<ext>") live on
   // disk right now, so their real PNG dimensions can be read back for the
-  // manifest. During a build this is the STAGING scad dir — generate() runs PWA
+  // manifest. During a build this is the STAGING scad dir: generate() runs PWA
   // generation before it swaps staging into the live scad location, so the
   // whole output can commit atomically. Defaults to the live location.
   scadDir = join(outPublicDir, "scad"),
@@ -97,12 +96,12 @@ export function generatePwaAssets({
   // descriptor, in commit order. Nothing under `outPublicDir` is touched
   // until the caller passes this to commitPwaBatch. `write`/`copy` default to
   // pushing onto `batch` directly; the splash loop below passes its own local
-  // array instead, so a mid-loop failure discards just that sub-batch (see
+  // array instead, so a mid-loop failure discards only that sub-batch (see
   // there) rather than the whole thing.
   const batch = [];
   const write = (name, data, label, sink = batch) => {
     const dest = join(outPublicDir, name);
-    // register() still runs immediately, at collection time — a destination
+    // register() still runs immediately, at collection time: a destination
     // collision between two owners must fail the build before anything is
     // even QUEUED to write, exactly as it failed before a physical write
     // existed to compare against.
@@ -119,12 +118,12 @@ export function generatePwaAssets({
 
   // Build (or use the default) icon SVG source.
   // M13: the app icon is browser-facing (rendered in an <img>/manifest
-  // context and directly navigable at /icon.svg), so — unlike render-input
-  // SVGs under public/scad/ — it's run through sanitizeSvg() first: cheap
+  // context and directly navigable at /icon.svg), so, unlike render-input
+  // SVGs under public/scad/. It's run through sanitizeSvg() first: cheap
   // defense-in-depth against a served SVG executing as an active document.
   // See docs/config.md "SVG asset trust model" and scripts/lib/svg-sanitize.mjs.
   // Compute the icon SVG source now, but defer QUEUEING icon.svg until the
-  // (fallible) rasterization below has succeeded — so a malformed icon that
+  // (fallible) rasterization below has succeeded, so a malformed icon that
   // fails rasterization can't queue a write that would overwrite a previous
   // build's good icon.svg either. The whole icon set (svg + PNGs) is queued
   // together or not at all; either way nothing lands on disk until generate()
@@ -147,7 +146,7 @@ export function generatePwaAssets({
       `</svg>\n`;
     iconSvgLabel = "default icon.svg";
   }
-  // Icon files actually written this run, in manifest-relevant order —
+  // Icon files actually written this run, in manifest-relevant order:
   // "icon.svg" plus whichever rasterized PNGs succeed below. Manifest icons
   // and the precache shell are built from this, never from a fixed assumed
   // set (M8): a rasterizer that's absent or fails must shrink what's
@@ -164,7 +163,7 @@ export function generatePwaAssets({
     );
   }
 
-  // Single SVG→PNG rasterizer (@resvg/resvg-js — Rust/WASM, no headless
+  // Single SVG→PNG rasterizer (@resvg/resvg-js: Rust/WASM, no headless
   // browser) shared by the icon and the iOS splash generation below. Null when
   // the optional dep is absent, in which case both fall back to copying the SVG.
   const rasterize = Resvg
@@ -194,9 +193,9 @@ export function generatePwaAssets({
     // Rasterize the whole icon set into memory BEFORE queueing any of it.
     // Rasterization (resvg) is the only fallible step; queueing an in-memory
     // buffer isn't (the actual write happens later, at generate()'s commit
-    // point — see the module comment). Doing all four renders first means a
+    // point, see the module comment). Doing all four renders first means a
     // failure on a later size can never leave earlier PNGs half-queued, and
-    // — since nothing here ever reaches disk — can never overwrite a
+    //  (since nothing here ever reaches disk) can never overwrite a
     // previous build's good icons in the first place, let alone need to
     // unwind that overwrite on cleanup.
     let iconPngs;
@@ -214,7 +213,7 @@ export function generatePwaAssets({
         { cause: err }
       );
     }
-    // Rasterization succeeded — now queue icon.svg and every PNG together.
+    // Rasterization succeeded: now queue icon.svg and every PNG together.
     write("icon.svg", iconSvg, iconSvgLabel);
     for (const [name, buf] of iconPngs) {
       write(name, buf, name);
@@ -237,15 +236,15 @@ export function generatePwaAssets({
   //
   // Queued into a LOCAL sub-batch, not `batch` directly: a mid-loop
   // rasterization failure (device N renders fine, device N+1 doesn't) must
-  // ship zero splashes, not the first N — see the catch below. Merging the
+  // ship zero splashes, not the first N, see the catch below. Merging the
   // whole sub-batch into `batch` only after every device succeeds is what
   // makes that true even now that nothing writes eagerly: an early device's
-  // descriptor sitting unmerged in `splashBatch` can simply be dropped on the
+  // descriptor sitting unmerged in `splashBatch` can be dropped on the
   // floor, no on-disk cleanup required, and `appleSplash` (the manifest/
   // index.html metadata) is only ever assigned from the same successful set,
   // so it can never describe a splash `batch` doesn't also contain.
   if (rasterize) {
-    // device px width × height, devicePixelRatio — current/common iPhones.
+    // device px width × height, devicePixelRatio: current/common iPhones.
     const DEVICES = [
       [1290, 2796, 3], [1179, 2556, 3], [1284, 2778, 3], [1170, 2532, 3],
       [1125, 2436, 3], [828, 1792, 2], [750, 1334, 2],
@@ -278,17 +277,17 @@ export function generatePwaAssets({
       appleSplash = splashDescriptors;
     } catch (err) {
       console.warn(`gen-schema: splash generation failed (${err.message})`);
-      // splashBatch/splashDescriptors are simply discarded (never merged), so
+      // splashBatch/splashDescriptors are discarded (never merged), so
       // a partial device set can never end up queued, let alone written.
       appleSplash = [];
     }
   }
 
-  // Manifest screenshot entries (optional — enables rich Android install UI).
+  // Manifest screenshot entries (optional: enables rich Android install UI).
   // `label` (accessibility) and `platform` are passed through when present.
   // A malformed individual entry (missing src/sizes/form_factor) is dropped
   // rather than failing the build, unchanged from before this reorg. This
-  // `mustExist` runs no earlier or later than it always has — what changed is
+  // `mustExist` runs no earlier or later than it always has: what changed is
   // that a throw here can no longer race a physical write: the icon set and
   // splashes above are only ever QUEUED (see `batch`/`write`/`copy`), so at
   // this point in the function nothing this call produces has touched disk
@@ -313,7 +312,7 @@ export function generatePwaAssets({
   }
 
   // M8: build the manifest's `icons` from `iconFiles` (what was actually
-  // written above), not a fixed assumed set — a rasterizer that's absent or
+  // written above), not a fixed assumed set. A rasterizer that's absent or
   // failed shrinks this list instead of leaving a dangling reference.
   const ALL_ICON_DESCRIPTORS = {
     "icon.svg": { src: "icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
@@ -348,7 +347,7 @@ export function generatePwaAssets({
       try {
         sizes = pngSize(readFileSync(abs)) ?? "any";
       } catch {
-        /* icon unreadable here — keep "any" */
+        /* icon unreadable here: keep "any" */
       }
     }
     return { src, sizes, ...(type ? { type } : {}) };
@@ -408,7 +407,7 @@ export function generatePwaAssets({
 
   // The M8 reconciliation caller derives its written-path list from `batch`
   // itself (`batch.map((e) => e.dest)`), so the batch is the single source of
-  // truth for what this call will produce — correct even for the splash
+  // truth for what this call will produce: correct even for the splash
   // sub-batch above, whose entries only ever reach `batch` on a fully
   // successful device loop.
   return { appleSplash, iconFiles, batch };
@@ -416,12 +415,12 @@ export function generatePwaAssets({
 
 /**
  * Physically write every entry `generatePwaAssets` queued (icons, splashes,
- * screenshot copies, manifest.webmanifest) — the other half of the split the
+ * screenshot copies, manifest.webmanifest): the other half of the split the
  * module comment above describes. Called exactly once, by generate(), at its
  * own single commit point: by the time this runs, every fallible step in
  * `generatePwaAssets` (icon rasterization, the screenshot `mustExist` checks)
  * has already succeeded, so this loop is not itself a place a config error
- * can surface — an exception here would mean a genuine environment fault (a
+ * can surface. An exception here would mean a genuine environment fault (a
  * full disk, a permission change mid-build), which is allowed to propagate
  * rather than being mistaken for one more thing to validate.
  */

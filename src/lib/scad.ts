@@ -1,4 +1,4 @@
-// scad.ts — convert UI parameter values to/from OpenSCAD -D expressions and the
+// scad.ts: convert UI parameter values to/from OpenSCAD -D expressions and the
 // string form used by OpenSCAD's Customizer preset (parameterSets) JSON.
 import type { Param, ParamValue } from "../openscad/types";
 
@@ -37,7 +37,7 @@ export function toPresetString(param: Param, value: ParamValue): string {
  * validating it against the schema. Values come from sharable URL hashes,
  * localStorage and imported preset files, so an out-of-range number or an enum
  * value outside the declared choices is rejected (falls back to the default /
- * clamped to range) — matching what the UI controls themselves enforce.
+ * clamped to range), matching what the UI controls themselves enforce.
  */
 export function fromPresetString(param: Param, raw: string): ParamValue {
   switch (param.type) {
@@ -55,8 +55,8 @@ export function fromPresetString(param: Param, raw: string): ParamValue {
     case "boolean":
       return raw === "true" || raw === "1";
     case "enum":
-      // Reject values outside the declared choices. (When choices are absent —
-      // only the synthetic params in tests — accept the raw value.)
+      // Reject values outside the declared choices. (When choices are absent,
+      // only the synthetic params in tests: accept the raw value.)
       return !param.choices || param.choices.some((c) => c.value === raw)
         ? raw
         : param.default;
@@ -69,7 +69,7 @@ export function fromPresetString(param: Param, raw: string): ParamValue {
  * Skew guard. The parameter *schema* is compiled into the JS bundle, but each
  * design's `.scad` source is fetched fresh at runtime. A stale cached bundle
  * (e.g. a service worker that hasn't picked up a deploy) can ask OpenSCAD to
- * `-D` a parameter the current source no longer declares — which OpenSCAD
+ * `-D` a parameter the current source no longer declares, which OpenSCAD
  * reports as a confusing "unknown variable" warning. Return the define names
  * that don't appear as a top-level assignment in the source so the caller can
  * drop them and prompt the user to reload instead.

@@ -1,4 +1,4 @@
-// Unit tests for src/lib/shareability.ts — deciding whether a share URL alone
+// Unit tests for src/lib/shareability.ts: deciding whether a share URL alone
 // reproduces the current render, or depends on local-only imported files
 // (fonts, SVG-wizard output, generic imported files). See
 // docs/architecture-review.md H2.
@@ -94,7 +94,7 @@ test("a bundled Bold face makes the Bold selection portable", () => {
 test("names the imported file that actually provides the selected face, not the family's first import", () => {
   const d = design([param("font", "string", { isFont: true })]);
   const values = { font: "Liberation Sans:style=Bold" };
-  // Two files for the same family, different styles — the Bold selection must
+  // Two files for the same family, different styles: the Bold selection must
   // name the Bold file, even though the Regular one was imported first.
   const userFiles = { "Regular.ttf": FONT_BYTES, "Bold.ttf": BOLD_BYTES };
   const result = computeShareability(d, values, userFiles, [] /* nothing bundled */);

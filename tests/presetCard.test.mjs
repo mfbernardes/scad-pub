@@ -1,5 +1,5 @@
 // Tests the presentation-only bundled-preset NAME parsing PresetPicker's
-// bundled-preset list uses (src/lib/presetCard.ts) — see docs/config.md's
+// bundled-preset list uses (src/lib/presetCard.ts), see docs/config.md's
 // "Bundled presets" note for the documented convention.
 import { test } from "node:test";
 import assert from "node:assert/strict";

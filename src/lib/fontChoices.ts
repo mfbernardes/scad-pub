@@ -1,10 +1,10 @@
-// fontChoices.ts — builds the option list for the font selector (FontSelect)
+// fontChoices.ts: builds the option list for the font selector (FontSelect)
 // from what's actually installed. Pure data-in/data-out so the grouping,
 // value-preservation and dedupe rules are unit-testable without React.
 //
-// The selector shows every face the renderer can really use (bundled ∪
-// imported) under friendly names ("Liberation Sans Bold"), plus — kept
-// selectable but clearly marked — any design-suggested face (enum choice) or
+// The selector shows every face the renderer can actually use (bundled ∪
+// imported) under friendly names ("Liberation Sans Bold"), plus: kept
+// selectable but clearly marked. Any design-suggested face (enum choice) or
 // currently-selected value that is NOT loaded, so a preset naming an
 // unavailable font still shows what it wants and the missing-font hint can
 // offer the fix (import it, or fall back).
@@ -20,7 +20,7 @@ import {
 
 /** One selectable entry of the font dropdown. */
 export interface FontChoice {
-  /** The OpenSCAD `font` value this entry writes (and matches) — never shown. */
+  /** The OpenSCAD `font` value this entry writes (and matches), never shown. */
   value: string;
   /** Friendly display name ("Liberation Sans Bold"). */
   label: string;

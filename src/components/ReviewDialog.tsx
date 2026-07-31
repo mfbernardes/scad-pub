@@ -1,12 +1,12 @@
-// ReviewDialog.tsx — the pre-download review surface: a dialog a visitor can
+// ReviewDialog.tsx: the pre-download review surface: a dialog a visitor can
 // open and read, not a modal gate they have to dismiss.
 // Opened either from the export dock's Download button (when the render
 // isn't cleanly "ready") or from StatusStrip (informationally, any time).
 // Content:
-//   - a failed render: a friendly failure card (FriendlyFailureCard) — there
+//   - a failed render: a friendly failure card (FriendlyFailureCard). There
 //     is nothing to review, only something to explain;
 //   - otherwise: the curated summary (src/lib/reviewSummary.ts's
-//     buildReviewSummaryRows — designs[].reviewLabels rows honouring any
+//     buildReviewSummaryRows: designs[].reviewLabels rows honouring any
 //     `echo("@review", …)` override, plus a headline Dimensions row), the
 //     design's own `reviewNote` if configured, and the attention cards
 //     (AttentionItems.tsx) for whatever's still unresolved.
@@ -17,8 +17,8 @@
 // offers the plain primary "Download for 3D printing" / "Close". Because it's
 // keyed on the live `failure`/`attention` props, the labels flip the moment
 // the last issue clears (e.g. after the "Use a bundled font" action re-renders
-// cleanly) — and both entry points show identical buttons for the same state.
-// Either action button stays disabled while `canExport` is false (H1) — a
+// cleanly), and both entry points show identical buttons for the same state.
+// Either action button stays disabled while `canExport` is false (H1): a
 // friendly-failure dialog's "Download anyway" is visibly present but inert,
 // matching the dock's own safety gate instead of contradicting it.
 import { useMemo } from "react";
@@ -48,13 +48,13 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   design: Design;
-  /** Live parameter values — attention cards' font-fallback actions act on these. */
+  /** Live parameter values: attention cards' font-fallback actions act on these. */
   values: Values;
-  /** Values behind the last render — what the summary rows and Dimensions
+  /** Values behind the last render: what the summary rows and Dimensions
    *  actually describe (mirrors DimensionInfo.tsx's own choice). */
   renderedValues: Values;
   result: RenderResult | null;
-  /** friendlyRenderError(result) — AppShell already computes this once for
+  /** friendlyRenderError(result). AppShell already computes this once for
    *  OutputConsole; passed through so both surfaces agree on the same mapping. */
   failure: FriendlyErrorInfo | null;
   measured: Dimensions | null;

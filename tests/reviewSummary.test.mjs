@@ -1,7 +1,7 @@
 // Tests the pure derivation behind a review summary (src/lib/
 // reviewSummary.ts): the row list built from a design's curated
 // `reviewLabels` (gathered by gen-schema from each parameter's own
-// `// @review "<label>"` annotation — there is no config-level source)
+// `// @review "<label>"` annotation: there is no config-level source)
 // plus one overall "Dimensions" row. No DOM/React harness needed. Value
 // formatting itself lives in src/lib/format.ts and is covered by
 // tests/format.test.mjs.
@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { formatBoundingBox, buildReviewSummaryRows } from "../src/lib/reviewSummary.ts";
 
-// A minimal Design-shaped fixture — structurally sufficient for these tests,
+// A minimal Design-shaped fixture: structurally sufficient for these tests,
 // which run untyped under node:test.
 function design(params) {
   return { id: "fixture", label: "Fixture", file: "fixture.scad", presets: [], sections: ["Main"], params };

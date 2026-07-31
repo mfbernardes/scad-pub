@@ -143,7 +143,7 @@ test("countBadges tallies per category (raw counts, config order) plus asserts",
 
 test("countBadges resolves the singular form when the final tally is exactly 1, plural otherwise", () => {
   // Two lines for "alert" (plural "alerts"), one line for "note" (singular
-  // "note") — proves the label is picked from the FINAL count, via the same
+  // "note"): proves the label is picked from the FINAL count, via the same
   // Intl.PluralRules-backed selectPlural as tn(), not a count-as-you-go guess.
   const log = ['[out] ECHO: "a: alert: one"', '[out] ECHO: "a: alert: two"', '[out] ECHO: "b: note: three"'];
   const badges = countBadges(log, NOTICES);
@@ -174,7 +174,7 @@ test("badgeTextColor: white text on dark backgrounds", () => {
   assert.equal(badgeTextColor("#000000"), "#fff");
   assert.equal(badgeTextColor("#000"), "#fff");
   assert.equal(badgeTextColor("#1a1a2e"), "#fff");
-  assert.equal(badgeTextColor("#e0a458"), "#000"); // amber — luminance > 0.4
+  assert.equal(badgeTextColor("#e0a458"), "#000"); // amber: luminance > 0.4
 });
 
 test("badgeTextColor: black text on light backgrounds", () => {

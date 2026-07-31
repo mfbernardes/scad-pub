@@ -1,4 +1,4 @@
-// prose-files.mjs — the shared "<field>/<field>File" resolution used by
+// prose-files.mjs: the shared "<field>/<field>File" resolution used by
 // popup.body/bodyFile, fileImport.note/noteFile, and licenses[].text/textFile
 // (see docs/config.md and config-spec.mjs's comments on each). All three are
 // scalar prose fields where the config author may write the value inline OR
@@ -6,9 +6,9 @@
 // gen-schema.mjs's generate(), BEFORE the field's own validation (applyGroupSpec
 // for popup/fileImport, parseLicenses for licenses[]) ever sees the object, so
 // by the time that validation runs, `field` is already populated exactly as if
-// the config author had written it inline — the app never gains a runtime
+// the config author had written it inline: the app never gains a runtime
 // fetch for this content (contrast a design's `// @doc` annotation, whose
-// resolved `designs[].doc` URL genuinely is fetched on demand — see
+// resolved `designs[].doc` URL genuinely is fetched on demand, see
 // docs/config.md).
 //
 // This is deliberately NOT folded into applyGroupSpec/config-spec.mjs's
@@ -22,8 +22,8 @@ import { optionalStringFieldError } from "./config-parsers.mjs";
 
 /**
  * Resolve one `<field>`/`<fileField>` pair on a plain object (or `undefined`/
- * `null`, passed through unchanged). Returns a NEW object — the input is
- * never mutated — with `fileField` removed and `field` set to the referenced
+ * `null`, passed through unchanged). Returns a NEW object: the input is
+ * never mutated, with `fileField` removed and `field` set to the referenced
  * file's contents (trimmed) when `fileField` was set. Throws a gen-schema
  * style Error when both `field` and `fileField` are set (naming both dotted
  * paths), or when the referenced file doesn't exist (via `mustExist`, so the

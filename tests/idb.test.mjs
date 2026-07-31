@@ -11,7 +11,7 @@ test("openDb reopens after the connection abnormally closes", async () => {
   const db1 = await openDb();
 
   // A normal versionchange-triggered close is already handled; this simulates
-  // the other way a connection dies — an abnormal close (e.g. the browser
+  // the other way a connection dies: an abnormal close (e.g. the browser
   // force-closing it under storage pressure), which fires "close" rather than
   // "versionchange". Firing the handler directly, then actually closing the
   // connection, reproduces that: the cached promise must not keep pointing at

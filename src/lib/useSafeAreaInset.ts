@@ -1,13 +1,13 @@
-// useSafeAreaInset — a device safe-area inset in px (the CSS
+// useSafeAreaInset: a device safe-area inset in px (the CSS
 // env(safe-area-inset-*)), for the two edges the mobile bottom sheet's geometry
 // depends on. env() can't be read from JS directly, so it's measured off a
 // hidden, fixed probe and refreshed on resize/orientation change.
 //
-//  • bottom — the iOS home-indicator / gesture bar. The sheet needs it so its
+//  • bottom. The iOS home-indicator / gesture bar. The sheet needs it so its
 //    JS-computed geometry (height + the `bottom` it sits at) agrees with the
 //    CSS that reserves the same inset; otherwise the two disagree by the inset
 //    on devices that have one.
-//  • top — the notch / dynamic island. The sheet's Full detent stops short of
+//  • top: the notch / dynamic island. The sheet's Full detent stops short of
 //    the top edge to leave a live model strip (BottomSheet's FULL_TOP_GAP),
 //    and this keeps a notch from eating into that strip.
 //
@@ -17,7 +17,7 @@
 // simulate a device inset) and it is exactly the sort of thing that gets
 // subtly re-implemented.
 //
-// Read it ONCE per mount and on viewport change — never per event. The value
+// Read it ONCE per mount and on viewport change, never per event. The value
 // only changes with orientation/viewport, but the probe appends to
 // document.body and then reads a rect, which forces a synchronous layout of
 // the whole document; calling it from a pointermove handler would thrash

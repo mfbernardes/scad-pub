@@ -1,4 +1,4 @@
-// schema.ts — runtime validation of the generated designs.json. It's produced
+// schema.ts: runtime validation of the generated designs.json. It's produced
 // by scripts/gen-schema.mjs and imported as a typed JSON blob; validating its
 // shape on load turns generator/type drift into a clear, immediate error instead
 // of a confusing failure deep inside a render.
@@ -6,11 +6,11 @@
 // Rule this file follows (see src/openscad/types.ts for the base statement):
 // designs.json is the app-facing artifact and may differ from the config
 // surface where the app's needs differ, but where both express the same
-// grouping — as `viewer` now does on both sides — they mirror each other.
+// grouping (as `viewer` now does on both sides) they mirror each other.
 //
 // The counter-example is deliberately documented HERE rather than in
 // types.ts: that file sits in the render worker's hashed dependency closure
-// (src/openscad/worker.ts imports its types — see scripts/lib/worker-deps.mjs
+// (src/openscad/worker.ts imports its types, see scripts/lib/worker-deps.mjs
 // and computeRenderHash in scripts/lib/hash.mjs, which hashes whole files,
 // comments included), so a comment-only edit there moves `renderHash` and
 // invalidates every persisted render for nothing. This file isn't in that
@@ -21,7 +21,7 @@
 // schema's own flat `features`/`format`/`fonts`/`fontFallback` fields (the
 // app already reads those flat; only `render.heavyMs`/`.cache` nest, under
 // `RenderConfig`, since that pairing is genuinely its own build-time-tuning
-// concept) — and `pwa` doesn't appear here at all, because every one of its
+// concept), and `pwa` doesn't appear here at all, because every one of its
 // keys (`shortName`, `icon`, `iconMaskable`, `backgroundColor`, `categories`,
 // `screenshots`, `shortcuts`, `themeColor`, `install`) is a
 // manifest.webmanifest / icon-rasterizer input with no runtime reader; the
@@ -38,7 +38,7 @@ const PARAM_TYPES = ["number", "boolean", "enum", "string"];
 // carries the resolved value, not the spec node, and this runtime check has
 // no other way to know what's valid. Exported so tests/config-spec.test.mjs
 // can cross-check each pair against CONFIG_SPEC directly rather than trusting
-// two hand-typed lists to stay in sync — see that test for the drift guard.
+// two hand-typed lists to stay in sync, see that test for the drift guard.
 export const POPUP_MODES = ["always", "once", "dismissible", "picker"];
 export const TEXT_DIRECTIONS = ["ltr", "rtl", "auto"];
 export const FORMATS = ["3mf", "stl"];
@@ -309,7 +309,7 @@ export function validateSchema(raw: unknown): Schema {
     }
   }
   // The 3D viewer's presentation, framing, and per-control visibility. Unlike
-  // `ui` above this is required (see the Schema/ViewerConfig types) — every
+  // `ui` above this is required (see the Schema/ViewerConfig types): every
   // config produces one, since parseViewer always returns an object.
   if (typeof s.viewer !== "object" || s.viewer === null || Array.isArray(s.viewer))
     fail("'viewer' must be an object");

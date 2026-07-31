@@ -126,7 +126,7 @@ test("a cache hit still supersedes an in-flight render", async () => {
   await slowRejects;
   assert.equal(cached.ok, true);
   // Respawned worker got only its spawn-time boot message (warmup, since
-  // this runner never received a compiled module) — no render request, since
+  // this runner never received a compiled module): no render request, since
   // the cache hit served it without ever reaching the worker.
   assert.equal(newest().posted.length, 1);
   assert.deepEqual(newest().last, { type: "warmup" });
@@ -421,7 +421,7 @@ test("an L1 miss is served from the persistent store without the worker", async 
   await first;
   a.dispose();
 
-  // A fresh runner (empty L1) serves the same request from L2 — no render
+  // A fresh runner (empty L1) serves the same request from L2: no render
   // request reaches the worker (only its spawn-time warmup post does).
   const b = new OpenSCADRunner({ store });
   const wb = newest();
@@ -502,7 +502,7 @@ test("SupersededError is exported and identifiable", () => {
 
 // A real reproduced collision against the PREVIOUS 32-bit FNV-1a fileSignature
 // (`fnv32([102,191,170,4,123,252,63,207]) === fnv32([240,156,234,254,246,13,62,237])
-// === 2990537249`, found by brute-force search over random 8-byte payloads —
+// === 2990537249`, found by brute-force search over random 8-byte payloads,
 // see the review's M10 evidence). Same name, same length, different bytes: the
 // old signature could not tell these two files apart. The new digest must.
 test("a same-name/same-length collision against the old 32-bit FNV-1a no longer collides", () => {
@@ -534,7 +534,7 @@ test("render() rejects filename aliases that sanitize to the same mount path", a
     assert.deepEqual(e.collisions["/logo.svg"].sort(), ["a/logo.svg", "b/logo.svg"]);
     return true;
   });
-  // Rejected before ever posting a render request to the worker — only the
+  // Rejected before ever posting a render request to the worker, only the
   // spawn-time warmup message went out.
   assert.equal(newest().posted.length, 1);
   assert.deepEqual(newest().last, { type: "warmup" });
@@ -574,7 +574,7 @@ test("unchanged user files are not resent to the worker on a later render", asyn
   await first;
 
   // A different `defines` value means a cache miss (so this must reach the
-  // worker), but the SAME file bytes — the worker already has them mounted
+  // worker), but the SAME file bytes: the worker already has them mounted
   // (see worker.ts's cachedUserFiles), so this post must omit `userFiles`
   // entirely rather than re-cloning the same bytes across the thread boundary.
   const second = runner.render({ design: "x", defines: { a: "2" }, userFiles: files });
@@ -616,7 +616,7 @@ test("a respawned worker always gets a full resend, even if files are unchanged"
   w0.emit(ok(w0.last.id, 6));
   await first;
 
-  // Force a respawn (worker error), then render again with the SAME files —
+  // Force a respawn (worker error), then render again with the SAME files:
   // the new worker's module scope has no cached files, so it must NOT be
   // skipped even though the signature matches what the old worker last saw.
   const w1current = newest();
@@ -645,8 +645,8 @@ test("a fatal bootstrap result forces the next render to resend user files (same
   await first;
 
   // Same (unchanged) file set on the retry: without the fix the runner would
-  // treat them as already-sent and omit them, and the reused worker — which
-  // never cached them — would mount nothing and render wrong geometry. The
+  // treat them as already-sent and omit them, and the reused worker, which
+  // never cached them. Would mount nothing and render wrong geometry. The
   // fatal result must have cleared the sent signature, so the files are resent.
   const sameWorker = newest();
   assert.strictEqual(sameWorker, w, "a fatal bootstrap must NOT respawn the worker");
@@ -664,8 +664,8 @@ test("a fatal bootstrap result forces the next render to resend user files (same
 // `if (!runnerRef.current) runnerRef.current = new OpenSCADRunner(...)` in
 // useRenderPipeline.ts into a useEffect whose setup constructs the runner and
 // whose cleanup disposes it. React's dev-only Strict Mode replays a
-// component's effects as mount -> cleanup -> remount on the very first mount,
-// which — for that effect — means: construct runner A, dispose runner A,
+// component's effects as mount -> cleanup -> remount on the first mount,
+// which (for that effect) means: construct runner A, dispose runner A,
 // construct runner B. These tests exercise that exact sequence directly
 // against OpenSCADRunner (no React/jsdom available in this suite) to prove
 // the invariants useRenderPipeline.ts's effect relies on: dispose is safe to
@@ -721,7 +721,7 @@ test("a StrictMode-style construct/dispose/construct replay leaves exactly one l
   );
   assert.notStrictEqual(w1, w0, "the surviving worker is a fresh instance, not a reused one");
 
-  // End state: exactly one LIVE worker (w1) — w0 is terminated, and no third
+  // End state: exactly one LIVE worker (w1). W0 is terminated, and no third
   // worker was ever spawned (no leak).
   assert.equal(w0.terminated, true);
   assert.equal(w1.terminated, false);
@@ -794,7 +794,7 @@ test("a DataCloneError posting the module falls back to warmup and is never retr
     const runner = new OpenSCADRunner();
     const w0 = newest();
     // The first-ever worker has no module to hand back yet, so its spawn-time
-    // post is a plain warmup — never throws.
+    // post is a plain warmup, never throws.
     assert.deepEqual(w0.posted[0], { type: "warmup" });
 
     w0.emit({ type: "module", module: sentinel });
@@ -815,9 +815,9 @@ test("a DataCloneError posting the module falls back to warmup and is never retr
     w1.emit(ok(w1.last.id));
     assert.equal((await b).ok, true);
 
-    // The module was dropped for good, not just skipped once: a FURTHER
+    // The module was dropped for good, not only skipped once: a FURTHER
     // respawn (via worker-error recovery this time) also gets a plain
-    // warmup — no second attempt to post the now-discarded module.
+    // warmup. No second attempt to post the now-discarded module.
     w1.emitError("boom");
     const c = runner.render({ design: "z", defines: {} });
     const w2 = newest();

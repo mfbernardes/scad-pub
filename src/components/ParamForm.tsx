@@ -1,8 +1,8 @@
-// ParamForm.tsx — renders the design's Customizer parameters grouped by section,
+// ParamForm.tsx: renders the design's Customizer parameters grouped by section,
 // driven entirely by the generated schema. Controls are shadcn/ui (Radix):
 // Slider + Input for numbers, Switch for booleans, Select for enums, Input for
 // strings. Each control carries an aria-label (its description) for its name.
-// Every row also carries `data-param="<var>"` — the stable hook the smoke test
+// Every row also carries `data-param="<var>"`: the stable hook the smoke test
 // (and extraCss) target now that variable names are hidden from users by default.
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import { Info as InfoIcon, RotateCcw as RevertIcon, Upload as UploadIcon } from "lucide-react";
@@ -55,13 +55,13 @@ interface Props {
   /**
    * SVG basenames the renderer can resolve right now (bundled assets ∪ imported
    * `.svg`). When non-empty, an `@svg` control whose filename value isn't in it
-   * shows an actionable "not imported" hint — the SVG mirror of the missing-font
+   * shows an actionable "not imported" hint: the SVG mirror of the missing-font
    * hint. Omitted or empty → no SVG checking (we can't be authoritative).
    */
   availableSvgFiles?: Set<string>;
   /**
    * Tier-2 preset-diff markers: the values a drifted param is compared against
-   * (the selected preset, or design defaults — see App.tsx/PresetDiffBar) and
+   * (the selected preset, or design defaults, see App.tsx/PresetDiffBar) and
    * the set of param names currently drifted from it. Both optional so the
    * form still works for a caller that doesn't wire up the diff (e.g. a future
    * standalone use); omitting either suppresses the markers entirely.
@@ -75,16 +75,16 @@ interface Props {
   showAdvanced?: boolean;
   /**
    * Density. `false` (the default, and what the docked desktop panel uses)
-   * stacks every control under its label. `true` — the mobile sheet — puts the
+   * stacks every control under its label. `true` (the mobile sheet) puts the
    * control BESIDE its label wherever the control doesn't need the full row,
    * and tightens the vertical rhythm.
    *
    * The sheet's half detent is the only state where a phone visitor can see
    * the model and the controls at once, and it was showing one or two
    * parameters out of sixteen: a stacked row costs the label's height PLUS the
-   * control's, and a label is often two lines. Side-by-side makes a row
+   * control's, and a label can run to two lines. Side-by-side makes a row
    * `max(label, control)` instead of their sum. Numbers with a slider and
-   * `@svg` fields still stack — their controls genuinely need the width — so
+   * `@svg` fields still stack (their controls genuinely need the width) so
    * this narrows rows rather than cramping them.
    */
   compact?: boolean;
@@ -115,10 +115,10 @@ export interface ParamFormHandle {
 
 // Inline, non-alarming hint shown under a `font` control when the selected
 // family isn't loaded. Offers the two actions that actually fix it: import the
-// real font, or switch to an available bundled family — so availability is
+// real font, or switch to an available bundled family, so availability is
 // communicated immediately, without needing a render to find out. The
 // hidden-FileInput+addFile plumbing behind "Import font…" is FontImportActions
-// (shared with AttentionItems' own font-fallback card) — this only supplies
+// (shared with AttentionItems' own font-fallback card): this only supplies
 // the copy/visuals, which stay identical to before.
 function FontMissingHint({
   family,
@@ -187,7 +187,7 @@ function committedNumber(param: Extract<Param, { type: "number" }>, value: Param
 }
 
 /**
- * Revert one parameter to the baseline — and, for an `@svg` field, its bound
+ * Revert one parameter to the baseline, and, for an `@svg` field, its bound
  * `layers=` parameter with it. The two are written together by the SVG wizard
  * (the layers string names regions that exist only in the drawing it prepared),
  * so reverting the drawing alone would leave the regions of a drawing that is no
@@ -232,7 +232,7 @@ function NumberControl({
   const hasRange = param.min !== undefined && param.max !== undefined;
   // While the input is focused, an external `committed` change (our own
   // clamped onChange echoing back through props) must NOT stomp the user's
-  // in-progress keystrokes — e.g. typing "2" en route to "25" in a min=10
+  // in-progress keystrokes: e.g. typing "2" en route to "25" in a min=10
   // field commits (clamped) 10, and re-syncing the draft from that would
   // force the field back to "10" mid-type. Blur already normalises the draft,
   // and an external value change (e.g. a preset apply) while unfocused should
@@ -334,7 +334,7 @@ function Control({
   svgDefaultHeight?: number | null;
 }) {
   // A font parameter (string or enum flagged `isFont`) becomes the friendly
-  // FontSelect dropdown whenever we authoritatively know what's installed —
+  // FontSelect dropdown whenever we authoritatively know what's installed:
   // listing real faces by name instead of raw Fontconfig strings.
   if ((param.type === "string" || param.type === "enum") && param.isFont && installedFonts?.length)
     return (
@@ -376,8 +376,8 @@ function Control({
       );
     case "enum": {
       // The full label of the selected choice as a `title`, so a value too
-      // long to fit the trigger (now ellipsis-truncated, not hard-clipped —
-      // see ui/select.tsx) is still readable on hover — e.g. a long language
+      // long to fit the trigger (now ellipsis-truncated, not hard-clipped,
+      // see ui/select.tsx) is still readable on hover: e.g. a long language
       // name at a narrow panel width.
       const selectedLabel = param.choices.find((c) => c.value === String(value))?.label;
       return (
@@ -411,11 +411,10 @@ function Control({
 
 // Surfaces a parameter's full help text in a tap/click popover, rendered
 // INLINE right after the last word of the label/help text it belongs to (a
-// plain sibling in the same text flow, not a flex row item) — so when that
+// plain sibling in the same text flow, not a flex row item), so when that
 // text wraps to multiple lines, the button flows with it instead of sitting
-// detached to the row's right edge at the first line's height. The detail
-// was previously reachable only through the hover-only `title` tooltip,
-// which is invisible on touch devices.
+// detached to the row's right edge at the first line's height. A hover-only
+// `title` tooltip would leave the detail unreachable on touch devices.
 function ParamHelp({ help, label }: { help: string; label: string }) {
   return (
     <Popover>
@@ -453,7 +452,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
   // collapsible (native <details>), so long forms stay manageable. Recompute
-  // visible groups only when the design, values or query change — not on every
+  // visible groups only when the design, values or query change, not on every
   // unrelated render (e.g. a sibling re-render). The filter itself lives in
   // lib/paramGroups.ts so the section navigator (ParamPanel/SheetTabs) shares
   // exactly this computation and can never list a section the form doesn't show.
@@ -467,7 +466,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
 
   // Per-section open/closed state, controlled in React so a search can force a
   // folded group open without losing the user's manual fold/unfold of an
-  // @collapsed (or plain) group — <details>'s `open` attribute is otherwise
+  // @collapsed (or plain) group: <details>'s `open` attribute is otherwise
   // native DOM state React never observes, so a search-forced re-render used to
   // stomp it back to the design's static @collapsed default. Re-derived whenever
   // the design changes (a different design's section names shouldn't inherit
@@ -485,7 +484,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
     initOpenSections(design, collapsedDefault)
   );
   // Re-derive whenever `design` changes, during render rather than in an
-  // effect (the documented "adjusting state when a prop changes" pattern) —
+  // effect (the documented "adjusting state when a prop changes" pattern):
   // this is a synchronous reset of state fully derived from `design`, not a
   // side effect on an external system.
   const lastOpenSectionsDesign = useRef(design);
@@ -496,7 +495,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
 
   // Imperative "jump to a section" for the SectionNavigator. `openSection`
   // forces the section open (leaving the search-forces-open logic untouched)
-  // and arms a scroll via a monotonically-increasing counter — bumped on every
+  // and arms a scroll via a monotonically-increasing counter: bumped on every
   // call so the effect fires even when the section was already open (identity
   // of `openSections` wouldn't change then), giving the always-re-scroll a
   // one-shot navigation deserves.
@@ -548,7 +547,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
             open={q ? true : isOpen}
             onToggle={(e) => {
               // A search forces every matching group open without being a user
-              // choice — don't persist it, so clearing the search restores
+              // choice: don't persist it, so clearing the search restores
               // whatever the user had before searching.
               if (q) return;
               const next = (e.target as HTMLDetailsElement).open;
@@ -568,7 +567,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               const hasHelp = Boolean(p.help) && p.help !== label;
               const value = values[p.name];
               const missingFontValue = missingFont(p, value, availableFontFamilies);
-              // Toggles ride the label row (label left, switch right) — a
+              // Toggles ride the label row (label left, switch right): a
               // control row below would leave a stranded switch.
               const isToggle = p.type === "boolean";
               // In compact (mobile) mode most controls join the toggle on the
@@ -576,7 +575,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               const sideBySide = compact && !isToggle && !controlNeedsFullRow(p);
               // Tier-2 preset-diff marker (see PresetDiffBar for Tier 1): this
               // param's value differs from the baseline (selected preset, or
-              // design defaults). Neutral/slate — never the warn colour.
+              // design defaults). Neutral/slate, never the warn colour.
               const isDrifted = Boolean(baseline && changedParams?.has(p.name));
               const control = (
                 <Control
@@ -652,7 +651,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
               // The `.param`/`data-param` row hook stays on the outer element for
               // every param (smoke harness + extraCss target it). A `@filledBy`
               // param is normally written by the SVG wizard, so its content rides
-              // an inner "Advanced" disclosure — demoted, but still hand-editable.
+              // an inner "Advanced" disclosure: demoted, but still hand-editable.
               return (
                 <div
                   className={`param flex flex-col ${density.row}`}
@@ -678,7 +677,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
       {/* The form's closing row: the way to the `@advanced` params, at the
           point the visitor has run out of essential ones (see
           EssentialsToggle's own doc). Rendered outside the groups.map so it
-          survives an empty `groups` — a search that matches only advanced
+          survives an empty `groups`: a search that matches only advanced
           params shows "Nothing matches", and this is exactly the control that
           resolves that. */}
       {onShowAdvancedChange && (

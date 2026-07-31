@@ -1,4 +1,4 @@
-// FriendlyFailureCard.tsx — the shared failed-render presentation: the
+// FriendlyFailureCard.tsx: the shared failed-render presentation: the
 // friendly {title, body} from src/lib/friendlyErrors.ts, plus a collapsed
 // "Raw output" <details> holding the technical tail. Used by OutputConsole's
 // Notices tab and ReviewDialog so a failure reads identically wherever it

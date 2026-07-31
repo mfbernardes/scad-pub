@@ -1,4 +1,4 @@
-// OutputConsole.tsx — bottom drawer with Notices + Log tabs (shadcn/ui Tabs).
+// OutputConsole.tsx: bottom drawer with Notices + Log tabs (shadcn/ui Tabs).
 // Auto-opens when a render first surfaces a notice/assert; also toggled by the
 // Output button. Diagnostics/badges are computed once by the parent (AppShell)
 // and passed in.
@@ -32,7 +32,7 @@ interface Props {
   metrics: RenderMetrics;
   open: boolean;
   onClose: () => void;
-  /** friendlyRenderError(result) — when set, the Notices tab leads with this
+  /** friendlyRenderError(result): when set, the Notices tab leads with this
    *  {title, body} instead of the raw diagnostics list, with the technical
    *  tail tucked into a collapsed "Raw output" details block (the Log tab
    *  stays raw either way). Null on a missing/successful result. */
@@ -56,9 +56,9 @@ export function OutputConsole({ log, diagnostics, badges, metrics, open, onClose
         {/* The close button must survive a narrow viewport. At 320px the
             title + three tabs measured 355px against a 320px row, and since
             nothing here could shrink, `ml-auto` pushed Close clean off the
-            right edge — leaving no way to dismiss the console on the smallest
+            right edge: leaving no way to dismiss the console on the smallest
             phones. Two changes fix it and keep every tab reachable: the title
-            (redundant — the region carries the same accessible name, and the
+            (redundant: the region carries the same accessible name, and the
             bell that opens this says "Messages") drops out below 360px, and
             the tab strip may shrink and scroll rather than forcing the row
             wider than its container. Close itself stays `shrink-0`. */}

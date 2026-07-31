@@ -1,12 +1,12 @@
-// BottomSheet.tsx — persistent, detented bottom sheet for mobile (< 860px).
+// BottomSheet.tsx: persistent, detented bottom sheet for mobile (< 860px).
 // Three snap points: Peek (collapsed header) / Half (~50vh) / Full (everything
-// but a model strip at the top — see FULL_TOP_GAP). Never fully dismissed.
+// but a model strip at the top, see FULL_TOP_GAP). Never fully dismissed.
 // Drag handle tap cycles detents; Arrow Up/Down adjusts.
 // Non-modal at Peek/Half (canvas stays interactive, background stays reachable
 // by keyboard/AT). Modal at Full (see docs/architecture-review.md M16): the
 // sheet covers everything there but a model strip at the top, and that strip
-// is a preview rather than a workspace — AppShell hides the chrome floating
-// over it and marks the background `inert` — so the effect below traps
+// is a preview rather than a workspace. AppShell hides the chrome floating
+// over it and marks the background `inert`, so the effect below traps
 // keyboard focus inside the sheet (+ scrim), sends initial focus in, restores
 // it to the triggering control on close, and Escape collapses it from
 // anywhere in the trap. See AppShell's mobileBackgroundRef and `sheetFull`
@@ -33,10 +33,10 @@ export const HALF_VH_RATIO = 0.52;
 // at the top of the viewport. Any notch inset is added on top of it by fullH's
 // `topInset` argument, so a device with one doesn't lose part of the strip.
 //
-// "Full" used to mean the whole viewport, which made it the one state where a
-// visitor could read the form comfortably and the one state where they could
-// not see what they were editing — on a tool whose entire loop is "change the
-// text, watch the plate change". Stopping short of the top edge keeps the LIVE
+// "Full" stops short of the whole viewport deliberately: covering it would make
+// this the one state where a visitor can read the form comfortably and the one
+// state where they cannot see what they are editing, on a tool whose entire
+// loop is "change the text, watch the plate change". Stopping short keeps the LIVE
 // viewer in frame instead of adding a second render surface: the canvas's
 // bottom already tracks the sheet (`--sheet-top` in index.css), and the
 // Viewer's ResizeObserver re-fits the model into whatever box it is left with
@@ -50,7 +50,7 @@ export const FULL_TOP_GAP = 132;
 
 // Movement (px) past which a pointer interaction counts as a drag, not a tap.
 const DRAG_THRESHOLD = 6;
-// Elements a focus trap should consider reachable — the standard "visible,
+// Elements a focus trap should consider reachable: the standard "visible,
 // operable" set (no [hidden], no disabled, no roving -1 tabindex).
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -74,9 +74,9 @@ function halfH(containerH: number, inset: number) {
   return Math.round((containerH - inset) * HALF_VH_RATIO);
 }
 // Full stops FULL_TOP_GAP (plus any notch inset, passed in as `topInset`)
-// short of the top edge so the live viewer stays in frame — see FULL_TOP_GAP's
-// own doc. Floored at the half height so a very short viewport — a landscape
-// phone, where half is already most of the screen — can never resolve "full"
+// short of the top edge so the live viewer stays in frame, see FULL_TOP_GAP's
+// own doc. Floored at the half height so a short viewport: a landscape
+// phone, where half is already most of the screen. Can never resolve "full"
 // to something SMALLER than "half", which would make the detent order
 // non-monotonic and break the nearest-detent snap in onPointerUp.
 function fullH(containerH: number, inset: number, topInset: number) {
@@ -98,7 +98,7 @@ interface Props {
    *  so the parent can size the viewer to follow the sheet in real time. Fires
    *  every drag frame and on each settle. */
   onFollow?: (heightPx: number, dragging: boolean) => void;
-  /** Reports the effective "Peek" height (px) — the measured header (drag
+  /** Reports the effective "Peek" height (px): the measured header (drag
    *  handle + tab row), or the `peekHeight` fallback until that measurement
    *  lands. Distinct from onFollow: this is the sheet's own geometry (how
    *  tall the collapsed sheet is), not the live displayed height, so the
@@ -106,7 +106,7 @@ interface Props {
    *  exactly above the real peek row instead of a static guess. */
   onPeekHeightChange?: (heightPx: number) => void;
   /** Reports the gap (px) the Full detent leaves clear at the TOP of the
-   *  viewport — FULL_TOP_GAP plus the measured notch inset. The parent
+   *  viewport: FULL_TOP_GAP plus the measured notch inset. The parent
    *  publishes it as a CSS custom property so the stylesheet can anchor to the
    *  model strip (the scrim starts below it) without re-deriving the number:
    *  this module owns the detent model, so it should own the arithmetic. Same
@@ -147,7 +147,7 @@ export function BottomSheet({
   onFollowRef.current = onFollow;
 
   // A short haptic tick whenever the sheet settles on a new detent (drag-snap,
-  // tap-cycle or keyboard) — Android only; silent on iOS / reduced-motion.
+  // tap-cycle or keyboard). Android only; silent on iOS / reduced-motion.
   const didMount = useRef(false);
   useEffect(() => {
     if (didMount.current) tapFeedback();
@@ -163,7 +163,7 @@ export function BottomSheet({
   // The notch inset the Full detent's model strip has to clear. Measured once
   // per mount and on viewport change (useSafeAreaInset) rather than read at
   // each call: the probe it uses appends to document.body and reads a rect,
-  // forcing a synchronous document layout — and fullH() below runs on every
+  // forcing a synchronous document layout, and fullH() below runs on every
   // pointermove, every drag frame and every render. Held in a ref for the same
   // reason bottomInset is: so the pointer handlers stay identity-stable with
   // empty dependency lists.
@@ -222,7 +222,7 @@ export function BottomSheet({
   // ResizeObserver on it fires exactly when the box the sheet must fit
   // actually changes (orientation flip, a breakpoint reflow), which is both
   // narrower and more reliable than listening for window resize and hoping it
-  // corresponds. Seeded from window.innerHeight so the very first paint has a
+  // corresponds. Seeded from window.innerHeight so the first paint has a
   // sane height; the observer corrects it in the same frame.
   const [containerH, setContainerH] = useState(() =>
     typeof window === "undefined" ? 0 : window.innerHeight
@@ -248,7 +248,7 @@ export function BottomSheet({
     }
   }, []);
 
-  // All handlers below are stable — they read current detent/peekHeight via
+  // All handlers below are stable: they read current detent/peekHeight via
   // refs instead of closing over state. `setDetent` (== `onDetentChange`) is
   // itself stable because the caller passes a `useCallback` with an empty
   // dep array (see AppShell's `handleDetentChange`), so listing it below
@@ -258,12 +258,12 @@ export function BottomSheet({
     setDetent(DETENT_ORDER[(idx + 1) % DETENT_ORDER.length]);
   }, [setDetent]);
 
-  // Raise a collapsed (peek) sheet to half — used when a tab is tapped at peek.
+  // Raise a collapsed (peek) sheet to half: used when a tab is tapped at peek.
   const expand = useCallback(() => {
     if (detentRef.current === "peek") setDetent("half");
   }, [setDetent]);
 
-  // Tap cycles detents — but only when the pointer didn't drag (a drag already
+  // Tap cycles detents, but only when the pointer didn't drag (a drag already
   // snapped on pointer-up, and the browser still fires a click afterwards).
   const onHandleClick = useCallback(() => {
     if (draggedRef.current) { draggedRef.current = false; return; }
@@ -295,7 +295,7 @@ export function BottomSheet({
     }
   );
 
-  // onPointerMove only reads refs — no state deps at all.
+  // onPointerMove only reads refs: no state deps at all.
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragStart.current || e.pointerId !== dragPointerId.current) return;
     const offset = dragStart.current.y - e.clientY;
@@ -313,7 +313,7 @@ export function BottomSheet({
     const delta = dragStart.current.y - e.clientY;
     const currentH = dragStart.current.height;
     dragStart.current = null;
-    // Drop any pending rAF write so a frame queued just before pointer-up
+    // Drop any pending rAF write so a frame queued immediately before pointer-up
     // can't fire after React commits the settled detent below.
     cancelHeightFrame();
     setDragging(false);
@@ -329,11 +329,11 @@ export function BottomSheet({
     }
     // Imperatively restore the settled geometry for `best` right away. When
     // `best` differs from the pre-drag detent, the setDetent below triggers a
-    // React re-render that writes the same values via JSX — harmless. But
+    // React re-render that writes the same values via JSX: harmless. But
     // when `best` equals the current detent, React state doesn't change, so
     // its render is skipped and the DOM would otherwise be left at whatever
     // in-progress drag height the last rAF frame wrote (already stopped short
-    // of the committed detent height) — desynchronizing the viewer, which
+    // of the committed detent height): desynchronizing the viewer, which
     // only follows the onFollow call below. Writing here directly keeps the
     // DOM in lockstep with what a render for `best` would produce, so a
     // later render (detent did change) still agrees with it.
@@ -376,22 +376,22 @@ export function BottomSheet({
   }, [displayH, dragging, onFollow]);
 
   // M16: the Full detent is modal (the sheet visually covers the app behind
-  // it — see the file header). While at Full:
+  // it, see the file header). While at Full:
   //  - remember whatever held focus beforehand, and restore it on the way out
-  //    (mirrors standard dialog behavior — the trigger gets focus back).
+  //    (mirrors standard dialog behavior: the trigger gets focus back).
   //  - send initial focus into the sheet (or the scrim) if it isn't already
   //    there, so a keyboard user landing on Full doesn't stay parked on a
   //    control that's about to go `inert` behind it (AppShell inerts the
   //    background for this detent).
   //  - trap focus two ways: (1) Tab/Shift+Tab are intercepted directly and
-  //    wrapped to the other end of the trap's focusable list — needed
+  //    wrapped to the other end of the trap's focusable list. Needed
   //    because tabbing off the LAST focusable element doesn't move focus to
-  //    any DOM node (the browser just leaves the document, and
+  //    any DOM node (the browser leaves the document, and
   //    document.activeElement falls back to <body> without a `focusin`
   //    event ever firing), so a focusin-only redirect can't catch it; (2) a
   //    `focusin` listener still redirects any focus that lands outside the
   //    trap by other means (e.g. a programmatic .focus() call).
-  //  - Escape collapses to Half from anywhere in the trap, not just the
+  //  - Escape collapses to Half from anywhere in the trap, not only the
   //    drag handle (onHandleKeyDown above only fires when the handle itself
   //    has focus).
   const scrimRef = useRef<HTMLButtonElement>(null);
@@ -404,10 +404,10 @@ export function BottomSheet({
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     // A menu/popover/select opened from a sheet control portals its content to
     // <body> (outside `sheet`) so it isn't clipped by the sheet's `overflow:
-    // hidden` — but it is logically part of the sheet's modal surface. Treat any
+    // hidden`, but it is logically part of the sheet's modal surface. Treat any
     // Radix popper content as inside the trap: without this the focusin redirect
     // below yanks focus back into the sheet the instant the popover grabs it, and
-    // Radix (seeing focus leave its content) closes the layer again — so e.g. the
+    // Radix (seeing focus leave its content) closes the layer again, so e.g. the
     // "Jump to section" navigator could never open at the Full detent.
     const inPopper = (node: Node | null) =>
       node instanceof Element && !!node.closest("[data-radix-popper-content-wrapper]");
@@ -416,7 +416,7 @@ export function BottomSheet({
     // DOM/tab order: the scrim (when present) precedes the sheet.
     // FOCUSABLE_SELECTOR alone isn't enough: Radix's inactive TabsContent
     // panels carry tabindex="0" (for programmatic/AT focus management) while
-    // `hidden`, which the browser's real Tab key already skips — filter
+    // `hidden`, which the browser's real Tab key already skips. Filter
     // those out too, or "last focusable" here would disagree with what Tab
     // actually visits and the wrap-around below would never trigger.
     const isReachable = (el: HTMLElement) => !el.closest("[hidden]") && el.offsetParent !== null;
@@ -437,7 +437,7 @@ export function BottomSheet({
     const onKeyDown = (e: KeyboardEvent) => {
       // While a sheet-spawned popover/menu holds focus it owns Escape and Tab
       // (Radix closes it on Escape, moves within it on Tab). Don't also collapse
-      // the sheet or wrap focus back into it — let the layer handle the key.
+      // the sheet or wrap focus back into it: let the layer handle the key.
       if (inPopper(document.activeElement)) return;
       if (e.key === "Escape") {
         setDetent("half");
@@ -501,7 +501,7 @@ export function BottomSheet({
         role="complementary"
       >
         <div className="sheet-frame">
-          {/* Drag handle — single visible control; tap cycles, arrow keys resize. */}
+          {/* Drag handle: single visible control; tap cycles, arrow keys resize. */}
           <div
             className="sheet-handle"
             role="button"

@@ -2,7 +2,7 @@
 // contract extracted from worker.ts's ensureAssets (M1). worker.ts's actual
 // bootstrap (WASM/glue import, Cache Storage, fetch) needs a real worker/
 // browser environment to exercise end-to-end; this file pins the generic
-// contract that fix depends on — a rejected attempt is not memoized, so the
+// contract that fix depends on. A rejected attempt is not memoized, so the
 // next call retries from scratch, while a resolved attempt IS memoized and
 // shared by concurrent callers.
 import { test } from "node:test";
@@ -49,7 +49,7 @@ test("a rejected load is retried on the next call, not replayed forever", async 
 
   await assert.rejects(run(), /first attempt failed/);
   // Without the fix, a second call would resolve/reject with the exact same
-  // memoized (rejected) promise — same object, same error, forever.
+  // memoized (rejected) promise: same object, same error, forever.
   assert.equal(await run(), "ok");
   assert.equal(calls, 2);
 });
@@ -91,7 +91,7 @@ test("a value-returning loader threads its resolved value through", async () => 
 
 // Regression guard for the exact M1 bug pattern: a piece of bootstrap work
 // that is started but never actually awaited inside the loader can reject
-// without the caller ever finding out — retryableOnce can't fix that half of
+// without the caller ever finding out. RetryableOnce can't fix that half of
 // the bug (it can only retry what the loader actually awaits), so worker.ts's
 // ensureAssets loader is required to await every promise it starts (see its
 // comment). This test documents/pins that retryableOnce alone is not
@@ -99,7 +99,7 @@ test("a value-returning loader threads its resolved value through", async () => 
 test("retryableOnce cannot rescue a loader that starts work without awaiting it", async () => {
   let leaked;
   const run = retryableOnce(async () => {
-    // Deliberately NOT awaited — mirrors the pre-fix bug where
+    // Deliberately NOT awaited: mirrors the pre-fix bug where
     // `factoryPromise = loadFactory()` was assigned but not included in the
     // Promise.all.
     leaked = Promise.reject(new Error("never awaited")).catch((e) => {

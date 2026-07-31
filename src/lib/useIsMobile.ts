@@ -1,4 +1,4 @@
-// useIsMobile — true below the 860px breakpoint (kept in sync with the CSS
+// useIsMobile: true below the 860px breakpoint (kept in sync with the CSS
 // media query that toggles the mobile/desktop layouts). Used so only the active
 // layout mounts a three.js Viewer instead of both running at once.
 import { useSyncExternalStore } from "react";
@@ -6,7 +6,7 @@ import { subscribeMatchMedia } from "./matchMedia";
 
 const QUERY = "(max-width: 860px)";
 
-// Module scope keeps these referentially stable — see subscribeMatchMedia.
+// Module scope keeps these referentially stable, see subscribeMatchMedia.
 const subscribe = subscribeMatchMedia(QUERY);
 const getSnapshot = (): boolean => window.matchMedia(QUERY).matches;
 const getServerSnapshot = (): boolean => false;

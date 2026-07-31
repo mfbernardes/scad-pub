@@ -1,4 +1,4 @@
-// format.ts — small formatting helpers shared by the viewer's measurements
+// format.ts: small formatting helpers shared by the viewer's measurements
 // panel (DimensionInfo.tsx) and the pre-download review summary
 // (reviewSummary.ts), so a millimetre figure or a parameter's display value
 // reads identically wherever a visitor sees it. Dependency-light (only the
@@ -15,7 +15,7 @@ export function mm(n: number): string {
 /**
  * Format a parameter's current value for display, appending its optional
  * `@info` unit. Booleans render as Yes/No, enums by their choice label, and
- * an empty string is nothing worth showing (`null`) — the same rules
+ * an empty string is nothing worth showing (`null`): the same rules
  * DimensionInfo.tsx's `@info` rows and reviewSummary.ts's curated review rows
  * both need, so this is the one place they're written.
  *

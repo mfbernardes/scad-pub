@@ -1,6 +1,6 @@
-// FontImportActions.tsx — the shared "import a font" affordance: a hidden
+// FontImportActions.tsx: the shared "import a font" affordance: a hidden
 // `.ttf/.otf/.ttc` file input, reading the picked file into bytes and handing
-// it to AppActions' `addFile` — the same conversion ParamForm's inline
+// it to AppActions' `addFile`. The same conversion ParamForm's inline
 // missing-font hint does. Used by AttentionItems' font-fallback warning card.
 // Ported from a donor branch's design-reference component; the copy itself
 // lives at each call site (both of which take it from the `t()` catalogue).

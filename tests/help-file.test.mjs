@@ -1,4 +1,4 @@
-// Unit tests for scripts/lib/help-file.mjs's splitHelpMarkdown — the "whole
+// Unit tests for scripts/lib/help-file.mjs's splitHelpMarkdown: the "whole
 // help tab from one Markdown file" split rule (see docs/config.md "Sourcing
 // help from Markdown files").
 import { test } from "node:test";

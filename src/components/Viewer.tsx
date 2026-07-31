@@ -1,4 +1,4 @@
-// Viewer.tsx — three.js preview of the rendered model. Parses the OpenSCAD
+// Viewer.tsx: three.js preview of the rendered model. Parses the OpenSCAD
 // export and frames the model with orbit/zoom. There is no live OpenCSG preview
 // in WASM, so this shows the F6-rendered mesh. The export format is fixed at
 // build time (config -> __APP_FORMAT__): 3MF carries per-object colour from
@@ -30,7 +30,7 @@ import {
 } from "./framing";
 
 // The build-time model format (Vite define; see vite.config.ts). A literal, so
-// the unused branch below — and its loader import — drop out of the bundle.
+// the unused branch below (and its loader import) drop out of the bundle.
 declare const __APP_FORMAT__: "3mf" | "stl";
 
 // Build-time toggle (Vite define; see vite.config.ts / config
@@ -42,15 +42,15 @@ declare const __APP_REST_ON_GRID__: boolean;
 // The viewer presentation (a Vite define; see vite.config.ts / config
 // `viewer.style`). "plain" (the default) is the classic CAD preview; "studio"
 // adds image-based studio lighting, tone mapping, and a soft baked contact
-// shadow. A literal, so the unused style branch — and, for "plain", the
-// studio-only environment and contact-shadow modules — tree-shakes out of the
+// shadow. A literal, so the unused style branch, and, for "plain", the
+// studio-only environment and contact-shadow modules: tree-shakes out of the
 // bundle, like the loaders above. The reference grid is deliberately NOT a
 // build-time choice: it is a runtime toggle the visitor owns (the `showGrid`
-// prop, seeded by config `viewer.grid` — see src/lib/viewerPrefs.ts), and it
+// prop, seeded by config `viewer.grid`, see src/lib/viewerPrefs.ts), and it
 // is drawn in both styles.
 declare const __APP_VIEWER_STYLE__: "plain" | "studio";
 
-// The floating chrome the camera fit clears — see chromeInsets below for what
+// The floating chrome the camera fit clears, see chromeInsets below for what
 // qualifies and what deliberately doesn't.
 //
 // `edge` overrides framing.ts's "charge it to the side it intrudes from least"
@@ -59,12 +59,12 @@ declare const __APP_VIEWER_STYLE__: "plain" | "studio";
 // corner (ViewerHUD's `collapse` branch). Left to the default it reads as a
 // right-edge band and charges its width across the canvas's whole height,
 // shrinking the model for chrome that occupies one corner. Charging it to the
-// top is the cheaper truthful answer — the top bar already reserves a band
-// there, so the two merge instead of stacking — and it still keeps the model
+// top is the cheaper truthful answer: the top bar already reserves a band
+// there, so the two merge instead of stacking, and it still keeps the model
 // clear of the button, which is the point. The desktop HUD is a genuine
 // right-edge column and keeps the default.
-// The two HUD entries are mutually exclusive by construction — `:not()` on the
-// general one — because insets MERGE by taking the deepest per edge. Letting a
+// The two HUD entries are mutually exclusive by construction: `:not()` on the
+// general one, because insets MERGE by taking the deepest per edge. Letting a
 // collapsed HUD match both would keep the right-edge band alongside the top
 // charge and undo the whole point of the override.
 const CHROME_OVERLAYS: { selector: string; edge?: keyof Insets }[] = [
@@ -118,12 +118,12 @@ function studioShadowOpacity(): number {
   return document.documentElement.dataset.theme === "dark" ? 0.62 : 0.42;
 }
 
-// OpenSCAD's *automatic* object colours — the ones it writes into the 3MF for
+// OpenSCAD's *automatic* object colours: the ones it writes into the 3MF for
 // geometry the design didn't `color(...)` itself: the gold default for plain
 // objects, and the green it assigns to an uncoloured `difference()` result.
 // Geometry at one of these is treated as "uncoloured" and recoloured to the
-// theme's model colour, so plain designs still follow the light/dark theme as
-// they did on the old STL path; geometry the design coloured explicitly keeps
+// theme's model colour, so plain designs follow the light/dark theme;
+// geometry the design coloured explicitly keeps
 // its colour. Matched in the same sRGB space the 3MF loader uses (exact match).
 const OPENSCAD_AUTO_COLORS = new Set(
   ["#f9d72c", "#9dcb51"].map((hex) =>
@@ -159,7 +159,7 @@ function retintAutoVertices(
 }
 
 // ── Studio environment ──────────────────────────────────────────────────────
-// A soft overhead field over a small uniform base — a softbox above a product,
+// A soft overhead field over a small uniform base: a softbox above a product,
 // which is what makes a top face read brighter than the vertical wall beside
 // it. Built as a back-facing sphere whose fragment radiance depends only on
 // elevation, then PMREM-filtered like any other environment scene, so it costs
@@ -169,7 +169,7 @@ function retintAutoVertices(
 //
 // Authored Y-up (the equirect/scene convention three's environments use) and
 // mapped onto the Z-up world by scene.environmentRotation. The sign below is
-// the one that actually lands the bright pole on world +Z — three inverts and
+// the one that actually lands the bright pole on world +Z: three inverts and
 // re-flips the Euler on its way to the shader (see WebGLMaterials'
 // refreshTransformUniform), so it is not the sign the Euler alone suggests;
 // verify by eye, not by derivation, if this is ever changed.
@@ -240,7 +240,7 @@ export const Viewer = forwardRef<
     view?: ViewName;
     /** Whether the reference grid is drawn (default off). The HUD's grid
      *  toggle owns this; the config's `viewer.grid` only seeds its first-ever
-     *  value — see src/lib/viewerPrefs.ts. */
+     *  value, see src/lib/viewerPrefs.ts. */
     showGrid?: boolean;
     /** Reports the model's bounding-box size in mm (null when geometry clears). */
     onMeasure?: (size: Dimensions | null) => void;
@@ -281,7 +281,7 @@ export const Viewer = forwardRef<
   // Single-material geometry that tracks the theme (the STL path's one mesh).
   const themedMaterialsRef = useRef<ThemedMaterial[]>([]);
   // Per-vertex-coloured geometry (the 3MF path): the live colour attribute plus
-  // a copy of its original colours, so a theme switch can re-tint just the
+  // a copy of its original colours, so a theme switch can re-tint only the
   // vertices that carried an OpenSCAD auto-colour.
   const themedVertexRef = useRef<{ attr: THREE.BufferAttribute; original: Float32Array }[]>([]);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -302,26 +302,26 @@ export const Viewer = forwardRef<
   const dimGroupRef = useRef<DimensionsGroup | null>(null);
 
   // Every piece of floating chrome the camera fit has to account for itself.
-  // All of these are CSS `position: absolute` overlays — they do NOT shrink
+  // All of these are CSS `position: absolute` overlays. They do NOT shrink
   // the canvas's own box the way the mobile bottom sheet does
   // (`.app-shell__mobile-viewer`'s `bottom: var(--sheet-top)` already excludes
   // the sheet from `mount`'s own clientHeight, so that side needs no handling
-  // here) — so a model fitted to the full canvas sits partly behind them.
+  // here), so a model fitted to the full canvas sits partly behind them.
   // Measured live from the DOM rather than duplicating their CSS geometry
   // (gap/safe-area constants) here. Only one of each is ever in the document
-  // at a time — AppShell mounts exactly one of the desktop/mobile layouts,
-  // never both (see AppShell.tsx's M7) — so plain, unscoped queries are safe.
+  // at a time. AppShell mounts exactly one of the desktop/mobile layouts,
+  // never both (see AppShell.tsx's M7), so plain, unscoped queries are safe.
   //
   // Deliberately NOT listed: the transient chips (`.viewer-hint`,
   // `.sheet-hint`, the stale/updating banner), which come and go on their own
-  // timers, so insetting for them would jog the camera when they appear — and
+  // timers, so insetting for them would jog the camera when they appear, and
   // the measurements panel (`.dimension-info`), because the ruler must not
   // move the model AT ALL. The point of the ruler is reading the callouts on
   // the model at the size you were already looking at it; shrinking the model
   // to make room for the panel (or for the callouts, which are drawn outside
   // the mesh's own box) trades away the thing being measured for the label
   // about it. The panel stays clear of the model by being folded to a header
-  // strip on mobile and transparent to pointers instead — see DimensionInfo.
+  // strip on mobile and transparent to pointers instead, see DimensionInfo.
   function chromeInsets(mount: HTMLElement): Insets {
     const canvas = mount.getBoundingClientRect();
     const insets: Insets[] = [];
@@ -337,7 +337,7 @@ export const Viewer = forwardRef<
   // Reconstruct the model's world-space bounding box from its size, in the
   // same two positioning modes the geometry-swap effect below applies (both
   // centred at target (0,0,0) in X/Y): centred on all three axes by default,
-  // or — restOnGrid — resting its base on z=0 instead of being vertically
+  // or (restOnGrid) resting its base on z=0 instead of being vertically
   // centred. Cheaper than re-measuring a live THREE.Box3, and exactly
   // reproduces that effect's own math (translation only, so `size` alone is
   // enough to reconstruct it).
@@ -366,9 +366,9 @@ export const Viewer = forwardRef<
   // `direction`, at `zoomRatio` × the fit distance (1 = the fit itself) with
   // `pan` (world units, relative to the fitted target) carried over. Fits the
   // model's actual bounding BOX (see framing.ts) rather than a
-  // bounding-sphere radius — a sphere over-estimates a flat/wide model's
-  // on-screen footprint, which used to leave e.g. flat plates reading much
-  // smaller than intended. The camera's up stays +Z for every view (set once
+  // bounding-sphere radius: a sphere over-estimates a flat/wide model's
+  // on-screen footprint, leaving a flat plate reading much smaller than
+  // intended. The camera's up stays +Z for every view (set once
   // at init), so OrbitControls keeps orbiting correctly; only the look-from
   // direction changes.
   function applyFraming(direction: THREE.Vector3, zoomRatio: number, pan: THREE.Vector3) {
@@ -390,7 +390,7 @@ export const Viewer = forwardRef<
     // Two corrections, in this order:
     //  1. aspectAwareFit: on a canvas far from square (a portrait phone, or
     //     the sheet's full-detent model strip) one axis provably can't bind,
-    //     so raise the one that does — otherwise the model reads small in a
+    //     so raise the one that does. Otherwise the model reads small in a
     //     mostly-empty frame. A no-op at ordinary aspect ratios.
     //  2. insetFitFraction: shrink whatever that produced to the region the
     //     chrome leaves clear, so the solve fits the model into THAT rather
@@ -405,7 +405,7 @@ export const Viewer = forwardRef<
     // Move the orbit target so the (unmoved) model renders centred in that
     // clear region rather than in the middle of the canvas. Measured at the
     // APPLIED distance, not the fit distance, so the on-screen centring holds
-    // at whatever zoom the visitor is at — see framing.ts's insetTargetOffset
+    // at whatever zoom the visitor is at, see framing.ts's insetTargetOffset
     // for the sign/derivation.
     const { dir, right, up } = cameraBasis(direction);
     const offset = insetTargetOffset(applied, cam.fov, h, insets);
@@ -420,14 +420,14 @@ export const Viewer = forwardRef<
   }
 
   // Frame the orbit camera for the current model from the named standard view
-  // (default = the current one), at the fit distance with no pan — the "reset
+  // (default = the current one), at the fit distance with no pan: the "reset
   // to a clean product shot" path, used for a new model and for Reset view.
   function frameView(name: ViewName = viewRef.current) {
     const [dx, dy, dz] = VIEW_DIRECTIONS[name];
     applyFraming(new THREE.Vector3(dx, dy, dz), 1, new THREE.Vector3());
   }
 
-  // Re-fit the current model after the canvas changed shape — the mobile
+  // Re-fit the current model after the canvas changed shape: the mobile
   // bottom sheet sliding between detents is the big one, but the desktop
   // panel resize and an orientation change land here too. Without this the
   // camera kept its old distance while the canvas halved in height, and the
@@ -438,7 +438,7 @@ export const Viewer = forwardRef<
   // Not a plain frameView(): that would throw away the visitor's orbit, zoom
   // and pan. The orbit direction is read back off the camera, and the zoom is
   // carried as a RATIO against the last fit distance, so a model the visitor
-  // had zoomed to twice its fitted size stays at twice its fitted size — the
+  // had zoomed to twice its fitted size stays at twice its fitted size: the
   // apparent size holds across the resize instead of the camera snapping back
   // to a default.
   function refitView() {
@@ -482,14 +482,14 @@ export const Viewer = forwardRef<
 
   // Rebuild the reference grid from the current theme, matching the `show`
   // flag: removes any existing grid first (disposing its GPU resources), then
-  // adds a fresh one — coloured from --viewer-grid/-2 — when shown. Cheap line
+  // adds a fresh one (coloured from --viewer-grid/-2) when shown. Cheap line
   // geometry, so a full rebuild on toggle/theme change is fine. Both the HUD's
   // grid toggle and a live theme switch come through here.
   //
   // The grid is a scene decoration, not part of the model, so the studio
   // style's contact shadow must never see it: the bake's `hide` list carries
   // gridRef.current (see the bake call in the [stl] effect), which is why
-  // toggling the grid needs no re-bake — the baked texture never contained it
+  // toggling the grid needs no re-bake. The baked texture never contained it
   // either way. Toggling only has to invalidate a frame, which the [showGrid]
   // effect below does.
   function syncGrid(show: boolean) {
@@ -555,7 +555,7 @@ export const Viewer = forwardRef<
       // preserveDrawingBuffer off, see the renderer setup below), the drawing
       // buffer isn't guaranteed to still hold a frame by the time this is
       // called. Render synchronously and read back the same buffer before
-      // control returns to the browser — the UA only swaps/clears the default
+      // control returns to the browser: the UA only swaps/clears the default
       // framebuffer once the current task yields, so a same-task render then
       // toDataURL() is reliable without paying for a permanently preserved buffer.
       syncShadowFade(); // same view state the on-screen frame would show
@@ -580,7 +580,7 @@ export const Viewer = forwardRef<
   // Tracks whether the canvas is intersecting the viewport. Used to skip
   // renderer.render() calls when the viewer is off-screen (e.g. scrolled away,
   // or a background tab), saving GPU/battery. This is a *geometric*
-  // intersection signal only — it does not detect the mobile bottom sheet
+  // intersection signal only: it does not detect the mobile bottom sheet
   // visually occluding the canvas at its full detent, since the sheet is a
   // separate overlay element and the viewer's own bounding box is unchanged.
   const visibleRef = useRef(true);
@@ -611,7 +611,7 @@ export const Viewer = forwardRef<
     // preserveDrawingBuffer is intentionally left off (the default): rendering
     // is now invalidation-driven rather than continuous, so keeping a
     // permanently preserved backbuffer around would cost memory/perf for no
-    // benefit. PNG snapshots instead render-then-read synchronously — see the
+    // benefit. PNG snapshots instead render-then-read synchronously, see the
     // imperative handle's snapshot() above.
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     // Bounded DPR: uncapped devicePixelRatio on 3x+ phones/Retina displays
@@ -624,7 +624,7 @@ export const Viewer = forwardRef<
     let envTexture: THREE.Texture | null = null;
     if (__APP_VIEWER_STYLE__ === "studio") {
       // Studio style: image-based lighting from a PMREM-filtered gradient sky
-      // (generated procedurally — nothing to download) with Khronos PBR
+      // (generated procedurally: nothing to download) with Khronos PBR
       // Neutral tone mapping, which stays near-identity for mid-tones so the
       // model's own colours and the themed background survive faithfully (ACES
       // would hue-shift saturated colours). The environment is authored Y-up
@@ -636,12 +636,12 @@ export const Viewer = forwardRef<
       // millimetres thick instead of a flat sticker. The meshes are
       // flat-shaded, so the step draws a crisp line along every top edge.
       // Getting it takes an environment that is genuinely top-biased (three's
-      // RoomEnvironment is not — it is an enclosed room whose walls carry most
+      // RoomEnvironment is not: it is an enclosed room whose walls carry most
       // of its light, and measured against this scene its irradiance on a
       // vertical wall is ~1.17x what a top face gets, which is exactly the
       // sticker look) plus a modest key for direction. Totals put a top face
-      // at about full albedo — a near-white plate must read near-white, the
-      // same concern the plain rig's hemisphere solves below — and a vertical
+      // at about full albedo: a near-white plate must read near-white, the
+      // same concern the plain rig's hemisphere solves below, and a vertical
       // wall at roughly half of it.
       renderer.toneMapping = THREE.NeutralToneMapping;
       renderer.toneMappingExposure = 1.0;
@@ -651,7 +651,7 @@ export const Viewer = forwardRef<
       scene.environmentRotation.set(ENV_ROTATION_X, 0, 0);
       // A single key at ~55° elevation, off to the front-right. It is
       // deliberately soft: the environment already separates top from side, so
-      // the key's job is only to break the symmetry — the two walls facing the
+      // the key's job is only to break the symmetry. The two walls facing the
       // camera pick up a little of it (in different amounts) while the two
       // facing away get none, which is what turns the edge line into a
       // readable box rather than a flat outline.
@@ -691,8 +691,8 @@ export const Viewer = forwardRef<
 
     // ── On-model text editing: click/tap the mesh to open the inline editor ──
     // A plain click (a pointerdown→pointerup pair that moved under the
-    // click threshold, single pointer) raycasts the model — and ONLY the
-    // model, never the grid/floor — and reports the hit's screen position so
+    // click threshold, single pointer) raycasts the model, and ONLY the
+    // model, never the grid/floor, and reports the hit's screen position so
     // ViewerStage can float the editor there. These listeners are purely
     // observational (no preventDefault / stopPropagation), so OrbitControls'
     // own orbit/pan/zoom on the same canvas is completely unaffected: a real
@@ -709,7 +709,7 @@ export const Viewer = forwardRef<
     const onPointerDown = (e: PointerEvent) => {
       activePointers.add(e.pointerId);
       if (activePointers.size > 1) {
-        multiTouch = true; // a second finger landed — this is a pinch/rotate, not a tap
+        multiTouch = true; // a second finger landed: this is a pinch/rotate, not a tap
         downPt = null;
         return;
       }
@@ -781,8 +781,8 @@ export const Viewer = forwardRef<
     const renderNow = () => {
       if (!visibleRef.current || !pageVisibleRef.current) return;
       // The contact shadow's strength depends on where the camera is, so it is
-      // refreshed here — on the renders that already happen (controls "change",
-      // damping tick, resize, explicit invalidation) — instead of a loop of its
+      // refreshed here, on the renders that already happen (controls "change",
+      // damping tick, resize, explicit invalidation): instead of a loop of its
       // own. No camera movement, no work.
       syncShadowFade();
       renderer.render(scene, cam);
@@ -814,14 +814,14 @@ export const Viewer = forwardRef<
     // OrbitControls dispatches "change" both from our own tick() calling
     // update() (damping decay) and directly from pointer/wheel handlers
     // during user interaction (which call update() synchronously, outside
-    // this loop) — so listening here both keeps the damping loop alive and
+    // this loop), so listening here both keeps the damping loop alive and
     // wakes a stopped loop back up on the next user input.
     controls.addEventListener("change", requestRender);
 
     // ResizeObserver replaces per-frame layout polling. Resize + render
     // happen synchronously inside the same callback (rather than deferring to
     // the next rAF tick) so the drawing buffer is never left blank between a
-    // setSize() clear and the next paint — this preserved the no-flicker
+    // setSize() clear and the next paint: this preserved the no-flicker
     // behaviour the previous per-frame-polling approach relied on, e.g. while
     // the mobile bottom sheet animates the viewer's height.
     const ro = new ResizeObserver(() => {
@@ -832,7 +832,7 @@ export const Viewer = forwardRef<
       cam.updateProjectionMatrix();
       // Re-fit before the frame is drawn, so the model holds its apparent
       // size (and its centring in the chrome-free region) instead of
-      // shrinking with the canvas — see refitView. Cheap: eight corner
+      // shrinking with the canvas, see refitView. Cheap: eight corner
       // projections plus four getBoundingClientRect reads, which is fine
       // even at the per-frame rate a bottom-sheet drag produces.
       refitRef.current();
@@ -841,7 +841,7 @@ export const Viewer = forwardRef<
     ro.observe(mount);
 
     // Initial paint: ResizeObserver's first callback normally fires async
-    // shortly after observe(), but request one explicitly too so the very
+    // shortly after observe(), but request one explicitly too so the
     // first frame doesn't wait on it.
     requestRender();
 
@@ -858,11 +858,11 @@ export const Viewer = forwardRef<
       requestRenderRef.current = () => {};
       controls.dispose();
       dimGroupRef.current?.dispose();
-      // Release the current model's and grid's GPU resources too — previously
-      // only disposed on replacement, so a desktop⇄mobile breakpoint flip
-      // (which unmounts/remounts the whole Viewer) leaked a live geometry +
-      // material set until GC. Dispose before the renderer/context so nothing
-      // still references a torn-down GL context.
+      // Release the current model's and grid's GPU resources too, not only on
+      // replacement: a desktop⇄mobile breakpoint flip unmounts/remounts the
+      // whole Viewer, leaking a live geometry + material set until GC. Dispose
+      // before the renderer/context so nothing still references a torn-down GL
+      // context.
       if (modelRef.current) disposeObject(modelRef.current);
       if (gridRef.current) {
         gridRef.current.geometry.dispose();
@@ -875,7 +875,7 @@ export const Viewer = forwardRef<
       shadowRef.current = null;
       envTexture?.dispose();
       renderer.dispose();
-      // Explicitly free the WebGL context itself — dispose() alone frees GPU
+      // Explicitly free the WebGL context itself: dispose() alone frees GPU
       // objects (geometries/materials/textures) but keeps the context alive
       // until GC, so each breakpoint flip otherwise leaks a live context.
       renderer.forceContextLoss();
@@ -885,14 +885,14 @@ export const Viewer = forwardRef<
 
   // Background + grid follow the active theme. The CSS variables are keyed off
   // <html data-theme>, which a parent effect sets *after* this child effect runs
-  // in the same commit — so read them on the next frame, by which point the
+  // in the same commit, so read them on the next frame, by which point the
   // attribute (and thus the resolved variables) is up to date.
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
     const raf = requestAnimationFrame(() => {
       scene.background = cssColor("--viewer-bg", "#0f1115");
-      // Rebuilt (not just recoloured) so a live theme switch picks up the new
+      // Rebuilt (not only recoloured) so a live theme switch picks up the new
       // --viewer-grid/-2 values. Read fresh from the closure, like
       // showDimensions below; the [showGrid] effect handles plain toggles.
       syncGrid(showGrid);
@@ -909,7 +909,7 @@ export const Viewer = forwardRef<
       }
       // Re-tint the dimension overlay too (rebuilt with the new --viewer-dim).
       syncDimensions(showDimensions);
-      requestRenderRef.current(); // theme change doesn't move the camera — invalidate explicitly
+      requestRenderRef.current(); // theme change doesn't move the camera: invalidate explicitly
     });
     return () => cancelAnimationFrame(raf);
     // showDimensions/showGrid are read fresh on a theme change; their own
@@ -917,7 +917,7 @@ export const Viewer = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
-  // Show/hide the dimension overlay on toggle (geometry stays put — and so
+  // Show/hide the dimension overlay on toggle (geometry stays put, and so
   // does the camera: the ruler never re-frames, see chromeInsets).
   useEffect(() => {
     syncDimensions(showDimensions);
@@ -984,7 +984,7 @@ export const Viewer = forwardRef<
         roughness: 0.7,
       });
       if (__APP_VIEWER_STYLE__ === "studio") {
-        // Dielectric plastic under image-based lighting — the sheen comes
+        // Dielectric plastic under image-based lighting: the sheen comes
         // from the environment, not a metallic tint.
         mat.metalness = 0;
         mat.roughness = 0.5;
@@ -1008,7 +1008,7 @@ export const Viewer = forwardRef<
           // Swap the loader's Phong material(s) for PBR standard ones so the
           // studio environment lights the mesh, copying the shading-relevant
           // fields. flatShading stays as the loader set it (these meshes carry
-          // no normal attribute — see meshIndex.ts — and computing vertex
+          // no normal attribute (see meshIndex.ts) and computing vertex
           // normals here would smooth across the crisp bevels of plates and
           // dots, so normals keep deriving per-fragment).
           const toStandard = (old: THREE.Material): THREE.Material => {
@@ -1045,7 +1045,7 @@ export const Viewer = forwardRef<
     // Position the model. The export keeps the design's own coordinates, which
     // aren't centred. By default we centre on the origin in all three axes. When
     // the build opts in via `restOnGrid`, we instead centre in X/Y and anchor Z
-    // to the model's lowest point so the base rests on the z=0 grid — OpenSCAD
+    // to the model's lowest point so the base rests on the z=0 grid. OpenSCAD
     // designs are modelled with their base on z=0, and centring in Z sinks them
     // half-way through the grid.
     const box = new THREE.Box3().setFromObject(obj);
@@ -1086,21 +1086,21 @@ export const Viewer = forwardRef<
       }
     }
 
-    // Reframe when the design changed — and, on desktop (reframeOnPreset), when
-    // the preset changed too — or on the first model. A re-render from the same
+    // Reframe when the design changed, and, on desktop (reframeOnPreset), when
+    // the preset changed too, or on the first model. A re-render from the same
     // framing key (e.g. a parameter tweak, or a preset change on mobile) keeps
     // the user's current orbit/zoom so the view doesn't jump. designId/presetId
     // are read fresh here rather than via the dep array: a preset change doesn't
     // clear the old geometry, so reframing must wait for the new model to arrive
     // (this effect) and use *its* bounds, not the stale ones. frameView() reads
-    // modelSizeRef (just set above) to fit the model's actual bounding box —
-    // see framing.ts — rather than a bounding-sphere radius.
+    // modelSizeRef (set above) to fit the model's actual bounding box,
+    // see framing.ts: rather than a bounding-sphere radius.
     const frameKey = reframeOnPreset ? `${designId}\n${presetId}` : designId;
     if (framedKeyRef.current !== frameKey) {
       frameView(); // moves the camera, which self-invalidates via controls' "change" event
       framedKeyRef.current = frameKey;
     } else {
-      requestRenderRef.current(); // same framing (e.g. a param tweak) — camera didn't move, so invalidate explicitly
+      requestRenderRef.current(); // same framing (e.g. a param tweak): camera didn't move, so invalidate explicitly
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stl]);

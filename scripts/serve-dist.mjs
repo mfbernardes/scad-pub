@@ -1,4 +1,4 @@
-// serve-dist.mjs — a tiny in-process static server for the built dist/ tree,
+// serve-dist.mjs: a tiny in-process static server for the built dist/ tree,
 // shared by the headless checks (smoke.mjs, screenshots.mjs). It mirrors the
 // build's base path (derived from index.html) so requests resolve like a real
 // static host, guards against path traversal, and applies dist/_headers (the
@@ -39,7 +39,7 @@ export function detectBase() {
   }
 }
 
-// Read once at server startup, like detectBase() — dist/ doesn't change while
+// Read once at server startup, like detectBase(): dist/ doesn't change while
 // a single smoke/vis run is in flight. Absent silently (no _headers means an
 // unheaded response, same as any host that doesn't honour the file) rather
 // than failing the server: a caller building a stripped-down dist/ for a

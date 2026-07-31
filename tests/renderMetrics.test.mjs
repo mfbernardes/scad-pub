@@ -10,7 +10,7 @@ import {
   emptyMetrics,
 } from "../src/lib/renderMetrics.ts";
 
-// Minimal fake Params — only the fields changedParamLabels/defaultsFor-style
+// Minimal fake Params, only the fields changedParamLabels/defaultsFor-style
 // callers actually read (name, description, default; the rest of ParamBase is
 // irrelevant here).
 function numberParam(name, description, def) {
@@ -37,7 +37,7 @@ test("changedParamLabels: detects a changed param, labels it by description, ign
 
 test("changedParamLabels: missing keys fall back to the param default for comparison", () => {
   const params = [numberParam("width", "Width (mm)", 10)];
-  // prev has no explicit "width" — falls back to default (10), matching next.
+  // prev has no explicit "width": falls back to default (10), matching next.
   assert.deepEqual(changedParamLabels(params, {}, { width: 10 }), []);
   assert.deepEqual(changedParamLabels(params, {}, { width: 11 }), ["Width (mm)"]);
 });

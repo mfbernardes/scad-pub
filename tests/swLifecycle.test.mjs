@@ -1,11 +1,11 @@
 // Executable service-worker lifecycle tests (docs/architecture-review.md M2).
-// public/sw.js is plain JS (hand-written, tracked — see CLAUDE.md), so it can
+// public/sw.js is plain JS (hand-written, tracked, see CLAUDE.md), so it can
 // be loaded and actually exercised, unlike the app's TypeScript sources.
-// This builds a minimal ServiceWorkerGlobalScope in a vm context — real
+// This builds a minimal ServiceWorkerGlobalScope in a vm context: real
 // `caches`/`fetch` behavior faked, everything else (event dispatch, install/
-// activate/fetch handling) is the genuine sw.js code — and asserts the
+// activate/fetch handling) is the genuine sw.js code, and asserts the
 // transactional-install/scoped-shell-key/awaited-write behavior the review
-// called for, not just source-text pattern matching (see tests/swUpdate.test.mjs
+// called for, not only source-text pattern matching (see tests/swUpdate.test.mjs
 // for the lighter-weight text assertions that remain useful alongside this).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -72,7 +72,7 @@ function makeFetch(routes, calls = []) {
 // --- Load sw.js into a vm context with the fakes wired in -----------------
 function loadSw({ routes, existingCaches } = {}) {
   const fakeCaches = new FakeCacheStorage();
-  // Every URL sw.js fetched, in order — lets a test assert what install did
+  // Every URL sw.js fetched, in order: lets a test assert what install did
   // NOT pull down, and that a repeated WARM doesn't refetch.
   const calls = [];
   for (const [name, cache] of Object.entries(existingCaches ?? {})) {
@@ -252,7 +252,7 @@ test("install still rejects when boot-critical JS fails even if PWA metadata is 
 
 test("activate retains the old cache until the new shell validates, then deletes it", async () => {
   // Case 1: CACHE has no validated shell yet (e.g. evicted between install and
-  // activate) — the old cache must survive activation.
+  // activate). The old cache must survive activation.
   const oldCache = new FakeCache();
   oldCache.store.set("app-shell", new Response("old shell"));
   {
@@ -264,7 +264,7 @@ test("activate retains the old cache until the new shell validates, then deletes
   }
 
   // Case 2: CACHE already holds a validated shell (the normal post-install
-  // path) — now the old cache is safe to retire.
+  // path). Now the old cache is safe to retire.
   {
     const newCache = new FakeCache();
     newCache.store.set("app-shell", new Response("new shell"));
@@ -322,7 +322,7 @@ test("navigation and volatile-source runtime cache writes are awaited within the
 
   // Navigate to the entry: respondWith resolves as soon as the network
   // response is available, but the cache.put is only reachable via
-  // event.waitUntil — settle() (which awaits both) must observe the write.
+  // event.waitUntil. Settle() (which awaits both) must observe the write.
   const navReq = new Request(SCOPE_URL);
   Object.defineProperty(navReq, "mode", { value: "navigate" });
   const navEvent = makeEvent(navReq);
@@ -403,7 +403,7 @@ test("a WARM message pulls down the rest of the offline bundle, once", async () 
 
   // Several tabs (or one that re-sends on a later screen) must not re-download
   // any of it. A repeat pass does re-read the two small manifests, since that is
-  // how it works out what is still missing — but nothing it already holds.
+  // how it works out what is still missing, but nothing it already holds.
   calls.length = 0;
   await fireMessage(listeners, { type: "WARM" });
   assert.deepEqual(
@@ -416,7 +416,7 @@ test("a WARM message pulls down the rest of the offline bundle, once", async () 
 test("WARM covers the entry's linked artwork, even at a worker that never ran install", async () => {
   // The artwork list is re-derived from the cached shell rather than carried
   // over from install in memory, so a worker revived after termination (or a
-  // second tab's WARM) covers it just the same.
+  // second tab's WARM) covers it the same way.
   const routes = warmRoutes();
   const ICON = `https://example.test/${NS}/icon.svg`;
   routes.set(SCOPE_URL, {

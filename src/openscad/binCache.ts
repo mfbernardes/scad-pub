@@ -1,4 +1,4 @@
-// binCache.ts — pure naming + eviction logic for the persistent Cache Storage
+// binCache.ts: pure naming + eviction logic for the persistent Cache Storage
 // entry that holds OpenSCAD's big, version-pinned binaries (the ~10 MB WASM and
 // the bundled fonts). Extracted from worker.ts so the version-keyed cache name
 // and the "which stale caches to evict" predicate can be unit-tested without a
@@ -6,7 +6,7 @@
 // effects stay in worker.ts.
 
 // Every binary cache this app has ever written shares this prefix, so a version
-// bump can find and evict its predecessors. Neutral — NOT namespaced per config:
+// bump can find and evict its predecessors. Neutral, NOT namespaced per config:
 // the WASM binary is identical across deployments, so one shared cache per
 // origin avoids re-downloading ~10 MB.
 export const BIN_CACHE_PREFIX = "openscad-wasm-bin-";
@@ -14,7 +14,7 @@ export const BIN_CACHE_PREFIX = "openscad-wasm-bin-";
 // Last-resort fallback for a legacy/malformed schema that carries no
 // wasmVersion; the normal path is schema.wasmVersion, single-sourced from
 // scripts/wasm-version.mjs. That build script can't be imported into worker
-// runtime code, so this mirrors its PINNED_WASM_VERSION by hand — bump both
+// runtime code, so this mirrors its PINNED_WASM_VERSION by hand: bump both
 // together when the WASM is re-pinned.
 const DEFAULT_WASM_VERSION = "2026.06.12";
 
@@ -29,7 +29,7 @@ export function binCacheName(wasmVersion?: string): string {
 // H4 (point 3): how many openscad-wasm-bin-* caches to retain at once,
 // including the current one. Evicting every OTHER version unconditionally
 // (the pre-H4 behavior) meant a second ScadPub deployment/scope sharing this
-// origin — pinned to a different wasmVersion, or mid-rollout of a new one —
+// origin (pinned to a different wasmVersion, or mid-rollout of a new one)
 // could have its offline binaries deleted out from under it by the first
 // scope's worker to run cleanupOldCaches(). Retaining a small bounded set
 // instead lets a few versions coexist; eviction still bounds total storage
@@ -51,7 +51,7 @@ export function staleBinaryCaches(
   const others = keys.filter((k) => k.startsWith(BIN_CACHE_PREFIX) && k !== current);
   const keepCount = Math.max(0, retain - 1);
   if (keepCount <= 0) return others;
-  // Sort ascending, then keep the lexically-last `keepCount` entries — for
+  // Sort ascending, then keep the lexically-last `keepCount` entries, for
   // date-like version strings that keeps the most recent ones.
   const sorted = [...others].sort();
   const kept = new Set(sorted.slice(sorted.length - keepCount));

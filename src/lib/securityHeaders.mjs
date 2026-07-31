@@ -1,9 +1,9 @@
-// securityHeaders.mjs — build-time security-header assembly, shared verbatim
+// securityHeaders.mjs: build-time security-header assembly, shared verbatim
 // by the Vite build (vite.config.ts, which hashes and appends the app-document
 // CSP to dist/_headers) and the local static server (scripts/serve-dist.mjs,
 // which needs to actually enforce the built _headers file so smoke/vis exercise
 // the real policy). Plain ESM (no TS) so serve-dist.mjs can import it with no
-// loader, the same reason fontNameTable.mjs exists in this form — see that
+// loader, the same reason fontNameTable.mjs exists in this form, see that
 // file's header comment. A hand-written securityHeaders.d.mts types it for
 // vite.config.ts. Pure string logic, no fs/crypto/Vite imports: hashing itself
 // stays in the vite plugin (node:crypto), this module only shapes text.
@@ -20,7 +20,7 @@ const INLINE_SCRIPT_RE = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
 
 /**
  * The exact source text of every `<script>` element in `html` that has no
- * `src` attribute — i.e. every inline script a CSP `script-src` hash source
+ * `src` attribute: i.e. every inline script a CSP `script-src` hash source
  * would need to allow. Today that's the single pre-paint theme script in
  * index.html, but this handles any count so a future inline script (or none)
  * still produces a correct policy without touching the caller.
@@ -36,48 +36,45 @@ export function extractInlineScripts(html) {
   return bodies;
 }
 
-// -- CSP / app-document headers ----------------------------------------------
-
 /**
  * The `_headers` block text (Cloudflare Pages / Netlify convention) locking
  * down the app document itself: a CSP, clickjacking protection, MIME sniffing
  * protection, referrer minimisation, and unused-permission denial.
  *
- * `scriptHashes` are pre-formatted `sha256-<base64>` sources (the caller —
- * vite.config.ts — computes them with node:crypto from the built index.html,
+ * `scriptHashes` are pre-formatted `sha256-<base64>` sources (the caller:
+ * vite.config.ts: computes them with node:crypto from the built index.html,
  * because this module stays environment-free); they're quoted and appended to
  * `script-src` alongside `'self'` and `'wasm-unsafe-eval'`.
  *
- * Directive-by-directive rationale (preserve when editing):
+ * Directive-by-directive rationale: preserve it when editing, since the
+ * reason a directive is as permissive as it is lives only here:
  * - `script-src 'self' 'wasm-unsafe-eval' <hashes>`: `'wasm-unsafe-eval'` is
  *   required for the OpenSCAD-WASM module's own WebAssembly compilation
  *   (worker.ts); the hashes allow-list exactly the inline theme script by
  *   content, nothing more. The script's body varies per config
  *   (`%APP_THEME_KEY%` is substituted per deployment at build time), so the
- *   hash can't be a literal here — it's computed fresh from the built HTML on
+ *   hash can't be a literal here: it's computed fresh from the built HTML on
  *   every build, per config.
  * - `worker-src 'self'`: the render worker is loaded from this origin only.
  * - `style-src 'self' 'unsafe-inline'`: the build injects a config-driven
- *   `<style>` into <head> (configCss.ts's headStyleInjection — colour
+ *   `<style>` into <head> (configCss.ts's headStyleInjection: colour
  *   overrides, per docs/config.md's `colors` block) and React components set
  *   inline `style` attributes at runtime (e.g. the viewer/panel layout code).
  *   Neither is a fixed, hashable set, so `'unsafe-inline'` stays rather than
- *   inventing a stricter directive that would break real UI — see this file's
- *   own header comment on preferring permissive-but-documented over untested
- *   strictness.
+ *   inventing a stricter directive that would break real UI.
  * - `img-src 'self' data: blob:`: the PNG export snapshot renders to a data:
  *   URL and preset/icon artwork can be inlined as data: URIs.
  * - `font-src 'self'`: bundled + imported fonts are same-origin only.
  * - `connect-src 'self' data:`: the PNG snapshot flow (`savePng` in
  *   src/App.tsx) does `fetch(dataUrl)` to turn the snapshot into a `File` for
- *   the share sheet — `fetch()` of a `data:` URL is governed by `connect-src`,
+ *   the share sheet. `fetch()` of a `data:` URL is governed by `connect-src`,
  *   not `img-src`, even though the URL looks image-shaped.
  * - `object-src 'none'`, `base-uri 'none'`, `form-action 'none'`: no plugin
- *   content, no `<base>` hijack, no form submissions anywhere in the app —
- *   all closeable outright.
+ *   content, no `<base>` hijack, no form submissions anywhere in the app.
+ *   All closeable outright.
  * - `frame-ancestors 'none'` (+ the sibling `X-Frame-Options: DENY`, kept for
- *   browsers that don't honour `frame-ancestors`): nothing about this app —
- *   least of all the export flow — should ever run inside someone else's
+ *   browsers that don't honour `frame-ancestors`): nothing about this app.
+ *   Least of all the export flow. Should ever run inside someone else's
  *   frame, where a clickjacking overlay could hijack a Download click.
  * - `manifest-src 'self'`: the PWA manifest is same-origin only.
  *
@@ -126,7 +123,7 @@ export function buildAppHeadersBlock(scriptHashes) {
  * Parse Cloudflare Pages / Netlify `_headers` file text into an ordered list
  * of rules. A rule is a non-indented path-pattern line followed by any number
  * of indented `Name: value` lines; blank lines and `#`-comment lines (indented
- * or not) are noise and don't end the current rule — real `_headers` files
+ * or not) are noise and don't end the current rule. Real `_headers` files
  * (including this repo's) freely mix both between and around rules. A header
  * line with no preceding pattern (a malformed file) is dropped rather than
  * thrown on.
@@ -153,11 +150,11 @@ export function parseHeadersFile(text) {
   return rules;
 }
 
-// Split a pattern on its first `*` (there should only ever be one — multiple
+// Split a pattern on its first `*` (there should only ever be one: multiple
 // wildcards aren't part of the subset implemented here). No `*` at all means
 // an exact match; `prefix`/`suffix` alone (empty string) still work as a
 // pure-prefix (`/assets/*`) or pure-suffix (`/*.svg`) match respectively, and
-// `/*` collapses to prefix "/" suffix "" — every path, since every pathname
+// `/*` collapses to prefix "/" suffix "": every path, since every pathname
 // starts with "/".
 function splitPattern(pattern) {
   const starIdx = pattern.indexOf("*");
@@ -168,9 +165,9 @@ function splitPattern(pattern) {
 
 // Whether `pattern` matches `pathname`, with Cloudflare's own `_headers` glob
 // semantics: `*` matches any run of characters INCLUDING `/`, so `/*.svg`
-// matches both `/icon.svg` and a nested `/scad/foo/bar.svg` — the splat
+// matches both `/icon.svg` and a nested `/scad/foo/bar.svg`. The splat
 // crosses slashes, it isn't scoped to one path segment the way a router glob
-// often is. That's deliberate here too: `public/_headers`'s `/*.svg` rule is
+// can be. That's deliberate here too: `public/_headers`'s `/*.svg` rule is
 // meant to catch every served SVG regardless of depth.
 function matchesPattern(pattern, pathname) {
   const { prefix, suffix } = splitPattern(pattern);
@@ -184,7 +181,7 @@ function matchesPattern(pattern, pathname) {
 
 /**
  * The merged headers a Cloudflare Pages host would send for `pathname`,
- * applying every matching rule IN FILE ORDER — not just the first match.
+ * applying every matching rule IN FILE ORDER, not only the first match.
  * That's the real host behaviour `public/_headers`'s own layout relies on (a
  * request under `/scad/*` gets that rule's CSP *and* whatever the trailing
  * `/*` block this repo's securityHeaders vite plugin appends adds), so a test
@@ -192,14 +189,14 @@ function matchesPattern(pattern, pathname) {
  * actually ships.
  *
  * When two matching rules set the SAME header name, Cloudflare Pages does
- * not let the later one win — it joins both values with `", "` into one
+ * not let the later one win: it joins both values with `", "` into one
  * header ("If a header is applied twice in the `_headers` file, the values
  * are joined with a comma separator", per Cloudflare's own `_headers` docs).
  * This is deliberate, not incidental, for exactly the header this repo
  * relies on it for: `Content-Security-Policy`'s grammar treats a
  * comma-separated header value as a LIST of policies (equivalently, multiple
  * `Content-Security-Policy` response headers) and enforces their
- * INTERSECTION — so comma-joining `/scad/*`'s `default-src 'none'; sandbox`
+ * INTERSECTION, so comma-joining `/scad/*`'s `default-src 'none'; sandbox`
  * with the appended `/*` block's app CSP is exactly how "both enforced, no
  * weakening" (see vite.config.ts's securityHeaders plugin) actually happens
  * on the real host. Overriding instead of joining would silently drop the

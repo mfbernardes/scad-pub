@@ -1,7 +1,7 @@
-// BarActions.tsx — the secondary actions shared by both top bars: Save image
+// BarActions.tsx: the secondary actions shared by both top bars: Save image
 // (PNG), Files, theme toggle, Help, and open-source licenses. One component,
 // two presentations chosen by the `collapse` prop (the caller knows which
-// layout it's in — both layout trees mount at once, so a viewport hook would
+// layout it's in: both layout trees mount at once, so a viewport hook would
 // render a stray hidden ⋮ button):
 //   • inline (desktop CommandBar): icon buttons in a row.
 //   • collapsed (mobile top bar): a single "⋮" Popover of rows, so the narrow
@@ -9,17 +9,16 @@
 // Render status rides separately on the Output bell (see OutputToggle).
 //
 // Save-image moved here from the export dock (ActionButtons.tsx) when the dock
-// was unified down to two buttons (Download + Share only) — it's a lower-frequency
+// was unified down to two buttons (Download + Share only): it's a lower-frequency
 // secondary action, and this is where the app's other secondary chrome
 // (theme/help/licenses) already lives in both layouts, so it needs no new
-// overflow surface of its own. Files followed the same path: it used to be a
-// third panel tab (ParamPanel/SheetTabs), which felt out of place next to
-// Presets/Customize — it now opens FilesModal from here instead, gated on
-// `hasFiles` (the caller knows whether the design's config sets `fileImport`).
-// Live preview (auto-render) is the third: on mobile it used to pin a footer
-// row inside the sheet's Customize tab, spending ~36px of a ~385px sheet on a
-// mode PanelFooter's own doc calls "rarely toggled". It rides this menu now
-// (mobile only — desktop keeps PanelFooter, where the panel has the room).
+// overflow surface of its own. Files opens FilesModal from here rather than
+// sitting beside Presets/Customize as a panel tab, gated on `hasFiles` (the
+// caller knows whether the design's config sets `fileImport`). Live preview
+// (auto-render) rides this menu on mobile too, where a pinned footer row inside
+// the Customize tab would spend ~36px of a ~385px sheet on a mode PanelFooter's
+// own doc calls "rarely toggled"; desktop keeps PanelFooter, where the panel has
+// the room.
 import { useState } from "react";
 import { useAppActions } from "../lib/appActions";
 import { ThemeToggle } from "./ThemeToggle";
@@ -67,9 +66,9 @@ interface Props {
    *  currently, but this keeps the action optional rather than assumed). */
   onSavePng?: () => void;
   /** Gates Save-image the same way the dock's Download button is gated for
-   *  its direct-export path — a successful render matching the live controls. */
+   *  its direct-export path: a successful render matching the live controls. */
   canSavePng?: boolean;
-  /** Shows the Files action, which opens FilesModal — set when the config's
+  /** Shows the Files action, which opens FilesModal: set when the config's
    *  `fileImport` is present (the caller derives this from the schema; see
    *  AppShell's `hasFiles`). False by default: most designs import nothing. */
   hasFiles?: boolean;
@@ -100,7 +99,7 @@ export function BarActions({
         <PopoverTrigger
           // `outline-none` suppresses index.css's global :focus-visible
           // outline, and a native <button> (which PopoverTrigger's ref needs)
-          // gets none of shadcn Button's focus styling — so the ring below is
+          // gets none of shadcn Button's focus styling, so the ring below is
           // what makes this keyboard-visible at all. Same recipe as
           // ViewPicker's and ViewerHUD's triggers.
           className={cn(ICON_BUTTON_CLASS, "inline-flex items-center justify-center rounded-md outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-brand")}
@@ -140,7 +139,7 @@ export function BarActions({
           {hasFiles && (
             <MenuRow label="Files" icon={<FilesIcon size={16} />} onClick={openModal(showFiles)} />
           )}
-          {/* Cycles in place — the visitor usually wants to see the theme
+          {/* Cycles in place: the visitor usually wants to see the theme
               change, so this row deliberately leaves the menu open. */}
           <MenuRow label="Theme" icon={THEME_ICON[themeMode]} onClick={cycleTheme} aria-label="Toggle theme" />
           <MenuRow label="Help" icon={<HelpIcon size={16} />} onClick={openModal(() => showHelp())} />

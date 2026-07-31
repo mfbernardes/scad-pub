@@ -1,13 +1,12 @@
-// ParamPanel.tsx — docked desktop parameter panel: a slim header (collapse), a
+// ParamPanel.tsx: docked desktop parameter panel: a slim header (collapse), a
 // Presets / Parameters tab split, parameter search + ParamForm, and a Reset
 // footer. Collapsible and resizable; state persisted to localStorage. Presets
 // live here (a tab, mirroring the mobile sheet) rather than in the top bar.
-// Files used to be a third tab here; it's now FilesModal, opened from
-// BarActions (see CommandBar.tsx) — a design that imports files is no longer
-// special-cased in this component at all. Readiness went the same way: it used
-// to be a full-width StatusStrip row above the tabs, and is now the dock pill
-// both layouts share (see StatusStrip.tsx) — which also means it survives this
-// panel being collapsed to its rail, where the row used to disappear with it.
+// Files is not a tab here: it's FilesModal, opened from BarActions (see
+// CommandBar.tsx), so a design that imports files is not special-cased in this
+// component at all. Readiness is likewise the dock pill both layouts share (see
+// StatusStrip.tsx) rather than a row above the tabs, which also means it
+// survives this panel being collapsed to its rail.
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
@@ -54,7 +53,7 @@ interface Props {
   presetBaseline: Values | null;
   /** The selected preset's display name, or null when no preset is selected. */
   presetName: string | null;
-  /** Values the current params are diffed against — presetBaseline, or design defaults. */
+  /** Values the current params are diffed against: presetBaseline, or design defaults. */
   baseline: Values;
   /** Names of params whose value differs from `baseline`. */
   changedParams: Set<string>;
@@ -77,7 +76,7 @@ interface Props {
    *  which is what withholds the essentials toggle entirely (see AppShell). */
   onShowAdvancedChange?: (show: boolean) => void;
   /** Active tab + search query, hoisted to AppShell (usePanelState) so they
-   *  survive a desktop/mobile remount — see docs/architecture-review.md M7. */
+   *  survive a desktop/mobile remount, see docs/architecture-review.md M7. */
   panelTab: PanelTab;
   onPanelTabChange: (tab: PanelTab) => void;
   search: string;
@@ -125,7 +124,7 @@ export function ParamPanel({
   const debouncedSearch = useDebounce(search, 150);
   // Ref onto the form's imperative handle so the section navigator can jump.
   const formRef = useRef<ParamFormHandle>(null);
-  // The navigator's section list — derived from the SAME visible-groups filter
+  // The navigator's section list: derived from the SAME visible-groups filter
   // the form renders (same debounced search + showAdvanced + values), so it
   // narrows in lockstep and a section that filters out drops from the menu too.
   const navSections = useMemo(
@@ -179,13 +178,13 @@ export function ParamPanel({
   const onPointerUp = useCallback(() => {
     if (!dragging.current) return;
     dragging.current = false;
-    // Drop any pending rAF write so a frame queued just before pointer-up
+    // Drop any pending rAF write so a frame queued immediately before pointer-up
     // can't fire after React commits the settled width below.
     cancelWidthFrame();
     // Write the final width imperatively first: when liveWidthRef equals the
     // pre-drag width, setWidth below is a no-op and React skips the render,
     // leaving the DOM at whatever the last rAF frame applied (a few px short
-    // of the actual pointer position) — mirrors the BottomSheet drag-settle fix.
+    // of the actual pointer position). Mirrors the BottomSheet drag-settle fix.
     if (panelRef.current) panelRef.current.style.width = `${liveWidthRef.current}px`;
     setWidth(liveWidthRef.current);
   }, [cancelWidthFrame]);
@@ -194,14 +193,14 @@ export function ParamPanel({
   // Collapse chevron points toward the screen edge the panel docks against.
   const CollapseChevron = panelSide === "right" ? ChevronRightIcon : ChevronLeftIcon;
   // Overridable via the config's `strings` block (src/locales/en.json's
-  // presets.title/settings.title) — see docs/config.md's "Text overrides".
+  // presets.title/settings.title), see docs/config.md's "Text overrides".
   const presetsLabel = t("presets.title");
   const parametersLabel = t("settings.title");
 
   if (!open) {
     return (
       // Keep the #params id on the rail even collapsed, so the "Skip to
-      // parameters" link (AppShell) never dangles — landing on the "Open
+      // parameters" link (AppShell) never dangles: landing on the "Open
       // panel" button is the correct target when there's no panel to skip to.
       <div className={`param-panel-rail ${side}`} id="params">
         <button
@@ -240,7 +239,7 @@ export function ParamPanel({
         tabIndex={0}
         onKeyDown={(e) => {
           // Pointer-drag direction flips with panelSide (the handle sits on
-          // the panel's outer edge — left edge when docked right), so mirror
+          // the panel's outer edge: left edge when docked right), so mirror
           // that here: for a right-docked panel ArrowLeft (handle moves left,
           // away from the panel) grows it and ArrowRight shrinks it.
           const grow = panelSide === "right" ? "ArrowLeft" : "ArrowRight";
@@ -300,7 +299,7 @@ export function ParamPanel({
             onFocus={onSearchFocus}
             onBlur={onSearchBlur}
           />
-          {/* Essentials is no longer a row of its own here — it's the closing
+          {/* Essentials is no longer a row of its own here: it's the closing
               row of the form itself now, in both layouts (see
               EssentialsToggle). The section navigator stays: this panel is
               tall and resizable, so a standing jump control costs it nothing
@@ -310,7 +309,7 @@ export function ParamPanel({
             onSelect={(s) => formRef.current?.openSection(s)}
             className="mx-3 mt-2 self-start"
           />
-          {/* No padding-top — see SheetTabs' scroller: it would strand the
+          {/* No padding-top, see SheetTabs' scroller: it would strand the
               sticky group headers below the port edge. */}
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
             <ParamForm ref={formRef} design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} />

@@ -1,7 +1,7 @@
-// paramDiff.ts — pure param-value diffing shared by the render metrics telemetry
+// paramDiff.ts: pure param-value diffing shared by the render metrics telemetry
 // and the Parameters tab's "drifted from baseline" UI (PresetDiffBar + ParamForm
 // per-field markers). A param's "baseline" is whichever snapshot the caller is
-// comparing against — the selected preset's values, or the design's defaults.
+// comparing against: the selected preset's values, or the design's defaults.
 import type { Param, ParamValue } from "../openscad/types";
 import type { Values } from "./presets";
 

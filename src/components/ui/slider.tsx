@@ -21,7 +21,7 @@ function Slider({
     [value, defaultValue, min, max]
   );
   // Radix puts role="slider" on the Thumb, so the accessible name has to live
-  // there (not on the Root) — forward aria-label/labelledby down to each thumb.
+  // there (not on the Root): forward aria-label/labelledby down to each thumb.
   const thumbLabel = props["aria-label"];
   const thumbLabelledBy = props["aria-labelledby"];
 

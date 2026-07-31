@@ -1,4 +1,4 @@
-// mini.scad — minimal fixture design used to verify gen-schema's default
+// mini.scad: minimal fixture design used to verify gen-schema's default
 // `source` ("." => beside the config).
 /* [Basics] */
 // Size in mm.
