@@ -176,6 +176,16 @@ export default function App() {
   const [exportSuccess, setExportSuccess] = useState<ExportSuccessState | null>(null);
   const exportSuccessKeyRef = useRef(0);
   const dismissExportSuccess = useCallback(() => setExportSuccess(null), []);
+  // A panel celebrating last design's export makes no sense once the visitor
+  // has moved on to a different one: dismiss it on any design switch, however
+  // it happened (picker, external URL state, hash navigation). Adjusted
+  // during render (the previous-value pattern, as useOutputConsole's edge
+  // checks do) rather than in an effect.
+  const [exportSuccessDesignId, setExportSuccessDesignId] = useState(design.id);
+  if (design.id !== exportSuccessDesignId) {
+    setExportSuccessDesignId(design.id);
+    setExportSuccess(null);
+  }
   // `fromLink` skips the picker intro when the hash already names a design,
   // see shouldShowPopup. That also means a shared link never trips the boot
   // gate below: it renders what it was sent to render, immediately.
