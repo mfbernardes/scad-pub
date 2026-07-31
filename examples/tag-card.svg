@@ -1,10 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-label="A name tag with raised lettering and a hanging hole">
-  <rect width="320" height="240" fill="#eef1f6"/>
-  <g transform="translate(160 120) rotate(-8)">
-    <rect x="-120" y="-52" width="240" height="104" rx="16" fill="#ffffff" stroke="#c3ccdb" stroke-width="3"/>
-    <circle cx="-96" cy="-28" r="10" fill="#eef1f6" stroke="#c3ccdb" stroke-width="3"/>
-    <circle cx="-72" cy="10" r="18" fill="none" stroke="#2f55ff" stroke-width="6"/>
-    <circle cx="-72" cy="10" r="5" fill="#2f55ff"/>
-    <text x="34" y="12" font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="bold" fill="#e23b3b" text-anchor="middle">ScadPub</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-label="A name tag: a rounded plate carrying a raised emblem above raised lettering">
+  <defs>
+    <linearGradient id="tag-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f9fc"/>
+      <stop offset="1" stop-color="#e4eaf3"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="240" fill="url(#tag-bg)"/>
+  <g transform="translate(160 118) rotate(-5)">
+    <ellipse cx="0" cy="70" rx="118" ry="12" fill="#0f172a" opacity="0.08"/>
+    <rect x="-118" y="-66" width="236" height="132" rx="20" fill="#b9c4d6"/>
+    <rect x="-118" y="-72" width="236" height="132" rx="20" fill="#ffffff"/>
+    <circle cx="0" cy="-24" r="25" fill="none" stroke="#2f55ff" stroke-width="9"/>
+    <circle cx="0" cy="-24" r="7" fill="#2f55ff"/>
+    <text x="0" y="38" font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="bold"
+          fill="#e23b3b" text-anchor="middle">ScadPub</text>
   </g>
 </svg>
