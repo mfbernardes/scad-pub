@@ -1,7 +1,7 @@
 // MenuRow.tsx — one row of a popover menu: an icon, a label, and whatever the
 // caller puts after them. The app has several popover menus (the top bar's "⋮"
 // overflow, the viewer's collapsed "View options", the section navigator, the
-// preset "Manage" footer) and they were each spelling the same row out by
+// preset footer's "⋮") and they were each spelling the same row out by
 // hand, which is how two of them had already drifted on the active/disabled
 // treatment.
 //
