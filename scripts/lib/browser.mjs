@@ -46,6 +46,7 @@ export const renderStatusText = (page) =>
 export async function waitRendered(page, { timeout = 60000 } = {}) {
   await page.waitForFunction(
     () => /\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
+    undefined,
     { timeout }
   );
 }
@@ -88,10 +89,14 @@ export async function selectDesign(page, label, { mobile = false } = {}) {
       }
     }
     // Clear the cached "ok" state so a following waitRendered can't pass on
-    // the previous design's render.
+    // the previous design's render. Re-selecting the design already showing
+    // starts no render, so this legitimately times out — keep the `undefined`
+    // arg slot: dropping it makes the options object the page function's
+    // ARGUMENT and silently restores Playwright's 30s default.
     await page
       .waitForFunction(
         () => !/\d+ ms/.test(document.querySelector(".render-status")?.textContent || ""),
+        undefined,
         { timeout: 5000 }
       )
       .catch(() => {});
