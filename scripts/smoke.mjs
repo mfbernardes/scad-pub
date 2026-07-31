@@ -831,7 +831,7 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   // still read "N ms" from the previous render, so we wait on the result.
   const waitFor = async (fn) => {
     try {
-      await page.waitForFunction(fn, { timeout: 30000 });
+      await page.waitForFunction(fn, undefined, { timeout: 30000 });
       return true;
     } catch {
       return false;
