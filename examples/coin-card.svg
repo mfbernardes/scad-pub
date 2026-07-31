@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-label="A round medallion with a raised border ring and embossed text">
+  <rect width="320" height="240" fill="#eef1f6"/>
+  <g transform="translate(160 120)">
+    <circle r="92" fill="#ffffff" stroke="#c3ccdb" stroke-width="3"/>
+    <circle r="78" fill="none" stroke="#e0a458" stroke-width="10"/>
+    <circle cx="0" cy="-92" r="12" fill="#eef1f6" stroke="#c3ccdb" stroke-width="3"/>
+    <text y="14" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="bold" fill="#e23b3b" text-anchor="middle">ScadPub</text>
+  </g>
+</svg>

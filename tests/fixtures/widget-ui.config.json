@@ -1,0 +1,13 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "assets": ["lib"],
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "ui": {
+    "panelSide": "right",
+    "panelDefault": "collapsed",
+    "outputDefault": "open",
+    "gallery": true,
+    "essentials": true
+  }
+}

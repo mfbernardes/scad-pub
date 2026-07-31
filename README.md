@@ -53,6 +53,8 @@ examples/           self-contained example design (default source)
   tag.scad          embossed text (font) + an extruded SVG emblem
   emblem.svg        default emblem the tag imports (swap via the svg_file control's Prepare SVG…)
   tag.json          bundled presets for tag.scad
+  *-card.svg        gallery card artwork (// @image) for each design
+branding/           app icon + maskable icon the config's `pwa` block rasterizes from
 public/
   wasm/             OpenSCAD WASM (fetched, gitignored): scripts/fetch-wasm.mjs
   fonts/            Liberation TTFs (tracked); fonts.conf (generated, gitignored)

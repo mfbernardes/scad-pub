@@ -5,6 +5,7 @@
 
 // @description Round coin with an embossed emblem.
 // @icon coin-icon.svg
+// @image coin-card.svg
 
 /* [Coin] */
 // Diameter of the coin (mm).
@@ -14,6 +15,7 @@ thickness = 2.5; // [1:0.5:8]
 // Border ring width along the face (mm). Set to 0 for a plain disc.
 border_width = 4; // [0:0.5:15]
 // How far the border ring stands above the face (mm).
+// @advanced
 border_height = 0.8; // [0:0.2:3]
 
 /* [Text] */
@@ -22,6 +24,7 @@ label = "ScadPub";
 // Font height (mm).
 text_size = 7; // [3:0.5:20]
 // How far the text stands out from (or sinks into) the face (mm).
+// @advanced
 text_depth = 0.8; // [0.2:0.1:3]
 // Font family / style. Defaults to a font ScadPub doesn't bundle, to
 // demonstrate the "font isn't loaded" hint: import it (or click the bundled
@@ -41,6 +44,7 @@ hole = true;
 hole_diameter = 4; // [2:0.5:12]
 
 // @collapsed
+// @advanced
 /* [Quality] */
 // Maximum facet angle; lower is smoother but slower.
 facet_angle = 3; // [1:1:10]

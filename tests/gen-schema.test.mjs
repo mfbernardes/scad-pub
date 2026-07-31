@@ -25,6 +25,7 @@ import {
   parseEnumHint,
   parseAfterExport,
   parseColors,
+  COLOR_TOKENS,
   parseLicenses,
   parseFileImport,
   parsePopup,
@@ -47,6 +48,7 @@ import {
   isRiskyExternalFontCopy,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
+import { colorStyle } from "../src/lib/configCss.ts";
 import { componentVersions } from "../scripts/lib/dep-versions.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -787,6 +789,52 @@ test("manifest carries the PWA install fields (id, launch_handler, maskable icon
   assert.equal(manifest.shortcuts, undefined);
 });
 
+test("pwa.shortName names the installed app; pwa.iconMaskable is a separate rasterization source", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const schema = generate({
+    configPath: join(FIXTURES, "widget-pwa.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  assert.equal(manifest.name, "Widget Studio");
+  assert.equal(manifest.short_name, "Widgets");
+  // The app reads the same value off designs.json for the Apple web-app title.
+  assert.equal(schema.shortName, "Widgets");
+
+  // The maskable PNG must come from `iconMaskable`, not the main icon: with a
+  // distinct source the two 512s differ, and without one they're identical.
+  const png = (dir, name) => readFileSync(join(dir, "public", name));
+  assert.notDeepEqual(png(out, "icon-512-maskable.png"), png(out, "icon-512.png"));
+
+  const plain = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  generate({
+    configPath: join(FIXTURES, "widget-pwa-nomaskable.config.json"),
+    outSchemaDir: join(plain, "schema"),
+    outScadDir: join(plain, "public", "scad"),
+    outPublicDir: join(plain, "public"),
+  });
+  assert.deepEqual(png(plain, "icon-512-maskable.png"), png(plain, "icon-512.png"));
+});
+
+test("pwa.shortName falls back to the title when unset", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const schema = generate({
+    configPath: join(FIXTURES, "widget-pwa-nomaskable.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  assert.equal(manifest.short_name, "Widget Studio");
+  assert.equal(schema.shortName, "Widget Studio");
+});
+
 test("config shortcuts are validated and folded into the manifest", () => {
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   generate({
@@ -1111,6 +1159,44 @@ test("ui.showVarName defaults to false, accepts a boolean, rejects non-booleans"
   assert.equal(parseUi({ showVarName: false }).showVarName, false);
   assert.throws(() => parseUi({ showVarName: "yes" }), /'ui\.showVarName' must be a boolean/);
   assert.throws(() => parseUi({ showVarName: 1 }), /'ui\.showVarName' must be a boolean/);
+});
+
+test("ui.panelSide / panelDefault / outputDefault default, accept their enum, and reject anything else", () => {
+  for (const [field, dflt, other] of [
+    ["panelSide", "left", "right"],
+    ["panelDefault", "open", "collapsed"],
+    ["outputDefault", "closed", "open"],
+  ]) {
+    assert.equal(parseUi(undefined)[field], dflt);
+    assert.equal(parseUi({})[field], dflt);
+    assert.equal(parseUi({ [field]: null })[field], dflt);
+    assert.equal(parseUi({ [field]: other })[field], other);
+    assert.throws(
+      () => parseUi({ [field]: "sideways" }),
+      new RegExp(`'ui\\.${field}' must be one of .* \\(got "sideways"\\)`)
+    );
+    assert.throws(() => parseUi({ [field]: true }), new RegExp(`'ui\\.${field}' must be one of`));
+  }
+});
+
+test("ui.gallery / essentials default to false, accept booleans, and reject non-booleans", () => {
+  for (const field of ["gallery", "essentials"]) {
+    assert.equal(parseUi(undefined)[field], false);
+    assert.equal(parseUi({})[field], false);
+    assert.equal(parseUi({ [field]: null })[field], false);
+    assert.equal(parseUi({ [field]: true })[field], true);
+    assert.throws(() => parseUi({ [field]: "yes" }), new RegExp(`'ui\\.${field}' must be a boolean`));
+    assert.throws(() => parseUi({ [field]: 1 }), new RegExp(`'ui\\.${field}' must be a boolean`));
+  }
+});
+
+test("the ui block reaches the generated schema, not just the parser", () => {
+  const { schema } = run("widget-ui.config.json");
+  assert.equal(schema.ui.panelSide, "right");
+  assert.equal(schema.ui.panelDefault, "collapsed");
+  assert.equal(schema.ui.outputDefault, "open");
+  assert.equal(schema.ui.gallery, true);
+  assert.equal(schema.ui.essentials, true);
 });
 
 test("ui.presetsLabel / parametersLabel moved to the i18n catalogue (strings['presets.title']/['settings.title'])", () => {
@@ -1504,6 +1590,33 @@ test("colors: success/success-bg/warn-bg are accepted colour tokens", () => {
   assert.deepEqual(
     parseColors({ dark: { success: "#4ade80", "success-bg": "#142615", "warn-bg": "#332812" } }),
     { dark: { success: "#4ade80", "success-bg": "#142615", "warn-bg": "#332812" } }
+  );
+});
+
+test("every COLOR_TOKENS entry is settable, including the non-colour ones", () => {
+  // COLOR_TOKENS carries radii, an elevation shadow and two font stacks
+  // alongside the actual colours, and they all go through the one
+  // COLOR_VALUE_RE. A token that regex cannot express would be advertised in
+  // docs/config.md and the JSON Schema while failing every build that set it.
+  const sample = {
+    radius: "12px",
+    "radius-sm": "0.5rem",
+    elevation: "0 1px 2px rgba(0, 0, 0, 0.2)",
+    "font-sans": "Inter, system-ui, sans-serif",
+    "font-display": "Space Grotesk, Inter, sans-serif",
+  };
+  const dark = Object.fromEntries(COLOR_TOKENS.map((t) => [t, sample[t] ?? "#123456"]));
+  assert.deepEqual(parseColors({ dark }), { dark });
+  assert.match(colorStyle({ dark }), /--font-display: Space Grotesk, Inter, sans-serif;/);
+});
+
+test("a quoted font family is rejected: COLOR_VALUE_RE admits no quotes", () => {
+  // Documented limitation rather than an oversight — the value is interpolated
+  // into a generated <style> block, and the regex is what keeps it inert. Use
+  // an unquoted family name (CSS allows it for identifiers-with-spaces).
+  assert.throws(
+    () => parseColors({ dark: { "font-display": '"Space Grotesk", sans-serif' } }),
+    /'colors\.dark\.font-display' must be a plain CSS colour/
   );
 });
 

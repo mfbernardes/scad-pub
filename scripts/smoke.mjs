@@ -138,7 +138,9 @@ async function checkWelcomePopup({ page, check, schema }) {
       if (await dontShow.count()) await dontShow.check();
       await cta.click();
       await waitDialogClosed(page, schema.popup.header).catch(() => {});
-      check((await page.getByRole("dialog").count()) === 0, "popup dismissed");
+      // Scope this to the POPUP: with more than one design the CTA hands over
+      // to the design picker, which under `ui.gallery` is itself a dialog.
+      check((await popup.count()) === 0, "popup dismissed");
       if (schema.designs.length > 1) {
         // Under `ui.gallery` the picker the CTA opens is a card dialog, not a
         // Radix listbox, so target whichever this config mounts.
@@ -749,6 +751,104 @@ async function checkPreviewControls({ page, check }) {
   await auto.click();
 }
 
+// The generated manifest is what an install actually consumes, and nothing
+// else in this file opens it: a `pwa` block that stopped reaching it (or an
+// icon advertised but never written) would leave every other check green.
+async function checkPwaManifest({ page, check, base, schema }) {
+  console.log("=== PWA manifest ===");
+  const manifest = await (await page.request.get(base + "manifest.webmanifest")).json();
+  check(manifest.short_name === schema.shortName, `manifest short_name is "${schema.shortName}"`);
+  check(manifest.theme_color === schema.themeColor, "manifest theme_color matches the built schema");
+  check(Array.isArray(manifest.icons) && manifest.icons.length > 0, "manifest advertises icons");
+  const maskable = manifest.icons.filter((i) => i.purpose === "maskable");
+  check(maskable.length > 0, "manifest advertises a maskable icon (pwa.iconMaskable)");
+  // Every advertised icon must be served: an entry the build didn't write is
+  // a broken install, invisible from the page itself.
+  for (const icon of manifest.icons) {
+    const res = await page.request.get(base + icon.src);
+    check(res.ok(), `manifest icon ${icon.src} is served (${res.status()})`);
+  }
+  if (Array.isArray(manifest.shortcuts) && manifest.shortcuts.length) {
+    const ids = schema.designs.map((d) => d.id);
+    check(
+      manifest.shortcuts.every((s) => ids.some((id) => s.url === `./#d=${id}`)),
+      "every manifest shortcut deep-links to a configured design"
+    );
+  }
+}
+
+// `ui.gallery`: the card grid replaces the design dropdown, and each card
+// carries the design's `// @image` artwork (falling back to `@icon`).
+async function checkDesignGallery({ page, check, schema }) {
+  if (schema.ui?.gallery !== true) {
+    console.log("=== design gallery (ui.gallery) === (not enabled in this config — skipped)");
+    return;
+  }
+  console.log("=== design gallery (ui.gallery) ===");
+  await page
+    .locator(".command-bar__design-picker")
+    .getByRole("button", { name: "Choose a design" })
+    .first()
+    .click();
+  const dialog = page.locator('[role="dialog"]:visible').first();
+  await dialog.waitFor({ state: "visible", timeout: 3000 });
+  const cards = dialog.locator("button[data-design]");
+  check(
+    (await cards.count()) === schema.designs.length,
+    `the gallery shows one card per design (${schema.designs.length})`
+  );
+  // Assert the artwork actually loaded, not merely that an <img> is present: a
+  // stale `@image` path renders an empty box that still passes a count check.
+  const withImage = schema.designs.filter((d) => d.image);
+  for (const d of withImage) {
+    const img = dialog.locator(`button[data-design="${d.id}"] img`).first();
+    await img.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    const src = (await img.getAttribute("src")) ?? "";
+    check(src.includes(d.image), `${d.id}'s card uses its @image artwork`);
+    check(
+      await img.evaluate((i) => i.complete && i.naturalWidth > 0),
+      `${d.id}'s card artwork loaded`
+    );
+  }
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+}
+
+// `echo("@review", …)`: a runtime override of a curated review row's VALUE.
+// tag's `label` row reads "<text> (engraved)" once the text is carved, which
+// is only observable after a render, so nothing but a browser check sees it.
+async function checkReviewOverride({ page, check, ids, schema, paramsTabName }) {
+  const hasOverride = ids.includes("tag") && schema.designs.find((d) => d.id === "tag")?.reviewLabels?.label;
+  if (!hasOverride) {
+    console.log('=== curated review value (echo("@review")) === (no "tag" review row — skipped)');
+    return;
+  }
+  console.log('=== curated review value (echo("@review")) ===');
+  await selectDesign(page, "tag");
+  await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  const row = (label) =>
+    page.locator(".review-summary > div").filter({ has: page.locator("dt", { hasText: label }) });
+  const readRow = async (label) => {
+    await page.locator(".status-strip").first().click().catch(() => {});
+    const dialog = await openDialog(page, "Review");
+    const text = (await row(label).locator("dd").first().textContent()) ?? "";
+    await dialog.getByRole("button", { name: /Go back and fix|Close/ }).first().click().catch(() => {});
+    await waitDialogClosed(page, "Review").catch(() => {});
+    return text.trim();
+  };
+  check((await readRow("Text")) === "ScadPub", "the review row shows the raw value while nothing transforms it");
+
+  const engrave = paramRow(page, "engrave_text").getByRole("switch");
+  await engrave.click();
+  await waitRenderDone(page).catch(() => {});
+  check(
+    (await readRow("Text")) === "ScadPub (engraved)",
+    'the echo("@review") override replaces the row value once the render reports it'
+  );
+  await engrave.click();
+  await waitRenderDone(page).catch(() => {});
+}
+
 async function checkServiceWorker({ page, check, base }) {
   console.log("=== service worker update contract ===");
   const swText = await (await page.request.get(base + "sw.js")).text();
@@ -774,7 +874,7 @@ const paramRow = (page, name) => page.locator(`.param[data-param="${name}"]`);
 // @showIf + @collapsed: exercised on the example "tag" design when present.
 // Param rows are located by their stable data-param hook, which exists
 // regardless of ui.showVarName, so this block runs in every config.
-async function checkTagDesign({ page, check, ids, paramsTabName }) {
+async function checkTagDesign({ page, check, ids, schema, paramsTabName }) {
   if (!ids.includes("tag")) {
     console.log('=== conditional visibility (@showIf, tag) === (no "tag" design in this config — skipped)');
     return;
@@ -804,6 +904,24 @@ async function checkTagDesign({ page, check, ids, paramsTabName }) {
   const quality = page.locator("details.param-group", {
     has: page.locator("summary", { hasText: "Quality" }),
   });
+  // Under `ui.essentials`, tag's `@advanced` Quality section sits behind a
+  // second gate in front of the @collapsed one below: assert that gate, then
+  // lift it so the @collapsed checks test folding in isolation.
+  const advancedParams = (schema.designs.find((d) => d.id === "tag")?.params ?? [])
+    .filter((p) => p.advanced);
+  if (schema.ui?.essentials === true && advancedParams.length > 0) {
+    const toggle = page.locator(".param-form .essentials-toggle");
+    check((await toggle.count()) === 1, "essentials toggle mounts for a design with @advanced params");
+    check(
+      (await quality.count()) === 0,
+      "@advanced section is hidden while only the essential settings show"
+    );
+    check(
+      new RegExp(`${advancedParams.length} more`).test((await toggle.first().textContent()) ?? ""),
+      `the toggle counts the ${advancedParams.length} params it is hiding`
+    );
+    await toggle.first().click();
+  }
   check((await quality.count()) === 1, "Quality group is collapsible");
   const facet = paramRow(page, "facet_angle");
   check(!(await facet.isVisible()), "collapsed @collapsed group hides its params");
@@ -1798,8 +1916,11 @@ async function main() {
     await checkAfterExport(ctx);
     await checkPreviewControls(ctx);
     await checkServiceWorker(ctx);
+    await checkPwaManifest(ctx);
+    await checkDesignGallery(ctx);
     await checkTagDesign(ctx);
     await checkEditOnModel(ctx);
+    await checkReviewOverride(ctx);
     await checkSignageDesign(ctx);
     await checkSectionNavigator(ctx);
     await checkResponsiveLayout(ctx);

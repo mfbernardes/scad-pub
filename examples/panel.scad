@@ -6,6 +6,7 @@
 //
 // @description An SVG extruded as a coloured relief panel.
 // @icon panel-icon.svg
+// @image panel-card.svg
 // @doc panel.md
 
 /* [Panel] */
@@ -38,6 +39,7 @@ svg_file = "panel.svg";
 // relief_height. A leading "WxH" entry names the drawing's canvas, which is what
 // lets the regions be centred. Leave blank to extrude the whole drawing as one
 // relief. Filled in by the SVG wizard.
+// @label "Region colours & heights"
 // @filledBy svg_file
 svg_layers = "120x90, sky:#87ceeb, ground:#9acd32, house:#cd5c5c";
 // (Regions must not overlap: same-height overlapping regions conflict on colour.)

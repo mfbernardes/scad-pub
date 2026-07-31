@@ -9,6 +9,7 @@
 
 // @description Personalised name tag with text.
 // @icon tag-icon.svg
+// @image tag-card.svg
 // @reviewNote "The engraved or raised text keeps your capitalisation exactly as typed."
 
 /* [Tag] */
@@ -33,6 +34,7 @@ label = "ScadPub";
 // @info Text height | mm
 text_size = 9; // [3:0.5:30]
 // How far the text stands out from (or sinks into) the plate (mm).
+// @advanced
 text_depth = 1; // [0.4:0.1:3]
 // Font family/style. Change to an uploaded font's family, e.g. "DejaVu Sans".
 // @font
@@ -59,6 +61,7 @@ svg_file = "emblem.svg";
 emblem_size = 18; // [4:1:80]
 // How far the emblem stands out from the plate (mm).
 // @showIf show_emblem
+// @advanced
 emblem_height = 1.5; // [0.4:0.1:5]
 
 /* [Hanging hole] */
@@ -70,6 +73,7 @@ hole = true;
 hole_diameter = 5; // [2:0.5:15]
 
 // @collapsed
+// @advanced
 /* [Quality] */
 // Maximum facet angle; lower is smoother but slower.
 facet_angle = 4; // [1:1:12]
@@ -123,6 +127,13 @@ if (label != "" && engrave_text)
   echo("tag: note: the label is engraved into the plate rather than raised");
 if (hole && hole_diameter > height / 4)
   echo("tag: note: the hanging hole is large and leaves little material at the corner");
+
+// The review summary's "Text" row would otherwise show the raw stored string,
+// which says nothing about an empty tag or a carved one. `echo("@review", …)`
+// overrides that row's VALUE at render time (the `// @review "Text"` comment on
+// `label` above sets its LABEL); see docs/annotations.md.
+echo("@review", "label",
+     label == "" ? "no text" : engrave_text ? str(label, " (engraved)") : label);
 
 // --- Hard constraints (asserts) -------------------------------------------
 // Unlike the notices above, a failed assert aborts the render with an

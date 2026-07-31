@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-label="A rectangular plate carrying a multi-coloured extruded relief">
+  <rect width="320" height="240" fill="#eef1f6"/>
+  <g transform="translate(46 40)">
+    <rect width="228" height="160" rx="12" fill="#ffffff" stroke="#c3ccdb" stroke-width="3"/>
+    <rect x="18" y="18" width="192" height="70" fill="#87ceeb"/>
+    <rect x="18" y="88" width="192" height="54" fill="#9acd32"/>
+    <path d="M92 142V96h44v46z" fill="#cd5c5c"/>
+    <path d="M84 96l30-24 30 24z" fill="#cd5c5c"/>
+  </g>
+</svg>
