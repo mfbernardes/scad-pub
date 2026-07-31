@@ -9,6 +9,7 @@
 
 // @description Personalised name tag with text.
 // @icon tag-icon.svg
+// @image tag-card.svg
 // @reviewNote "The engraved or raised text keeps your capitalisation exactly as typed."
 
 /* [Tag] */
@@ -22,6 +23,10 @@ thickness = 3; // [1:0.5:10]
 // Corner radius; use 0 for square corners (mm).
 // @info Corner radius | mm
 corner_radius = 4; // [0:0.5:20]
+// Colour of the plate itself. Set here rather than left to the viewer's own
+// tint so the export, the preview and the design's card art all agree.
+// @info Plate colour
+plate_color = "white";
 
 /* [Text] */
 // Text to emboss on the tag. Leave empty for none.
@@ -33,6 +38,7 @@ label = "ScadPub";
 // @info Text height | mm
 text_size = 9; // [3:0.5:30]
 // How far the text stands out from (or sinks into) the plate (mm).
+// @advanced
 text_depth = 1; // [0.4:0.1:3]
 // Font family/style. Change to an uploaded font's family, e.g. "DejaVu Sans".
 // @font
@@ -57,19 +63,25 @@ svg_file = "emblem.svg";
 // Target width of the emblem; height follows the SVG's aspect ratio (mm).
 // @showIf show_emblem
 emblem_size = 18; // [4:1:80]
+// Colour of the raised emblem in the export, like the text colour above.
+// @showIf show_emblem
+// @info Emblem colour
+emblem_color = "#2f55ff";
 // How far the emblem stands out from the plate (mm).
 // @showIf show_emblem
+// @advanced
 emblem_height = 1.5; // [0.4:0.1:5]
 
 /* [Hanging hole] */
 // Add a hole to hang or thread the tag.
-hole = true;
+hole = false;
 // Hole diameter (mm). Only used when the hole is enabled.
 // @showIf hole
 // @info Hole diameter | mm
 hole_diameter = 5; // [2:0.5:15]
 
 // @collapsed
+// @advanced
 /* [Quality] */
 // Maximum facet angle; lower is smoother but slower.
 facet_angle = 4; // [1:1:12]
@@ -91,11 +103,12 @@ module emblem_2d() {
     import(svg_file, center = true);
 }
 
-// Where the text and emblem sit: emblem to the left when both are shown, so they
-// don't overlap; otherwise each is centred.
+// Where the text and emblem sit: both centred on the plate's width, and when
+// both are shown they split it into an upper and a lower half so they can't
+// overlap. Each half's own centre is height/4 from the middle.
 both = show_emblem && label != "";
-text_x = both ? emblem_size / 2 + 3 : 0;
-emblem_x = both ? -(width / 2) + emblem_size / 2 + 6 : 0;
+text_y = both ? -height / 4 : 0;
+emblem_y = both ? height / 4 : 0;
 
 // --- Configurator notices --------------------------------------------------
 // Non-fatal hints surfaced in the app's "OpenSCAD output" panel as count
@@ -103,26 +116,33 @@ emblem_x = both ? -(width / 2) + emblem_size / 2 + 6 : 0;
 // and `note` markers here line up with the `notices` categories configured in
 // scadpub.config.json. Each fires only in a specific, parameter-driven case, so
 // you can trigger them from the form:
-//   • raise "Font height" past half the tag height       -> an alert
-//   • widen the emblem past half the tag width           -> an alert
-//   • enable "Carve the text into the plate"             -> a note
-//   • enlarge the hanging hole past a quarter the height -> a note
+//   • raise "Font height" past its half of the plate      -> an alert
+//   • widen the emblem past half the tag width            -> an alert
+//   • enable "Carve the text into the plate"              -> a note
+//   • enlarge the hanging hole past a quarter the height  -> a note
 // The first two below fire for the shipped defaults, so the OpenSCAD-output
 // badges are populated out of the box (an amber alert + a blue note):
-//   • showing both an emblem and a label at once          -> an alert
-//   • including a hanging hole                             -> a note
-if (show_emblem && label != "")
-  echo("tag: alert: showing both an emblem and a label — check they don't crowd the plate");
-if (hole)
-  echo("tag: note: a hanging hole is included; turn off \"Add a hole\" for a solid tag");
-if (label != "" && !engrave_text && text_size > height / 2)
-  echo("tag: alert: the label text is tall relative to the tag and may overflow the plate");
+//   • an emblem and lettering filling over half the plate -> an alert
+//   • no hanging hole                                     -> a note
+if (both && emblem_size + text_size > height / 2)
+  echo("tag: alert: the emblem and lettering together fill more than half the plate's height");
+if (!hole)
+  echo("tag: note: this tag has no hanging hole; turn on \"Add a hole\" to thread it");
+if (label != "" && !engrave_text && text_size > (both ? height / 4 : height / 2))
+  echo("tag: alert: the label text is tall for the space it has and may overflow the plate");
 if (show_emblem && emblem_size > width / 2)
   echo("tag: alert: the emblem is wide relative to the tag and may reach the edges");
 if (label != "" && engrave_text)
   echo("tag: note: the label is engraved into the plate rather than raised");
 if (hole && hole_diameter > height / 4)
   echo("tag: note: the hanging hole is large and leaves little material at the corner");
+
+// The review summary's "Text" row would otherwise show the raw stored string,
+// which says nothing about an empty tag or a carved one. `echo("@review", …)`
+// overrides that row's VALUE at render time (the `// @review "Text"` comment on
+// `label` above sets its LABEL); see docs/annotations.md.
+echo("@review", "label",
+     label == "" ? "no text" : engrave_text ? str(label, " (engraved)") : label);
 
 // --- Hard constraints (asserts) -------------------------------------------
 // Unlike the notices above, a failed assert aborts the render with an
@@ -137,26 +157,28 @@ assert(!(hole && hole_diameter >= min(width, height) - 2 * corner_radius),
 
 difference() {
   union() {
-    linear_extrude(thickness) rounded_rect(width, height, corner_radius);
+    color(plate_color)
+      linear_extrude(thickness) rounded_rect(width, height, corner_radius);
 
-    // Raised text / emblem stand on top of the plate. The text gets its own
-    // colour so the export is multi-colour (the plate/emblem keep OpenSCAD's
-    // default, which the viewer tints to follow the theme).
+    // Raised text and emblem stand on top of the plate, each in its own colour
+    // so the export is multi-colour (the plate keeps OpenSCAD's default, which
+    // the viewer tints to follow the theme).
     if (!engrave_text && label != "")
       color(text_color)
-        translate([text_x, 0, thickness])
+        translate([0, text_y, thickness])
           linear_extrude(text_depth)
             text(label, size = text_size, font = font,
                  halign = "center", valign = "center");
 
     if (show_emblem)
-      translate([emblem_x, 0, thickness])
-        linear_extrude(emblem_height) emblem_2d();
+      color(emblem_color)
+        translate([0, emblem_y, thickness])
+          linear_extrude(emblem_height) emblem_2d();
   }
 
   // Engraved text is cut into the top face instead.
   if (engrave_text && label != "")
-    translate([text_x, 0, thickness - text_depth])
+    translate([0, text_y, thickness - text_depth])
       linear_extrude(text_depth + 0.01)
         text(label, size = text_size, font = font,
              halign = "center", valign = "center");

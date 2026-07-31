@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-label="A round medallion: a disc with a raised border ring and embossed lettering">
+  <defs>
+    <linearGradient id="coin-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f9fc"/>
+      <stop offset="1" stop-color="#e4eaf3"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="240" fill="url(#coin-bg)"/>
+  <g transform="translate(160 116)">
+    <ellipse cx="0" cy="96" rx="86" ry="11" fill="#0f172a" opacity="0.08"/>
+    <circle cy="8" r="88" fill="#b9c4d6"/>
+    <circle r="88" fill="#ffffff"/>
+    <circle r="74" fill="none" stroke="#e0a458" stroke-width="14"/>
+    <text y="14" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="bold"
+          fill="#e23b3b" text-anchor="middle">ScadPub</text>
+  </g>
+</svg>

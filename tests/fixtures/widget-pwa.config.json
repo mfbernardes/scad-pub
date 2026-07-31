@@ -1,0 +1,11 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "assets": ["lib"],
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "pwa": {
+    "shortName": "Widgets",
+    "icon": "icon-app.svg",
+    "iconMaskable": "icon-app-maskable.svg"
+  }
+}

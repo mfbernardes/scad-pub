@@ -12,7 +12,7 @@
       "presets": {
         "images": {
           "Large tag": "examples/tag-preset-large.png",
-          "No hole": "examples/tag-preset-nohole.png"
+          "With hole": "examples/tag-preset-hole.png"
         }
       }
     },
@@ -29,8 +29,20 @@
     ]
   },
 
-  "pwa": { "install": "off" },
-  "ui": { "afterExport": { "helpTab": "Printing" } },
+  "pwa": {
+    "install": "off",
+    "shortName": "ScadPub",
+    "icon": "branding/scadpub-icon.svg",
+    "iconMaskable": "branding/scadpub-icon-maskable.svg",
+    "themeColor": { "light": "#eef1f6", "dark": "#14161c" },
+    "backgroundColor": "#14161c",
+    "categories": ["utilities", "productivity", "graphics"]
+  },
+  "ui": {
+    "gallery": true,
+    "essentials": true,
+    "afterExport": { "helpTab": "Printing" }
+  },
   "fileImport": true,
 
   "popup": {

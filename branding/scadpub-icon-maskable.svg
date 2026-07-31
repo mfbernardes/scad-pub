@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="ScadPub">
+  <rect width="512" height="512" fill="#14161c"/>
+  <g transform="translate(256 256) scale(0.7) translate(-256 -256)" fill="none" stroke="#86a9ff" stroke-width="26" stroke-linejoin="round">
+    <path d="M256 108 400 190v132l-144 82-144-82V190z"/>
+    <path d="M112 190l144 82 144-82M256 272v132"/>
+  </g>
+  <circle cx="256" cy="235" r="21" fill="#2f55ff"/>
+</svg>
