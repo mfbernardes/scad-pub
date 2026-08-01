@@ -46,6 +46,7 @@ import {
   resolveHelp,
   resolveFileField,
   isRiskyExternalFontCopy,
+  isTrackedFile,
 } from "../scripts/gen-schema.mjs";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
 import { colorStyle } from "../src/lib/configCss.ts";
@@ -3131,10 +3132,14 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
   const manifestPath = join(outPublicDir, "..", ".gen-manifest.json");
   const relTo = (abs) => relative(outPublicDir, abs);
   assert.ok(!existsSync(join(outPublicDir, ".gen-manifest.json")), "manifest must not sit inside public/");
+  // Each entry is { path, sha256 }: the digest is what keeps reconciliation
+  // from deleting a path whose bytes somebody else replaced since.
+  const paths = (m) => m.map((e) => e.path);
   const manifest1 = JSON.parse(readFileSync(manifestPath, "utf-8"));
-  assert.ok(manifest1.every((e) => !isAbsolute(e)), "manifest entries must be relative, not absolute");
-  assert.ok(manifest1.includes(relTo(fontDest)));
-  assert.ok(manifest1.includes(relTo(shotDest)));
+  assert.ok(paths(manifest1).every((e) => !isAbsolute(e)), "manifest entries must be relative, not absolute");
+  assert.ok(manifest1.every((e) => /^[0-9a-f]{64}$/.test(e.sha256)), "every entry carries its digest");
+  assert.ok(paths(manifest1).includes(relTo(fontDest)));
+  assert.ok(paths(manifest1).includes(relTo(shotDest)));
 
   // Reconfigure without the font/screenshot, as if the config entry was
   // removed or renamed.
@@ -3150,9 +3155,9 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
   // Final manifest matches disk: every recorded path still exists, and
   // nothing recorded is stale.
   const manifest2 = JSON.parse(readFileSync(manifestPath, "utf-8"));
-  assert.ok(!manifest2.includes(relTo(fontDest)));
-  assert.ok(!manifest2.includes(relTo(shotDest)));
-  for (const p of manifest2)
+  assert.ok(!paths(manifest2).includes(relTo(fontDest)));
+  assert.ok(!paths(manifest2).includes(relTo(shotDest)));
+  for (const p of paths(manifest2))
     assert.ok(existsSync(join(outPublicDir, p)), `manifest entry missing on disk: ${p}`);
 });
 
@@ -3463,4 +3468,134 @@ test("popup.mode 'picker' with something to choose between builds fine", () => {
   const { schema } = run("widget-popup-picker.config.json");
   assert.equal(schema.popup.mode, "picker");
   assert.equal(schema.designs.length, 2);
+});
+
+// ── a config font may not shadow a tracked bundled one ─────────────────────
+// bundleFonts keys the destination on the font's basename, so a config listing
+// `myfonts/LiberationSans-Regular.ttf` aims at a file the repo tracks. Letting
+// that copy through recorded a TRACKED path in .gen-manifest.json, and the next
+// build against a config without the entry deleted repo content.
+
+test("isTrackedFile reports what git tracks, and false outside a working tree", () => {
+  assert.equal(isTrackedFile("/repo/public/fonts/F.ttf", () => "public/fonts/F.ttf"), true);
+  assert.equal(isTrackedFile("/repo/public/fonts/F.ttf", () => ""), false);
+});
+
+// A throwaway checkout with a tracked public/fonts/<name>, so the collision is
+// the real one rather than a stub's opinion.
+function checkoutWithTrackedFont(prefix, name) {
+  const checkout = mkdtempSync(join(tmpdir(), prefix));
+  execFileSync("git", ["init", "-q", checkout]);
+  const outPublicDir = join(checkout, "public");
+  mkdirSync(join(outPublicDir, "fonts"), { recursive: true });
+  copyFileSync(
+    join(HERE, "..", "public", "fonts", "LiberationSans-Regular.ttf"),
+    join(outPublicDir, "fonts", name)
+  );
+  execFileSync("git", ["-C", checkout, "add", "-A"]);
+  execFileSync("git", [
+    "-C", checkout,
+    "-c", "user.email=test@example.com",
+    "-c", "user.name=Test",
+    "commit", "-q", "-m", "bundled font",
+  ]);
+  return { checkout, outPublicDir };
+}
+
+function externalFontConfig(prefix, fontEntry, fontFileName) {
+  const src = mkdtempSync(join(tmpdir(), prefix));
+  const dir = dirname(join(src, fontEntry));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// Font.\nfont = "Liberation Sans";\n`);
+  copyFileSync(
+    join(HERE, "..", "public", "fonts", fontFileName),
+    join(src, fontEntry)
+  );
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: ".",
+      render: { fonts: [fontEntry], fontFallback: "Liberation Sans" },
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+  return src;
+}
+
+test("a config font whose basename shadows a tracked bundled font fails the build", () => {
+  const { checkout, outPublicDir } = checkoutWithTrackedFont(
+    "gen-schema-fontshadow-",
+    "LiberationSans-Regular.ttf"
+  );
+  const src = externalFontConfig(
+    "gen-schema-fontshadow-src-",
+    "myfonts/LiberationSans-Regular.ttf",
+    "LiberationSans-Regular.ttf"
+  );
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(src, "c.config.json"),
+        outSchemaDir: join(checkout, "schema"),
+        outScadDir: join(checkout, "scad"),
+        outPublicDir,
+      }),
+    /would overwrite the bundled font/
+  );
+  // …and left the tracked file untouched.
+  assert.equal(
+    execFileSync("git", ["-C", checkout, "status", "--porcelain", "--", "public"], {
+      encoding: "utf8",
+    }),
+    ""
+  );
+});
+
+test("an external-config font copy is cleaned up by the next build, and never a changed file", () => {
+  const { checkout, outPublicDir } = checkoutWithTrackedFont(
+    "gen-schema-reconcile-",
+    "LiberationSans-Regular.ttf"
+  );
+  const withFont = externalFontConfig(
+    "gen-schema-reconcile-src-",
+    "Face.ttf",
+    "LiberationSans-Bold.ttf"
+  );
+  const build = (configPath) =>
+    generate({
+      configPath,
+      outSchemaDir: join(checkout, "schema"),
+      outScadDir: join(checkout, "scad"),
+      outPublicDir,
+    });
+
+  build(join(withFont, "c.config.json"));
+  const copied = join(outPublicDir, "fonts", "Face.ttf");
+  assert.ok(existsSync(copied), "the external font was copied in");
+
+  // A config of this checkout's own, listing no external font.
+  const own = mkdtempSync(join(tmpdir(), "gen-schema-reconcile-own-"));
+  writeFileSync(join(own, "d.scad"), `/* [Main] */\n// Size.\nsize = 1;\n`);
+  writeFileSync(
+    join(own, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  build(join(own, "c.config.json"));
+  assert.ok(!existsSync(copied), "the transient copy was reconciled away");
+
+  // Same round trip, except the copy is replaced between builds: those bytes
+  // are somebody else's now, so reconciliation must leave them alone.
+  build(join(withFont, "c.config.json"));
+  writeFileSync(copied, "not the font this tool wrote");
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    build(join(own, "c.config.json"));
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(existsSync(copied), "a changed file is not this tool's to delete");
+  assert.ok(warnings.some((w) => w.includes("Face.ttf")), "and it says so");
 });

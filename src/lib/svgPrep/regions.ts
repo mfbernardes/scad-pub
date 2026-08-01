@@ -80,13 +80,32 @@ export function parseLayerSpec(spec: string): { canvas: string; entries: LayerEn
   return { canvas, entries };
 }
 
+/** The spec's own separators. A field carrying one is read back as several
+ *  fields — `rgba(255,0,0,0.5)` alone becomes four junk regions — so the
+ *  producers sanitise upstream (displayColor for colours, fixInkscapeIds for
+ *  ids) and this refuses to emit a spec that would not survive the round trip
+ *  if they ever stop. */
+const SPEC_SEPARATOR_RE = /[,:]/;
+
 /** Serialise a canvas entry plus region entries back into a layers spec. A
  *  region with no height is written bare, so the common all-default case reads
- *  exactly as it did before heights existed. */
+ *  exactly as it did before heights existed.
+ *
+ *  @throws if any field contains `,` or `:`. */
 export function formatLayerSpec(canvas: string, entries: LayerEntry[]): string {
-  const parts = entries.map((e) =>
-    e.height ? `${e.id}:${e.color}:${e.height}` : shorthandFor(e.id, e.color),
-  );
+  const parts = entries.map((e) => {
+    for (const [field, value] of [
+      ["id", e.id],
+      ["colour", e.color],
+      ["height", e.height],
+    ] as const) {
+      if (SPEC_SEPARATOR_RE.test(value))
+        throw new Error(
+          `region ${field} "${value}" contains "," or ":", which separate entries in the layers spec`,
+        );
+    }
+    return e.height ? `${e.id}:${e.color}:${e.height}` : shorthandFor(e.id, e.color);
+  });
   return (canvas ? [canvas, ...parts] : parts).join(", ");
 }
 

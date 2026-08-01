@@ -8,14 +8,7 @@
 // surface where the app's needs differ, but where both express the same
 // grouping (as `viewer` now does on both sides) they mirror each other.
 //
-// The counter-example is deliberately documented HERE rather than in
-// types.ts: that file sits in the render worker's hashed dependency closure
-// (src/openscad/worker.ts imports its types, see scripts/lib/worker-deps.mjs
-// and computeRenderHash in scripts/lib/hash.mjs, which hashes whole files,
-// comments included), so a comment-only edit there moves `renderHash` and
-// invalidates every persisted render for nothing. This file isn't in that
-// closure, so it's the safe place for prose that doesn't need to change
-// behaviour. The config's `render` and `pwa` blocks (scripts/lib/
+// The config's `render` and `pwa` blocks (scripts/lib/
 // config-spec.mjs) do NOT both mirror into designs.json the way `viewer`
 // does: `render.features`/`.format`/`.fonts`/`.fontFallback` land as this
 // schema's own flat `features`/`format`/`fonts`/`fontFallback` fields (the

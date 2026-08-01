@@ -199,8 +199,10 @@ function parseIdentity(config) {
 // source directories collide loudly instead of one silently overwriting the
 // other. `fontCopies` collects every dest this call actually wrote: the
 // tracked Liberation fallbacks under public/fonts are never written here (the
-// "already present" branch below is a no-op), so they never enter the list
-// and stay outside the M8 generated-font lifecycle the caller reconciles.
+// "already present" branch below is a no-op, and a config font that would
+// SHADOW one is refused outright by the isTrackedFile check), so they never
+// enter the list and stay outside the M8 generated-font lifecycle the caller
+// reconciles.
 //
 // M9: the transient-copy warning: the M8 reconciliation above (see
 // destinations.mjs) means a font copied from outside the current build's own
@@ -255,6 +257,16 @@ export function isRiskyExternalFontCopy(outPublicDir, srcAbs, git = runGitQuiet)
   return rel === ".." || rel.startsWith(`..${sep}`);
 }
 
+// Whether `abs` is a file git already tracks. Used to tell a bundled font that
+// ships with the app (tracked under public/fonts) from a previous run's
+// transient copy of an external one (untracked): only the latter is this tool's
+// to overwrite and later reconcile away. Outside a git working tree — a release
+// tarball, an npm-packed tree — nothing is tracked and nothing can be committed
+// by accident, so the answer is correctly "no".
+export function isTrackedFile(abs, git = runGitQuiet) {
+  return git(dirname(abs), ["ls-files", "--error-unmatch", "--", abs]) !== "";
+}
+
 function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained, register, fontCopies } = {}) {
   // The font tree is generated output too, so (like the scad tree) it is
   // validated, digested and family/face-read here but NOT written into the live
@@ -275,6 +287,19 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
       if (existsSync(srcAbs) && statSync(srcAbs).isFile()) {
         checkContained?.(srcAbs, `font '${entry}'`, configPath);
         const dest = join(outPublicDir, "fonts", name);
+        // The destination is keyed on the basename, so a config listing
+        // `myfonts/LiberationSans-Regular.ttf` aims at a TRACKED bundled font.
+        // Overwriting it puts the copy into the generated manifest, and the
+        // next build against a config without that entry deletes tracked repo
+        // content. A shadowed bundled font is a real conflict either way.
+        if (existsSync(dest) && isTrackedFile(dest)) {
+          throw new Error(
+            `gen-schema: font '${entry}' would overwrite the bundled font at\n  ${dest}\n` +
+              `  (a tracked file that ships with ScadPub; a config font may not shadow one)\n` +
+              `  Rename the font file, or drop the entry and reference '${name}' directly.\n` +
+              `  (referenced from ${configPath} — check its 'render.fonts')`
+          );
+        }
         register?.(dest, `font '${entry}'`);
         fontWrites.push({ src: srcAbs, dest });
         fontCopies?.push(dest);
@@ -1327,8 +1352,10 @@ export function generate({
     // renaming a config entry (a dropped font, a renamed screenshot) doesn't
     // leave a stale, still-deployable file behind. Scoped to paths THIS tool
     // recorded writing previously; a tracked bundled .ttf or an unrelated
-    // file a contributor placed under public/ was never in that manifest, so
-    // it's never a deletion candidate. See scripts/lib/destinations.mjs.
+    // file a contributor placed under public/ can never be in that manifest
+    // (bundleFonts refuses to stage a copy over a tracked destination), and an
+    // entry whose bytes changed since is left alone. See
+    // scripts/lib/destinations.mjs.
     //
     // The manifest lives ABOVE public/ (repo root), not inside it: Vite copies
     // everything under public/ into dist/ verbatim, so a manifest kept there

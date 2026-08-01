@@ -23,8 +23,15 @@ const SCOPE_URL = `https://example.test/${NS}/`;
 const ENTRY_JS = `https://example.test/${NS}/assets/index.js`;
 const ENTRY_CSS = `https://example.test/${NS}/assets/index.css`;
 const OTHER_PAGE = `https://example.test/${NS}/docs/readme.md`;
+// The preload hints vite.config.ts's preloadLinks injects into the built HTML.
+// They belong in the fixture: without them the suite structurally could not
+// tell install's tag-aware classification from a plain extension test.
+const WORKER_JS = `https://example.test/${NS}/assets/worker-abc.js`;
+const VIEWER_JS = `https://example.test/${NS}/assets/Viewer-abc.js`;
 const INDEX_HTML = `<!doctype html><html><head>
 <link rel="stylesheet" href="/${NS}/assets/index.css">
+<link rel="preload" as="worker" href="/${NS}/assets/worker-abc.js" />
+<link rel="modulepreload" href="/${NS}/assets/Viewer-abc.js" />
 </head><body><script type="module" src="/${NS}/assets/index.js"></script></body></html>`;
 
 // --- Minimal fake Cache Storage -------------------------------------------
@@ -370,6 +377,8 @@ const warmRoutes = () => {
   routes.set(LAZY_JS, { body: "export {}" });
   routes.set(SCAD_SRC, { body: "cube(1);" });
   routes.set(WASM_URL, { body: "\0asm" });
+  routes.set(WORKER_JS, { body: "self.onmessage=()=>{}" });
+  routes.set(VIEWER_JS, { body: "export {}" });
   return routes;
 };
 
@@ -379,6 +388,31 @@ test("install fetches only the boot-critical shell — no lazy chunks, sources o
 
   assert.deepEqual([...calls].sort(), [SCOPE_URL, ENTRY_CSS, ENTRY_JS].sort());
   assert.ok(!fakeCaches.caches.has(BIN_CACHE), "the ~10 MB binary cache was not opened at install");
+});
+
+test("preload-hinted chunks are warmed, not installed", async () => {
+  // preloadLinks injects <link rel="preload" as="worker"> and
+  // <link rel="modulepreload"> for the render worker and the lazy Viewer.
+  // Both are .js: an extension-based classifier calls them boot-critical and
+  // install re-downloads them (with cache: "reload", so past the HTTP cache
+  // the page just filled) while the first screen still needs the network.
+  const { listeners, fakeCaches, calls } = loadSw({ routes: warmRoutes() });
+  await fireInstall(listeners);
+  assert.ok(!calls.includes(WORKER_JS), "the worker chunk was not fetched at install");
+  assert.ok(!calls.includes(VIEWER_JS), "the Viewer chunk was not fetched at install");
+
+  await fireMessage(listeners, { type: "WARM" });
+  const cache = await fakeCaches.open(`${NS}-shell-__SW_VERSION__`);
+  assert.ok(await cache.match(WORKER_JS), "the worker chunk was warmed");
+  assert.ok(await cache.match(VIEWER_JS), "the Viewer chunk was warmed");
+});
+
+test("a failing preload-hinted chunk does not block install", async () => {
+  const routes = warmRoutes();
+  routes.set(WORKER_JS, { fail: true });
+  routes.set(VIEWER_JS, { fail: true });
+  const { listeners } = loadSw({ routes });
+  await fireInstall(listeners); // must not reject
 });
 
 test("a WARM message pulls down the rest of the offline bundle, once", async () => {

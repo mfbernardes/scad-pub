@@ -116,6 +116,22 @@ export function inkAttr(el: Element, name: string): string | null {
   return el.getAttribute(`inkscape:${name}`);
 }
 
+// An Inkscape layer label is free text ("Ground floor, walls"); an id is not.
+// A space makes an id that no `id=` selector in a consuming design matches, and
+// a comma or colon shreds the layers spec that carries the id. Unicode letters
+// and digits stay: they are valid NCName characters, and mangling them would
+// rename every non-English layer for nothing.
+const NCNAME_INVALID_RE = /[^\p{L}\p{N}._-]/gu;
+const NCNAME_START_RE = /^[\p{L}_]/u;
+
+/** `label` as an XML NCName — what `fixInkscapeIds` will actually adopt as the
+ *  id, and therefore what `check` must compare against to decide whether a
+ *  layer is still trapped. */
+export function toNCName(label: string): string {
+  const s = label.replace(NCNAME_INVALID_RE, "_");
+  return NCNAME_START_RE.test(s) ? s : `_${s}`;
+}
+
 export function hasAnyTransform(root: Element): boolean {
   return iterElements(root).some((el) => el.getAttribute("transform"));
 }

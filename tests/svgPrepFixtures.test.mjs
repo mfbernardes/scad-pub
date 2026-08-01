@@ -69,6 +69,7 @@ const CATEGORY_B = {
   "text_label.svg": "text",
   "css_fills.svg": "styled-fill",
   "inkscape_layers.svg": "inkscape-trap",
+  "functional_fills.svg": "inkscape-trap",
   "offcanvas.svg": "content-outside-viewbox",
   "nonzero_viewbox.svg": "viewbox-origin",
   "no_viewbox.svg": "no-viewbox",
@@ -87,6 +88,7 @@ const FIXABLE = {
   "background_path.svg": "covers-canvas",
   "css_fills.svg": "styled-fill",
   "inkscape_layers.svg": "inkscape-trap",
+  "functional_fills.svg": "inkscape-trap",
   "nonzero_viewbox.svg": "viewbox-origin",
 };
 
@@ -126,6 +128,10 @@ const DERIVES = {
   "multi_region.svg": "100x100, walls:gray, rooms:white",
   "inkscape_layers.svg": "100x100, walls:gray, rooms:white",
   "css_fills.svg": "100x100, wall:gray, room:white",
+  // Functional colour notations resolve to names, and free-text layer labels
+  // are sanitised into ids: neither may put a "," or ":" into the spec.
+  "functional_fills.svg":
+    "100x100, Ground_floor__walls:gray, rooms__interior:white, fixtures:blue",
 };
 
 for (const [file, expected] of Object.entries(DERIVES)) {

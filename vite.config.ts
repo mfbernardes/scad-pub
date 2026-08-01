@@ -165,11 +165,13 @@ function swVersion(): Plugin {
 //  1. Startup speed: the browser fetches the render worker and the lazy
 //     three.js Viewer chunk in parallel with the entry instead of discovering
 //     them after it executes.
-//  2. Deterministic offline: sw.js precaches by parsing index.html's
-//     src/href attributes (plus Vite's asset-manifest, which does NOT list
-//     worker chunks), so without these links the worker chunk was only ever
-//     cached opportunistically at runtime. The links make install-time
-//     precache cover everything a render needs.
+//  2. Deterministic offline: sw.js derives its asset list by parsing
+//     index.html (plus Vite's asset-manifest, which does NOT list worker
+//     chunks), so without these links the worker chunk was only ever cached
+//     opportunistically at runtime. The links let warmSupplementary discover
+//     it. Install deliberately skips them — sw.js classifies preload hints as
+//     supplementary, since fetching them there is the boot stall the warm-up
+//     brake exists to prevent.
 // Runs at closeBundle (like swVersion) because the chunk names are only known
 // once the bundle is emitted; base-aware for subpath deploys.
 function preloadLinks(): Plugin {

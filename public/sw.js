@@ -67,21 +67,35 @@ function addScopedUrl(urls, path) {
   if (shouldCache(url)) urls.add(url.href);
 }
 
-// The entry document links two kinds of asset: boot-critical code (the module
-// script + stylesheets + JS preloads it needs to render at all) and PWA
-// metadata/artwork (the webmanifest, icons, and Apple splash images). Only the
-// former is install-fatal; a missing or transient splash PNG must not reject
-// the whole service-worker install/update when the app boots fine without it.
-// Classify by extension: boot code is always .js/.mjs/.css; everything else
-// the HTML references here is metadata/artwork.
-const BOOT_CRITICAL_RE = /\.(?:m?js|css)$/i;
+// The entry document links three kinds of asset: boot-critical code (the module
+// script and the stylesheets the first paint needs), resource hints for chunks
+// the app loads later (`rel="preload" as="worker"` for the render worker,
+// `rel="modulepreload"` for the lazy three.js Viewer, both injected by
+// vite.config.ts's preloadLinks), and PWA metadata/artwork (the webmanifest,
+// icons, Apple splash images).
+//
+// Only the first is install-fatal, and only the first is fetched at install.
+// A preload hint is a *page* optimisation: the page is already fetching those
+// chunks, and re-fetching them here with cache: "reload" bypasses the HTTP
+// cache it just filled, at exactly the moment the first screen owns the
+// network — the stall the install brake exists to prevent. Their offline
+// coverage is warmSupplementary's job.
+//
+// Classification is therefore by tag and `rel`, not by extension: a stylesheet
+// and a modulepreload are both `.css`/`.js` links and only `rel` tells them
+// apart.
+const TAG_RE = /<(script|link)\b([^>]*)>/gi;
+const SRC_RE = /\bsrc=["']([^"']+)["']/i;
+const HREF_RE = /\bhref=["']([^"']+)["']/i;
+const REL_RE = /\brel=["']([^"']+)["']/i;
 
 function addHtmlAssets(essential, extra, html) {
-  const attr = /\b(?:src|href)=["']([^"']+)["']/g;
-  for (const match of html.matchAll(attr)) {
-    const path = match[1];
-    const bare = path.split(/[?#]/)[0];
-    addScopedUrl(BOOT_CRITICAL_RE.test(bare) ? essential : extra, path);
+  for (const [, tag, attrs] of html.matchAll(TAG_RE)) {
+    const isScript = tag.toLowerCase() === "script";
+    const url = (isScript ? attrs.match(SRC_RE) : attrs.match(HREF_RE))?.[1];
+    if (!url) continue;
+    const rel = attrs.match(REL_RE)?.[1].trim().toLowerCase();
+    addScopedUrl(isScript || rel === "stylesheet" ? essential : extra, url);
   }
 }
 

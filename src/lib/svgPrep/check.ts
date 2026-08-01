@@ -11,6 +11,7 @@ import {
   iterElements,
   localName,
   paint,
+  toNCName,
 } from "./dom";
 import { canvasBackgrounds } from "./background";
 import { contentBbox, parseViewBox } from "./geometry";
@@ -169,7 +170,7 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     if (localName(el) === "g" && inkAttr(el, "groupmode") === "layer") {
       const label = inkAttr(el, "label");
       const gid = el.getAttribute("id");
-      if (label && gid !== label) trapped.push([label, gid]);
+      if (label && gid !== toNCName(label)) trapped.push([label, gid]);
     }
   }
   if (trapped.length > 0) {

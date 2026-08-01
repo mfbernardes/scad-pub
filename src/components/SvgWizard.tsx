@@ -124,8 +124,13 @@ export function SvgWizard({
     regions: Region[];
   } | null>(null);
   const [layers, setLayers] = useState("");
+  // A preparation failure the drawing itself caused (formatLayerSpec refusing a
+  // region id or colour that would corrupt the spec). Terminal like a parse
+  // failure, with the same retry via cancel.
+  const [prepError, setPrepError] = useState<string | null>(null);
 
   const lastStep: Step = deriveColours ? 3 : 2;
+  const terminalError = parsed.error ?? prepError;
   // Residual ERROR findings (e.g. no importable geometry) mean the drawing can't
   // be imported as-is, so block advancing past the check step and completing.
   const blockedByError = (fixed?.findings ?? []).some((f) => f.level === "ERROR");
@@ -133,7 +138,13 @@ export function SvgWizard({
   const applyAndAdvance = () => {
     // The engine's one-call host contract: fix, (optionally) derive colours,
     // re-check, and serialise. The same result the host applies on finish.
-    const res = prepareSvg(parsed.root!, { deriveColours });
+    let res;
+    try {
+      res = prepareSvg(parsed.root!, { deriveColours });
+    } catch (e) {
+      setPrepError((e as Error).message);
+      return;
+    }
     setFixed({ svg: res.svg, changes: res.changes, findings: res.findings, regions: res.regions });
     setLayers(res.layers ?? "");
     setStep(2);
@@ -178,12 +189,14 @@ export function SvgWizard({
           <DialogDescription>
             {parsed.error
               ? "This file could not be read as an SVG."
-              : `Step ${step} of ${lastStep}: ${STEP_NAMES[step]} · ${fileName}`}
+              : prepError
+                ? "This drawing could not be prepared."
+                : `Step ${step} of ${lastStep}: ${STEP_NAMES[step]} · ${fileName}`}
           </DialogDescription>
         </DialogHeader>
 
-        {parsed.error ? (
-          <p className="svg-wizard__error text-sm text-destructive">{parsed.error}</p>
+        {terminalError ? (
+          <p className="svg-wizard__error text-sm text-destructive">{terminalError}</p>
         ) : (
           <div ref={scrollRef} className="max-h-[55vh] overflow-y-auto overscroll-contain pr-1">
             {step === 1 && (
@@ -340,7 +353,7 @@ export function SvgWizard({
         )}
 
         <DialogFooter>
-          {parsed.error ? (
+          {terminalError ? (
             <Button variant="outline" onClick={onCancel}>
               Choose another file
             </Button>

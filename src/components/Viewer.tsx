@@ -331,6 +331,7 @@ export const Viewer = forwardRef<
   // created once in the setup effect below, but refitView closes over refs and
   // props that change every render.
   const refitRef = useRef<() => void>(() => {});
+  const frameRef = useRef<() => void>(() => {});
   // Latest on-model-edit props, read inside the one-time setup effect's pointer
   // handlers (which have no deps) without re-running setup.
   const editableRef = useRef(editable);
@@ -458,18 +459,21 @@ export const Viewer = forwardRef<
   // intended. The camera's up stays +Z for every view (set once
   // at init), so OrbitControls keeps orbiting correctly; only the look-from
   // direction changes.
-  function applyFraming(direction: THREE.Vector3, zoomRatio: number, pan: THREE.Vector3) {
+  //
+  // Returns whether a framing was actually applied: a caller that records
+  // "this model is framed" must not record it when it wasn't.
+  function applyFraming(direction: THREE.Vector3, zoomRatio: number, pan: THREE.Vector3): boolean {
     const cam = camRef.current;
     const controls = controlsRef.current;
     const mount = mountRef.current;
     const size = modelSizeRef.current;
-    if (!cam || !controls || !mount || !size) return;
+    if (!cam || !controls || !mount || !size) return false;
 
     // A zero-sized canvas (display:none, or a layout not yet resolved) can't
     // be fitted to, and solving against it would poison fitStateRef for the
     // resize that follows. Leave the current framing alone.
     const current = currentFit(mount);
-    if (!current) return;
+    if (!current) return false;
     const { w, h, fit, insets } = current;
 
     const box = framedBox(size);
@@ -493,14 +497,15 @@ export const Viewer = forwardRef<
     cam.position.copy(target).addScaledVector(dir, applied);
     controls.target.copy(target);
     controls.update();
+    return true;
   }
 
   // Frame the orbit camera for the current model from the named standard view
   // (default = the current one), at the fit distance with no pan: the "reset
   // to a clean product shot" path, used for a new model and for Reset view.
-  function frameView(name: ViewName = viewRef.current) {
+  function frameView(name: ViewName = viewRef.current): boolean {
     const [dx, dy, dz] = VIEW_DIRECTIONS[name];
-    applyFraming(new THREE.Vector3(dx, dy, dz), 1, new THREE.Vector3());
+    return applyFraming(new THREE.Vector3(dx, dy, dz), 1, new THREE.Vector3());
   }
 
   // Re-fit the current model after the canvas changed shape: the mobile
@@ -531,6 +536,7 @@ export const Viewer = forwardRef<
     applyFraming(direction, zoomRatio, controls.target.clone().sub(fit.target));
   }
   refitRef.current = refitView;
+  frameRef.current = frameView;
 
   // A parameter tweak just rendered new geometry from the same design+preset
   // (frameKey unchanged, see the [stl] effect below), so the camera was left
@@ -952,7 +958,12 @@ export const Viewer = forwardRef<
       // shrinking with the canvas, see refitView. Cheap: eight corner
       // projections plus four getBoundingClientRect reads, which is fine
       // even at the per-frame rate a bottom-sheet drag produces.
-      refitRef.current();
+      //
+      // A model framed against a 0×0 canvas has no fit state at all, and
+      // refitView early-returns on that: this is where it gets its first
+      // framing once the canvas is measurable.
+      if (fitStateRef.current === null && modelSizeRef.current) frameRef.current();
+      else refitRef.current();
       renderNow();
     });
     ro.observe(mount);
@@ -981,6 +992,9 @@ export const Viewer = forwardRef<
       // before the renderer/context so nothing still references a torn-down GL
       // context.
       if (modelRef.current) disposeObject(modelRef.current);
+      // Already disposed here; leaving the ref set would have the [stl] effect
+      // dispose the same tree a second time after a remount.
+      modelRef.current = null;
       if (gridRef.current) {
         gridRef.current.geometry.dispose();
         (gridRef.current.material as THREE.Material).dispose();
@@ -990,6 +1004,12 @@ export const Viewer = forwardRef<
       // disposeObject above).
       shadowRef.current?.dispose();
       shadowRef.current = null;
+      // Reset the framing bookkeeping alongside the scene refs. A StrictMode or
+      // Fast-Refresh remount rebuilds the camera and the model, so a key left
+      // behind from the torn-down scene would claim the new one is already
+      // framed and dev would frame differently from prod.
+      framedKeyRef.current = null;
+      fitStateRef.current = null;
       envTexture?.dispose();
       renderer.dispose();
       // Explicitly free the WebGL context itself: dispose() alone frees GPU
@@ -1214,8 +1234,12 @@ export const Viewer = forwardRef<
     // see framing.ts: rather than a bounding-sphere radius.
     const frameKey = reframeOnPreset ? `${designId}\n${presetId}` : designId;
     if (framedKeyRef.current !== frameKey) {
-      frameView(); // moves the camera, which self-invalidates via controls' "change" event
-      framedKeyRef.current = frameKey;
+      // Only on success. A model that first arrives while the canvas measures
+      // 0×0 (a background tab, a layout not yet resolved) leaves the key
+      // uncommitted, so the ResizeObserver below reframes as soon as the
+      // canvas has real dimensions instead of the camera staying where it was
+      // mounted until the next design or preset change.
+      if (frameView()) framedKeyRef.current = frameKey; // moves the camera, which self-invalidates via controls' "change" event
     } else {
       refitIfOutgrown(framedBox(size)); // grown past the current view? re-fit; a no-op otherwise
       requestRenderRef.current(); // same framing (e.g. a param tweak): camera didn't move, so invalidate explicitly

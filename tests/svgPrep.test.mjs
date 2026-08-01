@@ -15,6 +15,8 @@ import {
   canvasEntry,
   check,
   deriveLayers,
+  displayColor,
+  parseColor,
   deriveRegions,
   formatLayerSpec,
   formatLayers,
@@ -479,4 +481,74 @@ test("the canvas entry stays in the decimal notation its own reader accepts", ()
     );
     if (entry !== "") assert.equal(isCanvasEntry(entry), true, `${vb} -> ${entry}`);
   }
+});
+
+// ── separators the layers spec cannot carry ────────────────────────────────
+// The spec splits entries on "," and fields on ":", so any id or colour holding
+// one is read back as several junk regions. A real-world `fill="rgba(255,0,0,.5)"`
+// or an Inkscape label like "Ground floor, walls" both hit this.
+
+test("functional colour notations parse instead of falling through as raw text", () => {
+  assert.deepEqual(parseColor("rgba(255, 0, 0, 0.5)"), [255, 0, 0]);
+  assert.deepEqual(parseColor("rgb(255 0 0 / 50%)"), [255, 0, 0]);
+  assert.deepEqual(parseColor("rgb(100%, 0%, 0%)"), [255, 0, 0]);
+  assert.deepEqual(parseColor("hsl(0, 100%, 50%)"), [255, 0, 0]);
+  assert.deepEqual(parseColor("hsl(120 100% 25%)"), [0, 128, 0]);
+  assert.deepEqual(parseColor("hsla(0, 0%, 100%, 0.2)"), [255, 255, 255]);
+  assert.equal(parseColor("rgb(oops)"), null);
+});
+
+test("an rgba() fill round-trips through derive → format → parse", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+       <g id="walls" fill="rgba(255,0,0,0.5)"><rect width="10" height="10"/></g>
+       <g id="rooms" fill="rgb(0 0 255)"><rect width="10" height="10"/></g>
+     </svg>`,
+  );
+  const spec = formatLayers(deriveRegions(root));
+  assert.equal(spec, "walls:red, rooms:blue");
+  assert.deepEqual(parseLayerSpec(spec).entries, [
+    { id: "walls", color: "red", height: "" },
+    { id: "rooms", color: "blue", height: "" },
+  ]);
+});
+
+test("an unparseable paint is stripped of the spec's separators, keeping url() case", () => {
+  // A gradient reference is case-sensitive and must survive verbatim apart from
+  // the separators; anything else is normalised to lower case as before.
+  assert.equal(displayColor(null, "url(#MyGradient)"), "url(#MyGradient)");
+  assert.equal(displayColor(null, "color-mix(in srgb, red, blue)"), "color-mix(insrgbredblue)");
+  assert.ok(!displayColor(null, "lab(50% 40 59.5 / 0.5)").match(/[,:]/));
+  assert.equal(displayColor(null, " , : "), "black");
+});
+
+test("an Inkscape label with spaces or commas becomes a valid, spec-safe id", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" viewBox="0 0 100 100">
+       <g inkscape:groupmode="layer" inkscape:label="Ground floor, walls" id="layer1" fill="gray">
+         <rect width="10" height="10"/>
+       </g>
+       <g inkscape:groupmode="layer" inkscape:label="Térreo" id="layer2" fill="white">
+         <rect width="10" height="10"/>
+       </g>
+     </svg>`,
+  );
+  const changes = applyFixes(root);
+  assert.ok(changes.some((c) => c.includes('named "Ground_floor__walls"')));
+  const spec = formatLayers(deriveRegions(root));
+  assert.equal(spec, "Ground_floor__walls:gray, Térreo:white");
+  // Unicode letters are valid NCName characters: renaming them would mangle
+  // every non-English layer for nothing.
+  assert.deepEqual(parseLayersArg(spec), ["Ground_floor__walls", "Térreo"]);
+});
+
+test("formatLayerSpec refuses a field that would corrupt the spec", () => {
+  assert.throws(
+    () => formatLayerSpec("", [{ id: "walls", color: "rgba(255,0,0,0.5)", height: "" }]),
+    /separate entries/,
+  );
+  assert.throws(
+    () => formatLayerSpec("", [{ id: "ground floor, walls", color: "gray", height: "" }]),
+    /separate entries/,
+  );
 });

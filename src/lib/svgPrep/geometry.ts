@@ -7,32 +7,73 @@ export type Point = [number, number];
 export type Bbox = [number, number, number, number];
 
 const NUMBER_RE = /[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g;
-const PATH_TOKEN_RE = /[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g;
+const COMMAND_RE = /[MmLlHhVvCcSsQqTtAaZz]/;
+// Sticky: the path grammar is scanned position by position rather than
+// pre-split into tokens, because an arc's two flags are single characters that
+// may be written unseparated from their neighbours (`a5 5 0 0110 0`, routine
+// svgo/Illustrator output). A number-shaped tokeniser reads `0110` as one
+// number and every following argument lands one slot out.
+const NUMBER_AT_RE = /[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/y;
+const SEPARATOR_AT_RE = /[\s,]*/y;
 
 export function numbers(text: string | null | undefined): number[] {
   if (!text) return [];
   return (text.match(NUMBER_RE) ?? []).map(Number);
 }
 
-/** Best-effort absolute points from a path's `d` (endpoints + control points). */
+/** Best-effort absolute points from a path's `d` (endpoints + control points).
+ *  A malformed segment costs that segment only: the scanner drops its partial
+ *  points, restores the current point, and resyncs at the next command letter.
+ *  Abandoning the rest of the path instead silently shrank contentBbox, which
+ *  the canvas-coverage and outside-the-viewBox checks read. */
 export function pathPoints(d: string): Point[] {
-  const toks = d.match(PATH_TOKEN_RE) ?? [];
   const pts: Point[] = [];
   let i = 0;
   let cx = 0;
   let cy = 0;
   let start: Point | null = null;
   let cmd: string | null = null;
+  let ok = true;
 
+  const skipSep = () => {
+    SEPARATOR_AT_RE.lastIndex = i;
+    SEPARATOR_AT_RE.exec(d);
+    i = SEPARATOR_AT_RE.lastIndex;
+  };
   const num = (): number => {
-    const value = Number(toks[i]);
+    if (!ok) return NaN;
+    skipSep();
+    NUMBER_AT_RE.lastIndex = i;
+    const m = NUMBER_AT_RE.exec(d);
+    if (!m) {
+      ok = false;
+      return NaN;
+    }
+    i = NUMBER_AT_RE.lastIndex;
+    const v = Number(m[0]);
+    if (!Number.isFinite(v)) ok = false;
+    return v;
+  };
+  // An arc flag is exactly one character, never a number token.
+  const flag = () => {
+    if (!ok) return;
+    skipSep();
+    if (d[i] !== "0" && d[i] !== "1") {
+      ok = false;
+      return;
+    }
     i += 1;
-    return value;
+  };
+  const resync = () => {
+    while (i < d.length && !COMMAND_RE.test(d[i])) i += 1;
+    ok = true;
   };
 
-  while (i < toks.length) {
-    if (/[a-zA-Z]/.test(toks[i][0])) {
-      cmd = toks[i];
+  while (i < d.length) {
+    skipSep();
+    if (i >= d.length) break;
+    if (COMMAND_RE.test(d[i])) {
+      cmd = d[i];
       i += 1;
       if (cmd === "Z" || cmd === "z") {
         if (start !== null) {
@@ -41,68 +82,67 @@ export function pathPoints(d: string): Point[] {
         }
         continue;
       }
+      skipSep();
+      if (i >= d.length) break;
     }
-    if (cmd === null || i >= toks.length) {
-      i += 1;
+    if (cmd === null) {
+      // Leading junk before any command: nothing to attribute it to.
+      resync();
       continue;
     }
-    const rel = cmd === cmd.toLowerCase();
-    const c = cmd.toUpperCase();
-    if (c === "M") {
+
+    const rel: boolean = cmd === cmd.toLowerCase();
+    const c: string = cmd.toUpperCase();
+    // Everything this segment would contribute, rolled back together if any of
+    // it fails to parse.
+    const mark = pts.length;
+    const [x0, y0] = [cx, cy];
+    const pending: Point[] = [];
+    const at = (x: number, y: number): Point => [rel ? x0 + x : x, rel ? y0 + y : y];
+
+    if (c === "M" || c === "L" || c === "T") {
       const x = num();
       const y = num();
-      cx = rel ? cx + x : x;
-      cy = rel ? cy + y : y;
-      start = [cx, cy];
-      pts.push([cx, cy]);
-      cmd = rel ? "l" : "L";
-    } else if (c === "L" || c === "T") {
-      const x = num();
-      const y = num();
-      cx = rel ? cx + x : x;
-      cy = rel ? cy + y : y;
-      pts.push([cx, cy]);
+      pending.push(at(x, y));
     } else if (c === "H") {
-      const x = num();
-      cx = rel ? cx + x : x;
-      pts.push([cx, cy]);
+      pending.push([rel ? x0 + num() : num(), y0]);
     } else if (c === "V") {
-      const y = num();
-      cy = rel ? cy + y : y;
-      pts.push([cx, cy]);
-    } else if (c === "C") {
-      for (let k = 0; k < 2; k++) {
+      pending.push([x0, rel ? y0 + num() : num()]);
+    } else if (c === "C" || c === "S" || c === "Q") {
+      for (let k = 0; k < (c === "C" ? 3 : 2); k++) {
         const x = num();
         const y = num();
-        pts.push([rel ? cx + x : x, rel ? cy + y : y]);
+        pending.push(at(x, y));
       }
-      const x = num();
-      const y = num();
-      cx = rel ? cx + x : x;
-      cy = rel ? cy + y : y;
-      pts.push([cx, cy]);
-    } else if (c === "S" || c === "Q") {
-      let x = num();
-      let y = num();
-      pts.push([rel ? cx + x : x, rel ? cy + y : y]);
-      x = num();
-      y = num();
-      cx = rel ? cx + x : x;
-      cy = rel ? cy + y : y;
-      pts.push([cx, cy]);
     } else if (c === "A") {
-      for (let k = 0; k < 5; k++) num();
+      num(); // rx
+      num(); // ry
+      num(); // x-axis-rotation
+      flag(); // large-arc
+      flag(); // sweep
       const x = num();
       const y = num();
-      cx = rel ? cx + x : x;
-      cy = rel ? cy + y : y;
-      pts.push([cx, cy]);
+      pending.push(at(x, y));
     } else {
-      i += 1;
+      ok = false;
     }
-    if (pts.some((p) => Number.isNaN(p[0]) || Number.isNaN(p[1]))) break;
+
+    if (!ok) {
+      pts.length = mark;
+      cx = x0;
+      cy = y0;
+      resync();
+      continue;
+    }
+    pts.push(...pending);
+    [cx, cy] = pending[pending.length - 1];
+    if (c === "M") {
+      start = [cx, cy];
+      // A moveto's implicit repetition is a lineto, not another moveto.
+      cmd = rel ? "l" : "L";
+    }
   }
-  return pts.filter((p) => !Number.isNaN(p[0]) && !Number.isNaN(p[1]));
+  return pts;
 }
 
 function attr(el: Element, name: string, fallback = 0): number {

@@ -77,12 +77,19 @@ What follows from that, before you edit anything:
   with `git describe` against ScadPub’s own checkout — not the cwd — so a fork, submodule or
   sibling build still names ScadPub. `$SCADPUB_VERSION` overrides it for git-less trees, and
   resolving to nothing is not a build failure.
-- **`src/openscad/types.ts` is in that hashed closure.** `scripts/lib/worker-deps.mjs` walks
-  `worker.ts`'s local import graph to feed `computeRenderHash`, and `types.ts` is transitively
-  imported from there, so any change to it — comments included — changes `renderHash` and
-  evicts every deployment’s persisted render cache. That’s a real but affordable cost, not a
-  reason to avoid the file forever: batch `types.ts` edits deliberately (e.g. alongside another
-  change that already bumps `renderHash`) rather than trickling them in one comment at a time.
+- **Only `src/openscad/`’s own worker files are in that hashed closure — keep UI types out of
+  it.** `scripts/lib/worker-deps.mjs` walks `worker.ts`’s local import graph to feed
+  `computeRenderHash`, so any change to a file in that graph — comments included — changes
+  `renderHash` and evicts every deployment’s persisted render cache. The closure is
+  `worker.ts`, `protocol.ts`, `renderArgs.ts`, `binCache.ts`, `progressThrottle.ts`,
+  `retryableOnce.ts`, `orphanedDefines.ts` and `lib/assetUrl.ts`, and
+  `tests/worker-deps.test.mjs` pins it as an exact set so it cannot re-widen by accident.
+  `protocol.ts` holds the worker’s message shapes alone; `types.ts` re-exports them and is the
+  app-facing home for everything else (it changed 25 times in a year for viewer/help/licence
+  fields that cannot affect a triangle, and each one used to evict every cache). Likewise
+  `orphanedDefines.ts` sits apart from `lib/scad.ts`, whose other exports need the full `Param`
+  union. When you do have to touch a hashed file, batch the edits deliberately rather than
+  trickling them in one comment at a time.
 - The licenses modal takes every version from build data (`componentVersions`, `wasmVersion`,
   `scadpubVersion`), never a literal. A new bundled component needs an entry in
   `src/lib/licenses.ts`; an npm package also needs its name in `BUNDLED_PACKAGES`, since

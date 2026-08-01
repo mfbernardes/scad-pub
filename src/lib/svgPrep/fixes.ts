@@ -2,12 +2,13 @@
 // human-readable change strings.
 
 import { canvasBackgrounds } from "./background";
-import { SHAPE_TAGS, SVG_NS, inkAttr, iterElements, localName } from "./dom";
+import { SHAPE_TAGS, SVG_NS, inkAttr, iterElements, localName, toNCName } from "./dom";
 import { gFormat, parseViewBox } from "./geometry";
 
 /** Rename each Inkscape layer's id to its label so it is selectable. Only touches
- *  layer groups whose label differs from the id, and skips a rename that would
- *  collide with an id already in use. */
+ *  layer groups whose label differs from the id, sanitises the label into a
+ *  valid id first, and skips a rename that would collide with an id already in
+ *  use. */
 export function fixInkscapeIds(root: Element): string[] {
   const changes: string[] = [];
   const existing = new Set<string>();
@@ -18,16 +19,22 @@ export function fixInkscapeIds(root: Element): string[] {
   for (const el of iterElements(root)) {
     if (localName(el) !== "g" || inkAttr(el, "groupmode") !== "layer") continue;
     const label = inkAttr(el, "label");
+    if (!label) continue;
+    const target = toNCName(label);
     const gid = el.getAttribute("id");
-    if (!label || gid === label) continue;
-    if (existing.has(label) && label !== gid) {
+    if (gid === target) continue;
+    if (existing.has(target)) {
       changes.push(`left layer "${label}" as-is (another region already uses that name)`);
       continue;
     }
-    el.setAttribute("id", label);
+    el.setAttribute("id", target);
     if (gid) existing.delete(gid);
-    existing.add(label);
-    changes.push(`made layer "${label}" usable as a colour region`);
+    existing.add(target);
+    changes.push(
+      target === label
+        ? `made layer "${label}" usable as a colour region`
+        : `made layer "${label}" usable as a colour region, named "${target}"`,
+    );
   }
   return changes;
 }
