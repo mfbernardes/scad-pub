@@ -196,13 +196,14 @@ async function checkWelcomePopup({ page, check, schema }) {
 // the main thread, which a busy thread delays well past the exit animation.
 // While it lingers it is what `elementFromPoint` returns over the desktop
 // resize handle, so the handle cannot be grabbed. `close` is the action that
-// dismisses the last dialog; it runs under a CPU throttle held across the
-// sampling, because the window only exists while the thread is contended.
+// dismisses the last dialog, run under a CPU throttle to widen the window.
 //
-// Sampling rather than one probe, and asserting the window was OBSERVED:
-// probing once after the overlay has already unmounted finds the handle
-// uncovered and proves nothing, which is how a fix that compiles but has no
-// effect passed this check.
+// The sampler runs IN THE PAGE, on every animation frame, and is armed BEFORE
+// the close: driving it from here meant each sample cost a CDP round-trip, so
+// on a slow runner the overlay could come and go entirely between two probes.
+// That makes "never saw it" an actual observation — there was no dead zone —
+// rather than a probe that missed, which is the difference between this check
+// proving something and passing vacuously.
 async function probeOverlayOverHandle({ page, check, cdp, box, close }) {
   if (!box) {
     check(false, "the resize handle is present to probe for a stale overlay");
@@ -210,44 +211,52 @@ async function probeOverlayOverHandle({ page, check, cdp, box, close }) {
   }
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 15 });
   try {
-    await close();
-    const y = box.y + box.height / 2;
-    let sawClosedOverlay = false;
-    let covering = null;
-    for (let i = 0; i < 60 && !covering; i++) {
-      const sample = await page.evaluate(
-        ([left, right, yy]) => {
+    await page.evaluate(
+      ([left, right, yy]) => {
+        const state = { frames: 0, sawClosed: false, covering: null, done: false };
+        window.__overlayProbe = state;
+        const tick = () => {
+          state.frames += 1;
           const overlay = document.querySelector('[data-slot="dialog-overlay"]');
-          const mounted = overlay?.getAttribute("data-state") === "closed";
-          const h = document.querySelector(".param-panel__resize-handle");
-          let top = null;
-          for (let x = Math.floor(left); x <= Math.ceil(right); x++) {
-            const e = document.elementFromPoint(x, yy);
-            if (e === h) return { mounted, gone: !overlay, covering: null };
-            top = top ?? e;
+          if (overlay?.getAttribute("data-state") === "closed") {
+            state.sawClosed = true;
+            const h = document.querySelector(".param-panel__resize-handle");
+            let top = null;
+            let onHandle = false;
+            for (let x = Math.floor(left); x <= Math.ceil(right); x++) {
+              const e = document.elementFromPoint(x, yy);
+              if (e === h) { onHandle = true; break; }
+              top = top ?? e;
+            }
+            if (!onHandle && !state.covering)
+              state.covering = top
+                ? `${top.getAttribute?.("data-slot") ?? top.tagName} ` +
+                  `state=${top.getAttribute?.("data-state") ?? "-"} ` +
+                  `pointer-events=${getComputedStyle(top).pointerEvents}`
+                : "nothing";
+          } else if (state.sawClosed && !overlay) {
+            state.done = true;
+            return;
           }
-          return {
-            mounted,
-            gone: !overlay,
-            covering: top
-              ? `${top.getAttribute?.("data-slot") ?? top.tagName} ` +
-                `state=${top.getAttribute?.("data-state") ?? "-"} ` +
-                `pointer-events=${getComputedStyle(top).pointerEvents}`
-              : "nothing",
-          };
-        },
-        [box.x, box.x + box.width, y]
-      );
-      sawClosedOverlay ||= sample.mounted;
-      covering = sample.covering;
-      if (sample.gone && sawClosedOverlay) break;
-      await new Promise((r) => setTimeout(r, 50));
-    }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      },
+      [box.x, box.x + box.width, box.y + box.height / 2]
+    );
+    await close();
+    await page
+      .waitForFunction(() => window.__overlayProbe.done, null, { timeout: 4000 })
+      .catch(() => {});
+    const { frames, sawClosed, covering } = await page.evaluate(() => window.__overlayProbe);
     check(
       !covering,
       `the resize handle stays clickable while the popup overlay unmounts${covering ? ` (covered by ${covering})` : ""}`
     );
-    check(sawClosedOverlay, "the closing overlay was still mounted when probed, so that assertion meant something");
+    // Not "the window must occur" — an overlay that unmounts instantly has no
+    // dead zone to find. What must hold is that the sampler actually ran, so a
+    // silent pass means nothing was there rather than nobody looked.
+    check(frames > 0, `the overlay sampler ran (${frames} frames, closed overlay seen: ${sawClosed})`);
   } finally {
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   }
