@@ -4,7 +4,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { isWaitingUpdate, forceReload, warmDelayMs, warmTargets } from "../src/lib/swUpdate.ts";
+import {
+  isWaitingUpdate,
+  watchForWaitingWorker,
+  handOffToWaiting,
+  forceReload,
+  warmDelayMs,
+  warmTargets,
+  SKIP_WAITING_TIMEOUT_MS,
+} from "../src/lib/swUpdate.ts";
 
 const swText = () =>
   readFileSync(fileURLToPath(new URL("../public/sw.js", import.meta.url)), "utf-8");
@@ -173,4 +181,188 @@ test("a WARM reaches the waiting worker too, so an update never activates cold",
   assert.deepEqual(warmTargets(undefined, null), []);
   // active and controller are normally the same object: message it once.
   assert.deepEqual(warmTargets({ active, waiting: null }, active).length, 1);
+});
+
+test("the handoff reloads once: whichever route gets there first wins", () => {
+  // The property is a RACE, and the previous test asserted it by regex-reading
+  // this function's source — which passes whether or not the guard works. A
+  // fake clock makes both orderings executable.
+  const posted = [];
+  const worker = { postMessage: (m) => posted.push(m) };
+
+  // 1. The graceful handoff lands first: controllerchange sets the shared
+  //    guard, and the fallback must then stand down rather than reload again.
+  {
+    const reloaded = { current: false };
+    let fired = 0;
+    let armed;
+    handOffToWaiting(worker, reloaded, () => fired++, (fn) => {
+      armed = fn;
+      return 1;
+    });
+    assert.deepEqual(posted, [{ type: "SKIP_WAITING" }], "the worker is asked to skip waiting");
+    reloaded.current = true; // controllerchange arrived and reloaded the page
+    armed();
+    assert.equal(fired, 0, "the fallback must not reload a second time");
+  }
+
+  // 2. postMessage itself throws — a worker that went redundant raises
+  //    InvalidStateError synchronously, which is exactly the case the fallback
+  //    exists for. Arming after posting meant it was never armed at all.
+  {
+    const reloaded = { current: false };
+    let fired = 0;
+    let armed;
+    const throwing = {
+      postMessage() {
+        throw new DOMException("worker is redundant", "InvalidStateError");
+      },
+    };
+    assert.doesNotThrow(() =>
+      handOffToWaiting(throwing, reloaded, () => fired++, (fn) => {
+        armed = fn;
+        return 1;
+      })
+    );
+    assert.ok(armed, "the fallback is armed even though postMessage threw");
+    armed();
+    assert.equal(fired, 1);
+  }
+
+  // 3. The handoff never lands (a worker that went redundant silently): the fallback
+  //    fires, and claims the guard so a late controllerchange stands down.
+  {
+    const reloaded = { current: false };
+    let fired = 0;
+    let armed;
+    let delay;
+    handOffToWaiting(worker, reloaded, () => fired++, (fn, ms) => {
+      armed = fn;
+      delay = ms;
+      return 1;
+    });
+    assert.equal(delay, SKIP_WAITING_TIMEOUT_MS, "the wait is bounded");
+    armed();
+    assert.equal(fired, 1, "the button does something even when the handoff never happens");
+    assert.equal(reloaded.current, true, "and a late controllerchange is now a no-op");
+  }
+});
+
+// ── watchForWaitingWorker: the async-registration/unmount ordering ─────────
+// Fakes rather than a DOM: the collaborators are EventTargets and a promise,
+// which is the whole of what this function touches. Node's EventTarget honours
+// the `signal` option, so the abort path under test is the real one.
+
+function fakeWorker(state = "installing") {
+  const w = new EventTarget();
+  w.state = state;
+  w.become = (next) => {
+    w.state = next;
+    w.dispatchEvent(new Event("statechange"));
+  };
+  return w;
+}
+
+function fakeRegistration() {
+  const reg = new EventTarget();
+  reg.waiting = null;
+  reg.installing = null;
+  reg.updateFound = (worker) => {
+    reg.installing = worker;
+    reg.dispatchEvent(new Event("updatefound"));
+  };
+  return reg;
+}
+
+test("a worker that reaches 'installed' with a controller is reported as waiting", () => {
+  const reg = fakeRegistration();
+  const ac = new AbortController();
+  const seen = [];
+  return watchForWaitingWorker({ controller: {} }, async () => reg, (w) => seen.push(w), ac.signal)
+    .then(() => {
+      const installing = fakeWorker();
+      reg.updateFound(installing);
+      installing.become("installing"); // not yet
+      assert.deepEqual(seen, []);
+      installing.become("installed");
+      assert.deepEqual(seen, [installing]);
+    });
+});
+
+test("a first install (no controller) is not reported as an update", () => {
+  const reg = fakeRegistration();
+  const seen = [];
+  return watchForWaitingWorker({ controller: null }, async () => reg, (w) => seen.push(w), new AbortController().signal)
+    .then(() => {
+      const installing = fakeWorker();
+      reg.updateFound(installing);
+      installing.become("installed");
+      assert.deepEqual(seen, [], "a fresh install has nothing to replace");
+    });
+});
+
+test("a worker already waiting from a previous visit is reported immediately", () => {
+  const reg = fakeRegistration();
+  reg.waiting = fakeWorker("installed");
+  const seen = [];
+  return watchForWaitingWorker({ controller: {} }, async () => reg, (w) => seen.push(w), new AbortController().signal)
+    .then(() => assert.deepEqual(seen, [reg.waiting]));
+});
+
+test("aborting BEFORE registration resolves subscribes to nothing", async () => {
+  // The ordering the previous implementation got wrong: cleanup ran, found no
+  // registration to unsubscribe from because the promise had not resolved, and
+  // the .then went on to add a listener to a registration that outlives the
+  // component. Nothing removed it, so every remount added another.
+  const reg = fakeRegistration();
+  let resolveReg;
+  const pending = new Promise((r) => {
+    resolveReg = r;
+  });
+  const ac = new AbortController();
+  const seen = [];
+  const watching = watchForWaitingWorker(
+    { controller: {} },
+    () => pending,
+    (w) => seen.push(w),
+    ac.signal
+  );
+  ac.abort(); // unmount, still mid-registration
+  resolveReg(reg);
+  assert.equal(await watching, undefined, "an abandoned registration is not returned");
+
+  const installing = fakeWorker();
+  reg.updateFound(installing);
+  installing.become("installed");
+  assert.deepEqual(seen, [], "no listener survived the abort");
+});
+
+test("aborting AFTER registration removes the listeners it had added", async () => {
+  const reg = fakeRegistration();
+  const ac = new AbortController();
+  const seen = [];
+  await watchForWaitingWorker({ controller: {} }, async () => reg, (w) => seen.push(w), ac.signal);
+
+  // A worker already mid-install when the component goes away: its statechange
+  // listener was anonymous and was never removed by the old cleanup.
+  const installing = fakeWorker();
+  reg.updateFound(installing);
+  ac.abort();
+  installing.become("installed");
+  reg.updateFound(fakeWorker());
+  assert.deepEqual(seen, [], "neither updatefound nor statechange survived");
+});
+
+test("a registration that never resolves is not an error", async () => {
+  const seen = [];
+  const reg = await watchForWaitingWorker(
+    { controller: {} },
+    async () => {
+      throw new Error("blocked by the browser");
+    },
+    (w) => seen.push(w),
+    new AbortController().signal
+  );
+  assert.equal(reg, undefined);
+  assert.deepEqual(seen, []);
 });

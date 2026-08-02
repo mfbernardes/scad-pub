@@ -67,3 +67,9 @@ npm-debug.log*
 .dev.vars*
 !.dev.vars.example
 !.env.example
+dist-studio/
+# check-studio.mjs writes this at the repo root (config-relative paths must
+# still resolve) and removes it in a `finally`. A kill signal skips that, and an
+# uncommitted copy of the operator's config is not something a later `git add
+# -A` should sweep up.
+studio.check.config.json
