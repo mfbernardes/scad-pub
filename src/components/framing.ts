@@ -1,26 +1,8 @@
-// framing.ts — pure math behind the viewer's box-aware camera fit. It fits the
-// model's actual axis-aligned bounding BOX, not a bounding SPHERE
-// (`radius * factor`, direction-only, no aspect awareness): a sphere's radius is
-// dominated by a flat/wide plate's diagonal, so fitting to it leaves a typical
-// flat plate reading at only ~30-40% of the pane.
-//
-// The camera looks at `target` from `target + direction * distance`. A world
-// point's offset from `target`, projected onto the camera's own screen basis
-// (`right`/`up`, perpendicular to `direction`), gives a depth-independent
-// screen-axis offset `q` and a depth-along-view-axis offset `s`; its actual
-// depth from the camera is `distance - s`. Requiring that point's projected
-// size stay within `fill` of the frame on that axis —
-//   |q| / ((distance - s) * tanHalf) <= fill
-// — rearranges to a direct, closed-form bound (no search/bisection needed):
-//   distance >= s + |q| / (tanHalf * fill)
-// Evaluating this for both screen axes at all 8 box corners and taking the
-// max gives the smallest distance at which EVERY corner is within `fill` of
-// the frame on both axes simultaneously — exactly the "fits generously,
-// doesn't overfill" target.
-//
-// Pure math only (three.js's Vector3/Matrix4 run on plain numbers, no WebGL
-// context needed), so this is unit-testable under node:test — see
-// tests/framing.test.mjs.
+// framing.ts — pure math behind the viewer's box-aware camera fit: it fits the
+// model's axis-aligned bounding BOX, not a bounding sphere, whose radius a flat
+// plate's diagonal dominates. docs/viewer.md derives the closed-form distance
+// bound, the aspect correction and the chrome-inset rules; this file is the
+// arithmetic. Pure numbers, no WebGL context — see tests/framing.test.mjs.
 import * as THREE from "three";
 
 /** Target fraction of the viewport's width/height a box's screen footprint
@@ -41,27 +23,9 @@ export const DEFAULT_FIT_FRACTION: Readonly<FitFraction> = Object.freeze({
   height: 0.58,
 });
 
-// ── Extreme-aspect correction ───────────────────────────────────────────
-// The fit above takes the tighter of the two axes, which is correct, but it
-// says nothing about the OTHER axis, and on a canvas far from square that
-// axis can be left almost entirely empty.
-//
-// The case that motivated this: a phone in portrait. The viewer is a tall
-// column (390 x ~730, aspect ~0.53) and these designs are wide flat plates, so
-// the width target always binds. The model duly occupied 66% of the width,
-// and under a quarter of the height, reading small in a mostly-empty frame.
-// The mirror case now exists too: the bottom sheet's Full detent leaves a
-// short, wide model strip (aspect ~3), where height binds and width is empty.
-//
-// So: when a canvas is far enough from square that one axis provably cannot
-// bind, raise the binding axis's target, by sqrt(aspect), which grows the
-// correction smoothly rather than stepping, and cap it so the model still
-// reads as a framed object rather than something cropped at the edges.
-//
-// Aspects inside the neutral band are left EXACTLY alone. That band covers
-// every ordinary desktop viewer pane and the mobile half detent, so this
-// changes nothing about the framing that was tuned against a flat plate, a
-// tall thin model and a cube: it only rescues the two extremes.
+// Aspects inside this band are left EXACTLY alone: it covers every ordinary
+// desktop pane and the mobile half detent, so the correction below only ever
+// rescues the two extremes (portrait phone, Full-detent strip).
 const NEUTRAL_ASPECT_MIN = 0.8;
 const NEUTRAL_ASPECT_MAX = 1.6;
 /** Caps for the corrected axis. Below 1.0 by a real margin so a corrected fit
@@ -71,13 +35,13 @@ const MAX_HEIGHT_FIT = 0.8;
 
 /**
  * `fit`, adjusted for a canvas whose aspect ratio makes one axis unable to
- * bind. Portrait (`aspect < 0.8`) widens the width target; wide landscape
- * (`aspect > 1.6`) raises the height target; anything between is returned
- * unchanged (the same object, so callers can cheaply detect the no-op).
+ * bind (docs/viewer.md). Portrait (`aspect < 0.8`) widens the width target;
+ * wide landscape (`aspect > 1.6`) raises the height target; anything between
+ * is returned unchanged (the same object, so callers can detect the no-op).
  *
- * Pure, and applied BEFORE `insetFitFraction`: the chrome insets then shrink
- * whatever this produced, so a corrected target still yields to the top bar,
- * the dock and the HUD rather than sliding under them.
+ * Applied BEFORE `insetFitFraction`: the chrome insets then shrink whatever
+ * this produced, so a corrected target still yields to the top bar, the dock
+ * and the HUD rather than sliding under them.
  */
 export function aspectAwareFit(fit: FitFraction, aspect: number): FitFraction {
   if (!Number.isFinite(aspect) || aspect <= 0) return fit;
@@ -209,21 +173,10 @@ export function frameDistanceForBox(
   return maxDistance;
 }
 
-// ── Chrome insets ───────────────────────────────────────────────────────
-// The viewer's floating chrome: the export dock, the HUD button column, the
-// mobile top bar, the measurements panel. Overlays the canvas rather than
-// shrinking it (all `position: absolute`, so none of them affect the canvas's
-// own flex-computed size, see index.css). A model fitted to the FULL canvas
-// therefore sits partly behind them. Two moves fix that together (applied by
-// Viewer.tsx's frameView): (1) shrink the fit's targets by each axis's inset
-// share, so the box is asked to fit the USABLE region rather than the full
-// canvas; (2) shift the orbit target so the box, unchanged in world space,
-// renders centred in that usable region.
-//
-// This was once a single bottom scalar, for the dock alone. It is a rect now
-// because the chrome isn't only at the bottom: the HUD is a right-edge
-// column tall enough to cover most of a short mobile viewport, and the top
-// bar spans the full width above the model.
+// The viewer's floating chrome overlays the canvas rather than shrinking it, so
+// a model fitted to the full canvas sits partly behind it; `insetFitFraction`
+// and `insetTargetOffset` below are the two halves of the correction
+// Viewer.tsx's frameView applies. See docs/viewer.md.
 
 /** Pixels of the canvas covered by chrome on each edge. */
 export interface Insets {
@@ -254,19 +207,10 @@ export const MIN_USABLE_FRACTION = 0.55;
 
 /**
  * The inset a single overlay implies: it eats into the edge it intrudes
- * from *least*, by that intrusion's depth. A bottom-centred export dock
- * reaches only ~55px up from the bottom but ~730px down from the top, so it
- * reads as a bottom inset; a right-hand HUD column reads as a right inset;
- * a full-width top bar as a top inset.
- *
- * Overlays that don't overlap the canvas at all contribute nothing. An
- * overlay pinned to a CORNER is the case this rule handles least well: it is
- * genuinely a corner box, not an edge band, so whichever edge wins
- * over-counts the other axis. Two of the viewer's overlays are corner boxes,
- * and neither goes through this function: the measurements panel is left out
- * of the fit entirely, and the mobile HUD's collapsed trigger declares its
- * edge and goes through `singleEdgeInset` below. See Viewer.tsx's
- * CHROME_OVERLAYS.
+ * from *least*, by that intrusion's depth. Overlays that don't overlap the
+ * canvas contribute nothing. Right for an edge band, worst for a CORNER box —
+ * which is why neither of the viewer's two corner overlays goes through here
+ * (docs/viewer.md; Viewer.tsx's CHROME_OVERLAYS).
  */
 export function edgeInset(overlay: RectLike, canvas: RectLike): Insets {
   const width = canvas.right - canvas.left;
@@ -295,14 +239,9 @@ export function edgeInset(overlay: RectLike, canvas: RectLike): Insets {
  * should be charged to: its depth from that edge, clamped to the canvas, with
  * the other three edges left clear.
  *
- * `edgeInset` picks the edge itself by "least intrusion", which is right for a
- * band spanning one whole side and (as its doc says) worst for a corner box,
- * where the winning edge over-counts the other axis. A corner overlay's right
- * answer depends on what ELSE is on screen (charging the mobile HUD's trigger
- * to the top is only cheap because the top bar already reserves a band there),
- * which this module cannot see. So the choice stays with the caller and the
- * arithmetic stays here, tested, rather than being hand-rolled at the call
- * site. See Viewer.tsx's CHROME_OVERLAYS.
+ * A corner overlay's right answer depends on what ELSE is on screen, which this
+ * module cannot see, so the choice stays with the caller and only the
+ * arithmetic lives here, tested. See docs/viewer.md.
  */
 export function singleEdgeInset(
   overlay: RectLike,
@@ -385,22 +324,10 @@ export function insetFitFraction(
  * model already fitted to `distance` renders centred in the region `insets`
  * leaves clear instead of in the middle of the whole canvas.
  *
- * Half the difference of the opposing insets, not their sum: with (say) only
- * the BOTTOM edge inset, the usable region's own centre sits `bottom / 2`
- * above the canvas centre.
- *
- * The returned scalars are applied directly:
- * `target.addScaledVector(right, off.right).addScaledVector(up, off.up)`,
- * with no negation at the call site: the sign flip is already folded in
- * here. The camera always keeps `target` at the exact centre of the frame,
- * so making the (stationary) model appear higher on screen means moving the
- * target itself the OTHER way, down and away from the model's true centre.
- * Hence a bottom inset yields a NEGATIVE `up`.
- *
- * One `worldPerPixel` serves both axes because pixels are square: the
- * horizontal world-per-pixel is `2·distance·tanHalfH / width`, and with
- * `tanHalfH = aspect·tanHalfV` and `aspect = width/height` that reduces to
- * the vertical expression.
+ * The returned scalars are applied directly —
+ * `target.addScaledVector(right, off.right).addScaledVector(up, off.up)` —
+ * with no negation at the call site: the sign flip is folded in here, so a
+ * bottom inset yields a NEGATIVE `up`. See docs/viewer.md.
  */
 export function insetTargetOffset(
   distance: number,
