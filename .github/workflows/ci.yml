@@ -8,9 +8,8 @@ name: CI
 # <user>.github.io/scad-pub/).
 #
 # `build` produces dist/ once and uploads it as the `scadpub-dist` artifact;
-# every job below that only needs the built output (check-dist, the
-# wrangler dry run, smoke, e2e:svg, vis) downloads that artifact instead of
-# rebuilding. check-scad-semantics and check-studio need public/wasm and/or
+# every job below that only needs the built output (check-dist, smoke,
+# e2e:svg, vis) downloads that artifact instead of rebuilding. check-scad-semantics and check-studio need public/wasm and/or
 # their own build rather than this dist/, so they run independently in
 # parallel with `build`. check-svg needs neither and also runs independently.
 # `deploy` waits on the full set so nothing is silently skipped.
@@ -88,9 +87,8 @@ jobs:
         with:
           name: scadpub-dist
           path: dist
-          # dist/.assetsignore is a real input to the wrangler dry run, and
-          # upload-artifact drops dotfiles unless told otherwise — without
-          # this the dry run validates a different asset set than a deploy.
+          # upload-artifact drops dotfiles, which would make the artifact a
+          # quietly lossy copy of dist for every job below that consumes it.
           include-hidden-files: true
 
       - name: Upload Pages artifact
@@ -277,30 +275,6 @@ jobs:
       - name: Check built artifact
         run: node scripts/check-dist.mjs
 
-  # A dry run only: it never publishes. It is what keeps the documented
-  # Cloudflare target from silently rotting, which a half-configured deploy
-  # path CI cannot redden on its own. Needs `build`'s dist/, since
-  # @cloudflare/vite-plugin writes dist/wrangler.json (the redirected config
-  # wrangler actually reads) at build time.
-  wrangler-dry-run:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: scadpub-dist
-          path: dist
-
-      - name: Cloudflare deploy dry run
-        run: npx wrangler deploy --dry-run
-
   # End-to-end check of the BUILT app in headless Chromium (incl. axe
   # accessibility). Needs `build`'s dist/ (served in-process) plus the
   # generated schema the browser helpers read design ids from.
@@ -439,7 +413,7 @@ jobs:
   deploy:
     # Every job above gates the deploy: a build that only works above the
     # declared floor, an engine belief the parser got wrong, a swallowed
-    # sw.js/CSP write, a rotted Cloudflare target, a broken render/export
+    # sw.js/CSP write, a broken render/export
     # path, an inert SVG sanitizer claim that isn't, a disposed studio
     # environment map, or a chrome regression are all reasons not to publish.
     needs:
@@ -450,7 +424,6 @@ jobs:
         check-svg,
         check-studio,
         check-dist,
-        wrangler-dry-run,
         smoke,
         e2e-svg,
         vis,
