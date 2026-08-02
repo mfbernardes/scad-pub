@@ -68,12 +68,13 @@ function isAppEntry(url) {
 // paths, so any name here could be theirs. A `.png` can be a `surface()`
 // heightmap, and a subdirectory can be whatever they called it.
 function isVolatileSource(pathname) {
-  if (pathname.endsWith("precache-manifest.json")) return true;
   // Relative to the scope, never anywhere in the pathname: a deployment at
   // BASE_PATH=/scad/ would otherwise make EVERY asset network-first, because
   // its own scope segment is called `scad`.
   if (!pathname.startsWith(SCOPE_PATH)) return false;
-  return pathname.slice(SCOPE_PATH.length).split("/")[0] === "scad";
+  const rest = pathname.slice(SCOPE_PATH.length);
+  if (rest.endsWith("precache-manifest.json")) return true;
+  return rest.split("/")[0] === "scad";
 }
 
 function addScopedUrl(urls, path) {

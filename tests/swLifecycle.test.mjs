@@ -641,6 +641,83 @@ test("a deployment scoped at /scad/ does not make every asset network-first", as
   assert.equal(await (await s2.settle()).text(), "b", "sources stay network-first");
 });
 
+test("precache-manifest.json outside the scope is not treated as volatile", async () => {
+  // The suffix check ran before the scope guard, so an out-of-scope path
+  // ending in precache-manifest.json was classified volatile regardless of
+  // scope. Assert the in-scope manifest stays volatile (network-first)
+  // while an out-of-scope one served under the same origin is cached
+  // (SWR), for both an unscoped deployment and one at BASE_PATH=/scad/.
+  const routes = goodRoutes();
+  const IN_SCOPE = `${SCOPE_URL}precache-manifest.json`;
+  const OUT_OF_SCOPE = "https://example.test/other/precache-manifest.json";
+  routes.set(IN_SCOPE, { body: "v1" });
+  routes.set(OUT_OF_SCOPE, { body: "v1" });
+  const { listeners } = loadSw({ routes });
+  await fireInstall(listeners);
+
+  const inFirst = makeEvent(new Request(IN_SCOPE));
+  listeners.fetch(inFirst);
+  assert.equal(await (await inFirst.settle()).text(), "v1");
+  routes.set(IN_SCOPE, { body: "v2" });
+  const inSecond = makeEvent(new Request(IN_SCOPE));
+  listeners.fetch(inSecond);
+  assert.equal(
+    await (await inSecond.settle()).text(),
+    "v2",
+    "in-scope precache-manifest.json stays network-first"
+  );
+
+  const outFirst = makeEvent(new Request(OUT_OF_SCOPE));
+  listeners.fetch(outFirst);
+  assert.equal(await (await outFirst.settle()).text(), "v1");
+  routes.set(OUT_OF_SCOPE, { body: "v2" });
+  const outSecond = makeEvent(new Request(OUT_OF_SCOPE));
+  listeners.fetch(outSecond);
+  assert.equal(
+    await (await outSecond.settle()).text(),
+    "v1",
+    "out-of-scope precache-manifest.json is served from cache, not network-first"
+  );
+});
+
+test("BASE_PATH=/scad/: precache-manifest.json volatility is scope-relative", async () => {
+  const SCOPED = "https://example.test/scad/";
+  const scopedHtml = `<!doctype html><html><head></head><body></body></html>`;
+  const IN_SCOPE = "https://example.test/scad/precache-manifest.json";
+  const OUT_OF_SCOPE = "https://example.test/other/precache-manifest.json";
+  const routes = new Map([
+    [SCOPED, { body: scopedHtml }],
+    [IN_SCOPE, { body: "v1" }],
+    [OUT_OF_SCOPE, { body: "v1" }],
+  ]);
+  const { listeners } = loadSwAt(SCOPED, { routes });
+  await fireInstall(listeners);
+
+  const inFirst = makeEvent(new Request(IN_SCOPE));
+  listeners.fetch(inFirst);
+  assert.equal(await (await inFirst.settle()).text(), "v1");
+  routes.set(IN_SCOPE, { body: "v2" });
+  const inSecond = makeEvent(new Request(IN_SCOPE));
+  listeners.fetch(inSecond);
+  assert.equal(
+    await (await inSecond.settle()).text(),
+    "v2",
+    "in-scope precache-manifest.json stays network-first under BASE_PATH=/scad/"
+  );
+
+  const outFirst = makeEvent(new Request(OUT_OF_SCOPE));
+  listeners.fetch(outFirst);
+  assert.equal(await (await outFirst.settle()).text(), "v1");
+  routes.set(OUT_OF_SCOPE, { body: "v2" });
+  const outSecond = makeEvent(new Request(OUT_OF_SCOPE));
+  listeners.fetch(outSecond);
+  assert.equal(
+    await (await outSecond.settle()).text(),
+    "v1",
+    "out-of-scope precache-manifest.json is served from cache, not network-first"
+  );
+});
+
 test("a navigation to <scope>index.html refreshes the offline shell", async () => {
   const routes = goodRoutes();
   const { listeners, fakeCaches } = loadSw({ routes });
