@@ -26,10 +26,9 @@ import { useLayoutEffect, useState } from "react";
 
 export type SafeAreaEdge = "top" | "bottom";
 
-/** One-shot measurement. Prefer the hook; this is exported for the rare caller
- *  that needs a value outside React's lifecycle. Same warning as above: it
- *  forces a synchronous layout, so don't put it on a hot path. */
-export function readSafeAreaInset(edge: SafeAreaEdge): number {
+/** One-shot measurement. Same warning as above: it forces a synchronous layout,
+ *  so don't put it on a hot path. */
+function readSafeAreaInset(edge: SafeAreaEdge): number {
   if (typeof document === "undefined") return 0;
   const probe = document.createElement("div");
   // Measure --safe-area-top / --safe-area-bottom (both defined in index.css

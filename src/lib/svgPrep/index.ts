@@ -106,7 +106,7 @@ export function serializeSvg(root: Element): string {
 /** Run group-by-colour once when the drawing has no named regions yet, so that
  *  painting alone defines the regions. Its idempotent "already grouped" and
  *  benign "single colour" outcomes are swallowed; other notes are returned. */
-export function autoGroupByColor(root: Element): string[] {
+function autoGroupByColor(root: Element): string[] {
   if (deriveRegions(root).length > 0) return [];
   const { changes, error } = groupByColor(root);
   if (error) {

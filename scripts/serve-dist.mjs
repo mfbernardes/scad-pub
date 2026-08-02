@@ -29,7 +29,7 @@ const TYPES = {
 
 // Derive the base path the bundle was built with (BASE_PATH) from the asset
 // URLs in index.html, so the test server matches the build (root or a subpath).
-export function detectBase(root = DIST) {
+function detectBase(root = DIST) {
   try {
     const html = readFileSync(join(root, "index.html"), "utf-8");
     const m = html.match(/(?:src|href)="([^"]*\/)assets\//);

@@ -190,7 +190,7 @@ export function warmTargets(
  * used, so a page that never reaches this (closed early, JS error) degrades
  * rather than breaks. Safe to call repeatedly: the worker memoizes the pass.
  */
-export function warmServiceWorker(): void {
+function warmServiceWorker(): void {
   if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
   void navigator.serviceWorker.ready
     .then((reg) => {
