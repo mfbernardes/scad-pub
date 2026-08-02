@@ -43,10 +43,9 @@ export const IGNORED_TAGS = new Set([
 // sets at runtime what no static scan of the markup would show.
 export const ACTIVE_TAGS = new Set([
   "script",
-  // Also in IGNORED_TAGS, deliberately: this set is meant to agree with
-  // scripts/lib/svg-sanitize.mjs's element list, and one of them being a
-  // superset by accident is how they drift. check() resolves the overlap in
-  // favour of this set.
+  // Also in IGNORED_TAGS, deliberately: `foreignObject` both fetches and, per
+  // OpenSCAD, produces no geometry. check() resolves the overlap in favour of
+  // this set.
   "foreignObject",
   "animate",
   "animateTransform",
@@ -54,15 +53,19 @@ export const ACTIVE_TAGS = new Set([
   "set",
   "handler",
 ]);
+// This is a DENYLIST, unlike scripts/lib/svg-sanitize.mjs's ALLOWLIST of what
+// may stay in a browser-facing asset: the two jobs differ (see that module's
+// header) and so, deliberately, does the answer to "which elements". Only the
+// reference PARSING is shared, via src/lib/cssRefs.mjs, because that answer
+// genuinely does not depend on the job.
 
-// `<style>` is deliberately NOT in that set. CSS cannot execute, so the element
-// is not an execution vector, and removing it would destroy the drawing's
-// colours before resolveStyleFills has read them AND blind the post-fix
-// `styled-fill` check to the stylesheet it exists to report. What a stylesheet
-// CAN do is fetch — `@import` and an external `url()` — and that is what
-// fixes.ts's removeActiveContent neutralises, leaving the rules themselves alone.
-export const CSS_IMPORT_RE = /@import\b[^;]*;?/gi;
-export const CSS_URL_RE = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
+// `<style>` is deliberately NOT in ACTIVE_TAGS. CSS cannot execute, so the
+// element is not an execution vector, and removing it would destroy the
+// drawing's colours before resolveStyleFills has read them AND blind the
+// post-fix `styled-fill` check to the stylesheet it exists to report. What a
+// stylesheet CAN do is fetch — `@import` and an external `url()` — and that is
+// what fixes.ts's removeActiveContent neutralises, leaving the rules
+// themselves alone.
 
 const ELEMENT_NODE = 1;
 const COMMENT_NODE = 8;

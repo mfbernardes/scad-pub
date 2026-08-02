@@ -96,6 +96,7 @@ export function generatePwaAssets({
   designs,
   mustExist,
   register,
+  isTracked,
   // Where design picker-icon files (`d.icon` = "scad/<id>-icon.<ext>") live on
   // disk right now, so their real PNG dimensions can be read back for the
   // manifest. During a build this is the STAGING scad dir: generate() runs PWA
@@ -131,6 +132,18 @@ export function generatePwaAssets({
   // at a navigable same-origin URL exactly like the icon does.
   const copy = (src, name, label, sink = batch) => {
     const dest = join(outPublicDir, name);
+    // Destination is keyed on the source's bare basename (see the call site
+    // below), so a config screenshot named e.g. `shots/sw.js` would land on
+    // the tracked public/sw.js: overwrite it and the path enters the
+    // generated manifest, so the next build reconciles (deletes) tracked
+    // repo content. `write()` below doesn't need this guard: its names are
+    // fixed generated ones (icon.svg, manifest.webmanifest), never
+    // author-controlled, so they can never alias a tracked path.
+    if (isTracked(dest))
+      throw new Error(
+        `gen-schema: ${label ?? name} would overwrite the tracked file at\n  ${dest}\n` +
+          `  Rename the source file so its basename doesn't collide with a tracked path.`
+      );
     register(dest, label ?? name);
     if (/\.svg$/i.test(src))
       sink.push({ dest, data: sanitizeBrowserFacingSvg(readFileSync(src, "utf-8"), { src, what: label }) });

@@ -350,6 +350,16 @@ test("defaultDesign must name a configured design", () => {
   assert.throws(() => run("widget-bad-default.config.json"), /'defaultDesign' .* is not one of the configured design ids/);
 });
 
+test("defaultDesign runs through the descriptor-driven type check", () => {
+  // A non-string defaultDesign used to reach the membership check raw and
+  // fail with "42 is not one of the configured design ids" — a type error
+  // reported as a membership error.
+  assert.throws(
+    () => run("widget-bad-defaultdesign.config.json"),
+    /'defaultDesign', when set, must be a non-empty string/
+  );
+});
+
 test("duplicate design ids fail the build", () => {
   assert.throws(() => run("widget-dup-id.config.json"), /duplicate design id "widget"/);
 });
@@ -3708,6 +3718,53 @@ test("an external-config font copy is cleaned up by the next build, and never a 
   );
 });
 
+// ── a pwa.screenshots[].src may not shadow a tracked file ──────────────────
+// copy() (pwa-assets.mjs) resolves the destination from the source's bare
+// basename, same as the font path above; a screenshot named e.g. `shots/sw.js`
+// aimed at the tracked public/sw.js, and the collision entered
+// .gen-manifest.json so the next build reconciled (deleted) it.
+test("a pwa screenshot whose basename shadows a tracked file fails the build", () => {
+  const checkout = mkdtempSync(join(tmpdir(), "gen-schema-shotshadow-"));
+  execFileSync("git", ["init", "-q", checkout]);
+  const outPublicDir = join(checkout, "public");
+  mkdirSync(outPublicDir, { recursive: true });
+  const trackedBytes = "// the real service worker\n";
+  writeFileSync(join(outPublicDir, "sw.js"), trackedBytes);
+  execFileSync("git", ["-C", checkout, "add", "-A"]);
+  execFileSync("git", [
+    "-C", checkout,
+    "-c", "user.email=test@example.com",
+    "-c", "user.name=Test",
+    "commit", "-q", "-m", "tracked sw.js",
+  ]);
+
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-shotshadow-src-"));
+  mkdirSync(join(src, "shots"), { recursive: true });
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// Size.\nsize = 1;\n`);
+  writeFileSync(join(src, "shots", "sw.js"), "not a screenshot at all");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: ".",
+      designs: [{ id: "d", label: "D" }],
+      pwa: { screenshots: [{ src: "shots/sw.js", sizes: "1x1", form_factor: "wide" }] },
+    })
+  );
+
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(src, "c.config.json"),
+        outSchemaDir: join(checkout, "schema"),
+        outScadDir: join(checkout, "scad"),
+        outPublicDir,
+      }),
+    /screenshot 'shots\/sw\.js'.*would overwrite the tracked file.*sw\.js/s
+  );
+  assert.equal(readFileSync(join(outPublicDir, "sw.js"), "utf8"), trackedBytes);
+});
+
 // ── build-time validation gaps ─────────────────────────────────────────────
 // Each of these built green and failed later — in vite-config, in the browser,
 // or not at all — rather than as a named gen-schema error at the key.
@@ -4336,6 +4393,40 @@ test("two assignments on one line are two parameters, not one corrupted one", ()
   // none, which is right — there was nowhere to write one.
   assert.equal(params[0].description, "D.");
   assert.equal(params[1].description, "");
+});
+
+test("a doc block above a non-parameter top-level statement doesn't leak onto the next parameter", () => {
+  // A comment block sitting above a statement that isn't a Customizer
+  // parameter (a bare call here) must not survive as pending state: it used
+  // to stay pending and become the label/help of whatever parameter came
+  // next.
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Not a parameter's doc.\n` +
+      `translate([0, 0, 1]);\n` +
+      `// Real doc.\n` +
+      `a = 1;\n`
+  );
+  assert.equal(params.length, 1);
+  assert.equal(params[0].name, "a");
+  assert.equal(params[0].description, "Real doc.");
+});
+
+test("a doc block above a bare function-call statement doesn't leak onto the next parameter", () => {
+  // Another statement shape that fails PARAM_RE — same category as an
+  // assignment sitting inside [Hidden] (both are top-level statements
+  // pushParam never runs on). A later section's own header always
+  // reset()s, so the leak is only observable within one still-open
+  // section, as here.
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Not a parameter's doc.\n` +
+      `echo("debug");\n` +
+      `// Real doc.\n` +
+      `a = 1;\n`
+  );
+  assert.deepEqual(params.map((p) => p.name), ["a"]);
+  assert.equal(params[0].description, "Real doc.");
 });
 
 test("code resumes after a block comment that closed mid-line", () => {

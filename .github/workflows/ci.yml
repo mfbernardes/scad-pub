@@ -6,6 +6,13 @@ name: CI
 # Pages on every push to main. Set the BASE_PATH repo variable to the
 # subpath you serve it under ("/" for a domain root, "/scad-pub/" for
 # <user>.github.io/scad-pub/).
+#
+# `build` produces dist/ once and uploads it as the `scadpub-dist` artifact;
+# every job below that only needs the built output (check-dist, smoke,
+# e2e:svg, vis) downloads that artifact instead of rebuilding. check-scad-semantics and check-studio need public/wasm and/or
+# their own build rather than this dist/, so they run independently in
+# parallel with `build`. check-svg needs neither and also runs independently.
+# `deploy` waits on the full set so nothing is silently skipped.
 
 on:
   # Only build/deploy on pushes to main. Feature branches are covered by the
@@ -76,86 +83,13 @@ jobs:
           # Override SCADPUB_CONFIG to build a different config.
           BASE_PATH: ${{ vars.BASE_PATH || '/' }}
 
-      # Cache the Chromium download (~150 MB) keyed on the installed Playwright
-      # version, so a browser is only downloaded when the dependency bumps.
-      # Standard pattern: on a cache hit, skip the download but still install
-      # the OS-level dependencies (apt packages aren't cacheable this way).
-      - name: Read Playwright version
-        id: playwright-version
-        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Playwright Chromium
-        id: playwright-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-
-      - name: Install Playwright Chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-
-      - name: Install Playwright system dependencies (browser cached)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
-
-      # Asserts what the pinned engine actually does with the language
-      # behaviours the Customizer parser reasons about. Runs here because it
-      # needs public/wasm, which the unit suite runs before.
-      - name: Check OpenSCAD semantics
-        run: node scripts/check-scad-semantics.mjs
-
-      # The two closeBundle plugins (sw-version, security-headers) write into
-      # dist/ after the bundle is emitted; this asserts from the artifact that
-      # they did, so an unversioned sw.js or a dropped CSP block can't ship
-      # from a build that exited 0.
-      - name: Check built artifact
-        run: node scripts/check-dist.mjs
-
-      # A dry run only: it never publishes. It is what keeps the documented
-      # Cloudflare target from silently rotting, which a half-configured deploy
-      # path CI cannot redden does on its own.
-      - name: Cloudflare deploy dry run
-        run: npx wrangler deploy --dry-run
-
-      - name: Smoke test (headless browser, incl. axe accessibility)
-        run: npm run smoke
-
-      - name: SVG wizard end-to-end
-        run: npm run e2e:svg
-
-      # The studio viewer style is not what this repo's own config builds, and
-      # the visual suite masks the viewer, so nothing else executes that path —
-      # which is how an environment map disposed before first use shipped
-      # green. Builds a studio variant and measures the lighting.
-      - name: Studio viewer
-        run: npm run check:studio
-
-      # Asserts the SVG sanitizer's claim on network traffic rather than on
-      # strings: each vector sanitized, the OUTPUT served to Chromium, and
-      # nothing allowed to leave the page. Each is paired with an unsanitized
-      # control, so "no request" cannot pass by the browser simply not
-      # implementing the construct.
-      - name: SVG sanitizer is inert in a browser
-        run: npm run check:svg
-
-      - name: Visual regression (light + dark chrome)
-        id: vis
-        run: npm run vis
-
-      # Only when vis itself failed — not when an earlier step did (which would
-      # skip vis, leaving no screenshots/ to upload).
-      - name: Upload visual-regression diffs
-        if: failure() && steps.vis.outcome == 'failure'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: scadpub-vis-diff
-          path: screenshots/
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: scadpub-dist
           path: dist
+          # upload-artifact drops dotfiles, which would make the artifact a
+          # quietly lossy copy of dist for every job below that consumes it.
+          include-hidden-files: true
 
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
@@ -167,7 +101,7 @@ jobs:
   # runs latest 22.x, so nothing there would notice a dependency or a build step
   # that quietly needs something newer than 22.18 — which is how "Node >= 22"
   # stayed wrong in three places for as long as it did. Unit suite and build
-  # only: the browser suites are the other job's business and add nothing here.
+  # only: the browser suites are the other jobs' business and add nothing here.
   min-node:
     runs-on: ubuntu-latest
     steps:
@@ -195,10 +129,305 @@ jobs:
 
       - run: npm run build
 
+  # Asserts what the pinned engine actually does with the language behaviours
+  # the Customizer parser reasons about. Needs public/wasm on disk (it imports
+  # the glue/binary directly, not through a built dist/), not the build job's
+  # output, so it runs independently in parallel with `build`.
+  check-scad-semantics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Read pinned WASM version
+        id: wasm-version
+        run: echo "version=$(node -e "import('./scripts/wasm-version.mjs').then(m => console.log(m.PINNED_WASM_VERSION))")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache OpenSCAD WASM
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: public/wasm
+          key: openscad-wasm-${{ steps.wasm-version.outputs.version }}
+
+      - name: Fetch pinned OpenSCAD WASM
+        run: npm run wasm
+
+      - name: Check OpenSCAD semantics
+        run: node scripts/check-scad-semantics.mjs
+
+  # Asserts the SVG sanitizer's claim on network traffic. Needs only Chromium
+  # and the sanitizer module — no dist/, no public/wasm — so it runs
+  # independently in parallel with `build`.
+  check-svg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Cache the Chromium download (~150 MB) keyed on the installed Playwright
+      # version, so a browser is only downloaded when the dependency bumps.
+      # Standard pattern: on a cache hit, skip the download but still install
+      # the OS-level dependencies (apt packages aren't cacheable this way).
+      - name: Read Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies (browser cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: SVG sanitizer is inert in a browser
+        run: npm run check:svg
+
+  # The studio viewer style is not what this repo's own config builds, and
+  # the visual suite masks the viewer, so nothing else executes that path —
+  # which is how an environment map disposed before first use shipped green.
+  # Builds its OWN studio variant (gen-schema + a raw `vite build`, not
+  # `npm run build`/tsc), so it needs public/wasm but not `build`'s dist/ —
+  # it runs independently in parallel with `build`.
+  check-studio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Read pinned WASM version
+        id: wasm-version
+        run: echo "version=$(node -e "import('./scripts/wasm-version.mjs').then(m => console.log(m.PINNED_WASM_VERSION))")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache OpenSCAD WASM
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: public/wasm
+          key: openscad-wasm-${{ steps.wasm-version.outputs.version }}
+
+      - name: Fetch pinned OpenSCAD WASM
+        run: npm run wasm
+
+      - name: Read Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies (browser cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Studio viewer
+        run: npm run check:studio
+
+  # The two closeBundle plugins (sw-version, security-headers) write into
+  # dist/ after the bundle is emitted; this asserts from the artifact that
+  # they did, so an unversioned sw.js or a dropped CSP block can't ship from
+  # a build that exited 0. Only needs `build`'s dist/ plus the generated
+  # schema (regenerated here — it doesn't need public/wasm, only the
+  # WASM_VERSION constant).
+  check-dist:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run gen
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: scadpub-dist
+          path: dist
+
+      - name: Check built artifact
+        run: node scripts/check-dist.mjs
+
+  # End-to-end check of the BUILT app in headless Chromium (incl. axe
+  # accessibility). Needs `build`'s dist/ (served in-process) plus the
+  # generated schema the browser helpers read design ids from.
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run gen
+
+      - name: Read Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies (browser cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: scadpub-dist
+          path: dist
+
+      - name: Smoke test (headless browser, incl. axe accessibility)
+        run: npm run smoke
+
+  # Manual end-to-end for the @svg field wizard, against the BUILT app. Same
+  # provisioning as smoke: dist/, the generated schema, Chromium.
+  e2e-svg:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run gen
+
+      - name: Read Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies (browser cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: scadpub-dist
+          path: dist
+
+      - name: SVG wizard end-to-end
+        run: npm run e2e:svg
+
+  # Light + dark visual-regression of the BUILT app's chrome, against
+  # tests/screenshots/. Same provisioning as smoke: dist/, the generated
+  # schema, Chromium.
+  vis:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run gen
+
+      - name: Read Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies (browser cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: scadpub-dist
+          path: dist
+
+      - name: Visual regression (light + dark chrome)
+        id: vis
+        run: npm run vis
+
+      # Only when vis itself failed — not when an earlier step did (which would
+      # skip vis, leaving no screenshots/ to upload).
+      - name: Upload visual-regression diffs
+        if: failure() && steps.vis.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scadpub-vis-diff
+          path: screenshots/
+
   deploy:
-    # Both: a build that only works above the declared floor is not a build this
-    # project supports, so min-node gates the deploy too.
-    needs: [build, min-node]
+    # Every job above gates the deploy: a build that only works above the
+    # declared floor, an engine belief the parser got wrong, a swallowed
+    # sw.js/CSP write, a broken render/export
+    # path, an inert SVG sanitizer claim that isn't, a disposed studio
+    # environment map, or a chrome regression are all reasons not to publish.
+    needs:
+      [
+        build,
+        min-node,
+        check-scad-semantics,
+        check-svg,
+        check-studio,
+        check-dist,
+        smoke,
+        e2e-svg,
+        vis,
+      ]
     # One Pages deployment at a time, and never cancel one in flight: a
     # cancelled deploy can leave the environment mid-swap.
     concurrency:

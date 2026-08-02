@@ -23,6 +23,7 @@
 // already inert — in which case the ORIGINAL BYTES come back, unparsed and
 // unserialized, so a clean asset is never perturbed.
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
+import { CSS_IMPORT_RE, CSS_URL_RE, isSameDocumentRef } from "../../src/lib/cssRefs.mjs";
 
 // ── which elements may stay: an ALLOWLIST ─────────────────────────────────
 // This was a denylist of things that execute (`<script>`, `<foreignObject>`,
@@ -105,11 +106,6 @@ const TEXT_NODE = 3;
 const CDATA_NODE = 4;
 const PROCESSING_INSTRUCTION_NODE = 7;
 
-/** Whether a reference stays inside this document, and so may be kept. */
-function isSameDocumentRef(value) {
-  return /^\s*#[^\s"'<>]*\s*$/.test(value);
-}
-
 // CSS escapes: `\<1-6 hex><one optional whitespace>` or `\<any char>`. Decoding
 // them is what a CSS tokenizer does before it decides whether an ident is
 // `url`, so it has to happen before anything looks for one.
@@ -120,11 +116,6 @@ function normalizeCssEscapes(css) {
     return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : "";
   });
 }
-
-const CSS_IMPORT_RE = /@import\b[^;]*;?/gi;
-// The quoted forms first, so a value containing `)` runs to its closing quote
-// rather than to the first paren.
-const CSS_URL_RE = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/gi;
 
 // ── the CSS rule, inverted for the last time ──────────────────────────────
 // Removing "the things that fetch" is an open-ended list. `url()` was the

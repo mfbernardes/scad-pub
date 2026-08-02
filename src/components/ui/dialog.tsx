@@ -28,7 +28,12 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none fixed inset-0 z-50 bg-black/60 p-4",
+        // Radix unmounts this node only once `animationend` reaches the main
+        // thread, so a busy thread leaves a faded-out overlay swallowing clicks
+        // meant for what is underneath. The `!` is load-bearing: DismissableLayer
+        // sets pointer-events INLINE, and the plain utility loses to it silently
+        // (scripts/smoke.mjs's probeOverlayOverHandle is what catches that).
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:pointer-events-none! motion-reduce:animate-none fixed inset-0 z-50 bg-black/60 p-4",
         className
       )}
       {...props}
