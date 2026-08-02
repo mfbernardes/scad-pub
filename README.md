@@ -49,11 +49,16 @@ ScadPub packages the configurator, renderer, offline shell, and export flow into
 ## Repository layout
 
 ```text
-examples/           self-contained example design (default source)
+examples/           three self-contained example designs (default source): tag, coin, panel
   tag.scad          embossed text (font) + an extruded SVG emblem
-  emblem.svg        default emblem the tag imports (swap via the svg_file control's Prepare SVG…)
+  coin.scad, panel.scad  the other two designs
+  emblem.svg, panel.svg  SVG assets the designs import
+  panel.md          panel's design doc (// @doc)
+  help-printing.md  afterExport help-tab source
   tag.json          bundled presets for tag.scad
-  *-card.svg        gallery card artwork (// @image) for each design
+  *-icon.svg        design-picker icon per design
+  *-card.svg        gallery card artwork (// @image) per design
+  tag-preset-*.png  preset thumbnails for tag.json's bundled presets
 branding/           app icon + maskable icon the config's `pwa` block rasterizes from
 public/
   wasm/             OpenSCAD WASM (fetched, gitignored): scripts/fetch-wasm.mjs
@@ -122,7 +127,7 @@ Dependabot (`.github/dependabot.yml`) checks npm and GitHub Actions dependencies
 
 ## Publish the static bundle
 
-The build output (`dist/`) is a plain static bundle. No special headers are required.
+The build output (`dist/`) is a plain static bundle: no cross-origin isolation headers (COOP/COEP) are needed, since the WASM is single-threaded. `public/_headers` ships a CSP and related security headers in the Cloudflare Pages / Netlify `_headers` convention; hosts that honour that file (Cloudflare Pages, Netlify) apply it, GitHub Pages does not. See [docs/security-headers.md](docs/security-headers.md).
 
 Two deploy targets are supported. Continuous integration (CI) deploys to **GitHub Pages** on every push to `main`; that is the authoritative public-site path. `npm run deploy` publishes the same bundle to **Cloudflare** via `wrangler` for manual deployments.
 

@@ -75,6 +75,8 @@ Expression syntax:
 
 `value` is a bare word, quoted string, number, or `true`/`false`. Combine with `&&` and `||` (OR of ANDs). A malformed expression fails safe: the control stays visible.
 
+`@show-if` (with a hyphen) is accepted as an alias, case-insensitively.
+
 Visibility is UI-only: hidden parameters are still sent to OpenSCAD, their values are retained, and their DOM nodes are removed.
 
 ## Collapsible groups (`// @collapsed`)
@@ -88,6 +90,8 @@ mounting = "none"; // [none, screw, countersunk]
 ```
 
 Collapsed parameters remain in the DOM and are still sent to OpenSCAD.
+
+`@collapse` (without the `-d`) is accepted as an alias, case-insensitively.
 
 ## Essential and advanced settings (`// @advanced`)
 
