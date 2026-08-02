@@ -8,8 +8,8 @@ import {
   toScadExpr,
   toPresetString,
   fromPresetString,
-  orphanedDefines,
 } from "../src/lib/scad.ts";
+import { orphanedDefines } from "../src/openscad/orphanedDefines.ts";
 
 // Minimal param of a given type.
 const P = (type, extra = {}) => ({

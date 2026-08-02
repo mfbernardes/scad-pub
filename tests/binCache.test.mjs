@@ -11,6 +11,7 @@ import {
   binCacheName,
   staleBinaryCaches,
 } from "../src/openscad/binCache.ts";
+import { PINNED_WASM_VERSION } from "../scripts/wasm-version.mjs";
 
 test("binCacheName folds the pinned version into a prefixed name", () => {
   assert.equal(binCacheName("2026.06.12"), "openscad-wasm-bin-2026.06.12");
@@ -19,10 +20,13 @@ test("binCacheName folds the pinned version into a prefixed name", () => {
   assert.notEqual(binCacheName("a"), binCacheName("b"));
 });
 
-test("binCacheName falls back to a default pin when no version is given", () => {
-  // An older generated bundle may carry no wasmVersion (undefined).
-  assert.equal(binCacheName(undefined), "openscad-wasm-bin-2026.06.12");
-  assert.ok(binCacheName(undefined).startsWith(BIN_CACHE_PREFIX));
+test("binCacheName falls back to the real pin when no version is given", () => {
+  // An older generated bundle may carry no wasmVersion (undefined), so
+  // binCache.ts mirrors scripts/wasm-version.mjs's pin by hand — app code can't
+  // import from scripts/ at runtime. Asserting the literal here let a bump to
+  // the pin alone leave the fallback stale with the whole suite still green;
+  // this test imports the real source of truth, which a test CAN do.
+  assert.equal(binCacheName(undefined), `${BIN_CACHE_PREFIX}${PINNED_WASM_VERSION}`);
 });
 
 test("staleBinaryCaches selects old binary caches beyond the retained bound", () => {

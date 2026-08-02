@@ -128,13 +128,27 @@ test("guard: a new local import worker.ts starts pulling in is automatically cov
   );
 });
 
-test("the real render worker's closure includes renderArgs.ts and scad.ts (geometry-affecting helpers)", () => {
+test("the real render worker's closure is exactly the render contract", () => {
+  // Pinned as an exact set, not a subset. renderHash covers every byte of this
+  // closure and is folded into the persisted render cache's key, so a file that
+  // drifts back in silently taxes every deployment with a full cache eviction
+  // on every edit to it — the reason src/openscad/protocol.ts exists apart from
+  // types.ts, and orphanedDefines.ts apart from lib/scad.ts. Widening this list
+  // is a deliberate decision (a new helper the worker genuinely runs), never an
+  // accident of where a type was declared.
   const entry = join(process.cwd(), "src", "openscad", "worker.ts");
   const closure = resolveWorkerDependencyClosure(entry);
   const names = closure.map((f) => f.replace(process.cwd() + "/", ""));
-  assert.ok(names.includes("src/openscad/worker.ts"));
-  assert.ok(names.includes("src/openscad/renderArgs.ts"));
-  assert.ok(names.includes("src/lib/scad.ts"));
+  assert.deepEqual(names, [
+    "src/lib/assetUrl.ts",
+    "src/openscad/binCache.ts",
+    "src/openscad/orphanedDefines.ts",
+    "src/openscad/progressThrottle.ts",
+    "src/openscad/protocol.ts",
+    "src/openscad/renderArgs.ts",
+    "src/openscad/retryableOnce.ts",
+    "src/openscad/worker.ts",
+  ]);
   // The generated schema JSON is a data import, not a further source file:
   // it must not appear as a "dependency" to parse for more imports.
   assert.ok(!names.some((n) => n.endsWith(".json")));
