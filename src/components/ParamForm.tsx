@@ -593,13 +593,17 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
   // gap. As the form's own padding it scrolls away, like content should.
   return (
     <div className="param-form pt-3" ref={rootRef}>
-      {/* Same colour discipline as FriendlyFailureCard, which this mirrors: the
-          destructive token tints the BORDER and the icon (graphics, held to
-          1.4.11's 3:1) and never the copy. Running `text-destructive` over a
-          `bg-destructive/10` tint measured 3.97:1 against body text's 4.5:1. */}
+      {/* Sticky, and above the sticky group headers (z-index 1): the whole point
+          is that a form scrolled 800px down still shows why the preview stopped
+          updating, and a banner that scrolls away with the content reproduces
+          the problem it was added for.
+          Colour follows FriendlyFailureCard: the destructive token tints the
+          BORDER and the icon (graphics, held to 1.4.11's 3:1), never the copy —
+          `text-destructive` over a `bg-destructive/10` tint measured 3.97:1
+          against body text's 4.5:1. */}
       {failure && (
         <div
-          className="param-form__failure mb-2 rounded-lg border border-destructive/40 bg-card px-[0.7rem] py-[0.5rem] text-[0.82rem]"
+          className="param-form__failure sticky top-0 z-[2] mb-2 rounded-lg border border-destructive/40 bg-card px-[0.7rem] py-[0.5rem] text-[0.82rem] shadow-(--elevation)"
           role="alert"
         >
           <p className="flex items-start gap-[0.4rem] font-semibold text-foreground">
