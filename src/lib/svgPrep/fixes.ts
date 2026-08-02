@@ -72,7 +72,7 @@ export function fixViewBoxOrigin(root: Element): string[] {
 
 // Whether the element sets its own fill (a `fill=` attribute or a `fill:` in its
 // `style` attribute). In which case a stylesheet rule must not override it.
-export function hasOwnFill(el: Element): boolean {
+function hasOwnFill(el: Element): boolean {
   if (/(?:^|;)\s*fill\s*:/i.test(el.getAttribute("style") ?? "")) return true;
   return el.getAttribute("fill") !== null;
 }
@@ -115,7 +115,7 @@ function parseStyleFillRules(root: Element): FillRule[] {
 
 /** The fill an element inherits from a matching `<style>` rule (id beats class
  *  beats tag; a later rule wins a tie), or null when none applies. */
-export function styleRuleFill(el: Element, rules: FillRule[]): string | null {
+function styleRuleFill(el: Element, rules: FillRule[]): string | null {
   const classes = (el.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
   const id = el.getAttribute("id");
   const tag = localName(el);
@@ -156,7 +156,7 @@ export function resolveStyleFills(root: Element): string[] {
  *  block; removing it is what a tactile relief actually wants (the raised shapes
  *  need open space around them). Only runs when other geometry remains, so the
  *  drawing never ends up empty. */
-export function removeCanvasBackground(root: Element): string[] {
+function removeCanvasBackground(root: Element): string[] {
   const backgrounds = canvasBackgrounds(root);
   let count = 0;
   for (const el of backgrounds) {

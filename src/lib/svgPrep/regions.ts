@@ -58,7 +58,7 @@ export function unusableHeightRegions(spec: string): string[] {
 
 /** The colour a bare region token stands for: the id itself when it is a CSS
  *  colour name, or the `#hex` behind a `c<hex>` slug (see shorthandFor). */
-export function expandShorthand(id: string): string {
+function expandShorthand(id: string): string {
   return /^c[0-9a-f]{6}$/i.test(id) ? `#${id.slice(1).toLowerCase()}` : id;
 }
 

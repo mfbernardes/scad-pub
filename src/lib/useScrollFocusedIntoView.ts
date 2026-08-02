@@ -34,7 +34,7 @@ const SETTLE_MS = 300;
  * there is nothing this hook may scroll, and it does nothing rather than
  * falling back to the document.
  */
-export function scrollParentWithin(el: HTMLElement, root: HTMLElement): HTMLElement | null {
+function scrollParentWithin(el: HTMLElement, root: HTMLElement): HTMLElement | null {
   for (let node = el.parentElement; node; node = node.parentElement) {
     if (isScrollableY(node) && node.scrollHeight > node.clientHeight) return node;
     if (node === root) return null;
