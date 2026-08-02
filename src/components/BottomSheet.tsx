@@ -532,6 +532,25 @@ export function BottomSheet({
         aria-modal={isModal || undefined}
       >
         <div className="sheet-frame">
+          {/* At Full the sheet is a modal (see `isModal`), and AppShell hides
+              the whole mobile chrome behind it: top bar, design switcher,
+              Messages bell, ⋮ and the export dock all go to zero height. The
+              drag handle was the only way back — a 36x4px bar, no words —
+              which is a scrim-less modal with no visible dismiss. Escape and
+              the scrim work, but neither is discoverable on a phone. A named
+              Done button rides the handle row in that state only; below Full
+              the background is fully reachable and it would be clutter. It is
+              positioned over the handle strip rather than in it, so the drag
+              gesture keeps the whole width. */}
+          {isModal && (
+            <button
+              type="button"
+              className="sheet-done absolute right-2 top-[0.3rem] z-10 inline-flex min-h-9 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent px-[0.6rem] text-[0.82rem] font-semibold text-brand outline-none transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              onClick={() => setDetent("half")}
+            >
+              {t("sheet.done")}
+            </button>
+          )}
           {/* Drag handle: single visible control; tap cycles, arrow keys resize. */}
           <div
             className="sheet-handle"

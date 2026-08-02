@@ -1,8 +1,8 @@
 // Markdown.tsx: a deliberately tiny, safe Markdown renderer for help content
 // (no library, no dangerouslySetInnerHTML). Supports the block + inline subset
 // the help text needs: blank-line-separated paragraphs, `#`/`##`/`###` ATX
-// headings, `- ` bullet lists, and inline **bold**, `code`, and [text](url)
-// links. Anything else renders as text.
+// headings, `- ` bullet lists, and inline **bold**, *italic*, `code`, and
+// [text](url) links. Anything else renders as text.
 import { createElement, type ReactNode } from "react";
 import { safeUrl } from "../lib/safeUrl";
 
@@ -10,16 +10,21 @@ import { safeUrl } from "../lib/safeUrl";
 // heading nests under the modal's own <h1> (DialogTitle) rather than competing.
 const HEADING = /^(#{1,3})\s+(.+)$/;
 
-// Inline: **bold**, `code`, [text](url). Split on the first matching token,
-// recurse on the rest. Order matters only for disjoint tokens, so a single pass
-// with a combined regex is enough.
-const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/;
+// Inline: **bold**, *italic*, `code`, [text](url). Split on the first matching
+// token, recurse on the rest. Order matters only for disjoint tokens, so a
+// single pass with a combined regex is enough — except that `**bold**` is a
+// prefix of the italic pattern, so bold MUST stay first in the alternation
+// (and in the branch chain below) or every bold run would render as an italic
+// wrapping a stray asterisk.
+const INLINE = /(\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/;
 
 function inline(text: string, key: string): ReactNode[] {
   return text.split(INLINE).map((part, i) => {
     const k = `${key}-${i}`;
     if (part.startsWith("**") && part.endsWith("**"))
       return <strong key={k}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("*") && part.endsWith("*"))
+      return <em key={k}>{part.slice(1, -1)}</em>;
     if (part.startsWith("`") && part.endsWith("`"))
       return (
         <code key={k} className="rounded-(--radius-sm) bg-code px-[0.2rem] font-mono text-xs">

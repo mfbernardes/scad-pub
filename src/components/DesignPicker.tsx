@@ -1,7 +1,7 @@
 // DesignPicker.tsx: the shadcn Select used to switch designs. Shared by the
 // desktop CommandBar and the mobile top bar (each wraps it differently and
 // handles the single-design fallback in its own markup).
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Design } from "../openscad/types";
 import { Check as CheckIcon, ChevronDown as ChevronDownIcon } from "lucide-react";
 import {
@@ -13,7 +13,7 @@ import {
   DialogTrigger,
 } from "./ui/dialog";
 import { preventTouchAutoFocus } from "../lib/pointer";
-import { t } from "../lib/i18n";
+import { t, tn } from "../lib/i18n";
 import { THUMB_FRAME, Thumbnail } from "./Thumbnail";
 import {
   Select,
@@ -61,6 +61,17 @@ export function DesignGallery({
   onChange,
 }: Pick<Props, "designs" | "value" | "onChange">) {
   const [query, setQuery] = useState("");
+  // Whether the gallery's scroll port has content past its bottom edge, which
+  // drives the fade above. Measured rather than assumed: the port's height
+  // depends on the dialog's, and a filter can take a scrollable list down to
+  // one row.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+  const updateMoreBelow = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+  }, []);
   const q = query.trim().toLowerCase();
   const filtered = q
     ? designs.filter((d) =>
@@ -68,6 +79,9 @@ export function DesignGallery({
       )
     : designs;
   const grouped = groupDesigns(filtered);
+  // Re-measure after the list changes: a filter that shortens it can end the
+  // overflow with no scroll event to notice.
+  useLayoutEffect(updateMoreBelow, [updateMoreBelow, filtered.length]);
   return (
     <div className="design-gallery flex min-h-0 flex-1 flex-col gap-3">
       {designs.length > 6 && (
@@ -82,7 +96,30 @@ export function DesignGallery({
           className="w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+      {/* How many designs there are, not just how many happen to fit. The
+          gallery's scroll port shows about six cards, and the dialog's
+          footnote sits directly under the last visible row, so a twelve-design
+          chooser read as a six-design one: nothing on the first screen said
+          more existed. The count says so in words; `moreBelow` adds the fade
+          that says which direction. Doubles as filter feedback while a search
+          is narrowing the list. */}
+      {designs.length > 6 && (
+        <p className="design-gallery__count -mb-1 shrink-0 text-xs text-muted-foreground" aria-live="polite">
+          {filtered.length === designs.length
+            ? tn("designPicker.count", designs.length)
+            : t("designPicker.countFiltered", { shown: filtered.length, total: designs.length })}
+        </p>
+      )}
+      <div
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
+        ref={scrollRef}
+        onScroll={updateMoreBelow}
+        style={
+          moreBelow
+            ? { maskImage: "linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent)" }
+            : undefined
+        }
+      >
         {filtered.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">{t("designPicker.noMatches")}</p>
         )}

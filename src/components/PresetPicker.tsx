@@ -415,7 +415,14 @@ export function PresetPicker({
                               {parsed.overline}
                             </span>
                           )}
-                          <span className="line-clamp-2 min-h-[2lh] text-[0.82rem] font-medium text-foreground">{parsed.title}</span>
+                          {/* `break-words` because `line-clamp` only ellipsizes
+                              the VERTICAL overflow: a word wider than the card
+                              (German compounds routinely are — "Senkbohrungen"
+                              measured 104px in a 94px box at the desktop panel's
+                              3-column width) overflows horizontally instead and
+                              the card's own `overflow-hidden` guillotines it
+                              mid-letter, with no ellipsis to say so. */}
+                          <span className="line-clamp-2 min-h-[2lh] break-words text-[0.82rem] font-medium text-foreground">{parsed.title}</span>
                           {parsed.badge && (
                             <span className="w-fit rounded-full bg-muted px-[0.4rem] py-[0.05rem] text-[0.66rem] text-muted-foreground">
                               {parsed.badge}

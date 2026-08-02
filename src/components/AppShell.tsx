@@ -177,6 +177,8 @@ interface Props {
   exportable: boolean;
   theme: "dark" | "light";
   themeMode: "light" | "dark" | "auto";
+  /** The mode the theme toggle moves to (theme.ts's nextThemeMode). */
+  themeNext: "light" | "dark" | "auto";
   /** Incremented by the intro popup's primary CTA to open the design picker. */
   openPickerSignal: number;
   /** Whether the config's welcome popup (schema.popup) is currently up. It is
@@ -215,6 +217,7 @@ export const AppShell = memo(function AppShell({
   exportable,
   theme,
   themeMode,
+  themeNext,
   openPickerSignal,
   introOpen,
   exportSuccess,
@@ -474,11 +477,16 @@ export const AppShell = memo(function AppShell({
   //     other surface that says the model did not come out.
   //   • "attention" pills on DESKTOP ONLY. On mobile the pill was a second
   //     visual for a signal the dock already carries. ActionButtons puts an
-  //     amber dot on Download itself (plus an sr-only issue count via
-  //     `aria-describedby`), and clicking Download in that state opens this
-  //     dialog rather than exporting. Saying it twice cost a whole
+  //     amber warning badge on Download itself (plus an sr-only issue count
+  //     via `aria-describedby`), and clicking Download in that state opens
+  //     this dialog rather than exporting. Saying it twice cost a whole
   //     stacked row over the model, on the layout with no room to spare; the
   //     desktop dock floats in open canvas, so it keeps the fuller wording.
+  //     That trade only holds while the badge is actually legible: it stood
+  //     on a 6px dot filled with `--warn` over the accent button, which
+  //     measured 1.05:1 and carried its meaning in colour alone, so mobile
+  //     was in practice showing nothing. See ActionButtons' own note for the
+  //     warn/warn-bg + triangle treatment that makes the premise true.
   //
   // Only one layout tree is ever mounted (see the split below), so deriving
   // this from `isMobile` yields exactly one answer per render.
@@ -517,6 +525,7 @@ export const AppShell = memo(function AppShell({
     onSearchChange: panelState.setSearch,
     onSearchFocus: handleSearchFocus,
     onSearchBlur: handleSearchBlur,
+    failure,
   };
   const stageProps = {
     design,
@@ -703,6 +712,7 @@ export const AppShell = memo(function AppShell({
                   />
                   <BarActions
                     themeMode={themeMode}
+                    themeNext={themeNext}
                     collapse
                     onSavePng={showSaveImage ? handleSavePng : undefined}
                     canSavePng={exportable}
@@ -797,6 +807,7 @@ export const AppShell = memo(function AppShell({
             designId={design.id}
             theme={theme}
             themeMode={themeMode}
+            themeNext={themeNext}
             rendering={rendering}
             ready={ready}
             result={result}

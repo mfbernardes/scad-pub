@@ -95,7 +95,16 @@ export function OutputConsole({
             {t("console.title")}
           </span>
           <TabsList className="h-auto min-w-0 shrink overflow-x-auto rounded-none border-0 bg-transparent p-0">
-            <TabsTrigger value="notices" className={cn(chipTabTrigger, "px-3")}>
+            {/* Summing the categories costs the reader WHICH ones the number
+                is made of, and the count chip is a bare numeral by design.
+                The per-category nouns countBadges already resolves (plural
+                form included) go in the trigger's title, so the breakdown is
+                one hover away instead of gone. */}
+            <TabsTrigger
+              value="notices"
+              className={cn(chipTabTrigger, "px-3")}
+              title={contributing.length > 1 ? contributing.map((b) => `${b.count} ${b.label}`).join(", ") : undefined}
+            >
               Notices
               {noticeTotal > 0 && (
                 <Badge

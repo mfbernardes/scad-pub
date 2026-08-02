@@ -15,7 +15,12 @@
 import { useAppActions } from "../lib/appActions";
 import { Button } from "./ui/button";
 import { ExplainedDisabledButton } from "./ExplainedDisabledButton";
-import { Download as DownloadIcon, Share2 as ShareIcon, Link2 as LinkIcon } from "lucide-react";
+import {
+  Download as DownloadIcon,
+  Share2 as ShareIcon,
+  Link2 as LinkIcon,
+  TriangleAlert as AttentionIcon,
+} from "lucide-react";
 import type { ReadinessState } from "../lib/readiness";
 import { canShareNatively } from "../lib/share";
 import { t, tn } from "../lib/i18n";
@@ -99,11 +104,28 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
       >
         <DownloadIcon size={16} aria-hidden="true" className="shrink-0" />
         <span className="action-export__label min-w-0 truncate">{t("action.export")}</span>
-        {/* Visual "something here still needs a look" signal: same amber
-            treatment as the status strip. Decorative only; the sr-only hint
-            below carries the actual meaning. */}
+        {/* Visual "something here still needs a look" signal. A bare amber
+            dot used to sit here, and it failed on both counts a status marker
+            has to meet. It took its colour from `--warn`, a token tuned to
+            carry TEXT over `--panel`: over the Download button's
+            `--accent-solid` fill that measured 1.05:1 (light) and 2.12:1
+            (dark), under 1.4.11's 3:1 for a meaningful graphic — brown on
+            blue at almost the same luminance. And colour was its only
+            carrier, so 1.4.1 had nothing to fall back on either.
+            The warn/warn-bg PAIR fixes both: warn-bg over the accent fill is
+            6.1:1 / 3.1:1, the glyph over warn-bg is the same AA pair every
+            warning card uses, and the triangle carries the meaning by shape.
+            It also makes this read as a different KIND of thing from the
+            Messages bell's neutral numeric badge, which is what kept the two
+            mobile signals ambiguous. Decorative; the sr-only hint below is
+            what assistive tech gets. */}
         {hasAttention && (
-          <span aria-hidden="true" className="action-export__attention size-[6px] shrink-0 rounded-full bg-warn" />
+          <span
+            aria-hidden="true"
+            className="action-export__attention inline-flex size-[17px] shrink-0 items-center justify-center rounded-full bg-warn-bg text-warn"
+          >
+            <AttentionIcon size={11} />
+          </span>
         )}
       </ExplainedDisabledButton>
       {hasAttention && (
