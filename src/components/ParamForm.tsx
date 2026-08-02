@@ -15,6 +15,7 @@ import { clampNumber, committedNumber, finiteDraft, typedCommitValue } from "../
 import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
 import { fontFallback } from "../lib/fontFallback";
 import { nearestScrollParent } from "../lib/scrollParent";
+import { t } from "../lib/i18n";
 import { EssentialsToggle } from "./EssentialsToggle";
 import { FontImportActions } from "./FontImportActions";
 import { FontSelect } from "./FontSelect";
@@ -231,6 +232,16 @@ function NumberControl({
     setDraft(String(committed));
   }, [committed]);
 
+  // Transient "adjusted to the min/max" feedback for a commit that actually
+  // clamped an out-of-range typed value. Mid-type keystrokes never reach
+  // here (typedCommitValue, above, only commits an already-in-range draft),
+  // so this only fires from commitDraft's blur/Enter path, and only clears
+  // itself: a permanent fixture under every ranged field would outlast the
+  // one commit it's about.
+  const [clampHint, setClampHint] = useState<string | null>(null);
+  const clampHintTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(clampHintTimer.current), []);
+
   const commitRange = (n: number) => {
     const v = clampNumber(param, n);
     setDraft(String(v));
@@ -240,57 +251,76 @@ function NumberControl({
   // Shared by blur and Enter: clamp whatever's left typed, commit it, and
   // normalise the draft text to match (e.g. a raw value beyond the range).
   const commitDraft = () => {
-    const v = clampNumber(param, finiteDraft(draft) ?? param.default);
+    const raw = finiteDraft(draft) ?? param.default;
+    const v = clampNumber(param, raw);
     setDraft(String(v));
     if (v !== committed) onChange(v);
+    clearTimeout(clampHintTimer.current);
+    if (v !== raw) {
+      setClampHint(
+        param.max !== undefined && v === param.max
+          ? t("paramForm.clampedToMax", { max: v })
+          : t("paramForm.clampedToMin", { min: v })
+      );
+      clampHintTimer.current = setTimeout(() => setClampHint(null), 4000);
+    } else {
+      setClampHint(null);
+    }
   };
 
   return (
-    <div className="flex items-center gap-2">
-      {hasRange && (
-        <Slider
-          className="flex-1"
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        {hasRange && (
+          <Slider
+            className="flex-1"
+            min={param.min}
+            max={param.max}
+            step={param.step ?? 1}
+            value={[committed]}
+            onValueChange={([v]) => commitRange(v)}
+            aria-label={label}
+          />
+        )}
+        <Input
+          type="number"
+          inputMode="decimal"
+          name={param.name}
+          autoComplete="off"
+          className="w-20"
           min={param.min}
           max={param.max}
-          step={param.step ?? 1}
-          value={[committed]}
-          onValueChange={([v]) => commitRange(v)}
+          step={param.step ?? "any"}
+          value={draft}
           aria-label={label}
+          onFocus={() => {
+            focusedRef.current = true;
+          }}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setDraft(raw);
+            // Only commit a draft already within range (typedCommitValue): a
+            // partial or out-of-range keystroke (e.g. "2" en route to "25" in a
+            // min=10 field) keeps the draft text but leaves the previous
+            // committed value live, instead of flashing the clamped bound into
+            // the preview and queuing a render for it.
+            const v = typedCommitValue(param, raw);
+            if (v !== null) onChange(v);
+          }}
+          onBlur={() => {
+            focusedRef.current = false;
+            commitDraft();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitDraft();
+          }}
         />
+      </div>
+      {clampHint && (
+        <p className="text-[0.72rem] text-warn" role="status">
+          {clampHint}
+        </p>
       )}
-      <Input
-        type="number"
-        inputMode="decimal"
-        name={param.name}
-        autoComplete="off"
-        className="w-20"
-        min={param.min}
-        max={param.max}
-        step={param.step ?? "any"}
-        value={draft}
-        aria-label={label}
-        onFocus={() => {
-          focusedRef.current = true;
-        }}
-        onChange={(e) => {
-          const raw = e.target.value;
-          setDraft(raw);
-          // Only commit a draft already within range (typedCommitValue): a
-          // partial or out-of-range keystroke (e.g. "2" en route to "25" in a
-          // min=10 field) keeps the draft text but leaves the previous
-          // committed value live, instead of flashing the clamped bound into
-          // the preview and queuing a render for it.
-          const v = typedCommitValue(param, raw);
-          if (v !== null) onChange(v);
-        }}
-        onBlur={() => {
-          focusedRef.current = false;
-          commitDraft();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") commitDraft();
-        }}
-      />
     </div>
   );
 }
@@ -433,7 +463,7 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
           ref={trigger}
           type="button"
           className="param-help__trigger -m-[14.5px] inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[4px] border-none bg-transparent p-[14.5px] align-middle leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
-          aria-label={`Help for ${label}`}
+          aria-label={t("paramForm.helpFor", { label })}
         >
           <InfoIcon aria-hidden="true" focusable="false" />
         </button>
@@ -551,7 +581,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
     <div className="param-form pt-3" ref={rootRef}>
       {groups.length === 0 && (
         <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
-          {q ? `Nothing matches “${search}”.` : "This design has nothing to customize."}
+          {q ? t("paramForm.noMatches", { search }) : t("paramForm.nothingToCustomize")}
         </p>
       )}
       {groups.map(({ section, params }) => {
@@ -661,7 +691,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                   {p.filledBy ? (
                     <details className="param-advanced">
                       <summary className="flex cursor-pointer select-none list-none items-center gap-[0.3rem] text-[0.82rem] text-muted-foreground focus-visible:rounded-[4px]">
-                        Advanced: {label}
+                        {t("paramForm.advancedLabel", { label })}
                       </summary>
                       <div className="mt-2 flex flex-col gap-[0.35rem]">{body}</div>
                     </details>

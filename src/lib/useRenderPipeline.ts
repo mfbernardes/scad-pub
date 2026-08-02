@@ -364,8 +364,13 @@ export function useRenderPipeline({
     if (holdBoot) return;
     if (!shouldFireInitialRender(initialRenderFiredRef.current, autoRenderRef.current)) return;
     initialRenderFiredRef.current = true;
+    // shouldFireInitialRender only let this through with autoRender already
+    // off, which for a fresh design view means design.heavy (see
+    // resetForDesign/the initial useState above): explain the silent manual
+    // start once, the same way the auto-pause path explains itself below.
+    if (design.heavy) setAnnouncement(t("render.heavyManualStart"));
     doRender();
-  }, [design.id, doRender, holdBoot]);
+  }, [design.id, design.heavy, doRender, holdBoot, setAnnouncement]);
 
   // Imported-file changes alter render inputs the key can't fully capture in
   // the persisted tiers: drop both cache tiers, forget the last key so the

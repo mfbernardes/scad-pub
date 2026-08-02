@@ -28,6 +28,15 @@ import { useSafeAreaInset } from "../lib/useSafeAreaInset";
 export type SheetDetent = "peek" | "half" | "full";
 
 const DETENT_ORDER: SheetDetent[] = ["peek", "half", "full"];
+
+// Humane words for the drag handle's aria-label, in place of the raw detent
+// id ("peek" means nothing spoken aloud; a screen reader user needs the same
+// "how open is this" description a sighted one gets by looking at it).
+const DETENT_LABEL: Record<SheetDetent, string> = {
+  peek: "sheet.detentCollapsed",
+  half: "sheet.detentHalf",
+  full: "sheet.detentFull",
+};
 // Slightly above 50% to clear browser chrome at the bottom.
 const HALF_VH_RATIO = 0.52;
 // Height (px) of the model strip the Full detent deliberately leaves uncovered
@@ -497,7 +506,7 @@ export function BottomSheet({
           className="sheet-scrim"
           tabIndex={-1}
           style={bottomInset ? { bottom: bottomInset } : undefined}
-          aria-label="Collapse parameter panel"
+          aria-label={t("sheet.collapsePanel")}
           onClick={() => setDetent("half")}
         />
       )}
@@ -528,7 +537,7 @@ export function BottomSheet({
             className="sheet-handle"
             role="button"
             tabIndex={0}
-            aria-label={`Parameter panel — ${detent}. Tap to cycle, Arrow Up/Down to resize`}
+            aria-label={t("sheet.handleLabel", { state: t(DETENT_LABEL[detent]) })}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}

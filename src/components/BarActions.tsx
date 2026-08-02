@@ -42,7 +42,7 @@ import {
 type ThemeMode = "light" | "dark" | "auto";
 
 // One wording for the licenses control in both presentations.
-const LICENSES_LABEL = "Open-source licenses";
+const LICENSES_LABEL = t("bar.licenses");
 
 // The menu's rows are the shared MenuRow (see MenuRow.tsx). The bare class is
 // what the Live-preview row needs: it's a <Label> wrapping a Switch, not a
@@ -100,8 +100,8 @@ export function BarActions({
           // what makes this keyboard-visible at all. Same recipe as
           // ViewPicker's and ViewerHUD's triggers.
           className={cn(ICON_BUTTON_CLASS, "inline-flex items-center justify-center rounded-md outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-brand")}
-          aria-label="More actions"
-          title="More"
+          aria-label={t("bar.moreActions")}
+          title={t("bar.more")}
         >
           <MoreIcon size={16} />
         </PopoverTrigger>
@@ -127,14 +127,14 @@ export function BarActions({
           )}
           {onSavePng && (
             <MenuRow
-              label="Save image"
+              label={t("bar.saveImage")}
               icon={<ImageIcon size={16} />}
               onClick={openModal(onSavePng)}
               disabled={!canSavePng}
             />
           )}
           {hasFiles && (
-            <MenuRow label="Files" icon={<FilesIcon size={16} />} onClick={openModal(showFiles)} />
+            <MenuRow label={t("files.title")} icon={<FilesIcon size={16} />} onClick={openModal(showFiles)} />
           )}
           {/* Cycles in place: the visitor usually wants to see the theme
               change, so this row deliberately leaves the menu open — naming
@@ -142,7 +142,7 @@ export function BarActions({
               a tap did anything, since the first cycle step can be a visual
               no-op (auto -> light under a light OS). */}
           <MenuRow label={themeLabel} icon={THEME_MODE[themeMode].icon} onClick={cycleTheme} />
-          <MenuRow label="Help" icon={<HelpIcon size={16} />} onClick={openModal(() => showHelp())} />
+          <MenuRow label={t("bar.help")} icon={<HelpIcon size={16} />} onClick={openModal(() => showHelp())} />
           <MenuRow label={LICENSES_LABEL} icon={<InfoIcon size={16} />} onClick={openModal(showLicenses)} />
         </PopoverContent>
       </Popover>
@@ -153,8 +153,8 @@ export function BarActions({
     <>
       {onSavePng && (
         <IconButton
-          label="Save image"
-          title="Save image (PNG)"
+          label={t("bar.saveImage")}
+          title={t("bar.saveImagePng")}
           onClick={onSavePng}
           disabled={!canSavePng}
         >
@@ -162,12 +162,12 @@ export function BarActions({
         </IconButton>
       )}
       {hasFiles && (
-        <IconButton label="Files" title="Files" onClick={showFiles}>
+        <IconButton label={t("files.title")} title={t("files.title")} onClick={showFiles}>
           <FilesIcon size={16} />
         </IconButton>
       )}
       <ThemeToggle mode={themeMode} onCycle={cycleTheme} />
-      <IconButton label="Help" title="Help & keyboard shortcuts" onClick={() => showHelp()}>
+      <IconButton label={t("bar.help")} title={t("bar.helpShortcuts")} onClick={() => showHelp()}>
         <HelpIcon size={16} />
       </IconButton>
       <IconButton label={LICENSES_LABEL} title={LICENSES_LABEL} onClick={showLicenses}>

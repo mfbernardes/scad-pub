@@ -19,6 +19,7 @@ import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";
 import { Bell as BellIcon, BellRing as BellRingIcon } from "lucide-react";
+import { t, tn } from "../lib/i18n";
 
 interface Props {
   outputOpen: boolean;
@@ -71,15 +72,23 @@ export function OutputToggle({
       ? STATE_STYLES[derived.state]
       : null;
 
+  // "message", never "notice"/"alert"/"attention": this is a count, not a
+  // verdict (see the file comment), and the readiness pill/Download's amber
+  // dot own the wording for "something needs your attention" — a screen
+  // reader user switching between the two controls should hear two distinct
+  // claims, not the same one twice.
+  const action = outputOpen ? t("common.close") : t("common.open");
+  const bellLabel = hasNotices
+    ? tn("console.bellLabel", noticeCount, { action })
+    : t("console.bellLabelEmpty", { action });
+
   return (
     <Button
       size="icon"
       variant="outline"
       className={cn("relative", outputOpen && "border-brand text-brand", className)}
       onClick={onToggleOutput}
-      aria-label={`${outputOpen ? "Close" : "Open"} Messages${
-        hasNotices ? ` (${noticeCount} notice${noticeCount === 1 ? "" : "s"})` : ""
-      }`}
+      aria-label={bellLabel}
       aria-pressed={outputOpen}
       title="Messages"
       // How many messages are pending, independent of whether the badge is

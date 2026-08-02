@@ -752,7 +752,7 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
     if ((await bellNoticeCount(page)) > 0) {
       const bellLabel = (await page.locator(".command-bar__output").first().getAttribute("aria-label")) ?? "";
       check(
-        /\(\d+ notices?\)/.test(bellLabel),
+        /—\s*\d+\s+messages?/.test(bellLabel),
         "the bell still reports its pending messages to assistive tech while the pill is up"
       );
     } else {
