@@ -14,8 +14,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
-import { startServer } from "./serve-dist.mjs";
-import { launchChromium, gotoWithTheme, dismissWelcomePopup, waitRendered } from "./lib/browser.mjs";
+import { bootstrap, gotoWithTheme, dismissWelcomePopup, waitRendered } from "./lib/browser.mjs";
 
 const UPDATE = process.argv.includes("--update");
 const BASELINE_DIR = fileURLToPath(new URL("../tests/screenshots", import.meta.url));
@@ -69,6 +68,15 @@ async function shoot(page, base, theme) {
 
 function compare(theme, actual) {
   const baselinePath = `${BASELINE_DIR}/${theme}.png`;
+  // A missing baseline is a first local run (write it), but in CI it is the
+  // gate having been removed: auto-writing and returning true meant deleting
+  // tests/screenshots/*.png disabled visual regression with a green tick.
+  if (!UPDATE && !existsSync(baselinePath) && process.env.CI) {
+    console.log(
+      `  ❌ ${theme}: no baseline at ${baselinePath} — commit one (npm run vis -- --update)`
+    );
+    return false;
+  }
   if (UPDATE || !existsSync(baselinePath)) {
     mkdirSync(BASELINE_DIR, { recursive: true });
     writeFileSync(baselinePath, PNG.sync.write(actual));
@@ -102,12 +110,8 @@ function compare(theme, actual) {
 }
 
 async function main() {
-  const { server, port, basePath } = await startServer();
-  const base = `http://127.0.0.1:${port}${basePath}`;
-  const browser = await launchChromium();
-  const page = await browser.newPage({
-    viewport: { width: 1280, height: 900 },
-    deviceScaleFactor: 1,
+  const { base, page, close } = await bootstrap({
+    pageOptions: { viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 },
   });
   let failures = 0;
   try {
@@ -117,8 +121,7 @@ async function main() {
       if (!compare(theme, png)) failures++;
     }
   } finally {
-    await browser.close();
-    server.close();
+    await close();
   }
   console.log(`\n${failures === 0 ? "VISUAL PASS ✅" : `${failures} VISUAL FAILURE(S) ❌`}`);
   process.exit(failures === 0 ? 0 : 1);

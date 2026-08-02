@@ -1,199 +1,149 @@
 <!--
 meta.contentType: Conceptual
-content plan: summarize the architecture review, group findings by risk, and record strengths future refactors should preserve.
+content plan: record the July 2026 deep architecture review, and give every historical finding ID a stable, resolvable definition so the ~180 cross-references in code comments keep meaning something.
 -->
 
 # Review the ScadPub architecture
 
-A full review of the runtime app (`src/`), the build pipeline (`scripts/`, `vite.config.ts`, `public/sw.js`), and the test/continuous integration (CI) setup, as of `0cf00d1` (axe-core AA sweep). Findings are ordered by severity within each section; every claim carries a `file:line` reference against that commit.
+Reviews of the runtime app (`src/`), the build pipeline (`scripts/`,
+`vite.config.ts`, `public/sw.js`), and the test/CI setup. The most recent full
+pass ran at `8bd800c` (July 2026).
 
-## Current architecture state
+This document has two jobs:
 
-The client/worker split is strict, the two-tier render cache degrades gracefully, and the stable-identity `AppActions` context avoids both prop-drilling and re-render churn. The source has zero `as any`, `@ts-ignore`, or `@ts-expect-error` in `src/**`, no TODO/FIXME markers, and three justified `eslint-disable`s total. The highest-value fixes are the two HTML-injection gaps in the config-to-chrome path, the silent hard-failure path in `doRender`, and the stale visual-regression mask.
+1. Record what the current pass found, in outline.
+2. Be the **stable definition of every finding ID**. Roughly 180 comments
+   across the tree cite codes like `M10`, `H3` or `L1` as shorthand for an
+   invariant. That is genuinely useful — every `M10` site describes one
+   mechanism, and the grouping is the point — but it only works if the codes
+   resolve. The appendix below is what makes them resolve. **A future review
+   appends to it; it never renumbers.**
 
-## Correctness and security
+## Current state
 
-### 1. `title`/`description`/`shortName` are interpolated into HTML unescaped
+At `8bd800c`: 990/990 unit tests pass, `tsc -b` is clean, `eslint .` is silent,
+and `src/` holds zero `as any`/`@ts-ignore`/`@ts-expect-error`. All five open
+items from the previous round — unescaped HTML interpolation, an unvalidated app
+id, a silent render failure, a stale visual-regression mask, and a shell-out to
+system `zip` — are fixed, and are recorded as resolved in the appendix.
 
-`vite.config.ts:70-82` injects config strings into `index.html` with raw
-`.replace`:
+The client/worker split is strict, the two-tier render cache degrades
+gracefully, and the stable-identity `AppActions` context avoids both
+prop-drilling and re-render churn.
 
-- `%APP_TITLE%` → `<title>` text content (`index.html:39`)
-- `%APP_DESCRIPTION%` → `<meta name="description" content="…">`
-  (`index.html:8`)
-- `%APP_APPLE_TITLE%` → `<meta name="apple-mobile-web-app-title" …>`
-  (`index.html:17`)
+## What the July 2026 pass found
 
-None of the three is validated or escaped anywhere. `gen-schema.mjs:127-131`
-assigns them straight from the config, while the colours two lines below get
-`COLOR_VALUE_RE` (`gen-schema.mjs:143-150`) and `lang`/`dir` get
-`parseLang`/`parseDir`. A `title` containing `</title><script>` or a
-`description` containing `">` escapes its context. CLAUDE.md explicitly
-claims *"Config values interpolated into generated SVG/HTML (chrome colours,
-title, design ids) are validated/escaped first"*; for these three values
-that claim is currently false. Exploitability is low (the config author is
-the site operator), but the fix is one line per value: `xmlEscape` already
-exists in `scripts/lib/config-parsers.mjs:45-50` and is used for the SVG
-path; apply it (or a gen-schema-time validation) to the HTML path too.
+Grouped as the fix plan groups them; see that document for `file:line`
+references, fix steps and verification recipes.
 
-### 2. The app-level `id` reaches an inline `<script>` string literal unvalidated
+- **Broken invariants and data-damaging bugs.** The service worker's install
+  fetched the very chunks the documented boot brake exists to defer; the SVG
+  layers spec was shredded by colours and ids containing its own separators;
+  the SVG path scanner mis-parsed compact arc flags and then silently discarded
+  every remaining segment; the viewer recorded a framing key when framing had
+  bailed on a 0×0 canvas; and font reconciliation could delete a tracked file.
+- **Cache and update-flow correctness.** `renderHash` hashed far more than the
+  render contract, so UI-only type edits evicted every deployment's persisted
+  geometry. Plus a batch of service-worker defects (a revalidation write not
+  tied to its event, a `scad` path-segment collision with a subpath deploy,
+  unpruned binary caches, two update-flow dead ends) and an unguarded
+  hand-mirrored WASM pin.
+- **Build-time validation and CI trust.** Eleven ways a broken config built
+  green; eight ways the Customizer parser dropped, invented or corrupted a
+  parameter; seven ways CI could pass without checking; and five verified
+  evasions of the SVG sanitizer.
+- **Consistency.** This document's own staleness (see below), user-facing
+  strings bypassing the i18n catalogue, drifted desktop/mobile duplicates,
+  accessibility inconsistencies, enum and default knowledge held in triplicate,
+  and doc comments contradicting their code.
+- **Complexity and polish.** A dead-code inventory, two ~1,000-line components
+  to split along seams they already have, `generate()`'s 425-line body,
+  `schema.ts`'s future as a fourth hand-written schema representation, viewer
+  performance polish, svgPrep's coverage gaps, and a comment-hygiene pass.
 
-Design ids are charset-checked (`checkId`, `gen-schema.mjs:307-313`); the
-top-level `id` is not (`gen-schema.mjs:129`, `config.id ?? "scadpub"`). It
-flows into `%APP_THEME_KEY%` = `` `${id}.theme` `` (`vite.config.ts:81`) and
-lands inside a **JavaScript string literal in the inline pre-paint theme
-script**: `localStorage.getItem("%APP_THEME_KEY%")` (`index.html:24`). A
-quote or backslash in `id` breaks (or escapes) the script. This is the most
-sensitive interpolation in the pipeline and the cheapest fix: run the
-existing `checkId` on the app id in `generate()`.
-
-### 3. A thrown render failure is invisible in the app
-
-`doRender`'s catch (`src/App.tsx:190-194`) distinguishes `SupersededError`
-(correctly swallowed) from everything else, but the “everything else”
-branch only resets `lastKeyRef` and the spinner. A worker crash surfaced via
-`runner`'s `failInflight` (worker `onerror`/`onmessageerror`,
-`runner.ts:195-203`) therefore shows **no toast and no console entry**; only
-structured `r.ok === false` results get the “Render failed” toast
-(`App.tsx:177-181`). The UI stops spinning with a stale model on
-screen. Add an error toast (or synthesize a failure `RenderResult`) in that
-branch.
-
-Related, worth a comment rather than a change: the `SupersededError` early
-return at `App.tsx:191` deliberately does **not** call `setRendering(false)`.
-The superseding render owns the spinner now. That invariant (a
-superseding render always follows a supersession) is load-bearing and
-undocumented at the site that depends on it.
-
-### 4. The visual-regression mask targets classes that don’t exist
-
-`scripts/screenshots.mjs:29-30` masks `.viewer, .viewer-overlay` (real) and
-`.status, .log, .diagnostics`, but no element in `src/` carries `status`,
-`log`, or `diagnostics` as a class. The volatile render-status hook used by
-every other script is `.render-status` / `.output-console`
-(`smoke.mjs:22-33`). The stale selectors mean any visible volatile text
-(render timings, log lines) is *not* masked, which is a baseline-flakiness
-time bomb; the first symptom will be an unexplained vis failure after a
-timing change. Re-audit `MASK_CSS` against the actual class hooks CLAUDE.md
-enumerates.
-
-## Architecture and maintainability
-
-### 5. `App.tsx` is at the god-component threshold
-
-412 lines holding 52 hook calls (17 `useState`, 10 `useEffect`, 16
-`useCallback`, 5 `useMemo`, 4 `useRef`) plus four custom hooks. It is
-organized sprawl: commented, memoized, view layer already extracted to
-`AppShell`. Every new feature lands here. Three extractions fall out
-naturally along existing seams:
-
-- `useRenderPipeline`: `renderKey`/`doRender`/auto-render debounce/heavy
-  brake/`lastKeyRef` (`App.tsx:142-211`), the piece with the trickiest
-  invariants and the one that would benefit most from focused tests;
-- `useFileImports`: add/remove/clear + cache invalidation + persistence
-  (`App.tsx:273-299`);
-- `useAppNotices`: the three independent toast effects for stale bundle /
-  SW update / offline (`App.tsx:343-371`).
-
-`AppShell.tsx` (470 lines) is bigger but is honest layout; its bulk is two
-near-identical trees (desktop `:306-359`, mobile `:365-467`) that could
-share a couple of extracted sections if they start drifting.
-
-### 6. ~150 lines of copy-pasted Playwright driving across three scripts
-
-`smoke.mjs`, `screenshots.mjs`, and `capture-screens.mjs` share only
-`serve-dist.mjs`; everything else is triplicated:
-
-- identical `chromium.launch({ executablePath: … })` blocks
-  (`smoke.mjs:84-86`, `screenshots.mjs:92-94`, `capture-screens.mjs:199-201`);
-- `waitRendered` re-implemented three times around the same
-  `/\d+ ms/` poll (`smoke.mjs:45-51`, `capture-screens.mjs:32-40`, inlined
-  at `screenshots.mjs:49`);
-- `selectDesign` twice (`smoke.mjs:59-79`, `capture-screens.mjs:47-60`);
-- welcome-popup dismissal three times, theme-forcing dance twice.
-
-A `scripts/lib/browser.mjs` (launch, waitRendered, selectDesign,
-dismissPopup, forceTheme) removes the duplication and, more importantly,
-makes finding 4's selector drift a one-place fix.
-
-### 7. Monolithic orchestrator functions
-
-The helpers were factored to `scripts/lib/` (good), but `generate()` in
-`gen-schema.mjs` is still one ~450-line function (`:99-545`) doing config
-parsing, three copy passes, PWA orchestration, and two manifest writes
-inline; `smoke.mjs`'s `main()` is ~410 linear lines of inline checks
-(`:81-494`). Neither is buggy, but both are past the size where a failed
-assertion takes extra work to localize. Splitting `generate()` at its own banner
-comments (identity → fonts → designs → PWA → precache) and `smoke.mjs` into
-per-section check functions would pay for itself on the next change.
-
-### 8. `capture-screens.mjs` shells out to a system `zip`
-
-`capture-screens.mjs:223` uses `execFileSync("zip", …)`. The repo’s own
-tooling principle is pure-Node/cross-platform (`fetch-wasm.mjs:8`, "no
-bash/curl/unzip needed"), and Windows has no `zip`. `fflate` is already a
-dependency (used to *unzip* in `fetch-wasm.mjs`) and can write the archive.
-
-## Testing and CI
-
-### 9. Coverage is pure-logic-deep, boundary-shallow
-
-The logic layer is well covered (19 `src/lib`+`src/openscad` modules plus a
-1,064-line `gen-schema` suite). Not covered by anything faster than the
-single-config smoke run: `worker.ts` (the WASM driver; `renderArgs.ts`
-exists precisely because its helpers were unreachable from `npm test`,
-`renderArgs.test.mjs:1-4`), every React component, and every hook. That’s a
-defensible trade-off for a UI this size, but `worker.ts`'s pure parts
-(mount-path computation, orphaned-define scan already in `scad.ts`) should
-keep migrating out to testable modules as they grow.
-
-### 10. CI gaps
-
-`.github/workflows/ci.yml` runs typecheck + unit + smoke, but:
-
-- **`npm run vis` never runs in CI**: visual regressions aren’t gated
-  anywhere. The baselines are environment-pinned, so the honest options are
-  a dedicated pinned runner/container for vis, or accepting (and
-  documenting) that vis is local-only.
-- **No lint step exists**: there is no ESLint config in the repo at all;
-  quality rides on `tsc` and conventions.
-- Playwright Chromium is reinstalled on every run (`ci.yml:24-25` caches npm
-  only). This is cacheable for a minute or two per build.
-- Two divergent deploy paths: CI deploys GitHub Pages (`ci.yml:52-71`) while
-  `package.json:15,21` deploys via `wrangler`. Intentional, but worth one
-  README sentence so a contributor knows which one is authoritative.
-
-## Smaller follow-ups
-
-- **Dead code**: `detentHeight` is exported from `BottomSheet.tsx:28-37`
-  with no importer anywhere in `src/` or `tests/`; the `onPeekHeightChange`
-  prop (`BottomSheet.tsx:52,126-128`) is never passed by the sole caller.
-- **Duplication**: `exportModel` and `savePng` share the
-  share-file/fallback-download/announce shape (`App.tsx:241-271`),
-  extractable; the `try { localStorage… } catch {}` idiom recurs across
-  `App.tsx`, `ParamPanel.tsx`, `presets.ts`, `urlState.ts`. A tiny
-  `safeStorage` helper would DRY it; `BottomSheet.tsx` computes detent
-  geometry twice (`:23-24` vs `:28-37`).
-- **Perf watch item**: `fileSignature` re-hashes every uploaded byte on each
-  `userFiles` change (`runner.ts:66-80`). Fine for SVG/font-sized imports;
-  if large imports ever land, hash once at import time and store the digest.
-- **Version pin nuance**: the WASM sha256 is only enforced when the version
-  equals the pin. An `OPENSCAD_VERSION` env override skips the integrity
-  check (`fetch-wasm.mjs:60`). Reasonable, but worth knowing.
+The pass also found this document actively misleading: it claimed `vis` never
+runs in CI, that no ESLint config existed, and that Chromium was uncached — all
+three false — while presenting five fixed findings as open, and it was cited as
+authoritative from `eslint.config.js` and `ci.yml`. That is what this rewrite
+fixes.
 
 ## Strengths worth preserving
 
-Recorded so a future refactor doesn’t accidentally regress them:
+Recorded so a future refactor doesn't trade them away:
 
-- **Latest-wins render cancellation**: terminate-and-respawn, staleness
-  guards on both the worker handle and the async L2 lookup
-  (`runner.ts:247-265,285`).
-- **Best-effort L2 everywhere**: every IndexedDB op degrades to L1-only,
-  including a quota-retry (`stlCache.ts:100-185`).
-- **The stable `AppActions` context** (`appActions.ts:41-77`): ref-backed
-  wrappers so consumers memo cleanly yet always call the latest closure.
-- **The skew guard** dropping orphaned defines when a stale client renders
-  against a newer bundle (`worker.ts:211-216`, `scad.ts:79-86`).
-- **Fail-fast generation**: unknown config keys throw with the valid-key
-  list (`gen-schema.mjs:115-121`), and the eval-free `@showIf` evaluator
-  fails open with a comment explaining why (`visibility.ts:46-53`).
+- The epoch/commit **render-provenance model** (`renderState.ts`) and
+  latest-wins terminate-and-respawn with compiled-module handoff.
+- The **two-tier render cache** on one content-stable key, with every
+  IndexedDB operation degrading to L1-only rather than throwing.
+- **Content-addressed binary URLs**, consistent across the worker, gen-schema
+  and the service worker, and **Web-Locks download dedup** between them.
+- **CSP hashes computed from built bytes**, so the policy is correct by
+  construction.
+- The **ref-backed stable `AppActions` context**: consumers memo cleanly yet
+  always invoke the latest closure.
+- **Storage namespacing** by config `id`, with the deliberate shared-bin-cache
+  exception.
+- **Fail-fast generation**: unknown config keys throw with the valid-key list,
+  and the eval-free `@showIf` evaluator fails open with a comment saying why.
+- The **VM-executed service-worker lifecycle tests**: `public/sw.js` is real,
+  loadable JS, so install/activate/fetch behaviour is exercised rather than
+  pattern-matched.
+
+## Appendix: finding IDs
+
+Every code cited in the tree, with the invariant it names and its resolution.
+Grep-checkable: `grep -rE '\b[HML][0-9]+\b' src scripts public tests` should
+resolve every hit against this table, numeric false positives aside — SVG path
+data and CSS values are full of `M6`, `L100`, `H50` and friends.
+
+IDs are historical and **stable**. The letter records how the review that
+raised a finding ranked it at the time; it is not a claim about today.
+
+### H — high
+
+| ID | Invariant it names | State |
+| --- | --- | --- |
+| `H1` | **Render provenance.** Exported output must correspond to the controls that produced it: an edit or a design switch may not leave a stale `RenderResult` exportable under the new controls. Lives in `renderState.ts`'s epoch/currentness/exportability rules, surfaced as `exportable`. | Fixed; load-bearing and unit-tested. |
+| `H2` | **Shareability is honest.** A share URL is built synchronously from the live design and values — never from `location.href`, which lags the debounced write — and a local-only dependency the URL cannot carry is named explicitly rather than silently implied complete. | Fixed. |
+| `H3` | **The render contract is fully hashed.** `renderHash` covers every input that can change rendered bytes: mounted sources, bundled fonts, render features, the export format, the design routing map, the WASM build, and the worker's own code closure. Binaries are content-addressed so a rebuild can never serve mismatched halves. | Fixed. The closure was **narrowed** in July 2026 to exactly the render contract, and `tests/worker-deps.test.mjs` now pins it as an exact set; see `src/openscad/protocol.ts`. |
+| `H4` | **Versioned binary URLs.** Every large pinned binary carries a `?v=<digest>`, so a Cache Storage entry can never serve a previous build's bytes, and the binary cache name folds in the pinned OpenSCAD version so a bump evicts automatically. | Fixed. |
+| `H5` | **Source containment.** Every path a config or design resolves — assets, presets, icons, fonts, symlink targets — must stay inside `source`; an escape fails the build. | Fixed (`checkContained`, `scripts/lib/assets.mjs`). |
+| `H6` | **Generated-output collision guard.** Every planned destination is registered with a human label before any bytes move; a second writer aimed at the same path fails the build naming both owners, instead of silently overwriting. | Fixed (`scripts/lib/destinations.mjs`). |
+
+### M — medium
+
+| ID | Invariant it names | State |
+| --- | --- | --- |
+| `M1` | **Cache writes are best-effort.** A Cache Storage failure (quota, private browsing, a blocked origin) degrades to uncached rather than failing the render; a fatal bootstrap failure resets the worker's bootstrap state so the next render retries the whole thing. | Fixed. |
+| `M2` | **Transactional service-worker install.** Install caches an atomic minimum shell and *propagates* failure, so a broken deploy never succeeds into an unusable offline fallback; and only the canonical app entry may refresh `SHELL_KEY`. | Fixed. Extended July 2026: `<scope>index.html` counts as the app entry too, and install no longer fetches preload-hinted chunks. |
+| `M3` | **A scoped update escape hatch.** `forceUpdate` unregisters only *this* app's registration and deletes only its own shell caches, never every worker or cache on the origin. | Fixed. |
+| `M4` | **One owner for external URL state.** A same-document `hashchange` (or a back/forward navigation) is consumed in exactly one place, so URL state and app state cannot diverge. | Fixed. |
+| `M5` | **Live system-theme tracking.** In auto mode the resolved theme comes from a `useSyncExternalStore` over `matchMedia`, not a value computed once and left stale until an unrelated render. | Fixed. |
+| `M6` | **Invalidation-driven rendering.** Once OrbitControls' damping has settled and nothing invalidates the scene, `renderer.render()` stops firing every animation frame. Smoke asserts it against a render counter stamped on the mount node. | Fixed. |
+| `M7` | **Only one layout tree is mounted.** The desktop and mobile trees never coexist, so a DOM id is never duplicated and unscoped queries are safe. Panel state must therefore live above the breakpoint to survive a remount. | Fixed. |
+| `M8` | **Generated-file lifecycle.** Files this tool wrote outside the wholesale-wiped scad tree are remembered and reconciled, so a removed config entry leaves no orphan — and nothing outside that remembered set is ever deleted. | Fixed. Hardened July 2026: a config font may not shadow a tracked bundled one, and every entry records a digest so a file changed since is never removed. |
+| `M9` | **Annotation grammar is gated at build time.** `scripts/lib/params.mjs` is the primary gate: a malformed or unknown `@annotation` fails the build with file and line rather than degrading into doc prose. `src/lib/visibility.ts` mirrors the `@showIf` grammar defensively, for a legacy cached schema that bypassed it. | Fixed. Extended July 2026 with quote-aware clause splitting and `@collapsed` in the known set. |
+| `M10` | **User files are untrusted.** The render worker path-strips user-supplied filenames, rejects a request whose sanitized mount paths collide, and mounts them only into the WASM filesystem. | Fixed. July 2026 documented the trust class end to end: see `docs/config.md`'s SVG trust model and `src/lib/useFileImports.ts`'s header. |
+| `M11` | **Persisted cache records are bounded.** A record's log is capped independently of the STL byte budget, and the cached flag is correctness-relevant rather than informational. | Fixed. |
+| `M12` | **The WASM pin is verified as a set.** The stamp and checksum cover both `openscad.wasm` and its glue, and the glue is content-addressed, so the two can never drift apart. | Fixed. July 2026 added a test that the app-side fallback pin cannot go stale against `scripts/wasm-version.mjs`. |
+| `M13` | **Browser-facing SVGs are sanitized.** The logo, the PWA icon and each design's picker icon run through `scripts/lib/svg-sanitize.mjs`. Render-input SVGs deliberately do not: rewriting those bytes would change geometry. | Fixed. Five verified evasions closed July 2026. |
+| `M14` | **The root error boundary is a pure state transition.** A caught render error maps to a recoverable UI state testable without a DOM. | Fixed. |
+| `M15` | **First-render bookkeeping resets per design.** The initial-render latch and the heavy-render brake are reset by `resetForDesign`, so switching designs never inherits the previous one's state. | Fixed. |
+| `M16` | **The mobile sheet is modal when it covers the app.** At the Full detent the sheet visually covers the mobile shell, so the background is `inert` and focus is trapped. | Fixed. Refined July 2026: while modal it is also *announced* as a dialog. |
+
+### L — low
+
+| ID | Invariant it names | State |
+| --- | --- | --- |
+| `L1` | **StrictMode is safe here.** React's dev-only double-invocation must not leak a second render worker: worker construction lives in a `useEffect` with matching cleanup, so mount → cleanup → remount disposes the first runner before constructing the second. | Fixed. Extended July 2026: the viewer's framing refs reset on teardown too, so dev frames like prod. |
+| `L2` | **Lint is a hard zero.** The repo is triaged to 0 errors and 0 warnings, and CI and pre-commit both run `eslint . --max-warnings 0`. A rule kept at `warn` rather than `error` still gates; it just reads as advice in-editor. | Fixed. |
+
+### Not finding IDs
+
+`L1` and `L2` **also** name the render cache's two tiers throughout
+`stlCache.ts` and `runner.ts` (L1 = the in-memory LRU, L2 = IndexedDB). Those
+are not references to this table.
+
+Everything else a `[HML][0-9]+` grep turns up — `M256`, `L100`, `H50`, the
+`M6,6 L6,94` runs in SVG fixtures — is coincidence: path data, CSS values and
+byte constants.

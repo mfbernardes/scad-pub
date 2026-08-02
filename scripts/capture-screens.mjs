@@ -15,13 +15,13 @@ import { mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { zipSync } from "fflate";
-import { startServer } from "./serve-dist.mjs";
 import {
-  launchChromium,
+  bootstrap,
   gotoWithTheme,
   dismissWelcomePopup,
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
+  openDialog,
 } from "./lib/browser.mjs";
 
 const OUT_DIR = fileURLToPath(new URL("../screenshots/captures", import.meta.url));
@@ -76,10 +76,10 @@ async function requireDialog(page, name, expectedName) {
     .catch(() => false);
   if (!opened) throw new Error(`capture "${name}": no dialog opened — the trigger selector no longer matches`);
   if (!expectedName) return;
-  const match = await page
-    .getByRole("dialog", { name: expectedName, exact: true })
-    .first()
-    .waitFor({ state: "visible", timeout: 2000 })
+  const match = await openDialog(page, { name: expectedName, exact: true }, {
+    timeout: 2000,
+    first: true,
+  })
     .then(() => true)
     .catch(() => false);
   if (!match) throw new Error(`capture "${name}": a dialog opened, but not "${expectedName}"`);
@@ -251,9 +251,7 @@ async function captureViewport(context, base, kind, theme) {
 async function main() {
   rmSync(OUT_DIR, { recursive: true, force: true });
   rmSync(ZIP_PATH, { force: true });
-  const { server, port, basePath } = await startServer();
-  const base = `http://127.0.0.1:${port}${basePath}`;
-  const browser = await launchChromium();
+  const { base, browser, close } = await bootstrap({ page: false });
   try {
     for (const kind of Object.keys(VIEWPORTS)) {
       const vp = VIEWPORTS[kind];
@@ -271,8 +269,7 @@ async function main() {
       }
     }
   } finally {
-    await browser.close();
-    server.close();
+    await close();
   }
   // Bundle into a single zip (entries relative to screenshots/ → captures/...).
   // Pure Node via fflate: no system `zip` binary needed (same principle as

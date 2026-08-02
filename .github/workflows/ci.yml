@@ -38,7 +38,11 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22 # node:test globs + TS type-stripping for the unit tests
+          # Latest 22.x, which is always past the 22.18 floor package.json's
+          # `engines` declares. The floor is 22.18 rather than 22 because type
+          # stripping is unflagged only from there, and both the unit suite and
+          # the build import .ts directly.
+          node-version: 22
           cache: npm
       - run: npm ci
 
@@ -50,6 +54,18 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      # ~10 MB per run, and it only changes when the pin does — which is what
+      # the key is read from, so a bump invalidates the cache by itself.
+      - name: Read pinned WASM version
+        id: wasm-version
+        run: echo "version=$(node -e "import('./scripts/wasm-version.mjs').then(m => console.log(m.PINNED_WASM_VERSION))")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache OpenSCAD WASM
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: public/wasm
+          key: openscad-wasm-${{ steps.wasm-version.outputs.version }}
 
       - name: Fetch pinned OpenSCAD WASM
         run: npm run wasm
@@ -83,8 +99,45 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
+      # Asserts what the pinned engine actually does with the language
+      # behaviours the Customizer parser reasons about. Runs here because it
+      # needs public/wasm, which the unit suite runs before.
+      - name: Check OpenSCAD semantics
+        run: node scripts/check-scad-semantics.mjs
+
+      # The two closeBundle plugins (sw-version, security-headers) write into
+      # dist/ after the bundle is emitted; this asserts from the artifact that
+      # they did, so an unversioned sw.js or a dropped CSP block can't ship
+      # from a build that exited 0.
+      - name: Check built artifact
+        run: node scripts/check-dist.mjs
+
+      # A dry run only: it never publishes. It is what keeps the documented
+      # Cloudflare target from silently rotting, which a half-configured deploy
+      # path CI cannot redden does on its own.
+      - name: Cloudflare deploy dry run
+        run: npx wrangler deploy --dry-run
+
       - name: Smoke test (headless browser, incl. axe accessibility)
         run: npm run smoke
+
+      - name: SVG wizard end-to-end
+        run: npm run e2e:svg
+
+      # The studio viewer style is not what this repo's own config builds, and
+      # the visual suite masks the viewer, so nothing else executes that path —
+      # which is how an environment map disposed before first use shipped
+      # green. Builds a studio variant and measures the lighting.
+      - name: Studio viewer
+        run: npm run check:studio
+
+      # Asserts the SVG sanitizer's claim on network traffic rather than on
+      # strings: each vector sanitized, the OUTPUT served to Chromium, and
+      # nothing allowed to leave the page. Each is paired with an unsanitized
+      # control, so "no request" cannot pass by the browser simply not
+      # implementing the construct.
+      - name: SVG sanitizer is inert in a browser
+        run: npm run check:svg
 
       - name: Visual regression (light + dark chrome)
         id: vis
@@ -110,8 +163,47 @@ jobs:
         with:
           path: dist
 
+  # The floor package.json's `engines` declares, executed. The build job above
+  # runs latest 22.x, so nothing there would notice a dependency or a build step
+  # that quietly needs something newer than 22.18 — which is how "Node >= 22"
+  # stayed wrong in three places for as long as it did. Unit suite and build
+  # only: the browser suites are the other job's business and add nothing here.
+  min-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.18.0 # exactly the floor, not "latest 22"
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+
+      # `prebuild` fetches the ~10 MB WASM, so cache it here the same way the
+      # build job does rather than re-downloading it for this job every run.
+      - name: Read pinned WASM version
+        id: wasm-version
+        run: echo "version=$(node -e "import('./scripts/wasm-version.mjs').then(m => console.log(m.PINNED_WASM_VERSION))")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache OpenSCAD WASM
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: public/wasm
+          key: openscad-wasm-${{ steps.wasm-version.outputs.version }}
+
+      - run: npm run build
+
   deploy:
-    needs: build
+    # Both: a build that only works above the declared floor is not a build this
+    # project supports, so min-node gates the deploy too.
+    needs: [build, min-node]
+    # One Pages deployment at a time, and never cancel one in flight: a
+    # cancelled deploy can leave the environment mid-swap.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:

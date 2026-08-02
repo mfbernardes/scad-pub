@@ -2,12 +2,14 @@
 // BUILT app: opens the tag design's @svg field, drops an SVG with issues, walks
 // the wizard (check -> fix -> use), and confirms the fixed SVG imports and the
 // 3D render updates. Run: node scripts/e2e-svg-wizard.mjs (after npm run build).
-import { startServer } from "./serve-dist.mjs";
 import {
-  launchChromium,
+  bootstrap,
+  makeCheck,
   waitRendered,
   dismissWelcomePopup,
   selectDesign,
+  openDialog,
+  waitDialogClosed,
 } from "./lib/browser.mjs";
 
 const DIRTY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 20 100 50">
@@ -15,17 +17,9 @@ const DIRTY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 20 100 50
   <rect x="10" y="20" width="100" height="50" fill="black"/>
 </svg>`;
 
-let failures = 0;
-const check = (ok, msg) => {
-  console.log(`  ${ok ? "✅" : "❌"} ${msg}`);
-  if (!ok) failures++;
-};
+const { check, state } = makeCheck();
 
-const { server, port, basePath } = await startServer();
-const base = `http://127.0.0.1:${port}${basePath}`;
-
-const browser = await launchChromium();
-const page = await browser.newPage();
+const { base, page, close } = await bootstrap();
 try {
   await page.goto(base, { waitUntil: "load" });
   await dismissWelcomePopup(page);
@@ -49,8 +43,7 @@ try {
     buffer: Buffer.from(DIRTY_SVG),
   });
 
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor({ state: "visible", timeout: 5000 });
+  const dialog = await openDialog(page, undefined, { timeout: 5000 });
   check(true, "wizard dialog opened");
 
   const bodyText = await dialog.textContent();
@@ -62,7 +55,7 @@ try {
   check(/re-centred the drawing/.test(fixText), "fix step reports the viewBox normalisation");
 
   await dialog.getByRole("button", { name: /Use this SVG/i }).click();
-  await dialog.waitFor({ state: "detached", timeout: 5000 });
+  await waitDialogClosed(page, undefined, { timeout: 5000 });
   check(true, "wizard closed on completion");
 
   // The field now points at the prepared file, and a fresh render succeeds.
@@ -85,15 +78,14 @@ try {
     mimeType: "image/svg+xml",
     buffer: Buffer.from(MULTI_SVG),
   });
-  const d2 = page.getByRole("dialog");
-  await d2.waitFor({ state: "visible", timeout: 5000 });
+  const d2 = await openDialog(page, undefined, { timeout: 5000 });
   await d2.getByRole("button", { name: /Fix & continue/i }).click();
   await d2.getByRole("button", { name: /Next/i }).click(); // → colours step
   const colourText = await d2.textContent();
   check(/colour regions/i.test(colourText), "wizard shows the colours step");
   check(/left/.test(colourText) && /right/.test(colourText), "colours step lists both regions");
   await d2.getByRole("button", { name: /Use this SVG/i }).click();
-  await d2.waitFor({ state: "detached", timeout: 5000 });
+  await waitDialogClosed(page, undefined, { timeout: 5000 });
   // The @filledBy layers target (svg_layers) is populated with the derived string.
   const layersVal = await page.locator('.param[data-param="svg_layers"] input').first().inputValue();
   check(/left:red/.test(layersVal) && /right:blue/.test(layersVal),
@@ -107,8 +99,7 @@ try {
   // --- per-region heights: the wizard's height boxes edit the layers string ---
   await page.locator('[data-svg-field="svg_file"]').first().locator('input[type="file"]')
     .setInputFiles({ name: "regions2.svg", mimeType: "image/svg+xml", buffer: Buffer.from(MULTI_SVG) });
-  const d4 = page.getByRole("dialog");
-  await d4.waitFor({ state: "visible", timeout: 5000 });
+  const d4 = await openDialog(page, undefined, { timeout: 5000 });
   await d4.getByRole("button", { name: /Fix & continue/i }).click();
   await d4.getByRole("button", { name: /Next/i }).click(); // → colours step
   const heightBox = d4.getByRole("spinbutton", { name: /Height of region left/i });
@@ -133,7 +124,7 @@ try {
   await heightBox.fill("2.5");
   check(!(await useBtn.isDisabled()), "fixing the height re-enables ‘Use this SVG’");
   await useBtn.click();
-  await d4.waitFor({ state: "detached", timeout: 5000 });
+  await waitDialogClosed(page, undefined, { timeout: 5000 });
   await waitRendered(page, { timeout: 60000 });
   check(true, "panel re-rendered with a per-region height");
 
@@ -160,8 +151,7 @@ try {
     mimeType: "image/svg+xml",
     buffer: Buffer.from(TEXT_ONLY),
   });
-  const d3 = page.getByRole("dialog");
-  await d3.waitFor({ state: "visible", timeout: 5000 });
+  const d3 = await openDialog(page, undefined, { timeout: 5000 });
   await d3.getByRole("button", { name: /Fix & continue/i }).click();
   check(/can't be used as-is/i.test(await d3.textContent()), "error step explains the drawing can't be used");
   check(await d3.getByRole("button", { name: /Use this SVG/i }).isDisabled(),
@@ -169,11 +159,14 @@ try {
   await page.keyboard.press("Escape");
 } catch (e) {
   console.error("E2E ERROR:", e.message);
-  failures++;
+  state.failures += 1;
 } finally {
-  await browser.close();
-  server.close();
+  await close();
 }
 
-console.log(failures === 0 ? "\nSVG WIZARD E2E PASS ✅" : `\nSVG WIZARD E2E FAIL ❌ (${failures})`);
-process.exit(failures === 0 ? 0 : 1);
+console.log(
+  state.failures === 0
+    ? "\nSVG WIZARD E2E PASS ✅"
+    : `\nSVG WIZARD E2E FAIL ❌ (${state.failures})`
+);
+process.exit(state.failures === 0 ? 0 : 1);
