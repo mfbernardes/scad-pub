@@ -3718,6 +3718,53 @@ test("an external-config font copy is cleaned up by the next build, and never a 
   );
 });
 
+// ── a pwa.screenshots[].src may not shadow a tracked file ──────────────────
+// copy() (pwa-assets.mjs) resolves the destination from the source's bare
+// basename, same as the font path above; a screenshot named e.g. `shots/sw.js`
+// aimed at the tracked public/sw.js, and the collision entered
+// .gen-manifest.json so the next build reconciled (deleted) it.
+test("a pwa screenshot whose basename shadows a tracked file fails the build", () => {
+  const checkout = mkdtempSync(join(tmpdir(), "gen-schema-shotshadow-"));
+  execFileSync("git", ["init", "-q", checkout]);
+  const outPublicDir = join(checkout, "public");
+  mkdirSync(outPublicDir, { recursive: true });
+  const trackedBytes = "// the real service worker\n";
+  writeFileSync(join(outPublicDir, "sw.js"), trackedBytes);
+  execFileSync("git", ["-C", checkout, "add", "-A"]);
+  execFileSync("git", [
+    "-C", checkout,
+    "-c", "user.email=test@example.com",
+    "-c", "user.name=Test",
+    "commit", "-q", "-m", "tracked sw.js",
+  ]);
+
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-shotshadow-src-"));
+  mkdirSync(join(src, "shots"), { recursive: true });
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// Size.\nsize = 1;\n`);
+  writeFileSync(join(src, "shots", "sw.js"), "not a screenshot at all");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: ".",
+      designs: [{ id: "d", label: "D" }],
+      pwa: { screenshots: [{ src: "shots/sw.js", sizes: "1x1", form_factor: "wide" }] },
+    })
+  );
+
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(src, "c.config.json"),
+        outSchemaDir: join(checkout, "schema"),
+        outScadDir: join(checkout, "scad"),
+        outPublicDir,
+      }),
+    /screenshot 'shots\/sw\.js'.*would overwrite the tracked file.*sw\.js/s
+  );
+  assert.equal(readFileSync(join(outPublicDir, "sw.js"), "utf8"), trackedBytes);
+});
+
 // ── build-time validation gaps ─────────────────────────────────────────────
 // Each of these built green and failed later — in vite-config, in the browser,
 // or not at all — rather than as a named gen-schema error at the key.

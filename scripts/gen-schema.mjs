@@ -1603,6 +1603,7 @@ export function generate({
       designs,
       mustExist,
       register: registry.register,
+      isTracked: isTrackedFile,
       scadDir: stageScadDir,
     }));
   }
