@@ -16,8 +16,12 @@
 //   • no PanelFooter — Live preview (auto-render) rides the top bar's "⋮"
 //     overflow (BarActions) instead.
 // Readiness also left: it's a pill in the export dock now, above the Download
-// button it warns about (see AppShell's ActionDock) — and on this layout only
-// for an outright failure, since Download itself carries the attention dot.
+// button it warns about (see AppShell's ActionDock). At the sheet's Full
+// detent that dock is hidden along with the rest of the mobile chrome (see
+// AppShell's `data-sheet-detent` doc), so an "attention" state would otherwise
+// go unannounced there; `attentionPill` (below) reuses the same StatusStrip
+// inside the sheet for that one case. A "failed" render still needs no
+// duplicate here: ParamForm's own `failure` banner already covers it.
 //
 // `data-sheet-peek-end` on the tab row marks where the sheet's peek header ends
 // — BottomSheet measures the Peek height down to that element's bottom edge.
@@ -32,6 +36,7 @@ import { ParamForm } from "./ParamForm";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
 import { ParamSearch } from "./ParamSearch";
+import { StatusStrip } from "./StatusStrip";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 
@@ -81,6 +86,10 @@ interface Props {
   onSearchBlur?: () => void;
   /** Current render failure, forwarded to ParamForm's banner. */
   failure?: FriendlyErrorInfo | null;
+  /** The readiness pill's "attention" state, reused here for the one case
+   *  where the export dock's own copy is hidden: the sheet's Full detent.
+   *  Undefined everywhere else (see AppShell's `sheetAttentionPill`). */
+  attentionPill?: { attentionCount: number; onOpen: () => void };
 }
 
 export function SheetTabs({
@@ -109,6 +118,7 @@ export function SheetTabs({
   onSearchFocus,
   failure,
   onSearchBlur,
+  attentionPill,
 }: Props) {
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
   // Overridable via the config's `strings` block (src/locales/en.json's
@@ -125,6 +135,16 @@ export function SheetTabs({
       onValueChange={(v) => onPanelTabChange(v as Tab)}
       className="sheet-tabs min-h-0 flex-1 gap-0"
     >
+      {attentionPill && (
+        <div className="shrink-0 px-3 pt-2">
+          <StatusStrip
+            readiness="attention"
+            attentionCount={attentionPill.attentionCount}
+            onOpen={attentionPill.onOpen}
+            className="w-full justify-center"
+          />
+        </div>
+      )}
       <TabsList
         className="w-full shrink-0 rounded-none border-b bg-transparent p-0"
         aria-label="Panel sections"

@@ -11,8 +11,11 @@
 // The caller mounts it only for the states that want a look at the Review
 // dialog: `failed` and `attention`, both layouts. Mobile used to skip
 // `attention` because the Download button carried a marker of its own; that
-// marker is gone (see AppShell's `hasStatusPill`), so this pill is the only
-// attention signal there is. A ready model needs no announcement
+// marker is gone (see AppShell's `hasStatusPill`). SheetTabs also reuses this
+// component directly, unrelated to that dock mount: at the bottom sheet's
+// Full detent the dock (and this pill inside it) is hidden along with the
+// rest of the mobile chrome, so it renders a second copy inside the sheet for
+// "attention" (see AppShell's `sheetAttentionPill`). A ready model needs no announcement
 // (the enabled Download button is the confirmation), and a first build is
 // already narrated by the viewer's own loading overlay. The unmounted states
 // are still spelled out below because `readiness` can hold them and the label

@@ -489,6 +489,16 @@ export const AppShell = memo(function AppShell({
   // mobile pills for attention too, that suppression applies there as well,
   // which is what finally makes the two mobile signals one.
   const hasStatusPill = readiness === "failed" || readiness === "attention";
+  // At the sheet's Full detent the whole floating chrome — including the dock
+  // and its StatusStrip — is hidden (see the `data-sheet-detent` doc above),
+  // so "attention" would otherwise have no visible indication at all there: a
+  // "failed" render still shows ParamForm's own failure banner inside the
+  // sheet, but nothing plays that role for "attention". Reuse the same pill
+  // inside SheetTabs for that one case only, so peek/half never show it twice.
+  const sheetAttentionPill =
+    isMobile && sheetDetent === "full" && readiness === "attention"
+      ? { attentionCount: attention.length, onOpen: openReview }
+      : undefined;
 
   // Prop bundles shared verbatim by the two layout trees: each call site below
   // adds only what is genuinely its own (the panel's dock geometry, the
@@ -776,7 +786,7 @@ export const AppShell = memo(function AppShell({
               // tabIndex -1: a skip link whose target isn't focusable moves
               // nothing, see #main-content below.
               <div className="sheet-content" id="params-mobile" tabIndex={-1}>
-                <SheetTabs {...paramProps} onActivate={expand} />
+                <SheetTabs {...paramProps} onActivate={expand} attentionPill={sheetAttentionPill} />
               </div>
             )}
           </BottomSheet>
