@@ -3,28 +3,34 @@
 // human-readable guidance shown in the wizard.
 
 import {
+  ACTIVE_TAGS,
+  CSS_IMPORT_RE,
+  CSS_URL_RE,
   IGNORED_TAGS,
   SHAPE_TAGS,
   TEXT_TAGS,
-  hasAnyTransform,
-  inkAttr,
   iterElements,
   localName,
   paint,
+  trappedLayers,
 } from "./dom";
 import { canvasBackgrounds } from "./background";
 import { contentBbox, parseViewBox } from "./geometry";
-import { effectiveFill, groupIndex } from "./regions";
-import type { Finding } from "./types";
+import { deriveRegions, effectiveFill, groupIndex, shapesUnder } from "./regions";
+import { MAX_RELIABLE_REGIONS } from "./limits";
+import type { Finding, Region } from "./types";
 
 /**
  * Run every compatibility check.
- * @param root   the SVG root element
- * @param layers region ids to verify (from parseLayersArg)
+ * @param root    the SVG root element
+ * @param layers  region ids to verify (from parseLayersArg)
+ * @param regions the derived regions, when the caller already has them.
+ *   `analyze`/`prepareSvg` do, and deriving is a full tree walk plus a
+ *   shapesUnder walk per candidate group — re-deriving here made a single
+ *   analyze() pay for it three times over.
  */
-export function check(root: Element, layers: string[] = []): Finding[] {
+export function check(root: Element, layers: string[] = [], regions?: Region[]): Finding[] {
   const findings: Finding[] = [];
-  const hasTransforms = hasAnyTransform(root);
 
   const vb = parseViewBox(root);
   if (vb === null) {
@@ -125,10 +131,41 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     });
   }
 
+  // Active content: reported on its own terms, because the reason it matters
+  // here is not "OpenSCAD will skip it" but "this file is untrusted input".
+  // applyFixes strips these; see ACTIVE_TAGS.
+  const active = els.filter((el) => ACTIVE_TAGS.has(localName(el)));
+  // matchAll, not test(): both regexes are global, and `test` on a global regex
+  // advances its lastIndex, so a second call over different text can miss.
+  const fetching = els.filter((el) => {
+    if (localName(el) !== "style") return false;
+    const css = el.textContent ?? "";
+    if ([...css.matchAll(CSS_IMPORT_RE)].length > 0) return true;
+    return [...css.matchAll(CSS_URL_RE)].some((m) => !m[2].startsWith("#"));
+  });
+  if (active.length > 0 || fetching.length > 0) {
+    const names = [
+      ...new Set([...active, ...fetching].map((el) => `<${localName(el)}>`)),
+    ].sort();
+    findings.push({
+      level: "WARN",
+      code: "active-content",
+      message:
+        `${active.length + fetching.length} element(s) carrying scripts, animation or ` +
+        `external references (${names.join(", ")}) — none of it is raised into relief`,
+      hint: "the Fix step removes them; the shapes and their colours are unaffected",
+    });
+  }
+
   const ignored = new Map<string, number>();
   for (const el of els) {
     const name = localName(el);
-    if (IGNORED_TAGS.has(name)) ignored.set(name, (ignored.get(name) ?? 0) + 1);
+    // ACTIVE_TAGS wins where the two sets overlap (`foreignObject` is in both):
+    // active-content above already named it, and this finding's advice —
+    // flatten it into filled shapes — is wrong for something the Fix step
+    // deletes outright.
+    if (IGNORED_TAGS.has(name) && !ACTIVE_TAGS.has(name))
+      ignored.set(name, (ignored.get(name) ?? 0) + 1);
   }
   for (const name of [...ignored.keys()].sort()) {
     findings.push({
@@ -164,16 +201,9 @@ export function check(root: Element, layers: string[] = []): Finding[] {
   // Inkscape layer trap: a layer carries its name in inkscape:label, but OpenSCAD
   // selects by the SVG id, so a layer named "walls" with id="layer1" is invisible.
   const { byId, byLabel } = groupIndex(root);
-  const trapped: Array<[string, string | null]> = [];
-  for (const el of els) {
-    if (localName(el) === "g" && inkAttr(el, "groupmode") === "layer") {
-      const label = inkAttr(el, "label");
-      const gid = el.getAttribute("id");
-      if (label && gid !== label) trapped.push([label, gid]);
-    }
-  }
+  const trapped = trappedLayers(els);
   if (trapped.length > 0) {
-    const names = trapped.map(([lab, gid]) => `"${lab}" (id=${gid})`).join(", ");
+    const names = trapped.map((t) => `"${t.label}" (id=${t.id})`).join(", ");
     findings.push({
       level: "WARN",
       code: "inkscape-trap",
@@ -184,13 +214,59 @@ export function check(root: Element, layers: string[] = []): Finding[] {
     });
   }
 
-  const regionIds = [...byId.keys()].sort();
+  // Only the ids deriveRegions can ACTUALLY emit, not every `<g id>` in the
+  // file: `byId` includes wrapper groups that merely contain other id-groups
+  // and groups holding no shapes at all, neither of which becomes a region.
+  // Advertising those sent the visitor looking for a region the pipeline was
+  // never going to produce.
+  const derived = regions ?? deriveRegions(root);
+  const regionIds = derived.map((r) => r.id).sort();
   if (regionIds.length > 0) {
     findings.push({
       level: "INFO",
       code: "regions-available",
       message: `colourable regions found: ${regionIds.join(", ")}`,
     });
+  }
+
+  // More regions than a slicer handles reliably (small regions merge or drop).
+  // Raised here rather than only in the wizard's own JSX, so a non-wizard
+  // consumer of `check` gets the caution too.
+  if (regionIds.length > MAX_RELIABLE_REGIONS) {
+    findings.push({
+      level: "WARN",
+      code: "too-many-regions",
+      message:
+        `${regionIds.length} colour regions — more than ${MAX_RELIABLE_REGIONS} tends to ` +
+        "print unreliably, as small regions merge or drop out",
+      hint: "merge the regions that don't need to differ in colour or height",
+    });
+  }
+
+  // Shapes that belong to no region at all. With regions in play these vanish
+  // from a per-region consumer without a word, which reads as the drawing
+  // having silently lost detail.
+  if (regionIds.length > 0) {
+    // Through byId (groupIndex, above) rather than re-finding each group: a
+    // find-per-region re-walked the whole tree R times, which measured as 37%
+    // of a check() pass on a 40k-element drawing.
+    const claimed = new Set(
+      derived.flatMap((r) => {
+        const group = byId.get(r.id);
+        return group ? shapesUnder(group) : [];
+      })
+    );
+    const orphans = shapes.filter((sh) => !claimed.has(sh));
+    if (orphans.length > 0) {
+      findings.push({
+        level: "WARN",
+        code: "shapes-outside-regions",
+        message:
+          `${orphans.length} shape(s) sit outside every colour region — they import, but ` +
+          "carry no region colour or height of their own",
+        hint: "move them into one of the named groups, or accept the design's default relief",
+      });
+    }
   }
 
   // The requested region names must resolve to a <g id=...>.
@@ -219,7 +295,12 @@ export function check(root: Element, layers: string[] = []): Finding[] {
 
   // Coarse placement hints (approximate; transforms make them unreliable).
   const bbox = contentBbox(root);
-  if (bbox && vb && !hasTransforms) {
+  // No `hasTransforms` gate: contentBbox composes the transforms it can measure
+  // through and returns null for the rest, so a non-null bbox is already in
+  // root's own frame. Gating on "any transform at all" went blind after
+  // fixViewBoxOrigin wrapped the drawing in one — and, worse, once the wrapper
+  // was exempted by name, reported content outside a viewBox it was inside.
+  if (bbox && vb) {
     const [minx, miny, w, h] = vb;
     const [bx0, by0, bx1, by1] = bbox;
     if (

@@ -20,6 +20,7 @@ import {
   check,
   deriveLayers,
 } from "../src/lib/svgPrep/index.ts";
+import { contentBbox, elementPoints } from "../src/lib/svgPrep/geometry.ts";
 
 const FIX_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "svg");
 const parse = (file) =>
@@ -60,6 +61,58 @@ for (const file of CATEGORY_A) {
   });
 }
 
+// The three transform fixtures need more than "raised no warning": two of them
+// are shapes geometry.ts DELIBERATELY refuses to measure (a shear and a
+// rotation do not keep an axis-aligned box axis-aligned), so every
+// coordinate-dependent check silently skips them and the clean-import test
+// above passes for the wrong reason — it would pass just as well if the
+// transform handling were removed entirely.
+//
+// So assert the actual outcome for each, and the DIFFERENCE between them:
+// composable transforms are composed, non-composable ones report "cannot
+// measure" rather than a wrong box, and in neither case does the drawing lose
+// its shapes.
+
+test("a composable transform is composed into the measured box", () => {
+  // translate(50,50) scale(1.6) over a diamond spanning ±12 about the origin:
+  // 50 ± 19.2.
+  const root = parse("transform_translate_scale.svg");
+  const bbox = contentBbox(root);
+  assert.ok(bbox, "translate/scale must be measurable");
+  const [x0, y0, x1, y1] = bbox;
+  for (const [got, want] of [
+    [x0, 30.8],
+    [y0, 30.8],
+    [x1, 69.2],
+    [y1, 69.2],
+  ])
+    assert.ok(Math.abs(got - want) < 1e-6, `${got} ≈ ${want}`);
+});
+
+test("a shear or a rotation reports 'cannot measure', not a wrong box", () => {
+  // The honest answer: a bbox computed in the wrong frame is worse than none,
+  // because callers report it as fact.
+  for (const file of ["transform_matrix.svg", "transform_rotate.svg"]) {
+    assert.equal(contentBbox(parse(file)), null, `${file} must refuse to measure`);
+  }
+});
+
+test("refusing to measure is not the same as finding no geometry", () => {
+  // The distinction the clean-import test cannot see. Each shape is still read;
+  // only the frame it would have to be reported in is unavailable.
+  for (const file of ["transform_matrix.svg", "transform_rotate.svg"]) {
+    const shapes = [...parse(file).getElementsByTagName("*")].filter((el) =>
+      ["rect", "path"].includes(el.nodeName)
+    );
+    assert.ok(shapes.length > 0, `${file} should contain a shape`);
+    // Two points for a rect (opposite corners are all a bbox needs), more for a
+    // path — the assertion is that the shape is READ, not how many points it
+    // reduces to.
+    for (const shape of shapes)
+      assert.ok(elementPoints(shape).length >= 2, `${file}: ${shape.nodeName} yielded no points`);
+  }
+});
+
 // Category B: each file must raise its known issue code.
 const CATEGORY_B = {
   "background_rect.svg": "covers-canvas",
@@ -69,6 +122,7 @@ const CATEGORY_B = {
   "text_label.svg": "text",
   "css_fills.svg": "styled-fill",
   "inkscape_layers.svg": "inkscape-trap",
+  "functional_fills.svg": "inkscape-trap",
   "offcanvas.svg": "content-outside-viewbox",
   "nonzero_viewbox.svg": "viewbox-origin",
   "no_viewbox.svg": "no-viewbox",
@@ -87,6 +141,7 @@ const FIXABLE = {
   "background_path.svg": "covers-canvas",
   "css_fills.svg": "styled-fill",
   "inkscape_layers.svg": "inkscape-trap",
+  "functional_fills.svg": "inkscape-trap",
   "nonzero_viewbox.svg": "viewbox-origin",
 };
 
@@ -126,6 +181,10 @@ const DERIVES = {
   "multi_region.svg": "100x100, walls:gray, rooms:white",
   "inkscape_layers.svg": "100x100, walls:gray, rooms:white",
   "css_fills.svg": "100x100, wall:gray, room:white",
+  // Functional colour notations resolve to names, and free-text layer labels
+  // are sanitised into ids: neither may put a "," or ":" into the spec.
+  "functional_fills.svg":
+    "100x100, Ground_floor__walls:gray, rooms__interior:white, fixtures:blue",
 };
 
 for (const [file, expected] of Object.entries(DERIVES)) {
