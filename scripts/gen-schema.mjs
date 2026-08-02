@@ -810,16 +810,18 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
   });
 }
 
-// Optional default design shown when a visit carries no `#d=` deep link.
-// Must name one of the configured designs.
+// Optional default design shown when a visit carries no `#d=` deep link. Must
+// be a string (checked against CONFIG_SPEC, like every other top-level scalar)
+// and must name one of the configured designs.
 function resolveDefaultDesign(config, designs) {
-  if (config.defaultDesign === undefined || config.defaultDesign === null) return null;
-  if (!designs.some((d) => d.id === config.defaultDesign))
+  const { defaultDesign } = applyTopLevelScalars(config, ["defaultDesign"]);
+  if (defaultDesign === undefined) return null;
+  if (!designs.some((d) => d.id === defaultDesign))
     throw new Error(
-      `gen-schema: 'defaultDesign' ${JSON.stringify(config.defaultDesign)} ` +
+      `gen-schema: 'defaultDesign' ${JSON.stringify(defaultDesign)} ` +
         `is not one of the configured design ids (${designs.map((d) => d.id).join(", ")})`
     );
-  return config.defaultDesign;
+  return defaultDesign;
 }
 
 // `popup.mode: "picker"` means one thing: the popup IS the design chooser, the

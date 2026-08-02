@@ -350,6 +350,16 @@ test("defaultDesign must name a configured design", () => {
   assert.throws(() => run("widget-bad-default.config.json"), /'defaultDesign' .* is not one of the configured design ids/);
 });
 
+test("defaultDesign runs through the descriptor-driven type check", () => {
+  // A non-string defaultDesign used to reach the membership check raw and
+  // fail with "42 is not one of the configured design ids" — a type error
+  // reported as a membership error.
+  assert.throws(
+    () => run("widget-bad-defaultdesign.config.json"),
+    /'defaultDesign', when set, must be a non-empty string/
+  );
+});
+
 test("duplicate design ids fail the build", () => {
   assert.throws(() => run("widget-dup-id.config.json"), /duplicate design id "widget"/);
 });
