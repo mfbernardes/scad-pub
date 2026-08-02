@@ -122,13 +122,32 @@ async function checkWelcomePopup({ page, check, schema }) {
         "popup renders its configured footnote"
       );
     }
+    // The resize handle sits behind whichever of these dialogs is open,
+    // covered by its overlay; grab the handle's box now (layout doesn't move
+    // once the dialogs close) so the check below can probe the same point
+    // right as the LAST one closes, without waiting for it to visibly finish.
+    const handle = page.locator(".param-panel__resize-handle").first();
+    const handleBox = (await handle.count()) ? await handle.boundingBox() : null;
+
+    // Radix keeps a closing dialog's overlay mounted until the browser's
+    // `animationend` event reaches the main thread, which the app's own
+    // first-render work (running concurrently, right after this flow starts)
+    // can delay well past the ~150ms animation. The throttle below makes that
+    // window reproducible instead of racing a fast local machine, and stays on
+    // ACROSS the probe: lifting it at the closing action's return let the
+    // overlay unmount before the probe looked, which passes without testing
+    // anything.
+    const cdp = await page.context().newCDPSession(page);
+    const closeAndProbe = (fn) => probeOverlayOverHandle({ page, check, cdp, box: handleBox, close: fn });
+
     if (schema.popup.mode === "picker") {
       // Picker mode embeds the design gallery directly and has NO primary CTA
       // button: the visitor's next step (choosing what to make) IS the popup.
-      // Picking a card selects that design and dismisses the popup.
+      // Picking a card selects that design and dismisses the popup — the
+      // only dialog in this mode, so this is the flow's one closing action.
       const card = popup.locator("button[data-design]").first();
       check((await card.count()) > 0, "picker popup shows selectable design cards");
-      await card.click();
+      await closeAndProbe(() => card.click());
       await waitDialogClosed(page, schema.popup.header).catch(() => {});
       check((await page.getByRole("dialog").count()) === 0, "picking a design card dismisses the popup");
     } else {
@@ -140,12 +159,18 @@ async function checkWelcomePopup({ page, check, schema }) {
       check((await cta.count()) > 0, `popup shows its configured button "${buttonLabel}"`);
       const dontShow = popup.getByRole("checkbox");
       if (await dontShow.count()) await dontShow.check();
-      await cta.click();
+      const opensPicker = schema.designs.length > 1;
+      // With no picker to follow, the CTA click IS the flow's closing action;
+      // otherwise leave it unthrottled and check once the picker itself closes
+      // below, since that dialog — not this one — is what's left covering the
+      // handle afterward.
+      if (opensPicker) await cta.click();
+      else await closeAndProbe(() => cta.click());
       await waitDialogClosed(page, schema.popup.header).catch(() => {});
       // Scope this to the POPUP: with more than one design the CTA hands over
       // to the design picker, which under `ui.gallery` is itself a dialog.
       check((await popup.count()) === 0, "popup dismissed");
-      if (schema.designs.length > 1) {
+      if (opensPicker) {
         // Under `ui.gallery` the picker the CTA opens is a card dialog, not a
         // Radix listbox, so target whichever this config mounts.
         const picker = schema.ui?.gallery
@@ -158,12 +183,73 @@ async function checkWelcomePopup({ page, check, schema }) {
           .catch(() => false);
         check(opened, "primary CTA opens the design picker");
         // Close it so it doesn't intercept the later checks' interactions.
-        await page.keyboard.press("Escape");
+        await closeAndProbe(() => page.keyboard.press("Escape"));
         await picker.first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
       }
     }
   } else {
     console.log("  (no popup in this config — skipped)");
+  }
+}
+
+// Radix keeps a closing dialog's overlay mounted until `animationend` reaches
+// the main thread, which a busy thread delays well past the exit animation.
+// While it lingers it is what `elementFromPoint` returns over the desktop
+// resize handle, so the handle cannot be grabbed. `close` is the action that
+// dismisses the last dialog; it runs under a CPU throttle held across the
+// sampling, because the window only exists while the thread is contended.
+//
+// Sampling rather than one probe, and asserting the window was OBSERVED:
+// probing once after the overlay has already unmounted finds the handle
+// uncovered and proves nothing, which is how a fix that compiles but has no
+// effect passed this check.
+async function probeOverlayOverHandle({ page, check, cdp, box, close }) {
+  if (!box) {
+    check(false, "the resize handle is present to probe for a stale overlay");
+    return;
+  }
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 15 });
+  try {
+    await close();
+    const y = box.y + box.height / 2;
+    let sawClosedOverlay = false;
+    let covering = null;
+    for (let i = 0; i < 60 && !covering; i++) {
+      const sample = await page.evaluate(
+        ([left, right, yy]) => {
+          const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+          const mounted = overlay?.getAttribute("data-state") === "closed";
+          const h = document.querySelector(".param-panel__resize-handle");
+          let top = null;
+          for (let x = Math.floor(left); x <= Math.ceil(right); x++) {
+            const e = document.elementFromPoint(x, yy);
+            if (e === h) return { mounted, gone: !overlay, covering: null };
+            top = top ?? e;
+          }
+          return {
+            mounted,
+            gone: !overlay,
+            covering: top
+              ? `${top.getAttribute?.("data-slot") ?? top.tagName} ` +
+                `state=${top.getAttribute?.("data-state") ?? "-"} ` +
+                `pointer-events=${getComputedStyle(top).pointerEvents}`
+              : "nothing",
+          };
+        },
+        [box.x, box.x + box.width, y]
+      );
+      sawClosedOverlay ||= sample.mounted;
+      covering = sample.covering;
+      if (sample.gone && sawClosedOverlay) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    check(
+      !covering,
+      `the resize handle stays clickable while the popup overlay unmounts${covering ? ` (covered by ${covering})` : ""}`
+    );
+    check(sawClosedOverlay, "the closing overlay was still mounted when probed, so that assertion meant something");
+  } finally {
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   }
 }
 
