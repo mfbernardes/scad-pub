@@ -38,13 +38,16 @@ writeFileSync(gluePath, readFileSync(join(WASM_DIR, "openscad.js")));
 const factory = (await import(gluePath)).default;
 const wasmBinary = readFileSync(join(WASM_DIR, "openscad.wasm"));
 
-/** Run `source` with the given `-D` defines and return its echo output. */
-async function echoRun(source, defines = []) {
+/** Run `source` with the given `-D` defines; return its echo output and stderr. */
+async function runFull(source, defines = []) {
+  let stderr = "";
   const instance = await factory({
     wasmBinary,
     noInitialRun: true,
     print: () => {},
-    printErr: () => {},
+    printErr: (s) => {
+      stderr += `${s}\n`;
+    },
   });
   instance.FS.writeFile("/in.scad", source);
   instance.callMain([
@@ -54,7 +57,18 @@ async function echoRun(source, defines = []) {
     "--export-format=echo",
     ...defines.flatMap((d) => ["-D", d]),
   ]);
-  return instance.FS.readFile("/out.echo", { encoding: "utf8" });
+  let stdout = "";
+  try {
+    stdout = instance.FS.readFile("/out.echo", { encoding: "utf8" });
+  } catch {
+    // A rejected file never got exported; stderr is what says why.
+  }
+  return { stdout, stderr };
+}
+
+/** Run `source` with the given `-D` defines and return its echo output. */
+async function echoRun(source, defines = []) {
+  return (await runFull(source, defines)).stdout;
 }
 
 // 1. `-D` beats an in-file assignment, wherever that assignment sits. This is
@@ -218,6 +232,70 @@ for (const [what, body, expected] of SHAPES) {
       `engine said ${JSON.stringify(echo.trim().split("\n").pop())})`
   );
 }
+
+// ── generated matrix: every arrangement, not just the ones we thought of ──
+// The hand-picked SHAPES above were extended twice, once per bug the
+// scanner shipped with — each time by someone who had just seen the
+// arrangement fail. This cross-products the constructs it distinguishes
+// (scripts/lib/scad-shape-matrix.mjs) instead of waiting for the next one.
+//
+// Not every generated shape is valid OpenSCAD (`a = 1; if (a > 0) b = 2;` is
+// rejected outright, same as in SHAPES above), so each one is run through
+// the pinned engine FIRST: `ERROR:` on stderr excludes it before anything is
+// asserted, rather than trying to enumerate the invalid shapes by hand.
+const { generateShapes } = await import("./lib/scad-shape-matrix.mjs");
+const generated = generateShapes();
+console.log(`\n=== generated shape matrix (${generated.length} shapes) ===`);
+
+// Only failures are worth a line here: the hand-picked SHAPES above are few
+// enough to read one by one, four thousand generated ones are not, and a log
+// nobody reads hides the one line that matters.
+const quiet = (ok, msg) => ok || check(false, msg);
+
+let excluded = 0;
+let asserted = 0;
+for (const { what, body, expected } of generated) {
+  const sentinel = (i) => 900 + i;
+  const defines = expected.map((n, i) => `${n}=${sentinel(i)}`);
+  const echoTail = expected.length
+    ? `\necho(${expected.map((n) => `"${n}=", ${n}`).join(", ")});`
+    : "";
+  const { stdout, stderr } = await runFull(`${body}${echoTail}\n`, defines);
+  if (/ERROR:/.test(stderr)) {
+    excluded += 1;
+    continue;
+  }
+  asserted += 1;
+
+  writeFileSync(scratch, `/* [Main] */\n${body}\n`);
+  let names;
+  try {
+    names = parseParams(scratch).params.map((p) => p.name);
+  } catch (e) {
+    quiet(false, `${what}: the parser threw — ${e.message}`);
+    continue;
+  }
+  if (
+    !quiet(
+      JSON.stringify(names) === JSON.stringify(expected),
+      `${what}: controls are ${JSON.stringify(expected)} (parser offered ${JSON.stringify(names)})\n    body: ${JSON.stringify(body)}`
+    )
+  )
+    continue;
+
+  if (expected.length === 0) continue;
+  const wanted = expected.map((n, i) => `"${n}=", ${sentinel(i)}`).join(", ");
+  quiet(
+    stdout.includes(wanted),
+    `${what}: every control is settable with -D (wanted ${JSON.stringify(wanted)}, ` +
+      `engine said ${JSON.stringify(stdout.trim().split("\n").pop())})\n    body: ${JSON.stringify(body)}`
+  );
+}
+console.log(`generated matrix: ${asserted} asserted, ${excluded} excluded as invalid OpenSCAD`);
+// A loop that never ran reports every shape as fine. A generator returning
+// nothing, or an engine change that excludes everything as invalid, would
+// otherwise print PASS having checked nothing at all.
+check(asserted > 2000, `the generated matrix asserted ${asserted} shapes (of ${generated.length})`);
 
 console.log(
   state.failures ? `\nSCAD SEMANTICS FAIL ❌ (${state.failures})` : "\nSCAD SEMANTICS PASS ✅"
