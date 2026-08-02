@@ -4,12 +4,12 @@
 // and passed in. The active tab is owned by useOutputConsole.ts, not a local
 // `useState` here: this component unmounts on close, so a local tab state
 // would forget which tab was active every time the console reopens.
-import { type Diagnostic, type BadgeCount, type DiagnosticLevel } from "../lib/diagnostics";
+import { type Diagnostic, type BadgeCount, type DiagnosticLevel, badgeTextColor } from "../lib/diagnostics";
 import { type RenderMetrics, formatDuration } from "../lib/renderMetrics";
 import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
-import { CountBadges } from "./CountBadges";
+import { Badge } from "./ui/badge";
 import { FriendlyFailureCard } from "./FriendlyFailureCard";
 import { IconButton } from "./IconButton";
 import { X as XIcon } from "lucide-react";
@@ -18,7 +18,8 @@ import { t } from "../lib/i18n";
 const ICON: Record<DiagnosticLevel, string> = { notice: "ⓘ", warning: "⚠", assert: "✗" };
 /* The ⓘ/⚠/✗ glyph colour per diagnostic level (config categories may override
    per-notice via inline style). An assert reads as an error, matching the
-   destructive count chip CountBadges already gives it on the console tab. */
+   destructive tint the tab's own count pill gets when an assert contributes
+   to it (see noticeTotal/hasAssert below). */
 const ICON_COLOR: Record<DiagnosticLevel, string> = {
   notice: "text-brand",
   warning: "text-warn",
@@ -60,6 +61,19 @@ export function OutputConsole({
 }: Props) {
   if (!open) return null;
 
+  // One pill on the Notices tab, not one per category (a `fontnote` advisory
+  // alongside an `advisory` marker used to render as two adjacent "1"s,
+  // reading as a typo rather than "2 things"). Destructive wins over warn
+  // over neutral, matching CountBadges' old per-badge variant choice; a
+  // category colour override only survives the sum when it's the only
+  // category actually contributing to the count, since a mixed sum has no
+  // single colour to speak for it.
+  const noticeTotal = badges.reduce((sum, b) => sum + b.count, 0);
+  const contributing = badges.filter((b) => b.count > 0);
+  const hasAssert = contributing.some((b) => b.key === "assert");
+  const anyAttention = contributing.some((b) => b.attention);
+  const soleColor = contributing.length === 1 ? contributing[0].color : undefined;
+
   return (
     <div
       className={cn("output-console flex shrink-0 flex-col border-t bg-card", className)}
@@ -83,7 +97,15 @@ export function OutputConsole({
           <TabsList className="h-auto min-w-0 shrink overflow-x-auto rounded-none border-0 bg-transparent p-0">
             <TabsTrigger value="notices" className={cn(chipTabTrigger, "px-3")}>
               Notices
-              <CountBadges badges={badges} />
+              {noticeTotal > 0 && (
+                <Badge
+                  variant={hasAssert ? "destructive" : anyAttention ? "warn" : "secondary"}
+                  className={cn("px-2 min-w-5 justify-center", hasAssert && "badge-assert")}
+                  style={soleColor ? { background: soleColor, color: badgeTextColor(soleColor) } : undefined}
+                >
+                  {noticeTotal}
+                </Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="log" className={cn(chipTabTrigger, "px-3")}>
               Log
