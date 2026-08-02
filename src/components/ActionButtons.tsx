@@ -21,8 +21,13 @@ import { canShareNatively } from "../lib/share";
 import { t, tn } from "../lib/i18n";
 
 // The id the Download button's `aria-describedby` points at, and the sr-only
-// span below carries: assistive tech gets the same "N issues to review"
-// signal a sighted visitor sees via the amber dot + status strip.
+// span below carries: assistive tech gets the same "attention needed before
+// download" signal a sighted visitor sees via the amber dot + status strip.
+// Its own catalogue key (action.attentionHint), not the status strip's
+// review.issueCount: that one reads fine as a standalone pill label, but
+// stapled onto a button already named "Download for 3D printing" it needs to
+// say what kind of attention, not just a bare count — see OutputToggle's
+// bell label for the matching half of this distinction.
 const EXPORT_ATTENTION_HINT_ID = "export-attention-hint";
 
 // The id the sr-only note explaining WHY Download is currently disabled is
@@ -103,7 +108,7 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
       </ExplainedDisabledButton>
       {hasAttention && (
         <span id={EXPORT_ATTENTION_HINT_ID} className="sr-only">
-          {tn("review.issueCount", attentionCount)}
+          {tn("action.attentionHint", attentionCount)}
         </span>
       )}
       {/* Share honesty: the label/icon/aria-label match what a click will

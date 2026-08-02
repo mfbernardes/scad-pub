@@ -279,8 +279,8 @@ export function ParamPanel({
           </TabsList>
           <IconButton
             className="mr-1 self-center"
-            label="Collapse panel"
-            title="Collapse to full-screen canvas"
+            label={t("panel.collapse")}
+            title={t("panel.collapseTitle")}
             onClick={() => setOpen(false)}
           >
             <CollapseChevron size={16} />

@@ -57,9 +57,13 @@ const sectionHeadingClass =
 // `preset-picker__item` hook class (the roving-focus querySelector above and
 // the smoke script both key off it) even though the layout is a card, not a
 // list row.
+// `outline-none` suppresses index.css's global :focus-visible outline (a card
+// spans two lines of copy the default outline would just clip a corner of),
+// so the replacement ring is required — same treatment as DesignPicker's own
+// gallery cards.
 const cardClass = (isSelected: boolean) =>
   cn(
-    "preset-picker__item preset-picker__card relative flex w-full flex-col overflow-hidden rounded-lg border bg-background/40 text-left outline-none",
+    "preset-picker__item preset-picker__card relative flex w-full flex-col overflow-hidden rounded-lg border bg-background/40 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring",
     isSelected ? "border-primary" : "border-border enabled:hover:border-brand"
   );
 
@@ -404,7 +408,10 @@ export function PresetPicker({
                             whether the title wraps or not. */}
                         <span className="preset-picker__card-body flex min-h-14 flex-col gap-0.5 px-2 py-[0.4rem]">
                           {parsed.overline && (
-                            <span className="truncate text-[0.66rem] font-semibold uppercase tracking-[0.03em] text-muted-foreground">
+                            <span
+                              className="truncate text-[0.66rem] font-semibold uppercase tracking-[0.03em] text-muted-foreground"
+                              title={parsed.overline}
+                            >
                               {parsed.overline}
                             </span>
                           )}

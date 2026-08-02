@@ -4,7 +4,7 @@
 // build time (config -> __APP_FORMAT__): 3MF carries per-object colour from
 // `color(...)`; STL is geometry-only and shown in the theme's model colour.
 // Only the chosen format's loader is referenced, so the other tree-shakes out.
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
@@ -14,6 +14,8 @@ import { shadowViewFade, type ContactShadow } from "./contactShadow";
 import { attachModelPicking, buildStudioRig, buildPlainRig, studioEnvIntensity } from "./viewerRig";
 import { VIEW_DIRECTIONS, DEFAULT_VIEW, type ViewName } from "./views";
 import { toIndexedGeometry } from "@/lib/meshIndex";
+import { Button } from "./ui/button";
+import { t } from "../lib/i18n";
 import {
   frameDistanceForBox,
   cameraBasis,
@@ -150,7 +152,23 @@ function retintAutoVertices(
   return matched;
 }
 
+/** Cheap capability check, run before constructing a THREE.WebGLRenderer (which
+ *  throws on a canvas that can't get a context at all): a disposable canvas
+ *  never attached to the document, discarded either way. */
+function probeWebGL(): boolean {
+  try {
+    const canvas = document.createElement("canvas");
+    return !!(
+      canvas.getContext("webgl2") ||
+      canvas.getContext("webgl") ||
+      canvas.getContext("experimental-webgl")
+    );
+  } catch {
+    return false;
+  }
+}
 
+type WebglStatus = "ok" | "unavailable" | "lost";
 
 export const Viewer = forwardRef<
   ViewerHandle,
@@ -582,15 +600,45 @@ export const Viewer = forwardRef<
   // Lets effects outside the one-time setup effect below (theme, dimension
   // toggle, new geometry) request a render without re-running setup. Sending
   // this through a ref rather than lifting the whole render loop keeps the
-  // scene-setup effect's dependency array empty, as before.
+  // scene-setup effect independent of those effects' own deps.
   const requestRenderRef = useRef<() => void>(() => {});
   // Test/instrumentation hook: counts renderer.render() calls actually issued
   // (i.e. gated by visibility). Exposed on the DOM node so smoke/vis scripts
   // can assert idle frames stay bounded instead of climbing forever.
   const renderCountRef = useRef(0);
 
-  // One-time scene setup.
+  // "unavailable": probeWebGL() failed before any renderer was ever built (no
+  // context to lose or restore). "lost"/"ok" track a live
+  // webglcontextlost/-restored pair on the canvas the setup effect owns.
+  // Rendered as a friendly fallback in place of the canvas (see the return
+  // below) instead of leaving three.js to throw into the ErrorBoundary.
+  const [webglStatus, setWebglStatus] = useState<WebglStatus>(() =>
+    probeWebGL() ? "ok" : "unavailable"
+  );
+  // Bumped to force the one-time setup effect to tear down and rebuild the
+  // renderer/scene/camera from scratch: the "reload viewer" actions below, and
+  // a webglcontextrestored (three.js gives no guarantee that a restored
+  // context still owns its previous GPU resources, so re-creating is the safe
+  // recovery rather than assuming it does). The theme and geometry effects
+  // also depend on it, so a rebuilt scene gets its background/grid and its
+  // model back without waiting on an unrelated prop to change.
+  const [resetEpoch, setResetEpoch] = useState(0);
+  // Re-probes and, if a context is available, forces the rebuild above.
+  // Shared by the "unavailable" and "lost" fallbacks: from "unavailable" it's
+  // a fresh capability check (the visitor may have just turned on hardware
+  // acceleration); from "lost" it's a manual recovery for a context that
+  // never fired webglcontextrestored on its own.
+  const reloadViewer = () => {
+    setWebglStatus(probeWebGL() ? "ok" : "unavailable");
+    setResetEpoch((n) => n + 1);
+  };
+
+  // One-time scene setup (rebuilt from scratch whenever resetEpoch bumps, see
+  // its own comment above). Skips entirely once probeWebGL() has said no
+  // context is available: nothing here can succeed, and constructing
+  // THREE.WebGLRenderer against an unavailable context throws.
   useEffect(() => {
+    if (webglStatus === "unavailable") return;
     const mount = mountRef.current!;
     const scene = new THREE.Scene();
     sceneRef.current = scene; // background + grid are set by the theme effect
@@ -605,7 +653,16 @@ export const Viewer = forwardRef<
     // permanently preserved backbuffer around would cost memory/perf for no
     // benefit. PNG snapshots instead render-then-read synchronously, see the
     // imperative handle's snapshot() above.
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+    } catch {
+      // probeWebGL() passed but the real construction still failed (e.g. a
+      // context lost between the two): same fallback as never having had one.
+      sceneRef.current = null;
+      setWebglStatus("unavailable");
+      return;
+    }
     // Bounded DPR: uncapped devicePixelRatio on 3x+ phones/Retina displays
     // multiplies fragment-shading cost for no visible benefit at this canvas
     // size.
@@ -637,6 +694,28 @@ export const Viewer = forwardRef<
       onPick: onModelPickRef,
     });
 
+    // A GPU process crash or driver reset fires this instead of throwing.
+    // preventDefault() is required for the browser to ever attempt restoring
+    // the context (see MDN's WebGL context loss guide); without it, this
+    // context is gone for the page's lifetime. `contextLost` gates renderNow
+    // below so a still-scheduled frame doesn't call into a dead context
+    // between the event and the state update landing.
+    let contextLost = false;
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+      contextLost = true;
+      setWebglStatus("lost");
+    };
+    const onContextRestored = () => {
+      // Rebuild everything rather than trusting the restored context still
+      // owns its previous textures/buffers (see resetEpoch's own comment).
+      contextLost = true;
+      setWebglStatus("ok");
+      setResetEpoch((n) => n + 1);
+    };
+    canvasEl.addEventListener("webglcontextlost", onContextLost, false);
+    canvasEl.addEventListener("webglcontextrestored", onContextRestored, false);
+
     const io = new IntersectionObserver(
       ([entry]) => {
         visibleRef.current = entry.isIntersecting;
@@ -663,7 +742,7 @@ export const Viewer = forwardRef<
     let looping = false;
 
     const renderNow = () => {
-      if (!visibleRef.current || !pageVisibleRef.current) return;
+      if (!visibleRef.current || !pageVisibleRef.current || contextLost) return;
       // The contact shadow's strength depends on where the camera is, so it is
       // refreshed here, on the renders that already happen (controls "change",
       // damping tick, resize, explicit invalidation): instead of a loop of its
@@ -739,6 +818,8 @@ export const Viewer = forwardRef<
     return () => {
       cancelAnimationFrame(raf);
       controls.removeEventListener("change", requestRender);
+      canvasEl.removeEventListener("webglcontextlost", onContextLost);
+      canvasEl.removeEventListener("webglcontextrestored", onContextRestored);
       detachPicking();
       ro.disconnect();
       io.disconnect();
@@ -779,8 +860,23 @@ export const Viewer = forwardRef<
       // until GC, so each breakpoint flip otherwise leaks a live context.
       renderer.forceContextLoss();
       mount.removeChild(renderer.domElement);
+      // A resetEpoch rebuild normally reassigns these immediately, but a
+      // rebuild that lands in the "unavailable" early-return above does not:
+      // left set, snapshot() and the theme/geometry effects would write into
+      // this torn-down scene/renderer instead of no-op'ing on their null
+      // guards.
+      sceneRef.current = null;
+      camRef.current = null;
+      controlsRef.current = null;
+      rendererRef.current = null;
     };
-  }, []);
+    // resetEpoch alone: webglStatus is read once per run (a status change
+    // without a matching resetEpoch bump is "lost", which intentionally does
+    // NOT tear this down, only pauses renderNow above) and every other prop
+    // this closes over is read fresh through a ref, as already documented at
+    // each ref's declaration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetEpoch]);
 
   // Background + grid follow the active theme. The CSS variables are keyed off
   // <html data-theme>, which a parent effect sets *after* this child effect runs
@@ -812,9 +908,11 @@ export const Viewer = forwardRef<
     });
     return () => cancelAnimationFrame(raf);
     // showDimensions/showGrid are read fresh on a theme change; their own
-    // effects below handle plain toggles.
+    // effects below handle plain toggles. resetEpoch: a rebuilt scene (see
+    // the setup effect) starts with none of this applied, and re-running
+    // this effect is cheaper than duplicating it there.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme]);
+  }, [theme, resetEpoch]);
 
   // Show/hide the dimension overlay on toggle (geometry stays put, and so
   // does the camera: the ruler never re-frames, see chromeInsets).
@@ -1021,12 +1119,52 @@ export const Viewer = forwardRef<
     // Whatever happened above, THIS geometry is what the camera is framed for
     // now: the next same-key render measures its growth against this box.
     framedBoxRef.current = framedBox(size);
+    // resetEpoch: a rebuilt scene (see the setup effect) starts with no
+    // model, so this needs to reload the current `stl` into it even though
+    // `stl` itself didn't change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stl]);
+  }, [stl, resetEpoch]);
 
-  // The WebGL canvas conveys nothing to assistive tech; the textual render
-  // status/log/notices carry the meaning instead.
-  return <div className="viewer" ref={mountRef} aria-hidden="true" />;
+  // mountRef stays the exact `.viewer` node three.js appends its canvas into
+  // (unchanged from before this fallback existed): smoke's idle-render-count
+  // check and the CSS `.viewer canvas` rule both key off that element, and
+  // splitting it into a wrapper + inner mount would silently orphan both. The
+  // fallback below is a plain React child alongside the imperatively-managed
+  // canvas — React only ever touches the child it rendered, never the canvas,
+  // so the two coexist safely (see the setup effect's own DOM calls).
+  //
+  // The canvas conveys nothing to assistive tech; the textual render
+  // status/log/notices carry the meaning instead. The fallback is the one
+  // case the viewer itself has something to say, so aria-hidden lifts while
+  // it's showing.
+  return (
+    <div
+      className="viewer relative"
+      ref={mountRef}
+      aria-hidden={webglStatus === "ok" ? "true" : undefined}
+    >
+      {webglStatus !== "ok" && (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-card p-6 text-center text-foreground"
+          role="alert"
+        >
+          <p className="text-[0.95rem] font-semibold">
+            {webglStatus === "unavailable"
+              ? t("viewer.webglUnavailableTitle")
+              : t("viewer.webglLostTitle")}
+          </p>
+          <p className="max-w-sm text-[0.82rem] text-muted-foreground">
+            {webglStatus === "unavailable"
+              ? t("viewer.webglUnavailableBody")
+              : t("viewer.webglLostBody")}
+          </p>
+          <Button size="sm" onClick={reloadViewer}>
+            {webglStatus === "unavailable" ? t("viewer.webglRetry") : t("viewer.webglReload")}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
   }
 );
 

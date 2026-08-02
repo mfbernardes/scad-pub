@@ -13,6 +13,7 @@ import {
   DialogTrigger,
 } from "./ui/dialog";
 import { preventTouchAutoFocus } from "../lib/pointer";
+import { t } from "../lib/i18n";
 import { THUMB_FRAME, Thumbnail } from "./Thumbnail";
 import {
   Select,
@@ -76,14 +77,14 @@ export function DesignGallery({
           autoComplete="off"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search designs…"
-          aria-label="Search designs"
+          placeholder={t("designPicker.searchPlaceholder")}
+          aria-label={t("designPicker.searchLabel")}
           className="w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       )}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
         {filtered.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted-foreground">No designs match your search.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">{t("designPicker.noMatches")}</p>
         )}
         {grouped.map((run, index) => (
           <section key={run.group ?? `ungrouped-${index}`} className="mb-4">
@@ -183,7 +184,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, gallery = f
         <DialogTrigger asChild>
           <button
             type="button"
-            aria-label="Choose a design"
+            aria-label={t("designPicker.title")}
             className="font-display inline-flex h-8 min-w-0 items-center gap-1 rounded-md px-2 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="truncate">{current?.label ?? value}</span>
@@ -195,8 +196,8 @@ export function DesignPicker({ designs, value, onChange, openSignal, gallery = f
           onOpenAutoFocus={preventTouchAutoFocus}
         >
           <DialogHeader>
-            <DialogTitle>Choose a design</DialogTitle>
-            <DialogDescription>Select what you want to configure.</DialogDescription>
+            <DialogTitle>{t("designPicker.title")}</DialogTitle>
+            <DialogDescription>{t("designPicker.description")}</DialogDescription>
           </DialogHeader>
           <DesignGallery designs={designs} value={value} onChange={(id) => { onChange(id); setOpen(false); }} />
         </DialogContent>

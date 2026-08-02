@@ -476,7 +476,7 @@ export default function App() {
       exportSuccessKeyRef.current += 1;
       setExportSuccess({ key: exportSuccessKeyRef.current });
     } else {
-      setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Exported ${name}`);
+      setAnnouncement(t(outcome === "shared" ? "toast.shared" : "toast.exported", { name }));
     }
     // The install-hint toast and the after-export panel are both "here's what
     // to do next" surfaces, never stack two of those on the same export.
@@ -494,7 +494,7 @@ export default function App() {
       () => download(url, name)
     );
     if (outcome === "cancelled") return;
-    setAnnouncement(outcome === "shared" ? `Shared ${name}` : `Saved ${name}`);
+    setAnnouncement(t(outcome === "shared" ? "toast.shared" : "toast.saved", { name }));
   }, [exportable, snapshot, setAnnouncement]);
 
   // Whether the CURRENT design/values/imports are fully described by a plain
