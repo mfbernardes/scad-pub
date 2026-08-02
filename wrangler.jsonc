@@ -5,6 +5,10 @@
   "observability": {
     "enabled": true
   },
+  // No "directory" here on purpose: @cloudflare/vite-plugin emits
+  // dist/wrangler.json at build time with the built output directory filled in,
+  // and wrangler uses that redirected config. CI runs `wrangler deploy
+  // --dry-run` after the build so this stays true rather than being assumed.
   "assets": {
     "not_found_handling": "single-page-application"
   },

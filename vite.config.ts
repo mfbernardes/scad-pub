@@ -7,39 +7,26 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { headStyleInjection, escapeHtml } from "./src/lib/configCss";
 import { extractInlineScripts, buildAppHeadersBlock } from "./src/lib/securityHeaders.mjs";
+// The build side's one declaration of the two built-in theme colours.
+// designs.json always carries a resolved value, so these only apply to a schema
+// this file failed to read (dev-server edge cases); re-hardcoding them here
+// meant the default lived in four places and could disagree with what
+// gen-schema actually emits. src/lib/theme.ts keeps its own last-resort
+// literals — app code cannot import from scripts/ — but they are only reached
+// when the Vite define and the meta tags are both absent.
+import { PWA_THEME_COLOR_DEFAULTS } from "./scripts/lib/config-spec.mjs";
+import { readGeneratedSchema, type BuildSchema } from "./scripts/lib/read-schema.mjs";
 
 import { cloudflare } from "@cloudflare/vite-plugin";
 
-// Read the active config's generated schema (written by the predev/prebuild
-// gen-schema step) so the page chrome and storage namespace are config-driven.
-function readSchema(): {
-  title?: string;
-  shortName?: string;
-  id?: string;
-  lang?: string;
-  dir?: "ltr" | "rtl" | "auto";
-  format?: "3mf" | "stl";
-  viewer?: { style?: "plain" | "studio"; restOnGrid?: boolean };
-  description?: string;
-  themeColor?: string;
-  themeColorLight?: string;
-  colors?: {
-    light?: Record<string, string>;
-    dark?: Record<string, string>;
-  } | null;
-  extraCss?: string | null;
-  appleSplash?: { href: string; media: string }[];
-} {
-  try {
-    return JSON.parse(
-      readFileSync(
-        fileURLToPath(new URL("./src/generated/designs.json", import.meta.url)),
-        "utf-8"
-      )
-    );
-  } catch {
-    return {};
-  }
+// The generated schema drives the page chrome and the storage namespace. Read
+// through scripts/lib/read-schema.mjs, whose `strict` flag is the difference
+// between a build and the dev server: see that module.
+function readSchema(strict = false): Promise<BuildSchema> {
+  return readGeneratedSchema(
+    fileURLToPath(new URL("./src/generated/designs.json", import.meta.url)),
+    strict
+  );
 }
 
 // Inject title/description/theme-color, the config colour scheme, and any
@@ -49,12 +36,12 @@ function readSchema(): {
 // land *after* it, giving consumer styles the final say (the escape hatch can
 // override the app's own rules by source order, not only specificity). The CSS
 // assembly lives in src/lib/configCss.ts so it's unit-testable without Vite.
-function configHtml(s: ReturnType<typeof readSchema>): Plugin {
+function configHtml(s: BuildSchema): Plugin {
   const headInjection = headStyleInjection(s);
   // Dark theme-color (used when prefers-color-scheme: dark).
-  const darkColor = s.themeColor ?? "#1f2229";
+  const darkColor = s.themeColor ?? PWA_THEME_COLOR_DEFAULTS.dark;
   // Light theme-color (panel surface in light mode).
-  const lightColor = s.themeColorLight ?? "#ffffff";
+  const lightColor = s.themeColorLight ?? PWA_THEME_COLOR_DEFAULTS.light;
   // Free-form config strings are HTML-escaped here (they can't be
   // charset-validated like the colours below), and interpolated through
   // function replacers so `$`-sequences in the text are never treated as
@@ -96,6 +83,14 @@ function configHtml(s: ReturnType<typeof readSchema>): Plugin {
       },
     },
   };
+}
+
+// "This build target has no such file", the only failure the closeBundle
+// plugins below may swallow. Everything else is a broken build that would
+// otherwise exit 0 having silently dropped the service-worker version stamp or
+// the app's CSP block.
+function isEnoent(e: unknown): boolean {
+  return (e as NodeJS.ErrnoException)?.code === "ENOENT";
 }
 
 // Every file under `dir`, recursively, as absolute paths.
@@ -153,8 +148,12 @@ function swVersion(): Plugin {
         const src = readFileSync(swPath, "utf-8");
         if (src.includes("__SW_VERSION__"))
           writeFileSync(swPath, src.replace(/__SW_VERSION__/g, version));
-      } catch {
-        /* no sw.js in this build (e.g. a non-default target): skip */
+      } catch (e) {
+        // Only "there is no sw.js in this build target" is expected. Anything
+        // else — an unwritable dist, a read error — used to be swallowed, and
+        // shipping an unversioned sw.js means updates are never detected at
+        // all, silently, from a build that exited 0.
+        if (!isEnoent(e)) throw e;
       }
     },
   };
@@ -165,13 +164,26 @@ function swVersion(): Plugin {
 //  1. Startup speed: the browser fetches the render worker and the lazy
 //     three.js Viewer chunk in parallel with the entry instead of discovering
 //     them after it executes.
-//  2. Deterministic offline: sw.js precaches by parsing index.html's
-//     src/href attributes (plus Vite's asset-manifest, which does NOT list
-//     worker chunks), so without these links the worker chunk was only ever
-//     cached opportunistically at runtime. The links make install-time
-//     precache cover everything a render needs.
+//  2. Deterministic offline: sw.js derives its asset list by parsing
+//     index.html (plus Vite's asset-manifest, which does NOT list worker
+//     chunks), so without these links the worker chunk was only ever cached
+//     opportunistically at runtime. The links let warmSupplementary discover
+//     it. Install deliberately skips them — fetching them there is the boot
+//     stall the warm-up brake exists to prevent.
+//
+// Hence WARM_ATTR on both: sw.js cannot tell these hints apart from Vite's own
+// `rel="modulepreload"` links by `rel` alone, and Vite emits one for every
+// chunk the ENTRY statically imports. Those are boot-critical — the entry
+// cannot execute without them — so classifying all modulepreloads as
+// supplementary left the install shell unable to boot offline. The attribute is
+// the only signal that says "this hint is for a chunk the app loads later".
 // Runs at closeBundle (like swVersion) because the chunk names are only known
 // once the bundle is emitted; base-aware for subpath deploys.
+// Marks a resource hint as "the app loads this later" for sw.js's install
+// classification. A bare data attribute: valid HTML, ignored by the browser,
+// and the string sw.js's WARM_HINT_RE looks for. Keep the two in step.
+const WARM_ATTR = "data-warm";
+
 function preloadLinks(): Plugin {
   let outDir = "dist";
   let base = "/";
@@ -197,15 +209,15 @@ function preloadLinks(): Plugin {
       const htmlPath = resolve(outDir, "index.html");
       const links = [
         // as="worker" warms the actual worker-script fetch.
-        workerFile && `<link rel="preload" as="worker" href="${base}${workerFile}" />`,
-        viewerFile && `<link rel="modulepreload" href="${base}${viewerFile}" />`,
+        workerFile && `<link rel="preload" as="worker" ${WARM_ATTR} href="${base}${workerFile}" />`,
+        viewerFile && `<link rel="modulepreload" ${WARM_ATTR} href="${base}${viewerFile}" />`,
       ].filter(Boolean);
       if (!links.length) return;
       try {
         const html = readFileSync(htmlPath, "utf-8");
         writeFileSync(htmlPath, html.replace("</head>", () => `  ${links.join("\n    ")}\n  </head>`));
-      } catch {
-        /* no index.html in this build target: skip */
+      } catch (e) {
+        if (!isEnoent(e)) throw e; // no index.html in this build target: skip
       }
     },
   };
@@ -250,9 +262,11 @@ function securityHeaders(): Plugin {
         );
         const block = buildAppHeadersBlock(hashes);
         writeFileSync(headersPath, `${existing.replace(/\n*$/, "\n")}\n${block}`);
-      } catch {
-        /* no index.html or _headers in this build target (e.g. a host with no
-           Cloudflare/Netlify _headers convention). Skip */
+      } catch (e) {
+        // A host with no Cloudflare/Netlify _headers convention has no
+        // dist/_headers to append to, which is fine. Any other failure drops
+        // the entire app CSP block from a build that still exits 0.
+        if (!isEnoent(e)) throw e;
       }
     },
   };
@@ -260,8 +274,8 @@ function securityHeaders(): Plugin {
 
 // Defaults to serving at the domain root. Set BASE_PATH to the subpath your
 // host serves the app under (e.g. "/app/" for example.com/app/). Dev uses "/".
-export default defineConfig(({ command }) => {
-  const schema = readSchema();
+export default defineConfig(async ({ command }) => {
+  const schema = await readSchema(command === "build");
   return {
     base: command === "build" ? process.env.BASE_PATH || "/" : "/",
     plugins: [
@@ -282,7 +296,7 @@ export default defineConfig(({ command }) => {
     // without importing JSON (which Node's test runner can't load untyped).
     define: {
       __APP_ID__: JSON.stringify(schema.id || "scadpub"),
-      __APP_THEME_COLOR__: JSON.stringify(schema.themeColor || "#1f2229"),
+      __APP_THEME_COLOR__: JSON.stringify(schema.themeColor || PWA_THEME_COLOR_DEFAULTS.dark),
       // The build-time model format. A literal here lets the viewer's dead
       // loader branch (and its loader import) tree-shake out of the bundle.
       __APP_FORMAT__: JSON.stringify(schema.format || "3mf"),
@@ -297,7 +311,10 @@ export default defineConfig(({ command }) => {
       // `viewer.grid` (src/lib/viewerPrefs.ts).
       __APP_VIEWER_STYLE__: JSON.stringify(schema.viewer?.style ?? "plain"),
     },
-    worker: { format: "es" },
+    // `as const` because the factory is async now (it awaits the schema read so
+    // strict validation can import the app's own validator): a Promise return
+    // loses the contextual UserConfig type that used to narrow this literal.
+    worker: { format: "es" as const },
     build: {
       target: "es2022",
       chunkSizeWarningLimit: 1500,

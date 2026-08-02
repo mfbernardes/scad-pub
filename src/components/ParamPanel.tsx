@@ -14,7 +14,6 @@ import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
 import { t } from "../lib/i18n";
 import { useAppActions } from "../lib/appActions";
-import { useDebounce } from "../lib/useDebounce";
 import { visibleGroups } from "../lib/paramGroups";
 import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
@@ -80,6 +79,9 @@ interface Props {
   panelTab: PanelTab;
   onPanelTabChange: (tab: PanelTab) => void;
   search: string;
+  /** `search` debounced, from usePanelState: one timer above the layout split,
+   *  so a breakpoint flip mid-typing doesn't restart the debounce. */
+  debouncedSearch: string;
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
@@ -108,6 +110,7 @@ export function ParamPanel({
   panelTab,
   onPanelTabChange,
   search,
+  debouncedSearch,
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
@@ -121,7 +124,6 @@ export function ParamPanel({
     const w = parseInt(readLocal(PANEL_WIDTH_KEY) || "0");
     return w >= MIN_WIDTH && w <= MAX_WIDTH ? w : DEFAULT_WIDTH;
   });
-  const debouncedSearch = useDebounce(search, 150);
   // Ref onto the form's imperative handle so the section navigator can jump.
   const formRef = useRef<ParamFormHandle>(null);
   // The navigator's section list: derived from the SAME visible-groups filter
@@ -149,11 +151,20 @@ export function ParamPanel({
     writeLocal(PANEL_WIDTH_KEY, String(width));
   }, [width]);
 
-  const { schedule: scheduleWidth, cancel: cancelWidthFrame } = useRafBatchedWrite<number>(
-    (w) => {
-      if (panelRef.current) panelRef.current.style.width = `${w}px`;
-    }
-  );
+  const handleRef = useRef<HTMLDivElement | null>(null);
+  // The panel's width and the separator's announced value are one fact, so they
+  // are written in one place. A drag never re-renders (that is the point of
+  // batching the write imperatively), so the announced value would otherwise
+  // stay frozen at whatever React last committed — and settling them
+  // separately at pointer-up left the attribute stranded at an intermediate
+  // value whenever the pointer returned to its starting width, because setWidth
+  // then matches state and React skips the render that would have fixed it.
+  const applyWidth = useCallback((w: number) => {
+    if (panelRef.current) panelRef.current.style.width = `${w}px`;
+    handleRef.current?.setAttribute("aria-valuenow", String(Math.round(w)));
+  }, []);
+  const { schedule: scheduleWidth, cancel: cancelWidthFrame } =
+    useRafBatchedWrite<number>(applyWidth);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -185,9 +196,9 @@ export function ParamPanel({
     // pre-drag width, setWidth below is a no-op and React skips the render,
     // leaving the DOM at whatever the last rAF frame applied (a few px short
     // of the actual pointer position). Mirrors the BottomSheet drag-settle fix.
-    if (panelRef.current) panelRef.current.style.width = `${liveWidthRef.current}px`;
+    applyWidth(liveWidthRef.current);
     setWidth(liveWidthRef.current);
-  }, [cancelWidthFrame]);
+  }, [cancelWidthFrame, applyWidth]);
 
   const side = panelSide === "right" ? "param-panel--right" : "param-panel--left";
   // Collapse chevron points toward the screen edge the panel docks against.
@@ -202,7 +213,11 @@ export function ParamPanel({
       // Keep the #params id on the rail even collapsed, so the "Skip to
       // parameters" link (AppShell) never dangles: landing on the "Open
       // panel" button is the correct target when there's no panel to skip to.
-      <div className={`param-panel-rail ${side}`} id="params">
+      // tabIndex -1 for the same reason #main-content has one (AppShell): a
+      // skip link that targets a non-focusable element only shifts the
+      // sequential-focus starting point, so a screen reader's focus stays where
+      // it was and the "skip" appears to do nothing.
+      <div className={`param-panel-rail ${side}`} id="params" tabIndex={-1}>
         <button
           className="param-panel-open-btn font-display"
           onClick={() => setOpen(true)}
@@ -221,10 +236,12 @@ export function ParamPanel({
       className={`param-panel ${side}`}
       style={{ width }}
       id="params"
+      tabIndex={-1}
       aria-label={parametersLabel}
     >
       {/* Drag handle for resize */}
       <div
+        ref={handleRef}
         className={`param-panel__resize-handle ${panelSide === "right" ? "handle--left" : "handle--right"}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -280,7 +297,6 @@ export function ParamPanel({
             onApply={applyPreset}
             onSelectedChange={selectedPresetChange}
             onPresetsChange={presetsChange}
-            inline
           />
         </TabsContent>
 

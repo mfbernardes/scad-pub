@@ -4,8 +4,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Design } from "../openscad/types";
 import { Check as CheckIcon, ChevronDown as ChevronDownIcon } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
-import { isCoarsePointer } from "../lib/pointer";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
+import { preventTouchAutoFocus } from "../lib/pointer";
 import { THUMB_FRAME, Thumbnail } from "./Thumbnail";
 import {
   Select,
@@ -23,12 +30,11 @@ interface Props {
   onChange: (id: string) => void;
   /**
    * Monotonically-increasing signal: each increment asks this picker to open
-   * (used by the intro popup's "start designing" CTA). Ignored unless `active`,
-   * so only the visible layout's picker opens: both bars mount at once.
+   * (used by the intro popup's "start designing" CTA). Only one picker is ever
+   * mounted — AppShell mounts one layout tree or the other (M7) — so there is
+   * no visible/hidden instance to tell apart.
    */
   openSignal?: number;
-  /** Whether this instance belongs to the currently-shown layout (desktop vs mobile). */
-  active?: boolean;
   /** Render a searchable card gallery instead of the compact Select. */
   gallery?: boolean;
 }
@@ -37,7 +43,7 @@ interface Props {
 // group's run starts where its first design appears, and ungrouped designs
 // (group null/absent) stay as a headerless run. Falls back to a flat list when
 // no design declares a group.
-export function groupDesigns(designs: Design[]): { group: string | null; items: Design[] }[] {
+function groupDesigns(designs: Design[]): { group: string | null; items: Design[] }[] {
   const runs: { group: string | null; items: Design[] }[] = [];
   for (const d of designs) {
     const group = d.group ?? null;
@@ -148,44 +154,45 @@ function designIcon(d: Design): ReactNode {
   ) : undefined;
 }
 
-export function DesignPicker({ designs, value, onChange, openSignal, active = true, gallery = false }: Props) {
+export function DesignPicker({ designs, value, onChange, openSignal, gallery = false }: Props) {
   const runs = groupDesigns(designs);
   const grouped = runs.some((r) => r.group !== null);
   const [open, setOpen] = useState(false);
 
-  // Open on a fresh signal (the CTA), but only for the visible layout's picker.
-  // A ref tracks the last-seen value so a later `active` flip alone can't re-open it.
+  // Open on a fresh signal (the CTA). A ref tracks the last-seen value so a
+  // re-render alone can't re-open it.
   const lastSignal = useRef(openSignal);
   useEffect(() => {
     if (openSignal !== undefined && openSignal !== lastSignal.current) {
       lastSignal.current = openSignal;
-      // Deliberate: `openSignal` is an external one-shot broadcast (a CTA
-      // click elsewhere in the tree), not state derived from props, so it
-      // can't be computed during render. A ref already tracks "last seen"
-      // to make this idempotent against re-renders.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (active) setOpen(true);
+      // `openSignal` is an external one-shot broadcast (a CTA click elsewhere
+      // in the tree), not state derived from props, so it can't be computed
+      // during render. The ref above makes this idempotent against re-renders.
+      setOpen(true);
     }
-  }, [openSignal, active]);
+  }, [openSignal]);
 
   if (gallery) {
     const current = designs.find((d) => d.id === value);
     return (
       <Dialog open={open} onOpenChange={setOpen}>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Choose a design"
-          className="font-display inline-flex h-8 min-w-0 items-center gap-1 rounded-md px-2 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span className="truncate">{current?.label ?? value}</span>
-          <ChevronDownIcon size={14} aria-hidden="true" />
-        </button>
+        {/* Through DialogTrigger rather than a bare button with onClick: Radix
+            then knows which element opened the dialog and restores focus to it
+            on close. A bare button left that to the FocusScope fallback, which
+            guesses. */}
+        <DialogTrigger asChild>
+          <button
+            type="button"
+            aria-label="Choose a design"
+            className="font-display inline-flex h-8 min-w-0 items-center gap-1 rounded-md px-2 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="truncate">{current?.label ?? value}</span>
+            <ChevronDownIcon size={14} aria-hidden="true" />
+          </button>
+        </DialogTrigger>
         <DialogContent
           className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden p-4 sm:p-6"
-          onOpenAutoFocus={(e) => {
-            if (isCoarsePointer()) e.preventDefault();
-          }}
+          onOpenAutoFocus={preventTouchAutoFocus}
         >
           <DialogHeader>
             <DialogTitle>Choose a design</DialogTitle>

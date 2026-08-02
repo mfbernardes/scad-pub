@@ -15,6 +15,106 @@ export function isWaitingUpdate(state: string, hasController: boolean): boolean 
   return state === "installed" && hasController;
 }
 
+/** How long applyUpdate waits for the waiting worker's `controllerchange`
+ *  before falling back to forceReload's unregister-and-reload. Long enough that
+ *  a normal handoff (activate + clients.claim, both local) always wins; short
+ *  enough that a redundant worker doesn't leave the button looking broken. */
+export const SKIP_WAITING_TIMEOUT_MS = 3000;
+
+/**
+ * Wire up "a new worker is waiting" notification for one registration, and
+ * report it through `onWaiting`.
+ *
+ * Extracted from the hook, and taking its collaborators as arguments, because
+ * the interesting behaviour is all in the ORDER of an async registration
+ * against an unmount, which is exactly what a hook body makes untestable.
+ *
+ * Every listener is added with `signal`, and that is the fix as well as the
+ * tidiness: the previous version removed `updatefound` in the effect's cleanup
+ * using a registration captured in the `.then`, so a cleanup that ran BEFORE
+ * registration resolved removed nothing and the `.then` then added a listener
+ * to a long-lived registration that nothing would ever remove. The inner
+ * `statechange` listeners were anonymous and were never removed at all. An
+ * already-aborted signal makes addEventListener a no-op, so both cases close
+ * with one mechanism rather than two bookkeeping refs.
+ *
+ * Resolves with the registration (so the caller can keep it for `update()` and
+ * the escape hatch), or undefined when registration failed or the caller
+ * abandoned it first.
+ */
+export async function watchForWaitingWorker(
+  sw: Pick<ServiceWorkerContainer, "controller">,
+  register: () => Promise<ServiceWorkerRegistration>,
+  onWaiting: (worker: ServiceWorker) => void,
+  signal: AbortSignal
+): Promise<ServiceWorkerRegistration | undefined> {
+  let reg: ServiceWorkerRegistration;
+  try {
+    reg = await register();
+  } catch {
+    return undefined; // offline support is best-effort
+  }
+  if (signal.aborted) return undefined;
+  // An update may already be waiting from a previous visit.
+  if (reg.waiting && sw.controller) onWaiting(reg.waiting);
+  reg.addEventListener(
+    "updatefound",
+    () => {
+      const installing = reg.installing;
+      installing?.addEventListener(
+        "statechange",
+        () => {
+          if (isWaitingUpdate(installing.state, !!sw.controller)) onWaiting(installing);
+        },
+        { signal }
+      );
+    },
+    { signal }
+  );
+  return reg;
+}
+
+/**
+ * Hand the page over to a waiting worker, with a bounded fallback.
+ *
+ * A worker that went redundant between being promoted and being accepted never
+ * fires `controllerchange`, and the user is left looking at a button that did
+ * nothing. So the graceful handoff gets `SKIP_WAITING_TIMEOUT_MS`, and after
+ * that the unregister-and-reload path takes over.
+ *
+ * Extracted from the hook, with its collaborators as arguments, for the same
+ * reason `watchForWaitingWorker` was: the behaviour that matters is a RACE —
+ * which of two paths reloads, and that exactly one of them does — and a race
+ * inside a `useEffect` closure cannot be asserted at all. `reloaded` is the
+ * shared guard both routes check and set; the caller owns it (a ref) so a
+ * `controllerchange` arriving from the effect closes this path too.
+ *
+ * Returns the timer id so a caller can cancel it; the hook does not, because a
+ * page that is reloading has nothing left to clean up.
+ */
+export function handOffToWaiting(
+  waiting: Pick<ServiceWorker, "postMessage">,
+  reloaded: { current: boolean },
+  fallback: () => void,
+  schedule: (fn: () => void, ms: number) => ReturnType<typeof setTimeout> = setTimeout
+): ReturnType<typeof setTimeout> {
+  // ARMED FIRST, and postMessage guarded. `postMessage` on a worker that has
+  // already gone redundant throws InvalidStateError synchronously — and a
+  // redundant worker is precisely the case this fallback exists for, so posting
+  // first meant the one failure it was built to survive skipped it entirely.
+  const timer = schedule(() => {
+    if (reloaded.current) return; // a handoff landed first and already reloaded
+    reloaded.current = true;
+    fallback();
+  }, SKIP_WAITING_TIMEOUT_MS);
+  try {
+    waiting.postMessage({ type: "SKIP_WAITING" });
+  } catch {
+    /* redundant already: the timer above is the whole plan now */
+  }
+  return timer;
+}
+
 /**
  * Nuclear escape hatch for a tab wedged on a stale build (e.g. a service worker
  * that never activated its update). Unregisters this app's own worker and
@@ -208,48 +308,48 @@ export function useServiceWorkerUpdate() {
   // Set when the user accepts, so the resulting controllerchange reloads (and a
   // first-install clients.claim() doesn't trigger a spurious reload).
   const applyingRef = useRef(false);
+  // Set the moment a reload is committed, by either route, so the other one
+  // stands down rather than reloading a second time.
+  const reloadedRef = useRef(false);
 
   useEffect(() => {
     if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
     const sw = navigator.serviceWorker;
     let reg: ServiceWorkerRegistration | undefined;
-    let reloaded = false;
+    // One signal for every listener this effect adds, on `sw` and on the
+    // registration alike. The registration outlives the component (a breakpoint
+    // flip remounts the tree) and resolves asynchronously, so cleanup has to be
+    // able to cancel a subscription that has not been made yet — which a signal
+    // does and a removeEventListener in the cleanup body cannot.
+    const ac = new AbortController();
 
-    const promote = (worker: ServiceWorker | null) => {
-      if (!worker) return;
+    const promote = (worker: ServiceWorker) => {
       waitingRef.current = worker;
       setUpdateReady(true);
     };
 
     const onControllerChange = () => {
-      if (applyingRef.current && !reloaded) {
-        reloaded = true;
+      if (applyingRef.current && !reloadedRef.current) {
+        reloadedRef.current = true;
         location.reload();
       }
     };
-    sw.addEventListener("controllerchange", onControllerChange);
+    sw.addEventListener("controllerchange", onControllerChange, { signal: ac.signal });
 
     // Pass the app id so the worker namespaces its shell cache per config
     // (sw.js is a static file, so it can't read the build-time define directly).
-    sw.register(`${assetUrl("sw.js")}?ns=${encodeURIComponent(APP_ID)}`, {
-      scope: import.meta.env.BASE_URL,
-    })
-      .then((r) => {
-        reg = r;
-        regRef.current = r;
-        // An update may already be waiting from a previous visit.
-        if (r.waiting && sw.controller) promote(r.waiting);
-        r.addEventListener("updatefound", () => {
-          const installing = r.installing;
-          installing?.addEventListener("statechange", () => {
-            if (isWaitingUpdate(installing.state, !!sw.controller))
-              promote(installing);
-          });
-        });
-      })
-      .catch(() => {
-        /* offline support is best-effort */
-      });
+    void watchForWaitingWorker(
+      sw,
+      () =>
+        sw.register(`${assetUrl("sw.js")}?ns=${encodeURIComponent(APP_ID)}`, {
+          scope: import.meta.env.BASE_URL,
+        }),
+      promote,
+      ac.signal
+    ).then((r) => {
+      reg = r;
+      regRef.current = r;
+    });
 
     // Long-lived tabs: the browser only checks for a new worker on navigation,
     // so nudge it periodically and when the tab regains focus.
@@ -261,7 +361,7 @@ export function useServiceWorkerUpdate() {
     const unsubscribeVisibility = onVisibilityChange(onVisible);
 
     return () => {
-      sw.removeEventListener("controllerchange", onControllerChange);
+      ac.abort();
       unsubscribeVisibility();
       clearInterval(timer);
     };
@@ -270,8 +370,11 @@ export function useServiceWorkerUpdate() {
   const applyUpdate = () => {
     applyingRef.current = true;
     const w = waitingRef.current;
-    if (w) w.postMessage({ type: "SKIP_WAITING" });
-    else location.reload(); // no waiting worker (shouldn't happen): hard reload
+    if (!w) {
+      location.reload(); // no waiting worker (shouldn't happen): hard reload
+      return;
+    }
+    handOffToWaiting(w, reloadedRef, () => void forceReload(regRef.current));
   };
 
   // Reload onto the newest build. Prefer the graceful waiting-worker handoff;

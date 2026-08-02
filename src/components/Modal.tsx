@@ -11,7 +11,7 @@
 // script) should expect the title.
 import type { ReactNode } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
-import { isCoarsePointer } from "../lib/pointer";
+import { preventTouchAutoFocus } from "../lib/pointer";
 
 /** Scrollable dialog body (below the header / between header and actions). */
 export const MODAL_BODY = "modal-body min-h-0 overflow-y-auto overscroll-contain px-4 pt-2 pb-4";
@@ -34,9 +34,7 @@ export function Modal({ title, onClose, children }: Props) {
         // On touch devices, don't let Radix pull focus to the first field on
         // open (e.g. the picker's design-search input), which pops the mobile
         // keyboard on a first-time visitor. Desktop behaviour is unchanged.
-        onOpenAutoFocus={(e) => {
-          if (isCoarsePointer()) e.preventDefault();
-        }}
+        onOpenAutoFocus={preventTouchAutoFocus}
       >
         <DialogHeader className="modal-head flex-row items-center justify-between border-b px-4 py-[0.8rem]">
           <DialogTitle>{title}</DialogTitle>

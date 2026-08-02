@@ -32,6 +32,40 @@ export const IGNORED_TAGS = new Set([
   "foreignObject",
 ]);
 
+// Elements that can EXECUTE rather than describe geometry. OpenSCAD ignores
+// them like everything in IGNORED_TAGS, but they are reported and stripped
+// separately: a user-supplied drawing is the one SVG class ScadPub does not
+// trust (see docs/config.md's trust model), and the invariant that keeps it
+// safe — a wizard-prepared SVG is never rendered in the DOM, only mounted into
+// the WASM filesystem — is one line of future code away from not holding.
+// Stripping them makes the runtime path safe by construction rather than by
+// circumstance.
+//
+// SMIL is here because `<animate attributeName="href" values="javascript:…">`
+// sets at runtime what no static scan of the markup would show.
+export const ACTIVE_TAGS = new Set([
+  "script",
+  // Also in IGNORED_TAGS, deliberately: this set is meant to agree with
+  // scripts/lib/svg-sanitize.mjs's element list, and one of them being a
+  // superset by accident is how they drift. check() resolves the overlap in
+  // favour of this set.
+  "foreignObject",
+  "animate",
+  "animateTransform",
+  "animateMotion",
+  "set",
+  "handler",
+]);
+
+// `<style>` is deliberately NOT in that set. CSS cannot execute, so the element
+// is not an execution vector, and removing it would destroy the drawing's
+// colours before resolveStyleFills has read them AND blind the post-fix
+// `styled-fill` check to the stylesheet it exists to report. What a stylesheet
+// CAN do is fetch — `@import` and an external `url()` — and that is what
+// fixes.ts's removeActiveContent neutralises, leaving the rules themselves alone.
+export const CSS_IMPORT_RE = /@import\b[^;]*;?/gi;
+export const CSS_URL_RE = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
+
 const ELEMENT_NODE = 1;
 const COMMENT_NODE = 8;
 
@@ -114,6 +148,43 @@ export function inkAttr(el: Element, name: string): string | null {
   const ns = el.getAttributeNS?.(INK_NS, name);
   if (ns !== null && ns !== undefined && ns !== "") return ns;
   return el.getAttribute(`inkscape:${name}`);
+}
+
+// An Inkscape layer label is free text ("Ground floor, walls"); an id is not.
+// A space makes an id that no `id=` selector in a consuming design matches, and
+// a comma or colon shreds the layers spec that carries the id. Unicode letters
+// and digits stay: they are valid NCName characters, and mangling them would
+// rename every non-English layer for nothing.
+const NCNAME_INVALID_RE = /[^\p{L}\p{N}._-]/gu;
+const NCNAME_START_RE = /^[\p{L}_]/u;
+
+/** `label` as an XML NCName — what `fixInkscapeIds` will actually adopt as the
+ *  id, and therefore what `check` must compare against to decide whether a
+ *  layer is still trapped. */
+export function toNCName(label: string): string {
+  const s = label.replace(NCNAME_INVALID_RE, "_");
+  return NCNAME_START_RE.test(s) ? s : `_${s}`;
+}
+
+/** Every Inkscape layer group whose name is not yet its id, with the id
+ *  `fixInkscapeIds` would adopt. The single statement of the "trapped layer"
+ *  rule: `check` reports these as `inkscape-trap` and `applyFixes` renames
+ *  exactly these, and two independent scans of one rule is how one of them ends
+ *  up reporting a trap the other no longer fixes. */
+export function trappedLayers(
+  els: Element[]
+): { el: Element; label: string; id: string | null; target: string }[] {
+  const out: { el: Element; label: string; id: string | null; target: string }[] = [];
+  for (const el of els) {
+    if (localName(el) !== "g" || inkAttr(el, "groupmode") !== "layer") continue;
+    const label = inkAttr(el, "label");
+    if (!label) continue;
+    const id = el.getAttribute("id");
+    const target = toNCName(label);
+    if (id === target) continue;
+    out.push({ el, label, id, target });
+  }
+  return out;
 }
 
 export function hasAnyTransform(root: Element): boolean {

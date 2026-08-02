@@ -2,7 +2,7 @@
 // the security-sensitive untrusted-filename handling, the source-relative FS
 // mount-path computation, and the format -> OpenSCAD CLI-args mapping can be
 // unit-tested without a browser/WASM module.
-import type { ModelFormat } from "./types";
+import type { ModelFormat } from "./protocol";
 
 // A user file is treated as a font (mounted where fontconfig can find it) when
 // its extension is one OpenSCAD/FreeType can load. Everything else is mounted at

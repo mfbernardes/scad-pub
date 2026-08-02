@@ -10,6 +10,7 @@ import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { displayValue } from "../lib/paramDiff";
 import { visibleGroups } from "../lib/paramGroups";
+import { prefersReducedMotion } from "../lib/matchMedia";
 import { clampNumber, committedNumber, finiteDraft, typedCommitValue } from "../lib/numberDraft";
 import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
 import { fontFallback } from "../lib/fontFallback";
@@ -513,13 +514,17 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
     const el = root.querySelector<HTMLDetailsElement>(`[data-section="${CSS.escape(section)}"]`);
     if (!el) return;
     // rAF so the forced-open <details> has committed before we scroll/focus.
-    requestAnimationFrame(() => {
-      const reduce =
-        typeof window !== "undefined" &&
-        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    // Cancelled on cleanup: a jump followed immediately by an unmount (a
+    // breakpoint flip, a design switch) would otherwise scroll and steal focus
+    // into a tree that is on its way out.
+    const raf = requestAnimationFrame(() => {
+      el.scrollIntoView({
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+        block: "start",
+      });
       el.querySelector("summary")?.focus();
     });
+    return () => cancelAnimationFrame(raf);
   }, [scrollTick]);
 
   // pt-3 here rather than padding-top on the scroll port above: the port's
@@ -593,24 +598,12 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                   <span className={`flex ${isToggle || sideBySide ? "items-center" : "items-baseline"} justify-between gap-2`}>
                     {/* Label + optional info button together on the left so the
                         right edge is free for the toggle / var-name code. */}
-                    <span className="flex min-w-0 items-baseline gap-[0.3rem]">
-                      {isDrifted && (
-                        <span
-                          className="param-drift-dot size-[6px] shrink-0 self-center rounded-full bg-muted-foreground"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <span className="min-w-0 text-foreground">
-                        {label}
-                        {hasHelp && " "}
-                        {hasHelp && <ParamHelp help={p.help} label={label} />}
-                      </span>
-                      {showVarName && p.description && (
-                        <code className="param-var shrink-0 font-mono text-[11px] leading-[normal] text-muted-foreground">
-                          {p.name}
-                        </code>
-                      )}
-                    </span>
+                    <ParamLabel
+                      label={label}
+                      help={hasHelp ? p.help : null}
+                      drifted={isDrifted}
+                      varName={showVarName && p.description ? p.name : null}
+                    />
                     {isToggle && control}
                     {/* Compact: the control shares the label's row. Fixed
                         share of the width rather than `flex-1`, so a one-word
@@ -622,18 +615,13 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
                   </span>
                   {!isToggle && !sideBySide && control}
                   {isDrifted && baseline && (
-                    <span className="param-drift flex items-center gap-[0.4rem] text-[0.78rem] text-muted-foreground">
-                      <span className="line-through">was {displayValue(p, baseline[p.name])}</span>
-                      <button
-                        type="button"
-                        className="param-drift-revert -m-[3px] inline-flex shrink-0 cursor-pointer items-center rounded-[4px] border-none bg-transparent p-[3px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1"
-                        aria-label={`Revert ${label} to ${presetName ?? "default"}`}
-                        title={`Revert to ${presetName ?? "default"}`}
-                        onClick={() => revertToBaseline(p, baseline, onChange)}
-                      >
-                        <RevertIcon size={12} aria-hidden="true" />
-                      </button>
-                    </span>
+                    <ParamDrift
+                      param={p}
+                      label={label}
+                      baseline={baseline}
+                      presetName={presetName}
+                      onChange={onChange}
+                    />
                   )}
                   {missingFontValue !== null && (
                     <FontMissingHint
@@ -687,3 +675,72 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
     </div>
   );
 });
+
+/** A parameter row's left-hand cluster: the drift dot, the label with its
+ *  optional help popover, and the optional OpenSCAD variable name. Named
+ *  because the row body it sits in reads as one shape once these two pieces
+ *  are out of it, not because either is reused. */
+function ParamLabel({
+  label,
+  help,
+  drifted,
+  varName,
+}: {
+  label: string;
+  /** The full doc block, or null when there is nothing beyond the label. */
+  help: string | null;
+  drifted: boolean;
+  varName: string | null;
+}) {
+  return (
+    <span className="flex min-w-0 items-baseline gap-[0.3rem]">
+      {drifted && (
+        <span
+          className="param-drift-dot size-[6px] shrink-0 self-center rounded-full bg-muted-foreground"
+          aria-hidden="true"
+        />
+      )}
+      <span className="min-w-0 text-foreground">
+        {label}
+        {help && " "}
+        {help && <ParamHelp help={help} label={label} />}
+      </span>
+      {varName && (
+        <code className="param-var shrink-0 font-mono text-[11px] leading-[normal] text-muted-foreground">
+          {varName}
+        </code>
+      )}
+    </span>
+  );
+}
+
+/** "was <old value>" plus the one-click revert, shown under a control whose
+ *  value has drifted from the applied preset (or the design's defaults). */
+function ParamDrift({
+  param,
+  label,
+  baseline,
+  presetName,
+  onChange,
+}: {
+  param: Param;
+  label: string;
+  baseline: Values;
+  presetName: string | null | undefined;
+  onChange: (name: string, value: ParamValue) => void;
+}) {
+  return (
+    <span className="param-drift flex items-center gap-[0.4rem] text-[0.78rem] text-muted-foreground">
+      <span className="line-through">was {displayValue(param, baseline[param.name])}</span>
+      <button
+        type="button"
+        className="param-drift-revert -m-[3px] inline-flex shrink-0 cursor-pointer items-center rounded-[4px] border-none bg-transparent p-[3px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1"
+        aria-label={`Revert ${label} to ${presetName ?? "default"}`}
+        title={`Revert to ${presetName ?? "default"}`}
+        onClick={() => revertToBaseline(param, baseline, onChange)}
+      >
+        <RevertIcon size={12} aria-hidden="true" />
+      </button>
+    </span>
+  );
+}

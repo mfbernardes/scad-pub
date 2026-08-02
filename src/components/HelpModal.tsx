@@ -60,7 +60,7 @@ function HelpTabs({ tabs, initialTab }: { tabs: HelpTab[]; initialTab?: string }
   // `initialTab` (from ui.afterExport's "Open printing help" action, or any
   // other future deep link) picks which tab is active on mount: matched by
   // its exact label; an unmatched or omitted value falls back to the first
-  // tab, same as before this prop existed. Radix Tabs' `defaultValue` is
+  // tab. Radix Tabs' `defaultValue` is
   // uncontrolled, so this only matters at mount: fine here since HelpModal
   // remounts fresh every time it opens (see App.tsx's `{showHelp && <HelpModal/>}`).
   const matched = initialTab ? tabs.findIndex((t) => t.label === initialTab) : -1;

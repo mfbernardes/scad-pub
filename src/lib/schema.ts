@@ -3,33 +3,17 @@
 // shape on load turns generator/type drift into a clear, immediate error instead
 // of a confusing failure deep inside a render.
 //
-// Rule this file follows (see src/openscad/types.ts for the base statement):
-// designs.json is the app-facing artifact and may differ from the config
-// surface where the app's needs differ, but where both express the same
-// grouping (as `viewer` now does on both sides) they mirror each other.
-//
-// The counter-example is deliberately documented HERE rather than in
-// types.ts: that file sits in the render worker's hashed dependency closure
-// (src/openscad/worker.ts imports its types, see scripts/lib/worker-deps.mjs
-// and computeRenderHash in scripts/lib/hash.mjs, which hashes whole files,
-// comments included), so a comment-only edit there moves `renderHash` and
-// invalidates every persisted render for nothing. This file isn't in that
-// closure, so it's the safe place for prose that doesn't need to change
-// behaviour. The config's `render` and `pwa` blocks (scripts/lib/
-// config-spec.mjs) do NOT both mirror into designs.json the way `viewer`
-// does: `render.features`/`.format`/`.fonts`/`.fontFallback` land as this
-// schema's own flat `features`/`format`/`fonts`/`fontFallback` fields (the
-// app already reads those flat; only `render.heavyMs`/`.cache` nest, under
-// `RenderConfig`, since that pairing is genuinely its own build-time-tuning
-// concept), and `pwa` doesn't appear here at all, because every one of its
-// keys (`shortName`, `icon`, `iconMaskable`, `backgroundColor`, `categories`,
-// `screenshots`, `shortcuts`, `themeColor`, `install`) is a
-// manifest.webmanifest / icon-rasterizer input with no runtime reader; the
-// closest thing, vite.config.ts's meta-tag injection, already consumes this
-// schema's flat `themeColor`/`themeColorLight`/`appleSplash` fields, not a
-// `pwa` object. One sentence: mirror the config's grouping here when the app
-// shares the concept, keep this file's flat shape when it doesn't.
+// Deliberately limited to LOAD-BEARING INVARIANTS — the shapes the app indexes
+// into and would crash or silently misbehave on. Not full structural
+// re-validation of every optional presentation field: designs.json is bundled
+// into the same chunk that reads it, so it cannot go stale against the code.
+// When adding a field, ask whether the app would MISBEHAVE rather than merely
+// look wrong if the generator emitted the wrong thing; if not, add nothing here.
+// docs/config-pipeline.md records that decision, the alternative that was
+// rejected, and where designs.json mirrors the config's grouping (and where it
+// deliberately does not).
 import type { Schema, Design, Param } from "../openscad/types";
+import { checkHelpShape } from "./helpShape.mjs";
 
 const PARAM_TYPES = ["number", "boolean", "enum", "string"];
 
@@ -331,34 +315,11 @@ export function validateSchema(raw: unknown): Schema {
     }
   }
   if (s.help != null) {
-    const h = s.help as Record<string, unknown>;
-    const isSection = (x: unknown) =>
-      !!x &&
-      typeof (x as Record<string, unknown>).title === "string" &&
-      typeof (x as Record<string, unknown>).body === "string";
-    const isSectionList = (x: unknown) => Array.isArray(x) && x.every(isSection);
-    if (typeof h !== "object" || Array.isArray(h))
-      fail("'help' must be { title?, intro?, sections?, tabs? } or null");
-    if (h.title !== undefined && typeof h.title !== "string")
-      fail("'help.title' must be a string");
-    if (h.sections !== undefined && !isSectionList(h.sections))
-      fail("'help.sections' must be an array of { title, body }");
-    if (h.tabs !== undefined) {
-      if (
-        !Array.isArray(h.tabs) ||
-        !h.tabs.every(
-          (t) =>
-            !!t &&
-            typeof (t as Record<string, unknown>).label === "string" &&
-            isSectionList((t as Record<string, unknown>).sections)
-        )
-      )
-        fail(
-          "'help.tabs' must be an array of { label, intro?, sections: [{ title, body }] }"
-        );
-    }
-    if (h.sections === undefined && h.tabs === undefined)
-      fail("'help' must provide 'sections' or 'tabs'");
+    // The contract lives in ./helpShape.mjs, shared with gen-schema: it used to
+    // be stated here alone, so a `help` block that was merely object-shaped
+    // built green and then failed HERE — during app-module initialisation, so
+    // the whole app failed to boot rather than one modal misbehaving.
+    checkHelpShape(s.help, fail);
   }
   if (s.licenses != null) {
     if (!Array.isArray(s.licenses)) fail("'licenses' must be an array or null");

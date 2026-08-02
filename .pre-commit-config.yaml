@@ -20,18 +20,24 @@ repos:
 
       - id: eslint
         # 0 errors / 0 warnings is a hard gate — see docs/architecture-review.md L2.
+        # `js` is in the filter for public/sw.js, which is hand-maintained
+        # (CLAUDE.md) and was the one tracked source these hooks never saw.
         name: ESLint
         language: system
         entry: npx eslint . --max-warnings 0
         pass_filenames: false
-        files: \.(ts|tsx|mjs)$
+        files: \.(ts|tsx|mjs|js)$
 
       - id: tests
         name: Unit tests
         language: system
         entry: npm test
         pass_filenames: false
-        files: \.(ts|tsx|mjs)$
+        # public/_headers is the served CSP and tests/securityHeaders.test.mjs
+        # is what says whether an edit to it still is one, but it is
+        # extensionless: without naming it, the suite never ran for a commit
+        # that only touched it.
+        files: (\.(ts|tsx|mjs|js)|^public/_headers)$
 
       - id: markdownlint
         name: Markdown lint

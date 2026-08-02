@@ -25,9 +25,9 @@ import type {
   WorkerCommand,
   WorkerModuleMessage,
   WorkerProgress,
-} from "./types";
+} from "./protocol";
 import { assetUrl as asset, versionedAssetUrl } from "../lib/assetUrl";
-import { orphanedDefines } from "../lib/scad";
+import { orphanedDefines } from "./orphanedDefines";
 import {
   buildOpenscadArgs,
   detectMountCollisions,

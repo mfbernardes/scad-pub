@@ -98,7 +98,7 @@ Use these commands while changing the app or build pipeline:
 ```bash
 npm install
 npm run dev      # predev fetches the WASM (first run only) and regenerates the schema
-npm test         # unit tests (requires Node ≥ 22)
+npm test         # unit tests (requires Node ≥ 22.18)
 ```
 
 Build and headless smoke test (end-to-end render, design switch, font upload, preset apply, `@showIf` visibility, share link, 3MF/PNG export, axe-core):

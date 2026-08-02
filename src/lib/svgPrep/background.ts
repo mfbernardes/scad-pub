@@ -8,7 +8,7 @@
 // silhouette is real artwork and is never flagged.
 
 import { SHAPE_TAGS, iterElements, localName } from "./dom";
-import { elementPoints, parseViewBox } from "./geometry";
+import { ancestorMatrix, elementPoints, parseViewBox } from "./geometry";
 
 // A rectangle must span at least this fraction of the viewBox on BOTH axes to
 // count as a background. High enough that ordinary large artwork (a pictogram
@@ -16,16 +16,26 @@ import { elementPoints, parseViewBox } from "./geometry";
 // artboard drawn a hair inside the frame.
 const COVER_FRAC = 0.9;
 
-/** Whether any ancestor of (or the element itself) carries a transform: in
- *  which case its raw coordinates can't be trusted against the viewBox, so we
- *  don't judge it a background. */
-function transformedContext(el: Element): boolean {
-  let node: Node | null = el;
-  while (node && (node as Element).getAttribute) {
-    if ((node as Element).getAttribute("transform")) return true;
-    node = node.parentNode;
-  }
-  return false;
+/** A box mapped through a composable (axis-preserving) transform. Mapping the
+ *  two opposite corners is exact for translate/scale; parseTransform refuses
+ *  anything that would rotate or skew the box. */
+function mapBox(
+  [x0, y0, x1, y1]: [number, number, number, number],
+  m: readonly [number, number, number, number, number, number]
+): [number, number, number, number] {
+  const ax = m[0] * x0 + m[2] * y0 + m[4];
+  const ay = m[1] * x0 + m[3] * y0 + m[5];
+  const bx = m[0] * x1 + m[2] * y1 + m[4];
+  const by = m[1] * x1 + m[3] * y1 + m[5];
+  return [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
+}
+
+// Whether `el` sits under a transform this module cannot measure through. A
+// composable one (translate/scale) is fine: solidRectBox's box is mapped into
+// the root frame below, so a rect that covers the canvas is still recognised
+// after fixViewBoxOrigin has wrapped the drawing in a translate.
+function unmeasurableContext(el: Element, root: Element): boolean {
+  return ancestorMatrix(el, root) === null;
 }
 
 function numAttr(el: Element, name: string, vbSpan: number, fallback: number): number {
@@ -134,8 +144,9 @@ function coversViewBox(
  * The shapes that cover the whole canvas as a solid rectangle: the backgrounds
  * that would make the drawing import as one solid block. Returned only when at
  * least one OTHER importable shape exists (a lone full-canvas rectangle is a
- * deliberate solid tile, not a background burying detail). Skipped entirely when
- * transforms make coordinates unreliable.
+ * deliberate solid tile, not a background burying detail). A shape under a
+ * transform this module cannot measure through is skipped individually
+ * (unmeasurableContext), not the whole drawing.
  */
 export function canvasBackgrounds(root: Element): Element[] {
   const vb = parseViewBox(root);
@@ -144,9 +155,10 @@ export function canvasBackgrounds(root: Element): Element[] {
   const shapes = iterElements(root).filter((el) => SHAPE_TAGS.has(localName(el)));
   const backgrounds: Element[] = [];
   for (const el of shapes) {
-    if (transformedContext(el)) continue;
+    if (unmeasurableContext(el, root)) continue;
     const box = solidRectBox(el, vw, vh);
-    if (box && coversViewBox(box, vb)) backgrounds.push(el);
+    const mapped = box && mapBox(box, ancestorMatrix(el, root)!);
+    if (mapped && coversViewBox(mapped, vb)) backgrounds.push(el);
   }
   // Only a background if it buries something else; keep at least one shape.
   if (backgrounds.length === 0 || backgrounds.length >= shapes.length) return [];

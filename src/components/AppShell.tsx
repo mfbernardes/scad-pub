@@ -55,27 +55,18 @@ import { ActionButtons } from "./ActionButtons";
 import { ExportSuccess, type ExportSuccessState } from "./ExportSuccess";
 import { OutputToggle } from "./OutputToggle";
 import { BarActions } from "./BarActions";
-import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
-import { BookOpen as GuideIcon } from "lucide-react";
+import { ICON_BUTTON_CLASS } from "./IconButton";
 import { cn } from "../lib/utils";
 import { ViewerStage } from "./ViewerStage";
 import { ViewerHUD } from "./ViewerHUD";
-import { DEFAULT_VIEW, type ViewName } from "./views";
+import { type ViewName } from "./views";
 import { OutputConsole } from "./OutputConsole";
 import { BottomSheet, type SheetDetent } from "./BottomSheet";
 import { SheetTabs } from "./SheetTabs";
-import { DesignPicker } from "./DesignPicker";
+import { DesignHeading } from "./DesignHeading";
 import { BarBrand } from "./BarBrand";
 import { parseComputedInfo } from "../lib/computedInfo";
-import {
-  fontFaces,
-  fontFamilyNames,
-  mergeInstalledFonts,
-  normalizeFamily,
-  type FontFaceInfo,
-} from "../lib/fonts";
-import { isFontFile } from "../openscad/renderArgs";
-import { svgPresent } from "../lib/svgFiles";
+import { useAssetAvailability } from "../lib/useAssetAvailability";
 import { useAppActions } from "../lib/appActions";
 import { useIsMobile } from "../lib/useIsMobile";
 import { useSafeAreaBottom } from "../lib/useSafeAreaInset";
@@ -83,12 +74,8 @@ import { usePanelState } from "../lib/usePanelState";
 import { PARAM_SEARCH_INPUT_ID } from "./ParamSearch";
 import { ns } from "../lib/appId";
 import { readLocal, writeLocal } from "../lib/safeStorage";
-import {
-  GRID_PREF_KEY,
-  initialGridVisible,
-  MEASURE_COLLAPSED_KEY,
-  initialMeasureCollapsed,
-} from "../lib/viewerPrefs";
+import { useViewerToggles } from "../lib/useViewerToggles";
+import { useCssPublishers } from "../lib/useCssPublishers";
 import { SheetSwipeHint } from "./SheetSwipeHint";
 import { useReadinessModel } from "../lib/useReadinessModel";
 import { useOutputConsole } from "../lib/useOutputConsole";
@@ -264,45 +251,19 @@ export const AppShell = memo(function AppShell({
   // The active Viewer's bounding-box size (mm), reported via onMeasure. Local
   // viewer glue like the PNG-snapshot handler: it needs the viewer, not App.
   const [measured, setMeasured] = useState<Dimensions | null>(null);
-  // Whether the viewer overlays arrowed W×D×H dimension lines on the model, plus
-  // the top-left measurements panel (bounding box + per-design @info). Off by
-  // default; the HUD ruler toggle turns it on. Shared across both layouts so the
-  // choice survives a desktop⇄mobile breakpoint switch.
-  const [showDimensions, setShowDimensions] = useState(false);
-  const toggleDimensions = useCallback(() => setShowDimensions((v) => !v), []);
-  // Whether that measurements panel is folded to its headline. Held here, not
-  // in DimensionInfo, because the panel unmounts on every ruler-off, cleared
-  // render and design switch: local state made the visitor re-fold it each
-  // time. Starts folded on mobile, where the expanded panel would cover the
-  // model outright (see viewerPrefs' initialMeasureCollapsed); after that the
-  // visitor's own choice persists, like the grid.
-  const [measureCollapsed, setMeasureCollapsed] = useState(() =>
-    initialMeasureCollapsed(readLocal(MEASURE_COLLAPSED_KEY), isMobile)
-  );
-  const toggleMeasureCollapsed = useCallback(() => {
-    setMeasureCollapsed((v) => {
-      const next = !v;
-      writeLocal(MEASURE_COLLAPSED_KEY, next ? "on" : "off");
-      return next;
-    });
-  }, []);
-  // Whether the viewer draws its reference grid. Unlike the other HUD controls
-  // this isn't config-gated: the button is always offered; `viewer.grid` only
-  // seeds the first-ever value, after which the visitor's own choice persists
-  // (see src/lib/viewerPrefs.ts). Shared across both layouts, like the
-  // dimension toggle above, so it survives a desktop⇄mobile breakpoint switch.
-  const [showGrid, setShowGrid] = useState(() => initialGridVisible(readLocal(GRID_PREF_KEY), schema));
-  const toggleGrid = useCallback(() => {
-    setShowGrid((v) => {
-      const next = !v;
-      writeLocal(GRID_PREF_KEY, next ? "on" : "off");
-      return next;
-    });
-  }, []);
-  // The active camera view. Driving it as state (shared across layouts) keeps the
-  // picker's highlight and a freshly-mounted Viewer in step; the imperative snap
-  // below re-applies it on every pick, including the current one.
-  const [view, setView] = useState<ViewName>(DEFAULT_VIEW);
+  // The viewer HUD's own state: the dimension overlay, the measurements panel's
+  // folded state, the grid, and the active camera view. Above the layout split
+  // so a breakpoint change doesn't reset any of it (see useViewerToggles).
+  const {
+    showDimensions,
+    toggleDimensions,
+    measureCollapsed,
+    toggleMeasureCollapsed,
+    showGrid,
+    toggleGrid,
+    view,
+    setView,
+  } = useViewerToggles(schema, isMobile);
   // The sheet sits directly on the viewport bottom now (no docked footer band),
   // reserving only the iOS home-indicator inset below itself so its peek row
   // clears the gesture bar. Its JS geometry must match that CSS bottom offset.
@@ -403,41 +364,11 @@ export const AppShell = memo(function AppShell({
   // is no longer a panel tab.
   const hasFiles = schema.fileImport != null;
 
-  // The set of font families the renderer can actually use: bundled families
-  // (parsed at build time) plus the embedded families of any imported font.
-  // Normalised for case/space-insensitive matching. The font controls compare a
-  // design's `font` value against this to flag a missing family (see ParamForm).
-  const availableFontFamilies = useMemo(() => {
-    const set = new Set((schema.fontFamilies ?? []).map(normalizeFamily));
-    for (const [name, bytes] of Object.entries(userFiles)) {
-      if (isFontFile(name))
-        for (const fam of fontFamilyNames(bytes)) set.add(normalizeFamily(fam));
-    }
-    return set;
-  }, [schema.fontFamilies, userFiles]);
-  // A bundled family to offer as a one-click fallback when the selected font
-  // isn't loaded. Always available, so it can never itself be missing.
-  const fontSuggestion = (schema.fontFamilies ?? [])[0] ?? null;
-  // Every face the renderer can actually use, display-ordered: the bundled
-  // faces (parsed at build time into schema.fontFaces) merged with the faces of
-  // any imported font, so the font selector's list updates the moment a font
-  // is imported. Feeds ParamForm's FontSelect.
-  const installedFonts = useMemo(() => {
-    const imported: FontFaceInfo[] = [];
-    for (const [name, bytes] of Object.entries(userFiles)) {
-      if (isFontFile(name)) imported.push(...fontFaces(bytes));
-    }
-    return mergeInstalledFonts(schema.fontFaces ?? [], imported);
-  }, [schema.fontFaces, userFiles]);
-
-  // The SVG drawings the renderer can resolve right now: the bundled assets
-  // (schema.assets) plus any imported `.svg`. An `@svg` control compares its
-  // filename value against this so removing an in-use drawing surfaces a
-  // missing-file hint at the control: the SVG mirror of the missing-font hint.
-  const availableSvgFiles = useMemo(
-    () => svgPresent([...(schema.assets ?? []), ...Object.keys(userFiles)]),
-    [schema.assets, userFiles]
-  );
+  // What the renderer can actually resolve right now: font families/faces and
+  // SVG drawings, each the union of what the build bundled with what the
+  // visitor has imported (see useAssetAvailability).
+  const { availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles } =
+    useAssetAvailability(schema, userFiles);
 
   // Rows from `echo("@info", label, unit, value)`: internally-calculated
   // values the design surfaced at render time (see lib/computedInfo.ts).
@@ -478,7 +409,7 @@ export const AppShell = memo(function AppShell({
   const handleSelectView = useCallback((next: ViewName) => {
     setView(next);
     (isMobile ? mobileViewerRef : desktopViewerRef).current?.setView(next);
-  }, [isMobile]);
+  }, [isMobile, setView]);
 
   // Output console open/closed state + its auto-open-on-problem machine (see
   // useOutputConsole.ts). Opening the console has to collapse an expanded
@@ -496,7 +427,11 @@ export const AppShell = memo(function AppShell({
     diagnostics,
     defaultOpen: schema.ui?.outputDefault === "open",
     collapseSheet: collapseSheetToPeek,
-    sheetAtPeek: sheetDetent === "peek",
+    // The desktop has no sheet, and useSheetPolicy keeps the last mobile detent
+    // across the breakpoint: without the layout test, a warning arriving after
+    // a resize from an expanded sheet consumed its own edge and the desktop
+    // console never auto-opened.
+    sheetAtPeek: !isMobile || sheetDetent === "peek",
   });
 
   // Raising the sheet off peek (dragging the handle OR tapping a tab) would slide
@@ -513,52 +448,12 @@ export const AppShell = memo(function AppShell({
     }
   }, [setSheetDetent, closeOutput, dismissSheetHint]);
 
-  // Size the mobile viewer to follow the sheet's live height: write the sheet
-  // height (px) into --sheet-follow-h, which sets the viewer's bottom edge,
-  // and, through the Viewer's ResizeObserver, re-fits the model into the new
-  // box so it holds its size instead of shrinking with the canvas (see
-  // Viewer.tsx's refitView). The CSS caps it at the half height, and
-  // data-sheet-dragging toggles the easing, see .app-shell__mobile-viewer.
-  const handleSheetFollow = useCallback((heightPx: number, dragging: boolean) => {
-    const el = mobileRootRef.current;
-    if (!el) return;
-    el.style.setProperty("--sheet-follow-h", `${Math.round(heightPx)}px`);
-    el.dataset.sheetDragging = dragging ? "true" : "false";
-  }, []);
-
-  // Mirror the sheet's measured "Peek" height (drag handle + tab row) into
-  // --mobile-peek-height, so the output console overlay + scrim anchor to the
-  // real row instead of the static CSS fallback, which font scaling can
-  // exceed. See BottomSheet's onPeekHeightChange doc.
-  // Mirror the sheet's Full-detent top gap into --sheet-full-gap, so the
-  // stylesheet can anchor to the model strip (the scrim starts below it)
-  // without re-deriving `FULL_TOP_GAP + notch inset` in CSS. Same pattern as
-  // the peek height below. BottomSheet owns the detent model, so it owns the
-  // number, and this republishes it.
-  const handleSheetFullGap = useCallback((gapPx: number) => {
-    const el = mobileRootRef.current;
-    if (!el) return;
-    el.style.setProperty("--sheet-full-gap", `${Math.round(gapPx)}px`);
-  }, []);
-
-  const handleSheetPeekHeight = useCallback((heightPx: number) => {
-    const el = mobileRootRef.current;
-    if (!el) return;
-    el.style.setProperty("--mobile-peek-height", `${Math.round(heightPx)}px`);
-  }, []);
-
-  // Mirror the export dock's measured height into --action-dock-h, the offset
-  // the over-viewer chips (ViewerGestureHint, SheetSwipeHint) stack themselves
-  // by. The dock is a flex column that grows with what it holds: the readiness
-  // pill, the after-export panel, and it outranks both chips (z-10 vs z-9), so
-  // a static "height of the button cluster" guess meant anything taller than
-  // the cluster covered them. Written on the shell root (rather than a
-  // per-layout one) because both layouts' chips read it and only one layout is
-  // ever mounted. See `.viewer-hint` / `.sheet-hint` in index.css.
+  // The four measured values the stylesheet lays out against, published as CSS
+  // custom properties (see useCssPublishers): the sheet's live height, its
+  // Full-detent top gap, its peek row, and the export dock's height.
   const shellRef = useRef<HTMLDivElement>(null);
-  const handleDockHeight = useCallback((heightPx: number) => {
-    shellRef.current?.style.setProperty("--action-dock-h", `${Math.round(heightPx)}px`);
-  }, []);
+  const { handleSheetFollow, handleSheetFullGap, handleSheetPeekHeight, handleDockHeight } =
+    useCssPublishers(mobileRootRef, shellRef);
 
   // "View messages" (the review dialog's notice-attention cards) closes the
   // dialog and opens the console: the same anchor-above-peek behaviour as
@@ -595,9 +490,34 @@ export const AppShell = memo(function AppShell({
   // which is the contract working as intended: one tally on screen, not none.
   const hasStatusPill = readiness === "failed" || (!isMobile && readiness === "attention");
 
-
-  // Prop bundles shared verbatim by the two layout trees: each invocation
-  // below adds only its layout-specific bits (viewer ref, active flag, …).
+  // Prop bundles shared verbatim by the two layout trees: each call site below
+  // adds only what is genuinely its own (the panel's dock geometry, the
+  // sheet's expand callback).
+  const paramProps = {
+    design,
+    values,
+    bundled,
+    userPresets,
+    selectedPreset,
+    presetBaseline,
+    presetName,
+    baseline,
+    changedParams,
+    availableFontFamilies,
+    fontSuggestion,
+    installedFonts,
+    availableSvgFiles,
+    showVarName,
+    showAdvanced,
+    onShowAdvancedChange: handleShowAdvancedChange,
+    panelTab: panelState.tab,
+    onPanelTabChange: panelState.setTab,
+    search: panelState.search,
+    debouncedSearch: panelState.debouncedSearch,
+    onSearchChange: panelState.setSearch,
+    onSearchFocus: handleSearchFocus,
+    onSearchBlur: handleSearchBlur,
+  };
   const stageProps = {
     design,
     result,
@@ -757,30 +677,17 @@ export const AppShell = memo(function AppShell({
                   <BarBrand schema={schema} theme={theme} logoClassName="h-[1.3rem]" />
                 </span>
                 <div className="mobile-top-bar__center inline-flex min-w-0 items-center justify-self-center">
-                  {designs.length > 1 ? (
-                    <DesignPicker
-                      designs={designs}
-                      value={design.id}
-                      onChange={actions.designChange}
-                      openSignal={openPickerSignal}
-                      active={isMobile}
-                      gallery={schema.ui?.gallery}
-                    />
-                  ) : (
-                    <span className="whitespace-nowrap px-[0.2rem] py-[0.3rem] text-[0.85rem] font-semibold">
-                      {design.label}
-                    </span>
-                  )}
-                  {design.doc && (
-                    <IconButton
-                      label="Design guide"
-                      title="About this design"
-                      onClick={actions.showDesignDoc}
-                      className="mobile-top-bar__design-doc size-7 shrink-0 p-[0.3rem]"
-                    >
-                      <GuideIcon size={15} />
-                    </IconButton>
-                  )}
+                  <DesignHeading
+                    designs={designs}
+                    designId={design.id}
+                    label={design.label}
+                    hasDoc={!!design.doc}
+                    gallery={!!schema.ui?.gallery}
+                    onChange={actions.designChange}
+                    openPickerSignal={openPickerSignal}
+                    onShowDoc={actions.showDesignDoc}
+                    docClassName="mobile-top-bar__design-doc"
+                  />
                 </div>
                 {/* The Output bell doubles as the render-status indicator (a
                     status dot rides its corner), so the narrow bar needs no
@@ -864,32 +771,10 @@ export const AppShell = memo(function AppShell({
               // The tab bar shows at every detent (including peek); tapping a tab
               // raises a collapsed sheet. Auto-render + Reset are param-scoped, so
               // they live inside the Parameters tab (SheetTabs), not here.
-              <div className="sheet-content" id="params-mobile">
-                <SheetTabs
-                  design={design}
-                  values={values}
-                  bundled={bundled}
-                  userPresets={userPresets}
-                  selected={selectedPreset}
-                  presetBaseline={presetBaseline}
-                  presetName={presetName}
-                  baseline={baseline}
-                  changedParams={changedParams}
-                  availableFontFamilies={availableFontFamilies}
-                  fontSuggestion={fontSuggestion}
-                  installedFonts={installedFonts}
-                  availableSvgFiles={availableSvgFiles}
-                  onActivate={expand}
-                  showVarName={showVarName}
-                  showAdvanced={showAdvanced}
-                  onShowAdvancedChange={handleShowAdvancedChange}
-                  tab={panelState.tab}
-                  onTabChange={panelState.setTab}
-                  search={panelState.search}
-                  onSearchChange={panelState.setSearch}
-                  onSearchFocus={handleSearchFocus}
-                  onSearchBlur={handleSearchBlur}
-                />
+              // tabIndex -1: a skip link whose target isn't focusable moves
+              // nothing, see #main-content below.
+              <div className="sheet-content" id="params-mobile" tabIndex={-1}>
+                <SheetTabs {...paramProps} onActivate={expand} />
               </div>
             )}
           </BottomSheet>
@@ -921,7 +806,6 @@ export const AppShell = memo(function AppShell({
             showCount={!hasStatusPill}
             onToggleOutput={toggleOutput}
             openPickerSignal={openPickerSignal}
-            pickerActive={!isMobile}
             onSavePng={showSaveImage ? handleSavePng : undefined}
             canSavePng={exportable}
             hasFiles={hasFiles}
@@ -948,31 +832,10 @@ export const AppShell = memo(function AppShell({
             {pageHeading}
             {/* Docked panel: Presets / Parameters tabs (mirrors mobile). */}
             <ParamPanel
-              design={design}
-              values={values}
-              bundled={bundled}
-              userPresets={userPresets}
-              selectedPreset={selectedPreset}
-              presetBaseline={presetBaseline}
-              presetName={presetName}
-              baseline={baseline}
-              changedParams={changedParams}
-              availableFontFamilies={availableFontFamilies}
-              fontSuggestion={fontSuggestion}
-              installedFonts={installedFonts}
-              availableSvgFiles={availableSvgFiles}
+              {...paramProps}
               panelSide={panelSide}
               panelDefaultOpen={panelDefaultOpen}
-              showVarName={showVarName}
               autoRender={autoRender}
-              showAdvanced={showAdvanced}
-              onShowAdvancedChange={handleShowAdvancedChange}
-              panelTab={panelState.tab}
-              onPanelTabChange={panelState.setTab}
-              search={panelState.search}
-              onSearchChange={panelState.setSearch}
-              onSearchFocus={handleSearchFocus}
-              onSearchBlur={handleSearchBlur}
             />
 
             {/* Canvas */}

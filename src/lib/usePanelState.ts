@@ -8,8 +8,13 @@
 // controlled props to whichever layout is mounted, so a breakpoint change
 // (or a real device rotation) preserves all three.
 import { useRef, useState, type MutableRefObject } from "react";
+import { useDebounce } from "./useDebounce";
 
 export type PanelTab = "presets" | "params";
+
+/** Long enough that typing a word doesn't refilter per keystroke, short enough
+ *  that the list feels live. */
+const SEARCH_DEBOUNCE_MS = 150;
 
 export interface PanelState {
   /** Active tab. Presets only when the design ships ready-made presets: a
@@ -21,6 +26,11 @@ export interface PanelState {
   setTab: (tab: PanelTab) => void;
   search: string;
   setSearch: (search: string) => void;
+  /** `search`, debounced for the filter pass. Hoisted here with the raw value
+   *  for the same reason the raw value is: each layout used to run its own
+   *  `useDebounce(search, 150)`, so a breakpoint flip mid-typing unmounted the
+   *  timer and restarted the debounce from zero. */
+  debouncedSearch: string;
   /** Ref (not state: nothing needs to re-render on focus/blur) tracking
    *  whether the search input currently holds focus, so a layout switch can
    *  restore focus to the newly mounted layout's equivalent input instead of
@@ -33,5 +43,6 @@ export function usePanelState(hasPresets: boolean): PanelState {
   const tab = (picked ?? (hasPresets ? "presets" : "params")) as PanelTab;
   const [search, setSearch] = useState("");
   const searchFocusedRef = useRef(false);
-  return { tab, setTab: setPicked, search, setSearch, searchFocusedRef };
+  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
+  return { tab, setTab: setPicked, search, setSearch, debouncedSearch, searchFocusedRef };
 }

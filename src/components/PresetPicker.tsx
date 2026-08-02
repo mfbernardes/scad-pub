@@ -1,6 +1,6 @@
 // PresetPicker.tsx: a plain preset list (Bundled / Yours), with a
-// "Save current as…" row. Used as a popover on desktop (CommandBar) and as the
-// Presets tab on mobile.
+// "Save current as…" row. Rendered in place by both layouts: the desktop
+// panel's Presets tab and the mobile sheet's.
 //
 // The three list-management actions (save-as, import, export) render two
 // ways, chosen by the `compact` prop: two standing rows on desktop, one row on
@@ -22,13 +22,12 @@ import { downloadBlob } from "../lib/download";
 import { parsePresetCardName } from "../lib/presetCard";
 import { t, tn } from "../lib/i18n";
 import { Button } from "./ui/button";
-import { IconButton } from "./IconButton";
 import { FileInput } from "./FileInput";
 import { Thumbnail } from "./Thumbnail";
 import { Input } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { cn } from "../lib/utils";
-import { Upload as UploadIcon, Download as DownloadIcon, X as XIcon, Check as CheckIcon, EllipsisVertical as MoreIcon } from "lucide-react";
+import { Upload as UploadIcon, Download as DownloadIcon, Check as CheckIcon, EllipsisVertical as MoreIcon } from "lucide-react";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 /* One preset row. `preset-picker__item` is a JS hook too (the roving-focus
@@ -51,7 +50,7 @@ const sectionHeadingClass =
   "font-display mt-2 mb-[0.2rem] px-[0.4rem] text-[0.72rem] font-semibold uppercase tracking-[0.04em] text-muted-foreground";
 
 // One bundled-preset card (design.presetImages is set): same art treatment
-// as DesignGallery.tsx's design cards: an aspect-[4/3] object-cover
+// as DesignPicker.tsx's DesignGallery design cards: an aspect-[4/3] object-cover
 // thumbnail, a selected-state checkmark badge instead of a filled
 // background (the plain list's `itemClass` fill would clash with a photo),
 // and the name split into overline/title/badge by presetCard.ts. Keeps the
@@ -88,8 +87,6 @@ interface Props {
   onApply: (values: Values) => void;
   onSelectedChange: (id: string) => void;
   onPresetsChange: () => void;
-  /** When true, renders inline (no popover wrapper). Used in mobile sheet tabs. */
-  inline?: boolean;
   /**
    * Fold the footer into ONE row (mobile) instead of two standing rows
    * (desktop): the save field keeps the row, and import/export. The two
@@ -102,7 +99,6 @@ interface Props {
    * the trigger row cost a full row anyway and bought back nothing.
    */
   compact?: boolean;
-  onClose?: () => void;
 }
 
 export function PresetPicker({
@@ -114,15 +110,10 @@ export function PresetPicker({
   onApply,
   onSelectedChange,
   onPresetsChange,
-  inline = false,
   compact = false,
-  onClose,
 }: Props) {
   // Whether the compact footer's import/export overflow is open (compact only).
   const [manageOpen, setManageOpen] = useState(false);
-  // Overridable via the config's `strings` block (src/locales/en.json's
-  // presets.title), see docs/config.md's "Text overrides".
-  const presetsLabel = t("presets.title");
   // Preset images are optional per preset (docs/config.md's "Bundled presets"
   // note). A bundled preset that has a configured image renders as a card; one
   // without renders as a plain list row (the same `itemClass` row the "Saved by
@@ -173,7 +164,6 @@ export function PresetPicker({
   const applyBundled = (p: ParsedSet) => {
     onApply(p.values);
     onSelectedChange(`bundled:${design.id}:${p.name}`);
-    onClose?.();
   };
 
   const applyUser = (name: string) => {
@@ -181,7 +171,6 @@ export function PresetPicker({
     if (!v) return;
     onApply(v);
     onSelectedChange(`user:${design.id}:${name}`);
-    onClose?.();
   };
 
   const handleDelete = (name: string) => {
@@ -366,11 +355,9 @@ export function PresetPicker({
   );
 
   const content = (
-    <div className={cn("preset-picker flex flex-col", inline && "min-h-0 flex-1")}>
-      {/* Inline (mobile sheet): fill the tab height so the list grows and the
-          "Save current as…" row pins to the bottom. */}
+    <div className="preset-picker flex min-h-0 flex-1 flex-col">
       <div
-        className={cn("overflow-y-auto overscroll-contain px-1 pt-1 pb-2", inline ? "flex-1" : "max-h-72")}
+        className="flex-1 overflow-y-auto overscroll-contain px-1 pt-1 pb-2"
         ref={sectionsRef}
         onKeyDown={onListKeyDown}
       >
@@ -398,7 +385,7 @@ export function PresetPicker({
                       <button
                         type="button"
                         className={cardClass(isSelected)}
-                        aria-pressed={isSelected}
+                        aria-current={isSelected ? "true" : undefined}
                         title={p.name}
                         onClick={() => applyBundled(p)}
                       >
@@ -442,7 +429,7 @@ export function PresetPicker({
                     <li key={p.name}>
                       <button
                         className={itemClass(selected === id)}
-                        aria-pressed={selected === id}
+                        aria-current={selected === id ? "true" : undefined}
                         onClick={() => applyBundled(p)}
                       >
                         {p.name}
@@ -466,7 +453,7 @@ export function PresetPicker({
                   <li key={name} className="flex items-center gap-[0.15rem]">
                     <button
                       className={cn(itemClass(selected === id), "min-w-0 flex-1")}
-                      aria-pressed={selected === id}
+                      aria-current={selected === id ? "true" : undefined}
                       onClick={() => applyUser(name)}
                     >
                       {name}
@@ -541,30 +528,12 @@ export function PresetPicker({
     />
   );
 
-  if (inline)
-    return (
-      <>
-        {content}
-        {deleteDialog}
-        {saveCollisionDialog}
-        {importCollisionDialog}
-      </>
-    );
-
   return (
-    <div className="preset-picker-popover overflow-hidden bg-card" role="dialog" aria-label={presetsLabel}>
-      <div className="flex items-center border-b py-[0.4rem] pr-2 pl-3">
-        <span className="flex-1 text-[0.88rem] font-semibold">{presetsLabel}</span>
-        {onClose && (
-          <IconButton label="Close presets" onClick={onClose}>
-            <XIcon size={16} />
-          </IconButton>
-        )}
-      </div>
+    <>
       {content}
       {deleteDialog}
       {saveCollisionDialog}
       {importCollisionDialog}
-    </div>
+    </>
   );
 }

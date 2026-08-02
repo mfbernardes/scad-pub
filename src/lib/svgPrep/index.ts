@@ -2,30 +2,26 @@
 // `import()`, apply safe fixes, and derive a region -> colour binding string.
 // Pure DOM logic (no framework, no design specifics) so it runs in the browser
 // wizard and in Node tests alike.
+//
+// This barrel is the module's PUBLIC surface, kept to what consumers actually
+// import: the wizard (src/components/SvgWizard.tsx) and the tests. Seventeen
+// names here had no importer outside src/lib/svgPrep/ at all — every DOM helper,
+// every colour internal — which made the module look like a general-purpose SVG
+// toolkit rather than the one pipeline it is. Import within the module from the
+// file that owns the name; add a re-export here only when something outside
+// needs it.
 
 export {
-  SVG_NS,
-  INK_NS,
-  SHAPE_TAGS,
-  TEXT_TAGS,
-  IGNORED_TAGS,
-  hasAnyTransform,
-  paint,
-  iterElements,
-  localName,
-} from "./dom";
-export {
-  NAMED_COLORS,
   parseColor,
   displayColor,
-  colorKey,
-  slugForColor,
   isRenderableColor,
 } from "./colors";
 export type { Rgb } from "./colors";
 export { check } from "./check";
-export { applyFixes, fixInkscapeIds, fixViewBoxOrigin, removeCanvasBackground } from "./fixes";
-export { canvasBackgrounds } from "./background";
+// applyFixes/deriveRegions/deriveLayers/analyze are exported FOR THE TESTS as
+// well as the wizard: they are the seams the fixture suite drives the pipeline
+// through, one stage at a time, rather than only end-to-end via prepareSvg.
+export { applyFixes, fixViewBoxOrigin } from "./fixes";
 export { groupByColor } from "./groupByColor";
 export type { GroupByColorResult } from "./groupByColor";
 export {
@@ -36,13 +32,11 @@ export {
   canvasEntry,
   isUsableHeight,
   unusableHeightRegions,
-  groupIndex,
   deriveRegions,
   formatLayers,
-  effectiveFill,
 } from "./regions";
 export type { LayerEntry } from "./regions";
-export { contentBbox, parseViewBox, gFormat } from "./geometry";
+export { contentBbox, gFormat } from "./geometry";
 export type { Point, Bbox } from "./geometry";
 export type { Finding, Level, Region } from "./types";
 
@@ -52,16 +46,18 @@ import { groupByColor } from "./groupByColor";
 import { canvasEntry, deriveRegions, formatLayers, parseLayersArg } from "./regions";
 import type { Finding, Region } from "./types";
 
-/** Above this many colour regions a multi-colour export tends to import
- *  unreliably into slicers (small regions merge or drop). Surfaced as a caution,
- *  not a hard limit. */
-export const MAX_RELIABLE_REGIONS = 8;
+export { MAX_RELIABLE_REGIONS } from "./limits";
 
 /** A region binding is only meaningful with 2+ distinct regions; a single
- *  colour degrades to a blank string (no per-region split). */
-export function deriveLayers(root: Element): string {
-  const regions = deriveRegions(root);
+ *  colour degrades to a blank string (no per-region split). The one place that
+ *  rule is written — it was spelled out identically at three call sites, which
+ *  is two chances for one of them to disagree about what "no regions" means. */
+function layersFor(root: Element, regions: Region[]): string {
   return regions.length >= 2 ? formatLayers(regions, canvasEntry(root)) : "";
+}
+
+export function deriveLayers(root: Element): string {
+  return layersFor(root, deriveRegions(root));
 }
 
 export interface Analysis {
@@ -77,11 +73,11 @@ export interface Analysis {
  *  regions and the derived layers string. */
 export function analyze(root: Element, layersArg = ""): Analysis {
   const regions = deriveRegions(root);
-  const findings = check(root, parseLayersArg(layersArg));
+  const findings = check(root, parseLayersArg(layersArg), regions);
   return {
     findings,
     regions,
-    derivedLayers: regions.length >= 2 ? formatLayers(regions, canvasEntry(root)) : "",
+    derivedLayers: layersFor(root, regions),
     hasErrors: findings.some((f) => f.level === "ERROR"),
     hasWarnings: findings.some((f) => f.level === "WARN"),
   };
@@ -91,7 +87,11 @@ export function analyze(root: Element, layersArg = ""): Analysis {
  *  XML or a non-`<svg>` root. */
 export function parseSvg(text: string): Element {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
-  const err = doc.querySelector("parsererror");
+  // getElementsByTagName, not querySelector: the DOM subset this module targets
+  // (see dom.ts) is the intersection of the browser's and @xmldom/xmldom's, and
+  // querySelector is browser-only — which left this, the wizard's ONE terminal
+  // error path, unreachable from a test.
+  const err = doc.getElementsByTagName("parsererror")[0];
   if (err) throw new Error(err.textContent || "Not a valid SVG/XML file");
   const root = doc.documentElement;
   if (!root || root.localName !== "svg") throw new Error("Root element is not <svg>");
@@ -149,8 +149,14 @@ export function prepareSvg(root: Element, opts: PrepareOptions): PrepareResult {
   if (opts.deriveColours) {
     changes.push(...autoGroupByColor(root));
     regions = deriveRegions(root);
-    layers = regions.length >= 2 ? formatLayers(regions, canvasEntry(root)) : "";
+    layers = layersFor(root, regions);
   }
-  const findings = check(root, layers ? parseLayersArg(layers) : []);
+  // `regions` is only populated on the deriveColours path; elsewhere check()
+  // derives its own.
+  const findings = check(
+    root,
+    layers ? parseLayersArg(layers) : [],
+    opts.deriveColours ? regions : undefined
+  );
   return { svg: serializeSvg(root), layers, findings, regions, changes };
 }

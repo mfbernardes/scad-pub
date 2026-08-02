@@ -23,8 +23,22 @@ const SCOPE_URL = `https://example.test/${NS}/`;
 const ENTRY_JS = `https://example.test/${NS}/assets/index.js`;
 const ENTRY_CSS = `https://example.test/${NS}/assets/index.css`;
 const OTHER_PAGE = `https://example.test/${NS}/docs/readme.md`;
+// The preload hints vite.config.ts's preloadLinks injects into the built HTML,
+// carrying its `data-warm` marker. They belong in the fixture: without them the
+// suite structurally could not tell install's attribute-aware classification
+// from a plain extension test.
+const WORKER_JS = `https://example.test/${NS}/assets/worker-abc.js`;
+const VIEWER_JS = `https://example.test/${NS}/assets/Viewer-abc.js`;
+// Vite's OWN modulepreload for a chunk the entry statically imports (its React
+// runtime, its shared vendor chunk). Same `rel` as the Viewer hint above and the
+// opposite classification, which is the whole reason the marker exists: the
+// entry cannot execute without this one, so install must fetch it.
+const VENDOR_JS = `https://example.test/${NS}/assets/vendor-abc.js`;
 const INDEX_HTML = `<!doctype html><html><head>
 <link rel="stylesheet" href="/${NS}/assets/index.css">
+<link rel="modulepreload" crossorigin href="/${NS}/assets/vendor-abc.js">
+<link rel="preload" as="worker" data-warm href="/${NS}/assets/worker-abc.js" />
+<link rel="modulepreload" data-warm href="/${NS}/assets/Viewer-abc.js" />
 </head><body><script type="module" src="/${NS}/assets/index.js"></script></body></html>`;
 
 // --- Minimal fake Cache Storage -------------------------------------------
@@ -70,7 +84,13 @@ function makeFetch(routes, calls = []) {
 }
 
 // --- Load sw.js into a vm context with the fakes wired in -----------------
-function loadSw({ routes, existingCaches } = {}) {
+function loadSw(opts = {}) {
+  return loadSwAt(SCOPE_URL, opts);
+}
+
+// `scope` is a parameter so a test can exercise a subpath deployment whose own
+// scope segment collides with a path the worker treats specially.
+function loadSwAt(scope, { routes, existingCaches } = {}) {
   const fakeCaches = new FakeCacheStorage();
   // Every URL sw.js fetched, in order: lets a test assert what install did
   // NOT pull down, and that a repeated WARM doesn't refetch.
@@ -99,8 +119,8 @@ function loadSw({ routes, existingCaches } = {}) {
     navigator: {},
   };
   sandbox.self = {
-    location: new URL(`${SCOPE_URL}sw.js?ns=${NS}`),
-    registration: { scope: SCOPE_URL },
+    location: new URL(`${scope}sw.js?ns=${NS}`),
+    registration: { scope },
     clients: { claim: async () => {} },
     skipWaiting: async () => {},
     addEventListener: (type, fn) => {
@@ -160,6 +180,7 @@ const goodRoutes = () =>
     [SCOPE_URL, { body: INDEX_HTML }],
     [ENTRY_JS, { body: "console.log(1)" }],
     [ENTRY_CSS, { body: "body{}" }],
+    [VENDOR_JS, { body: "export {}" }],
     // Supplementary/best-effort manifests: absent here, tolerated (404).
   ]);
 
@@ -193,6 +214,10 @@ test("install succeeds and caches the shell when all essential assets are availa
   assert.ok(await cache.match("app-shell"), "SHELL_KEY was populated");
   assert.ok(await cache.match(ENTRY_JS), "essential JS asset was cached");
   assert.ok(await cache.match(ENTRY_CSS), "essential CSS asset was cached");
+  assert.ok(
+    await cache.match(VENDOR_JS),
+    "the entry's own modulepreloaded chunk was cached — the app cannot boot without it"
+  );
 });
 
 test("a failing best-effort supplementary asset does not block install", async () => {
@@ -370,6 +395,8 @@ const warmRoutes = () => {
   routes.set(LAZY_JS, { body: "export {}" });
   routes.set(SCAD_SRC, { body: "cube(1);" });
   routes.set(WASM_URL, { body: "\0asm" });
+  routes.set(WORKER_JS, { body: "self.onmessage=()=>{}" });
+  routes.set(VIEWER_JS, { body: "export {}" });
   return routes;
 };
 
@@ -377,8 +404,58 @@ test("install fetches only the boot-critical shell — no lazy chunks, sources o
   const { listeners, fakeCaches, calls } = loadSw({ routes: warmRoutes() });
   await fireInstall(listeners);
 
-  assert.deepEqual([...calls].sort(), [SCOPE_URL, ENTRY_CSS, ENTRY_JS].sort());
+  assert.deepEqual([...calls].sort(), [SCOPE_URL, ENTRY_CSS, ENTRY_JS, VENDOR_JS].sort());
   assert.ok(!fakeCaches.caches.has(BIN_CACHE), "the ~10 MB binary cache was not opened at install");
+});
+
+test("two links with the same rel split on the marker, not on the tag", async () => {
+  // VENDOR_JS and VIEWER_JS are both <link rel="modulepreload">. The entry
+  // statically imports the first and cannot execute without it; the second is
+  // preloadLinks' hint for a chunk loaded later. Classifying by `rel` puts them
+  // on the same side whichever side that is, and one of the two answers ships
+  // an install shell that cannot boot offline.
+  const { listeners, fakeCaches, calls } = loadSw({ routes: warmRoutes() });
+  await fireInstall(listeners);
+  assert.ok(calls.includes(VENDOR_JS), "the entry's own import was fetched at install");
+  assert.ok(!calls.includes(VIEWER_JS), "the marked hint was not");
+
+  const cache = await fakeCaches.open(`${NS}-shell-__SW_VERSION__`);
+  assert.ok(await cache.match(VENDOR_JS), "and it is in the offline shell");
+});
+
+test("install rejects when a chunk the entry statically imports fails to fetch", async () => {
+  // The install brake's whole promise: a shell that is cached is a shell that
+  // boots. A modulepreloaded entry import missing from it is as fatal as the
+  // entry itself missing, so install must not report success without it.
+  const routes = warmRoutes();
+  routes.set(VENDOR_JS, { fail: true });
+  const { listeners } = loadSw({ routes });
+  await assert.rejects(() => fireInstall(listeners));
+});
+
+test("preload-hinted chunks are warmed, not installed", async () => {
+  // preloadLinks injects <link rel="preload" as="worker"> and
+  // <link rel="modulepreload"> for the render worker and the lazy Viewer.
+  // Both are .js: an extension-based classifier calls them boot-critical and
+  // install re-downloads them (with cache: "reload", so past the HTTP cache
+  // the page just filled) while the first screen still needs the network.
+  const { listeners, fakeCaches, calls } = loadSw({ routes: warmRoutes() });
+  await fireInstall(listeners);
+  assert.ok(!calls.includes(WORKER_JS), "the worker chunk was not fetched at install");
+  assert.ok(!calls.includes(VIEWER_JS), "the Viewer chunk was not fetched at install");
+
+  await fireMessage(listeners, { type: "WARM" });
+  const cache = await fakeCaches.open(`${NS}-shell-__SW_VERSION__`);
+  assert.ok(await cache.match(WORKER_JS), "the worker chunk was warmed");
+  assert.ok(await cache.match(VIEWER_JS), "the Viewer chunk was warmed");
+});
+
+test("a failing preload-hinted chunk does not block install", async () => {
+  const routes = warmRoutes();
+  routes.set(WORKER_JS, { fail: true });
+  routes.set(VIEWER_JS, { fail: true });
+  const { listeners } = loadSw({ routes });
+  await fireInstall(listeners); // must not reject
 });
 
 test("a WARM message pulls down the rest of the offline bundle, once", async () => {
@@ -480,4 +557,244 @@ test("a partial warm-up is retried by the next trigger, not memoized as success"
   assert.ok(await cache.match(SCAD_SRC), "the retry filled the gap");
   // …without re-downloading what the first pass already got.
   assert.ok(!calls.includes(LAZY_JS), "already-cached assets are not refetched");
+});
+
+// --- P1: service-worker fixes (SWR write lifetime, scope collision, pruning) --
+
+test("the stale-while-revalidate write is tied to the event, not fired alongside it", async () => {
+  // waitUntil received only the fetch promise, so a worker killed between the
+  // response arriving and cache.put() landing lost the revalidation silently.
+  //
+  // Driven, not pattern-matched: `waitUntil` is called either way, so the
+  // assertion has to be that awaiting WHAT IT RECEIVED is enough for the write
+  // to have landed. Slowing put() past the fetch is what makes the two
+  // distinguishable — an unchained put resolves after the event has settled,
+  // which is exactly the window a terminated worker falls into.
+  const routes = goodRoutes();
+  const { listeners, fakeCaches } = loadSw({ routes });
+  await fireInstall(listeners);
+  const cache = await fakeCaches.open(`${NS}-shell-__SW_VERSION__`);
+  const realPut = cache.put.bind(cache);
+  cache.put = (req, res) => new Promise((r) => setTimeout(() => r(realPut(req, res)), 10));
+
+  routes.set(ENTRY_JS, { body: "v2" });
+  const waits = [];
+  let responded;
+  listeners.fetch({
+    request: new Request(ENTRY_JS),
+    waitUntil: (p) => waits.push(p),
+    respondWith: (p) => {
+      responded = p;
+    },
+  });
+  assert.equal(
+    await (await responded).text(),
+    "console.log(1)",
+    "the stale copy is served immediately"
+  );
+  await Promise.allSettled(waits);
+  assert.equal(
+    await (await cache.match(ENTRY_JS)).text(),
+    "v2",
+    "and awaiting only what waitUntil received is enough for the revalidation to have landed"
+  );
+});
+
+test("a deployment scoped at /scad/ does not make every asset network-first", async () => {
+  // isVolatileSource matched the segment `scad` anywhere in the pathname, so a
+  // BASE_PATH=/scad/ build treated its own hashed JS/CSS as build-volatile
+  // sources — every asset network-first, no offline app at all.
+  const SCOPED = "https://example.test/scad/";
+  const scopedHtml = `<!doctype html><html><head>
+<link rel="stylesheet" href="/scad/assets/index.css">
+</head><body><script type="module" src="/scad/assets/index.js"></script></body></html>`;
+  const JS = "https://example.test/scad/assets/index.js";
+  const CSS = "https://example.test/scad/assets/index.css";
+  const routes = new Map([
+    [SCOPED, { body: scopedHtml }],
+    [JS, { body: "v1" }],
+    [CSS, { body: "body{}" }],
+  ]);
+  const { listeners, calls } = loadSwAt(SCOPED, { routes });
+  await fireInstall(listeners);
+
+  // Second fetch of the hashed bundle must be served from the cache (SWR), not
+  // treated as a volatile source that always goes to the network first.
+  const first = makeEvent(new Request(JS));
+  listeners.fetch(first);
+  assert.equal(await (await first.settle()).text(), "v1");
+  routes.set(JS, { body: "v2" });
+  calls.length = 0;
+  const second = makeEvent(new Request(JS));
+  listeners.fetch(second);
+  assert.equal(await (await second.settle()).text(), "v1", "served from cache, not network-first");
+
+  // The design sources under the scope still ARE volatile.
+  const SRC = "https://example.test/scad/scad/plate.scad";
+  routes.set(SRC, { body: "a" });
+  const s1 = makeEvent(new Request(SRC));
+  listeners.fetch(s1);
+  await s1.settle();
+  routes.set(SRC, { body: "b" });
+  const s2 = makeEvent(new Request(SRC));
+  listeners.fetch(s2);
+  assert.equal(await (await s2.settle()).text(), "b", "sources stay network-first");
+});
+
+test("a navigation to <scope>index.html refreshes the offline shell", async () => {
+  const routes = goodRoutes();
+  const { listeners, fakeCaches } = loadSw({ routes });
+  await fireInstall(listeners);
+  const cache = await fakeCaches.open(`${NS}-shell-__SW_VERSION__`);
+
+  const INDEX = `${SCOPE_URL}index.html`;
+  routes.set(INDEX, { body: "<!doctype html>fresh shell" });
+  const req = new Request(INDEX);
+  Object.defineProperty(req, "mode", { value: "navigate" });
+  const event = makeEvent(req);
+  listeners.fetch(event);
+  await event.settle();
+  await Promise.all(event._waits);
+  assert.equal(await (await cache.match("app-shell")).text(), "<!doctype html>fresh shell");
+});
+
+test("a WARM pass retires superseded binary caches, keeping a bounded recent set", async () => {
+  // The render worker prunes these too, but only once it has rendered: a
+  // visitor who installs and warms without rendering had no other owner. The
+  // retention bound mirrors binCache.ts's MAX_RETAINED_BIN_CACHES, because
+  // these caches are origin-shared and another deployment may still be on an
+  // older pin.
+  //
+  // Driven through install + WARM, with the manifest served from the network
+  // exactly as a real deploy serves it. Pruning on the ACTIVATE path could
+  // never work and this is why: CACHE is versioned per build, so an activating
+  // worker opens a cache holding only what install put there, and the copy of
+  // the manifest a previous warm pass stored lives in the cache activate has
+  // just deleted. Seeding the manifest into the current shell cache by hand
+  // (which is what this test used to do) reaches a state production never has.
+  const CURRENT = "openscad-wasm-bin-2026.06.12";
+  const existing = {};
+  for (const k of [
+    "openscad-wasm-bin-2025.01.01",
+    "openscad-wasm-bin-2025.06.01",
+    "openscad-wasm-bin-2026.01.01",
+    "unrelated-app-cache",
+  ]) {
+    existing[k] = new FakeCache();
+  }
+  const routes = goodRoutes();
+  routes.set(new URL("precache-manifest.json", SCOPE_URL).href, {
+    body: JSON.stringify({ version: 2, shell: [], bin: { cache: CURRENT, urls: [] } }),
+  });
+  const { listeners, fakeCaches } = loadSw({ routes, existingCaches: existing });
+  await fireInstall(listeners);
+  await fireActivate(listeners);
+  assert.ok(
+    (await fakeCaches.keys()).includes("openscad-wasm-bin-2025.01.01"),
+    "install and activate on their own retire nothing: the warm pass owns this"
+  );
+  await fireMessage(listeners, { type: "WARM" });
+
+  const keys = await fakeCaches.keys();
+  // MAX_RETAINED_BIN_CACHES is 3: the current pin plus the two most recent
+  // others, so exactly the oldest goes.
+  assert.ok(keys.includes("openscad-wasm-bin-2026.01.01"), "the most recent other pin is retained");
+  assert.ok(keys.includes("openscad-wasm-bin-2025.06.01"), "and the one before it");
+  assert.ok(!keys.includes("openscad-wasm-bin-2025.01.01"), "the oldest pin is retired");
+  assert.ok(keys.includes("unrelated-app-cache"), "a cache that isn't ours is untouched");
+});
+
+test("pruning survives the deploy boundary: a second build still retires an old pin", async () => {
+  // The regression this pins. Every deploy stamps a new VERSION and therefore a
+  // new shell cache, so anything the prune step needs must not be read out of
+  // the *previous* build's cache. Two builds in a row, each warming once.
+  let existing = Object.fromEntries(
+    ["openscad-wasm-bin-2025.01.01", "openscad-wasm-bin-2025.06.01"].map((k) => [k, new FakeCache()])
+  );
+  // Each build gets a fresh worker over the caches the previous one left behind
+  // — the caches persist across deploys, the shell cache name does not.
+  const run = async (binCache) => {
+    const routes = goodRoutes();
+    routes.set(new URL("precache-manifest.json", SCOPE_URL).href, {
+      body: JSON.stringify({ version: 2, shell: [], bin: { cache: binCache, urls: [] } }),
+    });
+    const { listeners, fakeCaches } = loadSw({ routes, existingCaches: existing });
+    await fireInstall(listeners);
+    await fireActivate(listeners);
+    await fireMessage(listeners, { type: "WARM" });
+    existing = Object.fromEntries(fakeCaches.caches);
+  };
+  await run("openscad-wasm-bin-2026.01.01");
+  await run("openscad-wasm-bin-2026.06.12");
+
+  const keys = Object.keys(existing);
+  assert.ok(
+    !keys.includes("openscad-wasm-bin-2025.01.01"),
+    "the oldest pin is gone after the second deploy's warm pass"
+  );
+  assert.ok(keys.includes("openscad-wasm-bin-2026.06.12"), "the current pin survives");
+});
+
+test("sw.js's hand-mirrored bin-cache policy matches binCache.ts", async () => {
+  // public/sw.js is plain JS and cannot import TypeScript, so it re-declares
+  // BIN_CACHE_PREFIX and MAX_RETAINED_BIN_CACHES. Nothing checked that: the
+  // suite asserted sw.js against sw.js's own literal, so raising the bound in
+  // binCache.ts alone left both workers evicting the same origin-shared ~11 MB
+  // caches under different rules, with everything green. Same guard the WASM
+  // pin got (tests/binCache.test.mjs), for the same reason.
+  const { BIN_CACHE_PREFIX, MAX_RETAINED_BIN_CACHES } = await import(
+    "../src/openscad/binCache.ts"
+  );
+  const prefix = /const BIN_CACHE_PREFIX = "([^"]+)"/.exec(swSource)?.[1];
+  const retain = Number(/const MAX_RETAINED_BIN_CACHES = (\d+)/.exec(swSource)?.[1]);
+  assert.equal(prefix, BIN_CACHE_PREFIX, "sw.js's cache prefix");
+  assert.equal(retain, MAX_RETAINED_BIN_CACHES, "sw.js's retention bound");
+});
+
+test("the warm-hint marker vite.config.ts writes is the one sw.js reads", () => {
+  // Two files, one string, and nothing else connects them: the marker is what
+  // tells install a `rel="modulepreload"` belongs to a chunk the app loads
+  // later rather than to one the entry statically imports. If they drift, every
+  // hint reads as boot-critical (a slower install) or — the direction that
+  // actually broke — Vite's own entry imports read as supplementary and the
+  // offline shell cannot boot. Asserted through sw.js's OWN matcher rather than
+  // by re-deriving its regex here, which would just be a third copy to drift.
+  const viteConfig = readFileSync(
+    fileURLToPath(new URL("../vite.config.ts", import.meta.url)),
+    "utf-8"
+  );
+  const attr = /const WARM_ATTR = "([^"]+)"/.exec(viteConfig)?.[1];
+  assert.ok(attr, "vite.config.ts declares WARM_ATTR");
+  const { sandbox } = loadSw();
+  assert.equal(typeof sandbox.hasWarmMarker, "function", "sw.js exposes its matcher");
+  assert.ok(sandbox.hasWarmMarker(` ${attr} href="/x.js"`), `sw.js does not recognise ${attr}`);
+});
+
+test("the marker is an attribute, not a substring of a filename", () => {
+  // A chunk Vite happened to name `data-warm-runtime.js` demoted its own
+  // boot-critical modulepreload to supplementary, dropping an entry import out
+  // of the install shell — silently, and only for the bundle that produced that
+  // name.
+  const { listeners, calls } = loadSw({
+    routes: new Map([
+      [
+        SCOPE_URL,
+        {
+          body:
+            `<html><head><link rel="modulepreload" href="/${NS}/assets/data-warm-runtime.js">` +
+            `<link rel="modulepreload" data-warm href="/${NS}/assets/Viewer-abc.js" />` +
+            `</head><body><script type="module" src="/${NS}/assets/index.js"></script></body></html>`,
+        },
+      ],
+      [ENTRY_JS, { body: "console.log(1)" }],
+      [`https://example.test/${NS}/assets/data-warm-runtime.js`, { body: "export {}" }],
+    ]),
+  });
+  return fireInstall(listeners).then(() => {
+    assert.ok(
+      calls.includes(`https://example.test/${NS}/assets/data-warm-runtime.js`),
+      "a chunk merely NAMED data-warm is still boot-critical"
+    );
+    assert.ok(!calls.includes(VIEWER_JS), "the one that carries the attribute is not");
+  });
 });

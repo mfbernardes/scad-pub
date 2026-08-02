@@ -7,7 +7,12 @@ content plan: orient a coding agent in ScadPub. The commands, the one build-time
 
 ScadPub renders OpenSCAD designs client-side via OpenSCAD-WASM as a static site.
 [README.md](README.md) is the project overview, [docs/config.md](docs/config.md) the full
-config reference, [docs/annotations.md](docs/annotations.md) the annotation vocabulary. Read
+config reference, [docs/annotations.md](docs/annotations.md) the annotation vocabulary.
+Three subsystem pages hold the long-form rationale the source only points at:
+[docs/config-pipeline.md](docs/config-pipeline.md) (`CONFIG_SPEC`, the `designs.json`
+validator, generated-file reconciliation), [docs/viewer.md](docs/viewer.md) (camera fit and
+the studio lighting rig) and
+[docs/security-headers.md](docs/security-headers.md) (the CSP, directive by directive). Read
 the source rather than trusting a summary here: this file covers what the source does not say
 out loud.
 
@@ -30,10 +35,15 @@ file-by-file tour of the diff. Length is not thoroughness.
 ```bash
 npm install
 npm run dev        # predev fetches pinned WASM + regenerates the schema, then vite
-npm test           # node:test unit suite; Node >= 22
+npm test           # node:test unit suite; Node >= 22.18
 npm run build      # prebuild gen-schema + tsc -b + vite build -> dist/
 npm run smoke      # headless axe + end-to-end check of the BUILT app — build first
 npm run vis        # visual regression vs tests/screenshots/ (--update to rebaseline)
+npm run check:studio # builds a viewer.style "studio" variant and measures its lighting
+npm run check:svg  # serves each sanitized SVG to Chromium; asserts it makes no request
+npm run check:dist # asserts the BUILT artifact carries its sw.js version + CSP block
+npm run check:scad # drives the pinned OpenSCAD WASM to pin the language facts the parser assumes
+npm run e2e:svg    # end-to-end run of the in-app SVG wizard against the BUILT app
 npm run screens    # capture every desktop + mobile view of the BUILT app
 ```
 
@@ -77,12 +87,19 @@ What follows from that, before you edit anything:
   with `git describe` against ScadPub’s own checkout — not the cwd — so a fork, submodule or
   sibling build still names ScadPub. `$SCADPUB_VERSION` overrides it for git-less trees, and
   resolving to nothing is not a build failure.
-- **`src/openscad/types.ts` is in that hashed closure.** `scripts/lib/worker-deps.mjs` walks
-  `worker.ts`'s local import graph to feed `computeRenderHash`, and `types.ts` is transitively
-  imported from there, so any change to it — comments included — changes `renderHash` and
-  evicts every deployment’s persisted render cache. That’s a real but affordable cost, not a
-  reason to avoid the file forever: batch `types.ts` edits deliberately (e.g. alongside another
-  change that already bumps `renderHash`) rather than trickling them in one comment at a time.
+- **Only `src/openscad/`’s own worker files are in that hashed closure — keep UI types out of
+  it.** `scripts/lib/worker-deps.mjs` walks `worker.ts`’s local import graph to feed
+  `computeRenderHash`, so any change to a file in that graph — comments included — changes
+  `renderHash` and evicts every deployment’s persisted render cache. The closure is
+  `worker.ts`, `protocol.ts`, `renderArgs.ts`, `binCache.ts`, `progressThrottle.ts`,
+  `retryableOnce.ts`, `orphanedDefines.ts` and `lib/assetUrl.ts`, and
+  `tests/worker-deps.test.mjs` pins it as an exact set so it cannot re-widen by accident.
+  `protocol.ts` holds the worker’s message shapes alone; `types.ts` re-exports them and is the
+  app-facing home for everything else (it changed 25 times in a year for viewer/help/licence
+  fields that cannot affect a triangle, and each one used to evict every cache). Likewise
+  `orphanedDefines.ts` sits apart from `lib/scad.ts`, whose other exports need the full `Param`
+  union. When you do have to touch a hashed file, batch the edits deliberately rather than
+  trickling them in one comment at a time.
 - The licenses modal takes every version from build data (`componentVersions`, `wasmVersion`,
   `scadpubVersion`), never a literal. A new bundled component needs an entry in
   `src/lib/licenses.ts`; an npm package also needs its name in `BUNDLED_PACKAGES`, since
@@ -155,6 +172,13 @@ model to say it twice.
   resolves, plus a `tsc6` binary). Do not “fix” this back to a plain `typescript` dependency; a
   straight bump to 7.x breaks `npm run lint`. Revisit when typescript-eslint supports the 7.x
   API.
+- **Node 22.18 is the floor, and `engines` says so.** Type stripping is unflagged
+  only from 22.18.0: below it, importing a `.ts` file fails with
+  `ERR_UNKNOWN_FILE_EXTENSION`. The test suite has always needed it (see the next
+  bullet), and the BUILD needs it too now that `gen-schema.mjs` and
+  `scripts/lib/read-schema.mjs` import `src/lib/schema.ts` directly rather than
+  paraphrasing its contract. The old floor of plain 22 understated it on both
+  counts.
 - **Tests import TypeScript source directly.** `tests/register-ts.mjs` + `ts-resolve.mjs`
   register a loader hook that resolves extensionless relative imports (`./scad`) to `.ts` under
   Node’s built-in type-stripping. That is why app code writes extensionless imports and why
@@ -183,7 +207,11 @@ model to say it twice.
   group with an in-dropdown Import action. `fontFallback` pins a weak last-resort family in
   `fonts.conf` so an imported font cannot become Fontconfig’s global default.
 - **The config `id` namespaces all browser storage** (localStorage, IndexedDB, preset cache) so
-  several deployments coexist on one origin. `vite.config.ts` reads `designs.json` to inject
+  several deployments coexist on one origin — with one deliberate exception:
+  the binary cache (`openscad-wasm-bin-*`, `binCache.ts`) is origin-shared on
+  purpose, because the WASM binary is identical across deployments and one
+  shared copy saves every other deployment a ~10 MB download. Don’t “fix” it.
+  `vite.config.ts` reads `designs.json` to inject
   title, description, per-scheme `theme-color`, the Apple web-app title and the splash `<link>`s
   into `index.html`, and exposes `__APP_ID__`/`__APP_THEME_COLOR__` as compile-time constants.
 - **Annotations**: `// @showIf`, `// @collapsed`, `// @advanced`, `// @font`, `// @info`,
@@ -192,6 +220,15 @@ model to say it twice.
   `echo("@info", …)` / `echo("@review", …)`. Are parsed by `gen-schema` and invisible to desktop
   OpenSCAD. [docs/annotations.md](docs/annotations.md) is the reference; a new one lands in the
   parser and that doc together.
+
+**The studio viewer style is only exercised by `npm run check:studio`.** This
+repo's own config builds `plain`, and `npm run vis` masks the viewer, so the
+ordinary gates say nothing about `viewerRig.ts` — an environment map that was
+disposed before first use once shipped through all of them. That script builds a
+studio variant and asserts the 5th-percentile luminance of the model, which is
+the shadow side the environment lifts (~96 lit, ~28 unlit); mean brightness does
+not separate the two, because the key and fill lights dominate it. Touch the
+lighting rig and run it.
 
 ## Verify UI work by looking at it
 

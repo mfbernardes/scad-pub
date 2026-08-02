@@ -5,6 +5,9 @@
   "version": "0.0.0",
   "description": "ScadPub publishes OpenSCAD models as static browser-based configurators.",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "gen": "node scripts/gen-schema.mjs && node scripts/gen-config-schema.mjs",
     "wasm": "node scripts/fetch-wasm.mjs",
@@ -19,7 +22,12 @@
     "vis": "node scripts/screenshots.mjs",
     "screens": "node scripts/capture-screens.mjs",
     "lint": "eslint .",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "e2e:svg": "node scripts/e2e-svg-wizard.mjs",
+    "check:dist": "node scripts/check-dist.mjs",
+    "check:scad": "node scripts/check-scad-semantics.mjs",
+    "check:studio": "node scripts/check-studio.mjs",
+    "check:svg": "node scripts/check-svg-inert.mjs"
   },
   "dependencies": {
     "@fontsource/atkinson-hyperlegible": "^5.3.0",

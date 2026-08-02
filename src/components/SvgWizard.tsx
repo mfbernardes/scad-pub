@@ -8,7 +8,6 @@ import {
   check,
   formatLayerSpec,
   isRenderableColor,
-  MAX_RELIABLE_REGIONS,
   parseLayerSpec,
   parseSvg,
   unusableHeightRegions,
@@ -124,8 +123,16 @@ export function SvgWizard({
     regions: Region[];
   } | null>(null);
   const [layers, setLayers] = useState("");
+  // A preparation failure the drawing itself caused (formatLayerSpec refusing a
+  // region id or colour that would corrupt the spec). Terminal like a parse
+  // failure, with the same retry via cancel.
+  const [prepError, setPrepError] = useState<string | null>(null);
+  // Set once the visitor changes the layers string themselves (a per-region
+  // height, or a hand edit of the field), so a re-fix doesn't overwrite it.
+  const layersEditedRef = useRef(false);
 
   const lastStep: Step = deriveColours ? 3 : 2;
+  const terminalError = parsed.error ?? prepError;
   // Residual ERROR findings (e.g. no importable geometry) mean the drawing can't
   // be imported as-is, so block advancing past the check step and completing.
   const blockedByError = (fixed?.findings ?? []).some((f) => f.level === "ERROR");
@@ -133,9 +140,24 @@ export function SvgWizard({
   const applyAndAdvance = () => {
     // The engine's one-call host contract: fix, (optionally) derive colours,
     // re-check, and serialise. The same result the host applies on finish.
-    const res = prepareSvg(parsed.root!, { deriveColours });
+    //
+    // From a FRESH parse of the original text, not `parsed.root`: prepareSvg
+    // mutates its argument in place, so Back → "Fix & continue" again re-fixed
+    // an already-fixed drawing — a second viewBox-translate wrapper around the
+    // first, colour regions grouped inside colour regions — and reported the
+    // changes as though they were new.
+    let res;
+    try {
+      res = prepareSvg(parseSvg(svgText), { deriveColours });
+    } catch (e) {
+      setPrepError((e as Error).message);
+      return;
+    }
     setFixed({ svg: res.svg, changes: res.changes, findings: res.findings, regions: res.regions });
-    setLayers(res.layers ?? "");
+    // A hand-edited layers string survives the round trip. Re-deriving would
+    // silently discard per-region heights the visitor had already typed, which
+    // is the whole reason they went Back.
+    if (!layersEditedRef.current) setLayers(res.layers ?? "");
     setStep(2);
   };
 
@@ -162,13 +184,15 @@ export function SvgWizard({
   };
 
   const heightOf = (id: string) => spec.entries.find((e) => e.id === id)?.height ?? "";
-  const setHeight = (id: string, height: string) =>
+  const setHeight = (id: string, height: string) => {
+    layersEditedRef.current = true;
     setLayers(
       formatLayerSpec(
         spec.canvas,
         spec.entries.map((e) => (e.id === id ? { ...e, height: height.trim() } : e)),
       ),
     );
+  };
 
   return (
     <Dialog open onOpenChange={close}>
@@ -178,12 +202,14 @@ export function SvgWizard({
           <DialogDescription>
             {parsed.error
               ? "This file could not be read as an SVG."
-              : `Step ${step} of ${lastStep}: ${STEP_NAMES[step]} · ${fileName}`}
+              : prepError
+                ? "This drawing could not be prepared."
+                : `Step ${step} of ${lastStep}: ${STEP_NAMES[step]} · ${fileName}`}
           </DialogDescription>
         </DialogHeader>
 
-        {parsed.error ? (
-          <p className="svg-wizard__error text-sm text-destructive">{parsed.error}</p>
+        {terminalError ? (
+          <p className="svg-wizard__error text-sm text-destructive">{terminalError}</p>
         ) : (
           <div ref={scrollRef} className="max-h-[55vh] overflow-y-auto overscroll-contain pr-1">
             {step === 1 && (
@@ -293,13 +319,6 @@ export function SvgWizard({
                         previewed here, but are still applied — check them when you print.
                       </p>
                     )}
-                    {fixed.regions.length > MAX_RELIABLE_REGIONS && (
-                      <p className="text-sm text-warn">
-                        {fixed.regions.length} regions is a lot: a few large colour
-                        regions print reliably, but many small ones can merge or print
-                        unpredictably. Consider fewer, larger regions.
-                      </p>
-                    )}
                     <label className="flex flex-col gap-1 text-sm">
                       <span className="text-muted-foreground">
                         Region colours and heights (editable):
@@ -307,7 +326,10 @@ export function SvgWizard({
                       <Input
                         value={layers}
                         aria-label="Region colours and heights"
-                        onChange={(e) => setLayers(e.target.value)}
+                        onChange={(e) => {
+                          layersEditedRef.current = true;
+                          setLayers(e.target.value);
+                        }}
                       />
                     </label>
                   </>
@@ -340,7 +362,7 @@ export function SvgWizard({
         )}
 
         <DialogFooter>
-          {parsed.error ? (
+          {terminalError ? (
             <Button variant="outline" onClick={onCancel}>
               Choose another file
             </Button>

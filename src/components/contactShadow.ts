@@ -138,6 +138,11 @@ export function createContactShadow(): ContactShadow {
   const blurPlane = new THREE.Mesh(planeGeo);
   blurPlane.visible = false;
   group.add(blurPlane);
+  // three gives a material-less Mesh a default MeshBasicMaterial. `blur()`
+  // replaces it with the two blur shaders and nothing ever disposes this one,
+  // so hold it for dispose(): one leaked program per viewer mount, and the
+  // viewer remounts on every breakpoint flip.
+  const blurPlaneInitialMaterial = blurPlane.material as THREE.Material;
 
   // Orthographic camera at the ground looking up +Z. Frustum extents are set
   // by setFootprint; far (the height above ground that still darkens) too.
@@ -269,6 +274,7 @@ export function createContactShadow(): ContactShadow {
       depthMat.dispose();
       hBlur.dispose();
       vBlur.dispose();
+      blurPlaneInitialMaterial.dispose();
     },
   };
 }

@@ -129,6 +129,11 @@ export function groupByColor(root: Element): GroupByColorResult {
     buckets.get(key)!.shapes.push(sh);
   }
 
+  // Both conjuncts matter, and the second is not the tautology it looks like:
+  // `shapes` is `allShapes` minus those already in a named region, so they are
+  // equal only when NOTHING is grouped yet. A drawing that is half grouped and
+  // whose loose remainder happens to be one colour still has that remainder
+  // worth grouping, and must not be refused as "only one colour found".
   if (order.length < 2 && shapes.length === allShapes.length) {
     return {
       changes: [],

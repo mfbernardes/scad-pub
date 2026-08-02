@@ -10,10 +10,10 @@ import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildDimensions, type DimensionsGroup } from "./dimensions";
-import { createContactShadow, shadowViewFade, type ContactShadow } from "./contactShadow";
+import { shadowViewFade, type ContactShadow } from "./contactShadow";
+import { attachModelPicking, buildStudioRig, buildPlainRig, studioEnvIntensity } from "./viewerRig";
 import { VIEW_DIRECTIONS, DEFAULT_VIEW, type ViewName } from "./views";
 import { toIndexedGeometry } from "@/lib/meshIndex";
-import { isModelClick } from "@/lib/editOnModel";
 import {
   frameDistanceForBox,
   cameraBasis,
@@ -24,7 +24,7 @@ import {
   insetFitFraction,
   aspectAwareFit,
   insetTargetOffset,
-  outgrowsFrame,
+  refitPlan,
   DEFAULT_FIT_FRACTION,
   type Box3Like,
   type FitFraction,
@@ -106,16 +106,6 @@ function cssColor(name: string, fallback: string): THREE.Color {
   return new THREE.Color(v || fallback);
 }
 
-// Studio-style per-theme tuning, read from the live document theme (the same
-// source of truth the CSS variables key off) so scene setup and theme switches
-// always agree. Dimmer light and a heavier shadow read better against a dark
-// backdrop. NB this drives `scene.environmentIntensity`, not the materials'
-// `envMapIntensity`: with a scene-level environment three overwrites the
-// material value with the scene's (see WebGLRenderer's setProgram), so the
-// per-material knob is inert on this path.
-function studioEnvIntensity(): number {
-  return document.documentElement.dataset.theme === "dark" ? 0.92 : 1.1;
-}
 function studioShadowOpacity(): number {
   return document.documentElement.dataset.theme === "dark" ? 0.62 : 0.42;
 }
@@ -160,135 +150,7 @@ function retintAutoVertices(
   return matched;
 }
 
-// ── Studio environment ──────────────────────────────────────────────────────
-// A soft overhead field over a small uniform base: a softbox above a product,
-// which is what makes a top face read brighter than the vertical wall beside
-// it. Built as a back-facing sphere whose fragment radiance depends only on
-// elevation, then PMREM-filtered like any other environment scene, so it costs
-// one small render at startup and nothing per frame. Values are linear and may
-// exceed 1 (PMREM renders into a half-float target), and no colour is added:
-// a neutral field keeps the near-white plate white and the red relief unshifted.
-//
-// Authored Y-up (the equirect/scene convention three's environments use) and
-// mapped onto the Z-up world by scene.environmentRotation. The sign below is
-// the one that actually lands the bright pole on world +Z: three inverts and
-// re-flips the Euler on its way to the shader (see WebGLMaterials'
-// refreshTransformUniform), so it is not the sign the Euler alone suggests;
-// verify by eye, not by derivation, if this is ever changed.
-const ENV_ROTATION_X = Math.PI / 2;
-// Radiance of the overhead field and of the uniform base beneath it. Their
-// balance sets the top-vs-side ratio: the field reaches a vertical wall at
-// only ~0.27 of what it gives a top face, while the base reaches every
-// direction equally, so raising the base lifts the walls (and the undersides)
-// without touching the top by much.
-//
-// Trimmed from 0.97 (see git history) to make room for the much stronger key
-// below: this field depends only on elevation (see the fragment shader), so
-// two faces at the same elevation get identical radiance from it NO MATTER
-// their azimuth: by construction, rotating the whole field about world Z
-// (its axis of symmetry) leaves it unchanged, so it cannot see the difference
-// between a prismatic letter-stroke's two opposing ~45° bevels. That
-// symmetry is exactly the bug this file was changed to fix: only a light
-// with an azimuth of its own (the key/fill pair below) can tell those two
-// faces apart. Reclaiming some of this field's headroom lets that pair be
-// strong enough to matter without blowing out the top face it still has to
-// keep near-white (see the key/fill comment below for the budget).
-const ENV_OVERHEAD = 0.9;
-const ENV_BASE = 0.23;
-// Angular softness of the field's edge, as cosines of the angle from "up":
-// the radiance ramps from base to full between these. Wide and soft, so
-// curved geometry (Braille domes, letter bevels) shades smoothly.
-const ENV_EDGE0 = 0.1;
-const ENV_EDGE1 = 0.95;
 
-// ── Key + fill: the only azimuthally-aware light in the rig ────────────────
-// Prismatic lettering (roof()-cut strokes) is a ridge of two ~45° bevels at
-// the SAME elevation but opposite azimuths. The environment above is a
-// function of elevation only, so by construction it cannot tell those two
-// faces apart; whatever separates them has to come from a light with an
-// azimuth of its own. Two design choices follow from that:
-//
-// 1. Neither light's azimuth may line up with the camera's. The default
-//    camera sits at world azimuth ≈ −53° (see cam.position.set below and
-//    VIEW_DIRECTIONS.isometric); a light near that azimuth lights the two
-//    bevel faces the camera can see almost equally (both lean "towards" the
-//    viewer/light together), which is exactly the flat, un-emphasized look
-//    this rig replaces. KEY sits on world +X (azimuth 0°) and FILL on world
-//    −Y (azimuth −90°) instead: respectively ~53° and ~37° from the
-//    camera's azimuth, and 90° from each other, so between them almost
-//    every stroke direction (the vertical stems that dominate digits via
-//    KEY, the horizontal/curved strokes via FILL) gets a lit bevel and a
-//    shaded one rather than two equally-grey ones. FILL is deliberately the
-//    weaker of the pair: it exists so no stroke direction reads as
-//    perfectly flat, not to compete with KEY for which family of strokes
-//    reads most strongly.
-// 2. Both sit at a LOW elevation (14°/10°) rather than the old single key's
-//    ~55°. What a shallow angle buys is efficiency, not raw contrast: at any
-//    elevation below 45° the ridge's shaded bevel faces away and gets nothing
-//    from the light at all, and the lit one catches cos(45° − elevation) of
-//    it (shrinking only mildly as the light drops), while the leak onto the
-//    TOP face, the thing that must stay near-white, is sin(elevation), which
-//    collapses near the horizon. Bevel contrast per unit of top-face headroom
-//    spent therefore rises steeply at low elevation, which is why
-//    ENV_OVERHEAD only needed a modest trim (above) rather than a large one
-//    to keep the top face at about full albedo with these lights added.
-const KEY_INTENSITY = 0.95;
-const KEY_AZIMUTH_ELEVATION_DEG = { azimuth: 0, elevation: 14 }; // world +X, low and raking
-const FILL_INTENSITY = 0.55;
-const FILL_AZIMUTH_ELEVATION_DEG = { azimuth: -90, elevation: 10 }; // world −Y, low and raking
-
-// Direction (azimuth/elevation, both in degrees, measured in the world's
-// X/Y/Z the same way the camera views do) to a THREE.DirectionalLight
-// position. Distance is arbitrary for a directional light (only the
-// direction matters), so a fixed radius keeps the numbers above readable as
-// angles instead of raw XYZ.
-function lightPosition(azimuthDeg: number, elevationDeg: number, radius = 200): THREE.Vector3 {
-  const az = THREE.MathUtils.degToRad(azimuthDeg);
-  const el = THREE.MathUtils.degToRad(elevationDeg);
-  return new THREE.Vector3(
-    radius * Math.cos(el) * Math.cos(az),
-    radius * Math.cos(el) * Math.sin(az),
-    radius * Math.sin(el)
-  );
-}
-
-function studioEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
-  const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 16, 12),
-    new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      uniforms: {
-        base: { value: ENV_BASE },
-        overhead: { value: ENV_OVERHEAD },
-        edge0: { value: ENV_EDGE0 },
-        edge1: { value: ENV_EDGE1 },
-      },
-      vertexShader: /* glsl */ `
-        varying vec3 vDir;
-        void main() {
-          vDir = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        varying vec3 vDir;
-        uniform float base, overhead, edge0, edge1;
-        void main() {
-          float up = normalize(vDir).y;
-          gl_FragColor = vec4(vec3(base + overhead * smoothstep(edge0, edge1, up)), 1.0);
-        }
-      `,
-    })
-  );
-  const scene = new THREE.Scene();
-  scene.add(sky);
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const texture = pmrem.fromScene(scene).texture;
-  sky.geometry.dispose();
-  (sky.material as THREE.Material).dispose();
-  pmrem.dispose();
-  return texture;
-}
 
 export const Viewer = forwardRef<
   ViewerHandle,
@@ -322,8 +184,6 @@ export const Viewer = forwardRef<
   // imperative handle without re-running them.
   const viewRef = useRef(view);
   viewRef.current = view;
-  // Latest grid visibility, read inside the [theme]-only effect (which rebuilds
-  // the grid for the new colours) without adding showGrid to its deps.
   // Keep the latest onMeasure without re-running the [stl]-only geometry effect.
   const onMeasureRef = useRef(onMeasure);
   onMeasureRef.current = onMeasure;
@@ -331,6 +191,7 @@ export const Viewer = forwardRef<
   // created once in the setup effect below, but refitView closes over refs and
   // props that change every render.
   const refitRef = useRef<() => void>(() => {});
+  const frameRef = useRef<() => boolean>(() => false);
   // Latest on-model-edit props, read inside the one-time setup effect's pointer
   // handlers (which have no deps) without re-running setup.
   const editableRef = useRef(editable);
@@ -343,6 +204,12 @@ export const Viewer = forwardRef<
   // *same* design and preset (a parameter tweak) keeps the user's orbit/zoom; a
   // change of design or preset reframes from scratch. null until first framed.
   const framedKeyRef = useRef<string | null>(null);
+  // The key the *current* geometry would be framed under, kept at render so the
+  // ResizeObserver's first-framing path can commit it too. Without that, a model
+  // framed there stayed uncommitted and the next render — a parameter tweak,
+  // same design — reframed on top of the orbit the visitor had just set.
+  const frameKeyRef = useRef<string>("");
+  frameKeyRef.current = reframeOnPreset ? `${designId}\n${presetId}` : designId;
   // Single-material geometry that tracks the theme (the STL path's one mesh).
   const themedMaterialsRef = useRef<ThemedMaterial[]>([]);
   // Per-vertex-coloured geometry (the 3MF path): the live colour attribute plus
@@ -427,6 +294,13 @@ export const Viewer = forwardRef<
   // them. null until the first model is framed.
   const fitStateRef = useRef<{ distance: number; target: THREE.Vector3 } | null>(null);
 
+  // The box the current framing was established for. refitIfOutgrown compares
+  // the NEW geometry's requirement against THIS box's requirement, not against
+  // where the camera happens to be: measured against the live camera, a single
+  // zoom-in click made unchanged geometry look 25% overflowed, so the next
+  // same-key render threw the visitor's zoom away. null until a model is framed.
+  const framedBoxRef = useRef<Box3Like | null>(null);
+
   // The canvas size and fit fraction shared by applyFraming and
   // refitIfOutgrown. null for a zero-sized canvas (display:none, or a layout
   // not yet resolved), which can't be fitted to — callers leave the current
@@ -458,18 +332,21 @@ export const Viewer = forwardRef<
   // intended. The camera's up stays +Z for every view (set once
   // at init), so OrbitControls keeps orbiting correctly; only the look-from
   // direction changes.
-  function applyFraming(direction: THREE.Vector3, zoomRatio: number, pan: THREE.Vector3) {
+  //
+  // Returns whether a framing was actually applied: a caller that records
+  // "this model is framed" must not record it when it wasn't.
+  function applyFraming(direction: THREE.Vector3, zoomRatio: number, pan: THREE.Vector3): boolean {
     const cam = camRef.current;
     const controls = controlsRef.current;
     const mount = mountRef.current;
     const size = modelSizeRef.current;
-    if (!cam || !controls || !mount || !size) return;
+    if (!cam || !controls || !mount || !size) return false;
 
     // A zero-sized canvas (display:none, or a layout not yet resolved) can't
     // be fitted to, and solving against it would poison fitStateRef for the
     // resize that follows. Leave the current framing alone.
     const current = currentFit(mount);
-    if (!current) return;
+    if (!current) return false;
     const { w, h, fit, insets } = current;
 
     const box = framedBox(size);
@@ -493,14 +370,15 @@ export const Viewer = forwardRef<
     cam.position.copy(target).addScaledVector(dir, applied);
     controls.target.copy(target);
     controls.update();
+    return true;
   }
 
   // Frame the orbit camera for the current model from the named standard view
   // (default = the current one), at the fit distance with no pan: the "reset
   // to a clean product shot" path, used for a new model and for Reset view.
-  function frameView(name: ViewName = viewRef.current) {
+  function frameView(name: ViewName = viewRef.current): boolean {
     const [dx, dy, dz] = VIEW_DIRECTIONS[name];
-    applyFraming(new THREE.Vector3(dx, dy, dz), 1, new THREE.Vector3());
+    return applyFraming(new THREE.Vector3(dx, dy, dz), 1, new THREE.Vector3());
   }
 
   // Re-fit the current model after the canvas changed shape: the mobile
@@ -531,31 +409,43 @@ export const Viewer = forwardRef<
     applyFraming(direction, zoomRatio, controls.target.clone().sub(fit.target));
   }
   refitRef.current = refitView;
+  frameRef.current = frameView;
 
   // A parameter tweak just rendered new geometry from the same design+preset
   // (frameKey unchanged, see the [stl] effect below), so the camera was left
-  // where the visitor had it rather than reframed from scratch. If the new
-  // box has grown past what that framing can show — long auto-sized text is
-  // the case this exists for — refit like Reset view, but along the
-  // visitor's own current orbit direction rather than snapping to the
-  // design's default view. Checked against the box's actual position (the
-  // live orbit target, which may carry a pan), not a fresh centred fit, so a
-  // deliberate pan isn't itself mistaken for overflow. Left alone on shrink.
+  // where the visitor had it rather than reframed from scratch. If the new box
+  // has grown past what that framing can show — long auto-sized text is the
+  // case this exists for — refit like Reset view, but along the visitor's own
+  // current orbit direction rather than snapping to the design's default view.
+  //
+  // "Grown" is measured between the two GEOMETRIES, both evaluated along the
+  // camera's current direction and about the live orbit target (so a pan is
+  // not itself mistaken for overflow): the previous box's requirement against
+  // the new one's. It used to compare the new requirement against the camera's
+  // live distance, which conflates growth with zoom — one Zoom in click puts
+  // the camera at 80% of the fit distance, so unchanged geometry read as 25%
+  // overflowed and the next render of the same design snapped the zoom away.
+  //
+  // And when it does refit, the visitor's zoom is carried across as a ratio
+  // rather than reset: they asked to be this much closer than the frame, and
+  // that is still what they want of a model that just got bigger. Left alone
+  // on shrink.
   function refitIfOutgrown(box: Box3Like) {
     const cam = camRef.current;
     const controls = controlsRef.current;
     const mount = mountRef.current;
-    if (!cam || !controls || !mount) return;
+    const previous = framedBoxRef.current;
+    if (!cam || !controls || !mount || !previous) return;
     const current = currentFit(mount);
     if (!current) return;
     const { w, h, fit } = current;
 
     const direction = cam.position.clone().sub(controls.target);
     const currentDistance = direction.length();
-    const requiredDistance = frameDistanceForBox(box, controls.target, direction, w / h, cam.fov, fit);
-    if (outgrowsFrame(requiredDistance, currentDistance)) {
-      applyFraming(direction, 1, new THREE.Vector3());
-    }
+    const requiredFor = (b: Box3Like) =>
+      frameDistanceForBox(b, controls.target, direction, w / h, cam.fov, fit);
+    const plan = refitPlan(requiredFor(previous), requiredFor(box), currentDistance);
+    if (plan) applyFraming(direction, plan.zoomRatio, new THREE.Vector3());
   }
 
   // Rebuild the dimension overlay from the current model size + theme, matching
@@ -723,152 +613,29 @@ export const Viewer = forwardRef<
     rendererRef.current = renderer;
     mount.appendChild(renderer.domElement);
 
-    let envTexture: THREE.Texture | null = null;
+    // The branch is on the build-time define, not on a value passed into the
+    // rig, so a `plain` build prunes buildStudioRig and the PMREM/contact-shadow
+    // code it reaches (vite.config.ts's `define`).
+    let envTarget: THREE.WebGLRenderTarget | null = null;
     if (__APP_VIEWER_STYLE__ === "studio") {
-      // Studio style: image-based lighting from a PMREM-filtered gradient sky
-      // (generated procedurally: nothing to download) with Khronos PBR
-      // Neutral tone mapping, which stays near-identity for mid-tones so the
-      // model's own colours and the themed background survive faithfully (ACES
-      // would hue-shift saturated colours). The environment is authored Y-up
-      // (see studioEnvironment) and rotated onto this Z-up world by
-      // environmentRotation.
-      //
-      // The rig is balanced for TOP-vs-SIDE separation, because that step in
-      // luminance is the whole reason a printed plate reads as a solid a few
-      // millimetres thick instead of a flat sticker. The meshes are
-      // flat-shaded, so the step draws a crisp line along every top edge.
-      // Getting it takes an environment that is genuinely top-biased (three's
-      // RoomEnvironment is not: it is an enclosed room whose walls carry most
-      // of its light, and measured against this scene its irradiance on a
-      // vertical wall is ~1.17x what a top face gets, which is exactly the
-      // sticker look) plus the key/fill pair below for direction. Totals put a
-      // top face at about full albedo: a near-white plate must read near-white,
-      // the same concern the plain rig's hemisphere solves below. A plate's own
-      // outer wall stays visibly darker than its top on every side; the one
-      // wall that happens to face the key directly (the same low grazing angle
-      // that makes the key so effective on a letter bevel also makes it
-      // effective on a much bigger flat wall) is the tightest case, landing
-      // around four-fifths of the top's measured brightness rather than the
-      // roughly-half a wall facing away sits at. Narrower than the single-key
-      // rig this replaced, but checked against real renders (both themes) to
-      // confirm the top never stops reading as the brighter face: if the
-      // numbers above move, recheck a plate's four walls against its top, not
-      // just a letter's two bevels.
-      renderer.toneMapping = THREE.NeutralToneMapping;
-      renderer.toneMappingExposure = 1.0;
-      envTexture = studioEnvironment(renderer);
-      scene.environment = envTexture;
-      scene.environmentIntensity = studioEnvIntensity();
-      scene.environmentRotation.set(ENV_ROTATION_X, 0, 0);
-      // Key + fill: see the constants above for the full reasoning. In short,
-      // both sit off-camera-axis and low to the horizon so they rake across a
-      // prismatic letter-stroke's two ~45° bevels, which the azimuth-blind
-      // environment cannot separate, without dumping much of that intensity
-      // onto the top face.
-      const key = new THREE.DirectionalLight(0xffffff, KEY_INTENSITY);
-      key.position.copy(
-        lightPosition(KEY_AZIMUTH_ELEVATION_DEG.azimuth, KEY_AZIMUTH_ELEVATION_DEG.elevation)
-      );
-      scene.add(key);
-      const fill = new THREE.DirectionalLight(0xffffff, FILL_INTENSITY);
-      fill.position.copy(
-        lightPosition(FILL_AZIMUTH_ELEVATION_DEG.azimuth, FILL_AZIMUTH_ELEVATION_DEG.elevation)
-      );
-      scene.add(fill);
-      const shadow = createContactShadow();
-      scene.add(shadow.group);
-      shadowRef.current = shadow;
+      const studio = buildStudioRig(renderer, scene);
+      envTarget = studio.envTarget;
+      shadowRef.current = studio.shadow;
     } else {
-      // A hemisphere light carries most of the fill so that near-white surfaces
-      // read close to their true colour instead of collapsing to grey. With an
-      // ambient-dominated rig a face turned away from the key light only sees the
-      // ambient term, so a near-white model colour (e.g. #F2EFE9) multiplied by a
-      // ~0.6 ambient came out a warm mid-grey. The hemisphere's near-white "sky"
-      // fill lifts upward-facing surfaces toward their real colour while its
-      // mid-grey "ground" keeps side/under faces darker, so the model still shows
-      // form (a visible light→shadow gradient) rather than flattening. Ambient is
-      // dropped and the two directionals trimmed so highlights and saturated
-      // colours don't clip. Positioned at +Z to match the OpenSCAD Z-up scene, so
-      // "sky" fill lands on top faces.
-      const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 2.0);
-      hemi.position.set(0, 0, 1);
-      scene.add(hemi);
-      scene.add(new THREE.AmbientLight(0xffffff, 0.35));
-      const key = new THREE.DirectionalLight(0xffffff, 0.5);
-      key.position.set(1, -1, 2);
-      scene.add(key);
-      const fill = new THREE.DirectionalLight(0xffffff, 0.25);
-      fill.position.set(-1, 1, 0.5);
-      scene.add(fill);
+      buildPlainRig(scene);
     }
 
     const controls = new OrbitControls(cam, renderer.domElement);
     controls.enableDamping = true;
     controlsRef.current = controls;
 
-    // ── On-model text editing: click/tap the mesh to open the inline editor ──
-    // A plain click (a pointerdown→pointerup pair that moved under the
-    // click threshold, single pointer) raycasts the model, and ONLY the
-    // model, never the grid/floor, and reports the hit's screen position so
-    // ViewerStage can float the editor there. These listeners are purely
-    // observational (no preventDefault / stopPropagation), so OrbitControls'
-    // own orbit/pan/zoom on the same canvas is completely unaffected: a real
-    // drag moves the camera and, having moved past the threshold, never opens
-    // the editor. Only wired when `editableRef` is set (design has an
-    // `@editOnModel` param and a model is shown).
     const canvasEl = renderer.domElement;
-    const raycaster = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const activePointers = new Set<number>();
-    let downPt: { x: number; y: number } | null = null;
-    let multiTouch = false;
-
-    const onPointerDown = (e: PointerEvent) => {
-      activePointers.add(e.pointerId);
-      if (activePointers.size > 1) {
-        multiTouch = true; // a second finger landed: this is a pinch/rotate, not a tap
-        downPt = null;
-        return;
-      }
-      downPt = { x: e.clientX, y: e.clientY };
-    };
-    const clearPointer = (e: PointerEvent) => {
-      activePointers.delete(e.pointerId);
-      if (activePointers.size === 0) multiTouch = false;
-    };
-    const onPointerUp = (e: PointerEvent) => {
-      const down = downPt;
-      const wasMulti = multiTouch;
-      clearPointer(e);
-      downPt = null;
-      const pick = onModelPickRef.current;
-      const model = modelRef.current;
-      if (!editableRef.current || !pick || !model) return;
-      if (!isModelClick({ down, up: { x: e.clientX, y: e.clientY }, multiTouch: wasMulti })) return;
-      const rect = canvasEl.getBoundingClientRect();
-      ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(ndc, cam);
-      if (raycaster.intersectObject(model, true).length === 0) return; // a miss does nothing
-      pick({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-    };
-    // Hover affordance: point the cursor while genuinely over the model (only
-    // while editable and not mid-drag), so the on-model click is discoverable.
-    // A single-object raycast, and only on a plain hover move, so it's cheap.
-    const onPointerMove = (e: PointerEvent) => {
-      if (!editableRef.current || e.buttons !== 0) return;
-      const model = modelRef.current;
-      const rect = canvasEl.getBoundingClientRect();
-      ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(ndc, cam);
-      const over = !!model && raycaster.intersectObject(model, true).length > 0;
-      canvasEl.style.cursor = over ? "pointer" : "";
-    };
-    canvasEl.addEventListener("pointerdown", onPointerDown);
-    canvasEl.addEventListener("pointerup", onPointerUp);
-    canvasEl.addEventListener("pointercancel", clearPointer);
-    canvasEl.addEventListener("pointermove", onPointerMove);
+    const detachPicking = attachModelPicking(canvasEl, {
+      cam,
+      model: modelRef,
+      editable: editableRef,
+      onPick: onModelPickRef,
+    });
 
     const io = new IntersectionObserver(
       ([entry]) => {
@@ -952,7 +719,14 @@ export const Viewer = forwardRef<
       // shrinking with the canvas, see refitView. Cheap: eight corner
       // projections plus four getBoundingClientRect reads, which is fine
       // even at the per-frame rate a bottom-sheet drag produces.
-      refitRef.current();
+      //
+      // A model framed against a 0×0 canvas has no fit state at all, and
+      // refitView early-returns on that: this is where it gets its first
+      // framing once the canvas is measurable. Commit the key on success, the
+      // same as the geometry effect does, so this framing counts as done.
+      if (fitStateRef.current === null && modelSizeRef.current) {
+        if (frameRef.current()) framedKeyRef.current = frameKeyRef.current;
+      } else refitRef.current();
       renderNow();
     });
     ro.observe(mount);
@@ -965,10 +739,7 @@ export const Viewer = forwardRef<
     return () => {
       cancelAnimationFrame(raf);
       controls.removeEventListener("change", requestRender);
-      canvasEl.removeEventListener("pointerdown", onPointerDown);
-      canvasEl.removeEventListener("pointerup", onPointerUp);
-      canvasEl.removeEventListener("pointercancel", clearPointer);
-      canvasEl.removeEventListener("pointermove", onPointerMove);
+      detachPicking();
       ro.disconnect();
       io.disconnect();
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -981,6 +752,9 @@ export const Viewer = forwardRef<
       // before the renderer/context so nothing still references a torn-down GL
       // context.
       if (modelRef.current) disposeObject(modelRef.current);
+      // Already disposed here; leaving the ref set would have the [stl] effect
+      // dispose the same tree a second time after a remount.
+      modelRef.current = null;
       if (gridRef.current) {
         gridRef.current.geometry.dispose();
         (gridRef.current.material as THREE.Material).dispose();
@@ -990,7 +764,15 @@ export const Viewer = forwardRef<
       // disposeObject above).
       shadowRef.current?.dispose();
       shadowRef.current = null;
-      envTexture?.dispose();
+      // Reset the framing bookkeeping alongside the scene refs. A StrictMode or
+      // Fast-Refresh remount rebuilds the camera and the model, so a key left
+      // behind from the torn-down scene would claim the new one is already
+      // framed and dev would frame differently from prod.
+      framedKeyRef.current = null;
+      fitStateRef.current = null;
+      // The render target, not scene.environment: the target owns that texture
+      // and disposing it is what releases both (see viewerRig's studioEnvironment).
+      envTarget?.dispose();
       renderer.dispose();
       // Explicitly free the WebGL context itself: dispose() alone frees GPU
       // objects (geometries/materials/textures) but keeps the context alive
@@ -1181,8 +963,14 @@ export const Viewer = forwardRef<
     // wholly downstream of the exported bytes, so it's informative only and never
     // part of the print. Translation-invariant, so the centring above is moot.
     const size = box.getSize(new THREE.Vector3());
+    // The commonest edit by far — retyping a label, nudging a colour — produces
+    // new geometry with the SAME bounds, and the dimension overlay is derived
+    // from bounds alone, so rebuilding it there is three canvas-texture uploads
+    // for an identical result. Compared BEFORE modelSizeRef is overwritten.
+    const prevSize = modelSizeRef.current;
+    const boundsChanged = !prevSize || !sizesEqual(prevSize, size);
     modelSizeRef.current = size.clone();
-    syncDimensions(showDimensions); // refresh the overlay for the new bounds
+    if (boundsChanged) syncDimensions(showDimensions); // refresh the overlay for the new bounds
     onMeasureRef.current?.({ x: size.x, y: size.y, z: size.z });
 
     // Re-bake the contact shadow under the new geometry. Baking renders into
@@ -1192,6 +980,12 @@ export const Viewer = forwardRef<
     if (__APP_VIEWER_STYLE__ === "studio") {
       const shadow = shadowRef.current;
       const renderer = rendererRef.current;
+      // NOT gated on boundsChanged. setFootprint below is bounds-derived, but
+      // bake() renders the model's actual SILHOUETTE through a depth material
+      // (contactShadow.ts), so same-bounds-different-geometry — retyping a
+      // label at the same extent, the very case the gate targets — would keep
+      // the previous model's shadow. This effect only fires on new geometry, so
+      // there is nothing to skip.
       if (shadow && renderer) {
         const groundZ = __APP_REST_ON_GRID__ ? 0 : -size.z / 2;
         shadowGroundZRef.current = groundZ;
@@ -1212,14 +1006,21 @@ export const Viewer = forwardRef<
     // (this effect) and use *its* bounds, not the stale ones. frameView() reads
     // modelSizeRef (set above) to fit the model's actual bounding box,
     // see framing.ts: rather than a bounding-sphere radius.
-    const frameKey = reframeOnPreset ? `${designId}\n${presetId}` : designId;
+    const frameKey = frameKeyRef.current;
     if (framedKeyRef.current !== frameKey) {
-      frameView(); // moves the camera, which self-invalidates via controls' "change" event
-      framedKeyRef.current = frameKey;
+      // Only on success. A model that first arrives while the canvas measures
+      // 0×0 (a background tab, a layout not yet resolved) leaves the key
+      // uncommitted, so the ResizeObserver below reframes as soon as the
+      // canvas has real dimensions instead of the camera staying where it was
+      // mounted until the next design or preset change.
+      if (frameView()) framedKeyRef.current = frameKey; // moves the camera, which self-invalidates via controls' "change" event
     } else {
       refitIfOutgrown(framedBox(size)); // grown past the current view? re-fit; a no-op otherwise
       requestRenderRef.current(); // same framing (e.g. a param tweak): camera didn't move, so invalidate explicitly
     }
+    // Whatever happened above, THIS geometry is what the camera is framed for
+    // now: the next same-key render measures its growth against this box.
+    framedBoxRef.current = framedBox(size);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stl]);
 
@@ -1229,12 +1030,29 @@ export const Viewer = forwardRef<
   }
 );
 
+/** Whether two measured bounding-box sizes are the same to within float noise.
+ *  The mesh is re-parsed from freshly exported bytes each render, so an
+ *  unchanged dimension can come back differing in the last bit. */
+function sizesEqual(a: THREE.Vector3, b: THREE.Vector3): boolean {
+  const eps = 1e-6 * Math.max(1, a.length());
+  return (
+    Math.abs(a.x - b.x) < eps && Math.abs(a.y - b.y) < eps && Math.abs(a.z - b.z) < eps
+  );
+}
+
 // A mesh's material(s), always as an array.
 function materialList(material: THREE.Material | THREE.Material[]): THREE.Material[] {
   return Array.isArray(material) ? material : [material];
 }
 
 // Free the GPU resources of an object tree's meshes (geometries + materials).
+//
+// Deliberately does NOT walk a material's texture maps. Every loader on this
+// path (3MF/STL) produces untextured meshes, so there is nothing to walk, and
+// walking would mean deciding ownership for a texture that may be shared (the
+// PMREM environment is exactly such a case, and is disposed by its own owner).
+// If a textured loader is ever added, this is the function that has to grow
+// with it — reusing it as-is would leak one texture per model.
 function disposeObject(root: THREE.Object3D) {
   const materials = new Set<THREE.Material>();
   root.traverse((node) => {

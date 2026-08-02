@@ -1,0 +1,10 @@
+{
+  "title": "T",
+  "source": "src",
+  "designs": [
+    {
+      "id": "badpreset",
+      "label": "Bad preset"
+    }
+  ]
+}

@@ -29,9 +29,9 @@ const TYPES = {
 
 // Derive the base path the bundle was built with (BASE_PATH) from the asset
 // URLs in index.html, so the test server matches the build (root or a subpath).
-export function detectBase() {
+export function detectBase(root = DIST) {
   try {
-    const html = readFileSync(join(DIST, "index.html"), "utf-8");
+    const html = readFileSync(join(root, "index.html"), "utf-8");
     const m = html.match(/(?:src|href)="([^"]*\/)assets\//);
     return m ? m[1] : "/";
   } catch {
@@ -44,24 +44,27 @@ export function detectBase() {
 // unheaded response, same as any host that doesn't honour the file) rather
 // than failing the server: a caller building a stripped-down dist/ for a
 // narrow test shouldn't need to also fake a _headers file.
-function loadHeaderRules() {
+function loadHeaderRules(root) {
   try {
-    return parseHeadersFile(readFileSync(join(DIST, "_headers"), "utf-8"));
+    return parseHeadersFile(readFileSync(join(root, "_headers"), "utf-8"));
   } catch {
     return [];
   }
 }
 
-export function startServer() {
-  const basePath = detectBase();
-  const headerRules = loadHeaderRules();
+// `root` is dist/ for every ordinary check; check-studio.mjs passes the
+// throwaway tree its own variant build wrote, which is the only reason this
+// takes an argument at all.
+export function startServer(root = DIST) {
+  const basePath = detectBase(root);
+  const headerRules = loadHeaderRules(root);
   const server = createServer(async (req, res) => {
     try {
       let p = decodeURIComponent(new URL(req.url, "http://x").pathname);
       if (p.startsWith(basePath)) p = p.slice(basePath.length - 1);
       const rel = normalize(p).replace(/^(\.\.[/\\])+/, "");
       const pathname = rel === "" ? "/" : rel;
-      const file = join(DIST, pathname === "/" ? "index.html" : pathname);
+      const file = join(root, pathname === "/" ? "index.html" : pathname);
       const body = await readFile(file);
       res.writeHead(200, {
         "content-type": TYPES[extname(file)] || "application/octet-stream",

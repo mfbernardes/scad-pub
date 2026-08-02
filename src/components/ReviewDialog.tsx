@@ -115,7 +115,13 @@ export function ReviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="review-dialog max-h-[85vh] overflow-y-auto overscroll-contain sm:max-w-md">
+      <DialogContent
+        className="review-dialog max-h-[85vh] overflow-y-auto overscroll-contain sm:max-w-md"
+        // No coarse-pointer autofocus guard, unlike Modal.tsx and
+        // DesignPicker's gallery: those hold a text field whose keyboard would
+        // cover the dialog. This one is buttons and read-only rows, so
+        // suppressing Radix's focus transfer would only strand focus behind it.
+      >
         <DialogHeader>
           <DialogTitle>{t("review.title")}</DialogTitle>
           <DialogDescription className="sr-only">

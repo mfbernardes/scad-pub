@@ -1,6 +1,17 @@
 {
   "title": "Widget Studio",
   "source": "src",
-  "designs": [{ "id": "widget", "label": "Widget" }],
-  "strings": { "action.export": "Download now" }
+  "designs": [
+    {
+      "id": "widget",
+      "label": "Widget"
+    }
+  ],
+  "strings": {
+    "action.export": "Download now",
+    "notice.offline": "No connection — you can still build and download.",
+    "install.hint": "Add to your home screen?",
+    "files.added": "Added {name}",
+    "error.renderHardFailed": "Something went wrong building the preview"
+  }
 }

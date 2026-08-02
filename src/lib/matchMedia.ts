@@ -17,3 +17,12 @@ export function subscribeMatchMedia(query: string): (onChange: () => void) => ()
     return () => mq.removeEventListener("change", onChange);
   };
 }
+
+/** Whether the visitor asked for reduced motion. Two call sites hand-rolled
+ *  this `matchMedia` read while everything else in the app uses Tailwind's
+ *  `motion-reduce:` variant, so the query string existed in three forms with
+ *  three different guards. Safe in a DOM-less run (returns false). */
+export function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}

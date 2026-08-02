@@ -1,55 +1,15 @@
 // config-spec.mjs: the single declarative description of scadpub.config.json's
-// surface: every top-level key, and every key inside the handful that are
-// themselves small nested objects. This file is data, not behaviour; three
-// consumers read it:
+// surface — every top-level key, and every key inside the handful that are
+// themselves small nested objects. This file is data, not behaviour: it
+// describes STRUCTURE only (names, nesting, JSON types, enums, static defaults,
+// and which nested keys are recognised at all). Path existence, cross-field
+// checks, colour-value safety and the strings-against-catalogue check stay in
+// gen-schema.mjs's generate() and the bespoke parsers in ./config-parsers.mjs.
 //
-//   1. gen-schema.mjs derives `KNOWN_TOP_LEVEL_KEYS` (top-level unknown-key
-//      rejection) from `Object.keys(CONFIG_SPEC)`.
-//   2. config-parsers.mjs's `applyGroupSpec` walks the `ui`, `viewer`,
-//      `render`, `fileImport` and `popup` nodes' `properties` to check and
-//      default each field; gen-schema.mjs's `resolveDesignList` reuses it per
-//      `designs[]` entry against that entry's `presets` sub-node.
-//   3. gen-config-schema.mjs turns the tree into a real JSON Schema, and
-//      tests/config-spec.test.mjs cross-checks that against docs/config.md so
-//      a key cannot drift out of one without the other.
-//
-// It describes STRUCTURE only: names, nesting, JSON types, enums, static
-// defaults, and which nested keys are recognised at all. Path existence,
-// cross-field checks (`defaultDesign` naming a real design,
-// `designs[].presets.images` keys naming real presets), colour-value safety
-// and the `strings`-against-i18n-catalogue check all stay in gen-schema.mjs's
-// generate() and the bespoke parsers in ./config-parsers.mjs.
-//
-// `applyGroupSpec` applies one behaviour per axis to every field it drives: an
-// explicit `null` always means "not set"; an enum error always appends
-// ` (got <value>)`; a string is always rejected blank and stored trimmed; a
-// nested object's unrecognised key always fails the build, with the valid-key
-// list read straight off `properties`.
-//
-// Field-descriptor markers, every one opt-in:
-// - `custom`. Runtime validation lives in a bespoke parser, so don't derive
-//   behaviour from this node's shape. On a leaf field inside an otherwise
-//   applyGroupSpec-driven group (`render.features`, `render.fonts`,
-//   `pwa.themeColor`, `pwa.screenshots`, `pwa.categories`) it also means
-//   "recognise the key, then skip it": neither defaulted, validated, nor
-//   returned, because the bespoke reader takes the raw config value instead.
-// - `openKeys`. The emitted JSON Schema tolerates an unrecognised key.
-//   Reserved for genuinely open key spaces (`strings`, `help`) and for parsers
-//   that silently drop what they don't know (the parent `colors` object,
-//   `licenses[]`/`notices[]` entries, `logo`'s object form). NOT implied by
-//   `custom`: most bespoke parsers reject an unknown key by hand and stay as
-//   closed as an applyGroupSpec-driven node, so a config author relying on
-//   this schema for autocomplete still sees a typo rejected.
-// - `required`. The field must genuinely be present, and gen-config-schema's
-//   `addNull` withholds the null alternative it adds to every other field.
-// - `collapseEmptyToNull`. An empty `{}` disappears entirely, for a pure
-//   tuning knob like `render`/`render.cache`. Contrast `ui.afterExport`, where
-//   the key's mere presence, even empty, is itself the "show the panel" toggle.
-// - `alwaysPresent`: a nested group whose own fields carry defaults that must
-//   resolve even when the config omits the group (only `viewer.controls`).
-// - `rootTypeError`. A plain-string override naming a field's actual accepted
-//   shapes (`fileImport` is `true`/an object/`null`, `popup` needs
-//   `header`+`body`), where the generic message would be less useful.
+// Its three consumers and the full vocabulary of the field-descriptor markers
+// (`custom`, `openKeys`, `required`, `collapseEmptyToNull`, `alwaysPresent`,
+// `rootTypeError`) are documented in docs/config-pipeline.md. Add a marker
+// there and here together.
 
 // Small factories for the repeated field shapes, still plain data, they only
 // save re-typing the same few keys 30 times over.
@@ -194,15 +154,29 @@ const RENDER_CACHE_SPEC = {
 // different colours, not interchangeable the way a single logo asset is.
 // `custom: true` because the string-or-object shape and the per-theme
 // defaulting are bespoke (parsePwaThemeColor), like `logo` itself.
+// The two built-in theme colours, declared once. They appear in the field
+// descriptions below, in parsePwaThemeColor's fallback (config-parsers.mjs) and
+// in vite.config.ts's meta-tag injection; each of those used to carry its own
+// literal, so "the default" existed in four places and could disagree with what
+// gen-schema actually emits.
+export const PWA_THEME_COLOR_DEFAULTS = { light: "#ffffff", dark: "#1f2229" };
+
 const PWA_THEME_COLOR_SPEC = {
   type: "string",
   custom: true,
   description:
     "Per-theme PWA/browser-chrome colour: a string for both themes, or { light, dark } (either may be " +
-    "omitted, defaulting independently: light '#ffffff', dark '#1f2229'). Same shape as 'logo'.",
+    `omitted, defaulting independently: light '${PWA_THEME_COLOR_DEFAULTS.light}', ` +
+    `dark '${PWA_THEME_COLOR_DEFAULTS.dark}'). Same shape as 'logo'.`,
   properties: {
-    light: { type: "string", description: "Light-scheme <meta name=theme-color>. Default '#ffffff'." },
-    dark: { type: "string", description: "Dark-scheme browser-chrome / PWA colour. Default '#1f2229'." },
+    light: {
+      type: "string",
+      description: `Light-scheme <meta name=theme-color>. Default '${PWA_THEME_COLOR_DEFAULTS.light}'.`,
+    },
+    dark: {
+      type: "string",
+      description: `Dark-scheme browser-chrome / PWA colour. Default '${PWA_THEME_COLOR_DEFAULTS.dark}'.`,
+    },
   },
 };
 
@@ -393,12 +367,14 @@ export const CONFIG_SPEC = {
   // true` (see the file-top comment): applyGroupSpec recognises the key so
   // it isn't rejected as unknown, but skips producing/validating it. This
   // group's real return value (parseRender's result, schema.render) still
-  // holds only `heavyMs`/`cache`, exactly as before this move, while
+  // holds only `heavyMs`/`cache`, while
   // `parseStringArray`/`parseFormat`/`parseFontFallback` (unchanged, bespoke,
   // individually unit-tested) read `config.render.features` etc. directly and
-  // feed the schema's separate flat `features`/`format`/`fonts`/`fontFallback`
-  // keys, see gen-schema.mjs's schema assembly and its comment on why
-  // designs.json does NOT gain a nested `render.features` etc. to match.
+  // feed the schema's separate flat `features`/`format`/`fonts` keys —
+  // `fontFallback` gets no schema key at all, it is rendered into the generated
+  // `fonts.conf` and reaches renderHash from there — see gen-schema.mjs's
+  // schema assembly and its comment on why designs.json does NOT gain a nested
+  // `render.features` etc. to match.
   render: {
     type: "object",
     description:

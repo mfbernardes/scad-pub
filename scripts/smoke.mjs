@@ -15,9 +15,9 @@ import { readFile, mkdtemp, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { startServer } from "./serve-dist.mjs";
 import {
-  launchChromium,
+  bootstrap,
+  makeCheck,
   renderStatusText,
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
@@ -105,9 +105,9 @@ async function selectDesign(page, id) {
 // "picker" draws the design gallery (cards, no primary button) and remembers
 // the dismissal on any close, while "always"/"once"/"dismissible" draw the
 // Markdown body plus a primary button (and, for "dismissible", the
-// "Don't show this again" checkbox). PopupModal falls back to the button form
-// when a "picker" config has only one design, so derive the shape the same way
-// it does rather than trusting `mode` alone.
+// "Don't show this again" checkbox). `mode` alone is the whole answer:
+// gen-schema's checkPopupMode refuses to build a "picker" config with fewer
+// than two designs, so there is no single-design fallback shape to derive.
 async function checkWelcomePopup({ page, check, schema }) {
   console.log("=== welcome popup ===");
   if (schema.popup) {
@@ -122,7 +122,7 @@ async function checkWelcomePopup({ page, check, schema }) {
         "popup renders its configured footnote"
       );
     }
-    if (schema.popup.mode === "picker" && schema.designs.length > 1) {
+    if (schema.popup.mode === "picker") {
       // Picker mode embeds the design gallery directly and has NO primary CTA
       // button: the visitor's next step (choosing what to make) IS the popup.
       // Picking a card selects that design and dismisses the popup.
@@ -447,7 +447,9 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
     await selectDesign(page, id);
     await gotoPresets();
     // Ready-made presets sit in the "Ready-made" section as a plain button list;
-    // the applied one carries aria-pressed="true" (see PresetPicker.tsx).
+    // the applied one carries aria-current="true" (see PresetPicker.tsx: a
+    // preset is a current selection, not a toggle, and the design picker's
+    // visually identical grid already said so).
     const bundled = page.locator('[aria-label="Ready-made presets"] .preset-picker__item');
     if (await bundled.count()) {
       const name = (await bundled.first().textContent())?.trim() ?? "";
@@ -455,7 +457,7 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
       await waitRendered(page, `${id} + "${name}"`);
       // The applied preset shows as selected, and the choice is in the URL.
       check(
-        (await page.locator('[aria-label="Ready-made presets"] .preset-picker__item[aria-pressed="true"]').count()) >= 1,
+        (await page.locator('[aria-label="Ready-made presets"] .preset-picker__item[aria-current="true"]').count()) >= 1,
         `applied bundled preset "${name}"`
       );
       // persistState debounces ~300ms after the apply, so wait for the hash.
@@ -471,7 +473,7 @@ async function checkBundledPresets({ page, check, ids, presetsTabName, paramsTab
       await waitRendered(page, `${id} reloaded`);
       await gotoPresets();
       check(
-        (await page.locator('[aria-label="Ready-made presets"] .preset-picker__item[aria-pressed="true"]').count()) >= 1,
+        (await page.locator('[aria-label="Ready-made presets"] .preset-picker__item[aria-current="true"]').count()) >= 1,
         "preset auto-selected from the URL after reload"
       );
       await gotoParams();
@@ -508,8 +510,8 @@ async function checkPresetCardGrid({ page, check, schema, presetsTabName, params
   await cards.first().click();
   await waitRendered(page, `${design.id} + preset card "${firstCardText}"`);
   check(
-    (await page.locator('[aria-label="Ready-made presets"] .preset-picker__card[aria-pressed="true"]').count()) >= 1,
-    "clicking a preset card applies it (aria-pressed)"
+    (await page.locator('[aria-label="Ready-made presets"] .preset-picker__card[aria-current="true"]').count()) >= 1,
+    "clicking a preset card applies it (aria-current)"
   );
   await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
 }
@@ -1848,15 +1850,314 @@ async function checkViewerHudReachable({ browser, base, check }) {
   }
 }
 
+// The two families, kept apart because they answer to different rules.
+//
+// Focus must ENTER a modal when it opens, or a keyboard/screen-reader visitor
+// is left on the trigger behind it. The regression this pins was a
+// generalization: `preventTouchAutoFocus` exists because a dialog holding a
+// TEXT FIELD pops the software keyboard over itself on touch, and a sweep that
+// shared the helper applied it to two dialogs made only of buttons — where
+// there is no keyboard to pop and suppressing Radix's focus transfer only
+// strands focus outside.
+//
+// Its OWN touch context, not the shared desktop page: the guard is gated on
+// `(pointer: coarse)`, so on a desktop page it does nothing and this check
+// would pass with the bug fully present — verified by reintroducing it. The
+// media query is asserted first, as the control: if a Playwright change ever
+// stops emulating a coarse pointer here, this fails loudly instead of going
+// quietly vacuous.
+async function checkDialogFocusEntry({ browser, base, check }) {
+  console.log("=== dialogs take focus when they open (touch) ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+    if (
+      !check(
+        await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+        "the context really is a coarse pointer (or this check proves nothing)"
+      )
+    )
+      return;
+
+    // Radix moves focus a tick after the content mounts, so poll briefly rather
+    // than reading once: a bare read raced the transfer and reported a failure
+    // against the correct code. The window is short enough that a dialog which
+    // never takes focus still fails.
+    const focusIsInside = async (selector) => {
+      for (let i = 0; i < 20; i++) {
+        const inside = await page.evaluate((sel) => {
+          const dialog = document.querySelector(sel);
+          const active = document.activeElement;
+          return !!dialog && !!active && active !== document.body && dialog.contains(active);
+        }, selector);
+        if (inside) return true;
+        await page.waitForTimeout(50);
+      }
+      return false;
+    };
+
+    // The mobile sheet opens on Presets; the parameters (and with them the
+    // reset trigger) are on the other tab.
+    await page
+      .getByRole("tab", { name: "Customize" })
+      .click()
+      .catch(() => page.getByRole("button", { name: "Customize" }).click().catch(() => {}));
+    await page.waitForTimeout(300);
+
+    // ConfirmDialog (an alertdialog: a title, a description, two buttons). Its
+    // trigger only exists once something is dirty, so dirty something first.
+    const someNumber = page.locator('.param input[type="number"]').first();
+    if (await someNumber.count()) {
+      const was = await someNumber.inputValue();
+      await someNumber.fill(String((Number(was) || 1) + 1));
+      await someNumber.blur();
+    }
+    await page.waitForTimeout(300);
+    const reset = page.getByRole("button", { name: "Reset to defaults" }).first();
+    if ((await reset.count()) && (await reset.isEnabled())) {
+      await reset.click();
+      const dlg = page.getByRole("alertdialog");
+      if (await dlg.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
+        check(
+          await focusIsInside('[role="alertdialog"]'),
+          "a destructive confirmation takes focus rather than leaving it behind the modal"
+        );
+        await dlg.getByRole("button", { name: /^Reset$/ }).click().catch(() => {});
+        await dlg.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+      }
+    }
+
+    // ReviewDialog (buttons and read-only rows), opened from the Download flow.
+    const download = page.getByRole("button", { name: /Download/i }).first();
+    if (await download.count()) {
+      await download.click().catch(() => {});
+      const dlg = page.getByRole("dialog", { name: "Review" });
+      if (await dlg.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false))
+        check(
+          await focusIsInside(".review-dialog"),
+          "the review dialog takes focus rather than leaving it behind the modal"
+        );
+    }
+  } finally {
+    await context.close();
+  }
+}
+
+// The panel resizer announces its width through aria-valuenow, and a drag
+// writes it imperatively (a drag deliberately never re-renders). The settle at
+// pointer-up therefore has to write BOTH the width and the attribute: it used
+// to write only the style, and `setWidth` is a no-op when the pointer returns
+// to the width it started at, so React never re-rendered and the attribute
+// stayed stranded at whatever the last drag frame said. The panel sat at 360
+// while assistive technology was told 380.
+//
+// Driven, not unit-tested, because the bug lives in the interaction between an
+// imperative write, a cancelled rAF and React's bail-out on equal state.
+async function checkResizerAnnouncedWidth({ page, check }) {
+  console.log("=== the resizer's announced width settles where the panel does ===");
+  const handle = page.locator(".param-panel__resize-handle").first();
+  if (!(await handle.count())) return;
+  const panel = page.locator(".param-panel").first();
+  if (!(await panel.count())) return;
+
+  const box = await handle.boundingBox();
+  if (!box) return;
+  const y = box.y + box.height / 2;
+  // The handle straddles the panel's edge, so its own centre is not where it
+  // is topmost: the panel covers one half and the viewer canvas the other.
+  // Find the column where a pointer actually lands on it, which doubles as a
+  // check that it is grabbable at all.
+  const startX = await page.evaluate(
+    ([left, right, yy]) => {
+      const h = document.querySelector(".param-panel__resize-handle");
+      for (let x = Math.floor(left); x <= Math.ceil(right); x++)
+        if (document.elementFromPoint(x, yy) === h) return x;
+      return null;
+    },
+    [box.x, box.x + box.width, y]
+  );
+  if (!check(startX !== null, "the resize handle is reachable by pointer somewhere along its width"))
+    return;
+
+  // The exact shape of the bug, and it needs all three parts:
+  //   1. drag away and let a frame COMMIT an intermediate value;
+  //   2. return to the starting width in one move, which SCHEDULES a frame;
+  //   3. release before that frame runs, so pointer-up cancels it.
+  // The settle then has nothing to commit (the width equals React's state, so
+  // setWidth bails and no render happens), and the attribute is left at the
+  // intermediate value from step 1 unless pointer-up writes it too.
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(startX - 60, y, { steps: 6 });
+  await page.waitForTimeout(150); // let that frame land
+  const midway = await handle.getAttribute("aria-valuenow");
+  // Steps 2 and 3 have to happen in ONE task, or the scheduled frame runs in
+  // the gap between two awaited Playwright calls and writes the settled value
+  // itself — which is why driving this with the real mouse alone could not
+  // reproduce the bug. The events are genuine PointerEvents on the real
+  // element, so the component's own handlers run; only their TIMING is forced.
+  await page.evaluate(
+    ([x, yy]) => {
+      const h = document.querySelector(".param-panel__resize-handle");
+      const opts = { bubbles: true, clientX: x, clientY: yy, pointerId: 1, button: 0 };
+      h.dispatchEvent(new PointerEvent("pointermove", opts)); // schedules a frame
+      h.dispatchEvent(new PointerEvent("pointerup", opts)); // cancels it, then settles
+    },
+    [startX, y]
+  );
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+
+  const [announced, actual] = await Promise.all([
+    handle.getAttribute("aria-valuenow"),
+    panel.evaluate((el) => Math.round(el.getBoundingClientRect().width)),
+  ]);
+  check(
+    Math.abs(Number(announced) - actual) <= 1,
+    `the resizer announces the width the panel actually has (said ${announced}, is ${actual})`
+  );
+  // The control: if the drag never moved the announced value in the first
+  // place, the assertion above holds trivially and proves nothing.
+  check(
+    midway !== null && Math.abs(Number(midway) - actual) > 1,
+    `the drag really did move the announced value first (midway ${midway}, settled ${actual})`
+  );
+}
+
+// At the Full detent the sheet is a real modal: it carries aria-modal, AppShell
+// `inert`s the background, and this trap keeps Tab inside. The scrim is a
+// sibling rendered BEFORE the sheet, so including it in the trap's focusable
+// list made a forward Tab from the last control wrap to an element OUTSIDE the
+// dialog — which modal-aware assistive technology may not expose at all, so
+// focus simply vanished.
+//
+// Tab order is the browser's own; there is no way to ask a unit test about it.
+async function checkSheetFocusTrap({ browser, base, check }) {
+  console.log("=== the expanded sheet keeps Tab inside itself ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+
+    // Raise the sheet to Full through its own keyboard affordance.
+    const handle = page.locator(".sheet-handle, [aria-label*='Resize'], .bottom-sheet [role='separator']").first();
+    if (!(await handle.count())) return;
+    await handle.focus();
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowUp");
+    const atFull = await page
+      .waitForSelector(".bottom-sheet--full", { timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!check(atFull, "the sheet reaches the Full detent from the keyboard")) return;
+
+    check(
+      (await page.locator('.bottom-sheet[aria-modal="true"]').count()) === 1,
+      "the Full sheet is announced as a modal"
+    );
+    // The scrim exists as a click target but must not be in anyone's tab order.
+    check(
+      (await page.locator(".sheet-scrim").getAttribute("tabindex")) === "-1",
+      "the scrim is not tab-reachable"
+    );
+
+    // Walk forward well past the last control: every stop must be inside the
+    // sheet (or inside a popper it owns), never the scrim and never the
+    // inerted background.
+    const outside = [];
+    for (let i = 0; i < 40; i++) {
+      await page.keyboard.press("Tab");
+      const where = await page.evaluate(() => {
+        const a = document.activeElement;
+        if (!a || a === document.body) return "body";
+        if (a.closest(".sheet-scrim")) return "scrim";
+        if (a.closest(".bottom-sheet")) return null;
+        if (a.closest("[data-radix-popper-content-wrapper]")) return null;
+        return a.className || a.tagName;
+      });
+      if (where) outside.push(where);
+    }
+    check(
+      outside.length === 0,
+      `40 forward tabs all land inside the modal sheet (escaped to: ${[...new Set(outside)].join(", ")})`
+    );
+  } finally {
+    await context.close();
+  }
+}
+
+// SHARED_PAGE_CHECKS all drive the ONE page main() opens, in this order, and
+// each inherits whatever the last left behind: a theme, an imported file, the
+// selected design, an open console. That is deliberate — re-establishing the
+// app from scratch 30 times would dominate the run — but it means the order is
+// part of the contract, and a check that leaves the page somewhere unusual is
+// the next check's problem. Add one at the END unless it genuinely depends on
+// what a specific predecessor set up.
+//
+// OWN_CONTEXT_CHECKS each open their own browser context: a different viewport,
+// a cold first visit with empty storage, a forced reduced-motion or offline
+// state. None of them touch the shared page, and nothing they do can reach it —
+// which is exactly why they used to be safe to interleave, and exactly why
+// interleaving them hid which family a check belonged to. They run after, so
+// the shared sequence above reads as one uninterrupted session.
+//
+// checkWelcomePopup is not in either list: it runs before the first render
+// wait, for the reason main() gives at the call site.
+const SHARED_PAGE_CHECKS = [
+  checkFileImport,
+  checkThemeToggle,
+  checkIdleRenderCount,
+  checkAxe,
+  checkEveryDesignRenders,
+  checkBundledPresets,
+  checkPresetCardGrid,
+  checkPresetImport,
+  checkExports,
+  checkExportDock,
+  checkStatusStripAndReview,
+  checkAfterExport,
+  checkPreviewControls,
+  checkServiceWorker,
+  checkPwaManifest,
+  checkDesignGallery,
+  checkTagDesign,
+  checkEditOnModel,
+  checkReviewOverride,
+  checkSignageDesign,
+  checkSectionNavigator,
+  checkRoundedCorners,
+  checkResizerAnnouncedWidth,
+];
+
+const OWN_CONTEXT_CHECKS = [
+  checkResponsiveLayout,
+  checkFirstVisitSheetPolicy,
+  checkViewerHudReachable,
+  checkDocumentNeverScrolls,
+  checkNothingOffscreen,
+  checkSheetFocusTrap,
+  checkDialogFocusEntry,
+];
+
 async function main() {
-  const { server, port, basePath } = await startServer();
-  const base = `http://127.0.0.1:${port}${basePath}`;
-  const browser = await launchChromium();
-  const page = await browser.newPage();
+  const { base, browser, page, close } = await bootstrap();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  let failures = 0;
-  const check = (ok, msg) => console.log(`  ${ok ? "✅" : (failures++, "❌")} ${msg}`);
+  const { check, state } = makeCheck();
   const dir = await mkdtemp(join(tmpdir(), "scadpub-smoke-"));
 
   try {
@@ -1906,45 +2207,19 @@ async function main() {
     // first would sit through the timeout on every picker-mode deployment.
     await checkWelcomePopup(ctx);
     await waitRendered(page, ids[0]);
-    await checkFileImport(ctx);
-    await checkThemeToggle(ctx);
-    await checkIdleRenderCount(ctx);
-    await checkAxe(ctx);
-    await checkEveryDesignRenders(ctx);
-    await checkBundledPresets(ctx);
-    await checkPresetCardGrid(ctx);
-    await checkPresetImport(ctx);
-    await checkExports(ctx);
-    await checkExportDock(ctx);
-    await checkStatusStripAndReview(ctx);
-    await checkAfterExport(ctx);
-    await checkPreviewControls(ctx);
-    await checkServiceWorker(ctx);
-    await checkPwaManifest(ctx);
-    await checkDesignGallery(ctx);
-    await checkTagDesign(ctx);
-    await checkEditOnModel(ctx);
-    await checkReviewOverride(ctx);
-    await checkSignageDesign(ctx);
-    await checkSectionNavigator(ctx);
-    await checkResponsiveLayout(ctx);
-    await checkFirstVisitSheetPolicy(ctx);
-    await checkViewerHudReachable(ctx);
-    await checkDocumentNeverScrolls(ctx);
-    await checkRoundedCorners(ctx);
-    await checkNothingOffscreen(ctx);
+    for (const run of SHARED_PAGE_CHECKS) await run(ctx);
+    for (const run of OWN_CONTEXT_CHECKS) await run(ctx);
 
     if (errors.length) {
       console.log("  page errors:", errors);
-      failures += errors.length;
+      state.failures += errors.length;
     }
   } finally {
-    await browser.close();
-    server.close();
+    await close();
   }
 
-  console.log(`\n${failures === 0 ? "SMOKE PASS ✅" : `${failures} FAILURE(S) ❌`}`);
-  process.exit(failures === 0 ? 0 : 1);
+  console.log(`\n${state.failures === 0 ? "SMOKE PASS ✅" : `${state.failures} FAILURE(S) ❌`}`);
+  process.exit(state.failures === 0 ? 0 : 1);
 }
 
 main().catch((e) => {

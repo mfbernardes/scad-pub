@@ -1,0 +1,17 @@
+{
+  "title": "T",
+  "source": "src",
+  "designs": [
+    {
+      "id": "widget",
+      "label": "W"
+    }
+  ],
+  "pwa": {
+    "screenshots": [
+      null,
+      { "src": "logo.svg", "sizes": "640x480", "form_factor": "wide" },
+      { "src": "logo.svg" }
+    ]
+  }
+}

@@ -36,6 +36,11 @@ export function ConfirmDialog({
 }: Props) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
+      {/* No onOpenAutoFocus override here, unlike Modal/DesignPicker: this
+          dialog holds nothing but buttons, so there is no keyboard for
+          autofocus to pop over it, and suppressing Radix's focus transfer only
+          leaves a screen-reader or hardware-keyboard visitor focused behind a
+          destructive confirmation. */}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>

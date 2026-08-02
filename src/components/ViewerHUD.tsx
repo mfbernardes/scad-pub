@@ -198,31 +198,31 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
             )}
             {zoom && (
               <>
-                <MenuRow label="Zoom in" onClick={() => viewerRef.current?.zoomIn()}>
-                  <ZoomInIcon size={16} />
-                </MenuRow>
-                <MenuRow label="Zoom out" onClick={() => viewerRef.current?.zoomOut()}>
-                  <ZoomOutIcon size={16} />
-                </MenuRow>
+                <MenuRow
+                  label="Zoom in"
+                  onClick={() => viewerRef.current?.zoomIn()}
+                  icon={<ZoomInIcon size={16} />}
+                />
+                <MenuRow
+                  label="Zoom out"
+                  onClick={() => viewerRef.current?.zoomOut()}
+                  icon={<ZoomOutIcon size={16} />}
+                />
               </>
             )}
             {reset && (
-              <MenuRow label="Reset view" onClick={act(() => viewerRef.current?.resetView())}>
-                <ResetIcon size={16} />
-              </MenuRow>
+              <MenuRow
+                label="Reset view"
+                onClick={act(() => viewerRef.current?.resetView())}
+                icon={<ResetIcon size={16} />}
+              />
             )}
             {measure && (
-              <MenuRow label={dimensionsLabel} onClick={onToggleDimensions} pressed={showDimensions}>
-                <RulerIcon size={16} />
-              </MenuRow>
+              <MenuRow label={dimensionsLabel} onClick={onToggleDimensions} pressed={showDimensions} icon={<RulerIcon size={16} />} />
             )}
-            <MenuRow label={gridLabel} onClick={onToggleGrid} pressed={showGrid}>
-              <GridIcon size={16} />
-            </MenuRow>
+            <MenuRow label={gridLabel} onClick={onToggleGrid} pressed={showGrid} icon={<GridIcon size={16} />} />
             {canFullscreen && (
-              <MenuRow label="Toggle fullscreen" onClick={act(toggleFullscreen)}>
-                <MaximizeIcon size={16} />
-              </MenuRow>
+              <MenuRow label="Toggle fullscreen" onClick={act(toggleFullscreen)} icon={<MaximizeIcon size={16} />} />
             )}
           </PopoverContent>
         </Popover>

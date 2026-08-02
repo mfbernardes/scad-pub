@@ -1,1 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg"><not-closed
+<!-- A real SVG the sanitizer accepts and resvg then refuses: zero size ("SVG has
+     an invalid size"). The failure has to land at RASTERIZATION, not at the
+     sanitizer's parse — these fixtures exist to test the PWA rasterization
+     failure and the transactional rollback around it, while parse and root
+     rejection are tests/svgSanitize.test.mjs's subject. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0"></svg>

@@ -19,6 +19,7 @@ import {
   aspectAwareFit,
   insetTargetOffset,
   outgrowsFrame,
+  refitPlan,
   MIN_USABLE_FRACTION,
   NO_INSETS,
   DEFAULT_FIT_FRACTION,
@@ -481,4 +482,43 @@ test("charging a corner overlay to one edge only helps if it is charged ONCE", (
   assert.equal(bothWays.right, CANVAS.right - 334, "matching both entries keeps the band");
   const onceOnly = mergeInsets([singleEdgeInset(hud, CANVAS, "top")]);
   assert.deepEqual(onceOnly, insets({ top: 108 }), "matching one entry costs the top only");
+});
+
+// ── refitPlan: growth vs zoom, the distinction Viewer.tsx used to conflate ──
+
+test("refitPlan: unchanged geometry never refits, at any zoom the visitor picked", () => {
+  // The bug: the new requirement was compared against the camera's live
+  // distance, so one Zoom in click (80% of the fit distance) made unchanged
+  // geometry read as 25% overflowed and the next same-key render snapped the
+  // visitor's zoom away.
+  for (const currentDistance of [100, 80, 50, 10, 250])
+    assert.equal(refitPlan(100, 100, currentDistance), null, `zoomed to ${currentDistance}`);
+});
+
+test("refitPlan: growth under the margin is still not a refit", () => {
+  assert.equal(refitPlan(100, 110, 80), null);
+});
+
+test("refitPlan: real growth refits, and carries the visitor's zoom across", () => {
+  // Zoomed to 80% of the frame, geometry doubled: refit to the new fit
+  // distance, still at 80% of it.
+  assert.deepEqual(refitPlan(100, 200, 80), { zoomRatio: 0.8 });
+  // Sitting exactly at the fit distance asks for no zoom at all.
+  assert.deepEqual(refitPlan(100, 200, 100), { zoomRatio: 1 });
+  // Zoomed OUT is carried too: it is the visitor's framing either way.
+  assert.deepEqual(refitPlan(100, 200, 150), { zoomRatio: 1.5 });
+});
+
+test("refitPlan: shrinking is never a refit", () => {
+  assert.equal(refitPlan(200, 100, 200), null);
+});
+
+test("refitPlan: a degenerate input moves nothing, or moves without a zoom — never to NaN", () => {
+  // A zero or non-finite previous requirement is not a baseline to compare
+  // against, so there is no growth to detect: leave the camera alone.
+  assert.equal(refitPlan(0, 100, 80), null);
+  assert.equal(refitPlan(Number.NaN, 100, 80), null);
+  // A non-finite CURRENT distance still refits — the geometry did grow — but
+  // without carrying a zoom nobody can compute.
+  assert.deepEqual(refitPlan(100, 200, Number.NaN), { zoomRatio: 1 });
 });

@@ -26,6 +26,32 @@ function configId() {
 
 /** Launch headless Chromium, honouring the executable-path override used by
  *  environments that ship their own browser (no `playwright install`). */
+// The server + browser + base-URL dance every driving script opens with, and
+// the teardown every one of them has to remember. Four copies of it existed,
+// and they had already drifted on which of the two things they closed.
+//
+// `pageOptions` goes to newPage (the vis run pins a viewport and DPR); pass
+// `page: false` for a script that opens its own contexts.
+export { makeCheck } from "./check.mjs";
+
+export async function bootstrap({ pageOptions, page: wantPage = true } = {}) {
+  const { startServer } = await import("../serve-dist.mjs");
+  const { server, port, basePath } = await startServer();
+  const base = `http://127.0.0.1:${port}${basePath}`;
+  const browser = await launchChromium();
+  const page = wantPage ? await browser.newPage(pageOptions) : null;
+  return {
+    base,
+    browser,
+    page,
+    server,
+    async close() {
+      await browser.close();
+      server.close();
+    },
+  };
+}
+
 export function launchChromium(options = {}) {
   return chromium.launch({
     executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
@@ -142,27 +168,39 @@ export async function dismissWelcomePopup(page) {
 // place that constant lives now.
 const DIALOG_TIMEOUT = 3000;
 
-/** Wait for a `role="dialog"` with the given accessible name to become
- *  visible, then return its locator (so a caller can keep interacting with
- *  it: e.g. `.locator(...)`/`.getByRole(...)` for a footer button, without
- *  a second `page.getByRole("dialog", { name })` lookup). Throws on timeout,
- *  same as `waitRendered` above: callers that only want to know WHETHER it
- *  opened should `.catch()` it. */
-export async function openDialog(page, name, { timeout = DIALOG_TIMEOUT } = {}) {
-  const dialog = page.getByRole("dialog", { name });
+// `name` is the accessible name, or an options object passed straight through
+// to getByRole when a caller needs more (`{ name, exact: true }`), or undefined
+// for "whatever dialog is open" — which is what a script driving a single
+// modal flow wants, and what it otherwise hand-rolls.
+function dialogLocator(page, name) {
+  if (name === undefined) return page.getByRole("dialog");
+  return page.getByRole("dialog", typeof name === "string" ? { name } : name);
+}
+
+/** Wait for a `role="dialog"` to become visible, then return its locator (so a
+ *  caller can keep interacting with it: e.g. `.locator(...)`/`.getByRole(...)`
+ *  for a footer button, without a second lookup). `first` relaxes Playwright's
+ *  strict mode for a caller that only wants to know one matched. Throws on
+ *  timeout, same as `waitRendered` above: callers that only want to know
+ *  WHETHER it opened should `.catch()` it. */
+export async function openDialog(page, name, { timeout = DIALOG_TIMEOUT, first = false } = {}) {
+  const base = dialogLocator(page, name);
+  const dialog = first ? base.first() : base;
   await dialog.waitFor({ state: "visible", timeout });
   return dialog;
 }
 
-/** Wait for a `role="dialog"` with the given accessible name to be gone. It
- *  only WAITS: dismissing the dialog is the caller's job.
+/** Wait for a `role="dialog"` to be gone. It only WAITS: dismissing the dialog
+ *  is the caller's job.
  *  Playwright's "hidden" wait state matches both a fully unmounted dialog and
  *  one that's merely display:none/zero-size, covering every close pattern
  *  the app uses (a Dialog that unmounts vs. one that only hides) with a
- *  single helper. Throws on timeout: callers that tolerate a dialog staying
- *  open (a best-effort cleanup step) should `.catch()` it. */
+ *  single helper — including the `detached` the e2e script used to ask for,
+ *  which is the strictly narrower of the two. Throws on timeout: callers that
+ *  tolerate a dialog staying open (a best-effort cleanup step) should
+ *  `.catch()` it. */
 export async function waitDialogClosed(page, name, { timeout = DIALOG_TIMEOUT } = {}) {
-  await page.getByRole("dialog", { name }).waitFor({ state: "hidden", timeout });
+  await dialogLocator(page, name).waitFor({ state: "hidden", timeout });
 }
 
 /** Navigate to `base` with the given theme forced. Load once to establish the

@@ -23,7 +23,7 @@ import { t, tn } from "../lib/i18n";
 // The id the Download button's `aria-describedby` points at, and the sr-only
 // span below carries: assistive tech gets the same "N issues to review"
 // signal a sighted visitor sees via the amber dot + status strip.
-export const EXPORT_ATTENTION_HINT_ID = "export-attention-hint";
+const EXPORT_ATTENTION_HINT_ID = "export-attention-hint";
 
 // The id the sr-only note explaining WHY Download is currently disabled is
 // published under, and the button's `aria-describedby` points at when

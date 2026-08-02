@@ -66,12 +66,103 @@ export function parseColor(token: string | null | undefined): Rgb | null {
       parseInt(h.slice(4, 6), 16),
     ];
   }
-  m = /^rgb\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)$/.exec(t);
+  // Functional forms, in both the legacy comma syntax and the modern
+  // space-separated one, with the alpha component read and discarded (a relief
+  // has no opacity). Real exports reach here constantly — Illustrator writes
+  // `rgb()`, Figma writes `rgba()` — and every token that misses becomes an
+  // unparseable paint that can only be slugged, never named or grouped by
+  // equality with the same colour written another way.
+  m = /^rgba?\(([^)]*)\)$/.exec(t);
   if (m) {
-    const clamp = (v: string) => Math.min(255, Math.max(0, Math.round(parseFloat(v))));
-    return [clamp(m[1]), clamp(m[2]), clamp(m[3])];
+    const n = channels(m[1], 3);
+    if (n) return [byte(n[0]), byte(n[1]), byte(n[2])];
+    return null;
+  }
+  m = /^hsla?\(([^)]*)\)$/.exec(t);
+  if (m) {
+    const n = channels(m[1], 3);
+    // The hue is an <angle>, and CSS angles come in four units. `channels`
+    // reads the number and drops the unit, which is right for saturation and
+    // lightness and wrong for the hue: `hsl(.5turn 100% 50%)` is cyan, and
+    // reading it as 0.5 DEGREES makes it red. Nothing downstream would notice —
+    // isRenderableColor asks CSS.supports, which says every one of these is
+    // valid — so the region simply came out the wrong colour.
+    const hue = hueDegrees(m[1]);
+    if (n && hue !== null) return hslToRgb(hue, n[1], n[2]);
+    return null;
   }
   return null;
+}
+
+/** The leading `count` numeric components of a functional colour's argument
+ *  list, or null when it is not that shape. Splits on commas or whitespace (CSS
+ *  accepts both), tolerates the `/ alpha` suffix of the modern syntax, and
+ *  reads a percentage as its fraction of 255 — which is what `rgb(100% 0% 0%)`
+ *  means, and close enough for hsl's saturation/lightness because hslToRgb
+ *  divides by 255 again. */
+function channels(args: string, count: number): number[] | null {
+  const parts = args
+    .replace(/\//g, " ")
+    .split(/[\s,]+/)
+    .filter(Boolean);
+  if (parts.length < count) return null;
+  const out: number[] = [];
+  for (const part of parts.slice(0, count)) {
+    const pct = part.endsWith("%");
+    const v = parseFloat(pct ? part.slice(0, -1) : part);
+    if (!Number.isFinite(v)) return null;
+    out.push(pct ? (v / 100) * 255 : v);
+  }
+  return out;
+}
+
+function byte(v: number): number {
+  return Math.min(255, Math.max(0, Math.round(v)));
+}
+
+// CSS <angle> units, as multipliers onto degrees. `deg` is the default and the
+// only one an exporter normally writes, but all four are valid and the browser
+// accepts them, so all four have to mean what they say.
+const ANGLE_UNITS: Record<string, number> = {
+  deg: 1,
+  grad: 360 / 400,
+  rad: 180 / Math.PI,
+  turn: 360,
+};
+
+/** The hue component of an `hsl()` argument list, in degrees, or null when it
+ *  is not an angle at all. A bare number is degrees, as CSS specifies. */
+function hueDegrees(args: string): number | null {
+  const first = args
+    .replace(/\//g, " ")
+    .split(/[\s,]+/)
+    .filter(Boolean)[0];
+  if (first === undefined) return null;
+  const m = /^([-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?)(deg|grad|rad|turn)?$/.exec(first);
+  if (!m) return null;
+  const v = parseFloat(m[1]);
+  if (!Number.isFinite(v)) return null;
+  return v * (m[2] ? ANGLE_UNITS[m[2]] : 1);
+}
+
+/** hue in degrees, saturation/lightness as `channels` returns them (0–255). */
+function hslToRgb(hDeg: number, s255: number, l255: number): Rgb {
+  const h = (((hDeg % 360) + 360) % 360) / 360;
+  const s = Math.min(1, Math.max(0, s255 / 255));
+  const l = Math.min(1, Math.max(0, l255 / 255));
+  if (s === 0) return [byte(l * 255), byte(l * 255), byte(l * 255)];
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const channel = (t: number) => {
+    let x = t;
+    if (x < 0) x += 1;
+    if (x > 1) x -= 1;
+    if (x < 1 / 6) return p + (q - p) * 6 * x;
+    if (x < 1 / 2) return q;
+    if (x < 2 / 3) return p + (q - p) * (2 / 3 - x) * 6;
+    return p;
+  };
+  return [byte(channel(h + 1 / 3) * 255), byte(channel(h) * 255), byte(channel(h - 1 / 3) * 255)];
 }
 
 /** Whether a colour token can be painted into a CSS swatch. Uses the browser's
@@ -97,14 +188,26 @@ function hex2(n: number): string {
   return n.toString(16).padStart(2, "0");
 }
 
-/** An OpenSCAD-friendly colour value: a CSS name when known, else hex. */
+/** An OpenSCAD-friendly colour value: a CSS name when known, else hex.
+ *
+ *  An unparseable paint (a `url(#gradient)` reference, a colour space this
+ *  module does not model) still has to be carried, but never verbatim: the
+ *  layers spec separates its entries with `,` and its fields with `:`, so a
+ *  token holding either — `rgba(255,0,0,0.5)` above all — is shredded into junk
+ *  regions when parseLayerSpec reads it back. Strip both, and the whitespace
+ *  that would make the entry unreadable. Case survives for `url(#…)`, whose
+ *  fragment reference is case-sensitive. */
 export function displayColor(rgb: Rgb | null, original: string | null | undefined): string {
   if (rgb) {
     const name = RGB_TO_NAME.get(rgb.join(","));
     if (name) return name;
     return `#${hex2(rgb[0])}${hex2(rgb[1])}${hex2(rgb[2])}`;
   }
-  return (original ?? "").trim().toLowerCase();
+  const stripped = (original ?? "").replace(/[\s,:]+/g, "");
+  // A token that was nothing but separators leaves no usable colour; fall back
+  // to the same default effectiveFill uses when nothing paints a shape.
+  if (!stripped) return "black";
+  return /^url\(/i.test(stripped) ? stripped : stripped.toLowerCase();
 }
 
 /** A stable identity for a colour so equal colours group however they are written. */

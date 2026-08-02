@@ -30,9 +30,13 @@ interface Props {
    * straight back, which is the caller's decision, not this component's.
    */
   pressed?: boolean;
-  /** Leading icon. Sized by the caller (16px matches the rows in use). */
+  /** Leading icon, and the ONLY way to give a row one. Sized by the caller
+   *  (16px matches the rows in use). ViewerHUD used to pass its icons as
+   *  `children` instead, which put them on the opposite side of the label from
+   *  every other menu in the app: exactly the drift this component exists to
+   *  prevent. */
   icon?: ReactNode;
-  /** Trailing content: a Switch, a shortcut hint, a badge. */
+  /** Trailing content: a Switch, a shortcut hint, a badge. Not an icon. */
   children?: ReactNode;
   className?: string;
   /** Overrides the accessible name when `label` isn't plain text. */
