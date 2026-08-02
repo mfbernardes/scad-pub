@@ -3,12 +3,19 @@
 // "Raw output" <details> holding the technical tail. Used by OutputConsole's
 // Notices tab and ReviewDialog so a failure reads identically wherever it
 // surfaces.
+//
+// Deliberately NOT `role="alert"`. ParamForm's banner carries the same
+// sentence, at the point of edit, and is the one that should interrupt; with
+// both marked assertive a desktop visitor heard the identical text twice the
+// moment a render failed. Both of this card's hosts are already announced in
+// their own right (the console is a labelled region that auto-opens, the
+// review dialog takes focus), so the text is reached either way.
 import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import { t } from "../lib/i18n";
 
 export function FriendlyFailureCard({ info }: { info: FriendlyErrorInfo }) {
   return (
-    <div className="friendly-failure flex flex-col gap-2" role="alert">
+    <div className="friendly-failure flex flex-col gap-2">
       <p className="m-0 font-semibold text-foreground">{info.title}</p>
       {info.body && <p className="m-0 text-[0.88rem] text-muted-foreground">{info.body}</p>}
       {info.technical.length > 0 && (

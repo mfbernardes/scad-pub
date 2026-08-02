@@ -9,11 +9,10 @@
 // panel is collapsed to its rail. A row inside the panel would vanish with it.
 //
 // The caller mounts it only for the states that want a look at the Review
-// dialog, and not identically in both layouts: `failed` pills everywhere,
-// `attention` on desktop only, on mobile the dock's Download button already
-// carries an amber dot and an sr-only issue count for exactly that state, and
-// a stacked pill saying it again cost a row over the model. See AppShell's
-// `hasStatusPill` for the full reasoning. A ready model needs no announcement
+// dialog: `failed` and `attention`, both layouts. Mobile used to skip
+// `attention` because the Download button carried a marker of its own; that
+// marker is gone (see AppShell's `hasStatusPill`), so this pill is the only
+// attention signal there is. A ready model needs no announcement
 // (the enabled Download button is the confirmation), and a first build is
 // already narrated by the viewer's own loading overlay. The unmounted states
 // are still spelled out below because `readiness` can hold them and the label

@@ -46,7 +46,7 @@ globalThis.document = {
   querySelectorAll: () => [darkMeta, lightMeta],
 };
 
-const { resolveTheme, apply, subscribeSystemDark, getSystemDarkSnapshot } =
+const { resolveTheme, apply, subscribeSystemDark, getSystemDarkSnapshot, nextThemeMode } =
   await import("../src/lib/theme.ts");
 
 test("explicit modes resolve to themselves", () => {
@@ -122,4 +122,38 @@ test("getSystemDarkSnapshot mirrors resolveTheme('auto') at every point", () => 
     assert.equal(getSystemDarkSnapshot(), pref);
     assert.equal(resolveTheme("auto"), pref ? "dark" : "light");
   }
+});
+
+// The toggle's cycle order is derived, not a constant, so nothing else pins it.
+// Two properties matter and neither is obvious from reading the function: every
+// mode stays reachable under both OS preferences, and the press that LEAVES
+// "auto" always changes what is on screen — the whole reason the old fixed
+// auto->light->dark order was replaced (under a light OS it repainted nothing,
+// so the first press read as a dead control).
+test("nextThemeMode visits all three modes and never idles leaving auto", () => {
+  for (const systemDark of [true, false]) {
+    const resolve = (m) => (m === "auto" ? (systemDark ? "dark" : "light") : m);
+    const seen = new Set();
+    let mode = "auto";
+    for (let i = 0; i < 3; i++) {
+      const next = nextThemeMode(mode, systemDark);
+      if (mode === "auto") {
+        assert.notEqual(
+          resolve(next),
+          resolve(mode),
+          `leaving auto under systemDark=${systemDark} must repaint`
+        );
+      }
+      seen.add(next);
+      mode = next;
+    }
+    assert.deepEqual([...seen].sort(), ["auto", "dark", "light"], `systemDark=${systemDark}`);
+    assert.equal(mode, "auto", "three presses return to auto");
+  }
+});
+
+test("nextThemeMode has no fixed point", () => {
+  for (const systemDark of [true, false])
+    for (const mode of ["auto", "light", "dark"])
+      assert.notEqual(nextThemeMode(mode, systemDark), mode, `${mode}/${systemDark}`);
 });

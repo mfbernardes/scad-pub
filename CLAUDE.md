@@ -157,10 +157,12 @@ re-renders when a callback’s identity changes yet always invokes `App`'s lates
 implementation. Data and genuinely local glue (the PNG snapshot handler that needs the viewer
 ref) still flow as props. `src/lib/readiness.ts` derives the state `StatusStrip` surfaces as a
 pill in the export dock, above the Download button, and that `ReviewDialog` explains; Download
-routes through that dialog rather than exporting anything short of `ready`. The pill mounts for
-`failed` on both layouts but for `attention` on desktop only: mobile leaves that state to the
-amber dot `ActionButtons` already puts on Download, rather than spending a stacked row over the
-model to say it twice.
+routes through that dialog rather than exporting anything short of `ready`. The pill is the ONLY
+attention signal and mounts on both layouts. `ActionButtons` used to put an amber marker on
+Download so mobile could skip the pill and save a stacked row over the model; that marker is
+gone, because a small in-button graphic has to earn its contrast against a fill each deployment
+chooses (this repo's own dark palette put the pair at 2.66:1, under 1.4.11's 3:1) and can only
+say "amber", never what is wrong.
 
 ## Conventions
 
