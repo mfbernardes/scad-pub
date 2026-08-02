@@ -860,6 +860,15 @@ export const Viewer = forwardRef<
       // until GC, so each breakpoint flip otherwise leaks a live context.
       renderer.forceContextLoss();
       mount.removeChild(renderer.domElement);
+      // A resetEpoch rebuild normally reassigns these immediately, but a
+      // rebuild that lands in the "unavailable" early-return above does not:
+      // left set, snapshot() and the theme/geometry effects would write into
+      // this torn-down scene/renderer instead of no-op'ing on their null
+      // guards.
+      sceneRef.current = null;
+      camRef.current = null;
+      controlsRef.current = null;
+      rendererRef.current = null;
     };
     // resetEpoch alone: webglStatus is read once per run (a status change
     // without a matching resetEpoch bump is "lost", which intentionally does

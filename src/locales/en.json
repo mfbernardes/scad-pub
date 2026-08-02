@@ -133,7 +133,7 @@
   "toast.shared": "Shared {name}",
   "toast.exported": "Exported {name}",
   "toast.saved": "Saved {name}",
-  "render.heavyManualStart": "This design takes a while to build, so live preview starts paused — press “Update” to see your first render.",
+  "render.heavyManualStart": "This design takes a while to build, so live preview is paused — press “Update” after making changes.",
   "notice.bundleStale": "This page is running an outdated version. Reload to update.",
   "notice.reload": "Reload",
   "notice.updateAvailable": "A new version is available.",
