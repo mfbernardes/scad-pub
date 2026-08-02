@@ -539,11 +539,14 @@ export function BottomSheet({
               named Done. It overlays the handle's top-right corner, which
               costs the drag gesture that corner; the rest of the 390px strip
               still drags. Mounted at Full only: below it the background is
-              reachable and this would be clutter. */}
+              reachable and this would be clutter. The focus ring is INSET:
+              `.sheet-frame` is `overflow: hidden` and this sits on its top
+              edge, so an outset one would be clipped exactly where a keyboard
+              visitor needs to see it. */}
           {isModal && (
             <button
               type="button"
-              className="sheet-done absolute right-1 top-0 z-10 inline-flex min-h-11 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent px-[0.6rem] text-[0.82rem] font-semibold text-brand outline-none transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="sheet-done absolute right-1 top-0 z-10 inline-flex min-h-11 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent px-[0.6rem] text-[0.82rem] font-semibold text-brand outline-none transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring/50"
               onClick={() => setDetent("half")}
             >
               {t("sheet.done")}

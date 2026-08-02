@@ -900,16 +900,38 @@ async function checkDesignGallery({ page, check, schema }) {
   );
   // Assert the artwork actually loaded, not merely that an <img> is present: a
   // stale `@image` path renders an empty box that still passes a count check.
+  //
+  // Two things this has to do that reading `naturalWidth` once did not. The
+  // cards are `loading="lazy"`, so the ones below the gallery's scroll port may
+  // never be fetched at all — scroll each into view first. And `waitFor
+  // "visible"` proves nothing about the image: the card reserves an
+  // aspect-ratio box, so the <img> has a non-empty rect from the first frame,
+  // the wait returns immediately and the assertion then races the decode. That
+  // read a stale-path regression and a slow runner as the same failure, and
+  // reported the LATER designs as broken purely because the loop reached them
+  // sooner after their fetch started. Poll the real condition instead.
   const withImage = schema.designs.filter((d) => d.image);
   for (const d of withImage) {
     const img = dialog.locator(`button[data-design="${d.id}"] img`).first();
-    await img.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+    await img.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
     const src = (await img.getAttribute("src")) ?? "";
     check(src.includes(d.image), `${d.id}'s card uses its @image artwork`);
-    check(
-      await img.evaluate((i) => i.complete && i.naturalWidth > 0),
-      `${d.id}'s card artwork loaded`
-    );
+    const loaded = await img
+      .evaluate(
+        (i) =>
+          i.complete && i.naturalWidth > 0
+            ? true
+            : new Promise((resolve) => {
+                const done = (ok) => resolve(ok);
+                i.addEventListener("load", () => done(i.naturalWidth > 0), { once: true });
+                i.addEventListener("error", () => done(false), { once: true });
+                setTimeout(() => done(i.complete && i.naturalWidth > 0), 10000);
+              }),
+        undefined,
+        { timeout: 15000 }
+      )
+      .catch(() => false);
+    check(loaded, `${d.id}'s card artwork loaded`);
   }
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
