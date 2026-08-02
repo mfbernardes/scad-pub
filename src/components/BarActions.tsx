@@ -1,8 +1,9 @@
 // BarActions.tsx: the secondary actions shared by both top bars: Save image
 // (PNG), Files, theme toggle, Help, and open-source licenses. One component,
-// two presentations chosen by the `collapse` prop (the caller knows which
-// layout it's in: both layout trees mount at once, so a viewport hook would
-// render a stray hidden ⋮ button):
+// two presentations chosen by the `collapse` prop. The caller passes it rather
+// than this component reading a viewport hook, because the caller already knows
+// which layout it is: AppShell mounts one tree or the other (M7), and a second
+// source of truth for the breakpoint is one more thing to disagree.
 //   • inline (desktop CommandBar): icon buttons in a row.
 //   • collapsed (mobile top bar): a single "⋮" Popover of rows, so the narrow
 //     bar stays uncluttered.

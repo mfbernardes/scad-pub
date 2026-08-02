@@ -4,6 +4,7 @@
 // its previous instance instead of stacking.
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { t } from "./i18n";
 
 export interface AppNoticesArgs {
   /** A render used defines the current bundle no longer declares. */
@@ -25,20 +26,20 @@ export function useAppNotices({
 }: AppNoticesArgs): void {
   useEffect(() => {
     if (bundleStale)
-      toast.error("This page is running an outdated version. Reload to update.", {
+      toast.error(t("notice.bundleStale"), {
         id: "bundle-stale",
         duration: Infinity,
-        action: { label: "Reload", onClick: forceUpdate },
+        action: { label: t("notice.reload"), onClick: forceUpdate },
       });
   }, [bundleStale, forceUpdate]);
 
   useEffect(() => {
     if (updateReady && !bundleStale)
-      toast("A new version is available.", {
+      toast(t("notice.updateAvailable"), {
         id: "sw-update",
         duration: Infinity,
-        action: { label: "Reload", onClick: applyUpdate },
-        cancel: { label: "Later", onClick: dismissUpdate },
+        action: { label: t("notice.reload"), onClick: applyUpdate },
+        cancel: { label: t("notice.later"), onClick: dismissUpdate },
       });
   }, [updateReady, bundleStale, applyUpdate, dismissUpdate]);
 
@@ -46,7 +47,7 @@ export function useAppNotices({
   // the cached WASM means rendering and export keep working. Clears on reconnect.
   useEffect(() => {
     if (!online)
-      toast("You're offline — rendering and export still work.", {
+      toast(t("notice.offline"), {
         id: "offline",
         duration: Infinity,
       });

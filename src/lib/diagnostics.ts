@@ -12,7 +12,7 @@
 // See also computedInfo.ts, a separate echo convention (`echo("@info", ...)`)
 // for surfacing internally-calculated values in the measurements panel.
 import type { NoticeCategory } from "../openscad/types";
-import { selectPlural } from "./i18n";
+import { selectPlural, t } from "./i18n";
 
 export type DiagnosticLevel = "notice" | "warning" | "assert";
 
@@ -161,7 +161,12 @@ export function countBadges(
     });
   }
   const assertCount = counts.get("assert") ?? 0;
-  if (assertCount > 0) badges.push({ key: "assert", label: "asserts", count: assertCount, attention: true });
+  if (assertCount > 0) badges.push({
+      key: "assert",
+      label: t("diagnostics.assertsBadge"),
+      count: assertCount,
+      attention: true,
+    });
   return badges;
 }
 

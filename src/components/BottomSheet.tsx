@@ -20,6 +20,7 @@ import {
   type ReactNode,
 } from "react";
 import { tapFeedback } from "../lib/haptics";
+import { t } from "../lib/i18n";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
 import { useScrollFocusedIntoView } from "../lib/useScrollFocusedIntoView";
 import { useSafeAreaInset } from "../lib/useSafeAreaInset";
@@ -28,7 +29,7 @@ export type SheetDetent = "peek" | "half" | "full";
 
 const DETENT_ORDER: SheetDetent[] = ["peek", "half", "full"];
 // Slightly above 50% to clear browser chrome at the bottom.
-export const HALF_VH_RATIO = 0.52;
+const HALF_VH_RATIO = 0.52;
 // Height (px) of the model strip the Full detent deliberately leaves uncovered
 // at the top of the viewport. Any notch inset is added on top of it by fullH's
 // `topInset` argument, so a device with one doesn't lose part of the strip.
@@ -359,9 +360,10 @@ export function BottomSheet({
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       cycleDetent();
-    } else if (e.key === "Escape") {
-      setDetent("peek");
     }
+    // Escape is deliberately NOT handled here. The document-level trap below
+    // owns it: both handlers used to fire for one keypress, running
+    // handleDetentChange twice with different targets (peek here, half there).
   }, [cycleDetent, setDetent]);
 
   // Committed height for the current detent. Drag frames update the DOM
@@ -395,9 +397,14 @@ export function BottomSheet({
   //    drag handle (onHandleKeyDown above only fires when the handle itself
   //    has focus).
   const scrimRef = useRef<HTMLButtonElement>(null);
+  // The Full detent is where the sheet stops being a panel beside the model
+  // and becomes a modal over it: focus trapped here, background `inert`ed by
+  // AppShell, scrim drawn below. One flag, so the trap effect and the announced
+  // role can never disagree about which it is.
+  const isModal = detent === "full";
   const returnFocusRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (detent !== "full") return;
+    if (!isModal) return;
     const sheet = sheetRef.current;
     if (!sheet) return;
     returnFocusRef.current =
@@ -413,7 +420,13 @@ export function BottomSheet({
       node instanceof Element && !!node.closest("[data-radix-popper-content-wrapper]");
     const inTrap = (node: Node | null) =>
       !!node && (sheet.contains(node) || node === scrimRef.current || inPopper(node));
-    // DOM/tab order: the scrim (when present) precedes the sheet.
+    // The scrim is deliberately NOT in this list, though `inTrap` still counts
+    // it: it is a sibling rendered BEFORE the sheet, so including it made Tab
+    // from the last control wrap to an element outside the dialog — which,
+    // now that the sheet carries aria-modal, modal-aware assistive technology
+    // may not expose at all. It stays a click target (and carries tabIndex={-1}
+    // so the browser's own Tab cannot reach it either); Escape and the handle
+    // are the keyboard routes out.
     // FOCUSABLE_SELECTOR alone isn't enough: Radix's inactive TabsContent
     // panels carry tabindex="0" (for programmatic/AT focus management) while
     // `hidden`, which the browser's real Tab key already skips. Filter
@@ -424,7 +437,7 @@ export function BottomSheet({
       const list = Array.from(sheet.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
         isReachable
       );
-      return scrimRef.current ? [scrimRef.current, ...list] : list;
+      return list;
     };
     const focusFirst = () => {
       const focusables = trapFocusables();
@@ -472,16 +485,17 @@ export function BottomSheet({
       returnFocusRef.current = null;
       if (prev && document.contains(prev)) prev.focus();
     };
-  }, [detent, setDetent]);
+  }, [isModal, setDetent]);
 
   return (
     <>
       {/* Scrim only at Full detent */}
-      {detent === "full" && (
+      {isModal && (
         <button
           ref={scrimRef}
           type="button"
           className="sheet-scrim"
+          tabIndex={-1}
           style={bottomInset ? { bottom: bottomInset } : undefined}
           aria-label="Collapse parameter panel"
           onClick={() => setDetent("half")}
@@ -497,8 +511,16 @@ export function BottomSheet({
           transform: `translateY(${Math.max(0, fullHeight - displayH)}px)`,
           transition: dragging ? "none" : "transform 0.28s cubic-bezier(0.32,0.72,0,1)",
         } as React.CSSProperties}
-        aria-label="Parameter panel"
-        role="complementary"
+        aria-label={t("settings.title")}
+        // The sheet is a real modal at the Full detent — AppShell `inert`s the
+        // background, this component traps focus and scrims — so it has to be
+        // announced as one. Below Full it is an ordinary complementary region
+        // beside the model, and announcing THAT as a modal dialog would be just
+        // as wrong. The role therefore follows the modality rather than being
+        // fixed, which is what a screen reader needs to describe either state
+        // truthfully.
+        role={isModal ? "dialog" : "complementary"}
+        aria-modal={isModal || undefined}
       >
         <div className="sheet-frame">
           {/* Drag handle: single visible control; tap cycles, arrow keys resize. */}

@@ -4,14 +4,13 @@
 // via the auto-opening output console; PWA install is demoted to the Help
 // modal, so the bar stays lean.
 import { memo } from "react";
-import { BookOpen as GuideIcon } from "lucide-react";
 import type { Design, Schema, RenderResult } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
-import { DesignPicker } from "./DesignPicker";
+import { DesignHeading } from "./DesignHeading";
 import { BarBrand } from "./BarBrand";
 import { BarActions } from "./BarActions";
 import { OutputToggle } from "./OutputToggle";
-import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
+import { ICON_BUTTON_CLASS } from "./IconButton";
 import { cn } from "../lib/utils";
 
 interface Props {
@@ -32,8 +31,6 @@ interface Props {
   onToggleOutput: () => void;
   /** Bumped by the intro popup's CTA to open the design picker. */
   openPickerSignal: number;
-  /** Whether the desktop bar is the visible layout (so only its picker opens). */
-  pickerActive: boolean;
   /** Save-image (PNG): relocated here from the export dock (BarActions.tsx). */
   onSavePng?: () => void;
   canSavePng?: boolean;
@@ -57,7 +54,6 @@ export const CommandBar = memo(function CommandBar({
   showCount,
   onToggleOutput,
   openPickerSignal,
-  pickerActive,
   onSavePng,
   canSavePng,
   hasFiles,
@@ -77,30 +73,17 @@ export const CommandBar = memo(function CommandBar({
 
       {/* Design picker, centered in the bar */}
       <div className="command-bar__design-picker inline-flex items-center gap-[0.4rem] justify-self-center whitespace-nowrap">
-        {designs.length > 1 ? (
-          <DesignPicker
-            designs={designs}
-            value={designId}
-            onChange={designChange}
-            openSignal={openPickerSignal}
-            active={pickerActive}
-            gallery={schema.ui?.gallery}
-          />
-        ) : (
-          <span className="text-[0.88rem] font-semibold text-foreground">
-            {currentDesign?.label ?? designId}
-          </span>
-        )}
-        {currentDesign?.doc && (
-          <IconButton
-            label="Design guide"
-            title="About this design"
-            onClick={showDesignDoc}
-            className="command-bar__design-doc size-7 p-[0.3rem]"
-          >
-            <GuideIcon size={15} />
-          </IconButton>
-        )}
+        <DesignHeading
+          designs={designs}
+          designId={designId}
+          label={currentDesign?.label ?? designId}
+          hasDoc={!!currentDesign?.doc}
+          gallery={!!schema.ui?.gallery}
+          onChange={designChange}
+          openPickerSignal={openPickerSignal}
+          onShowDoc={showDesignDoc}
+          docClassName="command-bar__design-doc"
+        />
       </div>
 
       <div className="command-bar__right flex items-center gap-[0.4rem] justify-self-end">

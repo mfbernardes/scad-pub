@@ -26,7 +26,6 @@ import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { t } from "../lib/i18n";
-import { useDebounce } from "../lib/useDebounce";
 import type { PanelTab } from "../lib/usePanelState";
 import { ParamForm } from "./ParamForm";
 import { PresetPicker } from "./PresetPicker";
@@ -42,10 +41,10 @@ interface Props {
   values: Values;
   bundled: ParsedSet[];
   userPresets: string[];
-  selected: string;
-  /** The selected preset's values, or null when no preset is selected (baseline is defaults). */
+  selectedPreset: string;
+  /** The selected preset's values, or null when none is selected (baseline is defaults). */
   presetBaseline: Values | null;
-  /** The selected preset's display name, or null when no preset is selected. */
+  /** The selected preset's display name, or null when none is selected. */
   presetName: string | null;
   /** Values the current params are diffed against: presetBaseline, or design defaults. */
   baseline: Values;
@@ -70,9 +69,12 @@ interface Props {
   onShowAdvancedChange?: (show: boolean) => void;
   /** Active tab + search query, hoisted to AppShell (usePanelState) so they
    *  survive a desktop/mobile remount, see docs/architecture-review.md M7. */
-  tab: PanelTab;
-  onTabChange: (tab: PanelTab) => void;
+  panelTab: PanelTab;
+  onPanelTabChange: (tab: PanelTab) => void;
   search: string;
+  /** `search` debounced, from usePanelState: one timer above the layout split,
+   *  so a breakpoint flip mid-typing doesn't restart the debounce. */
+  debouncedSearch: string;
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
@@ -83,7 +85,7 @@ export function SheetTabs({
   values,
   bundled,
   userPresets,
-  selected,
+  selectedPreset,
   presetBaseline,
   presetName,
   baseline,
@@ -96,9 +98,10 @@ export function SheetTabs({
   showVarName = false,
   showAdvanced,
   onShowAdvancedChange,
-  tab,
-  onTabChange,
+  panelTab,
+  onPanelTabChange,
   search,
+  debouncedSearch,
   onSearchChange,
   onSearchFocus,
   onSearchBlur,
@@ -110,13 +113,12 @@ export function SheetTabs({
   const parametersLabel = t("settings.title");
   // Presets first on mobile, then Customize.
   const tabs: Tab[] = ["presets", "params"];
-  const debouncedSearch = useDebounce(search, 150);
   const triggerClass = cn(chipTabTrigger, "flex-1");
 
   return (
     <Tabs
-      value={tab}
-      onValueChange={(v) => onTabChange(v as Tab)}
+      value={panelTab}
+      onValueChange={(v) => onPanelTabChange(v as Tab)}
       className="sheet-tabs min-h-0 flex-1 gap-0"
     >
       <TabsList
@@ -183,12 +185,11 @@ export function SheetTabs({
             design={design}
             bundled={bundled}
             userPresets={userPresets}
-            selected={selected}
+            selected={selectedPreset}
             values={values}
             onApply={applyPreset}
             onSelectedChange={selectedPresetChange}
             onPresetsChange={presetsChange}
-            inline
             compact
           />
         </TabsContent>

@@ -3,7 +3,6 @@
   "status.ready": "Ready to download",
   "status.failed": "Preview failed",
   "status.reviewTitle": "Review this design before downloading",
-
   "error.bootstrapFailed": "The 3D engine couldn't start — check your connection and try again.",
   "error.renderFailed": "Preview could not be updated",
   "error.generic": "That combination of settings didn't work",
@@ -11,7 +10,6 @@
   "error.modalLoadFailed": "This dialog couldn't be loaded — check your connection, then reload to try again.",
   "error.modalLoadFailedReason": "Reloading is the fix: a failed load like this is cached for the rest of this visit, so retrying without reloading won't re-fetch it.",
   "error.reload": "Reload",
-
   "review.title": "Review",
   "review.descriptionFailure": "The last render failed — see the details below.",
   "review.descriptionSummary": "A summary of what will be downloaded, and anything that still needs your attention.",
@@ -20,9 +18,7 @@
   "review.issueCount#one": "{count} issue to review",
   "review.issueCount#other": "{count} issues to review",
   "review.noResultReason": "Nothing to download yet — the preview hasn't rendered successfully.",
-
   "common.close": "Close",
-
   "presets.title": "Presets",
   "presets.manage": "Manage",
   "presets.cancel": "Cancel",
@@ -34,44 +30,34 @@
   "presets.importCollisionBody": "This will replace: {names}. Any other presets in the file will be added as new entries.",
   "presets.moreCount#one": "{count} more",
   "presets.moreCount#other": "{count} more",
-
   "action.export": "Download for 3D printing",
   "action.share": "Share",
-
   "dock.copyLink": "Copy link",
   "dock.exportAria": "Download {format} for slicers and print services",
   "dock.buildingReason": "Still building the preview…",
   "dock.staleReason": "Preview out of date — render first",
-
   "attention.fontFallbackLead": "Font not loaded",
   "attention.substituteFont": "The preview uses a substitute font.",
   "attention.importFont": "Import font…",
   "attention.useBundledFont": "Use a bundled font",
   "attention.noticePending": "{count} {label} pending",
   "attention.viewMessages": "View messages",
-
   "exportSuccess.title": "Your file is on its way",
   "exportSuccess.body": "Check your browser's downloads, then slice and print when you're ready.",
   "exportSuccess.openHelp": "Open printing help",
   "exportSuccess.dismiss": "Dismiss",
-
   "hint.rotateZoomMouse": "Drag to rotate · Scroll to zoom",
   "hint.rotateZoomTouch": "Drag to rotate · Pinch to zoom",
   "hint.sheetSwipeUp": "Swipe up for settings",
-
   "hud.showGrid": "Show grid",
   "hud.hideGrid": "Hide grid",
   "hud.viewOptions": "View options",
   "hud.viewHeading": "View",
-
   "editOnModel.open": "Edit text",
   "editOnModel.label": "Text",
-
   "stale.updating": "Updating…",
-
   "console.title": "Messages",
   "console.rawOutput": "Raw output",
-
   "files.title": "Files",
   "files.empty": "No files imported yet.",
   "files.emptyFonts": "Fonts are imported from a font control.",
@@ -82,7 +68,6 @@
   "files.remove": "Remove {name}",
   "files.clearAll": "Clear all imported files",
   "svg.missing": "“{name}” isn’t imported — prepare or import it again.",
-
   "presetDiff.changesFrom#one": "{count} change from",
   "presetDiff.changesFrom#other": "{count} changes from",
   "presetDiff.defaults": "defaults",
@@ -90,7 +75,6 @@
   "presetDiff.revert": "Revert",
   "presetDiff.revertTo": "Revert to {name}",
   "presetDiff.reset": "Reset",
-
   "settings.title": "Customize",
   "settings.openPanel": "Open the {label} panel",
   "settings.jumpToSection": "Jump to section",
@@ -99,9 +83,26 @@
   "settings.showEssential": "Show essential settings",
   "settings.livePreview": "Live preview",
   "settings.livePreviewTitle": "Update the preview automatically as you change settings",
-
   "theme.label": "Theme: {mode}",
   "theme.modeAuto": "Auto",
   "theme.modeLight": "Light",
-  "theme.modeDark": "Dark"
+  "theme.modeDark": "Dark",
+  "error.renderHardFailed": "The preview couldn't be built",
+  "error.renderHardFailedReason": "Unexpected renderer error.",
+  "error.openMessages": "Open Messages (the bell in the top bar) for details.",
+  "render.autoPaused": "This design takes a while to build ({seconds} s), so live preview is paused — press “Update” after making changes.",
+  "notice.bundleStale": "This page is running an outdated version. Reload to update.",
+  "notice.reload": "Reload",
+  "notice.updateAvailable": "A new version is available.",
+  "notice.later": "Later",
+  "notice.offline": "You're offline — rendering and export still work.",
+  "install.hint": "Install this configurator for quick, offline access?",
+  "install.action": "Install",
+  "install.dismiss": "Not now",
+  "share.copied": "Copied share link",
+  "share.copyFailed": "Couldn't copy — copy the URL from the address bar",
+  "files.added": "File added: {name}",
+  "files.removed": "File removed: {name}",
+  "files.cleared": "Imported files cleared",
+  "diagnostics.assertsBadge": "asserts"
 }

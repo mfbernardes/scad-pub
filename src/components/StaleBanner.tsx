@@ -15,10 +15,9 @@ interface Props {
   /** Auto-render off AND params/preset/design changed since the last render. */
   stalePreview: boolean;
   onRender: () => void;
-  className?: string;
 }
 
-export function StaleBanner({ autoRender, rendering, stalePreview, onRender, className = "" }: Props) {
+export function StaleBanner({ autoRender, rendering, stalePreview, onRender }: Props) {
   // Auto-render keeps the preview live: the banner is a manual-mode concern only.
   if (autoRender) return null;
   if (!rendering && !stalePreview) return null;
@@ -29,8 +28,7 @@ export function StaleBanner({ autoRender, rendering, stalePreview, onRender, cla
       className={cn(
         // Positioning comes from the .stale-banner CSS block (per-layout offsets).
         "stale-banner group inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg border border-(color:--glass-border) bg-(--glass-bg) py-[0.35rem] pl-[0.7rem] pr-[0.4rem] text-[0.82rem] font-medium text-foreground shadow-(--elevation) enabled:hover:border-brand",
-        rendering && "cursor-default pr-[0.7rem] text-muted-foreground",
-        className
+        rendering && "cursor-default pr-[0.7rem] text-muted-foreground"
       )}
       onClick={rendering ? undefined : onRender}
       disabled={rendering}

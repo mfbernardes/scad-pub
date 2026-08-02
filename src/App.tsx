@@ -293,12 +293,12 @@ export default function App() {
   // M4: the ONE place external URL state (a same-document hashchange, or an
   // installed-app launch target queued via the Web App Launch Handler) is
   // applied to React state. Atomically, the same way a design switch is.
-  // Reuses handleDesignChange's own design/values/preset reset so the render
-  // pipeline's epoch still advances and a stale render can never land under
-  // the newly-applied design. When the design is unchanged (e.g. a launch
-  // that only carries new values/preset for the current design), still update
-  // values/preset without disturbing render-pipeline epoch/reset state that a
-  // full design switch would otherwise reset for no reason.
+  // Performs the same design/values/preset reset handleDesignChange does, so
+  // the render pipeline's epoch still advances and a stale render can never
+  // land under the newly-applied design. Not shared with it, because the two
+  // differ when the design is UNCHANGED (a launch carrying only new
+  // values/preset): here that updates values/preset without disturbing
+  // epoch/reset state a full design switch would otherwise clear for nothing.
   const applyExternalState = useCallback(
     (state: SessionState) => {
       const next = schema.designs.find((d) => d.id === state.designId);
@@ -445,11 +445,11 @@ export default function App() {
     if (readLocal(INSTALL_HINT_KEY)) return;
     // Storage unavailable: skip the hint rather than risk repeating it.
     if (!writeLocal(INSTALL_HINT_KEY, "1")) return;
-    toast("Install this configurator for quick, offline access?", {
+    toast(t("install.hint"), {
       id: "install-hint",
       duration: 12000,
-      action: { label: "Install", onClick: () => void promptInstall() },
-      cancel: { label: "Not now", onClick: () => {} },
+      action: { label: t("install.action"), onClick: () => void promptInstall() },
+      cancel: { label: t("install.dismiss"), onClick: () => {} },
     });
   }, [canInstall, promptInstall]);
 
@@ -524,9 +524,9 @@ export default function App() {
     }
     try {
       await navigator.clipboard.writeText(url);
-      setAnnouncement(warning ?? "Copied share link");
+      setAnnouncement(warning ?? t("share.copied"));
     } catch {
-      setAnnouncement("Couldn't copy — copy the URL from the address bar");
+      setAnnouncement(t("share.copyFailed"));
     }
   }, [design, values, presetSel, shareability, setAnnouncement]);
 
