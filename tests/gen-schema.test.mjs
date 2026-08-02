@@ -4395,6 +4395,40 @@ test("two assignments on one line are two parameters, not one corrupted one", ()
   assert.equal(params[1].description, "");
 });
 
+test("a doc block above a non-parameter top-level statement doesn't leak onto the next parameter", () => {
+  // A comment block sitting above a statement that isn't a Customizer
+  // parameter (a bare call here) must not survive as pending state: it used
+  // to stay pending and become the label/help of whatever parameter came
+  // next.
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Not a parameter's doc.\n` +
+      `translate([0, 0, 1]);\n` +
+      `// Real doc.\n` +
+      `a = 1;\n`
+  );
+  assert.equal(params.length, 1);
+  assert.equal(params[0].name, "a");
+  assert.equal(params[0].description, "Real doc.");
+});
+
+test("a doc block above a bare function-call statement doesn't leak onto the next parameter", () => {
+  // Another statement shape that fails PARAM_RE — same category as an
+  // assignment sitting inside [Hidden] (both are top-level statements
+  // pushParam never runs on). A later section's own header always
+  // reset()s, so the leak is only observable within one still-open
+  // section, as here.
+  const params = paramsOf(
+    `/* [Main] */\n` +
+      `// Not a parameter's doc.\n` +
+      `echo("debug");\n` +
+      `// Real doc.\n` +
+      `a = 1;\n`
+  );
+  assert.deepEqual(params.map((p) => p.name), ["a"]);
+  assert.equal(params[0].description, "Real doc.");
+});
+
 test("code resumes after a block comment that closed mid-line", () => {
   // `a = 1; /* why */ b = 2;` is two parameters. Treating `/*` as the end of
   // the line's code — which it is for `//`, but not for a comment that closes —

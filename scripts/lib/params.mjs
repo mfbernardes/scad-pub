@@ -926,10 +926,17 @@ export function parseParams(absPath) {
     // statement is pushed on the line it ENDS, so its doc block — accumulated
     // before it began — is still pending.
     if (statementLines.has(lineNo)) {
+      // Per ENTRY, not per line: `byEndLine` has entries only where a statement
+      // ends, so resetting once per line would clear a multi-line statement's
+      // pending doc block before its end line ever arrives.
       for (const st of byEndLine.get(lineNo) ?? []) {
         if (section === null || section === "Hidden") continue;
         const pm = st.code.match(PARAM_RE);
+        // pushParam() reset()s when it fires; a statement that is not a
+        // Customizer parameter must clear the block above it too, or that block
+        // becomes the next parameter's label and help.
         if (pm) pushParam(pm, st.startLine);
+        else reset();
       }
       continue;
     }
