@@ -532,6 +532,23 @@ export function BottomSheet({
         aria-modal={isModal || undefined}
       >
         <div className="sheet-frame">
+          {/* At Full the sheet is a modal and AppShell takes the whole mobile
+              chrome behind it to zero height, leaving the drag handle as the
+              only way back: a 36x4px bar with no words. Escape and the scrim
+              work but aren't discoverable on a phone, so this state gets a
+              named Done. It overlays the handle's top-right corner, which
+              costs the drag gesture that corner; the rest of the 390px strip
+              still drags. Mounted at Full only: below it the background is
+              reachable and this would be clutter. */}
+          {isModal && (
+            <button
+              type="button"
+              className="sheet-done absolute right-1 top-0 z-10 inline-flex min-h-11 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent px-[0.6rem] text-[0.82rem] font-semibold text-brand outline-none transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              onClick={() => setDetent("half")}
+            >
+              {t("sheet.done")}
+            </button>
+          )}
           {/* Drag handle: single visible control; tap cycles, arrow keys resize. */}
           <div
             className="sheet-handle"

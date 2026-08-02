@@ -5,7 +5,8 @@
 // Every row also carries `data-param="<var>"`: the stable hook the smoke test
 // (and extraCss) target now that variable names are hidden from users by default.
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import { Info as InfoIcon, RotateCcw as RevertIcon, Upload as UploadIcon } from "lucide-react";
+import { Info as InfoIcon, RotateCcw as RevertIcon, Upload as UploadIcon, TriangleAlert as FailureIcon } from "lucide-react";
+import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { displayValue } from "../lib/paramDiff";
@@ -105,6 +106,19 @@ interface Props {
    * without lifting the form's private open-state out of this component.
    */
   ref?: Ref<ParamFormHandle>;
+  /**
+   * The current render failure, when there is one. Rendered as a banner at the
+   * top of the form: the viewer overlay and the Messages console both already
+   * report it, but neither is in the surface the visitor is actually editing.
+   * Clearing a text field is an ordinary edit that fails the render, and with
+   * the panel scrolled the only feedback lived over the model or at the far
+   * bottom of the window. Omitted → no banner.
+   *
+   * It names no parameter, deliberately. OpenSCAD reports a failure against
+   * the design, not against a control, so marking one field `aria-invalid`
+   * would be a guess — and a wrong guess on a form is worse than none.
+   */
+  failure?: FriendlyErrorInfo | null;
 }
 
 /** The imperative surface a parent gets via `ref` (see Props.ref). */
@@ -490,7 +504,7 @@ const DENSITY = {
   compact: { group: "mb-2", summary: "py-[0.45rem]", row: "my-2 gap-[0.25rem]" },
 } as const;
 
-export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true, onShowAdvancedChange, compact = false, ref }: Props) {
+export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true, onShowAdvancedChange, compact = false, failure, ref }: Props) {
   const density = compact ? DENSITY.compact : DENSITY.regular;
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
@@ -579,6 +593,26 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
   // gap. As the form's own padding it scrolls away, like content should.
   return (
     <div className="param-form pt-3" ref={rootRef}>
+      {/* Sticky, and above the sticky group headers (z-index 1): the whole point
+          is that a form scrolled 800px down still shows why the preview stopped
+          updating, and a banner that scrolls away with the content reproduces
+          the problem it was added for.
+          Colour follows FriendlyFailureCard: the destructive token tints the
+          BORDER and the icon (graphics, held to 1.4.11's 3:1), never the copy —
+          `text-destructive` over a `bg-destructive/10` tint measured 3.97:1
+          against body text's 4.5:1. */}
+      {failure && (
+        <div
+          className="param-form__failure sticky top-0 z-[2] mb-2 rounded-lg border border-destructive/40 bg-card px-[0.7rem] py-[0.5rem] text-[0.82rem] shadow-(--elevation)"
+          role="alert"
+        >
+          <p className="flex items-start gap-[0.4rem] font-semibold text-foreground">
+            <FailureIcon size={14} aria-hidden="true" className="mt-[0.15rem] shrink-0 text-destructive" />
+            <span className="min-w-0">{failure.title}</span>
+          </p>
+          {failure.body && <p className="mt-[0.2rem] pl-[1.1rem] text-muted-foreground">{failure.body}</p>}
+        </div>
+      )}
       {groups.length === 0 && (
         <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
           {q ? t("paramForm.noMatches", { search }) : t("paramForm.nothingToCustomize")}

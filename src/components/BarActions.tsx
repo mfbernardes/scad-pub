@@ -51,6 +51,8 @@ const rowClass = MENU_ROW_CLASS;
 
 interface Props {
   themeMode: ThemeMode;
+  /** The mode a press moves to; the inline toggle names it. */
+  themeNext: ThemeMode;
   /** Collapse into a "⋮" overflow menu (mobile) instead of inline buttons (desktop). */
   collapse?: boolean;
   /** Present -> render the Save-image action (both presentations). Omitted
@@ -72,6 +74,7 @@ interface Props {
 
 export function BarActions({
   themeMode,
+  themeNext,
   collapse = false,
   onSavePng,
   canSavePng = true,
@@ -82,8 +85,8 @@ export function BarActions({
   const [open, setOpen] = useState(false);
   // Help/licenses/Save-image/Files close the menu; theme cycles in place.
   const openModal = (fn: () => void) => () => { fn(); setOpen(false); };
-  // Names the CURRENT mode ("Theme: Auto"), not the next one THEME_MODE's
-  // `nextLabel` describes: the collapsed row's only state feedback is this
+  // Names the CURRENT mode ("Theme: Auto"), unlike the inline toggle's
+  // "Switch to <next>": the collapsed row's only state feedback is this
   // label updating in place (see the row below), so it has to say what mode
   // is active now.
   const themeLabel = t("theme.label", { mode: t(THEME_MODE[themeMode].nameKey) });
@@ -166,7 +169,7 @@ export function BarActions({
           <FilesIcon size={16} />
         </IconButton>
       )}
-      <ThemeToggle mode={themeMode} onCycle={cycleTheme} />
+      <ThemeToggle mode={themeMode} next={themeNext} onCycle={cycleTheme} />
       <IconButton label={t("bar.help")} title={t("bar.helpShortcuts")} onClick={() => showHelp()}>
         <HelpIcon size={16} />
       </IconButton>

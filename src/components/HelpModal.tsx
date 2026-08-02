@@ -26,7 +26,7 @@ const HELP_BODY = cn(
   "help-body [&_section]:my-[0.9rem] [&_h3]:mb-1 [&_h3]:text-[0.95rem] [&_h3]:text-brand",
   "[&_p]:m-0 [&_p]:text-[0.88rem] [&_p]:leading-[1.5] [&_p]:text-foreground",
   "[&_p+p]:mt-[0.55rem] [&_ul+p]:mt-[0.55rem]",
-  "[&_ul]:mt-[0.35rem] [&_ul]:pl-[1.1rem] [&_ul]:text-[0.88rem] [&_ul]:leading-[1.5] [&_ul]:text-foreground [&_li]:my-[0.2rem]"
+  "[&_ul]:mt-[0.35rem] [&_ul]:list-disc [&_ul]:pl-[1.4rem] [&_ul]:text-[0.88rem] [&_ul]:leading-[1.5] [&_ul]:text-foreground [&_li]:my-[0.2rem] [&_li]:pl-[0.2rem]"
 );
 
 /** The sections of one pane: an optional intro followed by titled sections. */

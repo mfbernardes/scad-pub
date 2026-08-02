@@ -19,6 +19,7 @@ interface Props {
   designId: string;
   theme: "dark" | "light";
   themeMode: "light" | "dark" | "auto";
+  themeNext: "light" | "dark" | "auto";
   rendering: boolean;
   ready: boolean;
   result: RenderResult | null;
@@ -45,6 +46,7 @@ export const CommandBar = memo(function CommandBar({
   designId,
   theme,
   themeMode,
+  themeNext,
   rendering,
   ready,
   result,
@@ -98,7 +100,7 @@ export const CommandBar = memo(function CommandBar({
           status={{ rendering, ready, result, stale: stalePreview }}
           className={cn(ICON_BUTTON_CLASS, "command-bar__output")}
         />
-        <BarActions themeMode={themeMode} onSavePng={onSavePng} canSavePng={canSavePng} hasFiles={hasFiles} />
+        <BarActions themeMode={themeMode} themeNext={themeNext} onSavePng={onSavePng} canSavePng={canSavePng} hasFiles={hasFiles} />
       </div>
     </header>
   );

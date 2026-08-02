@@ -21,8 +21,9 @@ import { canShareNatively } from "../lib/share";
 import { t, tn } from "../lib/i18n";
 
 // The id the Download button's `aria-describedby` points at, and the sr-only
-// span below carries: assistive tech gets the same "attention needed before
-// download" signal a sighted visitor sees via the amber dot + status strip.
+// span below carries: the same "attention needed before download" signal a
+// sighted visitor gets from the status pill stacked above this button, said on
+// the button itself so it is heard BEFORE the button is activated.
 // Its own catalogue key (action.attentionHint), not the status strip's
 // review.issueCount: that one reads fine as a standalone pill label, but
 // stapled onto a button already named "Download for 3D printing" it needs to
@@ -54,7 +55,7 @@ interface Props {
    * routed through the Review dialog instead of exporting. */
   canExport: boolean;
   readiness: ReadinessState;
-  /** attention.length: drives the amber dot + sr-only hint. */
+  /** attention.length: names the count in the sr-only hint below. */
   attentionCount: number;
   onDownloadClick: () => void;
 }
@@ -64,8 +65,11 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
   const fmt = modelFormat.toUpperCase();
   const hasAttention = readiness === "attention";
   // The format rides in aria-label/title (a slicer needs it), not the visible
-  // label. "Download for 3D printing" reads the same regardless of format.
-  const exportAria = t("dock.exportAria", { format: fmt });
+  // label, which reads the same regardless of format. The accessible name must
+  // still START with that visible label (WCAG 2.5.3, Label in Name): a voice
+  // user saying "Download for 3D printing" has to hit this button, and the old
+  // "Download 3MF for slicers…" did not contain the words on screen.
+  const exportAria = t("dock.exportAria", { label: t("action.export"), format: fmt });
   // Mirrors ActionButtons' own `disabled` gate: "building" (nothing has
   // rendered yet, so there's nothing to review either) and "ready but the
   // render no longer matches the live controls" are the only two states that
@@ -99,12 +103,6 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
       >
         <DownloadIcon size={16} aria-hidden="true" className="shrink-0" />
         <span className="action-export__label min-w-0 truncate">{t("action.export")}</span>
-        {/* Visual "something here still needs a look" signal: same amber
-            treatment as the status strip. Decorative only; the sr-only hint
-            below carries the actual meaning. */}
-        {hasAttention && (
-          <span aria-hidden="true" className="action-export__attention size-[6px] shrink-0 rounded-full bg-warn" />
-        )}
       </ExplainedDisabledButton>
       {hasAttention && (
         <span id={EXPORT_ATTENTION_HINT_ID} className="sr-only">

@@ -1,8 +1,8 @@
 // Markdown.tsx: a deliberately tiny, safe Markdown renderer for help content
 // (no library, no dangerouslySetInnerHTML). Supports the block + inline subset
 // the help text needs: blank-line-separated paragraphs, `#`/`##`/`###` ATX
-// headings, `- ` bullet lists, and inline **bold**, `code`, and [text](url)
-// links. Anything else renders as text.
+// headings, `- ` bullet lists, and inline **bold**, *italic*, `code`, and
+// [text](url) links. Anything else renders as text.
 import { createElement, type ReactNode } from "react";
 import { safeUrl } from "../lib/safeUrl";
 
@@ -10,23 +10,34 @@ import { safeUrl } from "../lib/safeUrl";
 // heading nests under the modal's own <h1> (DialogTitle) rather than competing.
 const HEADING = /^(#{1,3})\s+(.+)$/;
 
-// Inline: **bold**, `code`, [text](url). Split on the first matching token,
-// recurse on the rest. Order matters only for disjoint tokens, so a single pass
-// with a combined regex is enough.
-const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/;
+// Inline tokens, one source of truth each. `split()` on the union below
+// interleaves matched tokens with the plain text between them, and each branch
+// re-tests its OWN anchored pattern rather than sniffing delimiters: a leftover
+// "*" or "`" starts and ends with its delimiter without being a token, and a
+// startsWith/endsWith test swallowed it into an empty <em>/<code>. Bold stays
+// ahead of italic in both the union and the chain, since `**a**` also satisfies
+// the italic shape.
+//
+// Italic may not open or close on whitespace and may not be empty (CommonMark's
+// flanking rule); without it `2 * 3 * 4` italicises the middle.
+const BOLD = /^\*\*[^*]+\*\*$/;
+const ITALIC = /^\*(?![\s*])[^*\n]*[^\s*]\*$/;
+const CODE = /^`[^`]+`$/;
+const LINK = /^\[([^\]]+)\]\(([^)]+)\)$/;
+const INLINE = /(\*\*[^*]+\*\*|\*(?![\s*])[^*\n]*[^\s*]\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/;
 
 function inline(text: string, key: string): ReactNode[] {
   return text.split(INLINE).map((part, i) => {
     const k = `${key}-${i}`;
-    if (part.startsWith("**") && part.endsWith("**"))
-      return <strong key={k}>{part.slice(2, -2)}</strong>;
-    if (part.startsWith("`") && part.endsWith("`"))
+    if (BOLD.test(part)) return <strong key={k}>{part.slice(2, -2)}</strong>;
+    if (ITALIC.test(part)) return <em key={k}>{part.slice(1, -1)}</em>;
+    if (CODE.test(part))
       return (
         <code key={k} className="rounded-(--radius-sm) bg-code px-[0.2rem] font-mono text-xs">
           {part.slice(1, -1)}
         </code>
       );
-    const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    const link = part.match(LINK);
     if (link) {
       const href = safeUrl(link[2]);
       // Unsafe protocol (e.g. javascript:) -> render the label as plain text.
