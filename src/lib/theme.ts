@@ -21,7 +21,6 @@ const DARK_THEME_COLOR =
 // index.html can't import appId, so the configHtml Vite plugin injects the same
 // key (%APP_THEME_KEY%). For the default id this is "scadpub.theme".
 const KEY = ns("theme");
-const ORDER: ThemeMode[] = ["auto", "light", "dark"];
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 function systemDark(): boolean {
@@ -105,6 +104,32 @@ export function apply(theme: Theme) {
   metas.dark?.setAttribute("content", color);
 }
 
+/**
+ * The mode one press of the theme toggle moves to.
+ *
+ * Leaves "auto" for whichever explicit mode is NOT what auto currently
+ * resolves to, then visits the other one, then comes home to auto. A fixed
+ * auto→light→dark walk started at light, which under a light OS preference
+ * (the common case) repaints nothing: the button's glyph changed and the page
+ * did not, so the first press read as a dead control. Ordering the two
+ * explicit steps against the OS preference makes the press that LEAVES auto
+ * always visible, and still visits all three modes:
+ *
+ *   light OS: auto -> dark -> light -> auto
+ *   dark OS:  auto -> light -> dark -> auto
+ *
+ * Only the final step home to auto can be a visual no-op, which is inherent to
+ * a three-state toggle whose third state matches one of the other two.
+ *
+ * Exported so ThemeToggle can label the button with the mode this returns
+ * rather than a hardcoded order that would now be wrong half the time.
+ */
+export function nextThemeMode(mode: ThemeMode, systemDark: boolean): ThemeMode {
+  if (mode === "auto") return systemDark ? "light" : "dark";
+  const matchesSystem = (mode === "dark") === systemDark;
+  return matchesSystem ? "auto" : systemDark ? "dark" : "light";
+}
+
 export function useTheme() {
   const [mode, setMode] = useState<ThemeMode>(readMode);
   // The one subscription to the OS preference, shared by every render. In
@@ -132,8 +157,7 @@ export function useTheme() {
     writeLocal(KEY, mode);
   }, [mode]);
 
-  const cycle = () =>
-    setMode((m) => ORDER[(ORDER.indexOf(m) + 1) % ORDER.length]);
+  const cycle = () => setMode((m) => nextThemeMode(m, systemDark));
 
-  return { mode, resolved, cycle };
+  return { mode, resolved, cycle, next: nextThemeMode(mode, systemDark) };
 }

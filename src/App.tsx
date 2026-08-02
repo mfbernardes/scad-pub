@@ -131,7 +131,7 @@ export default function App() {
   // scroll a browser applied on its own (iOS does, while the software keyboard
   // is up, and does not undo it afterwards). See the hook's own doc.
   useDocumentScrollLock();
-  const { mode: themeMode, resolved: theme, cycle: cycleTheme } = useTheme();
+  const { mode: themeMode, resolved: theme, cycle: cycleTheme, next: themeNext } = useTheme();
   const { canInstall, promptInstall, installed } = useInstallPrompt();
   const online = useOnline();
   // True when this is the installed app in its own window (see the warm-up below).
@@ -701,6 +701,7 @@ export default function App() {
           exportable={exportable}
           theme={theme}
           themeMode={themeMode}
+          themeNext={themeNext}
           openPickerSignal={openPickerSignal}
           introOpen={showPopup && !!popup}
           exportSuccess={exportSuccess}

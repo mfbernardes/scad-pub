@@ -51,6 +51,8 @@ const rowClass = MENU_ROW_CLASS;
 
 interface Props {
   themeMode: ThemeMode;
+  /** The mode a press moves to; the inline toggle names it. */
+  themeNext: ThemeMode;
   /** Collapse into a "⋮" overflow menu (mobile) instead of inline buttons (desktop). */
   collapse?: boolean;
   /** Present -> render the Save-image action (both presentations). Omitted
@@ -72,6 +74,7 @@ interface Props {
 
 export function BarActions({
   themeMode,
+  themeNext,
   collapse = false,
   onSavePng,
   canSavePng = true,
@@ -166,7 +169,7 @@ export function BarActions({
           <FilesIcon size={16} />
         </IconButton>
       )}
-      <ThemeToggle mode={themeMode} onCycle={cycleTheme} />
+      <ThemeToggle mode={themeMode} next={themeNext} onCycle={cycleTheme} />
       <IconButton label={t("bar.help")} title={t("bar.helpShortcuts")} onClick={() => showHelp()}>
         <HelpIcon size={16} />
       </IconButton>

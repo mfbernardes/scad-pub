@@ -27,6 +27,7 @@ import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { t } from "../lib/i18n";
 import type { PanelTab } from "../lib/usePanelState";
+import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import { ParamForm } from "./ParamForm";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
@@ -78,6 +79,8 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
+  /** Current render failure, forwarded to ParamForm's banner. */
+  failure?: FriendlyErrorInfo | null;
 }
 
 export function SheetTabs({
@@ -104,6 +107,7 @@ export function SheetTabs({
   debouncedSearch,
   onSearchChange,
   onSearchFocus,
+  failure,
   onSearchBlur,
 }: Props) {
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
@@ -177,7 +181,7 @@ export function SheetTabs({
                 row costs the label's height plus the control's, which fitted
                 two of sixteen parameters in it. See ParamForm's `compact`
                 doc. The docked desktop panel keeps the stacked layout. */}
-            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} compact />
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} compact failure={failure} />
           </div>
         </TabsContent>
         <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">

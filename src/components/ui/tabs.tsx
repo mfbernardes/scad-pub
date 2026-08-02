@@ -55,7 +55,16 @@ function TabsContent({
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn("flex-1 outline-none", className)}
+      // Radix makes the panel itself tabbable so a keyboard user can reach
+      // content the tab list doesn't cover, which made it a silent tab stop:
+      // `outline-none` with nothing to replace it. The ring is INSET because
+      // the panel fills its container (the whole preset list, the whole
+      // parameter form) and an outset one would be clipped by the scroll port
+      // it lives in.
+      className={cn(
+        "flex-1 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+        className
+      )}
       {...props}
     />
   );

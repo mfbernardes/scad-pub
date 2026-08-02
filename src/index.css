@@ -484,6 +484,17 @@ button:disabled { cursor: default; }
   .sheet-tabs [role="tab"] {
     min-height: 2.75rem;
   }
+  /* The same floor again for the three controls this list had missed. The
+     design switcher is the mobile top bar's navigation and was 32px tall; the
+     mobile preset footer's name field and Save were 32px each, and they sit on
+     one row with nothing between them, so the spacing exception does not
+     rescue either. Height only, for the same reason as above. */
+  .mobile-top-bar__center [data-slot="select-trigger"],
+  .mobile-top-bar__center button,
+  .preset-picker [name="preset-name"],
+  .preset-picker [name="preset-name"] + button {
+    min-height: 2.75rem;
+  }
   /* Radix's Switch (36x20) and Slider thumb (20x20) sit under 24px on their
      short axis and are deliberately left that way. They meet WCAG 2.2 SC 2.5.8
      through its spacing exception: measured, the nearest other target's centre
@@ -709,6 +720,9 @@ button:disabled { cursor: default; }
 
 .sheet-frame {
   height: var(--sheet-visible-h);
+  /* Positioning context for the Full-detent Done button, which floats over the
+     handle strip rather than sitting in it (see BottomSheet). */
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -741,7 +755,12 @@ button:disabled { cursor: default; }
    and up there it lost silently. The neighbours up there set `min-height`/
    `min-width`, which nothing else re-declares, so they are unaffected. */
 @media (pointer: coarse) {
-  .sheet-handle { padding: 0.85rem 0 0.7rem; }
+  /* 1.35rem + 1.3rem + the 4px bar clears 44px (SC 2.5.5), where the previous
+     0.85/0.7 pair stopped at 29px. It is the only way out of the Full detent
+     that a drag can use, so it earns the same floor as the dock buttons.
+     BottomSheet measures its real header rather than assuming PEEK_HEIGHT, so
+     the peek row grows with it instead of clipping the tabs. */
+  .sheet-handle { padding: 1.35rem 0 1.3rem; }
 }
 
 .sheet-handle__bar {

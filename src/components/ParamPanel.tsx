@@ -18,6 +18,7 @@ import { visibleGroups } from "../lib/paramGroups";
 import type { PanelTab } from "../lib/usePanelState";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
+import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import { ParamForm, type ParamFormHandle } from "./ParamForm";
 import { SectionNavigator } from "./SectionNavigator";
 import { PresetPicker } from "./PresetPicker";
@@ -85,6 +86,8 @@ interface Props {
   onSearchChange: (search: string) => void;
   onSearchFocus?: () => void;
   onSearchBlur?: () => void;
+  /** Current render failure, forwarded to ParamForm's banner. */
+  failure?: FriendlyErrorInfo | null;
 }
 
 export function ParamPanel({
@@ -113,6 +116,7 @@ export function ParamPanel({
   debouncedSearch,
   onSearchChange,
   onSearchFocus,
+  failure,
   onSearchBlur,
 }: Props) {
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
@@ -328,7 +332,7 @@ export function ParamPanel({
           {/* No padding-top, see SheetTabs' scroller: it would strand the
               sticky group headers below the port edge. */}
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-            <ParamForm ref={formRef} design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} />
+            <ParamForm ref={formRef} design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} failure={failure} />
           </div>
         </TabsContent>
       </Tabs>
