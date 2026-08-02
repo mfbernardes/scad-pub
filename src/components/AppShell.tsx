@@ -427,7 +427,11 @@ export const AppShell = memo(function AppShell({
     diagnostics,
     defaultOpen: schema.ui?.outputDefault === "open",
     collapseSheet: collapseSheetToPeek,
-    sheetAtPeek: sheetDetent === "peek",
+    // The desktop has no sheet, and useSheetPolicy keeps the last mobile detent
+    // across the breakpoint: without the layout test, a warning arriving after
+    // a resize from an expanded sheet consumed its own edge and the desktop
+    // console never auto-opened.
+    sheetAtPeek: !isMobile || sheetDetent === "peek",
   });
 
   // Raising the sheet off peek (dragging the handle OR tapping a tab) would slide

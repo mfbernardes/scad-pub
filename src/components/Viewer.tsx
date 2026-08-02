@@ -24,7 +24,7 @@ import {
   insetFitFraction,
   aspectAwareFit,
   insetTargetOffset,
-  outgrowsFrame,
+  refitPlan,
   DEFAULT_FIT_FRACTION,
   type Box3Like,
   type FitFraction,
@@ -294,6 +294,13 @@ export const Viewer = forwardRef<
   // them. null until the first model is framed.
   const fitStateRef = useRef<{ distance: number; target: THREE.Vector3 } | null>(null);
 
+  // The box the current framing was established for. refitIfOutgrown compares
+  // the NEW geometry's requirement against THIS box's requirement, not against
+  // where the camera happens to be: measured against the live camera, a single
+  // zoom-in click made unchanged geometry look 25% overflowed, so the next
+  // same-key render threw the visitor's zoom away. null until a model is framed.
+  const framedBoxRef = useRef<Box3Like | null>(null);
+
   // The canvas size and fit fraction shared by applyFraming and
   // refitIfOutgrown. null for a zero-sized canvas (display:none, or a layout
   // not yet resolved), which can't be fitted to — callers leave the current
@@ -406,28 +413,39 @@ export const Viewer = forwardRef<
 
   // A parameter tweak just rendered new geometry from the same design+preset
   // (frameKey unchanged, see the [stl] effect below), so the camera was left
-  // where the visitor had it rather than reframed from scratch. If the new
-  // box has grown past what that framing can show — long auto-sized text is
-  // the case this exists for — refit like Reset view, but along the
-  // visitor's own current orbit direction rather than snapping to the
-  // design's default view. Checked against the box's actual position (the
-  // live orbit target, which may carry a pan), not a fresh centred fit, so a
-  // deliberate pan isn't itself mistaken for overflow. Left alone on shrink.
+  // where the visitor had it rather than reframed from scratch. If the new box
+  // has grown past what that framing can show — long auto-sized text is the
+  // case this exists for — refit like Reset view, but along the visitor's own
+  // current orbit direction rather than snapping to the design's default view.
+  //
+  // "Grown" is measured between the two GEOMETRIES, both evaluated along the
+  // camera's current direction and about the live orbit target (so a pan is
+  // not itself mistaken for overflow): the previous box's requirement against
+  // the new one's. It used to compare the new requirement against the camera's
+  // live distance, which conflates growth with zoom — one Zoom in click puts
+  // the camera at 80% of the fit distance, so unchanged geometry read as 25%
+  // overflowed and the next render of the same design snapped the zoom away.
+  //
+  // And when it does refit, the visitor's zoom is carried across as a ratio
+  // rather than reset: they asked to be this much closer than the frame, and
+  // that is still what they want of a model that just got bigger. Left alone
+  // on shrink.
   function refitIfOutgrown(box: Box3Like) {
     const cam = camRef.current;
     const controls = controlsRef.current;
     const mount = mountRef.current;
-    if (!cam || !controls || !mount) return;
+    const previous = framedBoxRef.current;
+    if (!cam || !controls || !mount || !previous) return;
     const current = currentFit(mount);
     if (!current) return;
     const { w, h, fit } = current;
 
     const direction = cam.position.clone().sub(controls.target);
     const currentDistance = direction.length();
-    const requiredDistance = frameDistanceForBox(box, controls.target, direction, w / h, cam.fov, fit);
-    if (outgrowsFrame(requiredDistance, currentDistance)) {
-      applyFraming(direction, 1, new THREE.Vector3());
-    }
+    const requiredFor = (b: Box3Like) =>
+      frameDistanceForBox(b, controls.target, direction, w / h, cam.fov, fit);
+    const plan = refitPlan(requiredFor(previous), requiredFor(box), currentDistance);
+    if (plan) applyFraming(direction, plan.zoomRatio, new THREE.Vector3());
   }
 
   // Rebuild the dimension overlay from the current model size + theme, matching
@@ -1000,6 +1018,9 @@ export const Viewer = forwardRef<
       refitIfOutgrown(framedBox(size)); // grown past the current view? re-fit; a no-op otherwise
       requestRenderRef.current(); // same framing (e.g. a param tweak): camera didn't move, so invalidate explicitly
     }
+    // Whatever happened above, THIS geometry is what the camera is framed for
+    // now: the next same-key render measures its growth against this box.
+    framedBoxRef.current = framedBox(size);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stl]);
 

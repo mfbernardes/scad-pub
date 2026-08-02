@@ -129,6 +129,36 @@ export function outgrowsFrame(
 }
 
 /**
+ * Whether a re-render's new geometry has outgrown the framing established for
+ * the PREVIOUS geometry, and if so at what zoom to re-fit it.
+ *
+ * Both requirements must be measured along the same camera direction and about
+ * the same target (Viewer.tsx does that), because the comparison is about the
+ * two boxes and nothing else. Measuring the new requirement against the
+ * camera's live distance instead conflates growth with zoom: one Zoom in click
+ * puts the camera at 80% of the fit distance, so unchanged geometry read as
+ * 25% overflowed and the next render threw the visitor's zoom away.
+ *
+ * `zoomRatio` carries that zoom across the re-fit — they asked to be this much
+ * closer than the frame, and a model that just got bigger doesn't change it —
+ * and is 1 when the visitor sits at the fit distance.
+ * @returns null when nothing should move.
+ */
+export function refitPlan(
+  previousRequired: number,
+  newRequired: number,
+  currentDistance: number,
+  ratio: number = OUTGROW_REFIT_RATIO
+): { zoomRatio: number } | null {
+  if (!outgrowsFrame(newRequired, previousRequired, ratio)) return null;
+  const zoomRatio =
+    previousRequired > 0 && Number.isFinite(currentDistance) && currentDistance > 0
+      ? currentDistance / previousRequired
+      : 1;
+  return { zoomRatio };
+}
+
+/**
  * Camera distance from `target`, looking from `direction` (a unit-ish
  * vector, defensively renormalised), so a perspective camera of vertical
  * field of view `fovDeg` at viewport `aspect` (width / height) fits every

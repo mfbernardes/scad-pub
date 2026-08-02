@@ -26,8 +26,15 @@ export const THUMB_FRAME =
   "relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted";
 
 export function Thumbnail({ src }: { src: string }) {
-  const [loaded, setLoaded] = useState(false);
-  const [errored, setErrored] = useState(false);
+  // Keyed by `src`, not merely initialised from it: these cards are keyed by
+  // preset NAME, so switching designs can hand the same component a different
+  // image. A sticky `errored` then hid the <img> for good and the new URL was
+  // never requested — a failure on one design's thumbnail blanked another's.
+  const [shown, setShown] = useState({ src, loaded: false, errored: false });
+  if (shown.src !== src) setShown({ src, loaded: false, errored: false });
+  const { loaded, errored } = shown;
+  const setLoaded = (v: boolean) => setShown((p) => ({ ...p, loaded: v }));
+  const setErrored = (v: boolean) => setShown((p) => ({ ...p, errored: v }));
   // A cached image can finish decoding before React attaches `onLoad`, which
   // would leave the skeleton up forever. The callback ref runs once the
   // element exists, so re-check `complete` there, that covers the warm case
@@ -47,6 +54,9 @@ export function Thumbnail({ src }: { src: string }) {
         <ImageOffIcon aria-hidden="true" size={22} className="text-muted-foreground/60" />
       ) : (
         <img
+          // Remounts on a new src, so the cached-image re-check in `ref` runs
+          // for it too rather than only for the first one.
+          key={src}
           ref={ref}
           src={src}
           alt=""
