@@ -96,15 +96,13 @@ export function DesignGallery({
           className="w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       )}
-      {/* How many designs there are, not just how many happen to fit. The
-          gallery's scroll port shows about six cards, and the dialog's
-          footnote sits directly under the last visible row, so a twelve-design
-          chooser read as a six-design one: nothing on the first screen said
-          more existed. The count says so in words; `moreBelow` adds the fade
-          that says which direction. Doubles as filter feedback while a search
-          is narrowing the list. */}
+      {/* The scroll port shows about six cards and the dialog's footnote sits
+          directly under the last visible row, so a twelve-design chooser read
+          as a six-design one. This says the total in words; `moreBelow` adds
+          the fade that says which direction. Not a live region: it sits beside
+          the search box and would announce on every keystroke. */}
       {designs.length > 6 && (
-        <p className="design-gallery__count -mb-1 shrink-0 text-xs text-muted-foreground" aria-live="polite">
+        <p className="design-gallery__count -mb-1 shrink-0 text-xs text-muted-foreground">
           {filtered.length === designs.length
             ? tn("designPicker.count", designs.length)
             : t("designPicker.countFiltered", { shown: filtered.length, total: designs.length })}

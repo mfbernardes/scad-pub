@@ -69,8 +69,11 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
   const fmt = modelFormat.toUpperCase();
   const hasAttention = readiness === "attention";
   // The format rides in aria-label/title (a slicer needs it), not the visible
-  // label. "Download for 3D printing" reads the same regardless of format.
-  const exportAria = t("dock.exportAria", { format: fmt });
+  // label, which reads the same regardless of format. The accessible name must
+  // still START with that visible label (WCAG 2.5.3, Label in Name): a voice
+  // user saying "Download for 3D printing" has to hit this button, and the old
+  // "Download 3MF for slicers…" did not contain the words on screen.
+  const exportAria = t("dock.exportAria", { label: t("action.export"), format: fmt });
   // Mirrors ActionButtons' own `disabled` gate: "building" (nothing has
   // rendered yet, so there's nothing to review either) and "ready but the
   // render no longer matches the live controls" are the only two states that
@@ -104,21 +107,12 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
       >
         <DownloadIcon size={16} aria-hidden="true" className="shrink-0" />
         <span className="action-export__label min-w-0 truncate">{t("action.export")}</span>
-        {/* Visual "something here still needs a look" signal. A bare amber
-            dot used to sit here, and it failed on both counts a status marker
-            has to meet. It took its colour from `--warn`, a token tuned to
-            carry TEXT over `--panel`: over the Download button's
-            `--accent-solid` fill that measured 1.05:1 (light) and 2.12:1
-            (dark), under 1.4.11's 3:1 for a meaningful graphic — brown on
-            blue at almost the same luminance. And colour was its only
-            carrier, so 1.4.1 had nothing to fall back on either.
-            The warn/warn-bg PAIR fixes both: warn-bg over the accent fill is
-            6.1:1 / 3.1:1, the glyph over warn-bg is the same AA pair every
-            warning card uses, and the triangle carries the meaning by shape.
-            It also makes this read as a different KIND of thing from the
-            Messages bell's neutral numeric badge, which is what kept the two
-            mobile signals ambiguous. Decorative; the sr-only hint below is
-            what assistive tech gets. */}
+        {/* The warn/warn-bg PAIR, not bare `--warn`: that token carries text
+            over `--panel`, and over this button's accent fill it fell below
+            1.4.11's 3:1. The triangle, not a dot, so shape carries the meaning
+            (1.4.1) and this reads as a different KIND of marker from the
+            Messages bell's numeric badge. Decorative; the sr-only hint below
+            is what assistive tech gets. */}
         {hasAttention && (
           <span
             aria-hidden="true"

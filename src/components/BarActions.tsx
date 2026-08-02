@@ -85,8 +85,8 @@ export function BarActions({
   const [open, setOpen] = useState(false);
   // Help/licenses/Save-image/Files close the menu; theme cycles in place.
   const openModal = (fn: () => void) => () => { fn(); setOpen(false); };
-  // Names the CURRENT mode ("Theme: Auto"), not the next one THEME_MODE's
-  // `nextLabel` describes: the collapsed row's only state feedback is this
+  // Names the CURRENT mode ("Theme: Auto"), unlike the inline toggle's
+  // "Switch to <next>": the collapsed row's only state feedback is this
   // label updating in place (see the row below), so it has to say what mode
   // is active now.
   const themeLabel = t("theme.label", { mode: t(THEME_MODE[themeMode].nameKey) });

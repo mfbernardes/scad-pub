@@ -482,11 +482,8 @@ export const AppShell = memo(function AppShell({
   //     this dialog rather than exporting. Saying it twice cost a whole
   //     stacked row over the model, on the layout with no room to spare; the
   //     desktop dock floats in open canvas, so it keeps the fuller wording.
-  //     That trade only holds while the badge is actually legible: it stood
-  //     on a 6px dot filled with `--warn` over the accent button, which
-  //     measured 1.05:1 and carried its meaning in colour alone, so mobile
-  //     was in practice showing nothing. See ActionButtons' own note for the
-  //     warn/warn-bg + triangle treatment that makes the premise true.
+  //     That trade only holds while the badge is legible, which is what
+  //     ActionButtons' warn/warn-bg + triangle treatment is for.
   //
   // Only one layout tree is ever mounted (see the split below), so deriving
   // this from `isMobile` yields exactly one answer per render.

@@ -36,7 +36,7 @@
   "action.attentionHint#other": "Attention needed before download — {count} issues to review",
   "action.share": "Share",
   "dock.copyLink": "Copy link",
-  "dock.exportAria": "Download {format} for slicers and print services",
+  "dock.exportAria": "{label} — {format} for slicers and print services",
   "dock.buildingReason": "Still building the preview…",
   "dock.staleReason": "Preview out of date — render first",
   "attention.fontFallbackLead": "Font not loaded",
