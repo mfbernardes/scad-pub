@@ -186,8 +186,8 @@ protects the *renderer* from a hostile `.scad` file (it can’t reach the
 network or the filesystem outside its mount); it says nothing about assets
 that are served as-is and rendered by the *browser*, see below.
 
-**What this means concretely for SVGs.** `gen-schema` copies two different
-kinds of SVG into the served output, and treats them differently:
+**What this means concretely for SVGs.** Three kinds of SVG reach ScadPub, and
+each is treated differently:
 
 - **Render-input SVGs**: files reached via `assets` or a design’s
   `use`/`include` graph, copied byte-for-byte into `public/scad/` because
@@ -205,14 +205,81 @@ kinds of SVG into the served output, and treats them differently:
   case, without touching the geometry.
 - **Browser-facing SVGs**. The app `logo`, the PWA `icon`, and each design’s
   picker `icon`. Are only ever displayed, never read as geometry. `gen-schema`
-  runs these through a minimal sanitizer
-  (`scripts/lib/svg-sanitize.mjs`) before writing them: it strips
-  `<script>`/`<foreignObject>` elements, `on*` event-handler attributes, and
-  any `href`/`xlink:href` carrying a URI scheme (`javascript:`, `data:`,
-  `http(s):`, …). This is regex-based, not a full XML sanitizer: it is a
-  second layer on top of the operator-trust boundary above, not a substitute
-  for it, and it does not attempt to sanitize `iconMaskable` source pixels or
+  runs these through a sanitizer (`scripts/lib/svg-sanitize.mjs`) before writing
+  them. It **parses the document** (`@xmldom/xmldom`, a build-time dependency the
+  project already carried) rather than pattern-matching markup, and it is built
+  out of three **allowlists** — because every denylist here proved open-ended:
+
+  - **The document itself**: the root must be `<svg>` in the SVG namespace, and
+    must declare that namespace. A document that isn’t one fails the build,
+    naming the file. Leaving it to the element rule instead emptied the
+    document rather than refusing it, and what shipped was a rootless file.
+  - **Elements**: only SVG-namespace elements an icon is made of (structure,
+    shapes, text, painting, filter primitives, `<title>`/`<desc>`). Everything
+    else goes, including every HTML element — SVG 2 permits them, and
+    `<html:video src>`, `<html:video poster>`, `<html:img src>` and
+    `<html:iframe src>` all fetch. `<image>` is excluded too: its only job is to
+    reference a raster, and the reference rule below allows nothing it could
+    point at.
+  - **References**: an `href` (in any namespace) or a CSS `url()` is kept only
+    when it is a same-document `#fragment`. Deciding whether a value is
+    *external* instead would mean reproducing, in the browser’s own order, the
+    normalisations it applies before reading a URL — XML character references,
+    then CSS escapes, then backslash-to-slash — and a scrub that has to
+    out-normalise a browser is wrong until proven otherwise. `xml:base` is
+    removed as well, so a fragment cannot be rebased onto another document.
+  - **CSS**: a `<style>` block or a CSS-valued attribute survives only if what
+    remains, after `@import` and foreign `url()` are removed, is literal values
+    and functions that cannot reference anything (colours, maths, transforms).
+
+  It also removes what can execute — `<script>`, `<foreignObject>`, the SMIL
+  animation elements, `on*` handlers — and any `<?xml-stylesheet?>` processing
+  instruction.
+
+  **What this costs.** The CSS rule is strict, and deliberately so: a **quoted
+  string** or an **at-rule** drops the whole block. `font-family: "My Font"` and
+  `@media print { … }` are casualties, because `image-set("…" 1x)` carries a URL
+  as a bare quoted string and there is no way to tell the two apart without a
+  per-property value grammar (LightningCSS, which this repo already has, does not
+  surface that one either). A `data:` URI is the other casualty. Relative
+  references cost nothing: each of these files is copied on its own into a flat
+  served directory under a generated name, so a reference to a sibling already
+  resolved to a file that was never copied.
+
+  It also removes `ping` from an SVG `<a>`: SVG 2 delegates it to HTML’s
+  hyperlink auditing, and activating such a link really does send every URL
+  listed. The `<a>` itself and its artwork stay — a same-document link is fine.
+
+  The claim that nothing fetches is checked on **network traffic**, not on
+  strings: `npm run check:svg` serves each sanitized result to Chromium as a
+  standalone document and asserts no request leaves the page, with each vector
+  paired against its unsanitized control so “no request” cannot pass by the
+  browser simply not implementing the construct.
+
+  Nothing is silent — **`gen-schema` warns, naming the file and what it
+  removed**, whenever the sanitizer changes anything, and a file it changes
+  nothing in is passed through byte-for-byte, never re-serialised.
+
+  One more consequence: an SVG that is **not well-formed XML fails the build**,
+  naming the file. XML is draconian, so a browser asked to render it as
+  `image/svg+xml` would refuse it too — the build is simply the first place that
+  says so.
+
+  This remains a second layer on top of the operator-trust boundary above, not a
+  substitute for it, and it does not touch `iconMaskable` source pixels or
   anything under `public/scad/` (see above).
+- **User-supplied drawings**: a file a *visitor* drops onto an `// @svg` field,
+  prepared by the in-app wizard (`src/lib/svgPrep`). This is the only SVG class
+  ScadPub does **not** trust: it comes from whoever is using the site, not from
+  the operator. It never touches the build. The invariant that makes it safe is
+  that **a wizard-prepared SVG is never rendered in the DOM** — it is stored in
+  IndexedDB and mounted into the OpenSCAD-WASM filesystem, where markup is read
+  as geometry and nothing else. The wizard additionally reports (`active-content`)
+  and strips `<script>`, the SMIL animation elements, and a stylesheet’s
+  external references, so the runtime path stays safe by construction rather
+  than by circumstance. If you ever add a preview that puts one of these
+  drawings into the page, that invariant is what you are breaking, and this
+  class needs real sanitization first.
 
 **Deployment-target caveat.** `public/_headers` is the Cloudflare Pages /
 Netlify custom-headers convention. **GitHub Pages serves no custom response

@@ -1,0 +1,15 @@
+{
+  "title": "T",
+  "source": "src",
+  "designs": [
+    {
+      "id": "widget",
+      "label": "W"
+    }
+  ],
+  "help": {
+    "tabs": [
+      42
+    ]
+  }
+}

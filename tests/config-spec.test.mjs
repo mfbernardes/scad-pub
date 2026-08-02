@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_SPEC } from "../scripts/lib/config-spec.mjs";
 import { buildConfigSchema } from "../scripts/gen-config-schema.mjs";
-import { generate } from "../scripts/gen-schema.mjs";
+import { generate, parseLang, parseDir, parseFormat } from "../scripts/gen-schema.mjs";
 import {
   POPUP_MODES,
   TEXT_DIRECTIONS,
@@ -154,6 +154,57 @@ test("src/lib/schema.ts's hand-typed enum lists match config-spec.mjs", () => {
   }
 });
 
+// CONFIG_SPEC enum nodes that deliberately have no schema.ts counterpart,
+// because designs.json never carries the value for validateSchema to check.
+// Listing them here rather than leaving the exhaustiveness check to a
+// hand-picked sample is the point: a NEW enum that does reach designs.json
+// then fails this test instead of silently going unvalidated at runtime.
+// Empty today: every enum in the config surface reaches designs.json and is
+// validated at load. A future manifest-only enum (pwa.* is otherwise a
+// rasterizer input with no runtime reader) belongs here with its reason.
+const ENUMS_NOT_IN_DESIGNS_JSON = new Set([]);
+
+// The DEFAULT half of the same problem: an enum's values were single-sourced
+// but each parser still re-typed the spec's `default` a few lines below the
+// enum it had just imported from it, so the two could disagree with nothing
+// failing. These assert the parsers return exactly what the spec declares.
+test("the bespoke parsers' fallbacks are the spec's declared defaults", () => {
+  assert.equal(parseLang(null), CONFIG_SPEC.lang.default);
+  assert.equal(parseDir(null), CONFIG_SPEC.dir.default);
+  assert.equal(parseFormat(null), CONFIG_SPEC.render.properties.format.default);
+  // And each declared default must itself be a member of its own enum.
+  assert.ok(CONFIG_SPEC.dir.values.includes(CONFIG_SPEC.dir.default));
+  assert.ok(
+    CONFIG_SPEC.render.properties.format.values.includes(
+      CONFIG_SPEC.render.properties.format.default
+    )
+  );
+});
+
+test("every CONFIG_SPEC enum is either cross-checked or explicitly exempt", () => {
+  // The pairs above are hand-written, so the thing that can rot is not a pair
+  // drifting (that test catches it) but a new enum never getting a pair.
+  const checked = new Set(ENUM_CROSS_CHECKS.map(([key]) => key));
+  const found = [];
+  const walk = (node, path) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "enum" && Array.isArray(node.values)) found.push(path);
+    for (const [key, child] of Object.entries(node.properties ?? {}))
+      walk(child, path ? `${path}.${key}` : key);
+    if (node.items) walk(node.items, `${path}[]`);
+  };
+  for (const [key, node] of Object.entries(CONFIG_SPEC)) walk(node, key);
+
+  const unchecked = found.filter((p) => !checked.has(p) && !ENUMS_NOT_IN_DESIGNS_JSON.has(p));
+  assert.deepEqual(
+    unchecked,
+    [],
+    `these CONFIG_SPEC enums have no src/lib/schema.ts cross-check:\n  ${unchecked.join("\n  ")}\n` +
+      `Either add the pair to ENUM_CROSS_CHECKS, or add the path to ` +
+      `ENUMS_NOT_IN_DESIGNS_JSON with a reason.`
+  );
+});
+
 // ── Null agreement: does "the emitted schema permits null here" match "the
 // real parser accepts an explicit null here", for EVERY field CONFIG_SPEC
 // knows about? ───────────────────────────────────────────────────────────
@@ -260,7 +311,11 @@ test("emitted schema nullability matches the real parser, for every CONFIG_SPEC 
           licenseUrl: "https://example.com/acme/LICENSE",
         },
       ],
-      help: {},
+      // `{ sections: [] }`, not `{}`: an empty help block is a modal with
+      // nothing in it and gen-schema rejects it (src/lib/helpShape.mjs, shared
+      // with the runtime validator). An empty section LIST is well-formed, so
+      // this is still just a shell for the nested `help.*` fields below.
+      help: { sections: [] },
     };
   }
 

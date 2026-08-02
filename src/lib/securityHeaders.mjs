@@ -41,48 +41,12 @@ export function extractInlineScripts(html) {
  * down the app document itself: a CSP, clickjacking protection, MIME sniffing
  * protection, referrer minimisation, and unused-permission denial.
  *
- * `scriptHashes` are pre-formatted `sha256-<base64>` sources (the caller:
- * vite.config.ts: computes them with node:crypto from the built index.html,
- * because this module stays environment-free); they're quoted and appended to
- * `script-src` alongside `'self'` and `'wasm-unsafe-eval'`.
+ * `scriptHashes` are pre-formatted `sha256-<base64>` sources; the caller
+ * (vite.config.ts) computes them from the built index.html, because this module
+ * stays environment-free. They are quoted and appended to `script-src`.
  *
- * Directive-by-directive rationale: preserve it when editing, since the
- * reason a directive is as permissive as it is lives only here:
- * - `script-src 'self' 'wasm-unsafe-eval' <hashes>`: `'wasm-unsafe-eval'` is
- *   required for the OpenSCAD-WASM module's own WebAssembly compilation
- *   (worker.ts); the hashes allow-list exactly the inline theme script by
- *   content, nothing more. The script's body varies per config
- *   (`%APP_THEME_KEY%` is substituted per deployment at build time), so the
- *   hash can't be a literal here: it's computed fresh from the built HTML on
- *   every build, per config.
- * - `worker-src 'self'`: the render worker is loaded from this origin only.
- * - `style-src 'self' 'unsafe-inline'`: the build injects a config-driven
- *   `<style>` into <head> (configCss.ts's headStyleInjection: colour
- *   overrides, per docs/config.md's `colors` block) and React components set
- *   inline `style` attributes at runtime (e.g. the viewer/panel layout code).
- *   Neither is a fixed, hashable set, so `'unsafe-inline'` stays rather than
- *   inventing a stricter directive that would break real UI.
- * - `img-src 'self' data: blob:`: the PNG export snapshot renders to a data:
- *   URL and preset/icon artwork can be inlined as data: URIs.
- * - `font-src 'self'`: bundled + imported fonts are same-origin only.
- * - `connect-src 'self' data:`: the PNG snapshot flow (`savePng` in
- *   src/App.tsx) does `fetch(dataUrl)` to turn the snapshot into a `File` for
- *   the share sheet. `fetch()` of a `data:` URL is governed by `connect-src`,
- *   not `img-src`, even though the URL looks image-shaped.
- * - `object-src 'none'`, `base-uri 'none'`, `form-action 'none'`: no plugin
- *   content, no `<base>` hijack, no form submissions anywhere in the app.
- *   All closeable outright.
- * - `frame-ancestors 'none'` (+ the sibling `X-Frame-Options: DENY`, kept for
- *   browsers that don't honour `frame-ancestors`): nothing about this app.
- *   Least of all the export flow. Should ever run inside someone else's
- *   frame, where a clickjacking overlay could hijack a Download click.
- * - `manifest-src 'self'`: the PWA manifest is same-origin only.
- *
- * The four sibling headers: `X-Content-Type-Options: nosniff` stops a
- * misdeclared response from being sniffed into an executable type;
- * `Referrer-Policy: no-referrer` keeps the full URL (which can carry a
- * shareable design's state) out of any cross-origin request's Referer;
- * `Permissions-Policy` denies the three sensor APIs the app never asks for.
+ * docs/security-headers.md gives the directive-by-directive rationale — why
+ * each one is as permissive as it is. Read it before loosening anything.
  * @param {string[]} scriptHashes
  * @returns {string}
  */
@@ -181,30 +145,15 @@ function matchesPattern(pattern, pathname) {
 
 /**
  * The merged headers a Cloudflare Pages host would send for `pathname`,
- * applying every matching rule IN FILE ORDER, not only the first match.
- * That's the real host behaviour `public/_headers`'s own layout relies on (a
- * request under `/scad/*` gets that rule's CSP *and* whatever the trailing
- * `/*` block this repo's securityHeaders vite plugin appends adds), so a test
- * server that only matched the first rule would validate a policy nobody
- * actually ships.
+ * applying every matching rule IN FILE ORDER, not only the first match, and
+ * comma-JOINING two rules that set the same header name rather than letting the
+ * later one win. Both are real host behaviour that public/_headers depends on:
+ * a comma-joined CSP is enforced as the INTERSECTION of its policies, which is
+ * how /scad/*'s sandbox survives the appended app CSP. Overriding instead would
+ * silently drop that sandbox. See docs/security-headers.md.
  *
- * When two matching rules set the SAME header name, Cloudflare Pages does
- * not let the later one win: it joins both values with `", "` into one
- * header ("If a header is applied twice in the `_headers` file, the values
- * are joined with a comma separator", per Cloudflare's own `_headers` docs).
- * This is deliberate, not incidental, for exactly the header this repo
- * relies on it for: `Content-Security-Policy`'s grammar treats a
- * comma-separated header value as a LIST of policies (equivalently, multiple
- * `Content-Security-Policy` response headers) and enforces their
- * INTERSECTION, so comma-joining `/scad/*`'s `default-src 'none'; sandbox`
- * with the appended `/*` block's app CSP is exactly how "both enforced, no
- * weakening" (see vite.config.ts's securityHeaders plugin) actually happens
- * on the real host. Overriding instead of joining would silently drop the
- * SVG sandbox for every path both rules match, so this server matches
- * Cloudflare's join behaviour rather than the simpler-looking override that
- * would misrepresent it. Header names are compared case-insensitively (as
- * HTTP requires); the first matching rule's casing is kept for the combined
- * header's name.
+ * Header names are compared case-insensitively, as HTTP requires; the first
+ * matching rule's casing is kept.
  * @param {HeaderRule[]} rules
  * @param {string} pathname
  * @returns {Record<string, string>}

@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Corner case B19: an entire line-art drawing (a house) built only from
-     stroked, unfilled paths and lines (fill="none" throughout). Nothing in
-     this file will import into OpenSCAD at all - the checker must flag the
-     whole document as empty/invisible geometry. -->
+     stroked, unfilled paths and lines (fill="none" throughout). OpenSCAD's
+     import() ignores fill and stroke entirely and fills every closed shape, so
+     this does NOT come through as thin outlines and does NOT come through as
+     nothing: it comes through as solid filled silhouettes, which is almost
+     never what a line-art drawing meant. Verified against the pinned
+     OpenSCAD-WASM: extruding this path and extruding the same path with
+     fill="black" produce byte-identical geometry. The checker must therefore
+     flag it (stroke-only), not treat it as empty. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <path fill="none" stroke="black" stroke-width="4"
         d="M15,55 L50,20 L85,55 L85,90 L15,90 Z"/>

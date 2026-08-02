@@ -3,6 +3,10 @@
 // safe (no eval): an OR of ANDs of atomic clauses. Hidden parameters are still
 // sent to OpenSCAD unchanged: visibility is a UI nicety only.
 //
+// The expression is TOKENIZED by src/lib/showIfSyntax.mjs, the same module
+// scripts/lib/params.mjs validates with. That sharing is load-bearing, not
+// tidiness: see evalShowIf below.
+//
 // M9: gen-schema.mjs (scripts/lib/params.mjs) is the PRIMARY gate. It rejects
 // an unsupported clause shape (a relational operator, stray tokens, …) at
 // generate time, so a shipped schema.json's showIf strings are always
@@ -13,6 +17,7 @@
 // by an older/bypassed generator).
 import type { Param } from "../openscad/types";
 import type { Values } from "./presets";
+import { showIfTerms } from "./showIfSyntax.mjs";
 
 function truthy(v: unknown): boolean {
   if (typeof v === "boolean") return v;
@@ -56,9 +61,15 @@ function evalClause(clause: string, values: Values): boolean {
 
 /** Evaluate an `@showIf` expression: `a || b && c` == `(a) || (b && c)`. */
 export function evalShowIf(expr: string, values: Values): boolean {
-  return expr
-    .split("||")
-    .some((term) => term.split("&&").every((clause) => evalClause(clause, values)));
+  // showIfTerms, not split("||"): the generator accepts a quoted operator
+  // (`mode=="p||q"`) and splitting blind on it here tore the value in half. The
+  // fragment that remained was ungrammatical, evalClause threw, and isVisible's
+  // fail-open catch showed the control for every value of `mode` — a condition
+  // the build had just validated, silently inert in production. One tokenizer
+  // is the only way the two ends cannot disagree again.
+  return showIfTerms(expr).some((term) =>
+    term.every((clause) => evalClause(clause, values))
+  );
 }
 
 /** Whether a parameter's control should be shown for the current values. */

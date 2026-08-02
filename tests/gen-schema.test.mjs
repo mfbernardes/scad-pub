@@ -46,7 +46,10 @@ import {
   resolveHelp,
   resolveFileField,
   isRiskyExternalFontCopy,
+  isTrackedFile,
+  extOf,
 } from "../scripts/gen-schema.mjs";
+import { validateSchema } from "../src/lib/schema.ts";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
 import { colorStyle } from "../src/lib/configCss.ts";
 import { componentVersions } from "../scripts/lib/dep-versions.mjs";
@@ -60,6 +63,20 @@ function run(configName) {
     configPath: join(FIXTURES, configName),
     outSchemaDir: join(out, "schema"),
     outScadDir: join(out, "scad"),
+  });
+  return { schema, out };
+}
+
+// Same as run(), plus an outPublicDir so the font/PWA/precache steps actually
+// execute (they are skipped entirely without one).
+function runWithPublic(configName) {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  const outPublicDir = join(out, "public");
+  const schema = generate({
+    configPath: join(FIXTURES, configName),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(outPublicDir, "scad"),
+    outPublicDir,
   });
   return { schema, out };
 }
@@ -126,6 +143,35 @@ test("a pathological trailing-whitespace line parses in well under a second", ()
   const elapsed = Date.now() - t0;
   rmSync(dir, { recursive: true, force: true });
   assert.ok(elapsed < 2000, `parseParams took ${elapsed}ms, expected < 2000ms`);
+});
+
+test("a large top-level literal parses in well under a second", () => {
+  // The source-order scanner tested `buf.trim()` per character while `buf`
+  // accumulated the whole statement, which is quadratic in its length. A
+  // 20k-element point table — ordinary OpenSCAD, and this runs on every
+  // predev/prebuild/pretest — took 25s; the 60k case never finished.
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-perf-"));
+  const file = join(dir, "f.scad");
+  const pts = Array.from({ length: 20000 }, (_, i) => `[${i},${i}]`).join(",");
+  writeFileSync(file, `/* [Main] */\n// P.\npts = [${pts}];\n// A.\na = 1;\n`);
+  const t0 = Date.now();
+  const { params } = parseParams(file);
+  const elapsed = Date.now() - t0;
+  rmSync(dir, { recursive: true, force: true });
+  assert.deepEqual(params.map((p) => p.name), ["pts", "a"], "and still parses it correctly");
+  assert.ok(elapsed < 1000, `parseParams took ${elapsed}ms, expected < 1000ms`);
+
+  // The other shape that could go quadratic: every `<` asks whether the buffer
+  // is a pending use/include, so that question has to be O(1) rather than an
+  // inspection of everything collected so far.
+  const many = Array.from({ length: 20000 }, (_, i) => `a${i} = ${i} < ${i + 1};`).join("\n");
+  const file2 = join(mkdtempSync(join(tmpdir(), "gen-schema-perf-")), "f.scad");
+  writeFileSync(file2, `/* [Main] */\n${many}\n`);
+  const t1 = Date.now();
+  const { params: lts } = parseParams(file2);
+  const lessThans = Date.now() - t1;
+  assert.equal(lts.length, 20000, "every less-than statement is still a parameter");
+  assert.ok(lessThans < 2000, `20k less-thans took ${lessThans}ms, expected < 2000ms`);
 });
 
 test("// @collapsed marks sections collapsed; others stay open", () => {
@@ -428,7 +474,17 @@ test("presets.images: a blank string fails the build like the map form's blank v
 
 test("strings: a key that exists in en.json overrides the built-in text", () => {
   const { schema } = run("widget-strings.config.json");
-  assert.deepEqual(schema.strings, { "action.export": "Download now" });
+  assert.deepEqual(schema.strings, {
+    "action.export": "Download now",
+    // The core-flow strings a white-label deployment cannot ship without
+    // overriding: the render hard-failure toast, the SW/offline notices, the
+    // install hint and the file add/remove announcements all bypassed the
+    // catalogue until they were routed through t().
+    "notice.offline": "No connection — you can still build and download.",
+    "install.hint": "Add to your home screen?",
+    "files.added": "Added {name}",
+    "error.renderHardFailed": "Something went wrong building the preview",
+  });
 });
 
 test("a config with no 'strings' key yields an empty object", () => {
@@ -1428,7 +1484,7 @@ test("renderHash is unaffected by presentation-only config fields (title/help/no
   const dressedUp = gen({
     title: "A Whole Different Title",
     pwa: { themeColor: "#123456" },
-    help: "<p>Different help copy entirely.</p>",
+    help: { title: "Help", sections: [{ title: "T", body: "Different help copy entirely." }] },
     notices: [{ marker: "note", label: "A note", color: "#3b82f6" }],
     strings: { "presets.title": "Styles", "settings.title": "Options" },
     designs: [{ id: "widget", label: "A Very Different Label" }],
@@ -3101,6 +3157,7 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
   writeFileSync(join(src, "d.scad"), `/* [Main] */\nx = 1;\n`);
   copyFileSync(REAL_TTF, join(src, "Face.ttf"));
   writeFileSync(join(root, "shot.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  writeFileSync(join(root, "..shot.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
   const outPublicDir = join(root, "public");
   const base = {
@@ -3116,25 +3173,40 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
       title: "T",
       source: "src",
       render: { fonts: ["Face.ttf"] },
-      pwa: { screenshots: [{ src: "shot.png", sizes: "1x1", form_factor: "narrow" }] },
+      pwa: {
+        screenshots: [
+          { src: "shot.png", sizes: "1x1", form_factor: "narrow" },
+          // A leading-dot name is ordinary, and a `startsWith("..")`
+          // containment test read it as traversal: copied on the first build,
+          // then unreconcilable forever after.
+          { src: "..shot.png", sizes: "1x1", form_factor: "narrow" },
+        ],
+      },
       designs: [{ id: "d", label: "D" }],
     })
   );
   generate({ ...base, configPath: cfgWith });
   const fontDest = join(outPublicDir, "fonts", "Face.ttf");
   const shotDest = join(outPublicDir, "shot.png");
+  const dottedDest = join(outPublicDir, "..shot.png");
   assert.ok(existsSync(fontDest));
   assert.ok(existsSync(shotDest));
+  assert.ok(existsSync(dottedDest), "a leading-dot screenshot is copied like any other");
   // The manifest lives ABOVE public/ (so Vite never ships it) and stores paths
   // relative to public/ (never host-absolute: no checkout-path leak, and a
   // stray manifest can't authorize deletes outside the output root).
   const manifestPath = join(outPublicDir, "..", ".gen-manifest.json");
   const relTo = (abs) => relative(outPublicDir, abs);
   assert.ok(!existsSync(join(outPublicDir, ".gen-manifest.json")), "manifest must not sit inside public/");
+  // Each entry is { path, sha256 }: the digest is what keeps reconciliation
+  // from deleting a path whose bytes somebody else replaced since.
+  const paths = (m) => m.map((e) => e.path);
   const manifest1 = JSON.parse(readFileSync(manifestPath, "utf-8"));
-  assert.ok(manifest1.every((e) => !isAbsolute(e)), "manifest entries must be relative, not absolute");
-  assert.ok(manifest1.includes(relTo(fontDest)));
-  assert.ok(manifest1.includes(relTo(shotDest)));
+  assert.ok(paths(manifest1).every((e) => !isAbsolute(e)), "manifest entries must be relative, not absolute");
+  assert.ok(manifest1.every((e) => /^[0-9a-f]{64}$/.test(e.sha256)), "every entry carries its digest");
+  assert.ok(paths(manifest1).includes(relTo(fontDest)));
+  assert.ok(paths(manifest1).includes(relTo(shotDest)));
+  assert.ok(paths(manifest1).includes(relTo(dottedDest)), "and is recorded as owned");
 
   // Reconfigure without the font/screenshot, as if the config entry was
   // removed or renamed.
@@ -3146,13 +3218,15 @@ test("removing a font/screenshot from config leaves no orphan generated file; ma
   generate({ ...base, configPath: cfgWithout });
   assert.ok(!existsSync(fontDest), "stale generated font copy should be removed");
   assert.ok(!existsSync(shotDest), "stale screenshot should be removed");
+  assert.ok(!existsSync(dottedDest), "and so should a stale leading-dot one");
 
   // Final manifest matches disk: every recorded path still exists, and
   // nothing recorded is stale.
   const manifest2 = JSON.parse(readFileSync(manifestPath, "utf-8"));
-  assert.ok(!manifest2.includes(relTo(fontDest)));
-  assert.ok(!manifest2.includes(relTo(shotDest)));
-  for (const p of manifest2)
+  assert.ok(!paths(manifest2).includes(relTo(fontDest)));
+  assert.ok(!paths(manifest2).includes(relTo(shotDest)));
+  assert.ok(!paths(manifest2).includes(relTo(dottedDest)));
+  for (const p of paths(manifest2))
     assert.ok(existsSync(join(outPublicDir, p)), `manifest entry missing on disk: ${p}`);
 });
 
@@ -3310,7 +3384,7 @@ test("changing a font then failing a later step leaves the prior font bytes and 
     JSON.stringify({
       title: "T",
       source: "src",
-      render: { fonts: ["Face.ttf"], fontFallback: "Alpha" },
+      render: { fonts: ["Face.ttf"], fontFallback: "Liberation Sans" },
       designs: [{ id: "d", label: "D" }],
     })
   );
@@ -3324,14 +3398,24 @@ test("changing a font then failing a later step leaves the prior font bytes and 
   // rewrite the live font tree), but make the build fail at PWA rasterization
   // via a malformed icon: after bundleFonts, before the commit.
   copyFileSync(BOLD, join(src, "Face.ttf"));
-  writeFileSync(join(root, "bad.svg"), `<svg xmlns="http://www.w3.org/2000/svg"><not-closed`);
+  // A real SVG that resvg refuses (zero size), so the failure lands at
+  // RASTERIZATION (after bundleFonts, before the commit) rather than at the
+  // sanitizer's parse — which is the window this test is about. See
+  // tests/fixtures/bad-icon.svg.
+  writeFileSync(
+    join(root, "bad.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0"></svg>`
+  );
   const bad = join(root, "bad.config.json");
   writeFileSync(
     bad,
     JSON.stringify({
       title: "T",
       source: "src",
-      render: { fonts: ["Face.ttf"], fontFallback: "Beta" },
+      // A different string for the same bundled family: fonts.conf's rendered
+      // text changes (so a commit would rewrite it) while the fallback still
+      // names a family this build ships.
+      render: { fonts: ["Face.ttf"], fontFallback: "liberation sans" },
       pwa: { icon: "bad.svg" },
       designs: [{ id: "d", label: "D" }],
     })
@@ -3463,4 +3547,1066 @@ test("popup.mode 'picker' with something to choose between builds fine", () => {
   const { schema } = run("widget-popup-picker.config.json");
   assert.equal(schema.popup.mode, "picker");
   assert.equal(schema.designs.length, 2);
+});
+
+// ── a config font may not shadow a tracked bundled one ─────────────────────
+// bundleFonts keys the destination on the font's basename, so a config listing
+// `myfonts/LiberationSans-Regular.ttf` aims at a file the repo tracks. Letting
+// that copy through recorded a TRACKED path in .gen-manifest.json, and the next
+// build against a config without the entry deleted repo content.
+
+test("isTrackedFile reports what git tracks, and false outside a working tree", () => {
+  assert.equal(isTrackedFile("/repo/public/fonts/F.ttf", () => "public/fonts/F.ttf"), true);
+  assert.equal(isTrackedFile("/repo/public/fonts/F.ttf", () => ""), false);
+});
+
+// A throwaway checkout with a tracked public/fonts/<name>, so the collision is
+// the real one rather than a stub's opinion.
+function checkoutWithTrackedFont(prefix, name) {
+  const checkout = mkdtempSync(join(tmpdir(), prefix));
+  execFileSync("git", ["init", "-q", checkout]);
+  const outPublicDir = join(checkout, "public");
+  mkdirSync(join(outPublicDir, "fonts"), { recursive: true });
+  copyFileSync(
+    join(HERE, "..", "public", "fonts", "LiberationSans-Regular.ttf"),
+    join(outPublicDir, "fonts", name)
+  );
+  execFileSync("git", ["-C", checkout, "add", "-A"]);
+  execFileSync("git", [
+    "-C", checkout,
+    "-c", "user.email=test@example.com",
+    "-c", "user.name=Test",
+    "commit", "-q", "-m", "bundled font",
+  ]);
+  return { checkout, outPublicDir };
+}
+
+function externalFontConfig(prefix, fontEntry, fontFileName) {
+  const src = mkdtempSync(join(tmpdir(), prefix));
+  const dir = dirname(join(src, fontEntry));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// Font.\nfont = "Liberation Sans";\n`);
+  copyFileSync(
+    join(HERE, "..", "public", "fonts", fontFileName),
+    join(src, fontEntry)
+  );
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: ".",
+      render: { fonts: [fontEntry], fontFallback: "Liberation Sans" },
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+  return src;
+}
+
+test("a config font whose basename shadows a tracked bundled font fails the build", () => {
+  const { checkout, outPublicDir } = checkoutWithTrackedFont(
+    "gen-schema-fontshadow-",
+    "LiberationSans-Regular.ttf"
+  );
+  const src = externalFontConfig(
+    "gen-schema-fontshadow-src-",
+    "myfonts/LiberationSans-Regular.ttf",
+    "LiberationSans-Regular.ttf"
+  );
+  assert.throws(
+    () =>
+      generate({
+        configPath: join(src, "c.config.json"),
+        outSchemaDir: join(checkout, "schema"),
+        outScadDir: join(checkout, "scad"),
+        outPublicDir,
+      }),
+    /would overwrite the bundled font/
+  );
+  // …and left the tracked file untouched.
+  assert.equal(
+    execFileSync("git", ["-C", checkout, "status", "--porcelain", "--", "public"], {
+      encoding: "utf8",
+    }),
+    ""
+  );
+});
+
+test("an external-config font copy is cleaned up by the next build, and never a changed file", () => {
+  const { checkout, outPublicDir } = checkoutWithTrackedFont(
+    "gen-schema-reconcile-",
+    "LiberationSans-Regular.ttf"
+  );
+  const withFont = externalFontConfig(
+    "gen-schema-reconcile-src-",
+    "Face.ttf",
+    "LiberationSans-Bold.ttf"
+  );
+  const build = (configPath) =>
+    generate({
+      configPath,
+      outSchemaDir: join(checkout, "schema"),
+      outScadDir: join(checkout, "scad"),
+      outPublicDir,
+    });
+
+  build(join(withFont, "c.config.json"));
+  const copied = join(outPublicDir, "fonts", "Face.ttf");
+  assert.ok(existsSync(copied), "the external font was copied in");
+
+  // A config of this checkout's own, listing no external font.
+  const own = mkdtempSync(join(tmpdir(), "gen-schema-reconcile-own-"));
+  writeFileSync(join(own, "d.scad"), `/* [Main] */\n// Size.\nsize = 1;\n`);
+  writeFileSync(
+    join(own, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  build(join(own, "c.config.json"));
+  assert.ok(!existsSync(copied), "the transient copy was reconciled away");
+
+  // Same round trip, except the copy is replaced between builds: those bytes
+  // are somebody else's now, so reconciliation must leave them alone.
+  build(join(withFont, "c.config.json"));
+  writeFileSync(copied, "not the font this tool wrote");
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    build(join(own, "c.config.json"));
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(existsSync(copied), "a changed file is not this tool's to delete");
+  assert.ok(warnings.some((w) => w.includes("Face.ttf")), "and it says so");
+
+  // The window gen-schema's own external-font warning describes: the transient
+  // copy is committed UNCHANGED. It wasn't tracked when it was copied, so the
+  // copy-time guard never saw it, and its bytes still digest clean, so the
+  // digest guard passes it through. Only a tracked-at-delete-time check saves
+  // it — without one, a build silently deletes a committed file.
+  build(join(withFont, "c.config.json"));
+  execFileSync("git", ["-C", checkout, "add", "--", "public/fonts/Face.ttf"]);
+  // The identity is supplied explicitly, like every other commit in this file:
+  // a CI runner has no global user.name/user.email, so a bare `git commit`
+  // fails there with "empty ident name" while passing on any developer machine.
+  execFileSync("git", [
+    "-C", checkout,
+    "-c", "user.email=test@example.com",
+    "-c", "user.name=Test",
+    "commit", "-q", "-m", "add font",
+  ]);
+  const trackedWarnings = [];
+  console.warn = (msg) => trackedWarnings.push(msg);
+  try {
+    build(join(own, "c.config.json"));
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(existsSync(copied), "a git-tracked file is not this tool's to delete");
+  assert.ok(
+    trackedWarnings.some((w) => w.includes("Face.ttf") && w.includes("tracked by git")),
+    "and it says why"
+  );
+});
+
+// ── build-time validation gaps ─────────────────────────────────────────────
+// Each of these built green and failed later — in vite-config, in the browser,
+// or not at all — rather than as a named gen-schema error at the key.
+
+test("top-level scalars are validated against their CONFIG_SPEC descriptors", () => {
+  // The descriptors existed but were inert, so `"title": 42` reached
+  // vite-config as a raw TypeError instead of naming the key.
+  assert.throws(() => run("widget-bad-title.config.json"), /'title'/);
+  assert.throws(() => run("widget-bad-source.config.json"), /'source'/);
+  assert.throws(() => run("widget-bad-extracss.config.json"), /'extraCss'/);
+});
+
+test("a wrongly-typed designs/assets fails instead of silently auto-discovering", () => {
+  // `Array.isArray(x) && x.length` fell through to auto-discovery for both
+  // "absent" and "present but wrong", the one place the fail-fast convention
+  // was inverted: the list its author wrote was silently ignored.
+  assert.throws(() => run("widget-designs-notarray.config.json"), /'designs', when set/);
+  assert.throws(() => run("widget-designs-empty.config.json"), /'designs', when set/);
+  assert.throws(() => run("widget-assets-notarray.config.json"), /'assets', when set/);
+  // Omitting the key entirely still auto-discovers.
+  assert.ok(run("default-source.config.json").schema.designs.length > 0);
+});
+
+test("a malformed help block fails the build, not the browser", () => {
+  // resolveHelp passed a non-object through verbatim; src/lib/schema.ts then
+  // threw at runtime, so `"help": 42` shipped.
+  assert.throws(() => run("widget-help-notobject.config.json"), /'help', when set/);
+  assert.throws(() => run("widget-help-badtab.config.json"), /'help\.tabs\[0\]'/);
+});
+
+// The build and the runtime must agree about `help`, in both directions. The
+// test above shared its name with that claim while checking two shapes; these
+// check the property itself, against the validator that would otherwise be the
+// one to find out — at app-module initialisation, so several of these did not
+// break a modal, they stopped the app booting at all.
+// A real generated schema, so validateSchema is judging only the `help` swapped
+// into it — every other key is whatever the repo's own build produced.
+const MINIMAL_SCHEMA = JSON.parse(
+  readFileSync(join(HERE, "..", "src", "generated", "designs.json"), "utf-8")
+);
+
+const MALFORMED_HELP = [
+  ["neither sections nor tabs", {}],
+  ["a non-array tabs", { tabs: "bad" }],
+  ["a section whose title is not a string", { sections: [{ title: 42, body: "x" }] }],
+  ["a section with no body", { sections: [{ title: "T" }] }],
+  ["a tab with no label", { tabs: [{ sections: [] }] }],
+  ["a tab whose sections are missing", { tabs: [{ label: "T" }] }],
+  ["a tab section that is not a section", { tabs: [{ label: "T", sections: [{ body: "x" }] }] }],
+  ["a non-string title", { title: 42, sections: [] }],
+  ["a non-string intro", { intro: 42, sections: [] }],
+  ["an array", []],
+];
+
+test("every help shape the app rejects at startup is rejected by the build", () => {
+  const mustExist = (abs) => abs;
+  for (const [what, help] of MALFORMED_HELP) {
+    assert.throws(() => resolveHelp(help, "/cfg", mustExist), /gen-schema:/, what);
+    // And it really is what the runtime would have rejected, not a build-only
+    // opinion: the same shape must fail validateSchema too.
+    assert.throws(
+      () => validateSchema({ ...MINIMAL_SCHEMA, help }),
+      /Invalid designs schema/,
+      what
+    );
+  }
+});
+
+test("a well-formed help block passes both, including a file-derived one", () => {
+  const mustExist = (abs) => abs;
+  for (const help of [
+    { sections: [{ title: "T", body: "B" }] },
+    { title: "Help", intro: "Hi", sections: [{ title: "T", body: "B" }] },
+    { tabs: [{ label: "Basics", sections: [{ title: "T", body: "B" }] }] },
+    { tabs: [{ label: "Basics", intro: "Hi", sections: [{ title: "T", body: "B" }] }] },
+    { sections: [{ title: "T", body: "B" }], tabs: [{ label: "More", sections: [] }] },
+  ]) {
+    const resolved = resolveHelp(help, "/cfg", mustExist);
+    assert.deepEqual(resolved, help);
+    assert.doesNotThrow(() => validateSchema({ ...MINIMAL_SCHEMA, help: resolved }));
+  }
+});
+
+test("a help block whose sections come from a file is checked AFTER resolution", () => {
+  // `{ file }` carries neither `sections` nor `tabs` until splitHelpMarkdown
+  // has run, so checking the raw config would reject every file-sourced pane.
+  const dir = mkdtempSync(join(tmpdir(), "gen-schema-help-"));
+  writeFileSync(join(dir, "help.md"), "Intro line.\n\n## Setup\n\nDo the thing.\n");
+  const resolved = resolveHelp({ file: "help.md" }, dir, (abs) => abs);
+  assert.deepEqual(resolved.sections, [{ title: "Setup", body: "Do the thing." }]);
+  assert.doesNotThrow(() => validateSchema({ ...MINIMAL_SCHEMA, help: resolved }));
+});
+
+test("render.fontFallback must name one of the bundled families", () => {
+  // docs/config.md states the rule; nothing enforced it, so a typo pinned
+  // fonts.conf's last-resort family to a name Fontconfig cannot resolve.
+  assert.throws(
+    () => runWithPublic("widget-fontfallback-unknown.config.json"),
+    /not one of the bundled font families/
+  );
+});
+
+test("an id of dots alone is rejected, charset notwithstanding", () => {
+  assert.throws(() => run("widget-dot-id.config.json"), /not be dots alone/);
+});
+
+test("a design's file must be a .scad path", () => {
+  // Otherwise its `<name>.json` sibling is read as parameterSets while the
+  // design itself is parsed as OpenSCAD: both roles inverted.
+  assert.throws(() => run("widget-file-notscad.config.json"), /must be a \.scad path/);
+});
+
+test("a malformed parameterSets file names itself in the error", () => {
+  assert.throws(
+    () => run("widget-badpreset-json.config.json"),
+    /parameterSets file 'badpreset\.json' is not valid JSON/
+  );
+});
+
+test("a browser-facing SVG that is not well-formed names its file, at BOTH entry points", () => {
+  // docs/config.md promises "fails the build, naming the file". copyBrowserFacing
+  // wrapped the sanitizer to do that; pwa-assets called it bare, so a broken
+  // `pwa.icon` produced a raw parser error naming neither the key nor the path.
+  // Neither throw path had a test.
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-badsvg-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "widget.scad"), `/* [Main] */\n// A.\na = 1;\n`);
+  writeFileSync(join(root, "broken.svg"), `<svg xmlns="http://www.w3.org/2000/svg"><rect></svg>`);
+
+  const build = (extra) => {
+    const out = mkdtempSync(join(tmpdir(), "gen-schema-out-"));
+    const cfg = join(root, `${Object.keys(extra)[0]}.config.json`);
+    writeFileSync(
+      cfg,
+      JSON.stringify({ title: "T", source: "src", designs: [{ id: "widget", label: "W" }], ...extra })
+    );
+    return () =>
+      generate({
+        configPath: cfg,
+        outSchemaDir: join(out, "schema"),
+        outScadDir: join(out, "public", "scad"),
+        outPublicDir: join(out, "public"),
+      });
+  };
+
+  // The logo path (copyBrowserFacing).
+  assert.throws(build({ logo: "broken.svg" }), (e) => {
+    assert.match(e.message, /is not a usable SVG/);
+    assert.match(e.message, /broken\.svg/, "the message must name the file");
+    return true;
+  });
+  // The PWA icon path (pwa-assets), which used to throw a bare parser error.
+  assert.throws(build({ pwa: { icon: "broken.svg" } }), (e) => {
+    assert.match(e.message, /is not a usable SVG/);
+    assert.match(e.message, /broken\.svg/, "the message must name the file");
+    assert.match(e.message, /icon/, "and say which config key it came from");
+    return true;
+  });
+});
+
+test("a well-formed document that is not an SVG fails the build and names the file", () => {
+  // It used to be emptied rather than refused: every element failed the
+  // allowlist, and what shipped was a file with no root. Now the build stops,
+  // through each of the three browser-facing entry points.
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-notsvg-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "widget.scad"), `/* [Main] */\n// A.\na = 1;\n`);
+  const NOTSVG = `<notsvg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></notsvg>`;
+  writeFileSync(join(root, "notsvg.svg"), NOTSVG);
+  writeFileSync(join(src, "notsvg.svg"), NOTSVG);
+  // The design icon comes from the source's own `// @icon` annotation.
+  writeFileSync(
+    join(src, "iconed.scad"),
+    `// @icon notsvg.svg\n/* [Main] */\n// A.\na = 1;\n`
+  );
+
+  // Each entry names the destination that path would have written, so "no
+  // husk" is asked about the file this case could actually have left behind.
+  for (const [what, extra, dest] of [
+    ["logo", { logo: "notsvg.svg" }, ["public", "scad", "notsvg.svg"]],
+    ["pwa.icon", { pwa: { icon: "notsvg.svg" } }, ["public", "icon.svg"]],
+    ["a design @icon", { designs: [{ id: "iconed", label: "I" }] }, ["public", "scad", "notsvg.svg"]],
+  ]) {
+    const out = mkdtempSync(join(tmpdir(), "gen-schema-out-"));
+    const cfg = join(root, `notsvg-${what.replace(/\W/g, "")}.config.json`);
+    writeFileSync(
+      cfg,
+      JSON.stringify({ title: "T", source: "src", designs: [{ id: "widget", label: "W" }], ...extra })
+    );
+    assert.throws(
+      () =>
+        generate({
+          configPath: cfg,
+          outSchemaDir: join(out, "schema"),
+          outScadDir: join(out, "public", "scad"),
+          outPublicDir: join(out, "public"),
+        }),
+      (e) => {
+        assert.match(e.message, /root must be <svg/, what);
+        assert.match(e.message, /notsvg\.svg/, `${what}: the message names the file`);
+        return true;
+      },
+      what
+    );
+    // And nothing was left behind for a server to hand out — not at the
+    // destination, and not in the staging directory the commit would have
+    // moved into place either.
+    assert.ok(
+      !existsSync(join(out, ...dest)),
+      `${what}: no husk of an asset survives the refusal (${dest.join("/")})`
+    );
+    const strays = readdirSync(join(out, "public"), { recursive: true, withFileTypes: true })
+      .filter((d) => d.isFile() && /\.svg$/i.test(d.name))
+      .map((d) => join(d.parentPath ?? d.path, d.name));
+    assert.deepEqual(strays, [], `${what}: nor anywhere under public/, staging included`);
+  }
+});
+
+test("an SVG screenshot is sanitized too, not just the icon", () => {
+  // The rule belongs to "operator file that lands in the served root", not to
+  // `pwa.icon`. A screenshot is copied to a navigable same-origin URL by the
+  // same helper, and it used to go out byte-for-byte.
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-shotsvg-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "widget.scad"), `/* [Main] */\n// A.\na = 1;\n`);
+  writeFileSync(
+    join(root, "shot.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">` +
+      `<script>fetch("https://evil.invalid/x")</script>` +
+      `<rect width="64" height="64" fill="#123456"/></svg>`
+  );
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-out-"));
+  const cfg = join(root, "shotsvg.config.json");
+  writeFileSync(
+    cfg,
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      designs: [{ id: "widget", label: "W" }],
+      pwa: { screenshots: [{ src: "shot.svg", sizes: "64x64", form_factor: "narrow" }] },
+    })
+  );
+  generate({
+    configPath: cfg,
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const shipped = readFileSync(join(out, "public", "shot.svg"), "utf-8");
+  assert.doesNotMatch(shipped, /script|evil\.invalid/, "the script is gone from what ships");
+  assert.match(shipped, /#123456/, "and the artwork survives");
+
+  // And the manifest describes what it actually shipped. `type` was hardcoded
+  // to image/png for every screenshot whatever its format, which is the one
+  // thing a launcher reads to decide whether it can display the image at all.
+  const manifest = JSON.parse(readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8"));
+  assert.deepEqual(manifest.screenshots, [
+    { src: "shot.svg", sizes: "64x64", type: "image/svg+xml", form_factor: "narrow" },
+  ]);
+});
+
+test("a screenshot's manifest type follows its real format", () => {
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-shottype-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "widget.scad"), `/* [Main] */\n// A.\na = 1;\n`);
+  for (const name of ["a.png", "b.jpg", "c.bin"])
+    writeFileSync(join(root, name), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-out-"));
+  const cfg = join(root, "shottype.config.json");
+  writeFileSync(
+    cfg,
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      designs: [{ id: "widget", label: "W" }],
+      pwa: {
+        screenshots: ["a.png", "b.jpg", "c.bin"].map((s) => ({
+          src: s,
+          sizes: "64x64",
+          form_factor: "narrow",
+        })),
+      },
+    })
+  );
+  generate({
+    configPath: cfg,
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const { screenshots } = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  assert.deepEqual(
+    screenshots.map((s) => [s.src, s.type]),
+    // An extension this doesn't know carries no `type` at all — the member is
+    // optional, and no claim beats a false one.
+    [
+      ["a.png", "image/png"],
+      ["b.jpg", "image/jpeg"],
+      ["c.bin", undefined],
+    ]
+  );
+  assert.ok(!("type" in screenshots[2]), "the key is absent, not present-and-undefined");
+});
+
+test("a browser-facing SVG that IS sanitized says so, at BOTH entry points", () => {
+  // The throw path above was shared; the removal-reporting path was not, so
+  // sanitizing `pwa.icon` was silent: the external reference was stripped and
+  // the operator learned nothing. Both go through sanitizeBrowserFacingSvg now,
+  // and this asserts the warning AND the bytes that reach disk.
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-scrubsvg-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "widget.scad"), `/* [Main] */\n// A.\na = 1;\n`);
+  // Well-formed and renderable, but carries an off-document reference the
+  // allowlist removes.
+  writeFileSync(
+    join(root, "dirty.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">` +
+      `<image href="https://example.invalid/p.png" width="64" height="64"/>` +
+      `<rect width="64" height="64" fill="#123456"/></svg>`
+  );
+
+  const build = (extra, name) => {
+    const out = mkdtempSync(join(tmpdir(), "gen-schema-out-"));
+    const cfg = join(root, `${name}.config.json`);
+    writeFileSync(
+      cfg,
+      JSON.stringify({ title: "T", source: "src", designs: [{ id: "widget", label: "W" }], ...extra })
+    );
+    const warnings = [];
+    const realWarn = console.warn;
+    console.warn = (...a) => warnings.push(a.join(" "));
+    try {
+      generate({
+        configPath: cfg,
+        outSchemaDir: join(out, "schema"),
+        outScadDir: join(out, "public", "scad"),
+        outPublicDir: join(out, "public"),
+      });
+    } finally {
+      console.warn = realWarn;
+    }
+    return { out, warnings };
+  };
+
+  for (const [what, extra, written] of [
+    ["logo", { logo: "dirty.svg" }, ["public", "scad", "dirty.svg"]],
+    ["pwa icon", { pwa: { icon: "dirty.svg" } }, ["public", "icon.svg"]],
+  ]) {
+    const { out, warnings } = build(extra, `dirty-${what.replace(/\W/g, "")}`);
+    const sanitized = warnings.filter((w) => w.includes("sanitized"));
+    assert.equal(sanitized.length, 1, `${what}: exactly one sanitize warning (got ${warnings})`);
+    assert.match(sanitized[0], /dirty\.svg/, `${what}: the warning names the source file`);
+    assert.match(sanitized[0], /removed:.*\S/, `${what}: and says what it removed`);
+    // And the file that ships carries the scrub, not the original bytes.
+    const text = readFileSync(join(out, ...written), "utf-8");
+    assert.ok(!text.includes("example.invalid"), `${what}: the external reference is gone`);
+    assert.ok(text.includes("#123456"), `${what}: the rest of the artwork survives`);
+  }
+  // The key name only exists on the pwa path; assert it there specifically.
+  const { warnings } = build({ pwa: { icon: "dirty.svg" } }, "dirty-key");
+  assert.ok(
+    warnings.some((w) => w.includes("sanitized") && w.includes("pwa 'icon'")),
+    "the pwa warning names the config key, not just the path"
+  );
+});
+
+test("pwa.screenshots: a valid entry reaches the manifest, a null or partial one does not", () => {
+  // The sibling `shortcuts` path already guarded null; screenshots threw a bare
+  // "cannot read properties of null". But "generate() did not throw" is all the
+  // previous assertion checked, so a regression that emitted `{src: undefined}`
+  // — or one that dropped the VALID screenshot too — shipped green. The
+  // manifest is what the browser reads, so read the manifest.
+  const { out } = runWithPublic("widget-screenshot-null.config.json");
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  const shots = manifest.screenshots ?? [];
+  assert.equal(shots.length, 1, `exactly the one complete entry survives: ${JSON.stringify(shots)}`);
+  assert.equal(shots[0].sizes, "640x480");
+  assert.equal(shots[0].form_factor, "wide");
+  assert.ok(shots[0].src, "and it carries a real src");
+  assert.ok(!/undefined/.test(JSON.stringify(shots)), "nothing undefined reaches the manifest");
+  // The copied file is really there, or the entry points at a 404.
+  assert.ok(
+    existsSync(join(out, "public", shots[0].src)),
+    `${shots[0].src} should have been copied into the served tree`
+  );
+});
+
+test("extOf refuses an extension that could steer a generated write", () => {
+  // The result is spliced into `${id}-icon${ext}`; only a real extension may
+  // reach that name.
+  assert.equal(extOf("art/icon.svg"), ".svg");
+  assert.equal(extOf("art/icon"), "");
+  assert.equal(extOf(".gitignore"), "");
+  assert.equal(extOf("art/icon.svg/../../escape"), "");
+});
+
+test("the precache manifest covers gallery artwork and preset thumbnails", () => {
+  // A deployment using either renders a broken screen offline without them.
+  const { out } = runWithPublic("widget-presetimages-dir.config.json");
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "precache-manifest.json"), "utf-8")
+  );
+  const schema = JSON.parse(readFileSync(join(out, "schema", "designs.json"), "utf-8"));
+  for (const d of schema.designs) {
+    if (d.image) assert.ok(manifest.shell.includes(d.image), `image ${d.image} precached`);
+    for (const url of Object.values(d.presetImages ?? {}))
+      assert.ok(manifest.shell.includes(url), `preset image ${url} precached`);
+  }
+  // The fixture must actually exercise it, or this test proves nothing.
+  assert.ok(
+    schema.designs.some((d) => Object.keys(d.presetImages ?? {}).length > 0),
+    "fixture has preset images"
+  );
+});
+
+// ── Customizer parser hardening ────────────────────────────────────────────
+// Each case below either dropped a real parameter, invented one that `-D`
+// cannot reach, or corrupted a value that contained the parser's own
+// separators.
+
+const parseError = (body) => {
+  try {
+    parseOf(body);
+  } catch (e) {
+    return e.message;
+  }
+  return null;
+};
+
+test("a trailing free-text comment doesn't drop the parameter", () => {
+  // `wall = 2; // in mm` matched neither PARAM_RE nor a doc line, so the
+  // parameter silently vanished from the form while staying a real variable.
+  const { params } = parseOf(
+    `/* [Main] */\n` +
+      `// Wall thickness.\n` +
+      `wall = 2; // in mm\n` +
+      `// Depth.\n` +
+      `depth = 3; /* mm */\n` +
+      `// Mode.\n` +
+      `mode = "a"; // [a, b]\n`
+  );
+  assert.deepEqual(
+    params.map((p) => [p.name, p.type, p.default]),
+    [
+      ["wall", "number", 2],
+      ["depth", "number", 3],
+      ["mode", "enum", "a"],
+    ]
+  );
+  // The real hint still wins over the free-text branch.
+  assert.deepEqual(
+    params.find((p) => p.name === "mode").choices.map((c) => c.value),
+    ["a", "b"]
+  );
+});
+
+test("assignments inside a block comment or a module body are not parameters", () => {
+  // Both are invisible to `-D`, so a control for either does nothing.
+  const { params } = parseOf(
+    `/* [Main] */\n` +
+      `// Real.\n` +
+      `real = 1;\n` +
+      `/*\n` +
+      `// Commented out.\n` +
+      `ghost = 2;\n` +
+      `*/\n` +
+      `module thing() {\n` +
+      `  // Local.\n` +
+      `  local = 3;\n` +
+      `}\n` +
+      `function f(x) = let(inner = 4) x;\n` +
+      `// After.\n` +
+      `after = 5;\n`
+  );
+  assert.deepEqual(
+    params.map((p) => p.name),
+    ["real", "after"]
+  );
+});
+
+test("a brace inside a string doesn't open a scope", () => {
+  const { params } = parseOf(
+    `/* [Main] */\n// Label.\nlabel = "a { b";\n// Size.\nsize = 1;\n`
+  );
+  assert.deepEqual(
+    params.map((p) => p.name),
+    ["label", "size"]
+  );
+});
+
+test("enum choices and @showIf clauses split outside quotes", () => {
+  // `["a,b", "c"]` became three choices; `mode=="a||b"` became two clauses,
+  // the second ungrammatical.
+  const { params } = parseOf(
+    `/* [Main] */\n` +
+      `// Mode.\n` +
+      `mode = "a,b"; // ["a,b", "c"]\n` +
+      `// Label.\n` +
+      `// @showIf mode=="a,b"\n` +
+      `label = "x";\n`
+  );
+  assert.deepEqual(
+    params.find((p) => p.name === "mode").choices.map((c) => c.value),
+    ["a,b", "c"]
+  );
+  assert.equal(params.find((p) => p.name === "label").showIf, 'mode=="a,b"');
+  // A quoted `||` inside a comparison is a value, not a clause separator.
+  assert.equal(parseError(`/* [Main] */\n// A.\na = "x";\n// B.\n// @showIf a=="p||q"\nb = 1;\n`), null);
+});
+
+test("a value-shaped label keeps its colon; only the separator splits", () => {
+  const { params } = parseOf(
+    `/* [Main] */\n// Ratio.\nratio = "1:2"; // ["1:2":Half as wide, "2:1":Twice as wide]\n`
+  );
+  assert.deepEqual(
+    params[0].choices,
+    [
+      { value: '"1:2"', label: "Half as wide" },
+      { value: '"2:1"', label: "Twice as wide" },
+    ]
+  );
+});
+
+test("string defaults are matched non-greedily and unescaped", () => {
+  const { params } = parseOf(
+    `/* [Main] */\n` +
+      `// Concatenation.\n` +
+      `joined = "a" + "b";\n` +
+      `// Quoted.\n` +
+      `quoted = "a\\"b";\n` +
+      `// Newline.\n` +
+      `multi = "a\\nb";\n`
+  );
+  const by = Object.fromEntries(params.map((p) => [p.name, p]));
+  // An expression is an expression, not the literal `a" + "b`.
+  assert.equal(by.joined.raw, true);
+  assert.equal(by.joined.default, '"a" + "b"');
+  assert.equal(by.quoted.default, 'a"b');
+  assert.equal(by.multi.default, "a\nb");
+});
+
+test("a duplicate parameter name fails the build, naming both lines", () => {
+  const msg = parseError(`/* [Main] */\n// A.\nwidth = 1;\n// Again.\nwidth = 2;\n`);
+  assert.match(msg, /duplicate parameter 'width'/);
+  assert.match(msg, /line 3/);
+});
+
+test("a wrapped comparison is not an assignment", () => {
+  // `echo(…)` and `assert(…)` calls long enough to wrap put `name == …` at the
+  // start of a line ending in `;`, which matched as an assignment and produced
+  // a phantom parameter shadowing the real control of the same name.
+  const { params } = parseOf(
+    `/* [Main] */\n` +
+      `// L.\n` +
+      `label = "x";\n` +
+      `echo("@review", "label",\n` +
+      `     label == "" ? "no text" : label);\n` +
+      `assert(\n` +
+      `  label != "forbidden", "nope");\n`
+  );
+  assert.deepEqual(
+    params.map((p) => [p.name, p.default]),
+    [["label", "x"]]
+  );
+});
+
+test("only CONTROLS collide: an assignment elsewhere sharing the name is fine", () => {
+  // Every parameter is set with `-D`, and `-D` overrides an in-file assignment
+  // wherever it appears — so a `[Hidden]` or preamble assignment of the same
+  // name does NOT defeat the control, and rejecting one would fail a program
+  // the engine runs correctly. scripts/check-scad-semantics.mjs asserts that
+  // against the pinned build rather than leaving it as a belief.
+  for (const src of [
+    `/* [Main] */\n// W.\nwidth = 1;\n/* [Hidden] */\nwidth = 2;\n`,
+    `/* [Hidden] */\nwidth = 2;\n/* [Main] */\n// W.\nwidth = 1;\n`,
+    `$fn = 64;\nwidth = 0;\n/* [Main] */\n// W.\nwidth = 1;\n`,
+    // Repeated assignment with no control involved at all: ordinary OpenSCAD.
+    `/* [Hidden] */\nstep = 1;\nstep = 2;\n/* [Main] */\n// W.\nwidth = 1;\n`,
+  ]) {
+    assert.equal(parseError(src), null, src);
+  }
+  // The control is still declared exactly once.
+  const { params } = parseOf(`/* [Main] */\n// W.\nwidth = 1;\n/* [Hidden] */\nwidth = 2;\n`);
+  assert.deepEqual(
+    params.map((p) => p.name),
+    ["width"]
+  );
+  // Two real controls of one name remains a build failure: both write the same
+  // variable, so the second silently shadows the first in the form.
+  assert.match(
+    parseError(`/* [Main] */\n// W.\nwidth = 1;\n// Again.\nwidth = 2;\n`),
+    /duplicate parameter 'width'/
+  );
+});
+
+test("two assignments on one line are two parameters, not one corrupted one", () => {
+  // PARAM_RE's value group is lazy, so it stops at the first `;` — unless what
+  // follows is neither whitespace nor a comment, in which case it backtracks
+  // and swallows the `;` too. `d = 1; e = 2;` produced a single `d` whose
+  // default was the string `1; e = 2`, and `e` never appeared at all.
+  const { params } = parseOf(
+    `/* [Main] */\n` +
+      `// D.\n` +
+      `d = 1; e = 2;\n` +
+      `// F.\n` +
+      `f = 3;\n`
+  );
+  assert.deepEqual(
+    params.map((p) => [p.name, p.type, p.default]),
+    [
+      ["d", "number", 1],
+      ["e", "number", 2],
+      ["f", "number", 3],
+    ]
+  );
+  // The doc block belongs to the first statement on the line; the second has
+  // none, which is right — there was nowhere to write one.
+  assert.equal(params[0].description, "D.");
+  assert.equal(params[1].description, "");
+});
+
+test("code resumes after a block comment that closed mid-line", () => {
+  // `a = 1; /* why */ b = 2;` is two parameters. Treating `/*` as the end of
+  // the line's code — which it is for `//`, but not for a comment that closes —
+  // lost `b` entirely.
+  const { params } = parseOf(
+    `/* [Main] */\n// A.\na = 1; /* explanatory */ b = 2;\n// C.\nc = 3;\n`
+  );
+  assert.deepEqual(
+    params.map((p) => [p.name, p.default]),
+    [
+      ["a", 1],
+      ["b", 2],
+      ["c", 3],
+    ]
+  );
+  // An UNCLOSED block comment still ends the line; scanScope carries that state
+  // to the next line.
+  const { params: open } = parseOf(`/* [Main] */\n// A.\na = 1; /* opens here\nb = 2;\n*/\n`);
+  assert.deepEqual(open.map((p) => p.name), ["a"]);
+});
+
+test("a block comment is whitespace wherever it sits in an assignment", () => {
+  // OpenSCAD reads every one of these as an ordinary assignment — asserted
+  // against the pinned build by scripts/check-scad-semantics.mjs, not assumed.
+  // ScadPub read the first as a raw-string default of `/* c */ 1` and lost the
+  // second and fourth entirely.
+  const { params } = parseOf(
+    `/* [Main] */\n` +
+      `// A.\na = /* c */ 1;\n` +
+      `// B.\nb /* c */ = 2;\n` +
+      `// C.\nc = 3 /* c */;\n` +
+      `// D.\nd = /* multi\n  line */ 4;\n`
+  );
+  assert.deepEqual(
+    params.map((p) => [p.name, p.type, p.default]),
+    [
+      ["a", "number", 1],
+      ["b", "number", 2],
+      ["c", "number", 3],
+      ["d", "number", 4],
+    ]
+  );
+});
+
+test("a multi-line comment inside an assignment keeps the whole parameter", () => {
+  // Asserting the COMPLETE object, not [name, type, default]: the parameter was
+  // produced correctly while its description, help and every annotation were
+  // silently discarded, because resuming after the comment reset the pending
+  // doc block as if this were an unrelated line.
+  const { params } = parseOf(
+    `/* [Main] */\n` +
+      `// D label. More help.\n` +
+      `// @advanced\n` +
+      `// @info Dimension | mm\n` +
+      `d = /* multi\n line */ 4;\n`
+  );
+  assert.equal(params.length, 1);
+  assert.deepEqual(params[0], {
+    name: "d",
+    section: "Main",
+    description: "D label.",
+    help: "D label. More help.",
+    type: "number",
+    default: 4,
+    advanced: true,
+    info: { label: "Dimension", unit: "mm" },
+  });
+});
+
+test("statements survive on both sides of a multi-line comment", () => {
+  // The resumed line used to be matched against PARAM_RE directly rather than
+  // being split into statements, so everything after the comment was swallowed
+  // into the first parameter's default.
+  for (const src of [
+    `/* [Main] */\n// A.\na = 1; /* multi\n line */ b = 2;\n`,
+    `/* [Main] */\n// A.\na = /* multi\n line */ 1; b = 2;\n`,
+  ]) {
+    const { params } = parseOf(src);
+    assert.deepEqual(
+      params.map((p) => [p.name, p.type, p.default]),
+      [
+        ["a", "number", 1],
+        ["b", "number", 2],
+      ],
+      src
+    );
+  }
+});
+
+test("a multi-line comment inside a module does not swallow the tail after it", () => {
+  // The code before an unclosed comment was carried to wherever it closed —
+  // including when that code opened a module body, so `} b = 2;` was read as
+  // `module m() { … b = 2;` and matched nothing.
+  const { params } = parseOf(
+    `/* [Main] */\nmodule m() { /* multi\n line */ inner = 9;\n} b = 2;\n// C.\nc = 3;\n`
+  );
+  assert.deepEqual(
+    params.map((p) => [p.name, p.default]),
+    [
+      ["b", 2],
+      ["c", 3],
+    ]
+  );
+  assert.ok(!params.some((p) => p.name === "inner"), "a module's own local is not a control");
+});
+
+test("a multi-line comment before a module's brace does not eat the tail after it", () => {
+  // The sibling of the module-tail case above, with the `{` on the line that
+  // CLOSES the comment rather than the one that opens it. The continuation was
+  // started at depth 0 (correctly, the line had not entered a body yet) and
+  // then never cleared when the closing line raised the depth, so `} h = 3;`
+  // was read as `module foo() … h = 3;` and h vanished.
+  for (const [what, src] of [
+    ["no comment", `/* [Main] */\nmodule foo() {\n q = 2;\n} h = 3;\n`],
+    ["comment before the brace", `/* [Main] */\nmodule foo() /* c */ {\n q = 2;\n} h = 3;\n`],
+    ["multi-line comment, brace on the closing line", `/* [Main] */\nmodule foo() /* c\nc */ {\n q = 2;\n} h = 3;\n`],
+  ]) {
+    const { params } = parseOf(src);
+    assert.deepEqual(params.map((p) => [p.name, p.default]), [["h", 3]], what);
+  }
+});
+
+test("a module neither hides what precedes it nor leaks what is inside it", () => {
+  // The old line-wise scanner asked "did this LINE end at depth 0", so an
+  // assignment sharing a line with a module lost — before it, after it, or
+  // both — while a module local on its own line could be collected as a
+  // control. The scanner is source-order now; each shape's expected controls
+  // are pinned against the pinned engine too (scripts/check-scad-semantics.mjs).
+  for (const [what, body, expected] of [
+    ["before a module", `a = 1; module m() { z = 9; }`, ["a"]],
+    ["either side", `a = 1; module m() { z = 9; } b = 2;`, ["a", "b"]],
+    ["a body with its own semicolons", `a = 1; module m() { p = 1; q = 2; } b = 2;`, ["a", "b"]],
+    ["two modules around one", `module m() { z = 1; } a = 1; module n() { y = 2; }`, ["a"]],
+    ["nested braces, then a tail", `module m() { if (true) { z = 9; } } a = 1;`, ["a"]],
+    ["a continued assignment before a module", `a = /* x\ny */ 1; module m() { z = 9; } b = 2;`, ["a", "b"]],
+    ["a continued assignment after a module", `module m() { z = 9; } a = /* x\ny */ 1;`, ["a"]],
+    ["a function definition, then an assignment", `function f(x) = x*2; a = f(2);`, ["a"]],
+  ]) {
+    const { params } = parseOf(`/* [Main] */\n${body}\n`);
+    assert.deepEqual(params.map((p) => p.name), expected, what);
+  }
+});
+
+test("use/include end at '>', not at a semicolon", () => {
+  // They are the one statement form with no terminator the scanner would
+  // otherwise recognise, so without this the rest of the file accumulated into
+  // one never-ending statement and every section header after it was lost.
+  // The gap before `<` is arbitrary whitespace, and a bound on how much of the
+  // buffer the scanner would look at broke on it: `include` is already seven
+  // characters, so two spaces stopped it being recognised and everything after
+  // it — section headers included — vanished into one unterminated statement.
+  for (const directive of [
+    "use <dep.scad>",
+    "include <dep.scad>",
+    "include  <dep.scad>",
+    "include\t\t<dep.scad>",
+    "use      <dep.scad>",
+    "include\n<dep.scad>",
+    // No comment-inside-the-directive case: OpenSCAD's lexer reads `use <…>`
+    // as one token and refuses the file (scripts/check-scad-semantics.mjs).
+  ])
+    // Before the first section header and after it: the first is what hides a
+    // header, the second is what swallows the parameters under one.
+    for (const [where, src] of [
+      ["before the header", `${directive}\n/* [Main] */\n// A.\na = 1;\n/* [More] */\n// B.\nb = 2;\n`],
+      ["after the header", `/* [Main] */\n${directive}\n// A.\na = 1;\n/* [More] */\n// B.\nb = 2;\n`],
+    ]) {
+      const { params, sections } = parseOf(src);
+      const what = `${JSON.stringify(directive)} ${where}`;
+      assert.deepEqual(
+        params.map((p) => [p.name, p.section]),
+        [["a", "Main"], ["b", "More"]],
+        what
+      );
+      assert.ok(sections.includes("More"), `${what}: the later section header survives`);
+    }
+
+  // And the token is still matched exactly: a `<` that is less-than, and a
+  // name that merely starts with one of the keywords, are untouched.
+  assert.deepEqual(
+    parseOf(`/* [Main] */\n// A.\na = 1 < 2 ? 3 : 4;\n// U.\nusex = 5;\n`).params.map((p) => p.name),
+    ["a", "usex"]
+  );
+});
+
+test("a comment marker inside a string is not a comment", () => {
+  // The blanking pass is quote-aware, or a value would lose its own text.
+  const { params } = parseOf(
+    `/* [Main] */\n// A.\na = "keep /* this */ text";\n// B.\nb = "and // this";\n`
+  );
+  assert.deepEqual(
+    params.map((p) => [p.name, p.default]),
+    [
+      ["a", "keep /* this */ text"],
+      ["b", "and // this"],
+    ]
+  );
+});
+
+test("a semicolon inside a value or a comment is not a statement boundary", () => {
+  // The split has to be quote-aware, and has to stop at a comment: a hint is
+  // part of the statement it follows, not a statement of its own.
+  const { params } = parseOf(
+    `/* [Main] */\n` +
+      `// Label.\n` +
+      `label = "a;b";\n` +
+      `// Mode.\n` +
+      `mode = "a"; // [a, b]\n` +
+      `// Wall.\n` +
+      `wall = 2; // in mm; really\n`
+  );
+  const by = Object.fromEntries(params.map((p) => [p.name, p]));
+  assert.equal(by.label.default, "a;b");
+  assert.deepEqual(by.mode.choices.map((c) => c.value), ["a", "b"], "the hint still binds");
+  assert.equal(by.wall.default, 2);
+  assert.deepEqual(params.map((p) => p.name), ["label", "mode", "wall"]);
+});
+
+test("a parameter is read past a comment or block that closed on its own line", () => {
+  // Desktop OpenSCAD reads all three; the scanner tracked the scope but only
+  // ever consulted the tail on a line that STARTED inside one, so the
+  // single-line forms silently dropped the parameter.
+  const { params } = parseOf(
+    `/* [Main] */\n` +
+      `// A.\n` +
+      `/* mm */ a = 1;\n` +
+      `// B.\n` +
+      `module m() { inner = 9; } b = 2;\n` +
+      `// C.\n` +
+      `c = 3; /* trailing */\n`
+  );
+  assert.deepEqual(
+    params.map((p) => [p.name, p.default]),
+    [
+      ["a", 1],
+      ["b", 2],
+      ["c", 3],
+    ]
+  );
+  // The doc block above the line still belongs to it.
+  assert.equal(params[0].description, "A.");
+  // And the module's own body is still not Customizer surface.
+  assert.ok(!params.some((p) => p.name === "inner"));
+});
+
+test("a section marker survives a blank line before its header", () => {
+  // Both markers apply to the NEXT section header, and a blank line between
+  // the two is how anyone writes it. Inside a section blank lines already kept
+  // the pending state; before the first one they cleared it.
+  const advanced = parseOf(`// @advanced\n\n/* [Tuning] */\n// A.\na = 1;\n`);
+  assert.equal(advanced.params[0].advanced, true);
+  const collapsed = parseOf(`// @collapsed\n\n/* [Tuning] */\n// A.\na = 1;\n`);
+  assert.deepEqual(collapsed.collapsedSections, ["Tuning"]);
+});
+
+test("@advanced above the first section header is honoured", () => {
+  // Its own documentation names this placement; the null-section guard dropped
+  // it silently.
+  const { params } = parseOf(
+    `// @advanced\n/* [Tuning] */\n// A.\na = 1;\n/* [Main] */\n// B.\nb = 2;\n`
+  );
+  assert.equal(params.find((p) => p.name === "a").advanced, true);
+  assert.equal(params.find((p) => p.name === "b").advanced, undefined);
+});
+
+test("a malformed @collapsed gets its own message, not the unknown-annotation one", () => {
+  // The unknown-annotation error listed @collapsed among the valid annotations
+  // while being the error that rejected it.
+  const msg = parseError(`// @collapsed extra\n/* [Main] */\n// A.\na = 1;\n`);
+  assert.match(msg, /malformed @collapsed annotation/);
+  assert.doesNotMatch(msg, /unknown annotation/);
 });

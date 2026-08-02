@@ -36,9 +36,14 @@ import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "
 import { humanize, parseParams } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
 import { createDestinationRegistry, reconcileGenerated } from "./lib/destinations.mjs";
-import { sanitizeSvg } from "./lib/svg-sanitize.mjs";
+import { sanitizeBrowserFacingSvg } from "./lib/svg-sanitize.mjs";
 import { resolveFileField } from "./lib/prose-files.mjs";
 import { splitHelpMarkdown } from "./lib/help-file.mjs";
+import { checkHelpShape } from "../src/lib/helpShape.mjs";
+// TypeScript, imported directly: Node strips the types (the repo already
+// requires that, see CLAUDE.md), and schema.ts's only value import is
+// helpShape.mjs, so no app code is dragged into the build script.
+import { validateSchema } from "../src/lib/schema.ts";
 import { slugifyPresetNames } from "./lib/preset-slug.mjs";
 import { resolveWorkerDependencyClosure } from "./lib/worker-deps.mjs";
 import { generatePwaAssets, commitPwaBatch } from "./lib/pwa-assets.mjs";
@@ -46,6 +51,7 @@ import { scadpubVersion } from "./lib/version.mjs";
 import { componentVersions } from "./lib/dep-versions.mjs";
 import {
   applyGroupSpec,
+  applyTopLevelScalars,
   parseColors,
   parseDir,
   parseFileImport,
@@ -91,15 +97,13 @@ export { firstSentence, parseEnumHint, parseParams } from "./lib/params.mjs";
 export { resolveFileField } from "./lib/prose-files.mjs";
 export { splitHelpMarkdown } from "./lib/help-file.mjs";
 
-// Every top-level key gen-schema (or its helpers) reads from scadpub.config.json.
-// A key outside this set is almost always a typo (`popups`, `fontfallback`, …)
-// that would otherwise be silently ignored, so, matching gen-schema's fail-fast
-// convention for unknown *nested* keys (colour tokens, license fields): an
-// unrecognised top-level key fails the build. `$schema` is allowed so a config
-// can point at a JSON Schema for editor tooling without tripping the check.
-// Derived from scripts/lib/config-spec.mjs: the single declarative surface
-// description. Rather than hand-maintained here; re-exported (not only used
-// internally) because tests/gen-schema.test.mjs imports it directly.
+// Every top-level key gen-schema (or its helpers) reads from scadpub.config.json,
+// derived from scripts/lib/config-spec.mjs rather than hand-maintained here. A
+// key outside the set is almost always a typo (`popups`, `fontfallback`, …) that
+// would otherwise be silently ignored, so an unrecognised top-level key fails
+// the build, matching the fail-fast convention for unknown *nested* keys (colour
+// tokens, license fields). `$schema` is allowed so a config can point at a JSON
+// Schema for editor tooling. Re-exported because tests import it directly.
 export { KNOWN_TOP_LEVEL_KEYS };
 
 // Extensions tried, in order, for a `designs[].presets.images` DIRECTORY
@@ -113,6 +117,16 @@ const PRESET_IMAGE_EXTENSIONS = [".svg", ".png", ".webp"];
 // validated against its key set (see parseStrings): a config key that isn't a
 // real catalogue key would otherwise be silently ignored by every `t()` call.
 const EN_CATALOG_PATH = fileURLToPath(new URL("../src/locales/en.json", import.meta.url));
+
+// Read once, not once per generate(): the catalogue is part of the app, so it
+// cannot change between calls within a process, and the test suite calls
+// generate() 250-odd times.
+let enCatalogKeysCache = null;
+function enCatalogKeys() {
+  return (enCatalogKeysCache ??= Object.keys(
+    JSON.parse(readFileSync(EN_CATALOG_PATH, "utf-8"))
+  ));
+}
 
 // Fail early and clearly when a configured path doesn't exist: these are the
 // most common ways a config drifts from the designs it points at.
@@ -131,9 +145,12 @@ const makeMustExist = (configPath) => (abs, what) => {
 // <script> string literal, so restrict it to a safe, path/URL/script-friendly
 // character set. Used for both the app id and every design id.
 const checkId = (id, what = "design id") => {
-  if (typeof id !== "string" || !/^[A-Za-z0-9._-]+$/.test(id))
+  // "." and ".." match the charset but are path traversal, not names: the id is
+  // spliced into `${id}.scad`, into a served URL, and (for the app id) into an
+  // inline <script> string literal in index.html.
+  if (typeof id !== "string" || !/^[A-Za-z0-9._-]+$/.test(id) || /^\.+$/.test(id))
     throw new Error(
-      `gen-schema: ${what} ${JSON.stringify(id)} must match [A-Za-z0-9._-]+`
+      `gen-schema: ${what} ${JSON.stringify(id)} must match [A-Za-z0-9._-]+ and not be dots alone`
     );
   return id;
 };
@@ -141,9 +158,14 @@ const checkId = (id, what = "design id") => {
 // Dotted extension (incl. the leading dot) of a relative path, or "" when it
 // has none. `dot > 0` so a leading-dot "dotfile" with no real extension yields
 // "" rather than the whole basename.
-const extOf = (relPath) => {
+export const extOf = (relPath) => {
   const dot = relPath.lastIndexOf(".");
-  return dot > 0 ? relPath.slice(dot) : "";
+  const ext = dot > 0 ? relPath.slice(dot) : "";
+  // The result is spliced into a generated destination filename
+  // (`${id}-icon${ext}`), so constrain it to a real extension. A source path
+  // that resolves fine but ends in something like `.svg/../../x` must not be
+  // able to steer that write out of the staged tree.
+  return /^\.[A-Za-z0-9]+$/.test(ext) ? ext : "";
 };
 
 // Load + sanity-check the config. Catches genuinely typo'd / stale top-level
@@ -170,10 +192,11 @@ function loadConfig(configPath) {
 // and is computed separately, below, so it can feed both `generatePwaAssets`
 // and (unchanged) designs.json's own flat `themeColor`/`themeColorLight` keys.
 function parseIdentity(config) {
-  const TITLE = config.title ?? "ScadPub";
+  // title/description carry CONFIG_SPEC descriptors (including their defaults);
+  // applying them is what turns `"title": 42` into a named gen-schema error
+  // instead of a TypeError from vite-config three steps later.
+  const { title: TITLE, description: DESCRIPTION } = applyTopLevelScalars(config, ["title", "description"]);
   const ID = checkId(config.id ?? "scadpub", "config 'id'");
-  const DESCRIPTION =
-    config.description ?? "Configure and export designs in your browser.";
   // Document / manifest language and text direction, validated so they're safe
   // to interpolate into the generated <html lang dir> attributes and the manifest.
   const LANG = parseLang(config.lang);
@@ -189,9 +212,8 @@ function parseIdentity(config) {
 // last-resort fallback family (config.render.fontFallback) so an imported font
 // can't hijack Fontconfig's global default; generated into the served tree
 // (and hashed into renderHash) so the matching rules stay config-driven.
-// `fonts`/`fontFallback` moved under `render` (from the top level) since this
-// commit: both are genuine render inputs, so they stay part of renderHash
-// exactly as before; only where they're READ from the config changed.
+// `fonts`/`fontFallback` live under `render` in the config: both are genuine
+// render inputs and are part of renderHash.
 // `register`/`checkContained` are the H5/H6 helpers from createAssetTools:
 // a source-tree font is checked against SOURCE containment (a font path is a
 // source-owned path, like a design or asset) and its destination is
@@ -199,8 +221,10 @@ function parseIdentity(config) {
 // source directories collide loudly instead of one silently overwriting the
 // other. `fontCopies` collects every dest this call actually wrote: the
 // tracked Liberation fallbacks under public/fonts are never written here (the
-// "already present" branch below is a no-op), so they never enter the list
-// and stay outside the M8 generated-font lifecycle the caller reconciles.
+// "already present" branch below is a no-op, and a config font that would
+// SHADOW one is refused outright by the isTrackedFile check), so they never
+// enter the list and stay outside the M8 generated-font lifecycle the caller
+// reconciles.
 //
 // M9: the transient-copy warning: the M8 reconciliation above (see
 // destinations.mjs) means a font copied from outside the current build's own
@@ -247,12 +271,35 @@ function runGitQuiet(dir, args) {
 //     is an ordinary same-repo change a contributor means to commit, not a
 //     stray deployment artifact.
 export function isRiskyExternalFontCopy(outPublicDir, srcAbs, git = runGitQuiet) {
+  return isRiskyExternalFontCopyIn(gitContext(outPublicDir, git), srcAbs);
+}
+
+/** The two `git` answers isRiskyExternalFontCopy needs, both of which depend
+ *  only on the destination directory. Probed ONCE per build rather than once
+ *  per bundled font: each is a subprocess, and a six-face deployment was
+ *  spawning a dozen of them to ask the same two questions. */
+function gitContext(outPublicDir, git = runGitQuiet) {
   const toplevel = git(outPublicDir, ["rev-parse", "--show-toplevel"]);
-  if (!toplevel) return false; // not inside any git working tree
+  if (!toplevel) return null; // not inside any git working tree
   const branch = git(outPublicDir, ["symbolic-ref", "-q", "--short", "HEAD"]);
-  if (!branch) return false; // detached HEAD: a disposable build-only clone
-  const rel = relative(toplevel, srcAbs);
+  if (!branch) return null; // detached HEAD: a disposable build-only clone
+  return { toplevel };
+}
+
+function isRiskyExternalFontCopyIn(ctx, srcAbs) {
+  if (!ctx) return false;
+  const rel = relative(ctx.toplevel, srcAbs);
   return rel === ".." || rel.startsWith(`..${sep}`);
+}
+
+// Whether `abs` is a file git already tracks. Used to tell a bundled font that
+// ships with the app (tracked under public/fonts) from a previous run's
+// transient copy of an external one (untracked): only the latter is this tool's
+// to overwrite and later reconcile away. Outside a git working tree — a release
+// tarball, an npm-packed tree — nothing is tracked and nothing can be committed
+// by accident, so the answer is correctly "no".
+export function isTrackedFile(abs, git = runGitQuiet) {
+  return git(dirname(abs), ["ls-files", "--error-unmatch", "--", abs]) !== "";
 }
 
 function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained, register, fontCopies } = {}) {
@@ -268,6 +315,8 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
   // already-present public/fonts fallback) so hashing works before the copy.
   const fontWrites = [];
   const fontPaths = {};
+  // Probed once for the whole FONTS loop below (see gitContext).
+  const gitCtx = outPublicDir ? gitContext(outPublicDir) : null;
   const FONTS = (config.render?.fonts ?? []).map((entry) => {
     const name = String(entry).split(/[\\/]/).pop();
     const srcAbs = resolve(SOURCE, entry);
@@ -275,11 +324,24 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
       if (existsSync(srcAbs) && statSync(srcAbs).isFile()) {
         checkContained?.(srcAbs, `font '${entry}'`, configPath);
         const dest = join(outPublicDir, "fonts", name);
+        // The destination is keyed on the basename, so a config listing
+        // `myfonts/LiberationSans-Regular.ttf` aims at a TRACKED bundled font.
+        // Overwriting it puts the copy into the generated manifest, and the
+        // next build against a config without that entry deletes tracked repo
+        // content. A shadowed bundled font is a real conflict either way.
+        if (existsSync(dest) && isTrackedFile(dest)) {
+          throw new Error(
+            `gen-schema: font '${entry}' would overwrite the bundled font at\n  ${dest}\n` +
+              `  (a tracked file that ships with ScadPub; a config font may not shadow one)\n` +
+              `  Rename the font file, or drop the entry and reference '${name}' directly.\n` +
+              `  (referenced from ${configPath} — check its 'render.fonts')`
+          );
+        }
         register?.(dest, `font '${entry}'`);
         fontWrites.push({ src: srcAbs, dest });
         fontCopies?.push(dest);
         fontPaths[name] = srcAbs; // source bytes == the bytes that will be copied
-        if (isRiskyExternalFontCopy(outPublicDir, srcAbs)) {
+        if (isRiskyExternalFontCopyIn(gitCtx, srcAbs)) {
           console.warn(
             `gen-schema: '${name}' is being copied into public/fonts/ from outside this ` +
               `ScadPub checkout (${srcAbs}).\n` +
@@ -341,6 +403,21 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
       }
     }
     FONT_FAMILIES.sort((a, b) => a.localeCompare(b));
+    // docs/config.md states the rule ("must name one of the bundled families")
+    // but nothing enforced it: a typo pinned fonts.conf's last-resort family to
+    // a name Fontconfig cannot resolve, which is precisely the state the pin
+    // exists to prevent. The sibling font-file check already fails this way.
+    if (
+      FONT_FALLBACK !== null &&
+      !FONT_FAMILIES.some((f) => f.toLowerCase() === FONT_FALLBACK.toLowerCase())
+    ) {
+      throw new Error(
+        `gen-schema: 'render.fontFallback' names ${JSON.stringify(FONT_FALLBACK)}, ` +
+          `which is not one of the bundled font families.\n` +
+          `  Bundled: ${FONT_FAMILIES.map((f) => JSON.stringify(f)).join(", ") || "(none)"}\n` +
+          `  (check 'render.fonts' — the fallback must name a family this build ships)`
+      );
+    }
     FONT_FACES.sort(
       (a, b) => a.family.localeCompare(b.family) || a.style.localeCompare(b.style)
     );
@@ -360,8 +437,7 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
 // the operator-input trust boundary + public/_headers instead.
 function copyBrowserFacing(src, dest) {
   if (/\.svg$/i.test(src)) {
-    const { text } = sanitizeSvg(readFileSync(src, "utf-8"));
-    writeFileSync(dest, text);
+    writeFileSync(dest, sanitizeBrowserFacingSvg(readFileSync(src, "utf-8"), { src }));
   } else {
     copyFileSync(src, dest);
   }
@@ -408,6 +484,18 @@ function copyLogoAssets(config, CONFIG_DIR, outScadDir, mustExist, register) {
   return { light: copyLogo(lightSrc), dark: copyLogo(darkSrc) };
 }
 
+// A design's root source must be a .scad file. Anything else is parsed as
+// OpenSCAD anyway AND has its `<name>.json` sibling read as a parameterSets
+// file, so a config naming `plate.json` would try to parse the presets as a
+// design and the design as presets.
+const checkScadFile = (file, id) => {
+  if (typeof file !== "string" || !/\.scad$/i.test(file.trim()))
+    throw new Error(
+      `gen-schema: design '${id}' 'file' must be a .scad path (got ${JSON.stringify(file)})`
+    );
+  return file.trim();
+};
+
 // The design list from the config, or auto-discovered root .scad files.
 function resolveDesignList(config, SOURCE) {
   // Shared validator for a config `designs[].presets.images` map entry: an
@@ -440,6 +528,15 @@ function resolveDesignList(config, SOURCE) {
     }
     return { kind: "map", map: checkStringMap(raw, id, "presets.images") };
   };
+  // Absent means "auto-discover"; present-but-not-a-non-empty-array is a
+  // mistake. Falling through to auto-discovery for both inverted the fail-fast
+  // convention every other key follows: `"designs": {}` built green, silently
+  // ignoring the list its author wrote.
+  if (config.designs != null && (!Array.isArray(config.designs) || !config.designs.length))
+    throw new Error(
+      "gen-schema: 'designs', when set, must be a non-empty array of design objects.\n" +
+        "  Omit the key entirely to auto-discover *.scad in 'source'."
+    );
   if (Array.isArray(config.designs) && config.designs.length) {
     // Two designs sharing an id would clobber each other's generated
     // <id>-icon/<id>-doc output and collide in storage/URLs (#d=<id>).
@@ -478,7 +575,7 @@ function resolveDesignList(config, SOURCE) {
       return {
         id,
         label: d.label ?? humanize(d.id),
-        file: d.file ?? `${d.id}.scad`,
+        file: checkScadFile(d.file ?? `${d.id}.scad`, id),
         // Heavy designs skip the debounced auto-render (the user renders on demand).
         heavy: d.heavy ?? false,
         // Optional dropdown grouping header (designs sharing a group cluster).
@@ -494,6 +591,102 @@ function resolveDesignList(config, SOURCE) {
       const id = f.replace(/\.scad$/, "");
       return { id, label: humanize(id), file: f, heavy: false, group: null, presetImagesSrc: null };
     });
+}
+
+// The named parameter sets in a design's sibling parameterSets file. A syntax
+// error there is the author's typo, not a crash site: JSON.parse's own message
+// names neither the file nor the design.
+function readPresetNames(presetAbs, presetRel, id) {
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(presetAbs, "utf-8"));
+  } catch (e) {
+    throw new Error(
+      `gen-schema: design '${id}' parameterSets file '${presetRel}' is not valid JSON:\n` +
+        `  ${e.message}`,
+      { cause: e }
+    );
+  }
+  return Object.keys(parsed?.parameterSets ?? {});
+}
+
+function resolvePresetImages({
+  presetImagesSrc,
+  presetNames,
+  presetRel,
+  d,
+  CONFIG_DIR,
+  outScadDir,
+  mustExist,
+  register,
+}) {
+  // Bundled-preset thumbnails (`designs[].presets.images`), either form:
+  //   - MAP: each key must name an actual preset in the sibling
+  //     parameterSets file. The same typo-protection stance as the rest of
+  //     the config, so a stale/misspelled preset name fails the build
+  //     instead of silently rendering a text-only card forever. Each value
+  //     is a config-relative image path, copied under a deterministic
+  //     `<id>-preset-<n>.<ext>` name (n = insertion order: the preset NAME
+  //     itself, not the filename, is what the UI keys off of).
+  //   - DIRECTORY: every bundled preset's image is looked up by slugifying
+  //     its name (scripts/lib/preset-slug.mjs) and trying the supported
+  //     extensions in turn. A preset with no matching file has no
+  //     image (preset images are optional per preset either way) but the
+  //     directory itself must exist, and the match count is logged so a
+  //     wrong-but-existing directory (e.g. every name misspelled) is
+  //     visible in the build log rather than silently yielding zero images.
+  let presetImages;
+  if (presetImagesSrc?.kind === "map" && Object.keys(presetImagesSrc.map).length) {
+    const presetNameSet = new Set(presetNames);
+    presetImages = {};
+    Object.entries(presetImagesSrc.map).forEach(([presetName, rel], i) => {
+      if (!presetNameSet.has(presetName))
+        throw new Error(
+          `gen-schema: design '${d.id}' 'presets.images["${presetName}"]' does not match any bundled ` +
+            `preset name in '${presetRel}'`
+        );
+      const src = mustExist(
+        resolve(CONFIG_DIR, rel),
+        `design '${d.id}' presets.images["${presetName}"] '${rel}'`
+      );
+      const ext = extOf(rel);
+      const outName = `${d.id}-preset-${i}${ext}`;
+      const dest = join(outScadDir, outName);
+      register(dest, `design '${d.id}' presets.images["${presetName}"]`);
+      copyBrowserFacing(src, dest);
+      presetImages[presetName] = `scad/${outName}`;
+    });
+  } else if (presetImagesSrc?.kind === "dir") {
+    const dirRel = presetImagesSrc.dir;
+    const dirAbs = mustExist(resolve(CONFIG_DIR, dirRel), `design '${d.id}' presets.images directory '${dirRel}'`);
+    if (!statSync(dirAbs).isDirectory())
+      throw new Error(
+        `gen-schema: design '${d.id}' 'presets.images' '${dirRel}' is not a directory:\n  ${dirAbs}`
+      );
+    const slugs = slugifyPresetNames(presetNames);
+    const dirEntries = new Set(readdirSync(dirAbs));
+    presetImages = {};
+    let matched = 0;
+    for (const presetName of presetNames) {
+      const fileName = PRESET_IMAGE_EXTENSIONS.map((ext) => `${slugs.get(presetName)}${ext}`).find((f) =>
+        dirEntries.has(f)
+      );
+      if (!fileName) continue;
+      const ext = extOf(fileName);
+      const outName = `${d.id}-preset-${matched}${ext}`;
+      const dest = join(outScadDir, outName);
+      register(dest, `design '${d.id}' presets.images["${presetName}"]`);
+      copyBrowserFacing(join(dirAbs, fileName), dest);
+      presetImages[presetName] = `scad/${outName}`;
+      matched++;
+    }
+    console.log(
+      `gen-schema: design '${d.id}' presets.images: ${matched}/${presetNames.length} preset(s) ` +
+        `matched an image in '${dirRel}'`
+    );
+    if (!Object.keys(presetImages).length) presetImages = undefined;
+  }
+  return presetImages;
 }
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
@@ -565,75 +758,17 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       copyFileSync(src, dest);
       doc = `scad/${name}`;
     }
-    // Bundled-preset thumbnails (`designs[].presets.images`), either form:
-    //   - MAP: each key must name an actual preset in the sibling
-    //     parameterSets file. The same typo-protection stance as the rest of
-    //     the config, so a stale/misspelled preset name fails the build
-    //     instead of silently rendering a text-only card forever. Each value
-    //     is a config-relative image path, copied under a deterministic
-    //     `<id>-preset-<n>.<ext>` name (n = insertion order: the preset NAME
-    //     itself, not the filename, is what the UI keys off of).
-    //   - DIRECTORY: every bundled preset's image is looked up by slugifying
-    //     its name (scripts/lib/preset-slug.mjs) and trying the supported
-    //     extensions in turn. A preset with no matching file has no
-    //     image (preset images are optional per preset either way) but the
-    //     directory itself must exist, and the match count is logged so a
-    //     wrong-but-existing directory (e.g. every name misspelled) is
-    //     visible in the build log rather than silently yielding zero images.
-    let presetImages;
-    const presetNames = presets.length
-      ? Object.keys(JSON.parse(readFileSync(presetAbs, "utf-8")).parameterSets ?? {})
-      : [];
-    if (presetImagesSrc?.kind === "map" && Object.keys(presetImagesSrc.map).length) {
-      const presetNameSet = new Set(presetNames);
-      presetImages = {};
-      Object.entries(presetImagesSrc.map).forEach(([presetName, rel], i) => {
-        if (!presetNameSet.has(presetName))
-          throw new Error(
-            `gen-schema: design '${d.id}' 'presets.images["${presetName}"]' does not match any bundled ` +
-              `preset name in '${presetRel}'`
-          );
-        const src = mustExist(
-          resolve(CONFIG_DIR, rel),
-          `design '${d.id}' presets.images["${presetName}"] '${rel}'`
-        );
-        const ext = extOf(rel);
-        const outName = `${d.id}-preset-${i}${ext}`;
-        const dest = join(outScadDir, outName);
-        register(dest, `design '${d.id}' presets.images["${presetName}"]`);
-        copyBrowserFacing(src, dest);
-        presetImages[presetName] = `scad/${outName}`;
-      });
-    } else if (presetImagesSrc?.kind === "dir") {
-      const dirRel = presetImagesSrc.dir;
-      const dirAbs = mustExist(resolve(CONFIG_DIR, dirRel), `design '${d.id}' presets.images directory '${dirRel}'`);
-      if (!statSync(dirAbs).isDirectory())
-        throw new Error(
-          `gen-schema: design '${d.id}' 'presets.images' '${dirRel}' is not a directory:\n  ${dirAbs}`
-        );
-      const slugs = slugifyPresetNames(presetNames);
-      const dirEntries = new Set(readdirSync(dirAbs));
-      presetImages = {};
-      let matched = 0;
-      for (const presetName of presetNames) {
-        const fileName = PRESET_IMAGE_EXTENSIONS.map((ext) => `${slugs.get(presetName)}${ext}`).find((f) =>
-          dirEntries.has(f)
-        );
-        if (!fileName) continue;
-        const ext = extOf(fileName);
-        const outName = `${d.id}-preset-${matched}${ext}`;
-        const dest = join(outScadDir, outName);
-        register(dest, `design '${d.id}' presets.images["${presetName}"]`);
-        copyBrowserFacing(join(dirAbs, fileName), dest);
-        presetImages[presetName] = `scad/${outName}`;
-        matched++;
-      }
-      console.log(
-        `gen-schema: design '${d.id}' presets.images: ${matched}/${presetNames.length} preset(s) ` +
-          `matched an image in '${dirRel}'`
-      );
-      if (!Object.keys(presetImages).length) presetImages = undefined;
-    }
+    const presetNames = presets.length ? readPresetNames(presetAbs, presetRel, d.id) : [];
+    const presetImages = resolvePresetImages({
+      presetImagesSrc,
+      presetNames,
+      presetRel,
+      d,
+      CONFIG_DIR,
+      outScadDir,
+      mustExist,
+      register,
+    });
     // `reviewLabels`: each declared parameter's own `// @review "<label>"`
     // annotation (see scripts/lib/params.mjs and docs/annotations.md). The
     // sole source, with no config-level override. A label can only ever be
@@ -785,21 +920,40 @@ function resolveHelpPane(raw, CONFIG_DIR, mustExist, what) {
 // CONFIG_SPEC.help's comment): this is the only pre-processing it gets.
 export function resolveHelp(raw, CONFIG_DIR, mustExist) {
   if (raw == null) return null;
-  // `help` has never had its own shape check (see CONFIG_SPEC.help's
-  // comment: "passed through verbatim"). A non-object value passes through
-  // completely unchanged here too, exactly as before this function existed.
-  // Only a genuine object gets the 'file' treatment below.
-  if (typeof raw !== "object" || Array.isArray(raw)) return raw;
+  // `help`'s contents are passed through verbatim (see CONFIG_SPEC.help's
+  // comment), but its SHAPE is checked here like every other block: a
+  // non-object used to reach the browser untouched and fail in
+  // src/lib/schema.ts at runtime, so `"help": 42` built green and broke the
+  // deployed app.
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new Error(
+      `gen-schema: 'help', when set, must be an object (got ${JSON.stringify(raw)})`
+    );
   const help = resolveHelpPane(raw, CONFIG_DIR, mustExist, "help");
-  if (!Array.isArray(help.tabs)) return help;
-  return {
-    ...help,
-    tabs: help.tabs.map((tab, i) =>
-      tab && typeof tab === "object" && !Array.isArray(tab)
-        ? resolveHelpPane(tab, CONFIG_DIR, mustExist, `help.tabs[${i}]`)
-        : tab
-    ),
-  };
+  const resolved = Array.isArray(help.tabs)
+    ? {
+        ...help,
+        tabs: help.tabs.map((tab, i) => {
+          if (!tab || typeof tab !== "object" || Array.isArray(tab))
+            throw new Error(
+              `gen-schema: 'help.tabs[${i}]' must be an object (got ${JSON.stringify(tab)})`
+            );
+          return resolveHelpPane(tab, CONFIG_DIR, mustExist, `help.tabs[${i}]`);
+        }),
+      }
+    : help;
+  // The full contract, on what the app will actually receive — AFTER the
+  // `file` panes have been resolved into `intro`/`sections`, since that is what
+  // reaches designs.json and what the runtime validator will judge. The same
+  // module states it for both (src/lib/helpShape.mjs), so "malformed help fails
+  // the build" is now true of every shape the runtime rejects rather than of
+  // the two this function happened to check.
+  checkHelpShape(resolved, (msg) => {
+    throw new Error(
+      `gen-schema: ${msg}\n  (the app rejects this at startup, so it would fail the deployed site)`
+    );
+  });
+  return resolved;
 }
 
 // Optional raw-CSS escape hatch. Unlike `colors` — a safe, validated token map
@@ -810,16 +964,17 @@ export function resolveHelp(raw, CONFIG_DIR, mustExist) {
 // Lives under the (gitignored, auto-wiped) scad output dir, so it never goes
 // stale or gets committed. Returns its served URL, or null.
 function copyExtraCss(config, CONFIG_DIR, outScadDir, mustExist, register) {
-  if (!config.extraCss) return null;
+  const { extraCss: EXTRA_CSS } = applyTopLevelScalars(config, ["extraCss"]);
+  if (!EXTRA_CSS) return null;
   const abs = mustExist(
-    resolve(CONFIG_DIR, config.extraCss),
-    `extraCss '${config.extraCss}'`
+    resolve(CONFIG_DIR, EXTRA_CSS),
+    `extraCss '${EXTRA_CSS}'`
   );
   const name = abs.split(/[\\/]/).pop();
   // H6: an extraCss basename equal to a design's would silently overwrite that
   // design file, so register() fails the build naming both owners.
   const dest = join(outScadDir, name);
-  register(dest, `extraCss '${config.extraCss}'`);
+  register(dest, `extraCss '${EXTRA_CSS}'`);
   copyFileSync(abs, dest);
   return `scad/${name}`;
 }
@@ -866,6 +1021,11 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
     for (const preset of d.presets) shell.add(`scad/${preset}`);
     if (d.icon) shell.add(d.icon);
     if (d.doc) shell.add(d.doc);
+    // The gallery's artwork and the preset cards' thumbnails: a deployment
+    // using either renders a broken screen offline without them, exactly like
+    // a missing icon.
+    if (d.image) shell.add(d.image);
+    for (const url of Object.values(d.presetImages ?? {})) shell.add(url);
   }
   if (logo) {
     shell.add(logo.light);
@@ -898,8 +1058,10 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
 // designs.json vs. scadpub.config.json shape: mirror the config's grouping
 // here when the app shares the concept (as `viewer` does, see
 // src/openscad/types.ts's Schema comment); keep this file's existing flat
-// shape when it doesn't. `render.features`/`.format`/`.fonts`/`.fontFallback`
-// land as this schema's own flat `features`/`format`/`fonts`/`fontFallback`
+// shape when it doesn't. `render.features`/`.format`/`.fonts` land as this
+// schema's own flat `features`/`format`/`fonts` keys, while
+// `render.fontFallback` lands in no schema key at all — it is rendered into the
+// generated `fonts.conf` and reaches renderHash from there
 // (the app already reads those flat; only `render.heavyMs`/`.cache` nest,
 // under `render`, since that pairing IS its own build-time-tuning concept).
 // `pwa` (shortName/icon/iconMaskable/backgroundColor/categories/screenshots/
@@ -924,29 +1086,16 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
  *   checkout's node_modules (see scripts/lib/dep-versions.mjs).
  * @returns {object} the schema (also written to outSchemaDir/designs.json).
  */
-export function generate({
-  configPath,
-  outSchemaDir,
-  outScadDir,
-  outPublicDir,
-  rendererFiles,
-  version = scadpubVersion(),
-  components = componentVersions(),
-}) {
-  const mustExist = makeMustExist(configPath);
-  mustExist(configPath, "config file");
-  const config = loadConfig(configPath);
-  // Everything in the config is resolved relative to the config file's directory.
-  const CONFIG_DIR = dirname(configPath);
-
-  // popup.body / fileImport.note / licenses[].text may each be written
-  // inline OR sourced from a config-relative file (the sibling '<field>File'
-  // key), see scripts/lib/prose-files.mjs. Resolved here, BEFORE
-  // parsePopup/parseFileImport/parseLicenses run below, so each sees its
-  // field already populated exactly as if it had been written inline; this
-  // content is inlined into designs.json and never reaches the browser as
-  // its own fetch (contrast a design's `// @doc` annotation, whose resolved
-  // `designs[].doc` URL genuinely is fetched on demand).
+// popup.body / fileImport.note / licenses[].text may each be written inline OR
+// sourced from a config-relative file (the sibling '<field>File' key), see
+// scripts/lib/prose-files.mjs. Resolved BEFORE parsePopup/parseFileImport/
+// parseLicenses run, so each sees its field already populated exactly as if it
+// had been written inline; this content is inlined into designs.json and never
+// reaches the browser as its own fetch (contrast a design's `// @doc`
+// annotation, whose resolved Markdown IS served as a file).
+//
+// Mutates `config` in place, which is what the parsers downstream read.
+function resolveProseFields(config, CONFIG_DIR, mustExist) {
   if (config.popup)
     config.popup = resolveFileField({
       obj: config.popup,
@@ -978,32 +1127,36 @@ export function generate({
           })
         : entry
     );
+}
 
-  const { TITLE, ID, DESCRIPTION, LANG, DIR } = parseIdentity(config);
+// `ui.afterExport.helpTab`, when set, must name a Help tab that actually
+// exists. Cross-field, so it can't live in parseUi (config-parsers.mjs): it
+// needs HELP, which is only resolved once the whole config is parsed. Mirrors
+// HelpModal's own tab-list logic — top-level `help.sections` synthesize a
+// leading "Overview" tab when `help.tabs` are also present — so a value that
+// passes here is guaranteed to match a tab the modal renders.
+function checkAfterExportHelpTab(UI, HELP) {
+  if (!UI.afterExport?.helpTab) return;
+  const tabLabels = HELP?.tabs?.length
+    ? [...(HELP.sections?.length ? ["Overview"] : []), ...HELP.tabs.map((t) => t.label)]
+    : [];
+  if (tabLabels.includes(UI.afterExport.helpTab)) return;
+  throw new Error(
+    `gen-schema: 'ui.afterExport.helpTab' is ${JSON.stringify(UI.afterExport.helpTab)}, but no 'help' tab has that label.\n` +
+      (tabLabels.length
+        ? `  Available tabs: ${tabLabels.map((l) => JSON.stringify(l)).join(", ")}`
+        : `  This config's 'help' has no tabs defined.`)
+  );
+}
 
-  // `source` defaults to "." (designs live beside the config); set it to point
-  // elsewhere (e.g. "examples", a sibling checkout, or an absolute path).
-  const SOURCE = resolve(CONFIG_DIR, config.source ?? ".");
-  mustExist(SOURCE, `source directory '${config.source ?? "."}'`);
-
-  // SOURCE-bound asset resolution (source-relative paths, config `assets`
-  // expansion, the use/include dep-graph walk) plus the symlink-containment
-  // policy (H5), see scripts/lib/assets.mjs. Created early so bundleFonts
-  // below (a source-owned path, like a design or dependency) can use it too.
-  const { relPosix, expandConfiguredAssets, collectDeps, checkContained } = createAssetTools({
-    SOURCE,
-    configPath,
-    mustExist,
-  });
-  // Destination-ownership registry (H6): every file this run writes anywhere
-  // in the served tree is registered here before it's written; a second
-  // write aimed at the same path fails the build, naming both owners.
-  const registry = createDestinationRegistry();
-  // Font files copied from SOURCE this run (not the tracked/already-bundled
-  // ones bundleFonts leaves untouched): reconciled against the previous
-  // run's manifest below (M8).
-  const fontCopies = [];
-
+// Every purely declarative block of the config, parsed and validated in one
+// place: nothing here touches the filesystem beyond resolving a configured
+// path, and nothing depends on the designs or the staged output tree. Split
+// out of generate() because it was 90 uninterrupted lines of `const X =
+// parseX(config.x)` between two steps that genuinely do sequence.
+//
+// `TITLE` is only here for `shortName`'s documented fallback.
+function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE) {
   // `features`/`format`/`fonts`/`fontFallback` now live under `render` (moved
   // in from the top level): they're genuine render inputs, so they stay
   // folded into renderHash below exactly as before; only their config PATH
@@ -1021,18 +1174,6 @@ export function generate({
   // below instead. Validated; absent -> null -> the app keeps its built-in
   // defaults.
   const RENDER = parseRender(config.render);
-  const { FONTS, FONT_FAMILIES, FONT_FACES, fontPaths, fontsConf, fontWrites } = bundleFonts(
-    config,
-    SOURCE,
-    outPublicDir,
-    configPath,
-    {
-      checkContained,
-      register: registry.register,
-      fontCopies,
-    }
-  );
-
   // Optional per-theme colour-scheme overrides. Validated against the known CSS
   // tokens; emitted by vite.config.ts as a <style> block so a consumer project
   // can restyle the app entirely from its config. Absent -> null.
@@ -1040,7 +1181,7 @@ export function generate({
   // Build-time UI behaviour config (panel side, default state, etc.). `install`
   // moved to `pwa.install` (see PWA below): it's spliced back onto UI
   // immediately below so `schema.ui.install` still carries it, unmoved: App.tsx reads
-  // `schema.ui?.install`, and this reorg only moves the CONFIG surface, not
+  // `schema.ui?.install`: the config surface groups these under `pwa`, not
   // designs.json's shape (see gen-schema.mjs's schema-assembly comment).
   const UI = { ...parseUi(config.ui) };
   // Manifest-only PWA chrome (install metadata, icons, theming), see
@@ -1063,26 +1204,6 @@ export function generate({
   // its derived intro/sections first, see resolveHelp). Absent -> null ->
   // the app falls back to its generic, project-agnostic default help.
   const HELP = resolveHelp(config.help, CONFIG_DIR, mustExist);
-  // ui.afterExport.helpTab (if set) must name an existing Help tab: checked
-  // here rather than inside parseUi (config-parsers.mjs) because it's a
-  // cross-field validation against HELP, only available now. Mirrors
-  // HelpModal's own tab-list logic (top-level `help.sections` synthesize a
-  // leading tab labelled "Overview" when `help.tabs` are also present, see
-  // HelpModal.tsx's own HelpModal(), so a value that passes here is
-  // guaranteed to match a real tab the modal renders).
-  if (UI.afterExport?.helpTab) {
-    const tabLabels = HELP?.tabs?.length
-      ? [...(HELP.sections?.length ? ["Overview"] : []), ...HELP.tabs.map((t) => t.label)]
-      : [];
-    if (!tabLabels.includes(UI.afterExport.helpTab)) {
-      throw new Error(
-        `gen-schema: 'ui.afterExport.helpTab' is ${JSON.stringify(UI.afterExport.helpTab)}, but no 'help' tab has that label.\n` +
-          (tabLabels.length
-            ? `  Available tabs: ${tabLabels.map((l) => JSON.stringify(l)).join(", ")}`
-            : `  This config's 'help' has no tabs defined.`)
-      );
-    }
-  }
   // Config-driven notice categories surfaced on the OpenSCAD output panel.
   // Validated; off by default (omitted -> none).
   const NOTICES = parseNotices(config.notices);
@@ -1092,8 +1213,277 @@ export function generate({
   // Optional per-deployment UI text overrides (config's `strings` key),
   // validated against the bundled English catalogue's key set, see
   // src/lib/i18n.ts and docs/config.md's `strings` section. Absent -> {}.
-  const EN_CATALOG_KEYS = Object.keys(JSON.parse(readFileSync(EN_CATALOG_PATH, "utf-8")));
-  const STRINGS = parseStrings(config.strings, EN_CATALOG_KEYS);
+  const STRINGS = parseStrings(config.strings, enCatalogKeys());
+
+  checkAfterExportHelpTab(UI, HELP);
+  return {
+    FEATURES,
+    FORMAT,
+    VIEWER,
+    RENDER,
+    COLORS,
+    UI,
+    PWA,
+    SHORT_NAME,
+    FILE_IMPORT,
+    POPUP,
+    HELP,
+    NOTICES,
+    LICENSES_EXTRA,
+    STRINGS,
+  };
+}
+
+// designs.json, assembled from everything generate() has resolved. Its shape
+// is the APP's, not the config's: see docs/config-pipeline.md for where the
+// two deliberately diverge (`render`, `pwa`).
+function assembleSchema(parts) {
+  const {
+    SOURCE, relPosix, renderHash, version, components, BIN_ASSETS, TITLE, SHORT_NAME,
+    ID, DESCRIPTION, LANG, DIR, STRINGS, PWA, appleSplash, COLORS, extraCss, logo,
+    FORMAT, VIEWER, FEATURES, RENDER, FONTS, FONT_FAMILIES, FONT_FACES, FILE_IMPORT,
+    POPUP, NOTICES, HELP, LICENSES_EXTRA, UI, defaultDesign, assets, designs,
+  } = parts;
+  return {
+    generatedFrom: relPosix(SOURCE) || ".",
+    renderHash,
+    // Names the render worker's binary Cache Storage entry (and the service
+    // worker's warm-up target). Single-sourced from scripts/wasm-version.mjs.
+    wasmVersion: WASM_VERSION,
+    // Which ScadPub built this site (`git describe` of the ScadPub checkout, or
+    // $SCADPUB_VERSION). Shown in the open-source licenses modal; omitted from
+    // the JSON entirely when the build tree carries no git metadata. Display
+    // only: deliberately NOT part of renderHash, since it can't affect geometry
+    // (a code change that can already hashes the renderer's own sources).
+    ...(version ? { scadpubVersion: version } : {}),
+    // Versions of the bundled third-party packages, read from the node_modules
+    // this build bundles from (scripts/lib/dep-versions.mjs). The licenses modal
+    // reads them instead of carrying literals that drift from the dependency.
+    // Display-only, like the stamp above: kept out of renderHash.
+    componentVersions: components,
+    // H4: per-file digests for wasm/glue/fonts/fonts.conf, see BIN_ASSETS above.
+    binAssets: BIN_ASSETS,
+    title: TITLE,
+    shortName: SHORT_NAME,
+    id: ID,
+    description: DESCRIPTION,
+    lang: LANG,
+    dir: DIR,
+    strings: STRINGS,
+    // `pwa.themeColor.{dark,light}` in the config, still flat here, see the
+    // module-level comment above generate() (and CONFIG_SPEC.pwa's own) for
+    // why designs.json doesn't grow a nested "pwa" object to match: nothing
+    // under `pwa` has a runtime reader, so this stays shaped for consumption
+    // (vite.config.ts's meta-tag injection) rather than mirroring the config.
+    themeColor: PWA.themeColor.dark,
+    themeColorLight: PWA.themeColor.light,
+    appleSplash,
+    colors: COLORS,
+    extraCss,
+    logo,
+    format: FORMAT,
+    viewer: VIEWER,
+    features: FEATURES,
+    render: RENDER,
+    fonts: FONTS,
+    fontFamilies: FONT_FAMILIES,
+    fontFaces: FONT_FACES,
+    fileImport: FILE_IMPORT,
+    popup: POPUP,
+    notices: NOTICES,
+    help: HELP,
+    licenses: LICENSES_EXTRA,
+    ui: UI,
+    defaultDesign,
+    assets: [...assets].sort(),
+    designs: designs.map(({ abs, ...d }) => d),
+  };
+}
+
+// The commit point (H6/M8). Everything fallible — design parsing, containment
+// checks, PWA rasterization — has succeeded and the schema is in hand, so the
+// staged scad tree is swapped into place and every deferred write is flushed.
+// Split out of generate() so the boundary is a function call rather than a
+// comment banner halfway down a 400-line body: nothing below this line may
+// throw for a reason the config could have caused.
+function commitOutputs({
+  outScadDir,
+  stageScadDir,
+  outSchemaDir,
+  outPublicDir,
+  schema,
+  fontWrites,
+  fontsConf,
+  fontCopies,
+  pwaBatch,
+  appleSplash,
+  assets,
+  logo,
+  extraCss,
+  iconFiles,
+}) {
+  // COMMIT POINT (H6/M8): every fallible step. Design parsing, containment
+  // checks, PWA rasterization. Has now succeeded and the schema is in hand, so
+  // atomically swap the staged scad tree into the live location. Everything
+  // past here (font copies, precache manifest, reconciliation, designs.json) is
+  // a plain non-fallible write, so scad sources, PWA/font assets, and the
+  // schema all land together: a failure earlier left the entire previous output
+  // intact and internally consistent.
+  rmSync(outScadDir, { recursive: true, force: true });
+  renameSync(stageScadDir, outScadDir);
+
+  // The generated font tree AND the PWA icon/splash/screenshot/manifest batch
+  // are committed here too (deferred from bundleFonts and generatePwaAssets
+  // respectively): copy the source-referenced fonts into public/fonts, write
+  // fonts.conf, and flush every entry generatePwaAssets queued instead of
+  // writing directly (commitPwaBatch, see pwa-assets.mjs). Now that all
+  // fallible work (design parsing, PWA rasterization, the screenshot
+  // existence check) has already succeeded. A source font overwriting a
+  // same-named previous one, a rewritten fonts.conf, and a replaced icon/
+  // splash/manifest set therefore never outlive a build that later failed.
+  //
+  // Honest about the window this does NOT close: the commit itself is a
+  // sequence of ordinary writes, not an atomic swap. The scad tree IS swapped
+  // atomically (rename above), but the font copies, fonts.conf and the PWA
+  // batch are written one after another, so a crash or a full disk between
+  // them can still leave the font tree from this build beside the PWA assets
+  // from the last. Staging everything into one temp tree and renaming it into
+  // place would close that too; it has not been done, because these outputs
+  // live at several fixed paths under public/ rather than in one directory a
+  // rename could cover. What deferring buys is the far likelier failure —
+  // a design that doesn't parse, an icon that won't rasterize — leaving the
+  // previous build wholly intact.
+  if (outPublicDir) {
+    mkdirSync(join(outPublicDir, "fonts"), { recursive: true });
+    for (const { src, dest } of fontWrites) {
+      mkdirSync(dirname(dest), { recursive: true });
+      copyFileSync(src, dest);
+    }
+    if (fontsConf != null) writeFileSync(join(outPublicDir, "fonts", "fonts.conf"), fontsConf);
+    commitPwaBatch(pwaBatch);
+  }
+
+  if (outPublicDir) {
+    writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo, extraCss, iconFiles });
+    // M8: reconcile the generated files this run wrote OUTSIDE outScadDir
+    // (which was fully replaced as a unit immediately above). Source-copied fonts under
+    // public/fonts, plus the PWA root assets (icons, splashes, manifest,
+    // screenshots). Against what a previous run generated, so removing or
+    // renaming a config entry (a dropped font, a renamed screenshot) doesn't
+    // leave a stale, still-deployable file behind. Scoped to paths THIS tool
+    // recorded writing previously; a tracked bundled .ttf or an unrelated
+    // file a contributor placed under public/ can never be in that manifest
+    // (bundleFonts refuses to stage a copy over a tracked destination), and an
+    // entry whose bytes changed since is left alone. See
+    // scripts/lib/destinations.mjs.
+    //
+    // The manifest lives ABOVE public/ (repo root), not inside it: Vite copies
+    // everything under public/ into dist/ verbatim, so a manifest kept there
+    // shipped host-absolute checkout paths into the built site. Its entries are
+    // stored relative to public/ and only ever resolve/delete within it.
+    // Sweep away a legacy in-public manifest from older builds so it can't be
+    // deployed or read as an absolute-path authority.
+    rmSync(join(outPublicDir, ".gen-manifest.json"), { force: true });
+    reconcileGenerated(
+      join(outPublicDir, "..", ".gen-manifest.json"),
+      outPublicDir,
+      [...fontCopies, ...pwaBatch.map((e) => e.dest)],
+      isTrackedFile
+    );
+  }
+  writeFileSync(
+    join(outSchemaDir, "designs.json"),
+    JSON.stringify(schema, null, 2) + "\n"
+  );
+}
+
+// The whole build, in phases. Each is a function above rather than a labelled
+// stretch of one body, so the sequencing that IS load-bearing is visible:
+//
+//   parse        loadConfig -> resolveProseFields -> parseIdentity ->
+//                parseConfigBlocks. Pure validation; a config error must
+//                surface here, before a single byte is staged.
+//   stage        bundleFonts, buildDesigns, the asset walk and generatePwaAssets
+//                all write into a staging tree or a queued batch, never into the
+//                live output. Everything fallible happens in this phase.
+//   assemble     computeRenderHash + assembleSchema. designs.json in memory.
+//   commit       commitOutputs. The staged tree is swapped in and every deferred
+//                write is flushed. Nothing past this point may throw for a
+//                reason the config could have caused.
+//
+// The payoff is the failure mode: a config that doesn't parse, a design that
+// doesn't exist, an icon that won't rasterize — none of them can leave a
+// half-written site behind, because none of them reach the commit phase.
+export function generate({
+  configPath,
+  outSchemaDir,
+  outScadDir,
+  outPublicDir,
+  rendererFiles,
+  version = scadpubVersion(),
+  components = componentVersions(),
+}) {
+  const mustExist = makeMustExist(configPath);
+  mustExist(configPath, "config file");
+  const config = loadConfig(configPath);
+  // Everything in the config is resolved relative to the config file's directory.
+  const CONFIG_DIR = dirname(configPath);
+
+  resolveProseFields(config, CONFIG_DIR, mustExist);
+
+  const { TITLE, ID, DESCRIPTION, LANG, DIR } = parseIdentity(config);
+
+  // `source` defaults to "." (designs live beside the config); set it to point
+  // elsewhere (e.g. "examples", a sibling checkout, or an absolute path).
+  const { source: SOURCE_REL } = applyTopLevelScalars(config, ["source"]);
+  const SOURCE = resolve(CONFIG_DIR, SOURCE_REL);
+  mustExist(SOURCE, `source directory '${config.source ?? "."}'`);
+
+  // SOURCE-bound asset resolution (source-relative paths, config `assets`
+  // expansion, the use/include dep-graph walk) plus the symlink-containment
+  // policy (H5), see scripts/lib/assets.mjs. Created early so bundleFonts
+  // below (a source-owned path, like a design or dependency) can use it too.
+  const { relPosix, expandConfiguredAssets, collectDeps, checkContained } = createAssetTools({
+    SOURCE,
+    configPath,
+    mustExist,
+  });
+  // Destination-ownership registry (H6): every file this run writes anywhere
+  // in the served tree is registered here before it's written; a second
+  // write aimed at the same path fails the build, naming both owners.
+  const registry = createDestinationRegistry();
+  // Font files copied from SOURCE this run (not the tracked/already-bundled
+  // ones bundleFonts leaves untouched): reconciled against the previous
+  // run's manifest below (M8).
+  const fontCopies = [];
+
+  const {
+    FEATURES,
+    FORMAT,
+    VIEWER,
+    RENDER,
+    COLORS,
+    UI,
+    PWA,
+    SHORT_NAME,
+    FILE_IMPORT,
+    POPUP,
+    HELP,
+    NOTICES,
+    LICENSES_EXTRA,
+    STRINGS,
+  } = parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE);
+  const { FONTS, FONT_FAMILIES, FONT_FACES, fontPaths, fontsConf, fontWrites } = bundleFonts(
+    config,
+    SOURCE,
+    outPublicDir,
+    configPath,
+    {
+      checkContained,
+      register: registry.register,
+      fontCopies,
+    }
+  );
 
   // outScadDir is entirely generated. H6/M8: build the complete new tree in a
   // staging directory first, and only replace the live outScadDir once every
@@ -1147,6 +1537,11 @@ export function generate({
   // regardless of which branch below ends up using the result.
   const assets = new Set();
   const walkedByDesign = designs.map((d) => ({ id: d.id, deps: collectDeps(d.abs) }));
+  if (config.assets != null && (!Array.isArray(config.assets) || !config.assets.length))
+    throw new Error(
+      "gen-schema: 'assets', when set, must be a non-empty array of paths/globs.\n" +
+        "  Omit the key entirely to follow each design's use/include graph."
+    );
   if (Array.isArray(config.assets) && config.assets.length) {
     for (const a of expandConfiguredAssets(config.assets)) assets.add(a);
     checkAssetCoverage(designs, walkedByDesign, assets);
@@ -1234,119 +1629,67 @@ export function generate({
     ? computeBinAssetVersions({ fontPaths, fontsConf, outPublicDir })
     : {};
 
-  const schema = {
-    generatedFrom: relPosix(SOURCE) || ".",
+  const schema = assembleSchema({
+    SOURCE,
+    relPosix,
     renderHash,
-    // Names the render worker's binary Cache Storage entry (and the service
-    // worker's warm-up target). Single-sourced from scripts/wasm-version.mjs.
-    wasmVersion: WASM_VERSION,
-    // Which ScadPub built this site (`git describe` of the ScadPub checkout, or
-    // $SCADPUB_VERSION). Shown in the open-source licenses modal; omitted from
-    // the JSON entirely when the build tree carries no git metadata. Display
-    // only: deliberately NOT part of renderHash, since it can't affect geometry
-    // (a code change that can already hashes the renderer's own sources).
-    ...(version ? { scadpubVersion: version } : {}),
-    // Versions of the bundled third-party packages, read from the node_modules
-    // this build bundles from (scripts/lib/dep-versions.mjs). The licenses modal
-    // reads them instead of carrying literals that drift from the dependency.
-    // Display-only, like the stamp above: kept out of renderHash.
-    componentVersions: components,
-    // H4: per-file digests for wasm/glue/fonts/fonts.conf, see BIN_ASSETS above.
-    binAssets: BIN_ASSETS,
-    title: TITLE,
-    shortName: SHORT_NAME,
-    id: ID,
-    description: DESCRIPTION,
-    lang: LANG,
-    dir: DIR,
-    strings: STRINGS,
-    // `pwa.themeColor.{dark,light}` in the config, still flat here, see the
-    // module-level comment above generate() (and CONFIG_SPEC.pwa's own) for
-    // why designs.json doesn't grow a nested "pwa" object to match: nothing
-    // under `pwa` has a runtime reader, so this stays shaped for consumption
-    // (vite.config.ts's meta-tag injection) rather than mirroring the config.
-    themeColor: PWA.themeColor.dark,
-    themeColorLight: PWA.themeColor.light,
+    version,
+    components,
+    BIN_ASSETS,
+    TITLE,
+    SHORT_NAME,
+    ID,
+    DESCRIPTION,
+    LANG,
+    DIR,
+    STRINGS,
+    PWA,
     appleSplash,
-    colors: COLORS,
+    COLORS,
     extraCss,
     logo,
-    format: FORMAT,
-    viewer: VIEWER,
-    features: FEATURES,
-    render: RENDER,
-    fonts: FONTS,
-    fontFamilies: FONT_FAMILIES,
-    fontFaces: FONT_FACES,
-    fileImport: FILE_IMPORT,
-    popup: POPUP,
-    notices: NOTICES,
-    help: HELP,
-    licenses: LICENSES_EXTRA,
-    ui: UI,
+    FORMAT,
+    VIEWER,
+    FEATURES,
+    RENDER,
+    FONTS,
+    FONT_FAMILIES,
+    FONT_FACES,
+    FILE_IMPORT,
+    POPUP,
+    NOTICES,
+    HELP,
+    LICENSES_EXTRA,
+    UI,
     defaultDesign,
-    assets: [...assets].sort(),
-    designs: designs.map(({ abs, ...d }) => d),
-  };
+    assets,
+    designs,
+  });
 
-  // COMMIT POINT (H6/M8): every fallible step. Design parsing, containment
-  // checks, PWA rasterization. Has now succeeded and the schema is in hand, so
-  // atomically swap the staged scad tree into the live location. Everything
-  // past here (font copies, precache manifest, reconciliation, designs.json) is
-  // a plain non-fallible write, so scad sources, PWA/font assets, and the
-  // schema all land together: a failure earlier left the entire previous output
-  // intact and internally consistent.
-  rmSync(outScadDir, { recursive: true, force: true });
-  renameSync(stageScadDir, outScadDir);
+  // The last thing before the commit phase, and the reason the phases are
+  // ordered this way: designs.json is written by an ordinary write that cannot
+  // fail for a config reason, so "would the app accept this?" has to be asked
+  // while failing is still free. THE app's validator, not a build-side
+  // paraphrase of it — a paraphrase is a second contract, and the one that
+  // used to live in read-schema.mjs drifted from this one immediately.
+  validateSchema(schema);
 
-  // The generated font tree AND the PWA icon/splash/screenshot/manifest batch
-  // are committed here too (deferred from bundleFonts and generatePwaAssets
-  // respectively): copy the source-referenced fonts into public/fonts, write
-  // fonts.conf, and flush every entry generatePwaAssets queued instead of
-  // writing directly (commitPwaBatch, see pwa-assets.mjs). Now that all
-  // fallible work (design parsing, PWA rasterization, the screenshot
-  // existence check) has already succeeded. A source font overwriting a
-  // same-named previous one, a rewritten fonts.conf, and a replaced icon/
-  // splash/manifest set therefore never outlive a build that later failed.
-  if (outPublicDir) {
-    mkdirSync(join(outPublicDir, "fonts"), { recursive: true });
-    for (const { src, dest } of fontWrites) {
-      mkdirSync(dirname(dest), { recursive: true });
-      copyFileSync(src, dest);
-    }
-    if (fontsConf != null) writeFileSync(join(outPublicDir, "fonts", "fonts.conf"), fontsConf);
-    commitPwaBatch(pwaBatch);
-  }
-
-  if (outPublicDir) {
-    writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo, extraCss, iconFiles });
-    // M8: reconcile the generated files this run wrote OUTSIDE outScadDir
-    // (which was fully replaced as a unit immediately above). Source-copied fonts under
-    // public/fonts, plus the PWA root assets (icons, splashes, manifest,
-    // screenshots). Against what a previous run generated, so removing or
-    // renaming a config entry (a dropped font, a renamed screenshot) doesn't
-    // leave a stale, still-deployable file behind. Scoped to paths THIS tool
-    // recorded writing previously; a tracked bundled .ttf or an unrelated
-    // file a contributor placed under public/ was never in that manifest, so
-    // it's never a deletion candidate. See scripts/lib/destinations.mjs.
-    //
-    // The manifest lives ABOVE public/ (repo root), not inside it: Vite copies
-    // everything under public/ into dist/ verbatim, so a manifest kept there
-    // shipped host-absolute checkout paths into the built site. Its entries are
-    // stored relative to public/ and only ever resolve/delete within it.
-    // Sweep away a legacy in-public manifest from older builds so it can't be
-    // deployed or read as an absolute-path authority.
-    rmSync(join(outPublicDir, ".gen-manifest.json"), { force: true });
-    reconcileGenerated(
-      join(outPublicDir, "..", ".gen-manifest.json"),
-      outPublicDir,
-      [...fontCopies, ...pwaBatch.map((e) => e.dest)]
-    );
-  }
-  writeFileSync(
-    join(outSchemaDir, "designs.json"),
-    JSON.stringify(schema, null, 2) + "\n"
-  );
+  commitOutputs({
+    outScadDir,
+    stageScadDir,
+    outSchemaDir,
+    outPublicDir,
+    schema,
+    fontWrites,
+    fontsConf,
+    fontCopies,
+    pwaBatch,
+    appleSplash,
+    assets,
+    logo,
+    extraCss,
+    iconFiles,
+  });
   return schema;
 }
 

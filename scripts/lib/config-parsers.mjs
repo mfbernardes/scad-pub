@@ -14,7 +14,7 @@
 // that don't fit the shared shape) that isn't worth forcing into the same
 // mould, and config-spec.mjs only registers their keys for unknown-key
 // rejection and schema emission.
-import { CONFIG_SPEC, COLOR_TOKENS } from "./config-spec.mjs";
+import { CONFIG_SPEC, COLOR_TOKENS, PWA_THEME_COLOR_DEFAULTS } from "./config-spec.mjs";
 export { COLOR_TOKENS };
 
 // `prefix(path)` renders the leading part of a validation-error message. One
@@ -114,6 +114,28 @@ function validateFieldValue(value, field, path) {
   }
 }
 
+// Apply CONFIG_SPEC's TOP-LEVEL scalar descriptors, which existed but were
+// inert: `title`/`description`/`source`/`extraCss`/`defaultDesign` reached the
+// pipeline with no type check at all, so `"title": 42` surfaced as a raw
+// TypeError from vite-config rather than as a named gen-schema error like every
+// other key. Only the keys named by `keys` are looked at (the rest of the top
+// level is owned by bespoke parsers), and the unknown-key check stays with
+// loadConfig's KNOWN_TOP_LEVEL_KEYS.
+export function applyTopLevelScalars(raw, keys) {
+  const out = {};
+  for (const key of keys) {
+    const field = CONFIG_SPEC[key];
+    if (!field) throw new Error(`config-spec: no descriptor for top-level '${key}'`);
+    const value = raw[key];
+    if (value === undefined || value === null) {
+      if ("default" in field) out[key] = field.default;
+      continue;
+    }
+    out[key] = validateFieldValue(value, field, key);
+  }
+  return out;
+}
+
 // Walk one nested config object (ui, viewer, render, render.cache, popup, the
 // object form of fileImport, ui.afterExport) against its config-spec.mjs
 // node: shape check, unknown-key rejection, then each field in declaration
@@ -180,12 +202,12 @@ export const xmlEscape = (s) =>
 // A conservative BCP-47-ish language tag (letters, digits, hyphens only, e.g.
 // "en", "pt-BR", "zh-Hant"). Strict enough that the value is safe to interpolate
 // verbatim into the generated `<html lang="…">` attribute and the manifest.
-export const LANG_RE = /^[A-Za-z0-9-]{1,35}$/;
+const LANG_RE = /^[A-Za-z0-9-]{1,35}$/;
 
 // Validate the optional `lang` config key: the document/manifest language.
 // Defaults to "en". Fails the build on anything that isn't a plain BCP-47 tag.
 export function parseLang(raw) {
-  if (raw == null) return "en";
+  if (raw == null) return CONFIG_SPEC.lang.default;
   if (typeof raw !== "string" || !LANG_RE.test(raw.trim()))
     throw new Error(
       `gen-schema: 'lang' must be a BCP-47 language tag (got ${JSON.stringify(raw)})`
@@ -193,12 +215,16 @@ export function parseLang(raw) {
   return raw.trim();
 }
 
-// The writing directions HTML and the web-app manifest both accept.
-export const TEXT_DIRECTIONS = ["ltr", "rtl", "auto"];
+// The writing directions HTML and the web-app manifest both accept, and the
+// export formats, read off CONFIG_SPEC rather than re-declared here. This file
+// imports the spec already, so a second local copy was only ever a way for the
+// two to drift — which is exactly what config-spec's own drift tests exist to
+// catch elsewhere.
+const TEXT_DIRECTIONS = CONFIG_SPEC.dir.values;
 
 // Validate the optional `dir` config key: the document/manifest text direction.
 export function parseDir(raw) {
-  if (raw == null) return "ltr";
+  if (raw == null) return CONFIG_SPEC.dir.default;
   if (!TEXT_DIRECTIONS.includes(raw))
     throw new Error(
       `gen-schema: 'dir' must be one of ${TEXT_DIRECTIONS.map((d) => `"${d}"`).join(", ")} ` +
@@ -208,17 +234,17 @@ export function parseDir(raw) {
 }
 
 // The model formats OpenSCAD can export and the viewer can parse.
-const FORMATS = ["3mf", "stl"];
+const FORMATS = CONFIG_SPEC.render.properties.format.values;
 
 // Validate the optional `render.format` config key. "3mf" (the default)
 // carries per-object colour; "stl" is geometry-only. Fail fast on anything
 // else. `path` is the caller-supplied dotted path (default "render.format",
-// the field's only home since this reorg), so the message can't drift from
-// the key the way it did when `format` moved under `render` and this message
+// the field's only home), so the message can't drift from the key the way it
+// would if the path were hard-coded and the field moved
 // stayed "config.format must be...", also brings this message in line with
 // every other one in this file, which route through `messagePrefix`.
 export function parseFormat(raw, path = "render.format") {
-  if (raw == null) return "3mf";
+  if (raw == null) return CONFIG_SPEC.render.properties.format.default;
   if (!FORMATS.includes(raw))
     throw new Error(
       `${messagePrefix(path)} must be one of ${FORMATS.map((f) => `"${f}"`).join(", ")} (got ${JSON.stringify(raw)})`
@@ -361,7 +387,7 @@ export function parseRender(raw) {
   return applyGroupSpec(raw, CONFIG_SPEC.render, "render");
 }
 
-// A top-level (or, since this reorg, `render`/`pwa`-nested) array-of-strings
+// A `render`/`pwa`-nested array-of-strings
 // field (`render.features`, `pwa.categories`): absent OR explicit `null` ->
 // [], otherwise every entry must be a non-empty string. `null` reads as
 // "unset" here for the same reason `applyGroupSpec` treats it that way
@@ -373,19 +399,13 @@ export function parseRender(raw) {
 // of a clear config error. `key` is whatever the caller passes for the error
 // message, always the field's full dotted config path (`render.features`,
 // `pwa.categories`) so the message can't drift from the key the way
-// `render.features`'s used to before it moved under `render` (see
-// `messagePrefix`).
+// a hard-coded path would (see `messagePrefix`).
 export function parseStringArray(raw, key) {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string" || !v.trim()))
     throw new Error(`gen-schema: '${key}' must be an array of non-empty strings (got ${JSON.stringify(raw)})`);
   return raw;
 }
-
-// Independent built-in defaults for pwa.themeColor's two sides: identical to
-// the pre-reorg top-level themeColor/themeColorLight defaults, so an
-// unconfigured deployment's chrome colours don't change.
-const PWA_THEME_COLOR_DEFAULTS = { light: "#ffffff", dark: "#1f2229" };
 
 function validateThemeColorValue(value, path) {
   if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
@@ -430,7 +450,7 @@ export function parsePwaThemeColor(raw) {
 // same fix `render.features` already got); `screenshots`/`shortcuts` are
 // passed through UNVALIDATED here, on purpose. Pwa-assets.mjs already
 // tolerates (and silently drops) a malformed entry rather than failing the
-// build, a bit of leniency that predates this reorg and that this function
+// build, a deliberate bit of leniency that this function
 // must not turn into a hard failure.
 export function parsePwa(raw) {
   const src = raw ?? {};

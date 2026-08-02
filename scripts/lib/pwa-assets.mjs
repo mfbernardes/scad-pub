@@ -21,7 +21,7 @@
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { xmlEscape } from "./config-parsers.mjs";
-import { sanitizeSvg } from "./svg-sanitize.mjs";
+import { sanitizeBrowserFacingSvg } from "./svg-sanitize.mjs";
 
 // Read a PNG's pixel dimensions from its IHDR chunk (the first chunk, right
 // after the 8-byte signature: 4-byte length + "IHDR" + 4-byte width + height,
@@ -35,6 +35,22 @@ function pngSize(buf) {
   const h = buf.readUInt32BE(20);
   return w > 0 && h > 0 ? `${w}x${h}` : null;
 }
+
+// A manifest image resource's `type` is its real MIME type (W3C Image
+// Resource 4.3). Unknown extensions get nothing: the member is optional, and
+// omitting it is strictly better than declaring a format the bytes are not.
+// Shared by the icon descriptors and the screenshot list, which is how a
+// screenshot came to be advertised as PNG whatever it actually was.
+const MIME = {
+  svg: "image/svg+xml",
+  png: "image/png",
+  webp: "image/webp",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  avif: "image/avif",
+  gif: "image/gif",
+};
+const mimeOf = (src) => MIME[src.slice(src.lastIndexOf(".") + 1).toLowerCase()];
 
 // Optional build-time SVG→PNG rasterizer (@resvg/resvg-js). Present in dev
 // builds; gracefully absent in minimal CI environments that didn't npm install.
@@ -109,10 +125,16 @@ export function generatePwaAssets({
     sink.push({ dest, data });
     return dest;
   };
+  // Every operator file this module puts into the served root goes through
+  // here, so the browser-facing SVG rule belongs here rather than at each call
+  // site: `pwa.screenshots[].src` may perfectly well be an .svg, and it lands
+  // at a navigable same-origin URL exactly like the icon does.
   const copy = (src, name, label, sink = batch) => {
     const dest = join(outPublicDir, name);
     register(dest, label ?? name);
-    sink.push({ dest, src });
+    if (/\.svg$/i.test(src))
+      sink.push({ dest, data: sanitizeBrowserFacingSvg(readFileSync(src, "utf-8"), { src, what: label }) });
+    else sink.push({ dest, src });
     return dest;
   };
 
@@ -131,11 +153,14 @@ export function generatePwaAssets({
   let iconSvg;
   let iconSvgLabel;
   if (pwa.icon) {
-    const raw = readFileSync(
-      mustExist(resolve(CONFIG_DIR, pwa.icon), `icon '${pwa.icon}'`),
-      "utf-8"
-    );
-    iconSvg = sanitizeSvg(raw).text;
+    const iconPath = mustExist(resolve(CONFIG_DIR, pwa.icon), `icon '${pwa.icon}'`);
+    // The same helper copyBrowserFacing uses, so this path cannot go quiet
+    // again: it names the config key and the file both when the parse fails and
+    // when the sanitizer removed something.
+    iconSvg = sanitizeBrowserFacingSvg(readFileSync(iconPath, "utf-8"), {
+      src: iconPath,
+      what: "pwa 'icon'",
+    });
     iconSvgLabel = "pwa 'icon'";
   } else {
     // Neutral default icon when the config supplies none.
@@ -286,7 +311,7 @@ export function generatePwaAssets({
   // Manifest screenshot entries (optional: enables rich Android install UI).
   // `label` (accessibility) and `platform` are passed through when present.
   // A malformed individual entry (missing src/sizes/form_factor) is dropped
-  // rather than failing the build, unchanged from before this reorg. This
+  // rather than failing the build. This
   // `mustExist` runs no earlier or later than it always has: what changed is
   // that a throw here can no longer race a physical write: the icon set and
   // splashes above are only ever QUEUED (see `batch`/`write`/`copy`), so at
@@ -295,14 +320,20 @@ export function generatePwaAssets({
   const screenshots = [];
   if (Array.isArray(pwa.screenshots)) {
     for (const shot of pwa.screenshots) {
-      if (shot.src && shot.sizes && shot.form_factor) {
+      // Same null/type guard the sibling `shortcuts` path has: a null or
+      // non-object entry threw a bare "cannot read properties of null" here.
+      if (shot && typeof shot === "object" && shot.src && shot.sizes && shot.form_factor) {
         const abs = mustExist(resolve(CONFIG_DIR, shot.src), `screenshot '${shot.src}'`);
         const name = abs.split(/[\\/]/).pop();
         copy(abs, name, `screenshot '${shot.src}'`);
         screenshots.push({
           src: name,
           sizes: shot.sizes,
-          type: "image/png",
+          // The image's actual type, not an assumption: a screenshot may be
+          // any format the build copies, and `.svg` was being advertised as
+          // PNG. Absent for an extension this doesn't know, which the spec
+          // allows — a wrong `type` is worse than none.
+          ...(mimeOf(name) ? { type: mimeOf(name) } : {}),
           form_factor: shot.form_factor,
           ...(typeof shot.label === "string" ? { label: shot.label } : {}),
           ...(typeof shot.platform === "string" ? { platform: shot.platform } : {}),
@@ -335,7 +366,7 @@ export function generatePwaAssets({
   // types default to "any". An unknown extension gets no type (valid per the spec).
   const iconDescriptor = (src) => {
     const ext = src.slice(src.lastIndexOf(".") + 1).toLowerCase();
-    const type = { svg: "image/svg+xml", png: "image/png", webp: "image/webp" }[ext];
+    const type = mimeOf(src);
     let sizes = "any";
     if (ext === "png") {
       // A design picker icon (`d.icon`) is served from scad/ but lives, at this

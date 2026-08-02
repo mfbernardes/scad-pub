@@ -1,0 +1,16 @@
+{
+  "title": "T",
+  "source": "src",
+  "designs": [
+    {
+      "id": "widget",
+      "label": "W"
+    }
+  ],
+  "render": {
+    "fonts": [
+      "Bar.ttf"
+    ],
+    "fontFallback": "Nonexistent Family"
+  }
+}

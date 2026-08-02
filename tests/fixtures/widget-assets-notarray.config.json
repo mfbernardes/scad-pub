@@ -1,0 +1,11 @@
+{
+  "title": "T",
+  "source": "src",
+  "designs": [
+    {
+      "id": "widget",
+      "label": "W"
+    }
+  ],
+  "assets": "lib"
+}

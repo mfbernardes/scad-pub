@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corner case A16: the fills real exports actually write - rgba() from Figma,
+     hsl() from a design system, a space-separated rgb() with a slash alpha -
+     on Inkscape layers whose free-text labels carry the two characters the
+     layers spec uses as separators. Both halves feed the same failure: a
+     comma reaching the spec shreds one region into several junk ones. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 100 100">
+  <g id="layer1" inkscape:groupmode="layer" inkscape:label="Ground floor, walls"
+     fill="rgba(128, 128, 128, 0.5)">
+    <path d="M0,0 L100,0 L100,100 L0,100 Z
+             M6,6 L6,94 L94,94 L94,6 Z"/>
+  </g>
+  <g id="layer2" inkscape:groupmode="layer" inkscape:label="rooms: interior"
+     fill="hsl(0 0% 100%)">
+    <rect x="10" y="10" width="40" height="80"/>
+  </g>
+  <g id="layer3" inkscape:groupmode="layer" inkscape:label="fixtures"
+     fill="rgb(0 0 255 / 80%)">
+    <circle cx="70" cy="50" r="8"/>
+  </g>
+</svg>

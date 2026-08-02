@@ -77,3 +77,63 @@ test("evalShowIf: empty/whitespace clause is truthy (always visible)", () => {
   assert.equal(evalShowIf("", V), true);
   assert.equal(evalShowIf("   ", V), true);
 });
+
+// ── the generator and the evaluator are one grammar ────────────────────────
+// These are the pairing tests: whatever scripts/lib/params.mjs ACCEPTS, this
+// module must evaluate as written. They drifted once already — the generator
+// learned to split outside quotes and the evaluator did not — and the failure
+// was invisible, because isVisible fails open: the control showed for every
+// value, so the condition looked like it had simply never been written.
+
+test("a quoted operator is one value to both ends, not a clause separator", () => {
+  const V = { mode: "p||q", other: "x" };
+  // Accepted by the generator (tests/gen-schema.test.mjs pins that), so it must
+  // mean what it says here.
+  assert.equal(evalShowIf('mode=="p||q"', V), true);
+  assert.equal(evalShowIf('mode=="p||q"', { mode: "p" }), false);
+  assert.equal(evalShowIf('mode=="p||q"', { mode: "other" }), false);
+  // The same for `&&`, and for a single-quoted literal.
+  assert.equal(evalShowIf('mode=="a&&b"', { mode: "a&&b" }), true);
+  assert.equal(evalShowIf('mode=="a&&b"', { mode: "a" }), false);
+  assert.equal(evalShowIf("mode=='p||q'", V), true);
+});
+
+test("a quoted operator does not fail open through isVisible", () => {
+  // The specific production shape: the clause threw, the catch showed the
+  // control, and a condition that was supposed to hide it never did. Assert
+  // through isVisible, not evalShowIf, because the catch is what hid the bug.
+  const param = { name: "detail", type: "number", default: 1, showIf: 'mode=="p||q"' };
+  assert.equal(isVisible(param, { mode: "p||q" }), true);
+  assert.equal(isVisible(param, { mode: "anything else" }), false);
+});
+
+test("every clause shape the generator accepts is evaluated, not thrown on", () => {
+  // Drawn from the generator's own SHOWIF_BARE_RE / SHOWIF_CMP_RE grammar, so a
+  // shape added there without a matching evaluator branch fails here.
+  const V = { flag: true, off: false, n: 3, s: "yes", word: "bare" };
+  for (const [expr, expected] of [
+    ["flag", true],
+    ["!off", true],
+    ["n==3", true],
+    ["n!=3", false],
+    ["s==\"yes\"", true],
+    ["s=='yes'", true],
+    // A bare right-hand side is a VALUE, not a reference to another parameter
+    // (docs/annotations.md: "a bare word, quoted string, number, or
+    // true/false"). `word` here is the string "bare", and the clause below
+    // compares against the literal `bare` rather than reading `values.word`.
+    ["word==bare", true],
+    ["word==s", false],
+    ["n==-3", false],
+    ["n==3.0", true],
+    ["flag==true", true],
+    ["off==false", true],
+    ["flag && n==3", true],
+    ["off || n==3", true],
+    ["off && n==3 || s==\"yes\"", true],
+  ]) {
+    // Not through isVisible: its catch would turn a throw into `true` and hide
+    // exactly the failure this test exists to find.
+    assert.equal(evalShowIf(expr, V), expected, expr);
+  }
+});

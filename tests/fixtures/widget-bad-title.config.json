@@ -1,0 +1,10 @@
+{
+  "title": 42,
+  "source": "src",
+  "designs": [
+    {
+      "id": "widget",
+      "label": "W"
+    }
+  ]
+}
