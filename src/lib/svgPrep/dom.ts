@@ -3,9 +3,7 @@
 // DOMParser and, in tests/Node, with @xmldom/xmldom: both implement this subset.
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
-export const INK_NS = "http://www.inkscape.org/namespaces/inkscape";
-export const SODIPODI_NS = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.0.dtd";
-export const XLINK_NS = "http://www.w3.org/1999/xlink";
+const INK_NS = "http://www.inkscape.org/namespaces/inkscape";
 
 export const SHAPE_TAGS = new Set([
   "path",
@@ -89,17 +87,6 @@ export function iterElements(root: Element): Element[] {
   return out;
 }
 
-/** Direct child elements only. */
-export function elementChildren(el: Element): Element[] {
-  const out: Element[] = [];
-  const kids = el.childNodes;
-  for (let i = 0; i < kids.length; i++) {
-    const n = kids[i] as Node;
-    if (n.nodeType === ELEMENT_NODE) out.push(n as Element);
-  }
-  return out;
-}
-
 /** True when an element has at least one element or comment child. */
 export function hasStructuralChildren(el: Element): boolean {
   const kids = el.childNodes;
@@ -110,22 +97,8 @@ export function hasStructuralChildren(el: Element): boolean {
   return false;
 }
 
-/** The first direct child element with the given local name (+ optional namespace). */
-export function firstChildNamed(
-  el: Element,
-  name: string,
-  ns?: string,
-): Element | null {
-  for (const child of elementChildren(el)) {
-    if (localName(child) !== name) continue;
-    if (ns !== undefined && child.namespaceURI !== ns) continue;
-    return child;
-  }
-  return null;
-}
-
 /** Parse the `style="a:b;c:d"` attribute into a map. */
-export function styleProps(el: Element): Record<string, string> {
+function styleProps(el: Element): Record<string, string> {
   const props: Record<string, string> = {};
   const style = el.getAttribute("style") ?? "";
   for (const part of style.split(";")) {
@@ -161,7 +134,7 @@ const NCNAME_START_RE = /^[\p{L}_]/u;
 /** `label` as an XML NCName — what `fixInkscapeIds` will actually adopt as the
  *  id, and therefore what `check` must compare against to decide whether a
  *  layer is still trapped. */
-export function toNCName(label: string): string {
+function toNCName(label: string): string {
   const s = label.replace(NCNAME_INVALID_RE, "_");
   return NCNAME_START_RE.test(s) ? s : `_${s}`;
 }
@@ -185,8 +158,4 @@ export function trappedLayers(
     out.push({ el, label, id, target });
   }
   return out;
-}
-
-export function hasAnyTransform(root: Element): boolean {
-  return iterElements(root).some((el) => el.getAttribute("transform"));
 }
