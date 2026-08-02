@@ -399,6 +399,15 @@ button:disabled { cursor: default; }
 .param-panel__resize-handle:hover,
 .param-panel__resize-handle:focus-visible {
   background: var(--accent);
+}
+
+/* The hover background alone reads as nothing to a keyboard user: it's an
+   8px sliver that hover always tints anyway, so a plain outline (also
+   suppressed below, since the default squares off across the whole strip)
+   wasn't distinguishing keyboard focus from mouse-over. A ring matching the
+   app's other focus-visible treatments makes it a state, not a colour. */
+.param-panel__resize-handle:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus);
   outline: none;
 }
 
