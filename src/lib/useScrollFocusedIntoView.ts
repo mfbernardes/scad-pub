@@ -19,6 +19,7 @@
 // never fires on desktop: no layout or visual-baseline impact there.
 import { useEffect, type RefObject } from "react";
 import { isCoarsePointer } from "./pointer";
+import { isScrollableY } from "./scrollParent";
 
 // The input types a keyboard actually pops for. Buttons/checkboxes/sliders are
 // intentionally excluded: they don't summon a keyboard.
@@ -35,10 +36,7 @@ const SETTLE_MS = 300;
  */
 export function scrollParentWithin(el: HTMLElement, root: HTMLElement): HTMLElement | null {
   for (let node = el.parentElement; node; node = node.parentElement) {
-    const overflowY = getComputedStyle(node).overflowY;
-    if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) {
-      return node;
-    }
+    if (isScrollableY(node) && node.scrollHeight > node.clientHeight) return node;
     if (node === root) return null;
   }
   return null;

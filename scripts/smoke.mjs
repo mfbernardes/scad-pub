@@ -1792,6 +1792,116 @@ async function checkRoundedCorners({ page, check, paramsTabName }) {
   await page.waitForTimeout(200);
 }
 
+// A param's help popover belongs to its row. Radix positions against the
+// VIEWPORT by default, so scrolling the form under an open popover left it
+// repositioning to stay on screen until it came to rest over the 3D viewer,
+// pointing at a row that was no longer there (ParamForm's ParamHelp).
+//
+// Expressed as the property rather than as a pixel expectation: while it is
+// visible the popover stays inside the scroller its trigger lives in and never
+// paints over the viewer canvas, and once the trigger has scrolled out of that
+// scroller entirely the popover is gone.
+const HELP_POPOVER_GEOMETRY = `(() => {
+  const pop = document.querySelector(".param-help");
+  if (!pop) return { open: false };
+  const trigger = document.querySelector(".param-help__trigger[aria-expanded='true']");
+  const scroller = (() => {
+    for (let n = trigger?.parentElement; n; n = n.parentElement) {
+      const o = getComputedStyle(n).overflowY;
+      if (o === "auto" || o === "scroll") return n;
+    }
+    return null;
+  })();
+  const canvas = document.querySelector(".viewer canvas");
+  const r = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; };
+  const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  const box = r(pop);
+  const clip = scroller ? r(scroller) : null;
+  return {
+    open: true,
+    visible: getComputedStyle(pop).visibility !== "hidden",
+    triggerVisible: !!trigger && !!clip && r(trigger).bottom > clip.top && r(trigger).top < clip.bottom,
+    insideScroller: !!clip && box.top >= clip.top - 1 && box.bottom <= clip.bottom + 1,
+    overViewer: !!canvas && overlaps(box, r(canvas)),
+    box: { top: Math.round(box.top), bottom: Math.round(box.bottom) },
+    clip: clip ? { top: Math.round(clip.top), bottom: Math.round(clip.bottom) } : null,
+  };
+})()`;
+
+// Scroll the open popover's own scroller by `dy`, then let Floating UI's
+// autoUpdate settle. Returns false when there was nothing to scroll.
+const scrollHelpScroller = (page, dy) =>
+  page.evaluate((dy) => {
+    const trigger = document.querySelector(".param-help__trigger[aria-expanded='true']");
+    for (let n = trigger?.parentElement; n; n = n.parentElement) {
+      const o = getComputedStyle(n).overflowY;
+      if ((o === "auto" || o === "scroll") && n.scrollHeight > n.clientHeight) {
+        const before = n.scrollTop;
+        n.scrollTop = before + dy;
+        return n.scrollTop !== before;
+      }
+    }
+    return false;
+  }, dy);
+
+async function checkHelpPopoverStaysWithItsRow({ browser, base, check, schema, paramsTabName }) {
+  console.log("=== param help popover: stays with its row when the form scrolls ===");
+  for (const [width, height, layout] of [[390, 844, "mobile sheet"], [1280, 900, "docked panel"]]) {
+    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+    await context.addInitScript((key) => {
+      try { localStorage.setItem(key, "1"); } catch { /* storage unavailable */ }
+    }, `${schema?.id || "scadpub"}.sheet.introduced.v1`);
+    const page = await context.newPage();
+    try {
+      await page.goto(base, { waitUntil: "load" });
+      await dismissWelcomePopup(page);
+      await waitRenderDone(page).catch(() => {});
+      if (width < 900) {
+        // Full detent: the sheet needs enough height that the form scrolls at
+        // all, which is the precondition for the whole check.
+        await page.locator(".sheet-handle").focus();
+        for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowUp");
+      }
+      await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+      await page.waitForSelector(".param-form", { timeout: 5000 });
+
+      // A help button low enough in the form that there is room to scroll it
+      // away: the last one mounted.
+      const triggers = page.locator(".param-help__trigger");
+      const count = await triggers.count();
+      if (!count) {
+        console.log("  (no help text in this config: skipped)");
+        continue;
+      }
+      await triggers.nth(Math.min(count - 1, 3)).click();
+      await page.waitForSelector(".param-help", { timeout: 3000 });
+      await page.waitForTimeout(200);
+
+      const atRest = await page.evaluate(HELP_POPOVER_GEOMETRY);
+      check(
+        atRest.open && atRest.insideScroller && !atRest.overViewer,
+        `${layout}: an open help popover sits inside the form's scroller (${JSON.stringify(atRest.box)} in ${JSON.stringify(atRest.clip)})`
+      );
+
+      // Scroll the row well past the top of the scroller, as a thumb flick does.
+      const scrolled = await scrollHelpScroller(page, 2000);
+      await page.waitForTimeout(300);
+      const after = await page.evaluate(HELP_POPOVER_GEOMETRY);
+      check(
+        !scrolled || !after.open || !after.visible || (after.insideScroller && !after.overViewer),
+        `${layout}: scrolling the form never floats the popover over the viewer ` +
+          `(${after.open ? `${after.visible ? "visible" : "hidden"} at ${JSON.stringify(after.box)}` : "closed"})`
+      );
+      check(
+        !scrolled || !after.open || after.triggerVisible || !after.visible,
+        `${layout}: the popover retires once its row has scrolled out of the form`
+      );
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 async function checkViewerHudReachable({ browser, base, check }) {
   console.log("=== viewer HUD reachability (narrow + short viewports) ===");
   for (const [width, height] of [[360, 740], [320, 568]]) {
@@ -2147,6 +2257,7 @@ const OWN_CONTEXT_CHECKS = [
   checkResponsiveLayout,
   checkFirstVisitSheetPolicy,
   checkViewerHudReachable,
+  checkHelpPopoverStaysWithItsRow,
   checkDocumentNeverScrolls,
   checkNothingOffscreen,
   checkSheetFocusTrap,

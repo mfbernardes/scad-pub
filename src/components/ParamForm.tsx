@@ -14,6 +14,7 @@ import { prefersReducedMotion } from "../lib/matchMedia";
 import { clampNumber, committedNumber, finiteDraft, typedCommitValue } from "../lib/numberDraft";
 import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
 import { fontFallback } from "../lib/fontFallback";
+import { nearestScrollParent } from "../lib/scrollParent";
 import { EssentialsToggle } from "./EssentialsToggle";
 import { FontImportActions } from "./FontImportActions";
 import { FontSelect } from "./FontSelect";
@@ -413,15 +414,25 @@ function Control({
 // detached to the row's right edge at the first line's height. A hover-only
 // `title` tooltip would leave the detail unreachable on touch devices.
 function ParamHelp({ help, label }: { help: string; label: string }) {
+  // Radix positions against the VIEWPORT by default, so an open popover whose
+  // row is scrolled away keeps shifting to stay on screen and comes to rest
+  // over the 3D viewer, pointing at nothing. Anchoring collision handling to
+  // the scroller the row lives in (the docked panel or the mobile sheet) keeps
+  // it over the form, and `hideWhenDetached` retires it once its trigger has
+  // scrolled out of that scroller entirely. Resolved on open rather than on
+  // mount: the same form is portalled between the two layouts.
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [boundary, setBoundary] = useState<HTMLElement | null>(null);
   return (
-    <Popover>
+    <Popover onOpenChange={(open) => open && setBoundary(nearestScrollParent(trigger.current))}>
       <PopoverTrigger asChild>
         {/* 15px glyph with a >=44x44px tap target (WCAG 2.2 AAA "Target Size
             (Enhanced)"): the negative margin absorbs the padding so it
             doesn't push the surrounding text apart. */}
         <button
+          ref={trigger}
           type="button"
-          className="-m-[14.5px] inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[4px] border-none bg-transparent p-[14.5px] align-middle leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
+          className="param-help__trigger -m-[14.5px] inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[4px] border-none bg-transparent p-[14.5px] align-middle leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1 [&_svg]:h-[15px] [&_svg]:w-[15px]"
           aria-label={`Help for ${label}`}
         >
           <InfoIcon aria-hidden="true" focusable="false" />
@@ -429,7 +440,12 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-64 max-w-[80vw] p-3 text-sm leading-[1.45] text-foreground [overflow-wrap:anywhere]"
+        // `?? []` is Radix's own "no explicit boundary" value; passing null
+        // would register as explicit and pin it to the viewport instead.
+        collisionBoundary={boundary ?? []}
+        collisionPadding={8}
+        hideWhenDetached
+        className="param-help w-64 max-w-[80vw] p-3 text-sm leading-[1.45] text-foreground [overflow-wrap:anywhere]"
       >
         {help}
       </PopoverContent>
