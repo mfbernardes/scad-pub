@@ -154,18 +154,39 @@ function retintAutoVertices(
 
 /** Cheap capability check, run before constructing a THREE.WebGLRenderer (which
  *  throws on a canvas that can't get a context at all): a disposable canvas
- *  never attached to the document, discarded either way. */
+ *  never attached to the document, discarded either way.
+ *
+ *  The context is released explicitly. Dropping the canvas is NOT enough: a
+ *  detached canvas can hold its context until GC runs, and browsers cap how
+ *  many live WebGL contexts a page may have (Chromium ~16). This runs on every
+ *  Viewer mount, and AppShell remounts the Viewer whenever the layout crosses
+ *  the 860px breakpoint, so a few dozen resizes could exhaust the cap and make
+ *  the REAL renderer fail — the probe reporting "unavailable" for a machine
+ *  that is perfectly capable.
+ *
+ *  A SUCCESS is cached, because support cannot appear and then vanish within a
+ *  session. A failure is not: it can be transient (a driver reset, a page that
+ *  momentarily held too many contexts), and latching that would strand the
+ *  viewer on the fallback for the rest of the session over one bad moment. */
+let webglSupported = false;
+
 function probeWebGL(): boolean {
+  if (webglSupported) return true;
   try {
     const canvas = document.createElement("canvas");
-    return !!(
+    const gl =
       canvas.getContext("webgl2") ||
       canvas.getContext("webgl") ||
-      canvas.getContext("experimental-webgl")
-    );
+      canvas.getContext("experimental-webgl");
+    // WEBGL_lose_context is the only portable way to hand a context back.
+    (gl as WebGLRenderingContext | null)
+      ?.getExtension("WEBGL_lose_context")
+      ?.loseContext();
+    webglSupported = !!gl;
   } catch {
-    return false;
+    webglSupported = false;
   }
+  return webglSupported;
 }
 
 type WebglStatus = "ok" | "unavailable" | "lost";
