@@ -79,9 +79,20 @@ export function DesignGallery({
       )
     : designs;
   const grouped = groupDesigns(filtered);
-  // Re-measure after the list changes: a filter that shortens it can end the
-  // overflow with no scroll event to notice.
+  // Two triggers, because neither covers the other. The layout effect catches a
+  // filter changing the row count, synchronously, so the first paint after a
+  // keystroke is already right. The observer catches the port itself changing
+  // size — a rotation, a resized window, the on-screen keyboard opening — which
+  // changes whether anything is below the fold and fires no scroll event, so
+  // the fade would otherwise sit stale until the next scroll.
   useLayoutEffect(updateMoreBelow, [updateMoreBelow, filtered.length]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(updateMoreBelow);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [updateMoreBelow]);
   return (
     <div className="design-gallery flex min-h-0 flex-1 flex-col gap-3">
       {designs.length > 6 && (

@@ -15,19 +15,15 @@
 import { useAppActions } from "../lib/appActions";
 import { Button } from "./ui/button";
 import { ExplainedDisabledButton } from "./ExplainedDisabledButton";
-import {
-  Download as DownloadIcon,
-  Share2 as ShareIcon,
-  Link2 as LinkIcon,
-  TriangleAlert as AttentionIcon,
-} from "lucide-react";
+import { Download as DownloadIcon, Share2 as ShareIcon, Link2 as LinkIcon } from "lucide-react";
 import type { ReadinessState } from "../lib/readiness";
 import { canShareNatively } from "../lib/share";
 import { t, tn } from "../lib/i18n";
 
 // The id the Download button's `aria-describedby` points at, and the sr-only
-// span below carries: assistive tech gets the same "attention needed before
-// download" signal a sighted visitor sees via the amber dot + status strip.
+// span below carries: the same "attention needed before download" signal a
+// sighted visitor gets from the status pill stacked above this button, said on
+// the button itself so it is heard BEFORE the button is activated.
 // Its own catalogue key (action.attentionHint), not the status strip's
 // review.issueCount: that one reads fine as a standalone pill label, but
 // stapled onto a button already named "Download for 3D printing" it needs to
@@ -59,7 +55,7 @@ interface Props {
    * routed through the Review dialog instead of exporting. */
   canExport: boolean;
   readiness: ReadinessState;
-  /** attention.length: drives the amber dot + sr-only hint. */
+  /** attention.length: names the count in the sr-only hint below. */
   attentionCount: number;
   onDownloadClick: () => void;
 }
@@ -107,20 +103,6 @@ export function ActionButtons({ modelFormat, canExport, readiness, attentionCoun
       >
         <DownloadIcon size={16} aria-hidden="true" className="shrink-0" />
         <span className="action-export__label min-w-0 truncate">{t("action.export")}</span>
-        {/* The warn/warn-bg PAIR, not bare `--warn`: that token carries text
-            over `--panel`, and over this button's accent fill it fell below
-            1.4.11's 3:1. The triangle, not a dot, so shape carries the meaning
-            (1.4.1) and this reads as a different KIND of marker from the
-            Messages bell's numeric badge. Decorative; the sr-only hint below
-            is what assistive tech gets. */}
-        {hasAttention && (
-          <span
-            aria-hidden="true"
-            className="action-export__attention inline-flex size-[17px] shrink-0 items-center justify-center rounded-full bg-warn-bg text-warn"
-          >
-            <AttentionIcon size={11} />
-          </span>
-        )}
       </ExplainedDisabledButton>
       {hasAttention && (
         <span id={EXPORT_ATTENTION_HINT_ID} className="sr-only">

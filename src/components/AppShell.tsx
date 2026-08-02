@@ -475,25 +475,20 @@ export const AppShell = memo(function AppShell({
   //
   //   • "failed" pills on both layouts. A failure needs words; there is no
   //     other surface that says the model did not come out.
-  //   • "attention" pills on DESKTOP ONLY. On mobile the pill was a second
-  //     visual for a signal the dock already carries. ActionButtons puts an
-  //     amber warning badge on Download itself (plus an sr-only issue count
-  //     via `aria-describedby`), and clicking Download in that state opens
-  //     this dialog rather than exporting. Saying it twice cost a whole
-  //     stacked row over the model, on the layout with no room to spare; the
-  //     desktop dock floats in open canvas, so it keeps the fuller wording.
-  //     That trade only holds while the badge is legible, which is what
-  //     ActionButtons' warn/warn-bg + triangle treatment is for.
-  //
-  // Only one layout tree is ever mounted (see the split below), so deriving
-  // this from `isMobile` yields exactly one answer per render.
+  //   • "attention" pills on BOTH layouts. Mobile used to leave this state to
+  //     a marker inside the Download button, to save a stacked row over the
+  //     model. That marker is gone: a small in-button graphic has to earn its
+  //     contrast against a fill the deployment chooses, and it says "amber"
+  //     rather than saying what is wrong. The pill costs a row and says it in
+  //     words, which is the better trade on the layout where the visitor can
+  //     see least.
   //
   // It also gates the Messages bell's numeric badge (`showCount` below), so the
   // pill's issue count is never on screen beside the bell's message count, see
-  // OutputToggle.tsx for why those two tallies legitimately differ. Dropping
-  // the mobile attention pill hands that corner back to the bell's own count,
-  // which is the contract working as intended: one tally on screen, not none.
-  const hasStatusPill = readiness === "failed" || (!isMobile && readiness === "attention");
+  // OutputToggle.tsx for why those two tallies legitimately differ. Now that
+  // mobile pills for attention too, that suppression applies there as well,
+  // which is what finally makes the two mobile signals one.
+  const hasStatusPill = readiness === "failed" || readiness === "attention";
 
   // Prop bundles shared verbatim by the two layout trees: each call site below
   // adds only what is genuinely its own (the panel's dock geometry, the
