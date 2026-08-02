@@ -619,6 +619,22 @@ test("applyFixes strips what executes and what fetches, keeping the colours", ()
   assert.ok(check(root).every((f) => f.code !== "active-content"), "re-check is clean");
 });
 
+// Shared with scripts/lib/svg-sanitize.mjs via src/lib/cssRefs.mjs: a quoted
+// url() value containing ')' used to parse differently on the two sides (see
+// that module's header). Pins that check/applyFixes now agree with the
+// sanitizer instead of missing this shape entirely.
+test("a quoted url() value containing ')' is reported and stripped, not mistaken for inert", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+       <style>.a{background:url("http://evil.test/a)b.png")}</style>
+       <rect class="a" width="5" height="5"/>
+     </svg>`,
+  );
+  assert.ok(check(root).some((f) => f.code === "active-content"), "reported as active content");
+  applyFixes(root);
+  assert.doesNotMatch(serializeSvg(root), /evil\.test/);
+});
+
 // ── the check codes nothing asserted ───────────────────────────────────────
 // Several codes were only ever asserted as ABSENT (a Category A fixture raising
 // no WARN), so a check that stopped firing entirely would have looked like a

@@ -4,8 +4,6 @@
 
 import {
   ACTIVE_TAGS,
-  CSS_IMPORT_RE,
-  CSS_URL_RE,
   IGNORED_TAGS,
   SHAPE_TAGS,
   TEXT_TAGS,
@@ -14,6 +12,7 @@ import {
   paint,
   trappedLayers,
 } from "./dom";
+import { CSS_IMPORT_RE, CSS_URL_RE, isSameDocumentRef, urlRefValue } from "../cssRefs.mjs";
 import { canvasBackgrounds } from "./background";
 import { contentBbox, parseViewBox } from "./geometry";
 import { deriveRegions, effectiveFill, groupIndex, shapesUnder } from "./regions";
@@ -141,7 +140,7 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
     if (localName(el) !== "style") return false;
     const css = el.textContent ?? "";
     if ([...css.matchAll(CSS_IMPORT_RE)].length > 0) return true;
-    return [...css.matchAll(CSS_URL_RE)].some((m) => !m[2].startsWith("#"));
+    return [...css.matchAll(CSS_URL_RE)].some((m) => !isSameDocumentRef(urlRefValue(m)));
   });
   if (active.length > 0 || fetching.length > 0) {
     const names = [

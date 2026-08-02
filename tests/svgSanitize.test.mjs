@@ -552,3 +552,14 @@ test("the document must actually be an SVG, declared as one", () => {
   ])
     assert.doesNotThrow(() => sanitizeSvg(doc), what);
 });
+
+// ── shared with src/lib/svgPrep/dom.ts via src/lib/cssRefs.mjs ────────────
+// A quoted url() value containing `)` used to parse differently on the two
+// sides (see src/lib/cssRefs.mjs's header); this pins that they now agree.
+
+test("a quoted url() value containing ')' is recognised as external, not same-document", () => {
+  const out = clean(
+    wrap(`<style>.a{background:url("http://evil.test/a)b.png")}</style><rect width="1" height="1"/>`)
+  );
+  assert.doesNotMatch(out, /evil\.test/, `external ref with ')' survived: ${out}`);
+});

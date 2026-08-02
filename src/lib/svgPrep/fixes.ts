@@ -4,14 +4,13 @@
 import { canvasBackgrounds } from "./background";
 import {
   ACTIVE_TAGS,
-  CSS_IMPORT_RE,
-  CSS_URL_RE,
   SHAPE_TAGS,
   SVG_NS,
   iterElements,
   localName,
   trappedLayers,
 } from "./dom";
+import { CSS_IMPORT_RE, CSS_URL_RE, isSameDocumentRef } from "../cssRefs.mjs";
 import { gFormat, parseViewBox } from "./geometry";
 
 /** Rename each Inkscape layer's id to its label so it is selectable. Only touches
@@ -202,8 +201,8 @@ export function removeActiveContent(root: Element): string[] {
         fetches += 1;
         return "";
       })
-      .replace(CSS_URL_RE, (m, _q, url: string) => {
-        if (url.startsWith("#")) return m; // a same-document reference is routine
+      .replace(CSS_URL_RE, (m, dq: string, sq: string, bare: string) => {
+        if (isSameDocumentRef(dq ?? sq ?? bare ?? "")) return m; // a same-document reference is routine
         fetches += 1;
         return "none";
       });
