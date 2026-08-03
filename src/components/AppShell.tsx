@@ -487,6 +487,11 @@ export const AppShell = memo(function AppShell({
   // OutputToggle.tsx for why those two tallies legitimately differ. Now that
   // mobile pills for attention too, that suppression applies there as well,
   // which is what finally makes the two mobile signals one.
+  // What the bell's spoken region keys off: `diagnostics` is re-derived from
+  // each render's log, so its LENGTH cannot distinguish a replaced set from an
+  // unchanged one — three notices becoming three different ones is an arrival.
+  const noticeKey = useMemo(() => diagnostics.map((d) => `${d.level}:${d.text}`).join("\u0000"), [diagnostics]);
+
   const hasStatusPill = readiness === "failed" || readiness === "attention";
   // At the sheet's Full detent the whole floating chrome — including the dock
   // and its StatusStrip — is hidden (see the `data-sheet-detent` doc above),
@@ -707,6 +712,7 @@ export const AppShell = memo(function AppShell({
                   <OutputToggle
                     outputOpen={outputOpen}
                     noticeCount={diagnostics.length}
+                    noticeKey={noticeKey}
                     showCount={!hasStatusPill}
                     onToggleOutput={toggleOutput}
                     status={{ rendering, ready, result, stale: stalePreview }}
@@ -816,6 +822,7 @@ export const AppShell = memo(function AppShell({
             stalePreview={stalePreview}
             outputOpen={outputOpen}
             noticeCount={diagnostics.length}
+            noticeKey={noticeKey}
             showCount={!hasStatusPill}
             onToggleOutput={toggleOutput}
             openPickerSignal={openPickerSignal}

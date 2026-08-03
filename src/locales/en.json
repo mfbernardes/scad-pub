@@ -155,6 +155,6 @@
   "render.announceUpdated": "Preview updated",
   "render.announceStale": "Preview out of date",
   "render.announceFailed": "Render failed (exit {code})",
-  "output.newMessages#one": "{count} new message",
-  "output.newMessages#other": "{count} new messages"
+  "output.messagesPending#one": "{count} message",
+  "output.messagesPending#other": "{count} messages"
 }

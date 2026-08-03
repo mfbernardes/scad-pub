@@ -2179,23 +2179,13 @@ async function checkDialogFocusEntry({ browser, base, check }) {
   }
 }
 
-// The panel resizer announces its width through aria-valuenow, and a drag
-// writes it imperatively (a drag deliberately never re-renders). The settle at
-// pointer-up therefore has to write BOTH the width and the attribute: it used
-// to write only the style, and `setWidth` is a no-op when the pointer returns
-// to the width it started at, so React never re-rendered and the attribute
-// stayed stranded at whatever the last drag frame said. The panel sat at 360
-// while assistive technology was told 380.
-//
-// Driven, not unit-tested, because the bug lives in the interaction between an
-// imperative write, a cancelled rAF and React's bail-out on equal state.
 // === focus returns to the trigger when a dialog closes ===
 // Every dialog here is rendered conditionally (`{showHelp && <HelpModal/>}`),
 // which unmounts Radix's Dialog synchronously and skips its own
 // `onCloseAutoFocus` restore, so the restore is ours (src/lib/useReturnFocus.ts)
 // and nothing but an end-to-end check can tell whether it still works. Both
 // close routes, because they leave through different code.
-async function checkDialogFocusReturn({ page, check }) {
+async function checkDialogFocusReturn({ page, check, uiText }) {
   console.log("=== focus returns to the trigger when a dialog closes ===");
   const active = () =>
     page.evaluate(() => {
@@ -2203,9 +2193,13 @@ async function checkDialogFocusReturn({ page, check }) {
       if (!el || el === document.body) return "<body>";
       return el.getAttribute("aria-label") || (el.textContent || "").trim().slice(0, 30);
     });
-  for (const label of ["Help", "Open-source licenses"]) {
+  // Labels from the catalogue, not stock English: a `strings` override would
+  // otherwise match nothing and the loop would report zero assertions.
+  const labels = [uiText("bar.help"), uiText("bar.licenses")].filter(Boolean);
+  if (!check(labels.length === 2, `both dialog triggers are named (${labels.join(", ")})`)) return;
+  for (const label of labels) {
     const trigger = page.locator(`button[aria-label="${label}"]`).first();
-    if (!(await trigger.count())) continue;
+    if (!check(await trigger.count(), `the "${label}" trigger is in the top bar`)) continue;
     for (const route of ["Escape", "the close button"]) {
       await trigger.focus();
       await page.keyboard.press("Enter");
@@ -2217,6 +2211,61 @@ async function checkDialogFocusReturn({ page, check }) {
       const landed = await active();
       check(landed === label, `closing "${label}" with ${route} puts focus back on it (landed on "${landed}")`);
     }
+  }
+}
+
+// === focus returns to the trigger from the mobile "⋮" menu ===
+// A separate context, because this route breaks differently: the opener is a
+// menu row that unmounts as the dialog mounts, so a naive "remember what was
+// focused when I rendered" restores to a dead node and focus lands on <body>.
+// Repeated, because the FIRST open passes by accident on a cold lazy chunk (the
+// popover has already handed focus back by the time the dialog renders) and
+// only the second and later opens expose it.
+async function checkMenuDialogFocusReturn({ browser, base, check, uiText }) {
+  console.log('=== focus returns to the "⋮" button when a dialog opened from it closes ===');
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+    for (let i = 0; i < 5 && (await page.getByRole("dialog").count()); i++) {
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(300);
+    }
+    const menu = page.locator('button[aria-label="More actions"]').first();
+    if (!check(await menu.count(), 'the mobile top bar has a "⋮" menu')) return;
+    for (const round of [1, 2, 3]) {
+      await menu.click();
+      await page.waitForTimeout(400);
+      const help = page
+        .locator("[data-radix-popper-content-wrapper]")
+        .getByText(uiText("bar.help"), { exact: true })
+        .first();
+      if (!check(await help.count(), `round ${round}: the menu offers Help`)) return;
+      await help.click();
+      await page.getByRole("dialog").waitFor({ state: "visible", timeout: 3000 });
+      await page.waitForTimeout(400);
+      await page.locator('[data-slot="dialog-close"]').first().click();
+      await waitDialogClosed(page);
+      await page.waitForTimeout(200);
+      const landed = await page.evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body) return "<body>";
+        return el.getAttribute("aria-label") || (el.textContent || "").trim().slice(0, 26);
+      });
+      check(
+        landed === "More actions",
+        `round ${round}: focus returns to the "⋮" button (landed on "${landed}")`
+      );
+    }
+  } finally {
+    await context.close();
   }
 }
 
@@ -2254,6 +2303,40 @@ async function checkKeyboardZoom({ page, check }) {
   await press("-", 6);
   const zoomedOut = await litPixels();
   check(zoomedOut < zoomedIn * 0.9, `"-" shrinks it (${zoomedIn} -> ${zoomedOut} lit px)`);
+
+  // The guard that keeps these keys out of a modal's way must not also fire for
+  // an ordinary popover: Radix gives PopoverContent role="dialog", so a
+  // document-wide "is a dialog open" test disabled the keys from the viewer's
+  // OWN View menu, over a fully visible model.
+  const viewMenu = page.getByRole("button", { name: /^View: / }).first();
+  if (await viewMenu.count()) {
+    await viewMenu.click();
+    await page.waitForTimeout(400);
+    const withMenu = await litPixels();
+    await press("+", 3);
+    const afterMenu = await litPixels();
+    check(
+      afterMenu > withMenu * 1.1,
+      `the View popover doesn't disable them (${withMenu} -> ${afterMenu} lit px)`
+    );
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    await press("-", 3);
+  }
+
+  // ...while a modal dialog, which takes the viewer away entirely, must.
+  await page.locator('button[aria-label="Help"]').first().click();
+  await page.getByRole("dialog").waitFor({ state: "visible", timeout: 3000 });
+  await page.waitForTimeout(500);
+  const withDialog = await litPixels();
+  await press("+", 4);
+  const afterDialog = await litPixels();
+  check(
+    Math.abs(afterDialog - withDialog) / withDialog < 0.01,
+    `a modal dialog does (${withDialog} -> ${afterDialog} lit px)`
+  );
+  await page.keyboard.press("Escape");
+  await waitDialogClosed(page);
 
   // A text field owns its own "+"/"-": the guard that keeps this binding from
   // eating them is the reason it can live on the document at all.
@@ -2436,6 +2519,16 @@ async function checkSheetPeekFocus({ browser, base, check }) {
   }
 }
 
+// The panel resizer announces its width through aria-valuenow, and a drag
+// writes it imperatively (a drag deliberately never re-renders). The settle at
+// pointer-up therefore has to write BOTH the width and the attribute: it used
+// to write only the style, and `setWidth` is a no-op when the pointer returns
+// to the width it started at, so React never re-rendered and the attribute
+// stayed stranded at whatever the last drag frame said. The panel sat at 360
+// while assistive technology was told 380.
+//
+// Driven, not unit-tested, because the bug lives in the interaction between an
+// imperative write, a cancelled rAF and React's bail-out on equal state.
 async function checkResizerAnnouncedWidth({ page, check }) {
   console.log("=== the resizer's announced width settles where the panel does ===");
   const handle = page.locator(".param-panel__resize-handle").first();
@@ -2631,6 +2724,7 @@ const OWN_CONTEXT_CHECKS = [
   checkDialogFocusEntry,
   checkCoarseTargets,
   checkSheetPeekFocus,
+  checkMenuDialogFocusReturn,
 ];
 
 async function main() {
@@ -2679,7 +2773,7 @@ async function main() {
     };
     console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);
 
-    const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName, labels };
+    const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName, labels, uiText };
     // The popup is cleared BEFORE the first render wait, and the order is
     // load-bearing: a `picker` popup IS the design chooser, and App holds the
     // whole render path back while it owns the first screen (useRenderPipeline's

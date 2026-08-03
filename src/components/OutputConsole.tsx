@@ -139,10 +139,11 @@ export function OutputConsole({
               </div>
             ) : diagnostics.length ? (
               <ul
-                // Not a live region. The whole list is rebuilt on every render,
-                // so `aria-live` re-read all of it each time — for a console
-                // that auto-opens on the first notice and whose count the bell
-                // already announces. Reading it is the visitor's move.
+                // Not a live region: the whole list is rebuilt on every
+                // render, so `aria-live` re-read all of it each time. The
+                // arrival itself is announced as a tally beside the bell
+                // (OutputToggle's `.output-announce`); reading the lines is
+                // the visitor's move.
                 className="px-3 py-[0.4rem]"
               >
                 {diagnostics.map((d, i) => (

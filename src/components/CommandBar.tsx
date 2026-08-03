@@ -26,6 +26,8 @@ interface Props {
   stalePreview: boolean;
   outputOpen: boolean;
   noticeCount: number;
+  /** Signature of the pending messages; forwarded to the bell's spoken region. */
+  noticeKey?: string;
   /** Whether the bell may show `noticeCount` as a corner badge: false while the
    *  readiness pill owns the on-screen count (see OutputToggle's `showCount`). */
   showCount: boolean;
@@ -53,6 +55,7 @@ export const CommandBar = memo(function CommandBar({
   stalePreview,
   outputOpen,
   noticeCount,
+  noticeKey,
   showCount,
   onToggleOutput,
   openPickerSignal,
@@ -95,6 +98,7 @@ export const CommandBar = memo(function CommandBar({
         <OutputToggle
           outputOpen={outputOpen}
           noticeCount={noticeCount}
+          noticeKey={noticeKey}
           showCount={showCount}
           onToggleOutput={onToggleOutput}
           status={{ rendering, ready, result, stale: stalePreview }}

@@ -150,13 +150,8 @@ export function SheetTabs({
           </TabsTrigger>
         ))}
       </TabsList>
-      {/* Everything below the tab row sits under the peek fold, inside the
-          sheet's `overflow: hidden` frame: Tab used to walk straight into it
-          while the sheet was collapsed and park focus on controls ~90% clipped.
-          Raising the sheet on the way in is what tapping a tab already does
-          (`onActivate`), and `expand` is a no-op above peek. */}
       {sheetPill && (
-        <div className="shrink-0 px-3 pt-2 pb-1" onFocusCapture={onActivate}>
+        <div className="shrink-0 px-3 pt-2 pb-1">
           <StatusStrip
             readiness={sheetPill.readiness}
             attentionCount={sheetPill.attentionCount}
@@ -165,6 +160,11 @@ export function SheetTabs({
           />
         </div>
       )}
+      {/* Everything below the tab row sits under the peek fold, inside the
+          sheet's `overflow: hidden` frame: Tab used to walk straight into it
+          while the sheet was collapsed and park focus on controls ~90% clipped.
+          Raising the sheet on the way in is what tapping a tab already does
+          (`onActivate`), and `expand` is a no-op above peek. */}
       <div className="flex min-h-0 flex-1 flex-col" onFocusCapture={onActivate}>
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetDiffBar

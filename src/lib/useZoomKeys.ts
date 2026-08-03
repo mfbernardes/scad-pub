@@ -17,13 +17,17 @@ function isTyping(target: EventTarget | null): boolean {
   return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
 }
 
-/** Whether the viewer is behind something that owns the keyboard: an open
- *  dialog, or an `inert` subtree (the mobile sheet inerts the whole background
- *  at its Full detent). Zooming a model the visitor cannot see is worse than
- *  doing nothing. */
+/** Whether the viewer is behind something that owns the keyboard.
+ *
+ *  Asked of the VIEWER, not of the document, and that distinction is the whole
+ *  check: "is there a `[role=dialog]` anywhere" also matches every Radix
+ *  Popover (`PopoverContent` carries that role, see ParamForm's help bubble),
+ *  so opening the viewer's own View menu — a 200px panel occluding nothing —
+ *  killed the zoom keys. Both surfaces that really do take the viewer away mark
+ *  it directly instead: a modal dialog `aria-hidden`s the background, and the
+ *  mobile sheet `inert`s it at the Full detent. */
 function occluded(wrap: HTMLElement | null): boolean {
-  if (document.querySelector("[role=dialog], [role=alertdialog]")) return true;
-  return !!wrap?.closest("[inert]");
+  return !!wrap?.closest("[inert], [aria-hidden='true']");
 }
 
 export function useZoomKeys(
@@ -39,9 +43,10 @@ export function useZoomKeys(
       if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
       if (occluded(wrapRef.current)) return;
       // "=" and "_" are the unshifted faces of the same two keys, so the
-      // binding works without reaching for Shift on a US layout.
+      // binding works without reaching for Shift on a US layout. U+2212 is the
+      // minus sign the help copy prints and some layouts emit.
       if (e.key === "+" || e.key === "=") viewerRef.current?.zoomIn();
-      else if (e.key === "-" || e.key === "_") viewerRef.current?.zoomOut();
+      else if (e.key === "-" || e.key === "_" || e.key === "\u2212") viewerRef.current?.zoomOut();
       else return;
       e.preventDefault();
     };

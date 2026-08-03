@@ -88,6 +88,14 @@ test("renderAnnouncement: the states a visitor has to act on carry their own key
   });
 });
 
+test("the bell's spoken keys all resolve, including the message-arrival tally", () => {
+  // A key i18n cannot resolve falls back to the key itself, which a screen
+  // reader then reads out verbatim.
+  for (const key of ["output.messagesPending#one", "output.messagesPending#other"]) {
+    assert.ok(key in en, `${key} is missing from src/locales/en.json`);
+  }
+});
+
 test("renderAnnouncement: every key it can return exists in the catalogue", () => {
   // The spoken text is the one render string a screen reader ever hears, so a
   // key that resolves to itself (i18n's fallback) would be read aloud verbatim.

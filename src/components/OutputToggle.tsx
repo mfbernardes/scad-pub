@@ -32,6 +32,11 @@ interface Props {
   /** How many notices/warnings are pending: shown as a corner count badge when
    *  > 0 and `showCount` is true. */
   noticeCount?: number;
+  /** A value that changes exactly when the pending messages change (their
+   *  content, not merely how many). What the spoken region below keys off:
+   *  `diagnostics` is re-derived per render, so a count alone cannot tell a
+   *  replaced set from an unchanged one. Omitted -> the count stands in. */
+  noticeKey?: string;
   /**
    * Whether the corner may carry the numeric count. Callers set it false while
    * the readiness pill is on screen (AppShell's `hasStatusPill`) so only one
@@ -55,6 +60,7 @@ interface Props {
 export function OutputToggle({
   outputOpen,
   noticeCount = 0,
+  noticeKey,
   showCount = true,
   onToggleOutput,
   status,
@@ -84,7 +90,7 @@ export function OutputToggle({
   // reader user switching between the two controls should hear two distinct
   // claims, not the same one twice.
   const announcement = status ? renderAnnouncement(status) : null;
-  const newMessages = useNewMessages(noticeCount);
+  const messagesArrived = useArrivingMessages(noticeCount, noticeKey ?? String(noticeCount));
 
   const action = outputOpen ? t("common.close") : t("common.open");
   const bellLabel = hasNotices
@@ -150,40 +156,53 @@ export function OutputToggle({
       <span className="render-announce sr-only" role="status" aria-live="polite">
         {announcement ? t(announcement.key, announcement.vars) : ""}
       </span>
-      {/* A message arriving is its own status update, and the bell cannot make
+      {/* Messages arriving is its own status update, and the bell cannot make
           it: a count living in an aria-label on an unfocused button is never
-          spoken. The delta only, so a listener isn't re-read the whole console
-          — which is what dropping `aria-live` from the list itself was about,
-          see OutputConsole. */}
+          spoken. The tally, not the whole list — re-reading every line on every
+          render is what dropping `aria-live` from the list itself was about,
+          see OutputConsole. The child is keyed by arrival: replacing the node
+          is what a screen reader treats as new content, and two consecutive
+          arrivals can legitimately produce identical text. */}
       <span className="output-announce sr-only" role="status" aria-live="polite">
-        {newMessages > 0 ? tn("output.newMessages", newMessages, { count: newMessages }) : ""}
+        {messagesArrived ? (
+          <span key={messagesArrived.epoch}>
+            {tn("output.messagesPending", noticeCount, { count: noticeCount })}
+          </span>
+        ) : null}
       </span>
     </>
   );
 }
 
 /**
- * How many messages arrived since the last time this settled, for a live region
- * that reports the delta and then goes quiet.
+ * Whether the pending messages just changed, with an epoch that increments per
+ * change so the caller can force a fresh node.
  *
- * A tally that only ever grows would re-announce the same total on every render
- * that adds nothing, and one that reset synchronously would clear the text
- * before a screen reader read it; the timer is what buys the region a moment to
- * be read. A count going DOWN (a new design, a cleared console) is not news, so
- * it only re-baselines.
+ * Keyed on a content signature, not a tally: `diagnostics` is re-parsed from
+ * the current render's log every time, so one render's three notices being
+ * replaced by three different ones is an arrival a count comparison cannot see.
+ * Clears itself after a beat, so the region is quiet between renders and the
+ * next change reads as new rather than as a standing label.
  */
-function useNewMessages(count: number): number {
-  const seen = useRef(count);
-  const [delta, setDelta] = useState(0);
+function useArrivingMessages(count: number, signature: string): { epoch: number } | null {
+  const seen = useRef(signature);
+  const [state, setState] = useState<{ epoch: number } | null>(null);
+  // Adjusted during render, not in an effect: React re-renders before painting,
+  // so the region carries the announcement in the same frame the messages
+  // land. `count === 0` is not an arrival — a cleared console, or a design with
+  // no messages, has nothing to say.
+  if (signature !== seen.current) {
+    seen.current = signature;
+    setState(count === 0 ? null : (prev) => ({ epoch: (prev?.epoch ?? 0) + 1 }));
+  }
+  // The clear lives in its own effect keyed on the state itself, so a second
+  // arrival inside the window (or StrictMode's double invoke) restarts the
+  // timer rather than leaving the region holding text with none left to clear
+  // it.
   useEffect(() => {
-    if (count <= seen.current) {
-      seen.current = count;
-      return;
-    }
-    setDelta(count - seen.current);
-    seen.current = count;
-    const timer = setTimeout(() => setDelta(0), 2000);
+    if (!state) return;
+    const timer = setTimeout(() => setState(null), 2000);
     return () => clearTimeout(timer);
-  }, [count]);
-  return delta;
+  }, [state]);
+  return state;
 }
