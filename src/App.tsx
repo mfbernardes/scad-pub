@@ -440,16 +440,29 @@ export default function App() {
   // One-time, post-export install nudge: only when the browser actually offers
   // install, the config allows it, and we haven't shown it before. Demoted per
   // the UX plan, never a standing prompt.
+  //
+  // "Shown" and "seen" are deliberately different events (WCAG 2.2.1): marking
+  // the flag at show time meant a visitor who didn't act inside the 12s window
+  // (busy, looked away) lost the offer for good the instant it faded. `markSeen`
+  // only runs from a real user action — the install/dismiss buttons, or the
+  // toast's own close button/swipe (`onDismiss`) — never from `onAutoClose`, so
+  // an ignored toast tries again on the visitor's next export instead.
   const offerInstallHint = useCallback(() => {
     if (!canInstall || installMode === "off") return;
     if (readLocal(INSTALL_HINT_KEY)) return;
-    // Storage unavailable: skip the hint rather than risk repeating it.
-    if (!writeLocal(INSTALL_HINT_KEY, "1")) return;
+    const markSeen = () => writeLocal(INSTALL_HINT_KEY, "1");
     toast(t("install.hint"), {
       id: "install-hint",
       duration: 12000,
-      action: { label: t("install.action"), onClick: () => void promptInstall() },
-      cancel: { label: t("install.dismiss"), onClick: () => {} },
+      action: {
+        label: t("install.action"),
+        onClick: () => {
+          markSeen();
+          void promptInstall();
+        },
+      },
+      cancel: { label: t("install.dismiss"), onClick: markSeen },
+      onDismiss: markSeen,
     });
   }, [canInstall, promptInstall]);
 

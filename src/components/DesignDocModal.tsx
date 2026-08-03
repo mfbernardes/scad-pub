@@ -63,12 +63,17 @@ export function DesignDocModal({
     <Modal title={`About the ${design.label}`} onClose={onClose}>
       <div className={DOC_BODY} tabIndex={0}>
         {error ? (
-          <p className="text-[0.88rem] text-muted-foreground">
+          <p className="text-[0.88rem] text-muted-foreground" role="status">
             Couldn't load this design's documentation. Check your connection and try again.
           </p>
         ) : text === null ? (
-          <p className="text-[0.88rem] text-muted-foreground">Loading…</p>
+          <p className="text-[0.88rem] text-muted-foreground" role="status">
+            Loading…
+          </p>
         ) : (
+          // Silent once fetched: the visitor is already inside the dialog and
+          // can read it, and a live region over the whole doc body would read
+          // the entire markdown aloud on every open.
           <Markdown body={text} />
         )}
       </div>

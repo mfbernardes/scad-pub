@@ -29,11 +29,15 @@ export function FileInput({ accept, onFile, children }: Props) {
           e.target.value = "";
           if (!file) return;
           Promise.resolve(onFile(file)).catch((err) => {
+            // duration: Infinity: this covers every import route through
+            // FileInput (fonts, SVGs, presets), so a failure stays on screen
+            // until dismissed rather than the default 4s (WCAG 3.3.1).
             toast.error(
               t("fileInput.readError", {
                 name: file.name,
                 reason: err instanceof Error ? err.message : String(err),
-              })
+              }),
+              { duration: Infinity }
             );
           });
         }}

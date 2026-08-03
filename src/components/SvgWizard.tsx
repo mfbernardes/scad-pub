@@ -63,6 +63,12 @@ const LEVEL_BADGE: Record<Finding["level"], "destructive" | "warn" | "secondary"
 // Blocking problems first, then warnings, then informational notes.
 const LEVEL_ORDER: Record<Finding["level"], number> = { ERROR: 0, WARN: 1, INFO: 2 };
 
+// The id the height-error paragraph publishes under, and every invalid height
+// Input's `aria-describedby` points at (mirrors SvgPrepareControl's own
+// role="alert" error paragraph). One instance of the wizard is ever mounted
+// at a time, so a single static id is safe.
+const HEIGHT_ERROR_ID = "svg-wizard-height-error";
+
 function FindingList({ findings, empty }: { findings: Finding[]; empty: string }) {
   if (findings.length === 0)
     return <p className="text-sm text-muted-foreground">{empty}</p>;
@@ -300,6 +306,7 @@ export function SvgWizard({
                                 placeholder={defaultHeight === null ? "" : String(defaultHeight)}
                                 aria-label={`Height of region ${r.id} in millimetres`}
                                 aria-invalid={badHeights.has(r.id) || undefined}
+                                aria-describedby={badHeights.has(r.id) ? HEIGHT_ERROR_ID : undefined}
                                 onChange={(e) => setHeight(r.id, e.target.value)}
                               />
                               <span className="text-muted-foreground">mm</span>
@@ -343,7 +350,11 @@ export function SvgWizard({
             )}
 
             {blockedByHeight && !blockedByError && (
-              <p className="svg-wizard__height-error mt-3 text-sm font-medium text-destructive">
+              <p
+                id={HEIGHT_ERROR_ID}
+                role="alert"
+                className="svg-wizard__height-error mt-3 text-sm font-medium text-destructive"
+              >
                 {badHeights.size === 1
                   ? `The height for “${[...badHeights][0]}” isn't usable — `
                   : `The heights for ${[...badHeights].map((id) => `“${id}”`).join(", ")} aren't usable — `}

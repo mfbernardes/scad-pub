@@ -440,6 +440,12 @@
                 "null"
               ]
             },
+            "line-strong": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "text": {
               "type": [
                 "string",
@@ -494,6 +500,12 @@
                 "null"
               ]
             },
+            "warn-solid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "success": {
               "type": [
                 "string",
@@ -501,6 +513,12 @@
               ]
             },
             "success-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "danger-solid": {
               "type": [
                 "string",
                 "null"
@@ -567,6 +585,12 @@
               ]
             },
             "glass-border": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hud-border": {
               "type": [
                 "string",
                 "null"
@@ -623,6 +647,12 @@
                 "null"
               ]
             },
+            "line-strong": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "text": {
               "type": [
                 "string",
@@ -677,6 +707,12 @@
                 "null"
               ]
             },
+            "warn-solid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "success": {
               "type": [
                 "string",
@@ -684,6 +720,12 @@
               ]
             },
             "success-bg": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "danger-solid": {
               "type": [
                 "string",
                 "null"
@@ -750,6 +792,12 @@
               ]
             },
             "glass-border": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hud-border": {
               "type": [
                 "string",
                 "null"

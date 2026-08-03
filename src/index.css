@@ -38,11 +38,13 @@
   --color-accent-foreground: var(--text);
   --color-destructive: var(--danger);
   --color-destructive-foreground: #ffffff;
+  --color-danger-solid: var(--danger-solid);
   --color-border: var(--line);
-  --color-input: var(--line);
+  --color-input: var(--line-strong);
   --color-ring: var(--focus);
   --color-warn: var(--warn);
   --color-warn-bg: var(--warn-bg);
+  --color-warn-solid: var(--warn-solid);
   --color-success: var(--success);
   --color-success-bg: var(--success-bg);
   --color-brand: var(--accent);
@@ -84,6 +86,11 @@
   --panel: #1c1f27;
   --panel-2: #252935;
   --line: #343a48;
+  /* Interactive-control boundary (input/select/checkbox/switch/slider borders):
+     --line reads at only ~1.45:1 against --panel, under WCAG 1.4.11's 3:1 for a
+     UI component. Decorative dividers keep --line; anything a visitor operates
+     uses this instead. */
+  --line-strong: #6e7683;
   --text: #e6e9ef;
   --muted: #a7b0c0; /* AA on every panel (>= 6.5:1); BITV 2.0 / WCAG 2.1 */
   --accent: #86a9ff; /* azure: accent TEXT/icons on dark (~7:1 on panels) */
@@ -93,13 +100,20 @@
   --link: #8ab4f8;
   --warn: #e0a458;
   --warn-bg: #332812; /* warm amber tint behind a warning card, dark surface (~6.6:1) */
+  /* Black text/icons on --warn already clear AA (~9.6:1) here, so the filled
+     surface (badge) can reuse it; the light theme's --warn cannot (see there). */
+  --warn-solid: #e0a458;
   --success: #4ade80; /* AA on every panel (dark, ~10:1) */
   --success-bg: #142615; /* muted green tint behind a success card, dark surface */
   --danger: #f87171;
+  /* White text on plain --danger is only 2.77:1 (WCAG 1.4.3 needs 4.5:1): that
+     value is tuned as TEXT/icon colour on a dark panel, not as a fill under
+     white text. Filled destructive surfaces (button, badge) use this instead. */
+  --danger-solid: #ae4f4f;
   --code-bg: #101218;
   --overlay: rgba(20, 22, 28, 0.72);
   --viewer-bg: #0e1016; /* deep slate, darker than the chrome to frame the model */
-  --viewer-grid: #565f6e; /* centre axes: ~3:1 vs --viewer-bg for orientation */
+  --viewer-grid: #5c6577; /* centre axes: ~3:1 vs --viewer-bg for orientation */
   --viewer-grid-2: #20242e; /* grid lines: deliberately subtle */
   --viewer-model: #6f93ff; /* the rendered model's material: brand blue, the hero */
   --viewer-dim: #ffd7a1; /* dimension callouts: warm amber, contrasts the blue model */
@@ -115,6 +129,12 @@
   --radius-sm: 6px;
   --glass-bg: #252935;
   --glass-border: #343a48;
+  /* The viewer HUD's glass buttons float directly over --viewer-bg rather than
+     a chrome band, where --glass-border reads at ~1.67:1 (WCAG 1.4.11 needs
+     3:1). Scoped to that one context (ViewPicker's HUD_GLASS_BTN) rather than
+     raising --glass-border itself, which also borders chrome bands that don't
+     have the problem. */
+  --hud-border: #767e8a;
   --elevation: 0 6px 18px rgba(0, 0, 0, 0.5);
   /* Fallback only: BottomSheet measures its real header (drag handle + tab
      row) (which can exceed this under font scaling) and AppShell writes it
@@ -144,6 +164,7 @@
   --panel: #ffffff;
   --panel-2: #e5e9f0;
   --line: #cfd6e1;
+  --line-strong: #727b88;
   --text: #1a1d24;
   --muted: #545d6c; /* AA on every panel (>= 5.4:1) */
   --accent: #1d4ed8; /* deep blue: AA as text on white (~6.7:1 on panel) */
@@ -153,13 +174,18 @@
   --link: #1558c0;
   --warn: #9a5512;
   --warn-bg: #fff8e9; /* warm amber tint behind a warning card */
+  /* Black text on plain --warn is only 3.68:1 here (WCAG 1.4.3 needs 4.5:1):
+     tuned as text on white, not as a fill under black. The badge's filled
+     surface uses this darker value instead. */
+  --warn-solid: #a9702f;
   --success: #1f7a3d; /* AA as text on white (~5.1:1) */
   --success-bg: #eaf6ee; /* muted green tint behind a success card */
   --danger: #c0341d;
+  --danger-solid: #c0341d; /* same as --danger: already 5.60:1 with white here */
   --code-bg: #e8ecf3;
   --overlay: rgba(245, 247, 250, 0.72);
   --viewer-bg: #dde2ea; /* soft cool grey, not a glaring white */
-  --viewer-grid: #8b94a0; /* centre axes */
+  --viewer-grid: #6c7784; /* centre axes: ~3:1 vs --viewer-bg for orientation */
   --viewer-grid-2: #c4cad1; /* grid lines: subtle */
   --viewer-model: #3a5fd0; /* the rendered model's material: brand blue */
   --viewer-dim: #9c380b; /* dimension callouts: deep amber against the blue model */
@@ -168,6 +194,7 @@
   --radius-sm: 6px;
   --glass-bg: #ffffff;
   --glass-border: #cfd6e1;
+  --hud-border: #66707c; /* see the dark theme's own comment on this token */
   --elevation: 0 6px 18px rgba(20, 30, 60, 0.12);
   color-scheme: light;
 }
@@ -509,12 +536,13 @@ button:disabled { cursor: default; }
 
 /* Light schemes give `--glass-bg` very little separation from the viewer
    backdrop (on some palettes a few percent of luminance), which left the HUD
-   buttons reading as faint outlines rather than controls. Firm up the border
-   and add the blur the dark scheme gets for free from its own contrast, so the
-   button has an edge regardless of what is behind it. Scoped to the viewer HUD:
-   the top bar and dock sit on their own solid bands and don't have the problem. */
+   buttons reading as faint outlines rather than controls. The border itself
+   is `--hud-border` (HUD_GLASS_BTN, ViewPicker.tsx), tuned per theme against
+   `--viewer-bg`; this adds the blur the dark scheme gets for free from its own
+   contrast, so the button has an edge regardless of what's behind it. Scoped
+   to the viewer HUD: the top bar and dock sit on their own solid bands and
+   don't have the problem. */
 :root[data-theme="light"] .viewer-hud .icon-btn {
-  border-color: color-mix(in srgb, var(--line) 88%, var(--text));
   backdrop-filter: blur(6px);
 }
 

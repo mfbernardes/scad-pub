@@ -18,6 +18,11 @@ function Toaster({ theme = "dark", ...props }: ToasterProps) {
       theme={theme}
       className="toaster group"
       position="top-center"
+      // Every toast gets a manual dismiss affordance, not just the ones that
+      // happen to pass an `action`/`cancel` (WCAG 3.3.1): a persistent
+      // (duration: Infinity) import-failure or notice toast otherwise has no
+      // way to leave the screen except being superseded by its own `id`.
+      closeButton
       offset={{ top: "4.5rem" }}
       mobileOffset={{ top: "calc(env(safe-area-inset-top, 0px) + 4rem)" }}
       style={

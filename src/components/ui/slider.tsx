@@ -39,10 +39,16 @@ function Slider({
       {...props}
     >
       {/* Chunky track + solid thumb: the sliders are the app's main hands-on
-          control, so they read as tactile hardware, not a hairline widget. */}
+          control, so they read as tactile hardware, not a hairline widget.
+          The track's own border and the thumb's border are both --line-strong:
+          bg-muted (--panel-2) against the surrounding --panel is under 1.3:1
+          (WCAG 1.4.11 needs 3:1 for a UI component boundary), and in dark mode
+          the thumb's filled colour (--accent-solid) against the track reads
+          the same way — the border is what carries the required contrast in
+          both cases, independent of the fill underneath it. */}
       <SliderPrimitive.Track
         data-slot="slider-track"
-        className="bg-muted relative grow overflow-hidden rounded-full h-2 w-full"
+        className="bg-muted border-(--line-strong) relative grow overflow-hidden rounded-full border h-2 w-full"
       >
         <SliderPrimitive.Range
           data-slot="slider-range"
@@ -55,7 +61,7 @@ function Slider({
           key={index}
           aria-label={thumbLabel}
           aria-labelledby={thumbLabelledBy}
-          className="bg-primary border-card ring-ring/50 block size-5 shrink-0 rounded-full border-2 shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+          className="bg-primary border-(--line-strong) ring-ring/80 block size-5 shrink-0 rounded-full border-2 shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
     </SliderPrimitive.Root>

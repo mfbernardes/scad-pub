@@ -235,13 +235,21 @@ export function PresetPicker({
     try {
       parsed = parseParameterSetsFile(design, await file.text());
     } catch (err) {
+      // duration: Infinity: an import failure is actionable (fix the file,
+      // try another), not a fire-and-forget confirmation, so it stays until
+      // dismissed rather than the default 4s — see useAppNotices.ts's own
+      // persistent toasts for the same reasoning (WCAG 3.3.1).
       toast.error(
-        `Couldn't import "${file.name}": ${err instanceof Error ? err.message : "not a valid parameterSets file."}`
+        t("presets.importParseError", {
+          name: file.name,
+          reason: err instanceof Error ? err.message : t("presets.importParseErrorGeneric"),
+        }),
+        { duration: Infinity }
       );
       return;
     }
     if (parsed.length === 0) {
-      toast.error(`"${file.name}" has no parameter sets to import.`);
+      toast.error(t("presets.importEmpty", { name: file.name }), { duration: Infinity });
       return;
     }
     const collisions = parsed.map((s) => s.name).filter((name) => userPresets.includes(name));
@@ -470,7 +478,11 @@ export function PresetPicker({
                       {name}
                     </button>
                     <button
-                      className="shrink-0 rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.2rem] text-[0.8rem] text-muted-foreground enabled:hover:bg-muted enabled:hover:text-warn"
+                      // pointer-coarse:min-h-11: matches ParamForm's own
+                      // missing-font action links, which raise this same
+                      // ~22px control to the coarse-pointer target floor
+                      // without touching the fine-pointer (mouse) size.
+                      className="inline-flex shrink-0 items-center rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.2rem] pointer-coarse:min-h-11 text-[0.8rem] text-muted-foreground enabled:hover:bg-muted enabled:hover:text-warn"
                       onClick={() => setDeleteTarget(name)}
                       aria-label={`Delete preset "${name}"`}
                       title={`Delete "${name}"`}

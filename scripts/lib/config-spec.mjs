@@ -290,11 +290,12 @@ const DESIGN_PRESETS_SPEC = {
 // exact array, so parseColors's runtime validation and this schema/doc
 // metadata can never drift apart: there is one owner, this one.
 export const COLOR_TOKENS = [
-  "bg", "panel", "panel-2", "line", "text", "muted", "accent", "accent-solid",
-  "on-accent", "focus", "link", "warn", "warn-bg", "success", "success-bg",
-  "code-bg", "overlay", "viewer-bg", "viewer-grid", "viewer-grid-2",
-  "viewer-model", "viewer-dim", "radius", "radius-sm", "glass-bg",
-  "glass-border", "elevation", "font-sans", "font-display",
+  "bg", "panel", "panel-2", "line", "line-strong", "text", "muted", "accent",
+  "accent-solid", "on-accent", "focus", "link", "warn", "warn-bg",
+  "warn-solid", "success", "success-bg", "danger-solid", "code-bg", "overlay",
+  "viewer-bg", "viewer-grid", "viewer-grid-2", "viewer-model", "viewer-dim",
+  "radius", "radius-sm", "glass-bg", "glass-border", "hud-border", "elevation",
+  "font-sans", "font-display",
 ];
 
 export const CONFIG_SPEC = {

@@ -221,6 +221,21 @@ function revertToBaseline(
   if (bound && bound in baseline) onChange(bound, baseline[bound]);
 }
 
+/**
+ * The persistent, programmatic form of a numeric param's min/max (WCAG 3.3.2):
+ * unlike `clampHint`, which only appears after a commit gets clamped, this is
+ * always available to assistive tech via `aria-describedby`, so the range is
+ * known before a visitor ever gets it wrong. Null when the param has neither
+ * bound (nothing to describe).
+ */
+function rangeHintText(param: Extract<Param, { type: "number" }>): string | null {
+  const { min, max } = param;
+  if (min !== undefined && max !== undefined) return t("paramForm.rangeMinMax", { min, max });
+  if (min !== undefined) return t("paramForm.rangeMin", { min });
+  if (max !== undefined) return t("paramForm.rangeMax", { max });
+  return null;
+}
+
 function NumberControl({
   param,
   value,
@@ -265,6 +280,9 @@ function NumberControl({
     setDraft(String(v));
     onChange(v);
   };
+
+  const rangeHint = rangeHintText(param);
+  const rangeHintId = `range-hint-${param.name}`;
 
   // Shared by blur and Enter: clamp whatever's left typed, commit it, and
   // normalise the draft text to match (e.g. a raw value beyond the range).
@@ -311,6 +329,7 @@ function NumberControl({
           step={param.step ?? "any"}
           value={draft}
           aria-label={label}
+          aria-describedby={rangeHint ? rangeHintId : undefined}
           onFocus={() => {
             focusedRef.current = true;
           }}
@@ -334,6 +353,14 @@ function NumberControl({
           }}
         />
       </div>
+      {/* Persistent, not transient like clampHint below: the range is known
+          before a visitor ever types outside it (WCAG 3.3.2). Visually
+          hidden — the design stays unchanged; only the description is new. */}
+      {rangeHint && (
+        <span id={rangeHintId} className="sr-only">
+          {rangeHint}
+        </span>
+      )}
       {clampHint && (
         <p className="text-[0.72rem] text-warn" role="status">
           {clampHint}
@@ -661,7 +688,10 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
         </div>
       )}
       {groups.length === 0 && (
-        <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
+        // role="status": a search that zeroes out every group replaces the
+        // whole form with this line, so it needs to announce like any other
+        // content swap (WCAG 4.1.3).
+        <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground" role="status">
           {q ? t("paramForm.noMatches", { search }) : t("paramForm.nothingToCustomize")}
         </p>
       )}
@@ -833,7 +863,7 @@ function ParamLabel({
         {help && <ParamHelp help={help} label={label} />}
       </span>
       {varName && (
-        <code className="param-var shrink-0 font-mono text-[11px] leading-[normal] text-muted-foreground">
+        <code className="param-var shrink-0 font-mono text-[0.6875rem] leading-[normal] text-muted-foreground">
           {varName}
         </code>
       )}

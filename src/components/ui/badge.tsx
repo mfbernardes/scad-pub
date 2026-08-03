@@ -11,8 +11,11 @@ const badgeVariants = cva(
       variant: {
         default: "border-transparent bg-primary text-primary-foreground",
         secondary: "border-transparent bg-secondary text-secondary-foreground",
-        destructive: "border-transparent bg-destructive text-white",
-        warn: "border-transparent bg-warn text-black",
+        // bg-danger-solid/bg-warn-solid, not bg-destructive/bg-warn: those two
+        // tokens are tuned as text/icon colour on a panel, not as a fill under
+        // solid white/black text (see button.tsx's destructive variant).
+        destructive: "border-transparent bg-danger-solid text-white",
+        warn: "border-transparent bg-warn-solid text-black",
         outline: "text-foreground",
       },
     },

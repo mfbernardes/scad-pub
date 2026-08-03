@@ -350,9 +350,10 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
   --accent: #86a9ff;
   --accent-solid: #2f55ff;
   --on-accent: #ffffff;
-  /* --bg, --panel, --panel-2, --line, --text, --muted, --focus, --link, --warn,
-     --warn-bg, --success, --success-bg, --code-bg, --overlay, --glass-bg,
-     --glass-border, --elevation, --radius, --radius-sm,
+  /* --bg, --panel, --panel-2, --line, --line-strong, --text, --muted, --focus,
+     --link, --warn, --warn-bg, --warn-solid, --success, --success-bg,
+     --danger-solid, --code-bg, --overlay, --glass-bg, --glass-border,
+     --hud-border, --elevation, --radius, --radius-sm,
      --viewer-bg/-grid/-grid-2, --viewer-model/-dim */
 }
 :root[data-theme="light"] {
@@ -365,7 +366,8 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | Token | Controls |
 | ------- | ---------- |
 | `--bg` / `--panel` / `--panel-2` | app, panel, and inset backgrounds |
-| `--line` | borders and dividers |
+| `--line` | decorative borders and dividers |
+| `--line-strong` | borders on interactive controls (input, select, checkbox, switch, slider): darker than `--line` so the control's boundary clears WCAG 1.4.11's 3:1 against `--panel` |
 | `--text` / `--muted` | primary and secondary text |
 | `--accent` | accent text/icons: group headers, carets, notice icon, spinner |
 | `--accent-solid` | filled accent surfaces: primary button, badges |
@@ -374,11 +376,14 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | `--link` | hyperlinks |
 | `--warn` | warning text/icons |
 | `--warn-bg` | tint behind a warning card |
+| `--warn-solid` | filled warning surfaces (the `warn` badge variant): `--warn` is tuned as text on a panel, not as a fill under black text |
 | `--success` | success text/icons |
 | `--success-bg` | tint behind a success card |
+| `--danger-solid` | filled destructive surfaces (destructive button/badge variants): `--danger` is tuned as text on a panel, not as a fill under white text |
 | `--code-bg` | code and log backgrounds (output console, inline code) |
 | `--overlay` | modal/dialog scrim backdrop |
 | `--glass-bg` / `--glass-border` | translucent “glass” surfaces: command bar, sheets, viewer HUD |
+| `--hud-border` | the viewer HUD's glass buttons, which float directly over `--viewer-bg` rather than a chrome band: a border tuned against that background specifically, since `--glass-border` reads too faint there |
 | `--elevation` | drop shadow on raised surfaces (a `box-shadow`, not a colour) |
 | `--radius` / `--radius-sm` | corner radius, base and small (a length, not a colour) |
 | `--font-sans` / `--font-display` | UI font stacks: body text / the display voice (brand, headings, tabs, buttons). Unquoted family names only (e.g. `Georgia, serif`); set them under `dark` (the `:root` block) to apply to both themes |

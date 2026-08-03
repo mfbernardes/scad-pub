@@ -82,6 +82,7 @@ import { useOutputConsole } from "../lib/useOutputConsole";
 import { useSheetPolicy } from "../lib/useSheetPolicy";
 import { ReviewDialog } from "./ReviewDialog";
 import { StatusStrip, type StatusStripProps } from "./StatusStrip";
+import { tn } from "../lib/i18n";
 
 const ADVANCED_SETTINGS_KEY = ns("settings.advanced");
 
@@ -500,6 +501,23 @@ export const AppShell = memo(function AppShell({
       ? { readiness, attentionCount: attention.length, onOpen: openReview }
       : undefined;
 
+  // A transition into "attention" gets a spoken announcement of its own
+  // (WCAG 4.1.3): the StatusStrip pill that says it visually is a <button>,
+  // not a live region, and it mounts up to twice at once (the dock and
+  // SheetTabs' full-detent copy, see `sheetStatusPill` above), so wiring
+  // aria-live onto the pill itself risks announcing the same change twice.
+  // This region instead lives once here, above the mobile/desktop split (only
+  // one of which ever mounts, see M7), so exactly one copy of it exists
+  // regardless of layout or sheet detent. Text is empty outside "attention",
+  // so a live-region diff only fires on the entry (and exit) transitions, not
+  // on every render that leaves the state unchanged. "failed" needs no
+  // separate wording here: OutputToggle's own `.render-status` region already
+  // announces "Failed (exit N)" on that transition. Reuses `action.attentionHint`
+  // (already spoken by the Download button's own aria-describedby) so the two
+  // surfaces never disagree on the wording.
+  const attentionAnnouncement =
+    readiness === "attention" ? tn("action.attentionHint", attention.length) : "";
+
   // Prop bundles shared verbatim by the two layout trees: each call site below
   // adds only what is genuinely its own (the panel's dock geometry, the
   // sheet's expand callback).
@@ -618,6 +636,13 @@ export const AppShell = memo(function AppShell({
       <a className={SKIP_LINK_CLASS} href={isMobile ? "#params-mobile" : "#params"}>
         Skip to parameters
       </a>
+
+      {/* See `attentionAnnouncement`'s own comment: the one spoken announcement
+          of an "attention" transition, independent of which layout is mounted
+          or how many StatusStrip pills are currently on screen. */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {attentionAnnouncement}
+      </span>
 
       {/* Only the active layout mounts (M7): desktop and mobile used to both
           render at once with CSS hiding one, doubling ParamForm/tab/search
