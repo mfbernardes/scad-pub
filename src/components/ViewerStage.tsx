@@ -20,6 +20,7 @@ import { ViewerGestureHint } from "./ViewerGestureHint";
 import { ViewerEditOnModel } from "./ViewerEditOnModel";
 import { editOnModelParam, type Point } from "../lib/editOnModel";
 import { stageLoading } from "../lib/renderStatus";
+import { useZoomKeys } from "../lib/useZoomKeys";
 import { useAppActions } from "../lib/appActions";
 
 const Viewer = lazy(() =>
@@ -95,6 +96,10 @@ export function ViewerStage({
   children,
 }: Props) {
   const { render } = useAppActions();
+
+  // Only the active layout mounts a Viewer, so gating on `active` keeps the
+  // inactive tree from binding a second listener onto a handle that is null.
+  useZoomKeys(viewerRef, active);
 
   // ── On-model text editing ("type on the sign") ───────────────────────────
   // Active when the design declares an `@editOnModel` string param; the mesh

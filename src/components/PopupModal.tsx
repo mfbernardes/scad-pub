@@ -86,7 +86,11 @@ export function PopupModal({
       </div>
       <div className="modal-actions flex flex-wrap items-center gap-2 px-4 pb-4">
         {popup.mode === "dismissible" && (
-          <Label className="notice-dismiss flex cursor-pointer items-center gap-[0.4rem] text-[0.85rem] font-normal text-muted-foreground">
+          <Label
+            // The label IS the target here (it wraps the box), and a 16px
+            // checkbox on a row of 0.85rem text left it under 24px tall.
+            className="notice-dismiss flex min-h-6 cursor-pointer items-center gap-[0.4rem] text-[0.85rem] font-normal text-muted-foreground pointer-coarse:min-h-11"
+          >
             <Checkbox
               checked={dontShow}
               onCheckedChange={(v) => setDontShow(v === true)}

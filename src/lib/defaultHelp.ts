@@ -42,7 +42,9 @@ export const DEFAULT_HELP: HelpContent = {
     },
     {
       title: "3. Look around the preview",
-      body: "**Drag** to spin the model, **scroll or pinch** to zoom, and **right-drag** (or two fingers) to move it.",
+      body:
+        "**Drag** to spin the model, **scroll or pinch** to zoom, and **right-drag** (or two fingers) to move it.\n\n" +
+        "From the keyboard: **+** and **−** zoom, and the view buttons beside the preview turn the model to a named angle.",
     },
     {
       title: "4. Keep the preview fresh",

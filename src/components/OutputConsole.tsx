@@ -138,7 +138,13 @@ export function OutputConsole({
                 <FriendlyFailureCard info={failure} />
               </div>
             ) : diagnostics.length ? (
-              <ul className="px-3 py-[0.4rem]" aria-live="polite">
+              <ul
+                // Not a live region. The whole list is rebuilt on every render,
+                // so `aria-live` re-read all of it each time — for a console
+                // that auto-opens on the first notice and whose count the bell
+                // already announces. Reading it is the visitor's move.
+                className="px-3 py-[0.4rem]"
+              >
                 {diagnostics.map((d, i) => (
                   <li key={i} className="flex items-baseline gap-2 py-[0.2rem] text-[0.82rem]">
                     <span

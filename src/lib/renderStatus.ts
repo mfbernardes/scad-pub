@@ -62,3 +62,27 @@ export function deriveRenderStatus({ rendering, ready, result, stale = false }: 
     return { state: "ok", text: result.cached ? `${result.ms} ms (cached)` : `${result.ms} ms` };
   return { state: "error", text: `Failed (exit ${result.exitCode})` };
 }
+
+/**
+ * What a screen reader should hear about `status`, or "" for a state not worth
+ * interrupting for.
+ *
+ * Deliberately not `deriveRenderStatus`'s own text. That text is a readout —
+ * "214 ms", "Idle" — written for the visible chrome and for the scripts that
+ * poll it. Announcing it meant every debounced keystroke spoke twice ("Updating
+ * preview…", then a millisecond figure that tells a visitor nothing about their
+ * model). What is worth saying is that a render finished, or that the preview
+ * no longer matches the controls; the in-progress states say nothing, so the
+ * region goes quiet between renders and the next completion reads as new.
+ */
+export function renderAnnouncement({ state, text }: { state: RenderState; text: string }): string {
+  switch (state) {
+    case "ok":
+      return "Preview updated";
+    case "stale":
+    case "error":
+      return text;
+    default:
+      return "";
+  }
+}

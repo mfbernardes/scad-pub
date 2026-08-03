@@ -49,7 +49,7 @@
   "exportSuccess.body": "Check your browser's downloads, then slice and print when you're ready.",
   "exportSuccess.openHelp": "Open printing help",
   "exportSuccess.dismiss": "Dismiss",
-  "hint.rotateZoomMouse": "Drag to rotate · Scroll to zoom",
+  "hint.rotateZoomMouse": "Drag to rotate · Scroll or + / − to zoom",
   "hint.rotateZoomTouch": "Drag to rotate · Pinch to zoom",
   "hint.sheetSwipeUp": "Swipe up for settings",
   "hud.showGrid": "Show grid",

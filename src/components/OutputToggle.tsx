@@ -17,7 +17,12 @@
 // amber of its own for an attention-flagged notice.
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
-import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";
+import {
+  deriveRenderStatus,
+  renderAnnouncement,
+  STATE_STYLES,
+  type RenderStatusInput,
+} from "../lib/renderStatus";
 import { Bell as BellIcon, BellRing as BellRingIcon } from "lucide-react";
 import { t, tn } from "../lib/i18n";
 
@@ -123,11 +128,17 @@ export function OutputToggle({
           />
         )
       )}
-      {/* Keep the render status available to assistive tech, and as the stable
-          `render-status` hook the smoke/capture scripts read for completion. */}
+      {/* Two spans, because the readout and the announcement want different
+          text (see renderAnnouncement). This one is the stable `render-status`
+          hook the smoke/capture scripts poll for "N ms"; it is not spoken. */}
       {derived && (
-        <span className="render-status sr-only" role="status" aria-live="polite">
+        <span className="render-status sr-only" aria-hidden="true">
           {`Render status: ${derived.text}`}
+        </span>
+      )}
+      {derived && (
+        <span className="sr-only" role="status" aria-live="polite">
+          {renderAnnouncement(derived)}
         </span>
       )}
     </Button>

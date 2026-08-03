@@ -7,7 +7,7 @@
 // "nothing to show yet" distinction is exactly what the branches below pin.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stageLoading, deriveRenderStatus } from "../src/lib/renderStatus.ts";
+import { stageLoading, deriveRenderStatus, renderAnnouncement } from "../src/lib/renderStatus.ts";
 
 const okResult = { id: 1, ok: true, exitCode: 0, stl: new Uint8Array([1]), log: [], ms: 10 };
 const failedResult = { id: 2, ok: false, exitCode: 1, log: [], ms: 10 };
@@ -61,4 +61,21 @@ test("deriveRenderStatus: the shapes the smoke/capture scripts wait on stay stab
   ]) {
     assert.doesNotMatch(deriveRenderStatus(input).text, /\d+ ms/);
   }
+});
+
+test("renderAnnouncement: in-progress states stay silent, so a live region reads once per render", () => {
+  const spoken = (input) => renderAnnouncement(deriveRenderStatus(input));
+  // The two that used to speak on every debounced keystroke.
+  assert.equal(spoken({ ready: true, rendering: true, result: okResult }), "");
+  assert.equal(spoken({ ready: false, rendering: false, result: null }), "");
+  assert.equal(spoken({ ready: true, rendering: false, result: null }), "");
+  // A completed render says so, without the millisecond readout.
+  assert.equal(spoken({ ready: true, rendering: false, result: okResult }), "Preview updated");
+  assert.doesNotMatch(spoken({ ready: true, rendering: false, result: okResult }), /\d+ ms/);
+});
+
+test("renderAnnouncement: the states a visitor has to act on keep their own words", () => {
+  const spoken = (input) => renderAnnouncement(deriveRenderStatus(input));
+  assert.equal(spoken({ ready: true, rendering: false, result: okResult, stale: true }), "Preview out of date");
+  assert.equal(spoken({ ready: true, rendering: false, result: failedResult }), "Failed (exit 1)");
 });
