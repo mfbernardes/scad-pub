@@ -1,0 +1,90 @@
+{
+  "description": "Jede Art von Meldung, die die App anzeigt, jeweils hinter einem Schalter.",
+  "sections": {
+    "Messages": "Meldungen",
+    "Plaque": "Schild",
+    "Quality": "Qualität"
+  },
+  "params": {
+    "show_alert": {
+      "description": "Warnhinweis auslösen",
+      "help": "Löst einen `alert`-Hinweis aus. Er zählt auf dem gelben Abzeichen unter Meldungen, und da die Kategorie als `attention` markiert ist, erscheint zusätzlich die Bereitschaftsplakette sowie eine Karte im Prüfdialog vor dem Download."
+    },
+    "show_note": {
+      "description": "Notiz auslösen",
+      "help": "Löst eine `note` aus. Sie zählt auf dem blauen Abzeichen unter Meldungen und ist rein informativ: Sie hält den Download nie auf."
+    },
+    "show_warning": {
+      "description": "OpenSCAD-Warnung auslösen",
+      "help": "Ruft ein Modul auf, das es nicht gibt — so entsteht OpenSCADs eigene `WARNING:`-Ausgabe. Das Modell wird weiterhin gerendert; die Warnung wird gemeldet und möchte, wie ein Warnhinweis, vor dem Download geprüft werden."
+    },
+    "fail_assert": {
+      "description": "Assert fehlschlagen lassen",
+      "help": "Lässt ein `assert()` fehlschlagen. Das Rendern bricht ab, die App zeigt den Fehler und ein „asserts“-Abzeichen, und es gibt nichts herunterzuladen, solange dies eingeschaltet ist."
+    },
+    "font": {
+      "description": "Schriftart",
+      "help": "Schriftschnitt der Beschriftung. „Liberation Sans“ ist mitgeliefert und wird wie angegeben dargestellt; die andere Auswahl ist bewusst nicht mitgeliefert und zeigt deshalb den Hinweis „Schrift nicht geladen“ mit seinen Korrekturen (Importieren bzw. Familie wechseln).",
+      "choices": {
+        "Liberation Sans:style=Bold": "Liberation Sans:style=Bold",
+        "DejaVu Sans:style=Bold": "DejaVu Sans:style=Bold"
+      }
+    },
+    "width": {
+      "description": "Breite des Schilds (mm).",
+      "help": "Breite des Schilds (mm)."
+    },
+    "height": {
+      "description": "Höhe des Schilds (mm).",
+      "help": "Höhe des Schilds (mm)."
+    },
+    "thickness": {
+      "description": "Dicke des Schilds (mm).",
+      "help": "Dicke des Schilds (mm).",
+      "info": {
+        "label": "Plattendicke",
+        "unit": "mm"
+      }
+    },
+    "corner_radius": {
+      "description": "Eckenradius; 0 für rechtwinklige Ecken (mm).",
+      "help": "Eckenradius; 0 für rechtwinklige Ecken (mm)."
+    },
+    "label": {
+      "description": "Text, der erhaben auf dem Schild steht.",
+      "help": "Text, der erhaben auf dem Schild steht."
+    },
+    "text_size": {
+      "description": "Schrifthöhe (mm).",
+      "help": "Schrifthöhe (mm).",
+      "info": {
+        "label": "Texthöhe",
+        "unit": "mm"
+      }
+    },
+    "text_depth": {
+      "description": "Wie weit der Text aus dem Schild heraussteht (mm).",
+      "help": "Wie weit der Text aus dem Schild heraussteht (mm)."
+    },
+    "plate_color": {
+      "description": "Farbe des Schildkörpers.",
+      "help": "Farbe des Schildkörpers."
+    },
+    "text_color": {
+      "description": "Farbe der erhabenen Beschriftung.",
+      "help": "Farbe der erhabenen Beschriftung."
+    },
+    "facet_angle": {
+      "description": "Maximaler Facettenwinkel; niedriger ist glatter, aber langsamer.",
+      "help": "Maximaler Facettenwinkel; niedriger ist glatter, aber langsamer."
+    },
+    "facet_size": {
+      "description": "Maximale Facettengröße (mm); niedriger ist glatter, aber langsamer.",
+      "help": "Maximale Facettengröße (mm); niedriger ist glatter, aber langsamer."
+    }
+  },
+  "reviewLabels": {
+    "label": "Text"
+  },
+  "reviewNote": "Dieses Design löst absichtlich Meldungen aus; die Schalter unter Meldungen sind es, die sie erzeugen."
+}
