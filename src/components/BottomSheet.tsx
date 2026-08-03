@@ -369,6 +369,12 @@ export function BottomSheet({
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       cycleDetent();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      setDetent(DETENT_ORDER[0]);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      setDetent(DETENT_ORDER[DETENT_ORDER.length - 1]);
     }
     // Escape is deliberately NOT handled here. The document-level trap below
     // owns it: both handlers used to fire for one keypress, running
@@ -552,17 +558,12 @@ export function BottomSheet({
               {t("sheet.done")}
             </button>
           )}
-          {/* Drag handle: single visible control; tap cycles, arrow keys resize.
-              role="slider" (WCAG 4.1.2) rather than "button": it has an exposed
-              current value (which of the three detents it's at), and a button
-              gives assistive tech no reason to expect ArrowUp/Down to do
-              anything, let alone announce the result — a label change on an
-              already-focused node isn't a guaranteed speech event, unlike a
-              slider's value changing. aria-valuenow is the detent's index;
-              aria-valuetext its human name (DETENT_LABEL), so a screen reader
-              speaks "collapsed"/"half open"/"fully open" rather than "1 of 3".
-              The exposed semantics don't constrain the handlers: click-to-cycle
-              and drag stay exactly as they were. */}
+          {/* Drag handle: single visible control; tap cycles, arrow keys resize
+              (Home/End jump to the lowest/highest detent). role="slider", not
+              "button" (WCAG 4.1.2): it has an exposed current value (the
+              detent), and only a slider role guarantees AT announces that
+              value changing; aria-valuetext names it (DETENT_LABEL) rather
+              than exposing just the index. */}
           <div
             className="sheet-handle"
             role="slider"

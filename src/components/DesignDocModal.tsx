@@ -62,20 +62,20 @@ export function DesignDocModal({
   return (
     <Modal title={`About the ${design.label}`} onClose={onClose}>
       <div className={DOC_BODY} tabIndex={0}>
-        {error ? (
-          <p className="text-[0.88rem] text-muted-foreground" role="status">
-            Couldn't load this design's documentation. Check your connection and try again.
-          </p>
-        ) : text === null ? (
-          <p className="text-[0.88rem] text-muted-foreground" role="status">
-            Loading…
-          </p>
-        ) : (
-          // Silent once fetched: the visitor is already inside the dialog and
-          // can read it, and a live region over the whole doc body would read
-          // the entire markdown aloud on every open.
-          <Markdown body={text} />
-        )}
+        {/* The status region stays mounted with its text swapped: a region
+            inserted already containing its text is the case VoiceOver drops.
+            The fetched markdown renders outside it — a live region over the
+            doc body would read the entire document aloud. */}
+        <div role="status" aria-live="polite">
+          {error ? (
+            <p className="text-[0.88rem] text-muted-foreground">
+              Couldn't load this design's documentation. Check your connection and try again.
+            </p>
+          ) : text === null ? (
+            <p className="text-[0.88rem] text-muted-foreground">Loading…</p>
+          ) : null}
+        </div>
+        {!error && text !== null && <Markdown body={text} />}
       </div>
     </Modal>
   );

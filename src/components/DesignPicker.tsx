@@ -273,7 +273,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, gallery = f
       <SelectTrigger
         size="sm"
         aria-label="Choose a design"
-        className="font-display h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-0"
+        className="font-display h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-[3px] focus-visible:ring-ring/80"
       >
         <SelectValue />
       </SelectTrigger>

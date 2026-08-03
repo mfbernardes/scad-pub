@@ -210,10 +210,12 @@
   outline: none;
 }
 
-/* Windows High Contrast / forced-colors: keep colour-only cues visible. */
+/* Windows High Contrast / forced-colors: keep colour-only cues visible. Badge
+   borders are handled at the component (badge.tsx's forced-colors:border-*),
+   since a plain selector here loses to the per-variant border-transparent
+   utility it needs to beat. */
 @media (forced-colors: active) {
   :focus-visible { outline-color: Highlight; }
-  [data-slot="badge"] { border: 1px solid CanvasText; }
 }
 
 * { box-sizing: border-box; }
@@ -542,6 +544,17 @@ button:disabled { cursor: default; }
      dock buttons, the sheet tabs and the drag handle. Are at 44px above. */
 }
 
+/* Sonner's own close button (ui/sonner.tsx's toastOptions.classNames) is a
+   fixed 20x20px (node_modules/sonner/dist/styles.css), under WCAG 2.2's 24px
+   minimum (SC 2.5.8). min-width/min-height rather than width/height: Sonner
+   sets the latter, so this only raises the floor without a specificity fight
+   over the same property. Not gated to (pointer: coarse): the toast can be
+   dismissed from either input mode. */
+.toast-close-button {
+  min-width: 24px;
+  min-height: 24px;
+}
+
 /* Light schemes give `--glass-bg` very little separation from the viewer
    backdrop (on some palettes a few percent of luminance), which left the HUD
    buttons reading as faint outlines rather than controls. The border itself
@@ -660,6 +673,10 @@ button:disabled { cursor: default; }
   left: 50%;
   transform: translateX(-50%);
   z-index: 9;
+  /* Narrow viewports (e.g. 390px) can't fit the hint text unwrapped; allow it
+     to wrap rather than clip, capped short of the viewport edges. */
+  max-width: calc(100% - 1.5rem);
+  white-space: normal;
 }
 
 /* Mobile: the dock rides the sheet's live top edge instead of a fixed

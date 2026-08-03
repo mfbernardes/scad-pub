@@ -19,7 +19,7 @@ const buttonVariants = cva(
           // the token tuned for that.
           "bg-danger-solid text-white shadow-xs hover:bg-danger-solid/90",
         outline:
-          "border bg-card shadow-xs hover:bg-accent hover:text-accent-foreground",
+          "border-input border bg-card shadow-xs hover:bg-accent hover:text-accent-foreground",
         secondary:
           "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",

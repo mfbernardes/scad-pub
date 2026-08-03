@@ -102,7 +102,7 @@ export function BarActions({
           // gets none of shadcn Button's focus styling, so the ring below is
           // what makes this keyboard-visible at all. Same recipe as
           // ViewPicker's and ViewerHUD's triggers.
-          className={cn(ICON_BUTTON_CLASS, "inline-flex items-center justify-center rounded-md outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-brand")}
+          className={cn(ICON_BUTTON_CLASS, "inline-flex items-center justify-center rounded-md outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/80 data-[state=open]:border-brand")}
           aria-label={t("bar.moreActions")}
           title={t("bar.more")}
         >

@@ -353,9 +353,6 @@ function NumberControl({
           }}
         />
       </div>
-      {/* Persistent, not transient like clampHint below: the range is known
-          before a visitor ever types outside it (WCAG 3.3.2). Visually
-          hidden — the design stays unchanged; only the description is new. */}
       {rangeHint && (
         <span id={rangeHintId} className="sr-only">
           {rangeHint}
@@ -687,14 +684,17 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
           {failure.body && <p className="mt-[0.2rem] pl-[1.1rem] text-muted-foreground">{failure.body}</p>}
         </div>
       )}
-      {groups.length === 0 && (
-        // role="status": a search that zeroes out every group replaces the
-        // whole form with this line, so it needs to announce like any other
-        // content swap (WCAG 4.1.3).
-        <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground" role="status">
-          {q ? t("paramForm.noMatches", { search }) : t("paramForm.nothingToCustomize")}
-        </p>
-      )}
+      {/* The live region stays mounted with its text swapped in and out: a
+          region inserted already containing its text is the case VoiceOver
+          drops, and a search that zeroes out every group replaces the whole
+          form, so it must announce (WCAG 4.1.3). */}
+      <div role="status" aria-live="polite">
+        {groups.length === 0 && (
+          <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
+            {q ? t("paramForm.noMatches", { search }) : t("paramForm.nothingToCustomize")}
+          </p>
+        )}
+      </div>
       {groups.map(({ section, params }) => {
         const isOpen = openSections[section] ?? !collapsedDefault.has(section);
         return (

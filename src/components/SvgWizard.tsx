@@ -64,9 +64,10 @@ const LEVEL_BADGE: Record<Finding["level"], "destructive" | "warn" | "secondary"
 const LEVEL_ORDER: Record<Finding["level"], number> = { ERROR: 0, WARN: 1, INFO: 2 };
 
 // The id the height-error paragraph publishes under, and every invalid height
-// Input's `aria-describedby` points at (mirrors SvgPrepareControl's own
-// role="alert" error paragraph). One instance of the wizard is ever mounted
-// at a time, so a single static id is safe.
+// Input's `aria-describedby` points at (the id/describedby pairing mirrors
+// SvgPrepareControl's own error paragraph; role differs, see below). One
+// instance of the wizard is ever mounted at a time, so a single static id is
+// safe.
 const HEIGHT_ERROR_ID = "svg-wizard-height-error";
 
 function FindingList({ findings, empty }: { findings: Finding[]; empty: string }) {
@@ -306,7 +307,9 @@ export function SvgWizard({
                                 placeholder={defaultHeight === null ? "" : String(defaultHeight)}
                                 aria-label={`Height of region ${r.id} in millimetres`}
                                 aria-invalid={badHeights.has(r.id) || undefined}
-                                aria-describedby={badHeights.has(r.id) ? HEIGHT_ERROR_ID : undefined}
+                                aria-describedby={
+                                  badHeights.has(r.id) && !blockedByError ? HEIGHT_ERROR_ID : undefined
+                                }
                                 onChange={(e) => setHeight(r.id, e.target.value)}
                               />
                               <span className="text-muted-foreground">mm</span>
@@ -349,19 +352,25 @@ export function SvgWizard({
               </section>
             )}
 
-            {blockedByHeight && !blockedByError && (
-              <p
-                id={HEIGHT_ERROR_ID}
-                role="alert"
-                className="svg-wizard__height-error mt-3 text-sm font-medium text-destructive"
-              >
-                {badHeights.size === 1
-                  ? `The height for “${[...badHeights][0]}” isn't usable — `
-                  : `The heights for ${[...badHeights].map((id) => `“${id}”`).join(", ")} aren't usable — `}
-                enter a plain positive number of millimetres (like 2 or 1.5), or leave
-                it blank to use the design's relief height.
-              </p>
-            )}
+            {/* status, not alert: this re-validates on every keystroke, and an
+                assertive interrupt mid-typing (e.g. "0.5" transiting through
+                the invalid "0") would talk over the visitor's own input. The
+                region stays mounted with its text swapped — a region inserted
+                already containing its text is the case VoiceOver drops. */}
+            <div role="status" aria-live="polite">
+              {blockedByHeight && !blockedByError && (
+                <p
+                  id={HEIGHT_ERROR_ID}
+                  className="svg-wizard__height-error mt-3 text-sm font-medium text-destructive"
+                >
+                  {badHeights.size === 1
+                    ? `The height for “${[...badHeights][0]}” isn't usable — `
+                    : `The heights for ${[...badHeights].map((id) => `“${id}”`).join(", ")} aren't usable — `}
+                  enter a plain positive number of millimetres (like 2 or 1.5), or leave
+                  it blank to use the design's relief height.
+                </p>
+              )}
+            </div>
 
             {blockedByError && (
               <p className="mt-3 text-sm font-medium text-destructive">

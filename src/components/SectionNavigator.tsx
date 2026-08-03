@@ -43,7 +43,7 @@ export function SectionNavigator({ sections, onSelect, className }: Props) {
           aria-label={label}
           title={label}
           className={cn(
-            "section-nav-trigger inline-flex cursor-pointer items-center gap-[0.4rem] rounded-(--radius-sm) border bg-muted text-foreground transition-[background-color,border-color,color,box-shadow] hover:border-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-brand data-[state=open]:text-brand",
+            "section-nav-trigger inline-flex cursor-pointer items-center gap-[0.4rem] rounded-(--radius-sm) border-input border bg-muted text-foreground transition-[background-color,border-color,color,box-shadow] hover:border-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/80 data-[state=open]:border-brand data-[state=open]:text-brand",
             "px-[0.6rem] py-[0.35rem] text-[0.85rem] font-semibold",
             className
           )}

@@ -13,12 +13,20 @@ export function isCoarsePointer(): boolean {
 
 /** Radix's `onOpenAutoFocus` handler for a dialog CONTAINING A TEXT FIELD: on
  *  a touch device, don't let opening pull focus to it, which pops the on-screen
- *  keyboard over the dialog the visitor just opened.
+ *  keyboard over the dialog the visitor just opened. Focus still has to land
+ *  SOMEWHERE inside the dialog, though (otherwise it's stranded on the
+ *  now-hidden trigger and a screen reader never announces the dialog opened),
+ *  so this focuses the event's target directly instead — Radix dispatches
+ *  `onOpenAutoFocus` on its own focus-scope container, which already carries
+ *  `tabIndex={-1}` for exactly this. A non-editable container doesn't summon
+ *  the keyboard the way autofocusing the text field would.
  *
  *  Not for a dialog of buttons alone. There is no keyboard to pop there, and
- *  suppressing Radix's focus transfer strands a screen-reader or
+ *  suppressing Radix's default focusFirst() strands a screen-reader or
  *  hardware-keyboard visitor behind the modal — which is how ConfirmDialog and
  *  ReviewDialog briefly acquired it, in the sweep that shared this helper. */
 export function preventTouchAutoFocus(e: Event): void {
-  if (isCoarsePointer()) e.preventDefault();
+  if (!isCoarsePointer()) return;
+  e.preventDefault();
+  (e.target as HTMLElement | null)?.focus({ preventScroll: true });
 }

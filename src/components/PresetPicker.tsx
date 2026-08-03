@@ -235,21 +235,22 @@ export function PresetPicker({
     try {
       parsed = parseParameterSetsFile(design, await file.text());
     } catch (err) {
-      // duration: Infinity: an import failure is actionable (fix the file,
-      // try another), not a fire-and-forget confirmation, so it stays until
-      // dismissed rather than the default 4s — see useAppNotices.ts's own
-      // persistent toasts for the same reasoning (WCAG 3.3.1).
+      // duration: Infinity (WCAG 3.3.1) + a stable id: repeated failures
+      // replace this toast rather than stacking.
       toast.error(
         t("presets.importParseError", {
           name: file.name,
           reason: err instanceof Error ? err.message : t("presets.importParseErrorGeneric"),
         }),
-        { duration: Infinity }
+        { id: "preset-import-error", duration: Infinity }
       );
       return;
     }
     if (parsed.length === 0) {
-      toast.error(t("presets.importEmpty", { name: file.name }), { duration: Infinity });
+      toast.error(t("presets.importEmpty", { name: file.name }), {
+        id: "preset-import-error",
+        duration: Infinity,
+      });
       return;
     }
     const collisions = parsed.map((s) => s.name).filter((name) => userPresets.includes(name));
@@ -349,7 +350,7 @@ export function PresetPicker({
             target floor the dock buttons and sheet tabs share; `ml-auto` pins
             it to the end when there is no save field to push it there. */}
         <PopoverTrigger
-          className="ml-auto inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-(--radius-sm) border-none bg-transparent text-muted-foreground outline-none transition-[color,box-shadow] hover:text-brand focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:text-brand"
+          className="ml-auto inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-(--radius-sm) border-none bg-transparent text-muted-foreground outline-none transition-[color,box-shadow] hover:text-brand focus-visible:ring-[3px] focus-visible:ring-ring/80 data-[state=open]:text-brand"
           aria-label={t("presets.manage")}
           title={t("presets.manage")}
         >

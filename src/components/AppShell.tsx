@@ -637,9 +637,6 @@ export const AppShell = memo(function AppShell({
         Skip to parameters
       </a>
 
-      {/* See `attentionAnnouncement`'s own comment: the one spoken announcement
-          of an "attention" transition, independent of which layout is mounted
-          or how many StatusStrip pills are currently on screen. */}
       <span className="sr-only" role="status" aria-live="polite">
         {attentionAnnouncement}
       </span>

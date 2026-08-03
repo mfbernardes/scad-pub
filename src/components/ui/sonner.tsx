@@ -23,6 +23,12 @@ function Toaster({ theme = "dark", ...props }: ToasterProps) {
       // (duration: Infinity) import-failure or notice toast otherwise has no
       // way to leave the screen except being superseded by its own `id`.
       closeButton
+      // Sonner's own close button is a fixed 20x20px (styles.css), under WCAG
+      // 2.5.8's 24px minimum. min-width/min-height (not width/height) so this
+      // only raises the floor, leaving Sonner's own sizing/positioning rules
+      // (which set width/height, a different property, so no specificity
+      // fight) otherwise untouched.
+      toastOptions={{ classNames: { closeButton: "toast-close-button" } }}
       offset={{ top: "4.5rem" }}
       mobileOffset={{ top: "calc(env(safe-area-inset-top, 0px) + 4rem)" }}
       style={

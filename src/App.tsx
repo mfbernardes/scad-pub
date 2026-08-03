@@ -447,9 +447,15 @@ export default function App() {
   // only runs from a real user action — the install/dismiss buttons, or the
   // toast's own close button/swipe (`onDismiss`) — never from `onAutoClose`, so
   // an ignored toast tries again on the visitor's next export instead.
+  // Belt-and-braces alongside INSTALL_HINT_KEY: storage can be blocked
+  // (private browsing, a hardened profile), and `readLocal` alone would then
+  // let every export re-show the hint. This in-memory flag caps it at once
+  // per page load regardless of whether persistence works.
+  const installHintShownRef = useRef(false);
   const offerInstallHint = useCallback(() => {
     if (!canInstall || installMode === "off") return;
-    if (readLocal(INSTALL_HINT_KEY)) return;
+    if (installHintShownRef.current || readLocal(INSTALL_HINT_KEY)) return;
+    installHintShownRef.current = true;
     const markSeen = () => writeLocal(INSTALL_HINT_KEY, "1");
     toast(t("install.hint"), {
       id: "install-hint",

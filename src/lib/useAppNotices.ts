@@ -29,6 +29,9 @@ export function useAppNotices({
       toast.error(t("notice.bundleStale"), {
         id: "bundle-stale",
         duration: Infinity,
+        // Reload is the only way out: a stale bundle can't safely keep
+        // running, so this one toast overrides the app-wide close button.
+        closeButton: false,
         action: { label: t("notice.reload"), onClick: forceUpdate },
       });
   }, [bundleStale, forceUpdate]);

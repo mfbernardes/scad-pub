@@ -367,7 +367,7 @@ The full set of tokens (defined in [`src/index.css`](../src/index.css)):
 | ------- | ---------- |
 | `--bg` / `--panel` / `--panel-2` | app, panel, and inset backgrounds |
 | `--line` | decorative borders and dividers |
-| `--line-strong` | borders on interactive controls (input, select, checkbox, switch, slider): darker than `--line` so the control's boundary clears WCAG 1.4.11's 3:1 against `--panel` |
+| `--line-strong` | boundaries of interactive controls (input, select, checkbox, switch, slider) — a border on most, the unchecked switch track's fill — darker than `--line` so the control's boundary clears WCAG 1.4.11's 3:1 against `--panel` |
 | `--text` / `--muted` | primary and secondary text |
 | `--accent` | accent text/icons: group headers, carets, notice icon, spinner |
 | `--accent-solid` | filled accent surfaces: primary button, badges |
