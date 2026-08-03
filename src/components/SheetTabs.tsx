@@ -18,13 +18,16 @@
 // Readiness also left: it's a pill in the export dock now, above the Download
 // button it warns about (see AppShell's ActionDock). At the sheet's Full
 // detent that dock is hidden along with the rest of the mobile chrome (see
-// AppShell's `data-sheet-detent` doc), so an "attention" state would otherwise
-// go unannounced there; `attentionPill` (below) reuses the same StatusStrip
-// inside the sheet for that one case. A "failed" render still needs no
-// duplicate here: ParamForm's own `failure` banner already covers it.
+// AppShell's `data-sheet-detent` doc), so "attention" or "failed" would
+// otherwise go unannounced there — ParamForm's own `failure` banner is no
+// substitute, since it only mounts on the Customize tab and Presets has none
+// of its own. `sheetPill` (below) reuses the same StatusStrip inside the
+// sheet for those two cases.
 //
-// `data-sheet-peek-end` on the tab row marks where the sheet's peek header ends
-// — BottomSheet measures the Peek height down to that element's bottom edge.
+// `data-sheet-peek-end` on the tab row marks where the sheet's peek header
+// ends — BottomSheet measures the Peek height down to that element's bottom
+// edge. The pill renders AFTER the tab row (not before it) so mounting or
+// unmounting it never shifts the measured element's own position.
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
@@ -32,6 +35,7 @@ import { useAppActions } from "../lib/appActions";
 import { t } from "../lib/i18n";
 import type { PanelTab } from "../lib/usePanelState";
 import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
+import type { ReadinessState } from "../lib/readiness";
 import { ParamForm } from "./ParamForm";
 import { PresetPicker } from "./PresetPicker";
 import { PresetDiffBar } from "./PresetDiffBar";
@@ -86,10 +90,10 @@ interface Props {
   onSearchBlur?: () => void;
   /** Current render failure, forwarded to ParamForm's banner. */
   failure?: FriendlyErrorInfo | null;
-  /** The readiness pill's "attention" state, reused here for the one case
-   *  where the export dock's own copy is hidden: the sheet's Full detent.
-   *  Undefined everywhere else (see AppShell's `sheetAttentionPill`). */
-  attentionPill?: { attentionCount: number; onOpen: () => void };
+  /** The readiness pill, reused here for the one case where the export
+   *  dock's own copy is hidden: the sheet's Full detent. Undefined
+   *  everywhere else (see AppShell's `sheetStatusPill`). */
+  sheetPill?: { readiness: ReadinessState; attentionCount: number; onOpen: () => void };
 }
 
 export function SheetTabs({
@@ -118,7 +122,7 @@ export function SheetTabs({
   onSearchFocus,
   failure,
   onSearchBlur,
-  attentionPill,
+  sheetPill,
 }: Props) {
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
   // Overridable via the config's `strings` block (src/locales/en.json's
@@ -135,16 +139,6 @@ export function SheetTabs({
       onValueChange={(v) => onPanelTabChange(v as Tab)}
       className="sheet-tabs min-h-0 flex-1 gap-0"
     >
-      {attentionPill && (
-        <div className="shrink-0 px-3 pt-2">
-          <StatusStrip
-            readiness="attention"
-            attentionCount={attentionPill.attentionCount}
-            onOpen={attentionPill.onOpen}
-            className="w-full justify-center"
-          />
-        </div>
-      )}
       <TabsList
         className="w-full shrink-0 rounded-none border-b bg-transparent p-0"
         aria-label="Panel sections"
@@ -156,6 +150,16 @@ export function SheetTabs({
           </TabsTrigger>
         ))}
       </TabsList>
+      {sheetPill && (
+        <div className="shrink-0 px-3 pt-2 pb-1">
+          <StatusStrip
+            readiness={sheetPill.readiness}
+            attentionCount={sheetPill.attentionCount}
+            onOpen={sheetPill.onOpen}
+            className="w-full justify-center"
+          />
+        </div>
+      )}
       <div className="flex min-h-0 flex-1 flex-col">
         <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
           <PresetDiffBar

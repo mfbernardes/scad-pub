@@ -7,9 +7,10 @@
 // Deliberately NOT `role="alert"`. ParamForm's banner carries the same
 // sentence, at the point of edit, and is the one that should interrupt; with
 // both marked assertive a desktop visitor heard the identical text twice the
-// moment a render failed. Both of this card's hosts are already announced in
-// their own right (the console is a labelled region that auto-opens, the
-// review dialog takes focus), so the text is reached either way.
+// moment a render failed. The failure is still announced: OutputToggle's own
+// `role="status"` live region reports "Render status: Failed …" wherever this
+// card is reached (console or review dialog), so a second assertive alert
+// here would only repeat that.
 import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import { t } from "../lib/i18n";
 

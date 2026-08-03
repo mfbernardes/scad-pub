@@ -33,7 +33,7 @@ By default a parameter’s control label is the **first sentence** of its commen
 
 ```scad
 // Choose the material and finish standard for this bracket.
-material_standard = "steel-astm-a36-mill"; // [steel-astm:Steel, alu-astm:Aluminum]
+material_standard = "steel-astm"; // [steel-astm:Steel, alu-astm:Aluminum]
 ```
 
 That sentence is a good description and a poor label: above a dropdown on a phone it wraps to two lines where a noun phrase would do. `// @label "…"` supplies the label directly and demotes the whole comment block to help:
@@ -41,7 +41,7 @@ That sentence is a good description and a poor label: above a dropdown on a phon
 ```scad
 // Choose the material and finish standard for this bracket.
 // @label "Material & finish"
-material_standard = "steel-astm-a36-mill"; // [steel-astm:Steel, alu-astm:Aluminum]
+material_standard = "steel-astm"; // [steel-astm:Steel, alu-astm:Aluminum]
 ```
 
 - The quoted label is **required and non-empty**: a control always needs a label, so `@label ""` fails the build rather than clearing one. Bare `@label Short` (unquoted) fails too.

@@ -15,11 +15,11 @@
 // component directly, unrelated to that dock mount: at the bottom sheet's
 // Full detent the dock (and this pill inside it) is hidden along with the
 // rest of the mobile chrome, so it renders a second copy inside the sheet for
-// "attention" (see AppShell's `sheetAttentionPill`). A ready model needs no announcement
-// (the enabled Download button is the confirmation), and a first build is
-// already narrated by the viewer's own loading overlay. The unmounted states
-// are still spelled out below because `readiness` can hold them and the label
-// must stay exhaustive.
+// both states (see AppShell's `sheetStatusPill`). A ready model needs no
+// announcement (the enabled Download button is the confirmation), and a
+// first build is already narrated by the viewer's own loading overlay. The
+// unmounted states are still spelled out below because `readiness` can hold
+// them and the label must stay exhaustive.
 //
 // `.status-strip` is a stable hook class for the smoke/vis scripts (see
 // CLAUDE.md's script-hook convention): kept even though no stylesheet rule
