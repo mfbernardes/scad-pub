@@ -1535,7 +1535,7 @@ test("firstSentence splits before a sentence that opens with a quote", () => {
   assert.equal(
     firstSentence(
       'Text alignment. "center" (default) centres both the raised lettering ' +
-        'and the Braille row; "left" and "right" flush both to that edge.'
+        'and the logo row; "left" and "right" flush both to that edge.'
     ),
     "Text alignment."
   );
@@ -2359,17 +2359,17 @@ test("@review sets a parameter's review-summary label; the quoted label is requi
 test("@label overrides the first-sentence control label and keeps the doc block as help", () => {
   const params = paramsOf(
     `/* [Main] */\n` +
-      `// Choose the language and Braille standard for this sign.\n` +
-      `// @label "Language & standard"\n` +
+      `// Choose the material and finish standard for this bracket.\n` +
+      `// @label "Material & finish"\n` +
       `locale = "de";\n` +
       `// Plain param, no annotation.\n` +
       `width = 10;\n`
   );
   const byName = Object.fromEntries(params.map((p) => [p.name, p]));
-  assert.equal(byName.locale.description, "Language & standard");
+  assert.equal(byName.locale.description, "Material & finish");
   // The explanation isn't lost: it stays as help, so ParamForm's ⓘ popover
   // still offers it (it only mounts when help differs from the label).
-  assert.equal(byName.locale.help, "Choose the language and Braille standard for this sign.");
+  assert.equal(byName.locale.help, "Choose the material and finish standard for this bracket.");
   // The annotation line is consumed, not leaked into the help/label text.
   assert.ok(!byName.locale.help.includes("@label"));
   // No annotation -> the first-sentence default still applies.

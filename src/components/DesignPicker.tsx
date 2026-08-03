@@ -13,7 +13,7 @@ import {
   DialogTrigger,
 } from "./ui/dialog";
 import { preventTouchAutoFocus } from "../lib/pointer";
-import { t, tn } from "../lib/i18n";
+import { t } from "../lib/i18n";
 import { THUMB_FRAME, Thumbnail } from "./Thumbnail";
 import {
   Select,
@@ -115,19 +115,24 @@ export function DesignGallery({
       {designs.length > 6 && (
         <p className="design-gallery__count -mb-1 shrink-0 text-xs text-muted-foreground">
           {filtered.length === designs.length
-            ? tn("designPicker.count", designs.length)
+            ? t("designPicker.count", { count: designs.length })
             : t("designPicker.countFiltered", { shown: filtered.length, total: designs.length })}
         </p>
       )}
+      {/* The fade is an OVERLAY, not a `mask-image` on the scroller. A mask made
+          Chromium treat the faded region as not-visible for intersection
+          purposes, so it never fetched the `loading="lazy"` cards below the
+          fold at all: a twelve-design gallery showed six cards and six empty
+          boxes that only populated once scrolled to. Verified by A/B on one
+          build — mask on, 6 of 12 never loaded; mask off, all 12 did. An
+          absolutely-positioned gradient outside the scroller paints the same
+          thing and changes nothing about what the browser thinks is on screen.
+          `pointer-events-none` so it cannot eat a click on the card beneath. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
         ref={scrollRef}
         onScroll={updateMoreBelow}
-        style={
-          moreBelow
-            ? { maskImage: "linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent)" }
-            : undefined
-        }
       >
         {filtered.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">{t("designPicker.noMatches")}</p>
@@ -189,6 +194,13 @@ export function DesignGallery({
             </div>
           </section>
         ))}
+      </div>
+      {moreBelow && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent"
+        />
+      )}
       </div>
     </div>
   );

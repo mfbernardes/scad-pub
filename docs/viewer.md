@@ -150,7 +150,7 @@ letter-stroke's two opposing ~45° bevels. Reclaiming some of the field's headro
 key/fill pair be strong enough to matter without blowing out the top face.
 
 `ENV_EDGE0`/`ENV_EDGE1` are the angular softness of the field's edge, as cosines of the
-angle from "up": wide and soft, so curved geometry (Braille domes, letter bevels) shades
+angle from "up": wide and soft, so curved geometry (rivet heads, letter bevels) shades
 smoothly.
 
 ### `ENV_ROTATION_X`

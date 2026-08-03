@@ -546,7 +546,7 @@ export function BottomSheet({
           {isModal && (
             <button
               type="button"
-              className="sheet-done absolute right-1 top-0 z-10 inline-flex min-h-11 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent px-[0.6rem] text-[0.82rem] font-semibold text-brand outline-none transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring/50"
+              className="sheet-done absolute right-1 top-0 z-10 inline-flex min-h-11 cursor-pointer items-center rounded-(--radius-sm) border-none bg-transparent px-[0.6rem] text-[0.82rem] font-semibold text-brand outline-none transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring"
               onClick={() => setDetent("half")}
             >
               {t("sheet.done")}

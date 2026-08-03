@@ -4,7 +4,7 @@
 // strings. Each control carries an aria-label (its description) for its name.
 // Every row also carries `data-param="<var>"`: the stable hook the smoke test
 // (and extraCss) target now that variable names are hidden from users by default.
-import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
+import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from "react";
 import { Info as InfoIcon, RotateCcw as RevertIcon, Upload as UploadIcon, TriangleAlert as FailureIcon } from "lucide-react";
 import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import type { Design, Param, ParamValue } from "../openscad/types";
@@ -149,8 +149,12 @@ function FontMissingHint({
 }) {
   // The action links that actually fix a missing font (import it, or switch
   // to a loaded family).
+  // `pointer-coarse:min-h-11`: these two are where the entire missing-font flow
+  // ends, and at 23.7px stacked adjacent they were the smallest targets on the
+  // path. Height only — they are text links, and widening them would break the
+  // line they sit on.
   const actionBtn =
-    "inline-flex cursor-pointer items-center gap-[0.3rem] border-none bg-transparent px-0 py-[2px] text-[0.82rem] font-semibold text-brand hover:underline focus-visible:rounded-[4px] focus-visible:outline-offset-2";
+    "inline-flex cursor-pointer items-center gap-[0.3rem] border-none bg-transparent px-0 py-[2px] pointer-coarse:min-h-11 text-[0.82rem] font-semibold text-brand hover:underline focus-visible:rounded-[4px] focus-visible:outline-offset-2";
   return (
     <div
       className="font-missing mt-[0.1rem] flex flex-col gap-[0.4rem] rounded-(--radius-sm) border border-l-[3px] border-l-warn bg-muted px-[0.6rem] py-2"
@@ -484,6 +488,10 @@ function ParamHelp({ help, label }: { help: string; label: string }) {
       </PopoverTrigger>
       <PopoverContent
         align="start"
+        // Radix renders this as role="dialog", which axe requires to have an
+        // accessible name (aria-dialog-name). It shares the trigger's, so the
+        // popover announces which parameter it is explaining.
+        aria-label={t("paramForm.helpFor", { label })}
         // `?? []` is Radix's own "no explicit boundary" value; passing null
         // would register as explicit and pin it to the viewport instead.
         collisionBoundary={boundary ?? []}
@@ -587,6 +595,44 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
     return () => cancelAnimationFrame(raf);
   }, [scrollTick]);
 
+  // The banner and the group headers are both `position: sticky` against the
+  // same scroll port, so both pinned at top 0 and the header sat entirely
+  // behind the banner. Publish the banner's measured height as
+  // `--failure-banner-h`; index.css offsets the headers by it, so they pin
+  // under the banner instead of beneath it. Measured rather than hardcoded:
+  // the message wraps to two or three lines depending on the design.
+  const failureRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const el = failureRef.current;
+    if (!el) {
+      root.style.removeProperty("--failure-banner-h");
+      return;
+    }
+    // Sticky only while the banner is a small part of the port. At 320x568 it
+    // measured ~119px of a ~180px form area, and useScrollFocusedIntoView
+    // CENTRES a focused field rather than using scrollIntoView — so the field
+    // whose value caused the failure parked underneath it, invisible and not
+    // hit-testable, because the banner paints above. Past the threshold it
+    // scrolls with the content instead; the pill and the Messages console still
+    // report, and the banner is still the first thing in the form.
+    const publish = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      const port = el.parentElement?.parentElement;
+      const portH = port?.getBoundingClientRect().height ?? 0;
+      const stick = portH > 0 && h / portH <= 0.35;
+      el.style.position = stick ? "sticky" : "static";
+      root.style.setProperty("--failure-banner-h", stick ? `${h}px` : "0px");
+    };
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    const port = el.parentElement?.parentElement;
+    if (port) ro.observe(port);
+    return () => ro.disconnect();
+  }, [failure]);
+
   // pt-3 here rather than padding-top on the scroll port above: the port's
   // padding box is what a sticky group header pins to, so padding there would
   // strand every pinned header that far down and let rows scroll through the
@@ -604,6 +650,7 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
       {failure && (
         <div
           className="param-form__failure sticky top-0 z-[2] mb-2 rounded-lg border border-destructive/40 bg-card px-[0.7rem] py-[0.5rem] text-[0.82rem] shadow-(--elevation)"
+          ref={failureRef}
           role="alert"
         >
           <p className="flex items-start gap-[0.4rem] font-semibold text-foreground">
@@ -814,7 +861,7 @@ function ParamDrift({
       <span className="line-through">was {displayValue(param, baseline[param.name])}</span>
       <button
         type="button"
-        className="param-drift-revert -m-[3px] inline-flex shrink-0 cursor-pointer items-center rounded-[4px] border-none bg-transparent p-[3px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1"
+        className="param-drift-revert -m-[6px] inline-flex shrink-0 cursor-pointer items-center rounded-[4px] border-none bg-transparent p-[6px] pointer-coarse:-m-[16px] pointer-coarse:p-[16px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1"
         aria-label={`Revert ${label} to ${presetName ?? "default"}`}
         title={`Revert to ${presetName ?? "default"}`}
         onClick={() => revertToBaseline(param, baseline, onChange)}

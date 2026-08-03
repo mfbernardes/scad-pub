@@ -470,8 +470,7 @@ export const AppShell = memo(function AppShell({
   // announcement (the Download button right below it is the confirmation)
   // and "building" is already narrated by the viewer's own loading overlay, so
   // a pill in either state would be noise over the model. That leaves the two
-  // states that want a look at the Review dialog, and mobile takes only one of
-  // them:
+  // states that want a look at the Review dialog:
   //
   //   • "failed" pills on both layouts. A failure needs words; there is no
   //     other surface that says the model did not come out.
@@ -489,6 +488,17 @@ export const AppShell = memo(function AppShell({
   // mobile pills for attention too, that suppression applies there as well,
   // which is what finally makes the two mobile signals one.
   const hasStatusPill = readiness === "failed" || readiness === "attention";
+  // At the sheet's Full detent the whole floating chrome — including the dock
+  // and its StatusStrip — is hidden (see the `data-sheet-detent` doc above),
+  // so "attention" or "failed" would otherwise have no visible indication at
+  // all there. ParamForm's own failure banner doesn't cover it either: it
+  // only mounts on the Customize tab, so a failed render with Presets
+  // selected has no banner. Reuse the same pill inside SheetTabs for those
+  // two states only, so peek/half never show it twice.
+  const sheetStatusPill =
+    isMobile && sheetDetent === "full" && hasStatusPill
+      ? { readiness, attentionCount: attention.length, onOpen: openReview }
+      : undefined;
 
   // Prop bundles shared verbatim by the two layout trees: each call site below
   // adds only what is genuinely its own (the panel's dock geometry, the
@@ -776,7 +786,7 @@ export const AppShell = memo(function AppShell({
               // tabIndex -1: a skip link whose target isn't focusable moves
               // nothing, see #main-content below.
               <div className="sheet-content" id="params-mobile" tabIndex={-1}>
-                <SheetTabs {...paramProps} onActivate={expand} />
+                <SheetTabs {...paramProps} onActivate={expand} sheetPill={sheetStatusPill} />
               </div>
             )}
           </BottomSheet>

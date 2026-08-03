@@ -29,8 +29,12 @@ const INLINE = /(\*\*[^*]+\*\*|\*(?![\s*])[^*\n]*[^\s*]\*|`[^`]+`|\[[^\]]+\]\([^
 function inline(text: string, key: string): ReactNode[] {
   return text.split(INLINE).map((part, i) => {
     const k = `${key}-${i}`;
-    if (BOLD.test(part)) return <strong key={k}>{part.slice(2, -2)}</strong>;
-    if (ITALIC.test(part)) return <em key={k}>{part.slice(1, -1)}</em>;
+    // Recurse into the emphasis run rather than emitting its contents as raw
+    // text: `*a`b`c*` used to render the backticks literally, because the outer
+    // token consumed the inner one. The recursion terminates because stripping
+    // the delimiters always shortens the string.
+    if (BOLD.test(part)) return <strong key={k}>{inline(part.slice(2, -2), k)}</strong>;
+    if (ITALIC.test(part)) return <em key={k}>{inline(part.slice(1, -1), k)}</em>;
     if (CODE.test(part))
       return (
         <code key={k} className="rounded-(--radius-sm) bg-code px-[0.2rem] font-mono text-xs">

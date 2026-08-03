@@ -825,9 +825,21 @@ button:disabled { cursor: default; }
 
    The negative inline margins + matching padding let the fill span the group's
    full width, which its own `px-[0.8rem]` would otherwise inset. */
+/* A group jumped to via `scrollIntoView` (ParamForm.tsx) must not land at a
+   position the sticky failure banner covers. At 320x568 the banner is ~119px
+   of a ~180px form port, and a group scrolled to the very top would end up
+   entirely behind it — invisible AND not hit-testable, since the banner is
+   painted above. The same measured height the sticky headers offset by is
+   reserved here as scroll margin. */
+[data-section] {
+  scroll-margin-top: calc(var(--failure-banner-h, 0px) + 0.5rem);
+}
+
 .param-group > summary {
   position: sticky;
-  top: 0;
+  /* Clears the render-failure banner, which is sticky against the same scroll
+     port; ParamForm publishes its measured height (0 when there is no banner). */
+  top: var(--failure-banner-h, 0px);
   z-index: 1;
   margin-inline: -0.8rem;
   padding-inline: 1rem;
