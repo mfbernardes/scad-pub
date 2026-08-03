@@ -49,9 +49,10 @@ ScadPub packages the configurator, renderer, offline shell, and export flow into
 ## Repository layout
 
 ```text
-examples/           three self-contained example designs (default source): tag, coin, panel
+examples/           four self-contained example designs (default source): tag, coin, panel, diagnostics
   tag.scad          embossed text (font) + an extruded SVG emblem
-  coin.scad, panel.scad  the other two designs
+  coin.scad, panel.scad  two more designs; like tag, silent at their defaults
+  diagnostics.scad  one switch per kind of message the app reports
   emblem.svg, panel.svg  SVG assets the designs import
   panel.md          panel's design doc (// @doc)
   help-printing.md  afterExport help-tab source

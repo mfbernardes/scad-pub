@@ -17,7 +17,8 @@
       }
     },
     { "id": "coin", "label": "Coin" },
-    { "id": "panel", "label": "Panel" }
+    { "id": "panel", "label": "Panel" },
+    { "id": "diagnostics", "label": "Diagnostics demo" }
   ],
   "assets": ["emblem.svg", "panel.svg"],
 
