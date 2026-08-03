@@ -151,5 +151,10 @@
   "files.added": "File added: {name}",
   "files.removed": "File removed: {name}",
   "files.cleared": "Imported files cleared",
-  "diagnostics.assertsBadge": "asserts"
+  "diagnostics.assertsBadge": "asserts",
+  "render.announceUpdated": "Preview updated",
+  "render.announceStale": "Preview out of date",
+  "render.announceFailed": "Render failed (exit {code})",
+  "output.newMessages#one": "{count} new message",
+  "output.newMessages#other": "{count} new messages"
 }

@@ -97,9 +97,6 @@ export function ViewerStage({
 }: Props) {
   const { render } = useAppActions();
 
-  // Only the active layout mounts a Viewer, so gating on `active` keeps the
-  // inactive tree from binding a second listener onto a handle that is null.
-  useZoomKeys(viewerRef, active);
 
   // ── On-model text editing ("type on the sign") ───────────────────────────
   // Active when the design declares an `@editOnModel` string param; the mesh
@@ -114,6 +111,9 @@ export function ViewerStage({
   const modelReady = !!result?.ok;
   const editable = !!editParam && modelReady;
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Only the active layout mounts a Viewer, so gating on `active` keeps the
+  // inactive tree from binding a second listener onto a handle that is null.
+  useZoomKeys(viewerRef, active, wrapRef);
   const [editOpen, setEditOpen] = useState(false);
   const [editAnchor, setEditAnchor] = useState<Point | null>(null);
   const openEditAt = useCallback((pos: Point) => {

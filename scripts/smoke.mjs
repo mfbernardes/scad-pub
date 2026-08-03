@@ -12,6 +12,7 @@
 // context (page, check counter, schema-derived names); main() is setup, the
 // ordered calls, and teardown.
 import { readFile, mkdtemp, stat } from "node:fs/promises";
+import { PNG } from "pngjs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -2188,6 +2189,253 @@ async function checkDialogFocusEntry({ browser, base, check }) {
 //
 // Driven, not unit-tested, because the bug lives in the interaction between an
 // imperative write, a cancelled rAF and React's bail-out on equal state.
+// === focus returns to the trigger when a dialog closes ===
+// Every dialog here is rendered conditionally (`{showHelp && <HelpModal/>}`),
+// which unmounts Radix's Dialog synchronously and skips its own
+// `onCloseAutoFocus` restore, so the restore is ours (src/lib/useReturnFocus.ts)
+// and nothing but an end-to-end check can tell whether it still works. Both
+// close routes, because they leave through different code.
+async function checkDialogFocusReturn({ page, check }) {
+  console.log("=== focus returns to the trigger when a dialog closes ===");
+  const active = () =>
+    page.evaluate(() => {
+      const el = document.activeElement;
+      if (!el || el === document.body) return "<body>";
+      return el.getAttribute("aria-label") || (el.textContent || "").trim().slice(0, 30);
+    });
+  for (const label of ["Help", "Open-source licenses"]) {
+    const trigger = page.locator(`button[aria-label="${label}"]`).first();
+    if (!(await trigger.count())) continue;
+    for (const route of ["Escape", "the close button"]) {
+      await trigger.focus();
+      await page.keyboard.press("Enter");
+      await page.getByRole("dialog").waitFor({ state: "visible", timeout: 3000 });
+      if (route === "Escape") await page.keyboard.press("Escape");
+      else await page.locator('[data-slot="dialog-close"]').first().click();
+      await waitDialogClosed(page);
+      await page.waitForTimeout(150); // the restore is deferred past the unmount
+      const landed = await active();
+      check(landed === label, `closing "${label}" with ${route} puts focus back on it (landed on "${landed}")`);
+    }
+  }
+}
+
+// === "+" / "-" zoom the model ===
+// The canvas is aria-hidden and unfocusable, so this binding lives on the
+// document (src/lib/useZoomKeys.ts) and has no control of its own to assert
+// against: the model's own on-screen size is the only evidence. Lit pixels
+// stand in for it — the model is the only thing in the viewer that isn't the
+// flat background.
+async function checkKeyboardZoom({ page, check }) {
+  console.log('=== "+" / "-" zoom the model ===');
+  const litPixels = async () => {
+    const png = PNG.sync.read(await page.locator(".viewer").first().screenshot());
+    const [r0, g0, b0] = [png.data[0], png.data[1], png.data[2]];
+    let n = 0;
+    for (let i = 0; i < png.data.length; i += 4)
+      if (
+        Math.abs(png.data[i] - r0) + Math.abs(png.data[i + 1] - g0) + Math.abs(png.data[i + 2] - b0) >
+        30
+      )
+        n++;
+    return n;
+  };
+  const press = async (key, times) => {
+    for (let i = 0; i < times; i++) {
+      await page.keyboard.press(key);
+      await page.waitForTimeout(120);
+    }
+    await page.waitForTimeout(300);
+  };
+  const before = await litPixels();
+  await press("+", 3);
+  const zoomedIn = await litPixels();
+  check(zoomedIn > before * 1.1, `"+" magnifies the model (${before} -> ${zoomedIn} lit px)`);
+  await press("-", 6);
+  const zoomedOut = await litPixels();
+  check(zoomedOut < zoomedIn * 0.9, `"-" shrinks it (${zoomedIn} -> ${zoomedOut} lit px)`);
+
+  // A text field owns its own "+"/"-": the guard that keeps this binding from
+  // eating them is the reason it can live on the document at all.
+  const field = page.locator('.param-panel input[type="text"]').first();
+  if (await field.count()) {
+    await field.click();
+    await field.fill("");
+    await page.keyboard.type("a+b-c");
+    check((await field.inputValue()) === "a+b-c", 'typing "+"/"-" into a text field still types them');
+    await field.fill("");
+  }
+  await page.getByRole("button", { name: "Reset view" }).first().click().catch(() => {});
+  await page.waitForTimeout(300);
+}
+
+// === touch targets that a pointer, not a keyboard, has to hit ===
+// 2.5.8's floor is 24px, but these two are the ones a phone visitor meets
+// first (the close X on the welcome popup) and the only checkbox in the app,
+// and both shrink-wrapped a 16px glyph before.
+async function checkCoarseTargets({ browser, base, check }) {
+  console.log("=== touch targets (coarse pointer) ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await page.waitForTimeout(500);
+    if (
+      !check(
+        await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+        "the context really is a coarse pointer (or this check proves nothing)"
+      )
+    )
+      return;
+    const size = (selector) =>
+      page.evaluate((sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { w: Math.round(r.width), h: Math.round(r.height) };
+      }, selector);
+    const closeBox = await size('[data-slot="dialog-close"]');
+    if (closeBox)
+      check(
+        closeBox.w >= 44 && closeBox.h >= 44,
+        `a dialog's close button is ${closeBox.w}x${closeBox.h}`
+      );
+    const dismiss = await size(".notice-dismiss");
+    if (dismiss) check(dismiss.h >= 44, `the popup's dismiss row is ${dismiss.h}px tall`);
+    // A bare switch is its own target and must clear 24 — but the overlay that
+    // buys it that is centred on a 20px track, so height beyond 24 spills past
+    // the switch's own box and, since the root is positioned, WINS the hit test
+    // against the row below. The "⋮" menu is where that bites: at 44 a tap
+    // inside the next row toggled Live preview instead of opening it. Measured
+    // AND clicked, because the geometry alone doesn't say who wins.
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+    // A button-mode popup's CTA opens the design picker behind it, and
+    // dismissWelcomePopup's Escape can land before that dialog exists. Anything
+    // still open is a modal layer that swallows the trigger below, so the menu
+    // would never open and this check would pass by measuring nothing.
+    for (let i = 0; i < 5 && (await page.getByRole("dialog").count()); i++) {
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(300);
+    }
+    if (!check(!(await page.getByRole("dialog").count()), "no dialog is left covering the top bar")) return;
+    await page.locator('button[aria-label="More actions"]').first().click();
+    await page.waitForTimeout(400);
+    const sw = await page.evaluate(() => {
+      const el = document.querySelector('[data-slot="switch"]');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const overlay = parseFloat(getComputedStyle(el, "::after").height) || r.height;
+      const row = el.closest(".auto-render");
+      const nextEl = row?.nextElementSibling ?? null;
+      const next = nextEl?.getBoundingClientRect() ?? null;
+      return {
+        overlay,
+        spill: (overlay - r.height) / 2,
+        state: el.getAttribute("data-state"),
+        // A point 2px inside the row below the switch's own.
+        // The overlay is `inset-x-0`: it spans the SWITCH's width, not the
+        // row's, so the probe has to sit in the switch's own column. A point
+        // 2px into the row below, directly under the track, is where a too-tall
+        // overlay reaches and an honest one does not.
+        probe:
+          next && next.y + 2 <= r.bottom + (overlay - r.height) / 2
+            ? { x: r.x + r.width / 2, y: next.y + 2, label: (nextEl?.textContent ?? "next").trim().slice(0, 20) }
+            : null,
+      };
+    });
+    if (check(!!sw, "the ⋮ menu holds the Live-preview switch")) {
+      check(sw.overlay >= 24, `a switch's hit area is ${sw.overlay}px tall`);
+      check(!sw.probe, `the overlay stops short of the row below it (spill ${sw.spill}px)`);
+      if (sw.probe) {
+        await page.mouse.click(sw.probe.x, sw.probe.y);
+        await page.waitForTimeout(400);
+        // "gone" is the healthy outcome: the row acted and its menu closed. The
+        // failure is the switch STILL being there, flipped — so assert the row
+        // acted, not merely that something changed.
+        const after = await page.evaluate(() => ({
+          state: document.querySelector('[data-slot="switch"]')?.getAttribute("data-state") ?? "gone",
+          menuOpen: !!document.querySelector('[data-slot="switch"]'),
+        }));
+        check(
+          !after.menuOpen && after.state === "gone",
+          `a tap at the top of the "${sw.probe.label}" row below it activates that row ` +
+            `(spill ${sw.spill}px; menu ${after.menuOpen ? "still open" : "closed"}, switch ${after.state})`
+        );
+      }
+    }
+  } finally {
+    await context.close();
+  }
+}
+
+// === the collapsed sheet raises rather than hiding focus ===
+// At peek the panel content sits inside an `overflow: hidden` frame, so a tab
+// stop landing there is invisible and unusable (2.4.7). SheetTabs raises the
+// sheet on focus instead; the drag handle and tab row stay reachable at peek.
+async function checkSheetPeekFocus({ browser, base, check }) {
+  console.log("=== the collapsed sheet raises rather than hiding focus ===");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    await waitRenderDone(page).catch(() => {});
+    const detent = () =>
+      page.evaluate(() => document.querySelector(".app-shell__mobile")?.getAttribute("data-sheet-detent"));
+    for (let i = 0; i < 4 && (await detent()) !== "peek"; i++) {
+      await page.locator(".sheet-handle").click();
+      await page.waitForTimeout(600);
+    }
+    if (!check((await detent()) === "peek", `the sheet is collapsed to peek (${await detent()})`)) return;
+
+    const clipped = [];
+    let entryDetent = null;
+    for (let i = 0; i < 22; i++) {
+      await page.keyboard.press("Tab");
+      await page.waitForTimeout(150);
+      const stop = await page.evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body) return null;
+        const sheet = document.querySelector(".bottom-sheet");
+        if (!sheet?.contains(el)) return { inContent: false };
+        // The peek header (drag handle + tab row) is meant to be reachable at
+        // every detent; the content below it is what must not be.
+        if (el.closest("[data-sheet-peek-end], .sheet-handle, .sheet-done")) return { inContent: false };
+        const r = el.getBoundingClientRect();
+        const frame = document.querySelector(".sheet-frame")?.getBoundingClientRect();
+        return {
+          inContent: true,
+          name: (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 26),
+          clipped: !!frame && (r.top >= frame.bottom - 1 || r.bottom <= frame.top + 1),
+          detent: document.querySelector(".app-shell__mobile")?.getAttribute("data-sheet-detent"),
+        };
+      });
+      if (!stop) break;
+      if (!stop.inContent) continue;
+      if (entryDetent === null) entryDetent = stop.detent;
+      if (stop.clipped) clipped.push(stop.name);
+    }
+    check(
+      entryDetent !== null && entryDetent !== "peek",
+      `the sheet raised itself as focus entered its content (detent there: ${entryDetent})`
+    );
+    check(clipped.length === 0, `no tab stop lands clipped in the sheet${clipped.length ? ": " + clipped.join(", ") : ""}`);
+  } finally {
+    await context.close();
+  }
+}
+
 async function checkResizerAnnouncedWidth({ page, check }) {
   console.log("=== the resizer's announced width settles where the panel does ===");
   const handle = page.locator(".param-panel__resize-handle").first();
@@ -2368,6 +2616,8 @@ const SHARED_PAGE_CHECKS = [
   checkSectionNavigator,
   checkRoundedCorners,
   checkResizerAnnouncedWidth,
+  checkDialogFocusReturn,
+  checkKeyboardZoom,
 ];
 
 const OWN_CONTEXT_CHECKS = [
@@ -2379,6 +2629,8 @@ const OWN_CONTEXT_CHECKS = [
   checkNothingOffscreen,
   checkSheetFocusTrap,
   checkDialogFocusEntry,
+  checkCoarseTargets,
+  checkSheetPeekFocus,
 ];
 
 async function main() {

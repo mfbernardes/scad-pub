@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { useScrollFocusedIntoView } from "../lib/useScrollFocusedIntoView";
+import { useReturnFocus } from "../lib/useReturnFocus";
 
 /** The wizard's plain-value output; the host applies it to the parameters. */
 export interface SvgWizardResult {
@@ -97,6 +98,10 @@ export function SvgWizard({
   onCancel,
   onComplete,
 }: Props) {
+  // Mounted only while open, like Modal's callers, so Radix cannot restore
+  // focus on its own.
+  useReturnFocus();
+
   // Parse once. A parse failure is a terminal state with a retry via cancel.
   const parsed = useMemo(() => {
     try {

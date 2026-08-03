@@ -64,12 +64,9 @@ function DialogContent({
           {showCloseButton && (
             <DialogPrimitive.Close
               data-slot="dialog-close"
-              // The padding/negative-margin pair grows the hit area without
-              // moving the glyph: the X shrink-wrapped its 16px icon, which is
-              // the whole way out of a dialog on a phone. 24px on a fine
-              // pointer, 44px on a coarse one (2.5.8), with `top-4 right-4`
-              // still measuring to the same place because the negative margin
-              // cancels the padding.
+              // Padding cancelled by negative margin: grows the hit area to
+              // 24px (44 on a coarse pointer, 2.5.8) without moving the glyph,
+              // which shrink-wrapped its 16px icon.
               className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 -m-1 rounded-xs p-1 opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none pointer-coarse:-m-[14px] pointer-coarse:p-[14px] [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
             >
               <XIcon />

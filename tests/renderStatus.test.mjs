@@ -8,6 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { stageLoading, deriveRenderStatus, renderAnnouncement } from "../src/lib/renderStatus.ts";
+import en from "../src/locales/en.json" with { type: "json" };
 
 const okResult = { id: 1, ok: true, exitCode: 0, stl: new Uint8Array([1]), log: [], ms: 10 };
 const failedResult = { id: 2, ok: false, exitCode: 1, log: [], ms: 10 };
@@ -64,18 +65,38 @@ test("deriveRenderStatus: the shapes the smoke/capture scripts wait on stay stab
 });
 
 test("renderAnnouncement: in-progress states stay silent, so a live region reads once per render", () => {
-  const spoken = (input) => renderAnnouncement(deriveRenderStatus(input));
-  // The two that used to speak on every debounced keystroke.
-  assert.equal(spoken({ ready: true, rendering: true, result: okResult }), "");
-  assert.equal(spoken({ ready: false, rendering: false, result: null }), "");
-  assert.equal(spoken({ ready: true, rendering: false, result: null }), "");
-  // A completed render says so, without the millisecond readout.
-  assert.equal(spoken({ ready: true, rendering: false, result: okResult }), "Preview updated");
-  assert.doesNotMatch(spoken({ ready: true, rendering: false, result: okResult }), /\d+ ms/);
+  for (const input of [
+    { ready: true, rendering: true, result: okResult },
+    { ready: false, rendering: false, result: null },
+    { ready: true, rendering: false, result: null },
+  ]) {
+    assert.equal(renderAnnouncement(input), null);
+  }
+  assert.deepEqual(renderAnnouncement({ ready: true, rendering: false, result: okResult }), {
+    key: "render.announceUpdated",
+  });
 });
 
-test("renderAnnouncement: the states a visitor has to act on keep their own words", () => {
-  const spoken = (input) => renderAnnouncement(deriveRenderStatus(input));
-  assert.equal(spoken({ ready: true, rendering: false, result: okResult, stale: true }), "Preview out of date");
-  assert.equal(spoken({ ready: true, rendering: false, result: failedResult }), "Failed (exit 1)");
+test("renderAnnouncement: the states a visitor has to act on carry their own key", () => {
+  assert.deepEqual(
+    renderAnnouncement({ ready: true, rendering: false, result: okResult, stale: true }),
+    { key: "render.announceStale" }
+  );
+  assert.deepEqual(renderAnnouncement({ ready: true, rendering: false, result: failedResult }), {
+    key: "render.announceFailed",
+    vars: { code: 1 },
+  });
+});
+
+test("renderAnnouncement: every key it can return exists in the catalogue", () => {
+  // The spoken text is the one render string a screen reader ever hears, so a
+  // key that resolves to itself (i18n's fallback) would be read aloud verbatim.
+  for (const input of [
+    { ready: true, rendering: false, result: okResult },
+    { ready: true, rendering: false, result: okResult, stale: true },
+    { ready: true, rendering: false, result: failedResult },
+  ]) {
+    const { key } = renderAnnouncement(input);
+    assert.ok(key in en, `${key} is missing from src/locales/en.json`);
+  }
 });

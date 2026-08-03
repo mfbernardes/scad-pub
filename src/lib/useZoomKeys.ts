@@ -17,13 +17,27 @@ function isTyping(target: EventTarget | null): boolean {
   return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
 }
 
-export function useZoomKeys(viewerRef: RefObject<ViewerHandle | null>, enabled: boolean): void {
+/** Whether the viewer is behind something that owns the keyboard: an open
+ *  dialog, or an `inert` subtree (the mobile sheet inerts the whole background
+ *  at its Full detent). Zooming a model the visitor cannot see is worse than
+ *  doing nothing. */
+function occluded(wrap: HTMLElement | null): boolean {
+  if (document.querySelector("[role=dialog], [role=alertdialog]")) return true;
+  return !!wrap?.closest("[inert]");
+}
+
+export function useZoomKeys(
+  viewerRef: RefObject<ViewerHandle | null>,
+  enabled: boolean,
+  wrapRef: RefObject<HTMLElement | null>
+): void {
   useEffect(() => {
     if (!enabled) return;
     const onKeyDown = (e: KeyboardEvent) => {
       // Ctrl/Cmd +/- is the browser's own page zoom, and Alt combinations
       // belong to the platform: neither is ours to take.
       if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
+      if (occluded(wrapRef.current)) return;
       // "=" and "_" are the unshifted faces of the same two keys, so the
       // binding works without reaching for Shift on a US layout.
       if (e.key === "+" || e.key === "=") viewerRef.current?.zoomIn();
@@ -33,5 +47,5 @@ export function useZoomKeys(viewerRef: RefObject<ViewerHandle | null>, enabled: 
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [viewerRef, enabled]);
+  }, [viewerRef, enabled, wrapRef]);
 }

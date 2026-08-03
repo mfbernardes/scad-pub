@@ -25,7 +25,9 @@ export function PanelFooter({
           reads (BarActions), so a deployment's `strings` override doesn't
           change the label halfway across the breakpoint. */}
       <Label
-        className="auto-render inline-flex cursor-pointer select-none items-center gap-[0.35rem] text-[0.85rem] font-normal text-muted-foreground hover:text-foreground"
+        // The row is the target (it wraps the switch), so the coarse-pointer
+        // 44px lands here rather than on the track, see ui/switch.tsx.
+        className="auto-render inline-flex min-h-6 cursor-pointer select-none items-center gap-[0.35rem] text-[0.85rem] font-normal text-muted-foreground hover:text-foreground pointer-coarse:min-h-11"
         title={t("settings.livePreviewTitle")}
       >
         <Switch

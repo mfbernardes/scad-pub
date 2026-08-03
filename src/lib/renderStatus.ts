@@ -63,26 +63,38 @@ export function deriveRenderStatus({ rendering, ready, result, stale = false }: 
   return { state: "error", text: `Failed (exit ${result.exitCode})` };
 }
 
+/** A catalogue key plus its interpolation vars, or null for silence. */
+export interface Announcement {
+  key: string;
+  vars?: Record<string, string | number>;
+}
+
 /**
- * What a screen reader should hear about `status`, or "" for a state not worth
- * interrupting for.
+ * What a screen reader should hear about a render, or null for a state not
+ * worth interrupting for.
  *
  * Deliberately not `deriveRenderStatus`'s own text. That text is a readout —
  * "214 ms", "Idle" — written for the visible chrome and for the scripts that
  * poll it. Announcing it meant every debounced keystroke spoke twice ("Updating
- * preview…", then a millisecond figure that tells a visitor nothing about their
- * model). What is worth saying is that a render finished, or that the preview
- * no longer matches the controls; the in-progress states say nothing, so the
- * region goes quiet between renders and the next completion reads as new.
+ * preview…", then a millisecond figure that says nothing about the model). What
+ * is worth saying is that a render finished, or that the preview no longer
+ * matches the controls; the in-progress states say nothing, so the region goes
+ * quiet between renders and the next completion reads as new.
+ *
+ * Returns a key rather than a sentence: this is the only render text a screen
+ * reader ever hears, so it belongs in the catalogue a deployment can override
+ * (`strings`), while the function itself stays pure and testable.
  */
-export function renderAnnouncement({ state, text }: { state: RenderState; text: string }): string {
-  switch (state) {
-    case "ok":
-      return "Preview updated";
-    case "stale":
-    case "error":
-      return text;
-    default:
-      return "";
-  }
+export function renderAnnouncement(input: RenderStatusInput): Announcement | null {
+  const { state } = deriveRenderStatus(input);
+  if (state === "ok") return { key: "render.announceUpdated" };
+  if (state === "stale") return { key: "render.announceStale" };
+  if (state === "error")
+    return {
+      key: "render.announceFailed",
+      // Named, unlike the visible readout: "Failed (exit 1)" arriving on its
+      // own gives a listener nothing to attach it to.
+      vars: { code: input.result && !input.result.ok ? input.result.exitCode : 0 },
+    };
+  return null;
 }

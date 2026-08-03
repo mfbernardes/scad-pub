@@ -151,86 +151,81 @@ export function SheetTabs({
         ))}
       </TabsList>
       {/* Everything below the tab row sits under the peek fold, inside the
-          sheet's `overflow: hidden` frame. Tab used to walk straight into it
-          while the sheet was collapsed, parking focus on controls ~90% clipped
-          and invisible. Raising the sheet on the way in is the same move a tap
-          on a tab already makes (`onActivate` above), so focus lands somewhere
-          the visitor can see instead of being locked out of the panel. Capture
-          phase: the focus has to be handled before the control settles, and
-          `expand` is a no-op above peek. */}
-      <div className="flex min-h-0 flex-1 flex-col" onFocusCapture={onActivate}>
-        {sheetPill && (
-          <div className="shrink-0 px-3 pt-2 pb-1">
-            <StatusStrip
-              readiness={sheetPill.readiness}
-              attentionCount={sheetPill.attentionCount}
-              onOpen={sheetPill.onOpen}
-              className="w-full justify-center"
-            />
-          </div>
-        )}
-        <div className="flex min-h-0 flex-1 flex-col">
-          <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
-            <PresetDiffBar
-              design={design}
-              values={values}
-              presetBaseline={presetBaseline}
-              presetName={presetName}
-              changedParams={changedParams}
-            />
-            {/* No padding-top on the scroll port: a sticky group header pins to
-                the port's padding box, so any padding here would strand it that
-                far down and let rows scroll through the gap above it. The top gap
-                is `.param-form`'s own `pt-3` (and the toolbar's `mt-2`), both of
-                which scroll away as content should. Same reason ParamPanel's
-                scroller drops its `p-3` top. */}
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2">
-              {/* The form toolbar is now only the search field, full width, and
-                  still INSIDE the scroll container so it hands its ~44px back to
-                  the form as soon as the visitor scrolls. Its two former
-                  neighbours both left for somewhere they read better:
-                    • essentials ("+N more") is a MODE, not a find-the-setting
-                      control. It's the closing row of the form itself now (see
-                      EssentialsToggle);
-                    • the section navigator is desktop-only. Sticky group headers
-                      (`.param-group > summary` in index.css) keep the visitor
-                      oriented while scrolling and let them fold the group they're
-                      in from wherever they are, which is most of what the jump
-                      menu was for, and unlike the menu it costs no standing row. */}
-              <div className="sheet-toolbar mt-2">
-                <ParamSearch
-                  value={search}
-                  onChange={onSearchChange}
-                  onClear={() => onSearchChange("")}
-                  onFocus={onSearchFocus}
-                  onBlur={onSearchBlur}
-                  compact
-                />
-              </div>
-              {/* `compact`: control beside label wherever the control doesn't
-                  need the full row, plus a tighter vertical rhythm. The sheet's
-                  half detent is the only state where a phone shows the model and
-                  the controls together, and its form port is ~380px: a stacked
-                  row costs the label's height plus the control's, which fitted
-                  two of sixteen parameters in it. See ParamForm's `compact`
-                  doc. The docked desktop panel keeps the stacked layout. */}
-              <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} compact failure={failure} />
-            </div>
-          </TabsContent>
-          <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
-            <PresetPicker
-              design={design}
-              bundled={bundled}
-              userPresets={userPresets}
-              selected={selectedPreset}
-              values={values}
-              onApply={applyPreset}
-              onSelectedChange={selectedPresetChange}
-              onPresetsChange={presetsChange}
-              compact
-            />
-          </TabsContent>
+          sheet's `overflow: hidden` frame: Tab used to walk straight into it
+          while the sheet was collapsed and park focus on controls ~90% clipped.
+          Raising the sheet on the way in is what tapping a tab already does
+          (`onActivate`), and `expand` is a no-op above peek. */}
+      {sheetPill && (
+        <div className="shrink-0 px-3 pt-2 pb-1" onFocusCapture={onActivate}>
+          <StatusStrip
+            readiness={sheetPill.readiness}
+            attentionCount={sheetPill.attentionCount}
+            onOpen={sheetPill.onOpen}
+            className="w-full justify-center"
+          />
         </div>
+      )}
+      <div className="flex min-h-0 flex-1 flex-col" onFocusCapture={onActivate}>
+        <TabsContent value="params" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <PresetDiffBar
+            design={design}
+            values={values}
+            presetBaseline={presetBaseline}
+            presetName={presetName}
+            changedParams={changedParams}
+          />
+          {/* No padding-top on the scroll port: a sticky group header pins to
+              the port's padding box, so any padding here would strand it that
+              far down and let rows scroll through the gap above it. The top gap
+              is `.param-form`'s own `pt-3` (and the toolbar's `mt-2`), both of
+              which scroll away as content should. Same reason ParamPanel's
+              scroller drops its `p-3` top. */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2">
+            {/* The form toolbar is now only the search field, full width, and
+                still INSIDE the scroll container so it hands its ~44px back to
+                the form as soon as the visitor scrolls. Its two former
+                neighbours both left for somewhere they read better:
+                  • essentials ("+N more") is a MODE, not a find-the-setting
+                    control. It's the closing row of the form itself now (see
+                    EssentialsToggle);
+                  • the section navigator is desktop-only. Sticky group headers
+                    (`.param-group > summary` in index.css) keep the visitor
+                    oriented while scrolling and let them fold the group they're
+                    in from wherever they are, which is most of what the jump
+                    menu was for, and unlike the menu it costs no standing row. */}
+            <div className="sheet-toolbar mt-2">
+              <ParamSearch
+                value={search}
+                onChange={onSearchChange}
+                onClear={() => onSearchChange("")}
+                onFocus={onSearchFocus}
+                onBlur={onSearchBlur}
+                compact
+              />
+            </div>
+            {/* `compact`: control beside label wherever the control doesn't
+                need the full row, plus a tighter vertical rhythm. The sheet's
+                half detent is the only state where a phone shows the model and
+                the controls together, and its form port is ~380px: a stacked
+                row costs the label's height plus the control's, which fitted
+                two of sixteen parameters in it. See ParamForm's `compact`
+                doc. The docked desktop panel keeps the stacked layout. */}
+            <ParamForm design={design} values={values} onChange={change} search={debouncedSearch} showVarName={showVarName} availableFontFamilies={availableFontFamilies} fontSuggestion={fontSuggestion} installedFonts={installedFonts} availableSvgFiles={availableSvgFiles} baseline={baseline} changedParams={changedParams} presetName={presetName} showAdvanced={showAdvanced} onShowAdvancedChange={onShowAdvancedChange} compact failure={failure} />
+          </div>
+        </TabsContent>
+        <TabsContent value="presets" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <PresetPicker
+            design={design}
+            bundled={bundled}
+            userPresets={userPresets}
+            selected={selectedPreset}
+            values={values}
+            onApply={applyPreset}
+            onSelectedChange={selectedPresetChange}
+            onPresetsChange={presetsChange}
+            compact
+          />
+        </TabsContent>
       </div>
     </Tabs>
   );

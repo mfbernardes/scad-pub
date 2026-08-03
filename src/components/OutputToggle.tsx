@@ -15,6 +15,7 @@
 // both at once invites the reading that one of them is lying, so the caller
 // hides this count while the pill is up (`showCount`), and the bell carries no
 // amber of its own for an attention-flagged notice.
+import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import {
@@ -82,12 +83,16 @@ export function OutputToggle({
   // dot own the wording for "something needs your attention" — a screen
   // reader user switching between the two controls should hear two distinct
   // claims, not the same one twice.
+  const announcement = status ? renderAnnouncement(status) : null;
+  const newMessages = useNewMessages(noticeCount);
+
   const action = outputOpen ? t("common.close") : t("common.open");
   const bellLabel = hasNotices
     ? tn("console.bellLabel", noticeCount, { action })
     : t("console.bellLabelEmpty", { action });
 
   return (
+    <>
     <Button
       size="icon"
       variant="outline"
@@ -128,19 +133,57 @@ export function OutputToggle({
           />
         )
       )}
-      {/* Two spans, because the readout and the announcement want different
-          text (see renderAnnouncement). This one is the stable `render-status`
-          hook the smoke/capture scripts poll for "N ms"; it is not spoken. */}
+    </Button>
+      {/* Siblings of the bell, not children of it: the button carries an
+          explicit aria-label, so anything inside it is name-computation
+          territory rather than reliably-announced content. All three are
+          sr-only (absolutely positioned), so they cost the bar no layout.
+
+          The readout and the announcement want different text, hence two
+          regions: `.render-status` is the stable hook the smoke/capture scripts
+          poll for "N ms" and is deliberately not spoken. */}
       {derived && (
         <span className="render-status sr-only" aria-hidden="true">
           {`Render status: ${derived.text}`}
         </span>
       )}
-      {derived && (
-        <span className="sr-only" role="status" aria-live="polite">
-          {renderAnnouncement(derived)}
-        </span>
-      )}
-    </Button>
+      <span className="render-announce sr-only" role="status" aria-live="polite">
+        {announcement ? t(announcement.key, announcement.vars) : ""}
+      </span>
+      {/* A message arriving is its own status update, and the bell cannot make
+          it: a count living in an aria-label on an unfocused button is never
+          spoken. The delta only, so a listener isn't re-read the whole console
+          — which is what dropping `aria-live` from the list itself was about,
+          see OutputConsole. */}
+      <span className="output-announce sr-only" role="status" aria-live="polite">
+        {newMessages > 0 ? tn("output.newMessages", newMessages, { count: newMessages }) : ""}
+      </span>
+    </>
   );
+}
+
+/**
+ * How many messages arrived since the last time this settled, for a live region
+ * that reports the delta and then goes quiet.
+ *
+ * A tally that only ever grows would re-announce the same total on every render
+ * that adds nothing, and one that reset synchronously would clear the text
+ * before a screen reader read it; the timer is what buys the region a moment to
+ * be read. A count going DOWN (a new design, a cleared console) is not news, so
+ * it only re-baselines.
+ */
+function useNewMessages(count: number): number {
+  const seen = useRef(count);
+  const [delta, setDelta] = useState(0);
+  useEffect(() => {
+    if (count <= seen.current) {
+      seen.current = count;
+      return;
+    }
+    setDelta(count - seen.current);
+    seen.current = count;
+    const timer = setTimeout(() => setDelta(0), 2000);
+    return () => clearTimeout(timer);
+  }, [count]);
+  return delta;
 }
