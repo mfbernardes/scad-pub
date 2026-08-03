@@ -191,6 +191,15 @@ function probeWebGL(): boolean {
 
 type WebglStatus = "ok" | "unavailable" | "lost";
 
+// Per-keypress step sizes for the keyboard orbit/pan/zoom handler
+// (onViewerKeyDown, below), and the id the mount's aria-describedby points
+// at for the sr-only usage hint. See onViewerKeyDown's own doc for why the
+// zoom factor is gentler than dolly()'s HUD-button steps.
+const ORBIT_KEY_STEP = Math.PI / 24; // 7.5° per press
+const PAN_KEY_STEP_PX = 40; // OrbitControls.pan() takes screen pixels, see its own doc
+const ZOOM_KEY_FACTOR = 0.9;
+const VIEWER_KEYBOARD_HINT_ID = "viewer-keyboard-hint";
+
 export const Viewer = forwardRef<
   ViewerHandle,
   {
@@ -576,6 +585,58 @@ export const Viewer = forwardRef<
     controls.update();
   }
 
+  // Keyboard orbit/pan/zoom (WCAG 2.1.1): OrbitControls is pointer-only, so
+  // without this a keyboard user could zoom (HUD buttons) and snap to preset
+  // views (ViewPicker) but never freely rotate or pan. Arrow keys mirror a
+  // plain drag (rotate); Shift+arrow keys mirror a pan drag; +/- dolly like
+  // the HUD's zoom buttons, at a gentler step than dolly()'s own 0.8/1.25
+  // (see ZOOM_KEY_FACTOR below) because a held key auto-repeats at OS speed,
+  // and compounding 0.8/1.25 at that rate zooms absurdly fast.
+  //
+  // Routed through OrbitControls' own public rotateLeft/rotateUp/pan methods
+  // (three.js >= 0.176) rather than hand-rolled spherical math: they already
+  // apply damping, clamp phi to minPolarAngle/maxPolarAngle, and call
+  // controls.update(), which dispatches the "change" event the render loop
+  // already listens for (see the setup effect's controls.addEventListener),
+  // so a keypress redraws through the exact same path a drag does.
+  function onViewerKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const pan = e.shiftKey;
+    switch (e.key) {
+      case "ArrowLeft":
+        e.preventDefault();
+        if (pan) controls.pan(-PAN_KEY_STEP_PX, 0);
+        else controls.rotateLeft(-ORBIT_KEY_STEP);
+        return;
+      case "ArrowRight":
+        e.preventDefault();
+        if (pan) controls.pan(PAN_KEY_STEP_PX, 0);
+        else controls.rotateLeft(ORBIT_KEY_STEP);
+        return;
+      case "ArrowUp":
+        e.preventDefault();
+        if (pan) controls.pan(0, -PAN_KEY_STEP_PX);
+        else controls.rotateUp(-ORBIT_KEY_STEP);
+        return;
+      case "ArrowDown":
+        e.preventDefault();
+        if (pan) controls.pan(0, PAN_KEY_STEP_PX);
+        else controls.rotateUp(ORBIT_KEY_STEP);
+        return;
+      case "+":
+      case "=":
+        e.preventDefault();
+        dolly(ZOOM_KEY_FACTOR);
+        return;
+      case "-":
+      case "_":
+        e.preventDefault();
+        dolly(1 / ZOOM_KEY_FACTOR);
+        return;
+    }
+  }
+
   useImperativeHandle(ref, () => ({
     snapshot() {
       const r = rendererRef.current;
@@ -689,6 +750,11 @@ export const Viewer = forwardRef<
     // size.
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     rendererRef.current = renderer;
+    // The canvas conveys nothing to assistive tech on its own (see the return
+    // below): hidden here, unconditionally, rather than via the mount's own
+    // aria-hidden, so that attribute is free to instead describe the mount
+    // itself as the keyboard-operable control it now is (onViewerKeyDown).
+    renderer.domElement.setAttribute("aria-hidden", "true");
     mount.appendChild(renderer.domElement);
 
     // The branch is on the build-time define, not on a value passed into the
@@ -1154,16 +1220,34 @@ export const Viewer = forwardRef<
   // canvas — React only ever touches the child it rendered, never the canvas,
   // so the two coexist safely (see the setup effect's own DOM calls).
   //
-  // The canvas conveys nothing to assistive tech; the textual render
-  // status/log/notices carry the meaning instead. The fallback is the one
-  // case the viewer itself has something to say, so aria-hidden lifts while
-  // it's showing.
+  // The canvas itself conveys nothing to assistive tech (aria-hidden, set
+  // once in the setup effect above); while it's showing a model, though, the
+  // MOUNT is a real keyboard-operable control (onViewerKeyDown: arrow keys
+  // orbit, Shift+arrow keys pan, +/- zoom) and needs a role and label of its
+  // own, so it can't be aria-hidden itself the way it used to be (a hidden
+  // node can't be a focus target). role="application" rather than "img":
+  // a screen reader's browse mode intercepts arrow keys for its own virtual
+  // cursor, and a non-widget role wouldn't stop that — "application" tells it
+  // to hand arrow/+/- keys through to this element instead, which is the
+  // entire point of offering them. Only wired while webglStatus is "ok": with
+  // no model there is nothing to operate, and the WebGL-unavailable/lost
+  // fallback below is the one case the viewer has something to say, so it
+  // keeps its own role="alert" and isn't doubled up with a label here.
   return (
     <div
       className="viewer relative"
       ref={mountRef}
-      aria-hidden={webglStatus === "ok" ? "true" : undefined}
+      tabIndex={webglStatus === "ok" ? 0 : undefined}
+      role={webglStatus === "ok" ? "application" : undefined}
+      aria-label={webglStatus === "ok" ? t("viewer.a11yLabel") : undefined}
+      aria-describedby={webglStatus === "ok" ? VIEWER_KEYBOARD_HINT_ID : undefined}
+      onKeyDown={webglStatus === "ok" ? onViewerKeyDown : undefined}
     >
+      {webglStatus === "ok" && (
+        <p id={VIEWER_KEYBOARD_HINT_ID} className="sr-only">
+          {t("viewer.a11yKeyboardHint")}
+        </p>
+      )}
       {webglStatus !== "ok" && (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-card p-6 text-center text-foreground"
