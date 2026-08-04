@@ -12,7 +12,7 @@ import { isSvgFile } from "../lib/svgFiles";
 import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
 import { Button } from "./ui/button";
-import { t } from "../lib/i18n";
+import { t, formatNumber } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
 import { Trash2 as TrashIcon, File as FileIcon, X as XIcon } from "lucide-react";
 
@@ -31,9 +31,16 @@ interface Props {
 }
 
 function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024) return t("files.sizeB", { n: formatNumber(bytes) });
+  if (bytes < 1024 * 1024) {
+    const frac = bytes < 10 * 1024 ? 1 : 0;
+    return t("files.sizeKb", {
+      n: formatNumber(bytes / 1024, { minimumFractionDigits: frac, maximumFractionDigits: frac }),
+    });
+  }
+  return t("files.sizeMb", {
+    n: formatNumber(bytes / (1024 * 1024), { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+  });
 }
 
 /** The human label for a file's kind, inferred from its extension. */

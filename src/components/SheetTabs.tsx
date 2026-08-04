@@ -143,7 +143,7 @@ export function SheetTabs({
     >
       <TabsList
         className="w-full shrink-0 rounded-none border-b bg-transparent p-0"
-        aria-label="Panel sections"
+        aria-label={t("sheet.panelSections")}
         data-sheet-peek-end
       >
         {tabs.map((t) => (

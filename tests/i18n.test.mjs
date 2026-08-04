@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeT, overridesForLocale, rebind, defaultTag, t, tn } from "../src/lib/i18n.ts";
+import { makeT, overridesForLocale, rebind, defaultTag, t, tn, formatNumber, formatList } from "../src/lib/i18n.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LOCALES = join(HERE, "..", "src", "locales");
@@ -173,5 +173,70 @@ test("rebind(): a config override still wins over the locale bundle", () => {
     assert.equal(t("greet.hello"), "Configured override");
   } finally {
     restoreDefaultBinding();
+  }
+});
+
+test("formatNumber(): renders under the default (English) binding", () => {
+  assert.equal(formatNumber(1234.5, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), "1,234.5");
+});
+
+test("formatNumber(): a decimal comma after rebinding to German", () => {
+  try {
+    rebind("de", null, {});
+    assert.equal(formatNumber(1234.5, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), "1.234,5");
+  } finally {
+    restoreDefaultBinding();
+  }
+});
+
+test("formatList(): English joins with a conjunction; German uses its own word for it", () => {
+  assert.equal(formatList(["a", "b", "c"]), "a, b, and c");
+  try {
+    rebind("de", null, {});
+    assert.equal(formatList(["a", "b", "c"]), "a, b und c");
+  } finally {
+    restoreDefaultBinding();
+  }
+});
+
+test("formatNumber(): caches the Intl.NumberFormat instance per (locale, options)", () => {
+  const OriginalNumberFormat = Intl.NumberFormat;
+  let calls = 0;
+  Intl.NumberFormat = new Proxy(OriginalNumberFormat, {
+    construct(target, args) {
+      calls++;
+      return Reflect.construct(target, args);
+    },
+  });
+  try {
+    // Options unused by any other test in this file, so the cache starts cold.
+    formatNumber(1, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    formatNumber(2, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    assert.equal(calls, 1, "equivalent options must reuse the cached formatter");
+    formatNumber(3, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    assert.equal(calls, 2, "different options must mint a new formatter");
+  } finally {
+    Intl.NumberFormat = OriginalNumberFormat;
+  }
+});
+
+test("formatList(): caches the Intl.ListFormat instance per (locale, options)", () => {
+  const OriginalListFormat = Intl.ListFormat;
+  let calls = 0;
+  Intl.ListFormat = new Proxy(OriginalListFormat, {
+    construct(target, args) {
+      calls++;
+      return Reflect.construct(target, args);
+    },
+  });
+  try {
+    // A style/type combo unused by any other test in this file.
+    formatList(["x", "y"], { type: "disjunction" });
+    formatList(["p", "q"], { type: "disjunction" });
+    assert.equal(calls, 1, "equivalent options must reuse the cached formatter");
+    formatList(["m", "n"], { type: "unit" });
+    assert.equal(calls, 2, "different options must mint a new formatter");
+  } finally {
+    Intl.ListFormat = OriginalListFormat;
   }
 });

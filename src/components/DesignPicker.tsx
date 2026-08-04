@@ -275,7 +275,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, gallery = f
     <Select value={value} onValueChange={onChange} open={open} onOpenChange={setOpen}>
       <SelectTrigger
         size="sm"
-        aria-label="Choose a design"
+        aria-label={t("designPicker.title")}
         className="font-display h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-0"
       >
         <SelectValue />

@@ -1,5 +1,5 @@
 // HelpModal.tsx: renders the user guide from structured content. The content
-// is project-agnostic by default (DEFAULT_HELP) and fully overridable via the
+// is project-agnostic by default (defaultHelp()) and fully overridable via the
 // config's `help`, so no design-specific copy is baked into the app. A config
 // may group its guide into multiple tabs (`help.tabs`); without tabs it renders as
 // a single pane exactly as before.
@@ -9,7 +9,7 @@ import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { HardDriveDownload as InstallIcon } from "lucide-react";
-import { DEFAULT_HELP } from "../lib/defaultHelp";
+import { defaultHelp } from "../lib/defaultHelp";
 import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
 import { t } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
@@ -116,7 +116,7 @@ export function HelpModal({
   initialTab?: string;
 }) {
   useLocale(); // subscription only: re-render this component's t() calls on a locale switch
-  const content = help ?? DEFAULT_HELP;
+  const content = help ?? defaultHelp();
   // Normalise to tabs when the config supplies any. Top-level `sections` (the
   // single-pane form) become a leading "Overview" tab so adding `tabs` to an
   // existing help never drops the original content.

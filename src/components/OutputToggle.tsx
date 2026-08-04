@@ -129,7 +129,7 @@ export function OutputToggle({
           `render-status` hook the smoke/capture scripts read for completion. */}
       {derived && (
         <span className="render-status sr-only" role="status" aria-live="polite">
-          {`Render status: ${derived.text}`}
+          {t("status.renderStatusPrefix", { status: derived.text })}
         </span>
       )}
     </Button>

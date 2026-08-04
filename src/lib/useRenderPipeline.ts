@@ -36,7 +36,7 @@ import {
   shouldFireInitialRender,
   type RenderSnapshot,
 } from "./renderState";
-import { t } from "./i18n";
+import { t, formatNumber } from "./i18n";
 
 /** The subset of OpenSCADRunner's API the pipeline depends on: narrow enough
  * that tests can inject a fake runner without a real worker/WASM/IndexedDB. */
@@ -251,7 +251,9 @@ export function useRenderPipeline({
         if (r.ok && !r.cached && r.ms > heavyMs && autoRenderRef.current) {
           setAutoRender(false);
           setAnnouncement(
-            t("render.autoPaused", { seconds: (r.ms / 1000).toFixed(1) })
+            t("render.autoPaused", {
+              seconds: formatNumber(r.ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+            })
           );
         }
       } catch (e) {

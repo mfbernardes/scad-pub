@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { ErrorBoundary } = await import("../src/components/ErrorBoundary.tsx");
+const { ErrorBoundary, BoundaryFallback } = await import("../src/components/ErrorBoundary.tsx");
 
 test("getDerivedStateFromError captures the thrown error", () => {
   const err = new Error("chunk load failed");
@@ -42,13 +42,17 @@ test("render shows the caught-state fallback, not children, while an error is se
   assert.equal(el, "FALLBACK_UI");
 });
 
-test("render falls back to the built-in alert when no fallback prop is supplied", () => {
+test("render falls back to a BoundaryFallback element (carrying the error message) when no fallback prop is supplied", () => {
   const el = ErrorBoundary.prototype.render.call({
     state: { error: new Error("mesh parse error"), lastKey: 0 },
     props: { children: "CHILDREN" },
   });
   assert.notEqual(el, "CHILDREN");
-  assert.equal(el.props.role, "alert");
+  // BoundaryFallback is a function component (not the plain <div> the class
+  // used to build inline), so a switch mid-fallback can useLocale()-subscribe
+  // and re-render in the new language — see the component's own doc comment.
+  assert.equal(el.type, BoundaryFallback);
+  assert.equal(el.props.message, "mesh parse error");
 });
 
 test("render passes children through once no error is set (post-retry recovery)", () => {

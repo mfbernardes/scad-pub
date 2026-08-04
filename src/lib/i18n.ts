@@ -46,6 +46,20 @@ function pluralRulesFor(locale: string): Intl.PluralRules {
   return rules;
 }
 
+// Same rationale as pluralRulesCache: constructing an Intl.NumberFormat/
+// ListFormat isn't free, formatNumber/formatList can run on render-frequency
+// paths, and the active locale can change at runtime, so results are cached
+// per (locale, options) rather than reconstructed every call.
+const numberFormatCache = new Map<string, Intl.NumberFormat>();
+const listFormatCache = new Map<string, Intl.ListFormat>();
+
+/** Canonical cache-key fragment for an options object: sorted-key JSON, so
+ *  two option objects with the same entries in a different order share a
+ *  cache slot instead of each minting their own formatter. */
+function optionsKey(opts?: object): string {
+  return opts ? JSON.stringify(opts, Object.keys(opts).sort()) : "";
+}
+
 function hasOwn(obj: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
@@ -201,3 +215,33 @@ export const t = (key: string, vars?: Vars): string => currentBinding.t(key, var
  *  chain as `t`. */
 export const tn = (key: string, count: number, vars?: Vars): string =>
   currentBinding.tn(key, count, vars);
+
+/** Format a number through the active locale's `Intl.NumberFormat` (e.g. a
+ *  German binding renders a decimal comma). No `locale` parameter — callers
+ *  are already subscribed/tag-dep'd (see the file comment), so this always
+ *  reads the CURRENT binding, the same contract `t`/`tn` follow. Cached per
+ *  (locale, options) in `numberFormatCache`. */
+export function formatNumber(n: number, opts?: Intl.NumberFormatOptions): string {
+  const key = `${currentTag} ${optionsKey(opts)}`;
+  let fmt = numberFormatCache.get(key);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat(currentTag, opts);
+    numberFormatCache.set(key, fmt);
+  }
+  return fmt.format(n);
+}
+
+/** Join a list of already-resolved strings through the active locale's
+ *  `Intl.ListFormat` (e.g. "a, b, and c" in English, "a, b und c" in German)
+ *  instead of a hardcoded ", " join. Same current-binding/no-locale-param
+ *  contract as `formatNumber`. Cached per (locale, options) in
+ *  `listFormatCache`. */
+export function formatList(items: string[], opts?: Intl.ListFormatOptions): string {
+  const key = `${currentTag} ${optionsKey(opts)}`;
+  let fmt = listFormatCache.get(key);
+  if (!fmt) {
+    fmt = new Intl.ListFormat(currentTag, opts);
+    listFormatCache.set(key, fmt);
+  }
+  return fmt.format(items);
+}

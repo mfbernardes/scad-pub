@@ -13,7 +13,7 @@ import { Badge } from "./ui/badge";
 import { FriendlyFailureCard } from "./FriendlyFailureCard";
 import { IconButton } from "./IconButton";
 import { X as XIcon } from "lucide-react";
-import { t } from "../lib/i18n";
+import { t, formatList } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
 
 const ICON: Record<DiagnosticLevel, string> = { notice: "ⓘ", warning: "⚠", assert: "✗" };
@@ -160,32 +160,32 @@ export function OutputConsole({
           </TabsContent>
           <TabsContent value="log" className="mt-0">
             <pre className="log m-0 max-h-44 overflow-auto overscroll-contain whitespace-pre-wrap bg-code px-4 py-[0.6rem] font-mono text-xs leading-[1.4] text-muted-foreground">
-              {log.length ? log.join("\n") : "(no output yet)"}
+              {log.length ? log.join("\n") : t("console.noOutput")}
             </pre>
           </TabsContent>
           <TabsContent value="metrics" className="mt-0">
             <div className="render-metrics px-3 py-[0.4rem] text-[0.82rem]">
               {!metrics.last ? (
-                <p className="text-muted-foreground">No renders yet.</p>
+                <p className="text-muted-foreground">{t("metrics.noRenders")}</p>
               ) : (
                 <dl className="m-0 flex flex-col gap-[0.3rem]">
                   <div className="flex gap-1">
-                    <dt className="text-muted-foreground">Last render:</dt>
+                    <dt className="text-muted-foreground">{t("metrics.lastRender")}</dt>
                     <dd className="m-0 text-foreground">
                       {formatDuration(metrics.last.ms)}
-                      {metrics.last.cached ? " (cached)" : ""}
+                      {metrics.last.cached ? t("metrics.cachedSuffix") : ""}
                     </dd>
                   </div>
                   {metrics.slowest && (
                     <>
                       <div className="flex gap-1">
-                        <dt className="text-muted-foreground">Slowest this session:</dt>
+                        <dt className="text-muted-foreground">{t("metrics.slowest")}</dt>
                         <dd className="m-0 text-foreground">{formatDuration(metrics.slowest.ms)}</dd>
                       </div>
                       {metrics.slowest.changed.length > 0 && (
                         <div className="flex gap-1">
-                          <dt className="text-muted-foreground">Changed:</dt>
-                          <dd className="m-0 text-foreground">{metrics.slowest.changed.join(", ")}</dd>
+                          <dt className="text-muted-foreground">{t("metrics.changed")}</dt>
+                          <dd className="m-0 text-foreground">{formatList(metrics.slowest.changed)}</dd>
                         </div>
                       )}
                     </>
