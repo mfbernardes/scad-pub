@@ -131,8 +131,14 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
     }
   };
 
-  const dimensionsLabel = showDimensions ? "Hide dimensions" : "Show dimensions";
+  const dimensionsLabel = showDimensions ? t("hud.hideDimensions") : t("hud.showDimensions");
   const gridLabel = showGrid ? t("hud.hideGrid") : t("hud.showGrid");
+  // Shared by both the collapsed popover's MenuRows and the inline column's
+  // HudTooltipButtons below, so the two presentations can't drift.
+  const zoomInLabel = t("hud.zoomIn");
+  const zoomOutLabel = t("hud.zoomOut");
+  const resetViewLabel = t("hud.resetView");
+  const fullscreenLabel = t("hud.toggleFullscreen");
 
   if (collapse) {
     // The trigger names the active view, the way ViewPicker's desktop trigger
@@ -140,7 +146,8 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
     // reading without opening the menu, and this says it without spending a
     // second element over the model (which would also widen the top inset the
     // camera fit has to clear).
-    const currentView = VIEW_OPTIONS.find((o) => o.id === view)?.label;
+    const currentViewOption = VIEW_OPTIONS.find((o) => o.id === view);
+    const currentView = currentViewOption ? t(currentViewOption.labelKey) : undefined;
     const triggerLabel = currentView
       ? `${t("hud.viewOptions")}: ${currentView}`
       : t("hud.viewOptions");
@@ -201,12 +208,12 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
             {zoom && (
               <>
                 <MenuRow
-                  label="Zoom in"
+                  label={zoomInLabel}
                   onClick={() => viewerRef.current?.zoomIn()}
                   icon={<ZoomInIcon size={16} />}
                 />
                 <MenuRow
-                  label="Zoom out"
+                  label={zoomOutLabel}
                   onClick={() => viewerRef.current?.zoomOut()}
                   icon={<ZoomOutIcon size={16} />}
                 />
@@ -214,7 +221,7 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
             )}
             {reset && (
               <MenuRow
-                label="Reset view"
+                label={resetViewLabel}
                 onClick={act(() => viewerRef.current?.resetView())}
                 icon={<ResetIcon size={16} />}
               />
@@ -224,7 +231,7 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
             )}
             <MenuRow label={gridLabel} onClick={onToggleGrid} pressed={showGrid} icon={<GridIcon size={16} />} />
             {canFullscreen && (
-              <MenuRow label="Toggle fullscreen" onClick={act(toggleFullscreen)} icon={<MaximizeIcon size={16} />} />
+              <MenuRow label={fullscreenLabel} onClick={act(toggleFullscreen)} icon={<MaximizeIcon size={16} />} />
             )}
           </PopoverContent>
         </Popover>
@@ -240,16 +247,16 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
       {viewPicker && <ViewPicker view={view} onSelect={onSelectView} />}
       {zoom && (
         <>
-          <HudTooltipButton label="Zoom in" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomIn()}>
+          <HudTooltipButton label={zoomInLabel} className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomIn()}>
             <ZoomInIcon size={18} />
           </HudTooltipButton>
-          <HudTooltipButton label="Zoom out" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomOut()}>
+          <HudTooltipButton label={zoomOutLabel} className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.zoomOut()}>
             <ZoomOutIcon size={18} />
           </HudTooltipButton>
         </>
       )}
       {reset && (
-        <HudTooltipButton label="Reset view" className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.resetView()}>
+        <HudTooltipButton label={resetViewLabel} className={HUD_GLASS_BTN} onClick={() => viewerRef.current?.resetView()}>
           <ResetIcon size={18} />
         </HudTooltipButton>
       )}
@@ -278,7 +285,7 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
       {/* Fullscreen only where it works: a browser tab (not an installed PWA)
           on a browser that supports the Fullscreen API. */}
       {canFullscreen && (
-        <HudTooltipButton label="Toggle fullscreen" className={HUD_GLASS_BTN} onClick={toggleFullscreen}>
+        <HudTooltipButton label={fullscreenLabel} className={HUD_GLASS_BTN} onClick={toggleFullscreen}>
           <MaximizeIcon size={18} />
         </HudTooltipButton>
       )}

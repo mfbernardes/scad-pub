@@ -10,6 +10,8 @@
 import { IconButton } from "./IconButton";
 import { Search as SearchIcon, X as XIcon } from "lucide-react";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 // Stable id for the search input. Only one layout is ever mounted at a time
 // (see docs/architecture-review.md M7), so this id is never duplicated in the
@@ -30,6 +32,7 @@ interface Props {
 }
 
 export function ParamSearch({ value, onChange, onClear, onFocus, onBlur, compact = false, className }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   return (
     <div
       className={cn(
@@ -51,15 +54,15 @@ export function ParamSearch({ value, onChange, onClear, onFocus, onBlur, compact
         // text-base (16px) keeps iOS Safari from auto-zooming on focus: it
         // zooms any focused input under 16px and never zooms back.
         className="min-w-0 flex-1 rounded-[4px] border-none bg-transparent p-0 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-offset-2 [&::-webkit-search-cancel-button]:appearance-none"
-        placeholder="Find a setting…"
+        placeholder={t("paramSearch.placeholder")}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={onFocus}
         onBlur={onBlur}
-        aria-label="Find a setting"
+        aria-label={t("paramSearch.aria")}
       />
       {value && (
-        <IconButton label="Clear search" onClick={onClear}>
+        <IconButton label={t("paramSearch.clear")} onClick={onClear}>
           <XIcon size={14} />
         </IconButton>
       )}

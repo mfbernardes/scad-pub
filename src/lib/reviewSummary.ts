@@ -18,6 +18,7 @@ import type { Design } from "../openscad/types";
 import type { Values } from "./presets";
 import { isVisible } from "./visibility";
 import { mm, formatParamValue } from "./format";
+import { t } from "./i18n";
 
 /** Axis-aligned bounding-box size in millimetres: structurally the same
  *  shape as Viewer.tsx's own `Dimensions`, kept local so this dependency-
@@ -99,7 +100,7 @@ export function buildReviewSummaryRows(
     });
   }
   if (size) {
-    rows.push({ key: "dimensions", label: "Dimensions", value: formatBoundingBox(size), headline: true });
+    rows.push({ key: "dimensions", label: t("dimensions.title"), value: formatBoundingBox(size), headline: true });
   }
   return rows;
 }

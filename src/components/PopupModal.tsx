@@ -13,6 +13,8 @@ import { Label } from "./ui/label";
 import type { Design, PopupNotice } from "../openscad/types";
 import { DesignGallery } from "./DesignPicker";
 import { isDesignChooser } from "../lib/popup";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 export function PopupModal({
   popup,
@@ -31,6 +33,7 @@ export function PopupModal({
   designId: string;
   onDesignChange: (id: string) => void;
 }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const [dontShow, setDontShow] = useState(false);
 
   // "once" persists on every close; "dismissible" only when the box is ticked;
@@ -91,11 +94,11 @@ export function PopupModal({
               checked={dontShow}
               onCheckedChange={(v) => setDontShow(v === true)}
             />
-            Don’t show this again
+            {t("popup.dontShowAgain")}
           </Label>
         )}
         <Button className="notice-ok ml-auto" onClick={primary}>
-          {popup.button ?? "OK"}
+          {popup.button ?? t("popup.ok")}
         </Button>
         {footnote && <div className="basis-full">{footnote}</div>}
       </div>

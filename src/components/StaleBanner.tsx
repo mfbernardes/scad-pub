@@ -8,6 +8,8 @@
 import { RefreshCw as RefreshIcon } from "lucide-react";
 import { Spinner } from "./ui/spinner";
 import { cn } from "../lib/utils";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 interface Props {
   autoRender: boolean;
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export function StaleBanner({ autoRender, rendering, stalePreview, onRender }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   // Auto-render keeps the preview live: the banner is a manual-mode concern only.
   if (autoRender) return null;
   if (!rendering && !stalePreview) return null;
@@ -32,11 +35,11 @@ export function StaleBanner({ autoRender, rendering, stalePreview, onRender }: P
       )}
       onClick={rendering ? undefined : onRender}
       disabled={rendering}
-      aria-label={rendering ? "Updating the preview" : "Preview out of date — update now"}
+      aria-label={rendering ? t("staleBanner.updatingAria") : t("staleBanner.renderNowAria")}
     >
       {rendering ? (
         <>
-          <Spinner className="size-4" /> Updating…
+          <Spinner className="size-4" /> {t("stale.updating")}
         </>
       ) : (
         <>
@@ -45,9 +48,9 @@ export function StaleBanner({ autoRender, rendering, stalePreview, onRender }: P
             className="size-[7px] shrink-0 animate-[pill-pulse_1.4s_ease-in-out_infinite] rounded-full bg-warn motion-reduce:animate-none"
             aria-hidden="true"
           />
-          Preview out of date
+          {t("renderStatus.stale")}
           <span className="inline-flex items-center gap-[0.3rem] rounded-(--radius-sm) bg-primary px-2 py-[0.2rem] font-semibold text-primary-foreground group-hover:brightness-[1.08]">
-            <RefreshIcon size={14} /> Update
+            <RefreshIcon size={14} /> {t("staleBanner.update")}
           </span>
         </>
       )}

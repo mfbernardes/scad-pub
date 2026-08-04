@@ -11,6 +11,8 @@ import { cn } from "../lib/utils";
 import { HardDriveDownload as InstallIcon } from "lucide-react";
 import { DEFAULT_HELP } from "../lib/defaultHelp";
 import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 /* The help sections' typography, applied to the scrolling body wrapper (the
    Markdown renderer emits bare p/ul/li).
@@ -72,7 +74,7 @@ function HelpTabs({ tabs, initialTab }: { tabs: HelpTab[]; initialTab?: string }
     <Tabs defaultValue={defaultValue} className="min-h-0 flex-1 gap-0">
       <TabsList
         className="mx-4 mt-2 h-auto w-auto flex-wrap justify-start rounded-none border-0 border-b bg-transparent p-0"
-        aria-label="Help topics"
+        aria-label={t("help.topicsAria")}
       >
         {tabs.map((t, i) => (
           <TabsTrigger key={i} value={String(i)} className={cn(chipTabTrigger, "px-3")}>
@@ -113,6 +115,7 @@ export function HelpModal({
    *  panel's "Open printing help" action), see HelpTabs' own doc. */
   initialTab?: string;
 }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const content = help ?? DEFAULT_HELP;
   // Normalise to tabs when the config supplies any. Top-level `sections` (the
   // single-pane form) become a leading "Overview" tab so adding `tabs` to an
@@ -120,14 +123,14 @@ export function HelpModal({
   const tabs: HelpTab[] | null = content.tabs?.length
     ? [
         ...(content.sections?.length
-          ? [{ label: "Overview", sections: content.sections }]
+          ? [{ label: t("help.overviewTab"), sections: content.sections }]
           : []),
         ...content.tabs,
       ]
     : null;
 
   return (
-    <Modal title={content.title ?? "How to use this configurator"} onClose={onClose}>
+    <Modal title={content.title ?? t("help.defaultTitle")} onClose={onClose}>
       {content.intro && (
         <div className={MODAL_INTRO}>
           <Markdown body={content.intro} />
@@ -143,10 +146,10 @@ export function HelpModal({
       {canInstall && onInstall && (
         <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
           <span className="text-[0.85rem] text-muted-foreground">
-            Install this configurator for quick, offline access.
+            {t("help.installBlurb")}
           </span>
-          <Button size="sm" className="ml-auto" onClick={onInstall} title="Install as app">
-            <InstallIcon size={14} /> Install app
+          <Button size="sm" className="ml-auto" onClick={onInstall} title={t("help.installAsAppTitle")}>
+            <InstallIcon size={14} /> {t("help.installApp")}
           </Button>
         </div>
       )}

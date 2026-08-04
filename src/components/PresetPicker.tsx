@@ -242,12 +242,15 @@ export function PresetPicker({
       parsed = parseParameterSetsFile(design, await file.text());
     } catch (err) {
       toast.error(
-        `Couldn't import "${file.name}": ${err instanceof Error ? err.message : "not a valid parameterSets file."}`
+        t("presets.importParseError", {
+          name: file.name,
+          reason: err instanceof Error ? err.message : t("presets.importInvalidReason"),
+        })
       );
       return;
     }
     if (parsed.length === 0) {
-      toast.error(`"${file.name}" has no parameter sets to import.`);
+      toast.error(t("presets.importEmpty", { name: file.name }));
       return;
     }
     const collisions = parsed.map((s) => s.name).filter((name) => userPresets.includes(name));
@@ -268,16 +271,16 @@ export function PresetPicker({
         name="preset-name"
         autoComplete="off"
         className="h-8 flex-1"
-        placeholder="Save these settings as…"
+        placeholder={t("presets.saveAsPlaceholder")}
         value={saveName}
-        aria-label="New preset name"
+        aria-label={t("presets.newNameAria")}
         onChange={(e) => setSaveName(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") handleSave();
         }}
       />
       <Button size="sm" onClick={handleSave} disabled={!saveName.trim()}>
-        Save
+        {t("presets.save")}
       </Button>
     </div>
   ) : null;
@@ -294,9 +297,9 @@ export function PresetPicker({
           size="sm"
           className={compact ? "min-h-11 w-full justify-start" : undefined}
           onClick={open}
-          title="Import presets from an OpenSCAD parameterSets file"
+          title={t("presets.importTitle")}
         >
-          <UploadIcon size={14} /> Import…
+          <UploadIcon size={14} /> {t("presets.import")}
         </Button>
       )}
     </FileInput>
@@ -308,13 +311,9 @@ export function PresetPicker({
       className={compact ? "min-h-11 w-full justify-start" : "ml-auto"}
       onClick={handleExport}
       disabled={userPresets.length === 0}
-      title={
-        userPresets.length
-          ? "Export your saved presets as an OpenSCAD parameterSets file"
-          : "Save a preset first"
-      }
+      title={userPresets.length ? t("presets.exportTitleReady") : t("presets.exportTitleEmpty")}
     >
-      <DownloadIcon size={14} /> Export
+      <DownloadIcon size={14} /> {t("presets.export")}
     </Button>
   );
 
@@ -374,7 +373,7 @@ export function PresetPicker({
         {bundled.length > 0 && (
           <section>
             <h2 className={sectionHeadingClass}>
-              Ready-made
+              {t("presets.readyMade")}
             </h2>
             {/* Presets with a configured image render as a card grid; the rest
                 render as plain list rows below them. We group (grid, then rows)
@@ -384,7 +383,7 @@ export function PresetPicker({
                 when there are no imaged presets the row list carries that label
                 instead, so a fully-imageless design is unchanged. */}
             {imagedBundled.length > 0 && (
-              <ul aria-label="Ready-made presets" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <ul aria-label={t("presets.readyMadeAria")} className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {imagedBundled.map((p) => {
                   const id = `bundled:${design.id}:${p.name}`;
                   const isSelected = selected === id;
@@ -439,7 +438,7 @@ export function PresetPicker({
               </ul>
             )}
             {plainBundled.length > 0 && (
-              <ul aria-label={imagedBundled.length > 0 ? "More ready-made presets" : "Ready-made presets"}>
+              <ul aria-label={imagedBundled.length > 0 ? t("presets.moreReadyMadeAria") : t("presets.readyMadeAria")}>
                 {plainBundled.map((p) => {
                   const id = `bundled:${design.id}:${p.name}`;
                   return (
@@ -461,9 +460,9 @@ export function PresetPicker({
         {userPresets.length > 0 && (
           <section>
             <h2 className={sectionHeadingClass}>
-              Saved by you
+              {t("presets.savedByYou")}
             </h2>
-            <ul aria-label="Your saved presets">
+            <ul aria-label={t("presets.yourSavedAria")}>
               {userPresets.map((name) => {
                 const id = `user:${design.id}:${name}`;
                 return (
@@ -478,10 +477,10 @@ export function PresetPicker({
                     <button
                       className="shrink-0 rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.2rem] text-[0.8rem] text-muted-foreground enabled:hover:bg-muted enabled:hover:text-warn"
                       onClick={() => setDeleteTarget(name)}
-                      aria-label={`Delete preset "${name}"`}
-                      title={`Delete "${name}"`}
+                      aria-label={t("presets.deleteAria", { name })}
+                      title={t("presets.deleteTitle", { name })}
                     >
-                      Delete
+                      {t("presets.deleteLabel")}
                     </button>
                   </li>
                 );
@@ -491,7 +490,7 @@ export function PresetPicker({
         )}
         {bundled.length === 0 && userPresets.length === 0 && (
           <p className="px-[0.6rem] py-2 text-[0.85rem] text-muted-foreground">
-            No presets yet — set things up the way you like, then save them below.
+            {t("presets.empty")}
           </p>
         )}
       </div>
@@ -504,10 +503,10 @@ export function PresetPicker({
     <ConfirmDialog
       open={deleteTarget !== null}
       onOpenChange={(open) => !open && setDeleteTarget(null)}
-      title="Delete preset?"
-      description={`This permanently deletes your saved preset “${deleteTarget}”.`}
-      cancelLabel="Cancel"
-      confirmLabel="Delete"
+      title={t("presets.deleteConfirmTitle")}
+      description={t("presets.deleteConfirmBody", { name: deleteTarget ?? "" })}
+      cancelLabel={t("presets.cancel")}
+      confirmLabel={t("presets.deleteLabel")}
       onConfirm={() => {
         if (deleteTarget) handleDelete(deleteTarget);
         setDeleteTarget(null);
