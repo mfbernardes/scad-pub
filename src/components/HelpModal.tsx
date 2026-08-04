@@ -13,6 +13,7 @@ import { defaultHelp } from "../lib/defaultHelp";
 import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
 import { t } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
+import { OVERVIEW_TAB_ID } from "../lib/helpShape.mjs";
 
 /* The help sections' typography, applied to the scrolling body wrapper (the
    Markdown renderer emits bare p/ul/li).
@@ -61,11 +62,19 @@ function HelpSections({
 function HelpTabs({ tabs, initialTab }: { tabs: HelpTab[]; initialTab?: string }) {
   // `initialTab` (from ui.afterExport's "Open printing help" action, or any
   // other future deep link) picks which tab is active on mount: matched by
-  // its exact label; an unmatched or omitted value falls back to the first
-  // tab. Radix Tabs' `defaultValue` is
-  // uncontrolled, so this only matters at mount: fine here since HelpModal
-  // remounts fresh every time it opens (see App.tsx's `{showHelp && <HelpModal/>}`).
-  const matched = initialTab ? tabs.findIndex((t) => t.label === initialTab) : -1;
+  // `id` first, then by its exact label (back-compat with a config written
+  // before tab ids existed — see gen-schema.mjs's checkAfterExportHelpTab,
+  // which validates a config's `helpTab` reference the same way); an
+  // unmatched or omitted value falls back to the first tab. Radix Tabs'
+  // `defaultValue` is uncontrolled, so this only matters at mount: fine here
+  // since HelpModal remounts fresh every time it opens (see App.tsx's
+  // `{showHelp && <HelpModal/>}`).
+  const matched = initialTab
+    ? (() => {
+        const byId = tabs.findIndex((t) => t.id === initialTab);
+        return byId >= 0 ? byId : tabs.findIndex((t) => t.label === initialTab);
+      })()
+    : -1;
   const defaultValue = matched >= 0 ? String(matched) : "0";
   // `min-h-0 flex-1` lets this tab block fill the dialog's remaining height and,
   // crucially, shrink below its content: otherwise the default `min-height:auto`
@@ -123,7 +132,7 @@ export function HelpModal({
   const tabs: HelpTab[] | null = content.tabs?.length
     ? [
         ...(content.sections?.length
-          ? [{ label: t("help.overviewTab"), sections: content.sections }]
+          ? [{ id: OVERVIEW_TAB_ID, label: t("help.overviewTab"), sections: content.sections }]
           : []),
         ...content.tabs,
       ]

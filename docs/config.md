@@ -668,7 +668,7 @@ The optional `ui.afterExport` field turns on a compact, non-modal panel (`src/co
 }
 ```
 
-- **`helpTab`**: when set, the panel shows an “Open printing help” action that opens Help scrolled straight to the tab with this exact label (`HelpModal`'s `initialTab`, matched by [`help.tabs[].label`](#help-content-help)). **Validated at build time**: `gen-schema` fails the build if no tab in this config’s `help` carries that label. Omit to hide the action
+- **`helpTab`**: when set, the panel shows an “Open printing help” action that opens Help scrolled straight to a specific tab (`HelpModal`'s `initialTab`). Resolved **id-first**: matched against [`help.tabs[].id`](#help-content-help) first, and only when no tab carries that id does it fall back to an exact-label match (`help.tabs[].label`, back-compat with a config written before tab ids existed). The reserved id `"overview"` reaches the synthetic Overview tab a top-level `help.sections` produces alongside `tabs`, the same as the label `"Overview"` did before. **Validated at build time**: `gen-schema` fails the build if no tab in this config’s `help` carries that id or label
 
 The panel’s headline and body always come from the `strings` catalogue (`"exportSuccess.title"`, default “Your file is on its way”; `"exportSuccess.body"`, default a generic next-step line): override them there, the same way as any other chrome text, rather than through a second field on `afterExport`.
 
@@ -768,7 +768,7 @@ Use `sections` for a flat list of help sections:
 
 ### Tabbed help
 
-Use `tabs` to group the guide into multiple panes. A tab strip appears, and each tab has a `label`, an optional `intro`, and its own `sections`:
+Use `tabs` to group the guide into multiple panes. A tab strip appears, and each tab has an optional `id`, a `label`, an optional `intro`, and its own `sections`:
 
 ```jsonc
 {
@@ -776,6 +776,7 @@ Use `tabs` to group the guide into multiple panes. A tab strip appears, and each
     "intro": "Shown once above every tab.",   // optional shared intro
     "tabs": [
       {
+        "id": "getting-started",              // optional, see below
         "label": "Getting started",
         "intro": "The basics.",               // optional per-tab intro
         "sections": [
@@ -783,6 +784,7 @@ Use `tabs` to group the guide into multiple panes. A tab strip appears, and each
         ]
       },
       {
+        "id": "printing",
         "label": "Printing tips",
         "sections": [
           { "title": "Material", "body": "**PLA** works well." },
@@ -796,7 +798,8 @@ Use `tabs` to group the guide into multiple panes. A tab strip appears, and each
 
 - Any number of tabs is supported; the strip is keyboard-navigable (arrow keys / Home / End) per the ARIA tabs pattern.
 - A top-level `intro` renders once above the tab strip; a per-tab `intro` renders above that tab’s sections.
-- If you supply **both** top-level `sections` and `tabs`, the top-level sections become a leading **Overview** tab. Adding `tabs` to an existing single-pane help never drops the original content. To control every label yourself, put all content inside `tabs` and leave top-level `sections` out.
+- If you supply **both** top-level `sections` and `tabs`, the top-level sections become a leading **Overview** tab (reserved id `"overview"`). Adding `tabs` to an existing single-pane help never drops the original content. To control every label yourself, put all content inside `tabs` and leave top-level `sections` out.
+- **`id`**: an optional stable identifier for the tab, unique across this `help`’s tabs. Lets [`ui.afterExport.helpTab`](#after-export-panel-uiafterexport) (and any other deep link) name a tab independent of its display label — useful once a tab’s `label` might change wording, or might differ per locale in a multi-locale deployment, where a plain-string reference could never match a per-locale label. The id `"overview"` is reserved for the synthetic Overview tab above; a config tab claiming it fails the build. Two tabs sharing an id also fails the build.
 
 ### Sourcing help from Markdown files
 

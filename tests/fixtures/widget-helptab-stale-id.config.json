@@ -1,0 +1,11 @@
+{
+  "source": "src",
+  "ui": { "afterExport": { "helpTab": "printing" } },
+  "help": {
+    "tabs": [
+      { "id": "start", "label": "Getting started", "sections": [{ "title": "Step 1", "body": "Pick a design." }] }
+    ]
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}

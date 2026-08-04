@@ -40,7 +40,7 @@ import { createDestinationRegistry, reconcileGenerated } from "./lib/destination
 import { sanitizeBrowserFacingSvg } from "./lib/svg-sanitize.mjs";
 import { resolveFileField } from "./lib/prose-files.mjs";
 import { splitHelpMarkdown } from "./lib/help-file.mjs";
-import { checkHelpShape } from "../src/lib/helpShape.mjs";
+import { checkHelpShape, OVERVIEW_TAB_ID } from "../src/lib/helpShape.mjs";
 // TypeScript, imported directly: Node strips the types (the repo already
 // requires that, see CLAUDE.md), and schema.ts's only value import is
 // helpShape.mjs, so no app code is dragged into the build script.
@@ -1262,19 +1262,36 @@ function resolveProseFields(config, CONFIG_DIR, mustExist) {
 // exists. Cross-field, so it can't live in parseUi (config-parsers.mjs): it
 // needs HELP, which is only resolved once the whole config is parsed. Mirrors
 // HelpModal's own tab-list logic — top-level `help.sections` synthesize a
-// leading "Overview" tab when `help.tabs` are also present — so a value that
-// passes here is guaranteed to match a tab the modal renders.
+// leading "Overview" tab (id `OVERVIEW_TAB_ID`) when `help.tabs` are also
+// present — so a value that passes here is guaranteed to match a tab the
+// modal renders.
+//
+// Resolves id-first, then falls back to a plain-string label (back-compat
+// with a config written before tab ids existed): `HelpModal`'s own matching
+// (HelpTabs' `initialTab` handling) follows the same order. A tab whose label
+// is a per-locale map (see docs/config.md's "Localizing config text") can
+// never equal a plain-string reference, so a reference that only matches by
+// label is unreachable once any tab's label stops being a plain string —
+// the error below calls that out and points at `id` instead of leaving the
+// author to guess.
 function checkAfterExportHelpTab(UI, HELP) {
   if (!UI.afterExport?.helpTab) return;
-  const tabLabels = HELP?.tabs?.length
-    ? [...(HELP.sections?.length ? ["Overview"] : []), ...HELP.tabs.map((t) => t.label)]
+  const ref = UI.afterExport.helpTab;
+  const tabs = HELP?.tabs?.length
+    ? [...(HELP.sections?.length ? [{ id: OVERVIEW_TAB_ID, label: "Overview" }] : []), ...HELP.tabs]
     : [];
-  if (tabLabels.includes(UI.afterExport.helpTab)) return;
+  if (tabs.some((t) => t.id === ref)) return;
+  if (tabs.some((t) => typeof t.label === "string" && t.label === ref)) return;
+  const hasLocalizedLabel = tabs.some((t) => t.label && typeof t.label === "object");
+  const names = tabs.map((t) => t.id ?? t.label);
   throw new Error(
-    `gen-schema: 'ui.afterExport.helpTab' is ${JSON.stringify(UI.afterExport.helpTab)}, but no 'help' tab has that label.\n` +
-      (tabLabels.length
-        ? `  Available tabs: ${tabLabels.map((l) => JSON.stringify(l)).join(", ")}`
-        : `  This config's 'help' has no tabs defined.`)
+    `gen-schema: 'ui.afterExport.helpTab' is ${JSON.stringify(ref)}, but no 'help' tab has that id or label.\n` +
+      (names.length
+        ? `  Available: ${names.map((n) => JSON.stringify(n)).join(", ")}`
+        : `  This config's 'help' has no tabs defined.`) +
+      (hasLocalizedLabel
+        ? `\n  This help has per-locale tab labels — reference the tab by its 'id' instead.`
+        : "")
   );
 }
 

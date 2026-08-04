@@ -284,6 +284,36 @@ test("validates the optional help (single-pane and tabbed) shape", () => {
     () => validateSchema({ ...validBase(), help: { intro: "x" } }),
     /'help' must provide/
   );
+  // a tab may carry an optional, unique id.
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      help: { tabs: [{ id: "one", label: "One", sections: [{ title: "T", body: "B" }] }] },
+    })
+  );
+  // "overview" is reserved for the synthetic Overview tab.
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        help: { tabs: [{ id: "overview", label: "One", sections: [{ title: "T", body: "B" }] }] },
+      }),
+    /'help\.tabs\[0\]\.id' is "overview", which is reserved/
+  );
+  // duplicate tab ids are rejected.
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        help: {
+          tabs: [
+            { id: "a", label: "One", sections: [{ title: "T", body: "B" }] },
+            { id: "a", label: "Two", sections: [{ title: "T", body: "B" }] },
+          ],
+        },
+      }),
+    /'help\.tabs\[1\]\.id' \("a"\) duplicates an earlier tab's id/
+  );
 });
 
 test("validates the notices' label shape ({ one, other })", () => {

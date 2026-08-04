@@ -2173,17 +2173,62 @@ test("ui.afterExport.helpTab: build succeeds against the synthetic leading 'Over
   assert.equal(schema.ui.afterExport.helpTab, "Overview");
 });
 
-test("ui.afterExport.helpTab: build fails when no help tab has that label", () => {
+test("ui.afterExport.helpTab: build fails when no help tab has that id or label", () => {
   assert.throws(
     () => run("widget-afterexport-bad.config.json"),
-    /'ui\.afterExport\.helpTab' is "Nope", but no 'help' tab has that label/
+    /'ui\.afterExport\.helpTab' is "Nope", but no 'help' tab has that id or label/
   );
 });
 
 test("ui.afterExport.helpTab: build fails with a clear message when the config has no help tabs at all", () => {
   assert.throws(
     () => run("widget-afterexport-notabs.config.json"),
-    /'ui\.afterExport\.helpTab' is "Printing", but no 'help' tab has that label/
+    /'ui\.afterExport\.helpTab' is "Printing", but no 'help' tab has that id or label/
+  );
+});
+
+test("ui.afterExport.helpTab: resolves by tab id, ahead of label", () => {
+  const { schema } = run("widget-helptab-id.config.json");
+  assert.equal(schema.ui.afterExport.helpTab, "printing");
+  assert.equal(schema.help.tabs[1].id, "printing");
+});
+
+test("ui.afterExport.helpTab: a stale id fails the build, listing the available ids", () => {
+  assert.throws(
+    () => run("widget-helptab-stale-id.config.json"),
+    /'ui\.afterExport\.helpTab' is "printing", but no 'help' tab has that id or label.\s*\n\s*Available: "start"/
+  );
+});
+
+test("help.tabs[].id: must be unique, and \"overview\" is reserved for the synthetic Overview tab", () => {
+  const mustExist = (abs) => abs;
+  assert.throws(
+    () =>
+      resolveHelp(
+        {
+          tabs: [
+            { id: "a", label: "One", sections: [{ title: "T", body: "B" }] },
+            { id: "a", label: "Two", sections: [{ title: "T", body: "B" }] },
+          ],
+        },
+        "/cfg",
+        mustExist
+      ),
+    /'help\.tabs\[1\]\.id' \("a"\) duplicates an earlier tab's id/
+  );
+  assert.throws(
+    () =>
+      resolveHelp(
+        { tabs: [{ id: "overview", label: "One", sections: [{ title: "T", body: "B" }] }] },
+        "/cfg",
+        mustExist
+      ),
+    /'help\.tabs\[0\]\.id' is "overview", which is reserved/
+  );
+  assert.throws(
+    () =>
+      resolveHelp({ tabs: [{ id: "  ", label: "One", sections: [{ title: "T", body: "B" }] }] }, "/cfg", mustExist),
+    /'help\.tabs\[0\]\.id', when set, must be a non-empty string/
   );
 });
 

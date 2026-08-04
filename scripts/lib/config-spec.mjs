@@ -103,7 +103,9 @@ const AFTER_EXPORT_SPEC = {
   rootTypeError: "gen-schema: 'ui.afterExport' must be true, an options object, or null",
   properties: {
     helpTab: str({
-      description: "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
+      description:
+        "Opens Help scrolled to the tab with this id (help.tabs[].id, checked first) or, for " +
+        "back-compat, this exact label (help.tabs[].label); must name a real tab either way.",
     }),
   },
 };
