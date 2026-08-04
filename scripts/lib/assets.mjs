@@ -34,6 +34,15 @@ import { dirname, join, resolve, relative, sep } from "node:path";
 // A `use <path>` / `include <path>` dependency directive.
 const DEP_RE = /^\s*(?:use|include)\s*<([^>]+)>/;
 
+// Design-translation sidecar filename shape (`<design>.strings.<tag>.json`,
+// see docs/config.md "Design translations" and scripts/lib/design-strings.mjs).
+// A sidecar must never be bundled: it's authored config text, not a render
+// input, and reaching public/scad/ (hence renderHash) would invalidate every
+// deployment's persisted geometry cache on a translation edit that cannot
+// affect a single triangle. This is the one place a broad config `assets`
+// glob (`**/*.json`, say) could otherwise sweep one in.
+const SIDECAR_RE = /\.strings\.[A-Za-z0-9-]+\.json$/;
+
 /**
  * Build the SOURCE-bound asset resolution helpers used by generate().
  * @param {object} opts
@@ -257,6 +266,11 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
   // and "**/*.svg" every svg in the tree.
   const expandConfiguredAssets = (entries) => {
     const set = new Set();
+    // Every sidecar a glob matched, across every entry this call expands:
+    // reported once at the end (see below) rather than per-entry, so a config
+    // with several broad globs still gets one summary instead of a repeated
+    // warning per pattern.
+    const excludedSidecars = [];
     for (const entry of entries) {
       if (isGlob(entry)) {
         const matches = globAssets(entry);
@@ -265,7 +279,13 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
             `gen-schema: asset pattern '${entry}' matched no files under ${SOURCE}\n` +
               `  (referenced from ${configPath} — check its 'assets' globs)`
           );
-        for (const f of matches) set.add(f);
+        for (const f of matches) {
+          if (SIDECAR_RE.test(f)) {
+            excludedSidecars.push(f);
+            continue;
+          }
+          set.add(f);
+        }
         continue;
       }
       const abs = mustExist(resolve(SOURCE, entry), `asset '${entry}'`);
@@ -273,9 +293,24 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
       if (statSync(abs).isDirectory()) {
         for (const f of scadFilesUnder(abs, configPath)) set.add(f);
       } else {
-        set.add(relPosix(abs));
+        const rel = relPosix(abs);
+        // Unlike a glob match (silently excluded, see below): naming a
+        // sidecar directly is unambiguous intent, so it fails the build
+        // rather than being quietly dropped.
+        if (SIDECAR_RE.test(rel))
+          throw new Error(
+            `gen-schema: asset '${entry}' names a design-translation sidecar ('${rel}'), which must ` +
+              `never be bundled (it would reach public/scad/ and renderHash — see docs/config.md ` +
+              `"Design translations"). Remove it from 'assets'; gen-schema discovers it on its own.`
+          );
+        set.add(rel);
       }
     }
+    if (excludedSidecars.length)
+      console.warn(
+        `gen-schema: excluded ${excludedSidecars.length} design-translation sidecar file(s) from ` +
+          `'assets' (never bundled, see docs/config.md "Design translations"): ${excludedSidecars.join(", ")}`
+      );
     return set;
   };
 

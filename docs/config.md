@@ -124,6 +124,46 @@ gen-schema: design 'tag' presets.images: 2/3 preset(s) matched an image in 'bran
 
 The map form remains the escape hatch for a preset whose name and image file genuinely don’t correspond mechanically.
 
+### Design translations
+
+A design’s own text — its `// @description`, section names, each parameter’s doc comment and enum choice labels, its `@info`/`@review` labels, its `@reviewNote` — is authored once, in whatever language the `.scad` file itself is written in. For a deployment that ships more than one [`languages`](#app-identity-and-pwa), translate it with a **sidecar file** next to the design: `<design>.strings.<tag>.json`, where `<design>` is the `.scad` file’s own basename and `<tag>` is one of the deployment’s shipped locale tags (`en`, `de`, …; see `src/lib/localeRegistry.ts`). `nameplate.scad`’s German translation lives at `nameplate.strings.de.json`, beside it.
+
+```jsonc
+// nameplate.strings.de.json
+{
+  "description": "Ein kleines Namensschild.",
+  "sections": { "Size": "Größe" },
+  "params": {
+    "width": {
+      "description": "Breite der Platte.",
+      "help": "In Millimetern.",
+      "info": { "label": "Breite", "unit": "mm" }
+    },
+    "style": { "choices": { "round": "Rund", "square": "Eckig" } }
+  },
+  "reviewLabels": { "text": "Gravurtext" },
+  "reviewNote": "Wird exakt wie eingegeben gedruckt.",
+  "echo": { "Total width": "Gesamtbreite" }
+}
+```
+
+Every field is optional, and translates only what it names:
+
+A sidecar's own keys (distinct from `scadpub.config.json`'s — these belong to the `<design>.strings.<tag>.json` file, not the config):
+
+- `description` — the design’s `// @description`. Only legal if the design actually has one.
+- `sections` — section header text, keyed by the design’s own (authored-language) section name. A section left out keeps its authored name for this locale; `[Hidden]` can never appear here (it never reaches the UI at all, in any locale).
+- `params` — keyed by parameter name (never translated: it’s the underlying OpenSCAD variable, the `-D name=value` render argument, and the key stored/URL/preset state uses). Each entry may set `description` and/or `help` (the control’s label and its tooltip body), `choices` (an enum’s value -> translated label map — the stored value itself never changes), and `info` (`label`/`unit`, only legal on a parameter that carries its own `// @info` annotation).
+- `reviewLabels` — a parameter’s `// @review "<label>"` text, keyed by parameter name; only legal for a parameter that actually carries one.
+- `reviewNote` — the design’s `// @reviewNote`. Only legal if the design has one.
+- `echo` — a free-form map from a design’s own runtime-echoed string (e.g. the label argument of an `echo("@info", "Total width", …)` call, see [annotations.md](annotations.md#calculated-values-echoinfo-)) to its translation. Unlike every other field, `gen-schema` has no static way to know what a design chooses to echo, so this map is never cross-checked against the design — only its values must be non-empty strings.
+
+Every other key, section, parameter name, or choice value is validated against the design it sits beside and fails the build if it doesn’t match — a stale or misspelled translation key is caught at build time, not silently ignored. A sidecar for a locale the deployment doesn’t ship, or a `.strings.<tag>.json` file whose tag isn’t one `gen-schema` recognizes, also fails the build.
+
+A design’s picker **`label`** and **`group`** (see [Design sources](#design-sources) above) are **not** part of a sidecar: they’re config-authored, so they stay in the deployment’s own language regardless of which locale a visitor is viewing in.
+
+Sidecars are pure UI text: they’re parsed and validated at build time, but never copied into `public/scad/` and never folded into `renderHash` — adding, editing, or removing a translation never invalidates a cached render. (A config `assets` glob broad enough to otherwise sweep one up, e.g. `"**/*.json"`, has it filtered back out, with a build-log warning naming what was excluded; naming a sidecar directly in `assets` fails the build instead, since that can only be a mistake.)
+
 ### Rendering
 
 The `render` object gathers everything that affects render arguments, bundled fonts, and cache behavior. Two genuinely different kinds of field live in it, and that distinction matters for `renderHash`: the content hash folded into the persisted render-cache key:

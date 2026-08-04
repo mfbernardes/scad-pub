@@ -7,6 +7,8 @@ content plan: define each supported OpenSCAD comment annotation, show its syntax
 
 ScadPub adds a handful of comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
 
+Every annotation below is written **once**, in whatever language the `.scad` file itself is authored in — `@description`, `@label`, the doc-comment block, `@info`'s custom label, `@review`'s label, `@reviewNote`. There is no per-locale variant of any annotation. A deployment that ships more than one language translates this same text with a separate **sidecar file** next to the design instead — see [config.md’s “Design translations”](config.md#design-translations) — so the annotations stay the single, language-agnostic source a translation is projected onto, not something a translator edits directly.
+
 ## Design metadata (`// @description`, `// @icon`, `// @image`, `// @doc`)
 
 A design describes itself from its own `.scad` file: this is the **only** place its picker sub-label, thumbnail icon, gallery card art, and user-doc come from; there is no config-level override or escape hatch. Put these anywhere in the file. A header comment above the first section is the natural home:

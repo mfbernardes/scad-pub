@@ -16,20 +16,38 @@ import {
   type LocaleMeta,
 } from "./localeRegistry";
 import { rebind, overridesForLocale, defaultTag, type Bundle, type ConfigStrings } from "./i18n";
+import type { DesignI18nFile, DesignStrings } from "./designI18n";
 import { ns } from "./appId";
 import { readLocal, writeLocal } from "./safeStorage";
 
 export interface LocaleState {
   tag: string;
   dir: "ltr" | "rtl";
+  /** Bumped whenever the active tag's per-design translation bundle
+   *  (re)loads — including the async DEFAULT-tag load at init (see
+   *  `createLocaleStore`'s own comment) that doesn't touch tag/dir at all,
+   *  the only OTHER reason this object's reference identity changes.
+   *  `useSyncExternalStore` bails out on a referentially-unchanged snapshot,
+   *  so a design-strings-only update needs its own reason for a new `state`
+   *  object to exist; App.tsx's design memo keys off this alongside `tag`
+   *  (see useLocale's `LocaleSnapshot`) so a design's sidecar arriving after
+   *  first paint still triggers the memo. */
+  designsGeneration: number;
 }
 
 export interface CreateLocaleStoreDeps {
   /** Dynamic-import thunks for each non-English locale's chrome catalogue. */
   loadChrome: Record<string, () => Promise<Bundle>>;
-  /** Placeholder seam for Phase 5's per-design translation bundles: loaded
-   *  alongside the chrome bundle when present, otherwise ignored entirely. */
-  loadDesignStrings?: Record<string, () => Promise<unknown>>;
+  /** Dynamic-import thunks for each REGISTRY tag's per-design translation
+   *  bundle (`src/generated/i18n/<tag>.json`, gen-schema.mjs's commitOutputs)
+   *  — unlike `loadChrome`, this includes "en": there is no static default
+   *  bundle for design text the way `en.json` is a static import in i18n.ts,
+   *  since even the deployment's DEFAULT locale can carry sidecars (an
+   *  English deployment of a German-authored design, translated back). Loaded
+   *  alongside the chrome bundle in `setLocale`, and once more at construction
+   *  for the default tag (see below) since a deployment whose initial locale
+   *  simply IS the default never calls `setLocale` at all. */
+  loadDesignStrings?: Record<string, () => Promise<DesignI18nFile>>;
   persist: (tag: string) => void;
   schemaLang: string;
   configStrings?: ConfigStrings;
@@ -65,8 +83,12 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
   } = deps;
   const defaultTag = collapseToAvailable(schemaLang, LOCALE_TAGS) ?? "en";
 
-  let state: LocaleState = { tag: defaultTag, dir: localeMeta(defaultTag).dir };
+  let state: LocaleState = { tag: defaultTag, dir: localeMeta(defaultTag).dir, designsGeneration: 0 };
   let requestToken = 0;
+  // The active tag's per-design translation bundle, keyed by design id.
+  // Swapped alongside `state` (see setLocale and the default-tag init load
+  // below) — never read directly, only through `getDesignStrings`.
+  let designsById: Record<string, DesignStrings> = {};
   const listeners = new Set<() => void>();
 
   function notify(): void {
@@ -80,6 +102,10 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
 
   function getSnapshot(): LocaleState {
     return state;
+  }
+
+  function getDesignStrings(designId: string): DesignStrings | undefined {
+    return designsById[designId];
   }
 
   async function setLocale(tag: string, opts: { persist?: boolean } = {}): Promise<void> {
@@ -106,10 +132,16 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
     const designLoader = loadDesignStrings?.[tag];
 
     let bundle: Bundle | null;
+    let designFile: DesignI18nFile | undefined;
     try {
-      [bundle] = await Promise.all([
+      [bundle, designFile] = await Promise.all([
         chromeLoader ? chromeLoader() : Promise.resolve(null),
-        designLoader ? designLoader() : Promise.resolve(undefined),
+        // A missing/broken design-strings bundle is never a reason to fail
+        // the whole switch (unlike the chrome bundle above): gen-schema
+        // always writes one per registry tag, so a rejection here means a
+        // stale build or a network hiccup, not "this locale doesn't exist" —
+        // the switch still succeeds, just without translated design text.
+        designLoader ? designLoader().catch(() => undefined) : Promise.resolve(undefined),
       ]);
     } catch (err) {
       // A superseded request's own failure must not surface: only the
@@ -124,12 +156,37 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
 
     const overrides = overridesForLocale(configStrings, tag, defaultTag);
     onRebind(tag, bundle, overrides);
-    state = { tag, dir: localeMeta(tag).dir };
+    designsById = designFile?.designs ?? {};
+    state = { tag, dir: localeMeta(tag).dir, designsGeneration: state.designsGeneration + 1 };
     if (opts.persist !== false) persist(tag);
     notify();
   }
 
-  return { subscribe, getSnapshot, setLocale, defaultTag };
+  // Default-tag design strings: fired once, here, independent of any
+  // `setLocale` call — a deployment whose initial locale simply IS the
+  // default never calls `setLocale` at all (see the module-init block at the
+  // bottom of this file), so without this the default tag's own sidecars
+  // (see `loadDesignStrings`'s own doc) would never load. Non-blocking: the
+  // captured token is checked before applying, so a REAL switch racing ahead
+  // of this slow load (away from, or back to, defaultTag) always wins —
+  // exactly the same staleness guard `setLocale` uses, just against a token
+  // captured before any switch has happened.
+  if (loadDesignStrings?.[defaultTag]) {
+    const initToken = requestToken;
+    loadDesignStrings[defaultTag]()
+      .then((file) => {
+        if (initToken !== requestToken) return; // superseded by a real switch already
+        designsById = file?.designs ?? {};
+        state = { ...state, designsGeneration: state.designsGeneration + 1 };
+        notify();
+      })
+      .catch(() => {
+        // Missing/broken default-tag sidecar bundle: nothing to show, not a
+        // store failure (see setLocale's own `.catch` above for the same call).
+      });
+  }
+
+  return { subscribe, getSnapshot, setLocale, defaultTag, getDesignStrings };
 }
 
 /** Pure resolution of the locale to start in: a valid persisted choice wins;
@@ -179,6 +236,22 @@ const loadChrome: Record<string, () => Promise<Bundle>> = {
   de: () => import("../locales/de.json").then((m) => m.default),
 };
 
+// One thunk per REGISTRY tag (unlike `loadChrome` above: no static "en"
+// bundle to fall back to, see `CreateLocaleStoreDeps.loadDesignStrings`'s own
+// doc) into gen-schema.mjs's generated `src/generated/i18n/<tag>.json` — one
+// always exists per tag (possibly `{"designs":{}}`), so this map never
+// dangles. Same "no import attribute on a dynamic thunk" rule as `loadChrome`
+// above, and the same reason: Vite left the specifier untransformed with it
+// present.
+const loadDesignStrings: Record<string, () => Promise<DesignI18nFile>> = {
+  // Routed through `unknown` first: like i18n.ts's own `schemaJson as unknown
+  // as Schema`, the inferred literal type of one build's actual generated
+  // JSON (which content-varies per deployment/design set) structural-checks
+  // against nothing worth pinning here.
+  en: () => import("../generated/i18n/en.json").then((m) => m.default as unknown as DesignI18nFile),
+  de: () => import("../generated/i18n/de.json").then((m) => m.default as unknown as DesignI18nFile),
+};
+
 /**
  * `enabledTags` derivation: this deployment's build-time-validated
  * `schema.languages` (scripts/lib/config-parsers.mjs's `parseLanguages`,
@@ -207,6 +280,7 @@ const enabledTags: readonly string[] = deriveEnabledTags(schema.languages, defau
 
 const store = createLocaleStore({
   loadChrome,
+  loadDesignStrings,
   persist: (tag) => {
     writeLocal(ns("lang"), tag);
   },
@@ -277,6 +351,21 @@ export interface LocaleSnapshot {
   tag: string;
   dir: "ltr" | "rtl";
   locales: readonly LocaleMeta[];
+  /** See `LocaleState.designsGeneration`: include alongside `tag` in a memo
+   *  dependency array (e.g. App.tsx's `localizeDesign` call) that needs to
+   *  re-run when this tag's design-strings bundle finishes loading, even on
+   *  a load that doesn't change `tag` itself (the default-tag init load). */
+  designsGeneration: number;
+}
+
+/** This tag's per-design translation bundle for one design id, or `undefined`
+ *  when the active locale has no sidecar for it (including plain English with
+ *  nothing translated). Reads through the module singleton; not itself
+ *  reactive — call it from a `useLocale()`-subscribed component/memo so a
+ *  locale switch (or the default tag's own async load, see
+ *  `LocaleSnapshot.designsGeneration`) re-reads it. */
+export function getDesignStrings(designId: string): DesignStrings | undefined {
+  return store.getDesignStrings(designId);
 }
 
 /** Subscribes to the active locale. Re-renders on any runtime switch; the
@@ -294,7 +383,15 @@ export function useLocale(): LocaleSnapshot {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const cache = useRef<{ state: LocaleState; snapshot: LocaleSnapshot } | null>(null);
   if (cache.current === null || cache.current.state !== state) {
-    cache.current = { state, snapshot: { tag: state.tag, dir: state.dir, locales: ENABLED_LOCALES } };
+    cache.current = {
+      state,
+      snapshot: {
+        tag: state.tag,
+        dir: state.dir,
+        locales: ENABLED_LOCALES,
+        designsGeneration: state.designsGeneration,
+      },
+    };
   }
   return cache.current.snapshot;
 }
