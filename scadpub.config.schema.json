@@ -892,7 +892,7 @@
               "type": "object",
               "properties": {
                 "helpTab": {
-                  "description": "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
+                  "description": "Opens Help scrolled to the tab with this id (help.tabs[].id, checked first) or, for back-compat, this exact label (help.tabs[].label); must name a real tab either way.",
                   "type": [
                     "string",
                     "null"

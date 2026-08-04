@@ -16,6 +16,12 @@ const isSection = (x) =>
   !!x && typeof x === "object" && typeof x.title === "string" && typeof x.body === "string";
 const isSectionList = (x) => Array.isArray(x) && x.every(isSection);
 
+// The id the Overview tab HelpModal synthesizes (top-level `sections`
+// alongside `tabs`) uses, and `ui.afterExport.helpTab` may reference. A real
+// config tab claiming it would collide with that synthetic tab, so it's
+// rejected here rather than silently shadowed at render time.
+export const OVERVIEW_TAB_ID = "overview";
+
 /**
  * Check `help` against the contract, reporting through `fail`. Reports every
  * problem through the caller's own reporter rather than throwing its own error,
@@ -37,18 +43,33 @@ export function checkHelpShape(help, fail) {
   if (h.sections !== undefined && !isSectionList(h.sections))
     fail("'help.sections' must be an array of { title, body }");
   if (h.tabs !== undefined) {
-    if (
-      !Array.isArray(h.tabs) ||
-      !h.tabs.every(
-        (t) =>
-          !!t &&
-          typeof t === "object" &&
-          typeof t.label === "string" &&
-          (t.intro === undefined || typeof t.intro === "string") &&
-          isSectionList(t.sections)
+    if (!Array.isArray(h.tabs))
+      fail("'help.tabs' must be an array of { id?, label, intro?, sections: [{ title, body }] }");
+    const tabs = /** @type {unknown[]} */ (h.tabs);
+    const seenIds = new Set();
+    tabs.forEach((raw, i) => {
+      if (
+        !raw ||
+        typeof raw !== "object" ||
+        typeof (/** @type {Record<string, unknown>} */ (raw)).label !== "string" ||
+        ((/** @type {Record<string, unknown>} */ (raw)).intro !== undefined &&
+          typeof (/** @type {Record<string, unknown>} */ (raw)).intro !== "string") ||
+        !isSectionList((/** @type {Record<string, unknown>} */ (raw)).sections)
       )
-    )
-      fail("'help.tabs' must be an array of { label, intro?, sections: [{ title, body }] }");
+        fail("'help.tabs' must be an array of { id?, label, intro?, sections: [{ title, body }] }");
+      const tab = /** @type {Record<string, unknown>} */ (raw);
+      if (tab.id === undefined) return;
+      if (typeof tab.id !== "string" || !tab.id.trim())
+        fail(`'help.tabs[${i}].id', when set, must be a non-empty string`);
+      if (tab.id === OVERVIEW_TAB_ID)
+        fail(
+          `'help.tabs[${i}].id' is "${OVERVIEW_TAB_ID}", which is reserved for the synthetic ` +
+            `Overview tab (the leading tab HelpModal synthesizes from top-level 'help.sections')`
+        );
+      if (seenIds.has(tab.id))
+        fail(`'help.tabs[${i}].id' (${JSON.stringify(tab.id)}) duplicates an earlier tab's id`);
+      seenIds.add(tab.id);
+    });
   }
   // A help block that offers neither is a modal with nothing in it. Checked
   // last so the more specific message above wins when both apply.

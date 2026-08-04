@@ -237,6 +237,13 @@ export interface HelpSection {
  *  optional intro. A config may supply multiple tabs; the Help modal renders a tab
  *  strip when any are present. */
 export interface HelpTab {
+  /**
+   * Optional stable id, unique across this help's tabs. Lets `ui.afterExport.helpTab`
+   * (and any other deep link) name a tab independent of its display label — the id
+   * `"overview"` is reserved for the synthetic Overview tab HelpModal synthesizes from
+   * top-level `help.sections` when `tabs` are also present, and a config tab may not claim it.
+   */
+  id?: string;
   /** Tab-strip label. */
   label: string;
   /** Optional intro paragraph shown above this tab's sections. */
