@@ -92,6 +92,19 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
   // the rest of the session with no reload path while staying on the default
   // tag (Phase 6 review finding).
   let switchToken = 0;
+  // Whether the default tag's OWN chrome bundle has actually been loaded and
+  // rebound. Starts true for "en" (there's nothing to load: `rebind`'s null
+  // bundle already IS the English catalogue); starts false for every other
+  // default tag, since the synchronous `rebind(defaultTag, null, …)` at
+  // i18n.ts's module scope binds English text under that tag purely so
+  // something is bound before first paint — the init load below (or, if that
+  // races and loses, a same-tag `setLocale` call later) is what actually
+  // fetches and applies the real bundle. Read by `setLocale`'s same-tag
+  // guard: re-selecting the already-"active" default tag must not silently
+  // no-op while its own chrome was never loaded (see the guard's own comment
+  // below — this was a real, live bug: a `lang: "de"` deployment showed
+  // English chrome with "Deutsch" active in the selector).
+  let defaultChromeLoaded = defaultTag === "en";
   // The active tag's per-design translation bundle, keyed by design id.
   // Swapped alongside `state` (see setLocale and the default-tag init load
   // below) — never read directly, only through `getDesignStrings`.
@@ -116,7 +129,16 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
   }
 
   async function setLocale(tag: string, opts: { persist?: boolean } = {}): Promise<void> {
-    if (tag === state.tag) {
+    // "Already there" is only a true no-op when the tag's own chrome bundle
+    // is actually resident. For every tag but the default this is always the
+    // case (any state other than construction-default is reached only
+    // through a real load below). For the default tag specifically, state
+    // starts AT `defaultTag` before anything has ever loaded — so the first
+    // time this fires (or after an init/switch race left it unloaded, see
+    // `defaultChromeLoaded`'s own comment) it must fall through to a real
+    // load instead of silently confirming a locale that's still showing
+    // English text underneath.
+    if (tag === state.tag && (tag !== defaultTag || defaultChromeLoaded)) {
       // Already there: no load, no rebind, no notify (nothing actually
       // changed) — but still bump the token, so a SLOWER switch still in
       // flight (e.g. en -> de (slow) -> en) goes stale and can't overwrite
@@ -164,33 +186,71 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
 
     const overrides = overridesForLocale(configStrings, tag, defaultTag);
     onRebind(tag, bundle, overrides);
+    if (tag === defaultTag) defaultChromeLoaded = true;
     designsById = designFile?.designs ?? {};
     state = { tag, dir: localeMeta(tag).dir, designsGeneration: state.designsGeneration + 1 };
     if (opts.persist !== false) persist(tag);
     notify();
   }
 
-  // Default-tag design strings: fired once, here, independent of any
-  // `setLocale` call — a deployment whose initial locale simply IS the
-  // default never calls `setLocale` at all (see the module-init block at the
-  // bottom of this file), so without this the default tag's own sidecars
-  // (see `loadDesignStrings`'s own doc) would never load. Non-blocking: the
+  // Default-tag (boot locale) init load: chrome, when the default isn't
+  // "en" (see `defaultChromeLoaded`'s own comment — this is what actually
+  // fetches and applies the real bundle the synchronous i18n.ts binding
+  // could only stub with English), plus design strings, fired once here
+  // independent of any `setLocale` call — a deployment whose initial locale
+  // simply IS the default never calls `setLocale` at all (see the
+  // module-init block at the bottom of this file), so without this neither
+  // the default tag's chrome bundle nor its sidecars (see
+  // `loadDesignStrings`'s own doc) would ever load. Non-blocking: the
   // captured token is checked against `switchToken`, not `requestToken` — a
   // REAL switch racing ahead of this slow load (away from, or back to,
   // defaultTag) always wins, but a same-tag `setLocale` call resolving first
-  // must NOT count as one (see `switchToken`'s own comment above).
-  if (loadDesignStrings?.[defaultTag]) {
+  // must NOT count as one (see `switchToken`'s own comment above). If this
+  // load loses that race (discarded) OR fails, `defaultChromeLoaded` stays
+  // false — the same-tag guard in `setLocale` above then falls through to a
+  // real load the next time anything re-selects the default tag, so this
+  // self-heals without further machinery.
+  const defaultChromeLoader = defaultTag !== "en" ? loadChrome[defaultTag] : undefined;
+  const defaultDesignLoader = loadDesignStrings?.[defaultTag];
+  if (defaultChromeLoader || defaultDesignLoader) {
     const initToken = switchToken;
-    loadDesignStrings[defaultTag]()
-      .then((file) => {
+    // The design half is tracked as its own settled outcome (never lets a
+    // rejection propagate into the `Promise.all` below), independently of
+    // the chrome half, for two reasons: a missing/broken sidecar bundle must
+    // never cost this load its chrome bundle (mirrors setLocale's own design
+    // loader above), and a TOTAL no-op (nothing registered, or everything
+    // that WAS registered failed) must produce neither a state bump nor a
+    // notify — unlike setLocale's real-switch path, which always has
+    // something to apply once it resolves at all.
+    const designOutcome: Promise<{ ok: boolean; file: DesignI18nFile | undefined }> = defaultDesignLoader
+      ? defaultDesignLoader().then(
+          (file) => ({ ok: true, file }),
+          () => ({ ok: false, file: undefined })
+        )
+      : Promise.resolve({ ok: false, file: undefined });
+    Promise.all([defaultChromeLoader ? defaultChromeLoader() : Promise.resolve(null), designOutcome])
+      .then(([bundle, design]) => {
         if (initToken !== switchToken) return; // superseded by a real switch already
-        designsById = file?.designs ?? {};
-        state = { ...state, designsGeneration: state.designsGeneration + 1 };
-        notify();
+        let changed = false;
+        if (bundle !== null) {
+          const overrides = overridesForLocale(configStrings, defaultTag, defaultTag);
+          onRebind(defaultTag, bundle, overrides);
+          defaultChromeLoaded = true;
+          changed = true;
+        }
+        if (design.ok) {
+          designsById = design.file?.designs ?? {};
+          changed = true;
+        }
+        if (changed) {
+          state = { ...state, designsGeneration: state.designsGeneration + 1 };
+          notify();
+        }
       })
       .catch(() => {
-        // Missing/broken default-tag sidecar bundle: nothing to show, not a
-        // store failure (see setLocale's own `.catch` above for the same call).
+        // Chrome load failed (the design half never rejects, see above):
+        // leaves `defaultChromeLoaded` false, which is exactly the
+        // self-healing case described above, not a store failure.
       });
   }
 
