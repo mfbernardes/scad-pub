@@ -220,6 +220,13 @@ export interface Design {
    *  Null/absent hides the "Design guide" affordance. */
   doc?: string | null;
   /**
+   * Locale tags this design has a per-locale `@doc` translation for
+   * (`<design>.doc.<tag>.md`, see docs/config.md "Design translations"),
+   * sorted. Absent/empty when none exist. DesignDocModal fetches
+   * `<id>-doc.<tag>.md` instead of `doc` when the active tag is listed here.
+   */
+  docLocales?: string[];
+  /**
    * Optional bundled-preset thumbnails (config's `designs[].presets.images`;
    * see docs/config.md). Maps a bundled preset's EXACT name (as it appears in
    * the sibling parameterSets file) to a served image URL: gen-schema fails

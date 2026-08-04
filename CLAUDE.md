@@ -43,6 +43,7 @@ npm run check:studio # builds a viewer.style "studio" variant and measures its l
 npm run check:svg  # serves each sanitized SVG to Chromium; asserts it makes no request
 npm run check:dist # asserts the BUILT artifact carries its sw.js version + CSP block
 npm run check:scad # drives the pinned OpenSCAD WASM to pin the language facts the parser assumes
+npm run i18n:status # design-translation sidecar coverage/drift report; -- --strict for CI, -- --stamp to record freshness
 npm run e2e:svg    # end-to-end run of the in-app SVG wizard against the BUILT app
 npm run screens    # capture every desktop + mobile view of the BUILT app
 ```

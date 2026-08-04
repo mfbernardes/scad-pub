@@ -27,7 +27,8 @@
     "check:dist": "node scripts/check-dist.mjs",
     "check:scad": "node scripts/check-scad-semantics.mjs",
     "check:studio": "node scripts/check-studio.mjs",
-    "check:svg": "node scripts/check-svg-inert.mjs"
+    "check:svg": "node scripts/check-svg-inert.mjs",
+    "i18n:status": "node scripts/i18n-status.mjs"
   },
   "dependencies": {
     "@fontsource/atkinson-hyperlegible": "^5.3.0",

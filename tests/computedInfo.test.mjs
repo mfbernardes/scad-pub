@@ -6,9 +6,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseComputedInfo } from "../src/lib/computedInfo.ts";
 
-test("extracts a basic number value with a unit", () => {
+test("extracts a basic number value with a unit; the unit is NOT appended to value (DimensionInfo composes it at render)", () => {
   const out = parseComputedInfo(['[out] ECHO: "@info", "Rim height", "mm", 0.48']);
-  assert.deepEqual(out, [{ label: "Rim height", unit: "mm", value: "0.48 mm" }]);
+  assert.deepEqual(out, [{ label: "Rim height", unit: "mm", value: "0.48" }]);
 });
 
 test("an empty unit produces no trailing space", () => {
@@ -32,13 +32,13 @@ test("non-string values pass through exactly as OpenSCAD printed them", () => {
     { label: "Engraved", unit: "", value: "true" },
     { label: "Raised", unit: "", value: "false" },
     { label: "Maybe", unit: "", value: "undef" },
-    { label: "Position", unit: "mm", value: "[1, 2, 3] mm" },
+    { label: "Position", unit: "mm", value: "[1, 2, 3]" },
   ]);
 });
 
 test("matches ECHO on stderr too (OpenSCAD-WASM routes ECHO to [err])", () => {
   const out = parseComputedInfo(['[err] ECHO: "@info", "Radius", "mm", 25']);
-  assert.deepEqual(out, [{ label: "Radius", unit: "mm", value: "25 mm" }]);
+  assert.deepEqual(out, [{ label: "Radius", unit: "mm", value: "25" }]);
 });
 
 test("preserves log order across multiple echoes, not sorted/grouped", () => {
@@ -58,8 +58,8 @@ test("duplicate labels are NOT de-duplicated", () => {
     '[out] ECHO: "@info", "Width", "mm", 20',
   ]);
   assert.deepEqual(out, [
-    { label: "Width", unit: "mm", value: "10 mm" },
-    { label: "Width", unit: "mm", value: "20 mm" },
+    { label: "Width", unit: "mm", value: "10" },
+    { label: "Width", unit: "mm", value: "20" },
   ]);
 });
 
@@ -83,5 +83,5 @@ test("a single-arg echo merely containing the substring \"@info\" does not match
 
 test("a label or unit containing an embedded comma is handled correctly", () => {
   const out = parseComputedInfo(['[out] ECHO: "@info", "Width, height", "mm", 5']);
-  assert.deepEqual(out, [{ label: "Width, height", unit: "mm", value: "5 mm" }]);
+  assert.deepEqual(out, [{ label: "Width, height", unit: "mm", value: "5" }]);
 });

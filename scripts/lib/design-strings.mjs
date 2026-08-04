@@ -12,7 +12,15 @@
 // `localizeDesign`; this module only decides whether a sidecar is a legal
 // translation of its design, not how it's applied.
 
-const TOP_LEVEL_KEYS = new Set(["description", "sections", "params", "reviewLabels", "reviewNote", "echo"]);
+const TOP_LEVEL_KEYS = new Set([
+  "description",
+  "sections",
+  "params",
+  "reviewLabels",
+  "reviewNote",
+  "echo",
+  "presets",
+]);
 const PARAM_KEYS = new Set(["description", "help", "choices", "info"]);
 const INFO_KEYS = new Set(["label", "unit"]);
 
@@ -64,14 +72,18 @@ function checkUnknownKeys(file, obj, allowed, what) {
  * @param {boolean} ctx.hasDescription  Whether the design has a `// @description`.
  * @param {Set<string> | string[]} ctx.reviewLabels  Names of params carrying `// @review`.
  * @param {boolean} ctx.hasReviewNote  Whether the design has a `// @reviewNote`.
+ * @param {Set<string> | string[]} [ctx.presetNames]  Names of this design's
+ *   bundled presets (the parameterSets file's own keys), for validating
+ *   `presets`. Absent/empty for a design with no bundled presets.
  * @returns {object} The validated sidecar, unchanged (pass-through: nothing
  *   here rewrites shape, only rejects an illegal one).
  */
 export function parseDesignStrings(json, ctx) {
-  const { file, designId, params, sections, hasDescription, reviewLabels, hasReviewNote } = ctx;
+  const { file, designId, params, sections, hasDescription, reviewLabels, hasReviewNote, presetNames } = ctx;
   const paramByName = new Map(params.map((p) => [p.name, p]));
   const sectionSet = new Set(sections);
   const reviewLabelSet = reviewLabels instanceof Set ? reviewLabels : new Set(reviewLabels);
+  const presetNameSet = presetNames instanceof Set ? presetNames : new Set(presetNames ?? []);
 
   requireObject(file, json, ".");
   checkUnknownKeys(file, json, TOP_LEVEL_KEYS, ".");
@@ -194,11 +206,32 @@ export function parseDesignStrings(json, ctx) {
   // `echo`: source ECHO'd strings (e.g. `echo("@info", "Total width", …)`) are
   // author-chosen free text, not a build-time-known set gen-schema could
   // cross-check — so this is the one block with no name/existence check
-  // against the design, only the same leaf-is-a-non-empty-string rule.
+  // against the design, only the same leaf-is-a-non-empty-string rule. A
+  // unit string (e.g. `"mm"`) is just another echo-map source string: no
+  // special casing here (see docs/config.md "Design translations").
   if (json.echo !== undefined) {
     requireObject(file, json.echo, "echo");
     for (const [source, value] of Object.entries(json.echo)) {
       requireNonEmptyString(file, value, `echo["${source}"]`);
+    }
+  }
+
+  // `presets`: a bundled preset's exact NAME (as it appears as a key in the
+  // sibling parameterSets file) -> its translated FULL display string, in the
+  // same "Category | Title (Badge)" syntax `src/lib/presetCard.ts` parses
+  // (src/lib/designI18n.ts's `localizePresetName` runs that same parser on
+  // the translation — this module only checks the key against a real bundled
+  // preset name and the value's non-emptiness, never the syntax itself).
+  if (json.presets !== undefined) {
+    requireObject(file, json.presets, "presets");
+    for (const [name, value] of Object.entries(json.presets)) {
+      if (!presetNameSet.has(name))
+        fail(
+          file,
+          `'presets["${name}"]' does not match any bundled preset in design '${designId}' ` +
+            `(bundled presets: ${[...presetNameSet].join(", ") || "(none)"})`
+        );
+      requireNonEmptyString(file, value, `presets["${name}"]`);
     }
   }
 

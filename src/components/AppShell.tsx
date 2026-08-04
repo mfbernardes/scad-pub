@@ -379,18 +379,24 @@ export const AppShell = memo(function AppShell({
 
   // Rows from `echo("@info", label, unit, value)`: internally-calculated
   // values the design surfaced at render time (see lib/computedInfo.ts).
-  // Each row's label is the SOURCE string the design's `.scad` literally
-  // echoed; `localizeEcho` maps it through this design's sidecar `echo`
-  // table (a free-form source-string -> translation lookup, since gen-schema
-  // has no static knowledge of what a design chooses to echo, see
+  // Each row's label AND unit are SOURCE strings the design's `.scad`
+  // literally echoed; `localizeEcho` maps each through this design's sidecar
+  // `echo` table (a free-form source-string -> translation lookup, since
+  // gen-schema has no static knowledge of what a design chooses to echo, see
   // designI18n.ts's own doc) for the active locale, falling back to that
-  // source string unchanged on a miss. `locale.tag`/`.designsGeneration` are
-  // real dependencies here (unlike the bare subscription elsewhere): a locale
-  // switch, or the default tag's own async sidecar load, must re-map these
-  // labels even though `log` itself hasn't changed.
+  // source string unchanged on a miss — a unit ("mm") is just another
+  // echo-map source string, see docs/config.md. The numeric `value` is never
+  // translated. `locale.tag`/`.designsGeneration` are real dependencies here
+  // (unlike the bare subscription elsewhere): a locale switch, or the default
+  // tag's own async sidecar load, must re-map these labels/units even though
+  // `log` itself hasn't changed.
   const computedInfo = useMemo(() => {
     const strings = getDesignStrings(design.id);
-    return parseComputedInfo(log).map((row) => ({ ...row, label: localizeEcho(strings, row.label) }));
+    return parseComputedInfo(log).map((row) => ({
+      ...row,
+      label: localizeEcho(strings, row.label),
+      unit: localizeEcho(strings, row.unit),
+    }));
     // getDesignStrings() reads the locale store's module-singleton state
     // directly, so react-hooks can't see that this call is locale-sensitive.
     // eslint-disable-next-line react-hooks/exhaustive-deps

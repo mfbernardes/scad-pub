@@ -15,6 +15,7 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { join, dirname, relative, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -5340,4 +5341,221 @@ test("a glob 'assets' entry silently excludes translation sidecars, with a one-t
   const hits = warnings.filter((w) => w.includes("d.strings.de.json"));
   assert.equal(hits.length, 1, `expected exactly one warning naming the sidecar, got: ${JSON.stringify(warnings)}`);
   assert.ok(hits[0].includes("excluded 1 design-translation sidecar"));
+});
+
+// ── @doc per-locale sidecars, preset-name translation, freshness stamps
+// (Phase 4) ──────────────────────────────────────────────────────────────
+// Isolated throwaway source trees, exactly like the strings-sidecar
+// integration tests above: tests/fixtures/src/ is shared by 70+ configs, so
+// none of this touches it — see that section's own comment for why.
+
+function docFixtureSrc(prefix) {
+  const src = mkdtempSync(join(tmpdir(), `gen-schema-doc-${prefix}-`));
+  writeFileSync(join(src, "d.scad"), `// @doc d-doc.md\n/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d-doc.md"), "# D\n\nThe base doc.\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  return src;
+}
+
+test("docLocales: a '<design>.doc.<tag>.md' sidecar is discovered, copied to '<id>-doc.<tag>.md', and listed sorted", () => {
+  const src = docFixtureSrc("basic");
+  writeFileSync(join(src, "d.doc.de.md"), "# D\n\nDie Basisdokumentation.\n");
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-doc-basic-out-"));
+  const outPublicDir = join(out, "public");
+  const schema = generate({
+    configPath: join(src, "c.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(outPublicDir, "scad"),
+    outPublicDir,
+  });
+  const d = schema.designs[0];
+  assert.deepEqual(d.docLocales, ["de"]);
+  assert.equal(
+    readFileSync(join(outPublicDir, "scad", "d-doc.de.md"), "utf-8"),
+    "# D\n\nDie Basisdokumentation.\n"
+  );
+  const precache = JSON.parse(readFileSync(join(outPublicDir, "precache-manifest.json"), "utf-8"));
+  assert.ok(precache.shell.includes("scad/d-doc.de.md"));
+});
+
+test("docLocales is absent when no doc sidecar exists", () => {
+  const src = docFixtureSrc("absent");
+  const schema = generate({ ...i18nOutDirs("doc-absent"), configPath: join(src, "c.config.json") });
+  assert.equal(schema.designs[0].docLocales, undefined);
+});
+
+test("a doc sidecar naming a wrongly-cased shipped locale fails the build, naming the expected lowercase form", () => {
+  const src = docFixtureSrc("badcase");
+  writeFileSync(join(src, "d.doc.DE.md"), "# D\n");
+  assert.throws(
+    () => generate({ ...i18nOutDirs("doc-badcase"), configPath: join(src, "c.config.json") }),
+    /doc translation 'd\.doc\.DE\.md' names locale tag 'DE', but doc sidecar tags are matched case-sensitively\. Rename it to 'd\.doc\.de\.md'\./
+  );
+});
+
+test("a doc sidecar naming an unshipped locale tag fails the build, listing valid tags", () => {
+  const src = docFixtureSrc("badtag");
+  writeFileSync(join(src, "d.doc.xx.md"), "# D\n");
+  assert.throws(
+    () => generate({ ...i18nOutDirs("doc-badtag"), configPath: join(src, "c.config.json") }),
+    /doc translation 'd\.doc\.xx\.md' names an unshipped locale tag 'xx'.*Valid tags: en, de/s
+  );
+});
+
+test("a doc sidecar for a design with no '// @doc' fails the build", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-doc-nodocbase-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.doc.de.md"), "# D\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("doc-nodocbase"), configPath: join(src, "c.config.json") }),
+    /'d\.doc\.de\.md' exists, but design 'd' has no '\/\/ @doc' to translate/
+  );
+});
+
+test("an orphaned doc-sidecar-shaped file matching no design's basename warns, but does not fail the build", () => {
+  const src = docFixtureSrc("orphan");
+  writeFileSync(join(src, "widget.doc.de.md"), "# Orphan\n");
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  let schema;
+  try {
+    schema = generate({ ...i18nOutDirs("doc-orphan"), configPath: join(src, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(schema.designs.length, 1);
+  const hits = warnings.filter((w) => w.includes("widget.doc.de.md"));
+  assert.equal(hits.length, 1, `expected exactly one orphan warning, got: ${JSON.stringify(warnings)}`);
+});
+
+test("renderHash is identical with and without a design's doc-locale sidecar present", () => {
+  const src = docFixtureSrc("hash");
+  const gen = () => generate({ ...i18nOutDirs("doc-hash"), configPath: join(src, "c.config.json") }).renderHash;
+  const without = gen();
+  writeFileSync(join(src, "d.doc.de.md"), "# D\n\nDie Basisdokumentation.\n");
+  const withDoc = gen();
+  rmSync(join(src, "d.doc.de.md"));
+  const afterRemoval = gen();
+  assert.equal(withDoc, without, "a present doc sidecar must not change renderHash");
+  assert.equal(afterRemoval, without);
+});
+
+test("renderHash is identical with and without a '<design>.strings.stamps.json' file present", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-stamps-hash-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const gen = () => generate({ ...i18nOutDirs("stamps-hash"), configPath: join(src, "c.config.json") }).renderHash;
+  const without = gen();
+  writeFileSync(join(src, "d.strings.stamps.json"), JSON.stringify({ de: { description: "deadbeef" } }) + "\n");
+  const withStamps = gen();
+  rmSync(join(src, "d.strings.stamps.json"));
+  const afterRemoval = gen();
+  assert.equal(withStamps, without, "a present stamps file must not change renderHash");
+  assert.equal(afterRemoval, without);
+});
+
+test("design-strings 'presets': a key matching a bundled preset name translates into src/generated/i18n/<tag>.json", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-presets-i18n-ok-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(
+    join(src, "d.json"),
+    JSON.stringify({
+      fileFormatVersion: "1",
+      parameterSets: { "Signs | Door plate (Imperial)": { label: "hey" } },
+    })
+  );
+  writeFileSync(
+    join(src, "d.strings.de.json"),
+    JSON.stringify({ presets: { "Signs | Door plate (Imperial)": "Schilder | Türschild (Imperial)" } })
+  );
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const out = i18nOutDirs("presets-ok");
+  generate({ ...out, configPath: join(src, "c.config.json") });
+  const de = JSON.parse(readFileSync(join(out.outSchemaDir, "i18n", "de.json"), "utf-8"));
+  assert.equal(de.designs.d.presets["Signs | Door plate (Imperial)"], "Schilder | Türschild (Imperial)");
+});
+
+test("design-strings 'presets': a name not matching a bundled preset fails the build", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-presets-i18n-bad-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(
+    join(src, "d.json"),
+    JSON.stringify({ fileFormatVersion: "1", parameterSets: { Tall: { label: "hey" } } })
+  );
+  writeFileSync(join(src, "d.strings.de.json"), JSON.stringify({ presets: { "Not A Real Preset": "x" } }));
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("presets-bad"), configPath: join(src, "c.config.json") }),
+    /'presets\["Not A Real Preset"\]' does not match any bundled preset in design 'd'/
+  );
+});
+
+test("gen-schema warns (never fails) when a stamps file's recorded hash no longer matches the current source text", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-stamps-drift-"));
+  writeFileSync(
+    join(src, "d.scad"),
+    `// @description Original text.\n/* [Main] */\n// The label.\nlabel = "hi";\n`
+  );
+  writeFileSync(join(src, "d.strings.de.json"), JSON.stringify({ description: "Originaltext." }));
+  writeFileSync(
+    join(src, "d.strings.stamps.json"),
+    JSON.stringify({ de: { description: "not-the-real-hash" } })
+  );
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    generate({ ...i18nOutDirs("stamps-drift"), configPath: join(src, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  const hits = warnings.filter((w) => w.includes("de translation of description may be stale"));
+  assert.equal(hits.length, 1, JSON.stringify(warnings));
+});
+
+test("gen-schema does not warn when a stamps file's recorded hash matches the current source text", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-stamps-nodrift-"));
+  writeFileSync(
+    join(src, "d.scad"),
+    `// @description Original text.\n/* [Main] */\n// The label.\nlabel = "hi";\n`
+  );
+  writeFileSync(join(src, "d.strings.de.json"), JSON.stringify({ description: "Originaltext." }));
+  writeFileSync(
+    join(src, "d.strings.stamps.json"),
+    JSON.stringify({ de: { description: createHash("sha256").update("Original text.", "utf8").digest("hex") } })
+  );
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    generate({ ...i18nOutDirs("stamps-nodrift"), configPath: join(src, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.filter((w) => w.includes("may be stale")).length, 0, JSON.stringify(warnings));
 });

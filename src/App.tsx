@@ -37,7 +37,7 @@ import { readLocal, writeLocal } from "./lib/safeStorage";
 import { toast } from "sonner";
 import { t } from "./lib/i18n";
 import { localeStore, useLocale, applyLocale, getDesignStrings } from "./lib/localeStore";
-import { localizeDesign } from "./lib/designI18n";
+import { localizeDesign, localizePresetName } from "./lib/designI18n";
 import { lxDesignEntry } from "./lib/configI18n";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
@@ -473,7 +473,23 @@ export default function App() {
       return bundledPresets.find((p) => p.name === parsedPreset.name)?.values ?? null;
     return loadPreset(design.id, parsedPreset.name);
   }, [parsedPreset, bundledPresets, design]);
-  const presetName = parsedPreset?.name ?? null;
+  // Display name only: a BUNDLED preset's stored name is translated through
+  // this design's sidecar `presets` map (see localizePresetName's own doc);
+  // a user-saved preset's name stays verbatim (it's never sidecar text —
+  // there's nothing in a translation file that could name it). Feeds
+  // PresetDiffBar's baseline/revert labels and ParamForm's revert target
+  // (both purely display); `parsedPreset`/`presetSel` stay the raw identity
+  // read everywhere else (urlState, presets.ts storage, `applyBundled`'s
+  // `bundled:<id>:<name>` id). `locale.designsGeneration` matters alongside
+  // `.tag` — a default-tag sidecar can finish loading asynchronously after
+  // this preset was already selected (Risk 7).
+  const presetDisplayName = useMemo(() => {
+    if (!parsedPreset) return null;
+    return parsedPreset.kind === "bundled"
+      ? localizePresetName(getDesignStrings(design.id), parsedPreset.name)
+      : parsedPreset.name;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsedPreset, design.id, locale.tag, locale.designsGeneration]);
   // The baseline "drifted" is measured against: the selected preset's values,
   // or the design's defaults when no preset is selected.
   const baseline = useMemo(() => presetBaseline ?? defaultsFor(design), [presetBaseline, design]);
@@ -735,7 +751,7 @@ export default function App() {
           userPresets={userPresets}
           selectedPreset={presetSel}
           presetBaseline={presetBaseline}
-          presetName={presetName}
+          presetName={presetDisplayName}
           baseline={baseline}
           changedParams={changedNames}
           userFiles={userFiles}

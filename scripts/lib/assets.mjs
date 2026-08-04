@@ -34,17 +34,21 @@ import { dirname, join, resolve, relative, sep } from "node:path";
 // A `use <path>` / `include <path>` dependency directive.
 const DEP_RE = /^\s*(?:use|include)\s*<([^>]+)>/;
 
-// Design-translation sidecar filename shape (`<design>.strings.<tag>.json`,
-// see docs/config.md "Design translations" and scripts/lib/design-strings.mjs).
-// A sidecar must never be bundled: it's authored config text, not a render
-// input, and reaching public/scad/ (hence renderHash) would invalidate every
-// deployment's persisted geometry cache on a translation edit that cannot
-// affect a single triangle. This is the one place a broad config `assets`
-// glob (`**/*.json`, say) could otherwise sweep one in. Case-insensitive for
-// the same reason gen-schema.mjs's own sidecar scan is: a case-insensitive
-// filesystem (macOS, Windows) would otherwise let a wrongly-cased sidecar
-// (`widget.Strings.DE.json`) slip past this exclusion and get bundled.
-const SIDECAR_RE = /\.strings\.[A-Za-z0-9-]+\.json$/i;
+// Design-translation sidecar filename shapes: `<design>.strings.<tag>.json`
+// (see docs/config.md "Design translations" and scripts/lib/design-strings.mjs),
+// its `<design>.strings.stamps.json` freshness-stamp sibling (the literal tag
+// "stamps" already matches the first alternative — no separate pattern
+// needed), and `<design>.doc.<tag>.md` per-locale `@doc` translations (see
+// gen-schema.mjs's buildDesigns). None of these are ever bundled: they're
+// authored/derived translation text, not render input, and reaching
+// public/scad/ (hence renderHash) would invalidate every deployment's
+// persisted geometry cache on a translation edit that cannot affect a single
+// triangle. This is the one place a broad config `assets` glob (`**/*.json`,
+// say) could otherwise sweep one in. Case-insensitive for the same reason
+// gen-schema.mjs's own sidecar scan is: a case-insensitive filesystem (macOS,
+// Windows) would otherwise let a wrongly-cased sidecar (`widget.Strings.DE.json`)
+// slip past this exclusion and get bundled.
+const SIDECAR_RE = /\.(?:strings\.[A-Za-z0-9-]+\.json|doc\.[A-Za-z0-9-]+\.md)$/i;
 
 /**
  * Build the SOURCE-bound asset resolution helpers used by generate().
