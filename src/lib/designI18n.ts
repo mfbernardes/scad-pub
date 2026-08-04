@@ -55,6 +55,15 @@ export interface DesignStrings {
    *  `localizeEcho`, not applied by `localizeDesign` (nothing in `Design`
    *  carries a source ECHO string to replace). */
   echo?: Record<string, string>;
+  /** Bundled preset NAME (as it appears as a key in the sibling parameterSets
+   *  file, never itself translated — it's the stored identity `applyBundled`
+   *  keys `bundled:<id>:<name>` off of, and the `presetImages` lookup key) ->
+   *  its translated FULL display string, in the same "Category | Title
+   *  (Badge)" syntax `src/lib/presetCard.ts`'s `parsePresetCardName` parses.
+   *  Looked up at display time by `localizePresetName`, not applied by
+   *  `localizeDesign` (nothing in `Design` carries a preset name to replace,
+   *  the same reasoning as `echo` above). */
+  presets?: Record<string, string>;
 }
 
 /** The generated `src/generated/i18n/<tag>.json` shape: every translated
@@ -144,4 +153,17 @@ export function localizeDesign(design: LocalizedDesign, s: DesignStrings | undef
  */
 export function localizeEcho(s: DesignStrings | undefined, source: string): string {
   return s?.echo?.[source] ?? source;
+}
+
+/**
+ * Resolve one bundled preset's stored NAME to its translated display string
+ * for the active locale, via the sidecar's `presets` map (see
+ * `DesignStrings.presets`'s own doc for the syntax contract). A miss (no
+ * sidecar, or no entry for this exact name) returns `name` unchanged — same
+ * fallback shape as `localizeEcho`. Display only: every identity use of a
+ * preset name (`bundled:<id>:<name>`, `design.presetImages` lookups,
+ * `urlState`/preset storage) must keep reading the RAW name, never this.
+ */
+export function localizePresetName(s: DesignStrings | undefined, name: string): string {
+  return s?.presets?.[name] ?? name;
 }

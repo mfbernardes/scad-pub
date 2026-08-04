@@ -3,7 +3,7 @@
 // build time; this only covers applying an ALREADY-VALID one to a Design).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { localizeDesign, localizeEcho } from "../src/lib/designI18n.ts";
+import { localizeDesign, localizeEcho, localizePresetName } from "../src/lib/designI18n.ts";
 
 // A minimal Design-shaped fixture: structurally sufficient for these tests,
 // which run untyped under node:test (same idiom as tests/reviewSummary.test.mjs).
@@ -153,4 +153,17 @@ test("localizeEcho: a miss (no sidecar, or no entry for this source string) retu
   assert.equal(localizeEcho(undefined, "Total width"), "Total width");
   assert.equal(localizeEcho({ echo: {} }, "Total width"), "Total width");
   assert.equal(localizeEcho({ echo: { "Other label": "x" } }, "Total width"), "Total width");
+});
+
+test("localizePresetName: a matching preset name translates", () => {
+  assert.equal(
+    localizePresetName({ presets: { "Large tag": "Großes Etikett" } }, "Large tag"),
+    "Großes Etikett"
+  );
+});
+
+test("localizePresetName: a miss (no sidecar, or no entry for this exact name) returns the name unchanged", () => {
+  assert.equal(localizePresetName(undefined, "Large tag"), "Large tag");
+  assert.equal(localizePresetName({ presets: {} }, "Large tag"), "Large tag");
+  assert.equal(localizePresetName({ presets: { "No hole": "Ohne Loch" } }, "Large tag"), "Large tag");
 });

@@ -20,8 +20,9 @@ import {
 } from "../lib/presets";
 import { downloadBlob } from "../lib/download";
 import { parsePresetCardName } from "../lib/presetCard";
+import { localizePresetName } from "../lib/designI18n";
 import { t, tn } from "../lib/i18n";
-import { useLocale } from "../lib/localeStore";
+import { useLocale, getDesignStrings } from "../lib/localeStore";
 import { Button } from "./ui/button";
 import { FileInput } from "./FileInput";
 import { Thumbnail } from "./Thumbnail";
@@ -122,6 +123,15 @@ export function PresetPicker({
     () => new Intl.ListFormat(tag, { style: "long", type: "conjunction" }),
     [tag]
   );
+  // Display-only translation of a bundled preset's NAME (localizePresetName's
+  // own doc). Re-read on every render rather than memoized: calling
+  // useLocale() above already subscribes this component to every store
+  // change (tag switch AND a locale's own async sidecar load, see
+  // localeStore.ts's `designsGeneration`), so a stale closure here isn't a
+  // risk, and the map itself is a cheap object lookup. Every IDENTITY use of
+  // a preset name below (the `bundled:<id>:<name>` id, `presetImages` keys)
+  // stays on the raw `p.name`, never this.
+  const designStrings = getDesignStrings(design.id);
   // Whether the compact footer's import/export overflow is open (compact only).
   const [manageOpen, setManageOpen] = useState(false);
   // Preset images are optional per preset (docs/config.md's "Bundled presets"
@@ -387,7 +397,8 @@ export function PresetPicker({
                 {imagedBundled.map((p) => {
                   const id = `bundled:${design.id}:${p.name}`;
                   const isSelected = selected === id;
-                  const parsed = parsePresetCardName(p.name);
+                  const displayName = localizePresetName(designStrings, p.name);
+                  const parsed = parsePresetCardName(displayName);
                   const image = design.presetImages?.[p.name];
                   return (
                     <li key={p.name}>
@@ -395,7 +406,7 @@ export function PresetPicker({
                         type="button"
                         className={cardClass(isSelected)}
                         aria-current={isSelected ? "true" : undefined}
-                        title={p.name}
+                        title={displayName}
                         onClick={() => applyBundled(p)}
                       >
                         <Thumbnail src={image!} />
@@ -448,7 +459,7 @@ export function PresetPicker({
                         aria-current={selected === id ? "true" : undefined}
                         onClick={() => applyBundled(p)}
                       >
-                        {p.name}
+                        {localizePresetName(designStrings, p.name)}
                       </button>
                     </li>
                   );

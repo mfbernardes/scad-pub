@@ -33,7 +33,7 @@ export function DesignDocModal({
   design: LocalizedDesign;
   onClose: () => void;
 }) {
-  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
+  const { tag } = useLocale(); // also decides which locale's doc file to fetch, see below
   // idle→loading→(text|error). `design.doc` is guaranteed by the caller (the
   // trigger only renders when it's set), but we guard defensively.
   const [text, setText] = useState<string | null>(null);
@@ -42,11 +42,16 @@ export function DesignDocModal({
   useEffect(() => {
     if (!design.doc) return;
     let cancelled = false;
-    // No explicit reset here: the caller keys this component on `design.id`
-    // (see App.tsx), so a design change remounts it fresh with `text`/`error`
-    // already at their initial idle values rather than needing a synchronous
-    // reset inside the effect.
-    fetch(assetUrl(design.doc))
+    // `docLocales` (gen-schema.mjs's buildDesigns) lists the tags this design
+    // has a `<id>-doc.<tag>.md` translation for; a tag not listed (including
+    // every design when the deployment ships no doc sidecars at all) falls
+    // back to the design's own authored-language `doc`. No explicit reset
+    // here: the caller keys this component on `design.id` (see App.tsx), so a
+    // design change remounts it fresh with `text`/`error` already at their
+    // initial idle values rather than needing a synchronous reset inside the
+    // effect.
+    const url = design.docLocales?.includes(tag) ? design.doc.replace(/\.md$/, `.${tag}.md`) : design.doc;
+    fetch(assetUrl(url))
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.text();
@@ -60,7 +65,7 @@ export function DesignDocModal({
     return () => {
       cancelled = true;
     };
-  }, [design.doc]);
+  }, [design.doc, design.docLocales, tag]);
 
   return (
     <Modal title={t("docModal.title", { label: design.label })} onClose={onClose}>

@@ -36,6 +36,7 @@ import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "
 import { humanize, parseParams } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
 import { parseDesignStrings } from "./lib/design-strings.mjs";
+import { translatableFields, driftFields, sha256Hex } from "./lib/i18n-coverage.mjs";
 import { createDestinationRegistry, reconcileGenerated } from "./lib/destinations.mjs";
 import { sanitizeBrowserFacingSvg } from "./lib/svg-sanitize.mjs";
 import { resolveFileField } from "./lib/prose-files.mjs";
@@ -107,6 +108,14 @@ export { firstSentence, parseEnumHint, parseParams } from "./lib/params.mjs";
 export { resolveFileField } from "./lib/prose-files.mjs";
 export { splitHelpMarkdown } from "./lib/help-file.mjs";
 export { parseDesignStrings } from "./lib/design-strings.mjs";
+
+// Re-exported so scripts/i18n-status.mjs can drive the SAME config-loading
+// and design-parsing steps generate() itself uses, rather than re-implementing
+// any part of them: see that script's own doc for why it needs the pre-strip
+// per-design shape (`stringsByTag`/`presetNames`/`docAbs`) buildDesigns
+// produces, which designs.json's own generate() output no longer carries once
+// assembleSchema strips it.
+export { loadConfig, parseIdentity, makeMustExist, buildDesigns };
 
 // Every top-level key gen-schema (or its helpers) reads from scadpub.config.json,
 // derived from scripts/lib/config-spec.mjs rather than hand-maintained here. A
@@ -797,13 +806,14 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // modal. Pure prose, so it's excluded from renderHash (it can't affect
     // geometry).
     let doc = null;
+    let docAbs = null;
     if (meta.doc) {
-      const src = mustExist(resolve(dirname(abs), meta.doc), `design '${d.id}' doc '${meta.doc}'`);
-      checkContained(src, `design '${d.id}' doc '${meta.doc}'`, relPosix(abs));
+      docAbs = mustExist(resolve(dirname(abs), meta.doc), `design '${d.id}' doc '${meta.doc}'`);
+      checkContained(docAbs, `design '${d.id}' doc '${meta.doc}'`, relPosix(abs));
       const name = `${d.id}-doc.md`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' doc`);
-      copyFileSync(src, dest);
+      copyFileSync(docAbs, dest);
       doc = `scad/${name}`;
     }
     const presetNames = presets.length ? readPresetNames(presetAbs, presetRel, d.id) : [];
@@ -860,6 +870,12 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       const m = name.match(sidecarRe);
       if (!m) continue;
       const tag = m[1];
+      // `<base>.strings.stamps.json` (the i18n:status freshness-stamp file,
+      // see scripts/i18n-status.mjs) is sidecar-SHAPED but not a locale
+      // sidecar at all: "stamps" would otherwise match this loop's tag
+      // capture and get rejected as an unshipped locale. It's handled
+      // (parsed for drift warnings) separately below, never through this scan.
+      if (tag.toLowerCase() === "stamps") continue;
       if (LOCALE_TAGS.includes(tag)) continue;
       const lower = tag.toLowerCase();
       if (LOCALE_TAGS.includes(lower))
@@ -901,7 +917,90 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
         hasDescription: meta.description != null,
         reviewLabels: new Set(Object.keys(reviewLabels)),
         hasReviewNote: reviewNote != null,
+        presetNames,
       });
+    }
+
+    // Per-locale `@doc` translations: `<design>.doc.<tag>.md` beside the
+    // design's own .scad, mirroring the `.strings.<tag>.json` mechanics just
+    // above — probe per REGISTRY tag, plus a directory scan for anything
+    // doc-sidecar-SHAPED that isn't (wrong case, or an unshipped tag) — but
+    // for a whole alternate FILE rather than a JSON field, since a doc
+    // translation has no field-level structure design-strings.mjs could
+    // validate. Copied via register+copyFileSync exactly like the base `doc`
+    // above and NEVER copyAsset, so it stays out of renderHash the same way
+    // (pure prose, cannot affect geometry).
+    const docSidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.doc\\.([A-Za-z0-9-]+)\\.md$`, "i");
+    for (const name of readdirSync(designDir)) {
+      const m = name.match(docSidecarRe);
+      if (!m) continue;
+      const tag = m[1];
+      if (LOCALE_TAGS.includes(tag)) continue;
+      const lower = tag.toLowerCase();
+      if (LOCALE_TAGS.includes(lower))
+        throw new Error(
+          `gen-schema: design '${d.id}' doc translation '${relPosix(join(designDir, name))}' names ` +
+            `locale tag '${tag}', but doc sidecar tags are matched case-sensitively. Rename it to ` +
+            `'${sidecarBase}.doc.${lower}.md'.`
+        );
+      throw new Error(
+        `gen-schema: design '${d.id}' doc translation '${relPosix(join(designDir, name))}' names ` +
+          `an unshipped locale tag '${tag}'.\n  Valid tags: ${LOCALE_TAGS.join(", ")}`
+      );
+    }
+    const docLocales = [];
+    for (const tag of LOCALE_TAGS) {
+      const docSidecarRel = d.file.replace(/\.scad$/, `.doc.${tag}.md`);
+      const docSidecarAbs = join(SOURCE, docSidecarRel);
+      if (!existsSync(docSidecarAbs)) continue;
+      if (!doc)
+        throw new Error(
+          `gen-schema: '${docSidecarRel}' exists, but design '${d.id}' has no '// @doc' to translate`
+        );
+      checkContained(docSidecarAbs, `design '${d.id}' doc translation '${docSidecarRel}'`, relPosix(abs));
+      const name = `${d.id}-doc.${tag}.md`;
+      const dest = join(outScadDir, name);
+      register(dest, `design '${d.id}' doc translation (${tag})`);
+      copyFileSync(docSidecarAbs, dest);
+      docLocales.push(tag);
+    }
+    docLocales.sort();
+
+    // Content-drift WARNING (never an error — see docs/config.md "Keeping
+    // translations up to date"): when this design carries a
+    // `<base>.strings.stamps.json` (written by `npm run i18n:status --
+    // stamp`, never by hand), compare each stamped field's recorded hash
+    // against its CURRENT authored-source hash. A mismatch means the source
+    // text moved since the translation was stamped, so the existing
+    // translation may no longer match it. No stamps file -> no opinion.
+    const stampsAbs = join(designDir, `${sidecarBase}.strings.stamps.json`);
+    if (existsSync(stampsAbs)) {
+      let stampsJson;
+      try {
+        stampsJson = JSON.parse(readFileSync(stampsAbs, "utf-8"));
+      } catch (err) {
+        throw new Error(
+          `gen-schema: '${relPosix(stampsAbs)}' is not valid JSON:\n  ${err.message}`,
+          { cause: err }
+        );
+      }
+      const docHash = docAbs ? sha256Hex(readFileSync(docAbs, "utf-8")) : undefined;
+      const fields = translatableFields({
+        description,
+        sections,
+        params,
+        reviewLabels,
+        reviewNote,
+        presetNames,
+        docSourceText: docAbs ? readFileSync(docAbs, "utf-8") : null,
+      });
+      for (const [tag, tagStamps] of Object.entries(stampsJson)) {
+        for (const path of driftFields(fields, tagStamps, docHash)) {
+          console.warn(
+            `gen-schema: ${tag} translation of ${path} may be stale (source changed since it was stamped)`
+          );
+        }
+      }
     }
 
     // Strip the transient `reviewLabel` annotation flag off each param before
@@ -929,20 +1028,36 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       ...(presetImages ? { presetImages } : {}),
       // Only present when at least one parameter carries a `// @review` annotation.
       ...(Object.keys(reviewLabels).length ? { reviewLabels } : {}),
+      // Only present when at least one `<design>.doc.<tag>.md` translation
+      // exists, sorted for a deterministic designs.json. Unlike `stringsByTag`
+      // below, this ships INTO designs.json (src/openscad/types.ts's
+      // `Design.docLocales`): DesignDocModal reads it directly to pick the
+      // active locale's doc URL, so it isn't transient the way a sidecar's
+      // parsed CONTENT is.
+      ...(docLocales.length ? { docLocales } : {}),
       // Transient (see the sidecar-discovery comment above): read by generate()
       // to build src/generated/i18n/<tag>.json, then stripped before
       // assembleSchema — never reaches designs.json.
       ...(Object.keys(stringsByTag).length ? { stringsByTag } : {}),
+      // Transient, like `stringsByTag`: this design's bundled-preset NAMES and
+      // its base `@doc` file's absolute path (or null), read by
+      // scripts/i18n-status.mjs (via this same `buildDesigns`) to compute
+      // translation coverage/drift without re-deriving either. Never reaches
+      // designs.json.
+      presetNames,
+      docAbs,
     };
   });
 
-  // Orphaned sidecar-shaped files: a `<base>.strings.<tag>.json` whose base
-  // matches no design in its own directory — most often a design renamed (or
-  // removed) without its old translation following it — is invisible to the
-  // per-design scan above, which only ever looks for ITS OWN design's base.
-  // Left alone it translates nothing and fails nothing, silently rotting
-  // forever; warn instead so it gets noticed.
-  const GENERIC_SIDECAR_RE = /^(.+)\.strings\.[A-Za-z0-9-]+\.json$/i;
+  // Orphaned sidecar-shaped files: a `<base>.strings.<tag>.json` (a stamps
+  // file's literal "stamps" tag matches the same pattern, see the loop's own
+  // comment above) or a `<base>.doc.<tag>.md` whose base matches no design in
+  // its own directory — most often a design renamed (or removed) without its
+  // old translation following it — is invisible to the per-design scans
+  // above, which only ever look for ITS OWN design's base. Left alone it
+  // translates nothing and fails nothing, silently rotting forever; warn
+  // instead so it gets noticed.
+  const GENERIC_SIDECAR_RE = /^(.+)\.(?:strings\.[A-Za-z0-9-]+\.json|doc\.[A-Za-z0-9-]+\.md)$/i;
   const orphaned = [];
   for (const [dir, bases] of sidecarBasesByDir) {
     for (const name of readdirSync(dir)) {
@@ -1271,6 +1386,11 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
     for (const preset of d.presets) shell.add(`scad/${preset}`);
     if (d.icon) shell.add(d.icon);
     if (d.doc) shell.add(d.doc);
+    // Per-locale `@doc` translations (docLocales), same offline reasoning as
+    // the base doc above: DesignDocModal fetches `<id>-doc.<tag>.md` on
+    // demand, so a visitor who installed the app before opening it in that
+    // locale would otherwise see it fail offline.
+    for (const tag of d.docLocales ?? []) shell.add(`scad/${d.id}-doc.${tag}.md`);
     // The gallery's artwork and the preset cards' thumbnails: a deployment
     // using either renders a broken screen offline without them, exactly like
     // a missing icon.
@@ -1586,11 +1706,11 @@ function assembleSchema(parts) {
     ui: UI,
     defaultDesign,
     assets: [...assets].sort(),
-    // `stringsByTag` (buildDesigns' transient sidecar bundle, see its own
-    // comment) is read by generate() to write src/generated/i18n/<tag>.json
-    // BEFORE this function runs, so it's stripped here alongside `abs`:
-    // neither belongs in designs.json.
-    designs: designs.map(({ abs, stringsByTag, ...d }) => d),
+    // `stringsByTag`/`presetNames`/`docAbs` (buildDesigns' transient fields,
+    // see their own comments) are read by generate()/scripts/i18n-status.mjs
+    // BEFORE this function runs, so they're stripped here alongside `abs`:
+    // none of the four belongs in designs.json.
+    designs: designs.map(({ abs, stringsByTag, presetNames, docAbs, ...d }) => d),
   };
 }
 

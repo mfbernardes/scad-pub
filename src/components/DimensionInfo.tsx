@@ -136,7 +136,10 @@ export function DimensionInfo({
         computed.map((c, i) => (
           <div className={detailRow} key={`computed-${i}-${c.label}`}>
             <dt>{c.label}</dt>
-            <dd className={dd}>{c.value}</dd>
+            {/* Composes value+unit the same way format.ts's formatParamValue
+                does for a param's own @info row (`value + " " + unit`): the
+                unit lives on `c.value` no longer (see computedInfo.ts). */}
+            <dd className={dd}>{c.unit ? `${c.value} ${c.unit}` : c.value}</dd>
           </div>
         ))}
     </dl>

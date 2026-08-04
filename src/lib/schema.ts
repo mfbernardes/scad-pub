@@ -118,6 +118,11 @@ function checkDesign(d: unknown): void {
     fail(`design '${id}' 'image' must be a string URL`);
   if (design.doc != null && typeof design.doc !== "string")
     fail(`design '${id}' 'doc' must be a string URL`);
+  if (
+    design.docLocales !== undefined &&
+    (!Array.isArray(design.docLocales) || !design.docLocales.every((t) => typeof t === "string"))
+  )
+    fail(`design '${id}' 'docLocales' must be an array of strings`);
   if (design.presetImages != null)
     checkStringMap(
       design.presetImages,
