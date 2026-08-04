@@ -12,9 +12,14 @@ import {
   parseSvg,
   unusableHeightRegions,
   prepareSvg,
+  SvgPrepError,
+  type Change,
   type Finding,
   type Region,
 } from "../lib/svgPrep";
+import { changeText, findingText, prepErrorText } from "../lib/svgPrepText";
+import { t, tn, formatList, formatNumber } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
@@ -60,6 +65,13 @@ const LEVEL_BADGE: Record<Finding["level"], "destructive" | "warn" | "secondary"
   INFO: "secondary",
 };
 
+// Indirection tables (D4): store catalogue KEYS, resolved via t() at render.
+const LEVEL_KEY: Record<Finding["level"], string> = {
+  ERROR: "svgWizard.levelError",
+  WARN: "svgWizard.levelWarn",
+  INFO: "svgWizard.levelInfo",
+};
+
 // Blocking problems first, then warnings, then informational notes.
 const LEVEL_ORDER: Record<Finding["level"], number> = { ERROR: 0, WARN: 1, INFO: 2 };
 
@@ -69,17 +81,20 @@ function FindingList({ findings, empty }: { findings: Finding[]; empty: string }
   const sorted = [...findings].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
   return (
     <ul className="flex flex-col gap-2">
-      {sorted.map((f, i) => (
-        <li key={`${f.code}-${i}`} className="flex gap-2 text-sm leading-[1.4]">
-          <Badge variant={LEVEL_BADGE[f.level]} className="mt-[1px] shrink-0">
-            {f.level}
-          </Badge>
-          <span className="min-w-0">
-            <span className="text-foreground">{f.message}</span>
-            {f.hint && <span className="block text-muted-foreground">{f.hint}</span>}
-          </span>
-        </li>
-      ))}
+      {sorted.map((f, i) => {
+        const { message, hint } = findingText(f);
+        return (
+          <li key={`${f.code}-${i}`} className="flex gap-2 text-sm leading-[1.4]">
+            <Badge variant={LEVEL_BADGE[f.level]} className="mt-[1px] shrink-0">
+              {t(LEVEL_KEY[f.level])}
+            </Badge>
+            <span className="min-w-0">
+              <span className="text-foreground">{message}</span>
+              {hint && <span className="block text-muted-foreground">{hint}</span>}
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -87,7 +102,11 @@ function FindingList({ findings, empty }: { findings: Finding[]; empty: string }
 // Steps: 1 = check, 2 = fix, 3 = colours (only when deriveColours).
 type Step = 1 | 2 | 3;
 
-const STEP_NAMES: Record<Step, string> = { 1: "Check", 2: "Fix", 3: "Colours" };
+const STEP_NAME_KEY: Record<Step, string> = {
+  1: "svgWizard.stepCheck",
+  2: "svgWizard.stepFix",
+  3: "svgWizard.stepColours",
+};
 
 export function SvgWizard({
   svgText,
@@ -97,13 +116,15 @@ export function SvgWizard({
   onCancel,
   onComplete,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t()/tn() calls on a locale switch
+
   // Parse once. A parse failure is a terminal state with a retry via cancel.
   const parsed = useMemo(() => {
     try {
       const root = parseSvg(svgText);
-      return { root, error: null as string | null, before: check(root) };
+      return { root, error: null as SvgPrepError | null, before: check(root) };
     } catch (e) {
-      return { root: null, error: (e as Error).message, before: [] as Finding[] };
+      return { root: null, error: e as SvgPrepError, before: [] as Finding[] };
     }
   }, [svgText]);
 
@@ -118,7 +139,7 @@ export function SvgWizard({
   // mutated in place by prepareSvg).
   const [fixed, setFixed] = useState<{
     svg: string;
-    changes: string[];
+    changes: Change[];
     findings: Finding[];
     regions: Region[];
   } | null>(null);
@@ -126,7 +147,7 @@ export function SvgWizard({
   // A preparation failure the drawing itself caused (formatLayerSpec refusing a
   // region id or colour that would corrupt the spec). Terminal like a parse
   // failure, with the same retry via cancel.
-  const [prepError, setPrepError] = useState<string | null>(null);
+  const [prepError, setPrepError] = useState<SvgPrepError | null>(null);
   // Set once the visitor changes the layers string themselves (a per-region
   // height, or a hand edit of the field), so a re-fix doesn't overwrite it.
   const layersEditedRef = useRef(false);
@@ -150,7 +171,7 @@ export function SvgWizard({
     try {
       res = prepareSvg(parseSvg(svgText), { deriveColours });
     } catch (e) {
-      setPrepError((e as Error).message);
+      setPrepError(e as SvgPrepError);
       return;
     }
     setFixed({ svg: res.svg, changes: res.changes, findings: res.findings, regions: res.regions });
@@ -198,30 +219,29 @@ export function SvgWizard({
     <Dialog open onOpenChange={close}>
       <DialogContent className="max-w-[34rem]">
         <DialogHeader>
-          <DialogTitle>Prepare SVG</DialogTitle>
+          <DialogTitle>{t("svgWizard.title")}</DialogTitle>
           <DialogDescription>
             {parsed.error
-              ? "This file could not be read as an SVG."
+              ? t("svgWizard.parseErrorDescription")
               : prepError
-                ? "This drawing could not be prepared."
-                : `Step ${step} of ${lastStep}: ${STEP_NAMES[step]} · ${fileName}`}
+                ? t("svgWizard.prepErrorDescription")
+                : t("svgWizard.step", {
+                    n: step,
+                    m: lastStep,
+                    name: t(STEP_NAME_KEY[step]),
+                    fileName,
+                  })}
           </DialogDescription>
         </DialogHeader>
 
         {terminalError ? (
-          <p className="svg-wizard__error text-sm text-destructive">{terminalError}</p>
+          <p className="svg-wizard__error text-sm text-destructive">{prepErrorText(terminalError)}</p>
         ) : (
           <div ref={scrollRef} className="max-h-[55vh] overflow-y-auto overscroll-contain pr-1">
             {step === 1 && (
               <section className="flex flex-col gap-3">
-                <p className="text-sm text-muted-foreground">
-                  Only shapes are raised into relief — text, colours and a few other
-                  things aren't. Here's what to expect from this drawing:
-                </p>
-                <FindingList
-                  findings={parsed.before}
-                  empty="No problems found — this drawing is ready to use."
-                />
+                <p className="text-sm text-muted-foreground">{t("svgWizard.checkIntro")}</p>
+                <FindingList findings={parsed.before} empty={t("svgWizard.checkEmpty")} />
               </section>
             )}
 
@@ -229,28 +249,23 @@ export function SvgWizard({
               <section className="flex flex-col gap-3">
                 <div>
                   <h3 className="mb-1 font-display text-sm font-semibold text-foreground">
-                    Fixes applied
+                    {t("svgWizard.fixesHeading")}
                   </h3>
                   {fixed.changes.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Nothing needed changing.
-                    </p>
+                    <p className="text-sm text-muted-foreground">{t("svgWizard.noChanges")}</p>
                   ) : (
                     <ul className="list-disc pl-5 text-sm text-foreground">
                       {fixed.changes.map((c, i) => (
-                        <li key={i}>{c}</li>
+                        <li key={i}>{changeText(c)}</li>
                       ))}
                     </ul>
                   )}
                 </div>
                 <div>
                   <h3 className="mb-1 font-display text-sm font-semibold text-foreground">
-                    Remaining notes
+                    {t("svgWizard.notesHeading")}
                   </h3>
-                  <FindingList
-                    findings={fixed.findings}
-                    empty="No problems remain — this drawing is ready to use."
-                  />
+                  <FindingList findings={fixed.findings} empty={t("svgWizard.fixEmpty")} />
                 </div>
               </section>
             )}
@@ -260,8 +275,7 @@ export function SvgWizard({
                 {fixed.regions.length >= 2 ? (
                   <>
                     <p className="text-sm text-muted-foreground">
-                      Found {fixed.regions.length} colour regions. Each keeps its own
-                      colour on export, and can stand at its own height:
+                      {t("svgWizard.regionsIntro", { count: fixed.regions.length })}
                     </p>
                     <ul className="flex flex-col gap-1 text-sm">
                       {fixed.regions.map((r) => {
@@ -285,7 +299,7 @@ export function SvgWizard({
                             <code className="min-w-0 truncate font-mono text-[0.8rem]">{r.id}</code>
                             <span className="min-w-0 truncate text-muted-foreground">
                               {r.color}
-                              {r.count > 0 && ` · ${r.count} shape(s)`}
+                              {r.count > 0 && tn("svgWizard.regionShapeCount", r.count)}
                             </span>
                             <span className="ml-auto flex shrink-0 items-center gap-1">
                               <Input
@@ -297,12 +311,15 @@ export function SvgWizard({
                                   badHeights.has(r.id) ? "border-destructive" : ""
                                 }`}
                                 value={heightOf(r.id)}
+                                // The placeholder mirrors what this SAME <input type="number">
+                                // expects to receive back: locale-invariant on purpose (D3),
+                                // like every other number-input value in this app.
                                 placeholder={defaultHeight === null ? "" : String(defaultHeight)}
-                                aria-label={`Height of region ${r.id} in millimetres`}
+                                aria-label={t("svgWizard.regionHeightAria", { id: r.id })}
                                 aria-invalid={badHeights.has(r.id) || undefined}
                                 onChange={(e) => setHeight(r.id, e.target.value)}
                               />
-                              <span className="text-muted-foreground">mm</span>
+                              <span className="text-muted-foreground">{t("common.mm")}</span>
                             </span>
                           </li>
                         );
@@ -310,22 +327,21 @@ export function SvgWizard({
                     </ul>
                     <p className="text-[0.78rem] text-muted-foreground">
                       {defaultHeight === null
-                        ? "Leave a height blank to raise that region by the design's relief height."
-                        : `Leave a height blank to raise that region by the design's relief height (${defaultHeight} mm).`}
+                        ? t("svgWizard.heightHintNoDefault")
+                        : t("svgWizard.heightHintDefault", {
+                            heightMm: `${formatNumber(defaultHeight)} ${t("common.mm")}`,
+                          })}
                     </p>
                     {fixed.regions.some((r) => !isRenderableColor(r.color)) && (
                       <p className="text-[0.78rem] text-muted-foreground">
-                        Colours marked <span aria-hidden="true">?</span> can't be
-                        previewed here, but are still applied — check them when you print.
+                        {t("svgWizard.unpreviewableColours", { mark: "?" })}
                       </p>
                     )}
                     <label className="flex flex-col gap-1 text-sm">
-                      <span className="text-muted-foreground">
-                        Region colours and heights (editable):
-                      </span>
+                      <span className="text-muted-foreground">{t("svgWizard.layersLabel")}</span>
                       <Input
                         value={layers}
-                        aria-label="Region colours and heights"
+                        aria-label={t("svgWizard.layersAria")}
                         onChange={(e) => {
                           layersEditedRef.current = true;
                           setLayers(e.target.value);
@@ -334,29 +350,21 @@ export function SvgWizard({
                     </label>
                   </>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    This drawing has a single colour, so it comes out as one solid — no
-                    per-region colours to set.
-                  </p>
+                  <p className="text-sm text-muted-foreground">{t("svgWizard.singleColour")}</p>
                 )}
               </section>
             )}
 
             {blockedByHeight && !blockedByError && (
               <p className="svg-wizard__height-error mt-3 text-sm font-medium text-destructive">
-                {badHeights.size === 1
-                  ? `The height for “${[...badHeights][0]}” isn't usable — `
-                  : `The heights for ${[...badHeights].map((id) => `“${id}”`).join(", ")} aren't usable — `}
-                enter a plain positive number of millimetres (like 2 or 1.5), or leave
-                it blank to use the design's relief height.
+                {tn("svgWizard.heightError", badHeights.size, {
+                  names: formatList([...badHeights].map((id) => `“${id}”`)),
+                })}
               </p>
             )}
 
             {blockedByError && (
-              <p className="mt-3 text-sm font-medium text-destructive">
-                This drawing can't be used as-is — resolve the errors above (e.g. add some
-                filled shapes), then try again.
-              </p>
+              <p className="mt-3 text-sm font-medium text-destructive">{t("svgWizard.blockedByError")}</p>
             )}
           </div>
         )}
@@ -364,7 +372,7 @@ export function SvgWizard({
         <DialogFooter>
           {terminalError ? (
             <Button variant="outline" className="svg-wizard__choose-file" onClick={onCancel}>
-              Choose another file
+              {t("svgWizard.chooseAnotherFile")}
             </Button>
           ) : (
             <div className="flex w-full items-center justify-between gap-2">
@@ -373,7 +381,7 @@ export function SvgWizard({
                 className="svg-wizard__back"
                 onClick={() => (step === 1 ? onCancel() : setStep((step - 1) as Step))}
               >
-                {step === 1 ? "Cancel" : "Back"}
+                {step === 1 ? t("svgWizard.cancel") : t("svgWizard.back")}
               </Button>
               {step < lastStep ? (
                 <Button
@@ -381,11 +389,11 @@ export function SvgWizard({
                   onClick={step === 1 ? applyAndAdvance : () => setStep((step + 1) as Step)}
                   disabled={step !== 1 && blockedByError}
                 >
-                  {step === 1 ? "Fix & continue" : "Next"}
+                  {step === 1 ? t("svgWizard.fixAndContinue") : t("svgWizard.next")}
                 </Button>
               ) : (
                 <Button className="svg-wizard__finish" onClick={finish} disabled={blockedByError || blockedByHeight}>
-                  Use this SVG
+                  {t("svgWizard.useThisSvg")}
                 </Button>
               )}
             </div>

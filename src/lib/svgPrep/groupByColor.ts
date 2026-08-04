@@ -8,13 +8,14 @@
 import { SHAPE_TAGS, SVG_NS, hasStructuralChildren, iterElements, localName } from "./dom";
 import { colorKey, displayColor, parseColor, slugForColor } from "./colors";
 import { effectiveFill } from "./regions";
+import type { Change } from "./types";
 
 const ELEMENT_NODE = 1;
 
 export type GroupByColorErrorCode = "no-shapes" | "already-grouped" | "one-colour" | "transformed";
 
 export interface GroupByColorResult {
-  changes: string[];
+  changes: Change[];
   error: { code: GroupByColorErrorCode } | null;
 }
 
@@ -140,7 +141,7 @@ export function groupByColor(root: Element): GroupByColorResult {
     const id = el.getAttribute("id");
     if (id) taken.add(id);
   }
-  const changes: string[] = [];
+  const changes: Change[] = [];
   for (const key of order) {
     const bucket = buckets.get(key)!;
     const gid = slugForColor(bucket.token, taken);
@@ -152,9 +153,7 @@ export function groupByColor(root: Element): GroupByColorResult {
     group.setAttribute("fill", disp);
     for (const sh of bucket.shapes) group.appendChild(sh);
     container.appendChild(group);
-    changes.push(
-      `grouped ${bucket.shapes.length} shape(s) into the "${disp}" colour region`,
-    );
+    changes.push({ code: "grouped-colour", vars: { count: bucket.shapes.length, color: disp } });
   }
   pruneEmptyGroups(root);
   return { changes, error: null };

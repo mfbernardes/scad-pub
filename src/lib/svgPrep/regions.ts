@@ -4,7 +4,7 @@
 import { SHAPE_TAGS, inkAttr, iterElements, localName, paint } from "./dom";
 import { colorKey, displayColor, parseColor } from "./colors";
 import { parseViewBox } from "./geometry";
-import type { Region } from "./types";
+import { SvgPrepError, type Region } from "./types";
 
 const ELEMENT_NODE = 1;
 
@@ -91,17 +91,22 @@ const SPEC_SEPARATOR_RE = /[,:]/;
  *  region with no height is written bare, so the common all-default case reads
  *  exactly as it did before heights existed.
  *
- *  @throws if any field contains `,` or `:`. */
+ *  @throws SvgPrepError ("spec-separator") if any field contains `,` or `:`. */
 export function formatLayerSpec(canvas: string, entries: LayerEntry[]): string {
   const parts = entries.map((e) => {
+    // `field` names the spec's own DSL vocabulary (id/colour/height, the same
+    // words the layers= syntax itself uses) — locale-invariant on purpose, like
+    // the region id/value it's paired with (see CLAUDE.md's D3 rule).
     for (const [field, value] of [
       ["id", e.id],
       ["colour", e.color],
       ["height", e.height],
     ] as const) {
       if (SPEC_SEPARATOR_RE.test(value))
-        throw new Error(
+        throw new SvgPrepError(
+          "spec-separator",
           `region ${field} "${value}" contains "," or ":", which separate entries in the layers spec`,
+          { field, value },
         );
     }
     return e.height ? `${e.id}:${e.color}:${e.height}` : shorthandFor(e.id, e.color);

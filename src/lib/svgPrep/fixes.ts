@@ -1,5 +1,6 @@
-// Safe, appearance-preserving fixes applied in place. Each returns a list of
-// human-readable change strings.
+// Safe, appearance-preserving fixes applied in place. Each returns the list of
+// changes it made, coded the same way check.ts's findings are (see types.ts);
+// src/lib/svgPrepText.ts resolves a Change to display text.
 
 import { canvasBackgrounds } from "./background";
 import {
@@ -12,13 +13,14 @@ import {
 } from "./dom";
 import { CSS_IMPORT_RE, CSS_URL_RE, isSameDocumentRef } from "../cssRefs.mjs";
 import { gFormat, parseViewBox } from "./geometry";
+import type { Change } from "./types";
 
 /** Rename each Inkscape layer's id to its label so it is selectable. Only touches
  *  layer groups whose label differs from the id, sanitises the label into a
  *  valid id first, and skips a rename that would collide with an id already in
  *  use. */
-export function fixInkscapeIds(root: Element): string[] {
-  const changes: string[] = [];
+export function fixInkscapeIds(root: Element): Change[] {
+  const changes: Change[] = [];
   const els = iterElements(root);
   const existing = new Set<string>();
   for (const el of els) {
@@ -27,7 +29,7 @@ export function fixInkscapeIds(root: Element): string[] {
   }
   for (const { el, label, id: gid, target } of trappedLayers(els)) {
     if (existing.has(target)) {
-      changes.push(`left layer "${label}" as-is (another region already uses that name)`);
+      changes.push({ code: "layer-kept", vars: { label } });
       continue;
     }
     el.setAttribute("id", target);
@@ -35,8 +37,8 @@ export function fixInkscapeIds(root: Element): string[] {
     existing.add(target);
     changes.push(
       target === label
-        ? `made layer "${label}" usable as a colour region`
-        : `made layer "${label}" usable as a colour region, named "${target}"`,
+        ? { code: "layer-usable", vars: { label } }
+        : { code: "layer-renamed", vars: { label, target } },
     );
   }
   return changes;
@@ -44,7 +46,7 @@ export function fixInkscapeIds(root: Element): string[] {
 
 /** Normalise a non-zero viewBox origin to 0 0 by wrapping the content in a
  *  translate, preserving appearance. */
-export function fixViewBoxOrigin(root: Element): string[] {
+export function fixViewBoxOrigin(root: Element): Change[] {
   const vb = parseViewBox(root);
   if (vb === null) return [];
   const [minx, miny, w, h] = vb;
@@ -66,7 +68,7 @@ export function fixViewBoxOrigin(root: Element): string[] {
   for (const node of metadata) root.appendChild(node);
   root.appendChild(wrapper);
   root.setAttribute("viewBox", `0 0 ${gFormat(w)} ${gFormat(h)}`);
-  return ["re-centred the drawing so it sits on the plate"];
+  return [{ code: "recentred" }];
 }
 
 // Whether the element sets its own fill (a `fill=` attribute or a `fill:` in its
@@ -133,7 +135,7 @@ function styleRuleFill(el: Element, rules: FillRule[]): string | null {
  *  that rely on them (setting an inline `fill`), so colour derivation reads the
  *  drawing's real colours instead of defaulting to black. Appearance-preserving
  *  and geometry-neutral (OpenSCAD ignores both the stylesheet and the fill). */
-export function resolveStyleFills(root: Element): string[] {
+export function resolveStyleFills(root: Element): Change[] {
   const rules = parseStyleFillRules(root);
   if (rules.length === 0) return [];
   let count = 0;
@@ -147,7 +149,7 @@ export function resolveStyleFills(root: Element): string[] {
       count += 1;
     }
   }
-  return count ? [`applied ${count} stylesheet colour(s) directly to the shapes`] : [];
+  return count ? [{ code: "style-fills", vars: { count } }] : [];
 }
 
 /** Drop any full-canvas background rectangle. OpenSCAD fills every shape, so a
@@ -155,7 +157,7 @@ export function resolveStyleFills(root: Element): string[] {
  *  block; removing it is what a tactile relief actually wants (the raised shapes
  *  need open space around them). Only runs when other geometry remains, so the
  *  drawing never ends up empty. */
-function removeCanvasBackground(root: Element): string[] {
+function removeCanvasBackground(root: Element): Change[] {
   const backgrounds = canvasBackgrounds(root);
   let count = 0;
   for (const el of backgrounds) {
@@ -164,12 +166,7 @@ function removeCanvasBackground(root: Element): string[] {
       count += 1;
     }
   }
-  return count
-    ? [
-        `removed ${count} full-canvas background(s) that would bury the artwork in ` +
-          "one solid block",
-      ]
-    : [];
+  return count ? [{ code: "removed-background", vars: { count } }] : [];
 }
 
 /** Remove every element that can execute (see ACTIVE_TAGS), and neutralise what
@@ -177,8 +174,8 @@ function removeCanvasBackground(root: Element): string[] {
  *  rules — and therefore the drawing's colours — untouched. None of it becomes
  *  geometry, and a user-supplied drawing is the one SVG class ScadPub does not
  *  trust. */
-export function removeActiveContent(root: Element): string[] {
-  const changes: string[] = [];
+export function removeActiveContent(root: Element): Change[] {
+  const changes: Change[] = [];
   // One walk: on a 2 MB drawing a second full traversal is ~50k nodes for a
   // filter this pass already has in hand.
   const els = iterElements(root);
@@ -190,7 +187,7 @@ export function removeActiveContent(root: Element): string[] {
       count += 1;
     }
   }
-  if (count) changes.push(`removed ${count} script/animation element(s)`);
+  if (count) changes.push({ code: "removed-active", vars: { count } });
 
   let fetches = 0;
   for (const el of els) {
@@ -208,11 +205,11 @@ export function removeActiveContent(root: Element): string[] {
       });
     if (cleaned !== css) el.textContent = cleaned;
   }
-  if (fetches) changes.push(`removed ${fetches} external reference(s) from the drawing's styles`);
+  if (fetches) changes.push({ code: "removed-external", vars: { count: fetches } });
   return changes;
 }
 
-export function applyFixes(root: Element): string[] {
+export function applyFixes(root: Element): Change[] {
   // Background removal first: it reasons about raw coordinates, before
   // fixViewBoxOrigin wraps the content in a translate.
   return [
