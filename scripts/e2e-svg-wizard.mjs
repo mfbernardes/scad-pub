@@ -5,12 +5,12 @@
 //
 // Selectors deliberately avoid matching the wizard's own findings/hints/button
 // copy: that text moved through the i18n catalogue (Phase 2 of the translation
-// coverage plan) and is no longer guaranteed to read the same in every build.
-// Structural hooks instead: the `svg-wizard__*` classes, the `ERROR`/`WARN`
-// badge LEVELS (Finding["level"] values, English by construction — see
-// svgPrepText.ts — not prose, so stable across locales), counts, disabled
-// state, and data the drawing itself carries (region ids, filenames, the
-// derived layers string).
+// coverage plan), so its rendered value now depends on the active locale, not
+// just the build. Structural hooks instead: the `svg-wizard__*` classes, the
+// `data-level` attribute SvgWizard.tsx stamps on each finding badge (the raw
+// Finding["level"] value — "ERROR"/"WARN"/"INFO" — not the translated badge
+// text), counts, disabled state, and data the drawing itself carries (region
+// ids, filenames, the derived layers string).
 import {
   bootstrap,
   makeCheck,
@@ -36,12 +36,13 @@ function regionRow(dialog, page, id) {
     .filter({ has: page.locator("code", { hasText: id }) });
 }
 
-/** The badge level markers (Finding["level"]: "ERROR"/"WARN"/"INFO") the
- *  wizard renders next to each finding — stable, uppercase, English by
- *  construction regardless of locale, so counting them is a locale-safe proxy
- *  for "how many findings of this severity are showing". */
+/** The badge level markers next to each finding, found by SvgWizard.tsx's
+ *  `data-level` attribute (the raw Finding["level"] — "ERROR"/"WARN"/"INFO")
+ *  rather than the badge's own text, which is now translated and so reads
+ *  differently in a non-English-default build: counting the attribute is a
+ *  locale-safe proxy for "how many findings of this severity are showing". */
 function levelBadges(dialog, level) {
-  return dialog.getByText(level, { exact: true });
+  return dialog.locator(`[data-level="${level}"]`);
 }
 
 const { base, page, close } = await bootstrap();

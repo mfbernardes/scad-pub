@@ -9,16 +9,19 @@
 // require (D4): every entry is a literal catalogue-key STRING, resolved at
 // render — never a template-built key — both so a locale switch can't miss a
 // key and so tests/i18nCoverage.test.mjs's plain-text scan for `"key"`
-// literals can see every one of them. A code missing from its table is a bug
-// tests/svgPrepText.test.mjs catches (every code round-trips to a
-// non-key string).
+// literals can see every one of them. Tables are exported (not just their
+// resolving functions) so tests/svgPrepText.test.mjs can assert their key
+// sets against the engine's own FIND_CODES/CHANGE_CODES/
+// GROUP_BY_COLOR_ERROR_CODES exports (src/lib/svgPrep/{check,fixes,
+// groupByColor}.ts): a code the engine can emit but no table here covers
+// fails that test, not just a manual read of both files side by side.
 import { t, tn, formatList, type Vars as I18nVars } from "./i18n";
 import type { Change, Finding, SvgPrepError, Vars } from "./svgPrep";
 
 /** check.ts's finding codes with a plural (CLDR #one/#other) `find` value —
  *  every code whose old literal string carried a mechanical "(s)" — mapped to
  *  the catalogue's BASE key (tn() appends #one/#other itself). */
-const FIND_KEY: Record<string, string> = {
+export const FIND_KEY: Record<string, string> = {
   "text": "svgPrep.find.text",
   "stroke-only": "svgPrep.find.stroke-only",
   "open-paths": "svgPrep.find.open-paths",
@@ -30,7 +33,7 @@ const FIND_KEY: Record<string, string> = {
   "shapes-outside-regions": "svgPrep.find.shapes-outside-regions",
 };
 /** The rest of check.ts's codes: a plain (non-pluralised) `find` value. */
-const FIND_KEY_PLAIN: Record<string, string> = {
+export const FIND_KEY_PLAIN: Record<string, string> = {
   "no-viewbox": "svgPrep.find.no-viewbox",
   "viewbox-origin": "svgPrep.find.viewbox-origin",
   "no-geometry": "svgPrep.find.no-geometry",
@@ -44,7 +47,7 @@ const FIND_KEY_PLAIN: Record<string, string> = {
 
 /** Every finding code that pairs its `find` value with a `hint` one — every
  *  code except "regions-available", which has none. */
-const HINT_KEY: Record<string, string> = {
+export const HINT_KEY: Record<string, string> = {
   "no-viewbox": "svgPrep.hint.no-viewbox",
   "viewbox-origin": "svgPrep.hint.viewbox-origin",
   "no-geometry": "svgPrep.hint.no-geometry",
@@ -66,7 +69,7 @@ const HINT_KEY: Record<string, string> = {
 
 /** fixes.ts/groupByColor.ts's pluralised Change codes, mapped to their
  *  catalogue base key. */
-const CHANGE_KEY: Record<string, string> = {
+export const CHANGE_KEY: Record<string, string> = {
   "removed-background": "svgPrep.change.removed-background",
   "removed-active": "svgPrep.change.removed-active",
   "removed-external": "svgPrep.change.removed-external",
@@ -74,7 +77,7 @@ const CHANGE_KEY: Record<string, string> = {
   "grouped-colour": "svgPrep.change.grouped-colour",
 };
 /** Their non-pluralised Change codes. */
-const CHANGE_KEY_PLAIN: Record<string, string> = {
+export const CHANGE_KEY_PLAIN: Record<string, string> = {
   "layer-kept": "svgPrep.change.layer-kept",
   "layer-usable": "svgPrep.change.layer-usable",
   "layer-renamed": "svgPrep.change.layer-renamed",
@@ -87,7 +90,7 @@ const CHANGE_KEY_PLAIN: Record<string, string> = {
  *  `svgPrep.group.<code>`, not `svgPrep.change.<code>`, since "no shapes to
  *  group" reads differently as an auto-run aside than a Change would
  *  elsewhere (the en value keeps the "Group by colour: " prefix). */
-const GROUP_KEY: Record<string, string> = {
+export const GROUP_KEY: Record<string, string> = {
   "no-shapes": "svgPrep.group.no-shapes",
   "transformed": "svgPrep.group.transformed",
 };
@@ -96,7 +99,7 @@ const GROUP_KEY: Record<string, string> = {
  *  DELIBERATELY absent: its `.message` is the DOMParser's own parser-supplied
  *  detail (or a fixed English fallback when that's empty), neither of which
  *  is catalogue text — see `prepErrorText`'s fallback. */
-const PREP_ERROR_KEY: Record<string, string> = {
+export const PREP_ERROR_KEY: Record<string, string> = {
   "not-svg": "svgPrep.prepError.not-svg",
   "spec-separator": "svgPrep.prepError.spec-separator",
 };
@@ -120,12 +123,12 @@ function countOf(vars?: Vars): number {
 
 /** A finding's display text: its message, and its hint when the code declares
  *  one (see HINT_KEY). `region-missing`'s "available" region list falls back
- *  to "(none)" here — a display concern, not check.ts's (see its own
- *  comment). */
+ *  to `svgPrep.noneAvailable` here — a display concern, not check.ts's (see
+ *  its own comment). */
 export function findingText(f: Finding): { message: string; hint?: string } {
   const vars: Vars | undefined =
     f.code === "region-missing" && Array.isArray(f.vars?.regions)
-      ? { ...f.vars, available: f.vars.regions.length > 0 ? f.vars.regions : "(none)" }
+      ? { ...f.vars, available: f.vars.regions.length > 0 ? f.vars.regions : t("svgPrep.noneAvailable") }
       : f.vars;
   const message = FIND_KEY[f.code]
     ? tn(FIND_KEY[f.code], countOf(f.vars), resolveVars(vars))

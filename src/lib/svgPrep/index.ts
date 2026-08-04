@@ -17,12 +17,14 @@ export {
   isRenderableColor,
 } from "./colors";
 export type { Rgb } from "./colors";
-export { check } from "./check";
+export { check, FIND_CODES } from "./check";
+export type { FindCode } from "./check";
 // applyFixes/deriveRegions/deriveLayers/analyze are exported FOR THE TESTS as
 // well as the wizard: they are the seams the fixture suite drives the pipeline
 // through, one stage at a time, rather than only end-to-end via prepareSvg.
-export { applyFixes, fixViewBoxOrigin } from "./fixes";
-export { groupByColor } from "./groupByColor";
+export { applyFixes, fixViewBoxOrigin, CHANGE_CODES } from "./fixes";
+export type { FixChangeCode } from "./fixes";
+export { groupByColor, GROUP_BY_COLOR_ERROR_CODES, GROUP_BY_COLOR_CHANGE_CODES } from "./groupByColor";
 export type { GroupByColorResult, GroupByColorErrorCode } from "./groupByColor";
 export {
   parseLayersArg,
