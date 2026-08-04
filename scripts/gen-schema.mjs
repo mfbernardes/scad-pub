@@ -865,17 +865,40 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // misnamed. Matching case-insensitively here means every such file is at
     // least SEEN; the tag-case check right below decides whether to accept or
     // reject it.
-    const sidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.strings\\.([A-Za-z0-9-]+)\\.json$`, "i");
+    const sidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.(strings)\\.([A-Za-z0-9-]+)\\.json$`, "i");
     for (const name of readdirSync(designDir)) {
       const m = name.match(sidecarRe);
       if (!m) continue;
-      const tag = m[1];
+      const [, infix, tag] = m;
+      // The `i` flag above catches the file at all regardless of case; a
+      // wrongly-cased `strings` infix (`.Strings.`/`.STRINGS.`) would
+      // otherwise pass every check below unnoticed — matched here, but
+      // loaded by the per-tag probe further down via an exact-case path
+      // that only a case-INsensitive filesystem (macOS) resolves to it. On
+      // Linux it stays silently inert instead. Reject it the same way as a
+      // wrongly-cased tag.
+      if (infix !== "strings")
+        throw new Error(
+          `gen-schema: design '${d.id}' translation sidecar '${relPosix(join(designDir, name))}' has the ` +
+            `wrong case for 'strings' in its filename, but sidecar filenames are matched case-sensitively. ` +
+            `Rename it to '${sidecarBase}.strings.${tag}.json'.`
+        );
       // `<base>.strings.stamps.json` (the i18n:status freshness-stamp file,
       // see scripts/i18n-status.mjs) is sidecar-SHAPED but not a locale
       // sidecar at all: "stamps" would otherwise match this loop's tag
       // capture and get rejected as an unshipped locale. It's handled
-      // (parsed for drift warnings) separately below, never through this scan.
-      if (tag.toLowerCase() === "stamps") continue;
+      // (parsed for drift warnings) separately below, never through this scan
+      // — but a wrongly-cased 'stamps' is caught here for the same reason as
+      // the 'strings' infix above.
+      if (tag.toLowerCase() === "stamps") {
+        if (tag !== "stamps")
+          throw new Error(
+            `gen-schema: design '${d.id}' translation sidecar '${relPosix(join(designDir, name))}' has the ` +
+              `wrong case for 'stamps' in its filename, but sidecar filenames are matched case-sensitively. ` +
+              `Rename it to '${sidecarBase}.strings.stamps.json'.`
+          );
+        continue;
+      }
       if (LOCALE_TAGS.includes(tag)) continue;
       const lower = tag.toLowerCase();
       if (LOCALE_TAGS.includes(lower))
@@ -930,11 +953,20 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // validate. Copied via register+copyFileSync exactly like the base `doc`
     // above and NEVER copyAsset, so it stays out of renderHash the same way
     // (pure prose, cannot affect geometry).
-    const docSidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.doc\\.([A-Za-z0-9-]+)\\.md$`, "i");
+    const docSidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.(doc)\\.([A-Za-z0-9-]+)\\.md$`, "i");
     for (const name of readdirSync(designDir)) {
       const m = name.match(docSidecarRe);
       if (!m) continue;
-      const tag = m[1];
+      const [, infix, tag] = m;
+      // Same rename-hint treatment as the strings-sidecar scan above: a
+      // wrongly-cased 'doc' infix is silently inert on Linux, silently read
+      // on macOS.
+      if (infix !== "doc")
+        throw new Error(
+          `gen-schema: design '${d.id}' doc translation '${relPosix(join(designDir, name))}' has the ` +
+            `wrong case for 'doc' in its filename, but doc sidecar filenames are matched case-sensitively. ` +
+            `Rename it to '${sidecarBase}.doc.${tag}.md'.`
+        );
       if (LOCALE_TAGS.includes(tag)) continue;
       const lower = tag.toLowerCase();
       if (LOCALE_TAGS.includes(lower))

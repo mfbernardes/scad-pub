@@ -88,15 +88,17 @@ export function translatableFields(d) {
     if (p.info) {
       // Mirrors format.ts's own "custom label, else the param's own
       // description" fallback, so the hashed source text is whatever a
-      // translator was actually looking at.
-      const label = p.info.label ?? p.description ?? "";
-      if (label)
-        push(
-          "params",
-          `params.${p.name}.info.label`,
-          label,
-          (s) => s?.params?.[p.name]?.info?.label !== undefined
-        );
+      // translator was actually looking at. Pushed whenever `@info` is
+      // present at all, even with neither an explicit label nor a
+      // description to fall back to (sourceText ""): design-strings.mjs
+      // accepts an `info.label` sidecar entry off `hasInfo` alone, so a
+      // translation there needs a bucket/stamp to land in too.
+      push(
+        "params",
+        `params.${p.name}.info.label`,
+        p.info.label ?? p.description ?? "",
+        (s) => s?.params?.[p.name]?.info?.label !== undefined
+      );
       if (p.info.unit)
         push(
           "params",

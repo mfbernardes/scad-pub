@@ -86,6 +86,15 @@ function loadDesigns(configPath) {
     copyFileSync(join(SOURCE, relPath), dest);
   };
   let designs;
+  // buildDesigns already prints its own drift warning per stale field (the
+  // same computation formatDriftReport below re-derives for this tool's
+  // report), so left alone every drift line would print twice. Capture
+  // console.warn here and drop just those lines on replay; the font-risk and
+  // orphaned-sidecar warnings it may also emit have no duplicate downstream
+  // and pass through unchanged.
+  const originalWarn = console.warn;
+  const captured = [];
+  console.warn = (...args) => captured.push(args.join(" "));
   try {
     designs = buildDesigns({
       config,
@@ -101,7 +110,12 @@ function loadDesigns(configPath) {
       defaultTag: DEFAULT_TAG,
     });
   } finally {
+    console.warn = originalWarn;
     rmSync(scratchDir, { recursive: true, force: true });
+  }
+  for (const msg of captured) {
+    if (/translation of .* may be stale/.test(msg)) continue;
+    console.warn(msg);
   }
   return { designs, LANGUAGES, DEFAULT_TAG, SOURCE, configPath };
 }

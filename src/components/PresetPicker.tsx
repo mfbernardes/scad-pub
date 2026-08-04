@@ -7,7 +7,7 @@
 // the mobile sheet. Both presentations compose the SAME
 // `saveField`/`importButton`/`exportButton` below, so what the actions do
 // can't drift between them.
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
@@ -21,7 +21,7 @@ import {
 import { downloadBlob } from "../lib/download";
 import { parsePresetCardName } from "../lib/presetCard";
 import { localizePresetName } from "../lib/designI18n";
-import { t, tn } from "../lib/i18n";
+import { t, tn, formatList } from "../lib/i18n";
 import { useLocale, getDesignStrings } from "../lib/localeStore";
 import { Button } from "./ui/button";
 import { FileInput } from "./FileInput";
@@ -72,12 +72,11 @@ const cardClass = (isSelected: boolean) =>
 /** Summarises colliding preset names for the import dialog: every name when
  *  there are few, else the first `max` with an "N more" tail folded into the
  *  same conjunction join, so "A, B, C, and 2 more" reads as one sentence
- *  instead of a truncated dump. `listFormat` is the active locale's
- *  conjunction formatter (constructed in the component, since the locale can
- *  change at runtime — see `useLocale`). */
-function summarizeCollisions(names: string[], listFormat: Intl.ListFormat, max = 3): string {
-  if (names.length <= max) return listFormat.format(names);
-  return listFormat.format([...names.slice(0, max), tn("presets.moreCount", names.length - max)]);
+ *  instead of a truncated dump. Joins through i18n.ts's `formatList`, which
+ *  already reads the active locale's `Intl.ListFormat`. */
+function summarizeCollisions(names: string[], max = 3): string {
+  if (names.length <= max) return formatList(names);
+  return formatList([...names.slice(0, max), tn("presets.moreCount", names.length - max)]);
 }
 
 interface Props {
@@ -115,14 +114,11 @@ export function PresetPicker({
   onPresetsChange,
   compact = false,
 }: Props) {
-  const { tag } = useLocale();
-  // Reconstructed on a locale switch (the conjunction join and "and" wording
-  // are locale-specific); cheap enough not to warrant a module-level cache
-  // keyed by tag.
-  const listFormat = useMemo(
-    () => new Intl.ListFormat(tag, { style: "long", type: "conjunction" }),
-    [tag]
-  );
+  // Subscribes this component to every locale-store change (tag switch AND
+  // a locale's own async sidecar load, see `designsGeneration` below) — the
+  // tag itself isn't read directly here; formatList/localizePresetName read
+  // the active locale from i18n.ts/localeStore.ts's own current binding.
+  useLocale();
   // Display-only translation of a bundled preset's NAME (localizePresetName's
   // own doc). Re-read on every render rather than memoized: calling
   // useLocale() above already subscribes this component to every store
@@ -545,7 +541,7 @@ export function PresetPicker({
       open={pendingImport !== null}
       onOpenChange={(open) => !open && setPendingImport(null)}
       title={tn("presets.importCollisionTitle", pendingImportCollisions.length)}
-      description={t("presets.importCollisionBody", { names: summarizeCollisions(pendingImportCollisions, listFormat) })}
+      description={t("presets.importCollisionBody", { names: summarizeCollisions(pendingImportCollisions) })}
       cancelLabel={t("presets.cancel")}
       confirmLabel={t("presets.replace")}
       onConfirm={() => {

@@ -481,8 +481,9 @@ export default function App() {
   // (both purely display); `parsedPreset`/`presetSel` stay the raw identity
   // read everywhere else (urlState, presets.ts storage, `applyBundled`'s
   // `bundled:<id>:<name>` id). `locale.designsGeneration` matters alongside
-  // `.tag` — a default-tag sidecar can finish loading asynchronously after
-  // this preset was already selected (Risk 7).
+  // `.tag`: design-strings load asynchronously, so a sidecar can finish
+  // arriving after this preset was already selected, and the generation
+  // counter is what tells this memo a fresh lookup is worth another try.
   const presetDisplayName = useMemo(() => {
     if (!parsedPreset) return null;
     return parsedPreset.kind === "bundled"

@@ -22,6 +22,10 @@ import "./index.css";
 // otherwise unmount past `#root` and leave a blank page with no on-screen
 // signal. This is the last line of defence: reload is the only
 // correct recovery at this scope, since app state itself may be what's broken.
+// The fallback copy below is plain English, not `t()` — the locale machinery
+// itself (localeStore, i18n.ts) lives inside the tree this boundary guards
+// against, so it may be exactly what broke; a dependency-free fallback is the
+// one that's certain to render (documented exclusion, see CLAUDE.md).
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary
