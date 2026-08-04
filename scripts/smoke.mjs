@@ -24,6 +24,7 @@ import {
   dismissWelcomePopup,
   openDialog,
   waitDialogClosed,
+  PINNED_LOCALE,
 } from "./lib/browser.mjs";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
@@ -1382,6 +1383,7 @@ const LAYOUT_SWAP_MS = 20000;
 async function checkResponsiveLayout({ browser, base, check, schema, paramsTabName }) {
   console.log("=== responsive layout: single mounted tree + state across a breakpoint change (M7) ===");
   const context = await browser.newContext({
+    ...PINNED_LOCALE,
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1620,6 +1622,7 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
 
   const firstVisit = async (width, height) => {
     const context = await browser.newContext({
+      ...PINNED_LOCALE,
       viewport: { width, height },
       deviceScaleFactor: 2,
       isMobile: true,
@@ -1734,6 +1737,7 @@ const DETENTS = ["peek", "half", "full"];
 async function checkDocumentNeverScrolls({ browser, base, check }) {
   console.log("=== fixed shell: the document never scrolls ===");
   const context = await browser.newContext({
+    ...PINNED_LOCALE,
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1797,6 +1801,7 @@ async function checkDocumentNeverScrolls({ browser, base, check }) {
 async function checkNothingOffscreen({ browser, base, check }) {
   console.log("=== narrow viewport: nothing escapes horizontally ===");
   const context = await browser.newContext({
+    ...PINNED_LOCALE,
     viewport: { width: 320, height: 568 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1964,7 +1969,7 @@ const scrollHelpScroller = (page, dy) =>
 async function checkHelpPopoverStaysWithItsRow({ browser, base, check, schema, paramsTabName }) {
   console.log("=== param help popover: stays with its row when the form scrolls ===");
   for (const [width, height, layout] of [[390, 844, "mobile sheet"], [1280, 900, "docked panel"]]) {
-    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+    const context = await browser.newContext({ ...PINNED_LOCALE, viewport: { width, height }, deviceScaleFactor: 1 });
     await context.addInitScript((key) => {
       try { localStorage.setItem(key, "1"); } catch { /* storage unavailable */ }
     }, `${schema?.id || "scadpub"}.sheet.introduced.v1`);
@@ -2023,6 +2028,7 @@ async function checkViewerHudReachable({ browser, base, check }) {
   console.log("=== viewer HUD reachability (narrow + short viewports) ===");
   for (const [width, height] of [[360, 740], [320, 568]]) {
     const context = await browser.newContext({
+      ...PINNED_LOCALE,
       viewport: { width, height },
       deviceScaleFactor: 2,
       isMobile: true,
@@ -2096,6 +2102,7 @@ async function checkViewerHudReachable({ browser, base, check }) {
 async function checkDialogFocusEntry({ browser, base, check }) {
   console.log("=== dialogs take focus when they open (touch) ===");
   const context = await browser.newContext({
+    ...PINNED_LOCALE,
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -2270,6 +2277,7 @@ async function checkResizerAnnouncedWidth({ page, check }) {
 async function checkSheetFocusTrap({ browser, base, check }) {
   console.log("=== the expanded sheet keeps Tab inside itself ===");
   const context = await browser.newContext({
+    ...PINNED_LOCALE,
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,

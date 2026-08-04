@@ -21,6 +21,7 @@ import {
 } from "react";
 import { tapFeedback } from "../lib/haptics";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { useRafBatchedWrite } from "../lib/useRafBatchedWrite";
 import { useScrollFocusedIntoView } from "../lib/useScrollFocusedIntoView";
 import { useSafeAreaInset } from "../lib/useSafeAreaInset";
@@ -134,6 +135,7 @@ export function BottomSheet({
   onPeekHeightChange,
   onFullGapChange,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   // Detent is controlled by the parent; setDetent forwards to it.
   const setDetent = onDetentChange;
   // The sheet root, used to measure the natural peek height (handle + tab row).

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Sun as SunIcon, Moon as MoonIcon, SunMoon as AutoThemeIcon } from "lucide-react";
 import { IconButton } from "./IconButton";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import type { ThemeMode } from "../lib/theme";
 
 /**
@@ -38,6 +39,7 @@ export function ThemeToggle({
   next: ThemeMode;
   onCycle: () => void;
 }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const label = t("theme.switchTo", { mode: t(THEME_MODE[next].nameKey).toLowerCase() });
   return (
     <IconButton label={label} title={label} onClick={onCycle}>

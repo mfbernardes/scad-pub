@@ -26,6 +26,7 @@ import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
 import { IconButton } from "./IconButton";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 const AUTO_HIDE_MS = 9000;
 
@@ -47,6 +48,7 @@ export function ExportSuccess({
   helpTab?: string;
   onDismiss: () => void;
 }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { showHelp } = useAppActions();
 
   // Read through a ref so the effect below only re-arms on a genuinely new

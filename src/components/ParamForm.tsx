@@ -17,6 +17,7 @@ import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
 import { fontFallback } from "../lib/fontFallback";
 import { nearestScrollParent } from "../lib/scrollParent";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { EssentialsToggle } from "./EssentialsToggle";
 import { FontImportActions } from "./FontImportActions";
 import { FontSelect } from "./FontSelect";
@@ -513,6 +514,9 @@ const DENSITY = {
 } as const;
 
 export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true, onShowAdvancedChange, compact = false, failure, ref }: Props) {
+  // Subscription only: re-render this component's t() calls on a locale
+  // switch. A useSyncExternalStore-backed hook works fine inside memo().
+  useLocale();
   const density = compact ? DENSITY.compact : DENSITY.regular;
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is

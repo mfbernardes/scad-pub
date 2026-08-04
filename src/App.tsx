@@ -36,6 +36,7 @@ import { ns } from "./lib/appId";
 import { readLocal, writeLocal } from "./lib/safeStorage";
 import { toast } from "sonner";
 import { t } from "./lib/i18n";
+import { localeStore, useLocale, applyLocale } from "./lib/localeStore";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/ui/sonner";
@@ -132,6 +133,17 @@ export default function App() {
   // is up, and does not undo it afterwards). See the hook's own doc.
   useDocumentScrollLock();
   const { mode: themeMode, resolved: theme, cycle: cycleTheme, next: themeNext } = useTheme();
+  const locale = useLocale();
+  // Multi-locale deployments only: a single-locale one leaves the
+  // config-injected <html lang/dir> alone (see applyLocale's own doc).
+  useEffect(() => {
+    applyLocale(locale, locale.locales.length > 1);
+  }, [locale]);
+  const localeChange = useCallback((tag: string) => {
+    void localeStore.setLocale(tag).catch(() => {
+      toast.error(t("lang.loadFailed"));
+    });
+  }, []);
   const { canInstall, promptInstall, installed } = useInstallPrompt();
   const online = useOnline();
   // True when this is the installed app in its own window (see the warm-up below).
@@ -568,6 +580,7 @@ export default function App() {
     clearFiles: clearImportedFiles,
     autoRenderChange: setAutoRender,
     cycleTheme,
+    localeChange,
     showHelp: showHelpModal,
     showDesignDoc: showDesignDocModal,
     showLicenses: showLicensesModal,

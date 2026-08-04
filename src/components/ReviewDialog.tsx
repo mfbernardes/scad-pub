@@ -35,6 +35,7 @@ import { buildReviewSummaryRows } from "../lib/reviewSummary";
 import { useAppActions } from "../lib/appActions";
 import { cn } from "../lib/utils";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { AttentionItems } from "./AttentionItems";
 import { FriendlyFailureCard } from "./FriendlyFailureCard";
 import { Button } from "./ui/button";
@@ -88,6 +89,7 @@ export function ReviewDialog({
   canExport,
   onOpenMessages,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { exportModel } = useAppActions();
   const overrides = useMemo(() => parseReviewOverrides(result?.log ?? []), [result]);
   const rows = useMemo(

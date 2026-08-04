@@ -15,6 +15,7 @@ import type { Values } from "../lib/presets";
 import { hiddenAdvancedCount } from "../lib/essentials";
 import { cn } from "../lib/utils";
 import { t, tn } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { ChevronDown as MoreIcon, ChevronUp as FewerIcon } from "lucide-react";
 
 export function EssentialsToggle({
@@ -31,6 +32,7 @@ export function EssentialsToggle({
   /** Extra classes on the button (parent-supplied spacing). */
   className?: string;
 }) {
+  useLocale(); // subscription only: re-render this component's t()/tn() calls on a locale switch
   // The one gate, see the component doc. Zero means the toggle has nothing to
   // reveal (or, with `showAdvanced` on, nothing to hide), so it doesn't render.
   const count = hiddenAdvancedCount(params, values);

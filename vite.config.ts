@@ -75,6 +75,9 @@ function configHtml(s: BuildSchema): Plugin {
           // The id lands inside the inline script's string literal; gen-schema
           // charset-validates it (checkId) so it can't break out.
           .replace(/%APP_THEME_KEY%/g, `${s.id ?? "scadpub"}.theme`)
+          // Per-config locale storage key for the pre-paint script: matches
+          // ns("lang") in src/lib/localeStore.ts (default id → "scadpub.lang").
+          .replace(/%APP_LANG_KEY%/g, `${s.id ?? "scadpub"}.lang`)
           .replace(/%APP_APPLE_TITLE%/g, () => appleTitle)
           .replace(/%APP_APPLE_SPLASH%/g, () => appleSplashLinks)
           // Insert before </head> via a replacer so $-sequences in colour values

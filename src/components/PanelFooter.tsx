@@ -8,6 +8,7 @@ import { useAppActions } from "../lib/appActions";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 export function PanelFooter({
   autoRender,
@@ -16,6 +17,7 @@ export function PanelFooter({
   autoRender: boolean;
   className: string;
 }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { autoRenderChange } = useAppActions();
   return (
     <div className={className}>

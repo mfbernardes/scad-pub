@@ -43,6 +43,9 @@ export class ErrorBoundary extends Component<Props, State> {
             className="viewer-error flex flex-1 flex-col items-center justify-center gap-[0.4rem] bg-card p-4 text-center text-foreground"
             role="alert"
           >
+            {/* Class component: no useLocale() subscription, so a locale switch
+                that happens WHILE this fallback is showing doesn't re-render it —
+                accepted limitation, the fallback keeps error-time language. */}
             <p>{t("errorBoundary.viewerFailed")}</p>
             <p className="text-[0.82rem] text-muted-foreground">{this.state.error.message}</p>
           </div>

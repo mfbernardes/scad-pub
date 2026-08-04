@@ -16,6 +16,7 @@ import { VIEW_DIRECTIONS, DEFAULT_VIEW, type ViewName } from "./views";
 import { toIndexedGeometry } from "@/lib/meshIndex";
 import { Button } from "./ui/button";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import {
   frameDistanceForBox,
   cameraBasis,
@@ -219,6 +220,7 @@ export const Viewer = forwardRef<
     onModelPick?: (pos: { x: number; y: number }) => void;
   }
 >(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, view = DEFAULT_VIEW, showGrid = false, onMeasure, editable = false, onModelPick }, ref) {
+  useLocale(); // subscription only: re-render this component's t() calls (WebGL error copy) on a locale switch
   // Latest selected view, read inside the [stl]-only reframe effect and the
   // imperative handle without re-running them.
   const viewRef = useRef(view);

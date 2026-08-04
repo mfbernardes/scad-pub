@@ -24,6 +24,16 @@ function configId() {
   }
 }
 
+// Every script here drives by ARIA role + accessible name and matches literal
+// renderStatus/UI-copy strings (see smoke.mjs), which are only stable under
+// English chrome text. Pin every context/page this file and its callers
+// create to en-US so a host machine's own locale (which Chromium otherwise
+// inherits) can never flip the app's language under the harness — see
+// CLAUDE.md's Phase 2 i18n note. Spread this into every `newContext`/`newPage`
+// options object; a caller's own `locale` (there is none today) would still
+// win by ordering it after this spread.
+export const PINNED_LOCALE = { locale: "en-US" };
+
 /** Launch headless Chromium, honouring the executable-path override used by
  *  environments that ship their own browser (no `playwright install`). */
 // The server + browser + base-URL dance every driving script opens with, and
@@ -39,7 +49,7 @@ export async function bootstrap({ pageOptions, page: wantPage = true } = {}) {
   const { server, port, basePath } = await startServer();
   const base = `http://127.0.0.1:${port}${basePath}`;
   const browser = await launchChromium();
-  const page = wantPage ? await browser.newPage(pageOptions) : null;
+  const page = wantPage ? await browser.newPage({ ...PINNED_LOCALE, ...pageOptions }) : null;
   return {
     base,
     browser,

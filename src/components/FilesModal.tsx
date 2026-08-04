@@ -11,6 +11,7 @@ import { Modal, MODAL_BODY } from "./Modal";
 import { FileBar, type LoadedFile } from "./FileBar";
 import { cn } from "../lib/utils";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import type { FileImport } from "../openscad/types";
 
 // FileBar already carries its own padding (it was designed to sit directly in
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export function FilesModal({ fileImport, loadedFiles, onRemoveFile, onClearFiles, onClose }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   return (
     <Modal title={t("files.title")} onClose={onClose}>
       <div className={FILES_BODY}>

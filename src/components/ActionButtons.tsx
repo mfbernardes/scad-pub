@@ -19,6 +19,7 @@ import { Download as DownloadIcon, Share2 as ShareIcon, Link2 as LinkIcon } from
 import type { ReadinessState } from "../lib/readiness";
 import { canShareNatively } from "../lib/share";
 import { t, tn } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 // The id the Download button's `aria-describedby` points at, and the sr-only
 // span below carries: the same "attention needed before download" signal a
@@ -61,6 +62,7 @@ interface Props {
 }
 
 export function ActionButtons({ modelFormat, canExport, readiness, attentionCount, onDownloadClick }: Props) {
+  useLocale(); // subscription only: re-render this component's t()/tn() calls on a locale switch
   const { copyLink } = useAppActions();
   const fmt = modelFormat.toUpperCase();
   const hasAttention = readiness === "attention";

@@ -5,8 +5,10 @@
 // never both show), and showing both would double-message the same thing.
 import { Spinner } from "./ui/spinner";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 export function UpdatingChip() {
+  useLocale(); // subscription only: re-render this component's t() call on a locale switch
   return (
     <div
       className="updating-chip pointer-events-none flex items-center gap-2 whitespace-nowrap rounded-lg border border-(color:--glass-border) bg-(--glass-bg) py-[0.35rem] px-[0.7rem] text-[0.82rem] font-medium text-muted-foreground shadow-(--elevation)"
