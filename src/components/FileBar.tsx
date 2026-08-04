@@ -13,6 +13,7 @@ import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
 import { Button } from "./ui/button";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { Trash2 as TrashIcon, File as FileIcon, X as XIcon } from "lucide-react";
 
 /** A user-imported file, with its byte size for display. */
@@ -43,6 +44,7 @@ function fileTypeLabel(name: string): string {
 }
 
 export function FileBar({ fileImport, loadedFiles, onRemoveFile, onClearFiles }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   if (!fileImport) return null;
 
   return (

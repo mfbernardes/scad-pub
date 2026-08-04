@@ -46,6 +46,7 @@ import { ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, RotateCcw as ResetIcon, M
 import { useStandalone } from "../lib/useStandalone";
 import { fullscreenSupported } from "../lib/fullscreen";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 interface Props {
   viewerRef: React.RefObject<ViewerHandle | null>;
@@ -110,6 +111,7 @@ function HudTooltipButton({
 }
 
 export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showDimensions, onToggleDimensions, showGrid, onToggleGrid, viewPicker, reset, zoom, fullscreen, view, onSelectView }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const standalone = useStandalone();
   const [menuOpen, setMenuOpen] = useState(false);
   const canFullscreen = fullscreen && !standalone && fullscreenSupported();

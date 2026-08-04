@@ -23,6 +23,7 @@ import {
 } from "./readiness";
 import { friendlyRenderError, type FriendlyErrorInfo } from "./friendlyErrors";
 import { useAppActions } from "./appActions";
+import { useLocale } from "./localeStore";
 
 // Stable empty-log identity so a render with nothing to show yet doesn't hand
 // a fresh `[]` to the memos below on every idle re-render.
@@ -80,6 +81,11 @@ export function useReadinessModel({
   exportable,
 }: UseReadinessModelArgs): ReadinessModel {
   const actions = useAppActions();
+  // Subscription only, plus `tag` threaded into the memos below: each derives
+  // catalogue text (badge labels, attention copy, the friendly-failure card),
+  // so a runtime locale switch must invalidate them even though none of their
+  // OTHER inputs changed.
+  const { tag } = useLocale();
   const log = result?.log ?? EMPTY_LOG;
   // Memoized so a config without `notices` doesn't hand a fresh `[]` to the
   // useMemo hooks below on every render.
@@ -88,7 +94,12 @@ export function useReadinessModel({
   // Parse the log once here; the OutputConsole (Notices tab count chips) reads
   // this derived data instead of re-parsing it.
   const diagnostics = useMemo(() => parseDiagnostics(log, notices), [log, notices]);
-  const badges = useMemo(() => countBadges(log, notices), [log, notices]);
+  // `tag`: countBadges resolves a catalogue label (diagnostics.assertsBadge)
+  // through t(), so a runtime locale switch must invalidate this memo even
+  // though log/notices didn't change — react-hooks can't see that a
+  // dependency-free t() call inside is itself locale-sensitive.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const badges = useMemo(() => countBadges(log, notices), [log, notices, tag]);
 
   // Production-readiness (readiness.ts): a structured, typed list of real gaps
   // between "rendered" and "ready to ship". A font param whose selected
@@ -126,6 +137,9 @@ export function useReadinessModel({
       result?.ok ? diagnostics.filter((d) => d.attention && d.level !== "notice").map((d) => d.text) : [],
     [diagnostics, result]
   );
+  // `tag`: deriveAttention resolves plural/label copy via selectPlural/t(),
+  // which reads the active locale, so a switch must invalidate this memo too
+  // — react-hooks can't see that dependency-free call is locale-sensitive.
   const attention = useMemo(
     () =>
       deriveAttention({
@@ -135,17 +149,24 @@ export function useReadinessModel({
         notices: noticeAttentionInputs,
         diagnostics: diagnosticAttentionInputs,
       }),
-    [design.params, values, availableFontFamilies, noticeAttentionInputs, diagnosticAttentionInputs]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [design.params, values, availableFontFamilies, noticeAttentionInputs, diagnosticAttentionInputs, tag]
   );
   // `result` is the only render outcome readiness cares about: null until a
   // FIRST render has ever landed (readinessState's "building"), regardless of
   // whether a later live edit is currently re-rendering over it, matching
   // the viewer's own "Building your preview…" vs. "Updating…" distinction.
+  // No `tag` dep needed here: readinessState carries no catalogue text of its
+  // own, and `attention`'s own memo (above) already recomputes — with a new
+  // array identity — on a locale switch, so this memo invalidates through it.
   const readiness = useMemo(() => readinessState(result ? result.ok : null, attention), [result, attention]);
   // Friendly {title, body, technical} mapping of a failed render, shared by
   // the Notices tab (OutputConsole) and the Review dialog so a failure reads
   // identically wherever it surfaces. Null on a missing/successful result.
-  const failure = useMemo(() => friendlyRenderError(result), [result]);
+  // `tag`: friendlyRenderError resolves its title through t() — react-hooks
+  // can't see that dependency-free call is locale-sensitive.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const failure = useMemo(() => friendlyRenderError(result), [result, tag]);
 
   // Review dialog: one instance, its content and footer driven entirely by the
   // live `readiness`/`attention`/`failure` above. Both entry points (the dock

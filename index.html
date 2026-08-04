@@ -17,7 +17,15 @@
     <meta name="apple-mobile-web-app-title" content="%APP_APPLE_TITLE%" />
     <!-- Apply the saved/auto theme before first paint to avoid a flash. The
          storage key is namespaced per config (injected by the configHtml Vite
-         plugin) so it matches src/lib/theme.ts's ns("theme"). -->
+         plugin) so it matches src/lib/theme.ts's ns("theme"). Also sets
+         <html lang> from a persisted locale choice (ns("lang") in
+         src/lib/localeStore.ts) before first paint, same reasoning: without
+         this a returning visitor who switched locale sees the deployment's
+         default `lang` flash before React mounts and localeStore's own
+         (async) resolution corrects it. lang only, no dir: every shipped
+         locale is ltr today (see src/lib/localeRegistry.ts's own note). A
+         missing/invalid key is a no-op — the server-rendered %APP_LANG%
+         default stands. -->
     <script>
       (function () {
         try {
@@ -28,6 +36,12 @@
           document.documentElement.dataset.theme = dark ? "dark" : "light";
         } catch (e) {
           document.documentElement.dataset.theme = "dark";
+        }
+        try {
+          var lang = localStorage.getItem("%APP_LANG_KEY%");
+          if (lang) document.documentElement.lang = lang;
+        } catch (e) {
+          /* no persisted locale, or storage unavailable: keep the default lang */
         }
       })();
     </script>

@@ -14,6 +14,7 @@ import {
 } from "./ui/dialog";
 import { preventTouchAutoFocus } from "../lib/pointer";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { THUMB_FRAME, Thumbnail } from "./Thumbnail";
 import {
   Select,
@@ -60,6 +61,7 @@ export function DesignGallery({
   value,
   onChange,
 }: Pick<Props, "designs" | "value" | "onChange">) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const [query, setQuery] = useState("");
   // Whether the gallery's scroll port has content past its bottom edge, which
   // drives the fade above. Measured rather than assumed: the port's height
@@ -214,6 +216,7 @@ function designIcon(d: Design): ReactNode {
 }
 
 export function DesignPicker({ designs, value, onChange, openSignal, gallery = false }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const runs = groupDesigns(designs);
   const grouped = runs.some((r) => r.group !== null);
   const [open, setOpen] = useState(false);

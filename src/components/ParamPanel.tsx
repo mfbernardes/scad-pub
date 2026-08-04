@@ -13,6 +13,7 @@ import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { useAppActions } from "../lib/appActions";
 import { visibleGroups } from "../lib/paramGroups";
 import type { PanelTab } from "../lib/usePanelState";
@@ -119,6 +120,7 @@ export function ParamPanel({
   failure,
   onSearchBlur,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
   const [open, setOpen] = useState(() => {
     const v = readLocal(PANEL_OPEN_KEY);

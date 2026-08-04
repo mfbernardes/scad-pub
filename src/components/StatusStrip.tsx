@@ -33,6 +33,7 @@ import {
 import type { ReadinessState } from "../lib/readiness";
 import { cn } from "../lib/utils";
 import { t, tn } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 export interface StatusStripProps {
   readiness: ReadinessState;
@@ -78,6 +79,7 @@ function label(readiness: ReadinessState, attentionCount: number): string {
 }
 
 export function StatusStrip({ readiness, attentionCount, onOpen, className }: StatusStripProps) {
+  useLocale(); // subscription only: re-render this component's t()/tn() calls on a locale switch
   const Icon = ICON[readiness];
   return (
     <button

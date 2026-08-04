@@ -18,6 +18,7 @@ import { ns } from "../lib/appId";
 import { readLocal, writeLocal } from "../lib/safeStorage";
 import { isCoarsePointer } from "../lib/pointer";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 const HINT_SEEN_KEY = ns("hint.viewer.v1");
 // How long the hint stays up before auto-fading if the visitor never touches
@@ -26,6 +27,7 @@ const HINT_SEEN_KEY = ns("hint.viewer.v1");
 const FADE_TIMEOUT_MS = 8000;
 
 export function ViewerGestureHint({ resultOk, suppressed = false }: { resultOk: boolean; suppressed?: boolean }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   // Sticky: once the first successful render has landed this mount, stays
   // true even if a later edit fails or is mid-render. The hint is about
   // "you've now seen a model", not "the model is currently fine".

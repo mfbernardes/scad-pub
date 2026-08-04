@@ -7,7 +7,7 @@
 // the mobile sheet. Both presentations compose the SAME
 // `saveField`/`importButton`/`exportButton` below, so what the actions do
 // can't drift between them.
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Design } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
@@ -21,6 +21,7 @@ import {
 import { downloadBlob } from "../lib/download";
 import { parsePresetCardName } from "../lib/presetCard";
 import { t, tn } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { Button } from "./ui/button";
 import { FileInput } from "./FileInput";
 import { Thumbnail } from "./Thumbnail";
@@ -67,18 +68,15 @@ const cardClass = (isSelected: boolean) =>
     isSelected ? "border-primary" : "border-border enabled:hover:border-brand"
   );
 
-// English conjunction join ("A, B, and C") for the import-collision dialog's
-// name list, module-level like i18n.ts's own EN_PLURAL_RULES since it's cheap
-// to share and pointless to reconstruct per render.
-const LIST_FORMAT = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
-
 /** Summarises colliding preset names for the import dialog: every name when
  *  there are few, else the first `max` with an "N more" tail folded into the
  *  same conjunction join, so "A, B, C, and 2 more" reads as one sentence
- *  instead of a truncated dump. */
-function summarizeCollisions(names: string[], max = 3): string {
-  if (names.length <= max) return LIST_FORMAT.format(names);
-  return LIST_FORMAT.format([...names.slice(0, max), tn("presets.moreCount", names.length - max)]);
+ *  instead of a truncated dump. `listFormat` is the active locale's
+ *  conjunction formatter (constructed in the component, since the locale can
+ *  change at runtime — see `useLocale`). */
+function summarizeCollisions(names: string[], listFormat: Intl.ListFormat, max = 3): string {
+  if (names.length <= max) return listFormat.format(names);
+  return listFormat.format([...names.slice(0, max), tn("presets.moreCount", names.length - max)]);
 }
 
 interface Props {
@@ -116,6 +114,14 @@ export function PresetPicker({
   onPresetsChange,
   compact = false,
 }: Props) {
+  const { tag } = useLocale();
+  // Reconstructed on a locale switch (the conjunction join and "and" wording
+  // are locale-specific); cheap enough not to warrant a module-level cache
+  // keyed by tag.
+  const listFormat = useMemo(
+    () => new Intl.ListFormat(tag, { style: "long", type: "conjunction" }),
+    [tag]
+  );
   // Whether the compact footer's import/export overflow is open (compact only).
   const [manageOpen, setManageOpen] = useState(false);
   // Preset images are optional per preset (docs/config.md's "Bundled presets"
@@ -529,7 +535,7 @@ export function PresetPicker({
       open={pendingImport !== null}
       onOpenChange={(open) => !open && setPendingImport(null)}
       title={tn("presets.importCollisionTitle", pendingImportCollisions.length)}
-      description={t("presets.importCollisionBody", { names: summarizeCollisions(pendingImportCollisions) })}
+      description={t("presets.importCollisionBody", { names: summarizeCollisions(pendingImportCollisions, listFormat) })}
       cancelLabel={t("presets.cancel")}
       confirmLabel={t("presets.replace")}
       onConfirm={() => {

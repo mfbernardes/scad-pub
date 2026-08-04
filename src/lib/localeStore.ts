@@ -166,13 +166,31 @@ export function applyLocale(state: LocaleState, multiLocale: boolean): void {
   document.documentElement.dir = state.dir;
 }
 
-// Phase 4 reads `schema.languages` for enabledTags; until then every
-// deployment ships exactly its default locale, so the store below never has
-// anywhere else to switch to and stays inert.
-const enabledTags: readonly string[] = [defaultTag];
-
-// Phase 2 adds the "de" thunk here once src/locales/de.json exists.
-const loadChrome: Record<string, () => Promise<Bundle>> = {};
+// Phase 4 narrows this to `schema.languages`. For now every deployment can
+// reach every locale that has a chrome bundle: defaultTag first (so an
+// index-0 assumption elsewhere — e.g. a selector's default highlight — picks
+// the deployment's own default), then the rest of `loadChrome`'s keys ("en"
+// is implicit: it needs no loader).
+// No `{ with: { type: "json" } }` attribute here, unlike i18n.ts's STATIC
+// English import: Vite left this dynamic import's specifier untransformed
+// with the attribute present (it still pointed at the literal source path at
+// runtime — a 404 in the built app, even though a de-*.js chunk existed in
+// asset-manifest.json), so it's dropped on this dynamic thunk specifically.
+// Safe to drop: Node never executes this thunk (it's only reached through a
+// running locale switch, which nothing under node:test triggers), so there's
+// no ERR_UNKNOWN_FILE_EXTENSION risk here the way there is for i18n.ts's
+// static import under the node:test loader.
+const loadChrome: Record<string, () => Promise<Bundle>> = {
+  de: () => import("../locales/de.json").then((m) => m.default),
+};
+// "en" is always available (no loader needed: rebind falls back to the plain
+// English catalogue), so it's added explicitly rather than read off
+// `loadChrome`'s keys.
+const shippedTags = ["en", ...Object.keys(loadChrome)];
+const enabledTags: readonly string[] = [
+  defaultTag,
+  ...shippedTags.filter((tag) => tag !== defaultTag),
+];
 
 const store = createLocaleStore({
   loadChrome,
@@ -192,6 +210,11 @@ const store = createLocaleStore({
     void store.setLocale(initial, { persist: false }).catch(() => {});
   }
 }
+
+/** The module singleton, for callers that need to trigger a switch
+ *  (`localeStore.setLocale(tag)`, see appActions' `localeChange`) rather than
+ *  just subscribing (`useLocale()` below). */
+export const localeStore = store;
 
 /** `LocaleMeta` for every locale enabled on this deployment. */
 export function availableLocales(): LocaleMeta[] {

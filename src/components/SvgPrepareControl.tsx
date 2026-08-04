@@ -10,6 +10,7 @@ import type { SvgFieldMeta } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
 import { isSvgMissing } from "../lib/svgFiles";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { FileInput } from "./FileInput";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { Spinner } from "./ui/spinner";
@@ -78,6 +79,7 @@ function svgRejectionReason(file: File): string | null {
 }
 
 export function SvgPrepareControl({ name, svg, value, label, onChange, availableSvgFiles, defaultHeight = null }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { change, addFile } = useAppActions();
   const [pending, setPending] = useState<{ text: string; fileName: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);

@@ -151,5 +151,8 @@
   "files.added": "File added: {name}",
   "files.removed": "File removed: {name}",
   "files.cleared": "Imported files cleared",
-  "diagnostics.assertsBadge": "asserts"
+  "diagnostics.assertsBadge": "asserts",
+  "lang.label": "Language",
+  "lang.current": "Language: {name}",
+  "lang.loadFailed": "Couldn't load that language — check your connection and try again."
 }

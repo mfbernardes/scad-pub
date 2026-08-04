@@ -22,7 +22,9 @@
 // the room.
 import { useState } from "react";
 import { useAppActions } from "../lib/appActions";
+import { useLocale } from "../lib/localeStore";
 import { ThemeToggle, THEME_MODE } from "./ThemeToggle";
+import { LanguageSelect } from "./LanguageSelect";
 import { IconButton, ICON_BUTTON_CLASS } from "./IconButton";
 import { MenuRow, MENU_ROW_CLASS } from "./MenuRow";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -40,9 +42,6 @@ import {
 } from "lucide-react";
 
 type ThemeMode = "light" | "dark" | "auto";
-
-// One wording for the licenses control in both presentations.
-const LICENSES_LABEL = t("bar.licenses");
 
 // The menu's rows are the shared MenuRow (see MenuRow.tsx). The bare class is
 // what the Live-preview row needs: it's a <Label> wrapping a Switch, not a
@@ -82,6 +81,9 @@ export function BarActions({
   autoRender,
 }: Props) {
   const { cycleTheme, showHelp, showLicenses, showFiles, autoRenderChange } = useAppActions();
+  // Subscription only: re-renders this component (and its module-bound t()
+  // calls) on a runtime locale switch. See CLAUDE.md's useLocale() adoption note.
+  useLocale();
   const [open, setOpen] = useState(false);
   // Help/licenses/Save-image/Files close the menu; theme cycles in place.
   const openModal = (fn: () => void) => () => { fn(); setOpen(false); };
@@ -145,8 +147,9 @@ export function BarActions({
               a tap did anything, since the first cycle step can be a visual
               no-op (auto -> light under a light OS). */}
           <MenuRow label={themeLabel} icon={THEME_MODE[themeMode].icon} onClick={cycleTheme} />
+          <LanguageSelect collapse />
           <MenuRow label={t("bar.help")} icon={<HelpIcon size={16} />} onClick={openModal(() => showHelp())} />
-          <MenuRow label={LICENSES_LABEL} icon={<InfoIcon size={16} />} onClick={openModal(showLicenses)} />
+          <MenuRow label={t("bar.licenses")} icon={<InfoIcon size={16} />} onClick={openModal(showLicenses)} />
         </PopoverContent>
       </Popover>
     );
@@ -170,10 +173,11 @@ export function BarActions({
         </IconButton>
       )}
       <ThemeToggle mode={themeMode} next={themeNext} onCycle={cycleTheme} />
+      <LanguageSelect />
       <IconButton label={t("bar.help")} title={t("bar.helpShortcuts")} onClick={() => showHelp()}>
         <HelpIcon size={16} />
       </IconButton>
-      <IconButton label={LICENSES_LABEL} title={LICENSES_LABEL} onClick={showLicenses}>
+      <IconButton label={t("bar.licenses")} title={t("bar.licenses")} onClick={showLicenses}>
         <InfoIcon size={16} />
       </IconButton>
     </>

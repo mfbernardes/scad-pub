@@ -22,6 +22,7 @@ import {
   waitRendered as waitRenderDone,
   selectDesign as pickDesign,
   openDialog,
+  PINNED_LOCALE,
 } from "./lib/browser.mjs";
 
 const OUT_DIR = fileURLToPath(new URL("../screenshots/captures", import.meta.url));
@@ -259,6 +260,7 @@ async function main() {
         console.log(`=== ${kind} / ${theme} ===`);
         // Fresh context per theme: clean storage so the welcome popup shows again.
         const context = await browser.newContext({
+          ...PINNED_LOCALE,
           viewport: { width: vp.width, height: vp.height },
           deviceScaleFactor: vp.deviceScaleFactor,
           isMobile: vp.isMobile,

@@ -14,6 +14,7 @@ import { FriendlyFailureCard } from "./FriendlyFailureCard";
 import { IconButton } from "./IconButton";
 import { X as XIcon } from "lucide-react";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 const ICON: Record<DiagnosticLevel, string> = { notice: "ⓘ", warning: "⚠", assert: "✗" };
 /* The ⓘ/⚠/✗ glyph colour per diagnostic level (config categories may override
@@ -59,6 +60,7 @@ export function OutputConsole({
   failure,
   className,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   if (!open) return null;
 
   // One pill on the Notices tab, not one per category (a `fontnote` advisory

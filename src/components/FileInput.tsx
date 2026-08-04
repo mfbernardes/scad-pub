@@ -3,6 +3,7 @@
 import { useRef, type ReactNode } from "react";
 import { toast } from "sonner";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 interface Props {
   /** `accept` filter for the picker; omit to allow any file type. */
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function FileInput({ accept, onFile, children }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls (the read-error toast) on a locale switch
   const ref = useRef<HTMLInputElement>(null);
   return (
     <>
