@@ -40,22 +40,29 @@ export function DesignDocModal({
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!design.doc) return;
+    const doc = design.doc;
+    if (!doc) return;
     let cancelled = false;
+    // Reset from any previous fetch (e.g. a stale error surviving a tag
+    // change) since this effect reruns in place rather than remounting.
+    setText(null);
+    setError(false);
     // `docLocales` (gen-schema.mjs's buildDesigns) lists the tags this design
     // has a `<id>-doc.<tag>.md` translation for; a tag not listed (including
     // every design when the deployment ships no doc sidecars at all) falls
-    // back to the design's own authored-language `doc`. No explicit reset
-    // here: the caller keys this component on `design.id` (see App.tsx), so a
-    // design change remounts it fresh with `text`/`error` already at their
-    // initial idle values rather than needing a synchronous reset inside the
-    // effect.
-    const url = design.docLocales?.includes(tag) ? design.doc.replace(/\.md$/, `.${tag}.md`) : design.doc;
-    fetch(assetUrl(url))
-      .then((r) => {
+    // back to the design's own authored-language `doc`.
+    const localized = design.docLocales?.includes(tag);
+    const url = localized ? doc.replace(/\.md$/, `.${tag}.md`) : doc;
+    const fetchText = (u: string) =>
+      fetch(assetUrl(u)).then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.text();
-      })
+      });
+    fetchText(url)
+      // The per-locale file is listed but may still 404 (a build/asset
+      // mismatch); fall back to the authored-language doc once before
+      // surfacing the failure message.
+      .catch(() => (localized ? fetchText(doc) : Promise.reject()))
       .then((body) => {
         if (!cancelled) setText(body);
       })

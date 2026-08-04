@@ -11,6 +11,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { run } from "../scripts/i18n-status.mjs";
+import { translatableFields, coverageForTag } from "../scripts/lib/i18n-coverage.mjs";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const REPO = join(HERE, "..");
@@ -138,6 +139,45 @@ test("run(): mutating the source text after stamping surfaces a drift warning", 
   const { drift } = run({ configPath: join(src, "c.config.json") });
   assert.equal(drift.length, 1);
   assert.match(drift[0], /de translation of description may be stale/);
+});
+
+test("run(): a drift warning is reported exactly once, not once via gen-schema's own console.warn and again in the tool's report", () => {
+  const src = coverageFixture();
+  run({ configPath: join(src, "c.config.json"), stamp: true });
+  const scad = readFileSync(join(src, "d.scad"), "utf-8");
+  writeFileSync(join(src, "d.scad"), scad.replace("A little widget.", "A rather large widget."));
+
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  let result;
+  try {
+    result = run({ configPath: join(src, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  // gen-schema's own buildDesigns-time console.warn for this SAME drift is
+  // suppressed (see loadDesigns' capture/replay); the tool's own `drift`/
+  // `text` still carry it, just not doubled onto the console.
+  const driftWarnings = warnings.filter((w) => /may be stale/.test(w));
+  assert.equal(driftWarnings.length, 0, JSON.stringify(warnings));
+  assert.equal(result.drift.length, 1);
+  assert.match(result.text, /Drift warnings:/);
+  assert.match(result.text, /de translation of description may be stale/);
+});
+
+test("translatableFields: a param with @info but neither a custom label nor a description still yields a fillable info.label field", () => {
+  // design-strings.mjs accepts an `info.label` sidecar entry off `hasInfo`
+  // alone (see its own INFO_KEYS check), so a param whose bare `@info`
+  // falls back to "" here must still get a bucket/stamp, not silently drop
+  // any translation of it on the floor.
+  const fields = translatableFields({ params: [{ name: "w", info: { label: null, unit: null } }] });
+  const infoField = fields.find((f) => f.path === "params.w.info.label");
+  assert.ok(infoField, "expected a params.w.info.label field");
+  assert.equal(infoField.sourceText, "");
+  const byClass = coverageForTag(fields, "de", { params: { w: { info: { label: "Breite" } } } }, []);
+  assert.equal(byClass.params.translated, 1);
+  assert.equal(byClass.params.total, 1);
 });
 
 test("CLI --strict exits 1 when coverage is incomplete, 0 when it's complete", () => {

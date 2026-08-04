@@ -56,6 +56,7 @@ import { validateSchema } from "../src/lib/schema.ts";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
 import { colorStyle } from "../src/lib/configCss.ts";
 import { componentVersions } from "../scripts/lib/dep-versions.mjs";
+import { LOCALE_TAGS } from "../src/lib/localeRegistry.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "fixtures");
@@ -342,7 +343,7 @@ test("lang/dir default to en/ltr and pass through to the schema", () => {
 
 test("languages: omitted + a shipped 'lang' (default 'en') defaults to every registry tag, default first", () => {
   const { schema } = run("widget.config.json");
-  assert.deepEqual(schema.languages, ["en", "de"]);
+  assert.deepEqual(schema.languages, [...LOCALE_TAGS]);
 });
 
 test("languages: omitted + an unshipped 'lang' (e.g. \"fr\") defaults to a single \"en\" tag", () => {
@@ -362,10 +363,15 @@ test("languages: an explicit array is normalised to registry tags, default local
 });
 
 test("languages: an entry that isn't a shipped locale fails the build, naming the entry and the valid tags", () => {
-  assert.throws(
-    () => run("widget-languages-badtag.config.json"),
-    /'languages\[1\]' \("fr"\) is not a locale ScadPub ships a chrome translation for\.\s*\n\s*Valid tags: en, de/
-  );
+  const validTags = new RegExp(`Valid tags: ${LOCALE_TAGS.join(", ")}`);
+  assert.throws(() => run("widget-languages-badtag.config.json"), (err) => {
+    assert.match(
+      err.message,
+      /'languages\[1\]' \("fr"\) is not a locale ScadPub ships a chrome translation for\./
+    );
+    assert.match(err.message, validTags);
+    return true;
+  });
 });
 
 test("languages: omitting the deployment's default locale fails the build", () => {
@@ -5208,9 +5214,14 @@ test("the checked-in widget.scad sidecar fixture is discovered and folded into s
   assert.equal(de.designs.widget.sections.Main, "Haupt");
   assert.equal(de.designs.widget.params.style.choices.flat, "Flach");
   assert.equal(de.designs.widget.echo["Total width"], "Gesamtbreite");
-  // Written for EVERY registry tag, even one no design translated.
-  const en = JSON.parse(readFileSync(join(out, "schema", "i18n", "en.json"), "utf-8"));
-  assert.deepEqual(en, { designs: {} });
+  // Written for EVERY registry tag, even one no design translated: the
+  // fixture only ships a "de" sidecar, so every OTHER registry tag's file
+  // must still exist and come out empty.
+  for (const tag of LOCALE_TAGS) {
+    if (tag === "de") continue;
+    const bundle = JSON.parse(readFileSync(join(out, "schema", "i18n", `${tag}.json`), "utf-8"));
+    assert.deepEqual(bundle, { designs: {} });
+  }
 });
 
 test("renderHash is identical with and without a design's translation sidecar present", () => {
@@ -5242,7 +5253,10 @@ test("a translation sidecar naming an unshipped locale tag fails the build, list
   );
   assert.throws(
     () => generate({ ...i18nOutDirs("badtag"), configPath: join(src, "c.config.json") }),
-    /translation sidecar 'd\.strings\.xx\.json' names an unshipped locale tag 'xx'.*Valid tags: en, de/s
+    new RegExp(
+      `translation sidecar 'd\\.strings\\.xx\\.json' names an unshipped locale tag 'xx'.*Valid tags: ${LOCALE_TAGS.join(", ")}`,
+      "s"
+    )
   );
 });
 
@@ -5260,6 +5274,38 @@ test("a translation sidecar whose tag is a wrongly-cased shipped locale fails th
   assert.throws(
     () => generate({ ...i18nOutDirs("badcase"), configPath: join(src, "c.config.json") }),
     /translation sidecar 'd\.strings\.DE\.json' names locale tag 'DE', but sidecar tags are matched case-sensitively\. Rename it to 'd\.strings\.de\.json'\./
+  );
+});
+
+test("a translation sidecar with a wrongly-cased 'strings' infix fails the build, naming the canonical form", () => {
+  // A case-insensitive filesystem loads 'd.Strings.de.json' as if it were
+  // 'd.strings.de.json' with nothing else to say about it; on a
+  // case-sensitive one it's silently inert instead. Reject both instead of
+  // letting behaviour diverge across platforms.
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-badinfix-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.Strings.de.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("badinfix"), configPath: join(src, "c.config.json") }),
+    /translation sidecar 'd\.Strings\.de\.json' has the wrong case for 'strings'.*Rename it to 'd\.strings\.de\.json'\./
+  );
+});
+
+test("a freshness-stamp file with a wrongly-cased 'stamps' tag fails the build, naming the canonical form", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-badstamps-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.strings.STAMPS.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("badstamps"), configPath: join(src, "c.config.json") }),
+    /translation sidecar 'd\.strings\.STAMPS\.json' has the wrong case for 'stamps'.*Rename it to 'd\.strings\.stamps\.json'\./
   );
 });
 
@@ -5401,7 +5447,19 @@ test("a doc sidecar naming an unshipped locale tag fails the build, listing vali
   writeFileSync(join(src, "d.doc.xx.md"), "# D\n");
   assert.throws(
     () => generate({ ...i18nOutDirs("doc-badtag"), configPath: join(src, "c.config.json") }),
-    /doc translation 'd\.doc\.xx\.md' names an unshipped locale tag 'xx'.*Valid tags: en, de/s
+    new RegExp(
+      `doc translation 'd\\.doc\\.xx\\.md' names an unshipped locale tag 'xx'.*Valid tags: ${LOCALE_TAGS.join(", ")}`,
+      "s"
+    )
+  );
+});
+
+test("a doc sidecar with a wrongly-cased 'doc' infix fails the build, naming the canonical form", () => {
+  const src = docFixtureSrc("badinfix");
+  writeFileSync(join(src, "d.Doc.de.md"), "# D\n");
+  assert.throws(
+    () => generate({ ...i18nOutDirs("doc-badinfix"), configPath: join(src, "c.config.json") }),
+    /doc translation 'd\.Doc\.de\.md' has the wrong case for 'doc'.*Rename it to 'd\.doc\.de\.md'\./
   );
 });
 

@@ -11,7 +11,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { collapseToAvailable, bestFitLocale, LOCALE_TAGS } from "../src/lib/localeRegistry.ts";
-import { createLocaleStore, resolveInitialLocale, deriveEnabledTags } from "../src/lib/localeStore.ts";
+import {
+  createLocaleStore,
+  resolveInitialLocale,
+  deriveEnabledTags,
+  registeredLoaderTags,
+} from "../src/lib/localeStore.ts";
 import { rebind, t, overridesForLocale } from "../src/lib/i18n.ts";
 
 // A controllable promise so a test can hold a "load" pending, then resolve or
@@ -479,4 +484,14 @@ test("deriveEnabledTags: malformed languages (empty, non-array, non-string entri
   assert.deepEqual(deriveEnabledTags(null, "en"), ["en"]);
   assert.deepEqual(deriveEnabledTags([], "en"), ["en"]);
   assert.deepEqual(deriveEnabledTags(["en", 5], "en"), ["en"]);
+});
+
+// The net cost of a locale N+1 is a registry entry plus two thunk lines; this
+// pins that nothing else is required by catching a registry entry that never
+// got its loaders. `chrome` has no "en" thunk (i18n.ts imports it statically,
+// see loadChrome's own comment); `designs` covers every registry tag.
+test("registeredLoaderTags: chrome loaders cover every non-en registry tag, design loaders cover all of them", () => {
+  const { chrome, designs } = registeredLoaderTags();
+  assert.deepEqual(chrome.slice().sort(), LOCALE_TAGS.filter((tag) => tag !== "en").sort());
+  assert.deepEqual(designs.slice().sort(), LOCALE_TAGS.slice().sort());
 });

@@ -321,6 +321,19 @@ const loadDesignStrings: Record<string, () => Promise<DesignI18nFile>> = {
 };
 
 /**
+ * The tags each loader map above actually carries a thunk for, so a test can
+ * pin them against `LOCALE_TAGS` (the registry) without importing the maps
+ * themselves — adding a locale to `localeRegistry.ts` without also adding its
+ * two thunk lines here is exactly the gap this exists to catch. `chrome`
+ * excludes "en" (no dynamic thunk; i18n.ts imports it statically) the same
+ * way `loadChrome` itself does; `designs` covers every registry tag (see
+ * `loadDesignStrings`'s own doc for why "en" needs one here regardless).
+ */
+export function registeredLoaderTags(): { chrome: string[]; designs: string[] } {
+  return { chrome: Object.keys(loadChrome), designs: Object.keys(loadDesignStrings) };
+}
+
+/**
  * `enabledTags` derivation: this deployment's build-time-validated
  * `schema.languages` (scripts/lib/config-parsers.mjs's `parseLanguages`,
  * always a non-empty array of registry tags, default-locale first) when

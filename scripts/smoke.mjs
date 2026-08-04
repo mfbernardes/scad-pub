@@ -30,7 +30,7 @@ import {
 // the same way scripts/gen-schema.mjs imports it, to project a per-locale
 // `strings` override (schema.strings' object-valued form, see docs/config.md's
 // `strings` section) onto the tag the app will actually boot into.
-import { LOCALE_TAGS, collapseToAvailable, bestFitLocale } from "../src/lib/localeRegistry.ts";
+import { LOCALES, LOCALE_TAGS, collapseToAvailable, bestFitLocale } from "../src/lib/localeRegistry.ts";
 
 // Mirrors src/lib/configI18n.ts's `lx`: not imported directly, since this
 // script drives the BUILT app from outside rather than importing app source
@@ -543,6 +543,85 @@ async function checkAxe({ page, check }) {
     if (pass === 0) {
       await page.locator('.command-bar__right button[aria-label^="Switch to"]').first().click();
     }
+  }
+}
+
+// One dedicated German pass, own context (a separate `locale: "de-DE"`
+// deliberately breaks with PINNED_LOCALE, unlike every other check in this
+// file): boot language, one accessible name, the language selector, one axe
+// sweep. Kept to a single focused function/context so it adds seconds, not
+// minutes, and skipped entirely on a single-locale build (nothing to prove).
+// Every piece of German text this reads comes from src/locales/de.json or
+// localeRegistry.ts's own locale data at runtime — never retyped here, so a
+// wording change on either side can't silently desync this check from what
+// the app actually renders.
+async function checkGermanLocale({ browser, base, check, enabledTags }) {
+  if (!enabledTags.includes("de")) return;
+  console.log("=== German locale (de-DE) ===");
+  const deCatalogue = JSON.parse(
+    await readFile(fileURLToPath(new URL("../src/locales/de.json", import.meta.url)), "utf-8")
+  );
+  const deLabel = LOCALES.find((l) => l.tag === "de")?.label;
+  // A fresh context has empty storage, so there is no persisted language
+  // choice to override the browser-locale best-fit (localeStore.ts's
+  // `resolveInitialLocale`) — this alone is enough for the app to boot into
+  // German with no interaction.
+  const context = await browser.newContext({ locale: "de-DE" });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    // dismissWelcomePopup's own Escape can race a SECOND dialog its primary
+    // CTA opens (the design picker, on a config with more than one design):
+    // this context's extra locale-switch network activity (chrome + design
+    // sidecar fetches) can leave that dialog still mounting when the single
+    // Escape fires. Retry rather than assume one press lands in the window.
+    for (let i = 0; i < 10 && (await page.getByRole("dialog").count()) > 0; i++) {
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(300);
+    }
+    await waitRendered(page).catch(() => {});
+
+    // <html lang> is set at boot from a persisted choice only (index.html's
+    // inline script); with none, it flips to "de" asynchronously once
+    // localeStore's init load settles (applyLocale) — wait for that instead
+    // of racing it.
+    await page
+      .waitForFunction(() => document.documentElement.lang === "de", undefined, { timeout: 5000 })
+      .catch(() => {});
+    check((await page.getAttribute("html", "lang")) === "de", "german context: <html lang> is 'de'");
+
+    // One visible accessible name sourced from de.json: the top bar's Help
+    // icon button, unconditionally rendered by BarActions in both layouts.
+    const helpName = deCatalogue["bar.help"];
+    check(
+      (await page.getByRole("button", { name: helpName, exact: true }).count()) > 0,
+      `german context: a "${helpName}" (bar.help) accessible name is present`
+    );
+
+    // The language selector reports the German locale's own name (its
+    // trigger's title is i18n.ts's t("lang.current", {name}), templated here
+    // from de.json's own copy of that key rather than assumed).
+    const expectedTitle = deCatalogue["lang.current"]?.replace("{name}", deLabel ?? "");
+    const selectorTitle = await page.locator(".lang-select").first().getAttribute("title");
+    check(
+      !!deLabel && selectorTitle === expectedTitle,
+      `german context: language selector reports "${deLabel}" (got "${selectorTitle}")`
+    );
+
+    await injectAxe(page);
+    const axeRes = await page.evaluate(async () =>
+      window.axe.run(document, {
+        resultTypes: ["violations"],
+        runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
+      })
+    );
+    const serious = axeRes.violations.filter((v) => ["serious", "critical"].includes(v.impact));
+    for (const v of serious)
+      console.log(`  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node(s))`);
+    check(serious.length === 0, `german context axe: ${serious.length} serious/critical violation(s)`);
+  } finally {
+    await context.close();
   }
 }
 
@@ -2408,6 +2487,7 @@ const OWN_CONTEXT_CHECKS = [
   checkNothingOffscreen,
   checkSheetFocusTrap,
   checkDialogFocusEntry,
+  checkGermanLocale,
 ];
 
 async function main() {
@@ -2486,7 +2566,20 @@ async function main() {
     };
     console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);
 
-    const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName, labels, lx };
+    const ctx = {
+      page,
+      browser,
+      check,
+      base,
+      dir,
+      schema,
+      ids,
+      presetsTabName,
+      paramsTabName,
+      labels,
+      lx,
+      enabledTags,
+    };
     // The popup is cleared BEFORE the first render wait, and the order is
     // load-bearing: a `picker` popup IS the design chooser, and App holds the
     // whole render path back while it owns the first screen (useRenderPipeline's
