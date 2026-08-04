@@ -570,7 +570,10 @@ test("strings: a per-locale object value lands in the schema verbatim", () => {
 test("strings: a per-locale object value naming a locale outside this deployment's languages fails the build", () => {
   assert.throws(
     () => run("widget-strings-locale-badtag.config.json"),
-    /'strings\.action\.export' has an entry for locale "fr", which isn't one of this deployment's enabled locales\.\s*\n\s*Valid tags: en, de/
+    // The fixture omits `languages`, so the enabled set is the real registry.
+    new RegExp(
+      `'strings\\.action\\.export' has an entry for locale "fr", which isn't one of this deployment's enabled locales\\.\\s*\\n\\s*Valid tags: ${LOCALE_TAGS.join(", ")}`
+    )
   );
 });
 
