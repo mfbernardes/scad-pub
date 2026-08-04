@@ -25,13 +25,15 @@ export const emptyMetrics: RenderMetrics = { last: null, slowest: null };
 /** "214 ms" under a second, "4.2 s" at or above it. Only feeds the Output
  *  console's Metrics tab — renderStatus.ts's own "{ms} ms" digits stay raw
  *  and locale-invariant on purpose, since scripts/smoke.mjs matches them with
- *  a plain /\d+ ms/ regex. */
+ *  a plain /\d+ ms/ regex. `useGrouping: false`: a duration is a technical
+ *  readout, not prose — formatNumber's default grouping would render a
+ *  4-digit ms count as "1,234 ms". */
 export function formatDuration(ms: number): string {
   return ms >= 1000
     ? t("metrics.durationSeconds", {
-        n: formatNumber(ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+        n: formatNumber(ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }),
       })
-    : t("metrics.durationMs", { n: formatNumber(Math.round(ms)) });
+    : t("metrics.durationMs", { n: formatNumber(Math.round(ms), { useGrouping: false }) });
 }
 
 /**

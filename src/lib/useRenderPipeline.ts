@@ -251,8 +251,14 @@ export function useRenderPipeline({
         if (r.ok && !r.cached && r.ms > heavyMs && autoRenderRef.current) {
           setAutoRender(false);
           setAnnouncement(
+            // useGrouping: false — a duration readout, not prose (see
+            // renderMetrics.ts's formatDuration for the same reasoning).
             t("render.autoPaused", {
-              seconds: formatNumber(r.ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+              seconds: formatNumber(r.ms / 1000, {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+                useGrouping: false,
+              }),
             })
           );
         }

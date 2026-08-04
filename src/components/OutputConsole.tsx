@@ -172,8 +172,9 @@ export function OutputConsole({
                   <div className="flex gap-1">
                     <dt className="text-muted-foreground">{t("metrics.lastRender")}</dt>
                     <dd className="m-0 text-foreground">
-                      {formatDuration(metrics.last.ms)}
-                      {metrics.last.cached ? t("metrics.cachedSuffix") : ""}
+                      {metrics.last.cached
+                        ? t("metrics.cachedDuration", { duration: formatDuration(metrics.last.ms) })
+                        : formatDuration(metrics.last.ms)}
                     </dd>
                   </div>
                   {metrics.slowest && (
