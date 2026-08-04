@@ -11,9 +11,10 @@
 // ReviewDialog. Pure derivation aside from the Review dialog's own open/closed
 // bit and the Download click's exportModel call: no layout, no DOM.
 import { useCallback, useMemo, useState } from "react";
-import type { Design, NoticeCategory, RenderResult } from "../openscad/types";
+import type { LocalizedDesign, RawNoticeCategory, RenderResult } from "../openscad/types";
 import type { Values } from "./presets";
 import { parseDiagnostics, countBadges, type Diagnostic, type BadgeCount } from "./diagnostics";
+import { lxNotice } from "./configI18n";
 import {
   deriveAttention,
   readinessState,
@@ -30,13 +31,16 @@ import { useLocale } from "./localeStore";
 const EMPTY_LOG: string[] = [];
 
 export interface UseReadinessModelArgs {
-  design: Design;
+  design: LocalizedDesign;
   /** The live control values (not the values behind the last render: a
    *  missing-font warning should track what's selected right now). */
   values: Values;
   result: RenderResult | null;
-  /** The config's notice categories (schema.notices). */
-  notices: NoticeCategory[];
+  /** The config's notice categories (schema.notices): raw, since a category's
+   *  `label` is `LocalizableText`. Projected to plain strings (`lxNotice`) in
+   *  this hook's own `notices` memo below, ahead of every consumer
+   *  (diagnostics.ts/readiness.ts, whose signatures stay plain-string). */
+  notices: RawNoticeCategory[];
   /**
    * Normalised (see fonts.ts's `normalizeFamily`) family names the renderer
    * can actually use right now: bundled ∪ imported. Computed in AppShell
@@ -87,9 +91,13 @@ export function useReadinessModel({
   // OTHER inputs changed.
   const { tag } = useLocale();
   const log = result?.log ?? EMPTY_LOG;
-  // Memoized so a config without `notices` doesn't hand a fresh `[]` to the
-  // useMemo hooks below on every render.
-  const notices = useMemo(() => rawNotices ?? [], [rawNotices]);
+  // Projects each category's `label` to plain strings for the active locale
+  // (lxNotice) so every consumer below — parseDiagnostics/countBadges
+  // (diagnostics.ts) and deriveAttention (readiness.ts) via
+  // noticeAttentionInputs — keeps its existing plain-string `NoticeCategory`
+  // signature. `tag`: a config without per-locale labels still needs no
+  // re-projection, but one that DOES must re-run this on a locale switch.
+  const notices = useMemo(() => (rawNotices ?? []).map((n) => lxNotice(n, tag)), [rawNotices, tag]);
 
   // Parse the log once here; the OutputConsole (Notices tab count chips) reads
   // this derived data instead of re-parsing it.

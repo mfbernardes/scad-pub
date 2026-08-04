@@ -66,6 +66,17 @@ Every one is opt-in.
 - **`acceptsString`** — a field that accepts either a plain string or an object with no fixed
   key set (`designs[].presets.images`: a directory path, or a preset-name -> path map).
   Emitted as an `anyOf` of the primitive and object forms, distinct from `mapValue` above.
+- **`localizable`** — a `LocalizableText`-valued leaf (docs/config.md's "Localizing config
+  text"): a plain string that shows for every locale, or an object of locale tag -> string.
+  Set by the `localizable()` factory, which also sets `custom: true` (config-parsers.mjs's
+  `parseLocalizableText` needs this deployment's resolved `languages`/default tag — not
+  something a generic `applyGroupSpec` field descriptor has access to — so the field's own
+  parser, not `applyGroupSpec`, validates the raw value). `gen-config-schema.mjs`'s
+  `nodeToSchema` reads the marker on its own, ahead of `custom`'s usual plain-`"string"`
+  emission, and produces the same string-or-locale-map `anyOf` shape `mapValue` (`strings`)
+  emits by hand — the two exist side by side because `mapValue` describes a dynamically-keyed
+  *container* whose values share one shape, while `localizable` describes one ordinary FIELD
+  whose own value is that shape.
 
 ## Validating `designs.json` at runtime (`src/lib/schema.ts`)
 

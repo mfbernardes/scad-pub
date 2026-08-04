@@ -1927,7 +1927,7 @@ test("parseLicenses validates shape and required fields", () => {
           note: 5,
         },
       ]),
-    /'licenses\[0\]\.note' must be a string/
+    /'licenses\[0\]\.note' must be a non-empty string, or an object of locale tag: string pairs/
   );
 });
 
@@ -1959,7 +1959,7 @@ test("parseFileImport: true/object, defaults and errors", () => {
   assert.throws(() => parseFileImport([]), /'fileImport' must be true/);
   assert.throws(
     () => parseFileImport({ note: 5 }),
-    /'fileImport\.note', when set, must be a non-empty string/
+    /'fileImport\.note' must be a non-empty string, or an object of locale tag: string pairs/
   );
   // Blank/whitespace-only is rejected; what's kept is trimmed.
   assert.throws(
@@ -2313,6 +2313,59 @@ test("fileImport.noteFile: the referenced file's contents become 'note'", () => 
   const { schema } = run("widget-fileimport-file.config.json");
   assert.equal(schema.fileImport.note, "Import a font or SVG here.");
   assert.equal("noteFile" in schema.fileImport, false);
+});
+
+// Full-build LocalizableText coverage: popup (incl. a per-locale bodyFile —
+// this is also the load-bearing Risk-3 guard for generate()'s parseIdentity
+// -> resolveProseFields reorder, since resolving a per-locale bodyFile needs
+// LANGUAGES already resolved), notices[].label, licenses[].note,
+// designs[].label/group, and help (title/intro/tabs[].label/sections).
+test("LocalizableText: a full build resolves every touched field to its per-locale object form", () => {
+  const { schema } = run("widget-prose-i18n.config.json");
+  assert.deepEqual(schema.popup.header, { en: "Welcome", de: "Willkommen" });
+  assert.deepEqual(schema.popup.body, {
+    en: "Configure a widget and export a model. Nothing is uploaded.",
+    de: "Konfiguriere ein Widget und exportiere ein Modell. Nichts wird hochgeladen.",
+  });
+  assert.equal("bodyFile" in schema.popup, false);
+  assert.deepEqual(schema.popup.button, { en: "Start", de: "Los geht's" });
+  assert.deepEqual(schema.popup.footnote, {
+    en: "Runs in your browser.",
+    de: "Läuft in deinem Browser.",
+  });
+  assert.deepEqual(schema.notices[0].label, {
+    one: { en: "alert", de: "Warnung" },
+    other: { en: "alerts", de: "Warnungen" },
+  });
+  assert.deepEqual(schema.licenses[0].note, {
+    en: "Bundled helper geometry.",
+    de: "Gebündelte Hilfsgeometrie.",
+  });
+  assert.deepEqual(schema.designs[0].label, { en: "Widget", de: "Gerät" });
+  assert.deepEqual(schema.designs[0].group, { en: "Tools", de: "Werkzeuge" });
+  assert.deepEqual(schema.help.title, { en: "User guide", de: "Anleitung" });
+  assert.deepEqual(schema.help.intro, { en: "Shared intro.", de: "Gemeinsame Einleitung." });
+  assert.equal(schema.help.tabs[0].id, "start");
+  assert.deepEqual(schema.help.tabs[0].label, { en: "Getting started", de: "Erste Schritte" });
+  assert.deepEqual(schema.help.tabs[0].sections[0].title, { en: "Step 1", de: "Schritt 1" });
+  assert.deepEqual(schema.help.tabs[0].sections[0].body, {
+    en: "Pick a design.",
+    de: "Wähle ein Design.",
+  });
+});
+
+test("LocalizableText: an object entry naming a locale outside 'languages' fails the build", () => {
+  assert.throws(
+    () => run("widget-prose-i18n-bad-tag.config.json"),
+    /'popup\.header' has an entry for locale "fr", which isn't one of this deployment's enabled locales/
+  );
+});
+
+test("LocalizableText: an object missing the deployment's default-locale entry fails the build", () => {
+  assert.throws(
+    () => run("widget-prose-i18n-missing-default.config.json"),
+    /'popup\.header' must include an entry for "en", this deployment's default locale/
+  );
 });
 
 // resolveFileField backs popup.bodyFile / fileImport.noteFile /

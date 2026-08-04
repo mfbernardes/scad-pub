@@ -65,6 +65,7 @@ import {
   parseLang,
   parseLanguages,
   parseLicenses,
+  parseLocalizableText,
   parseNotices,
   parsePopup,
   parsePwa,
@@ -90,6 +91,7 @@ export {
   parseLang,
   parseLanguages,
   parseLicenses,
+  parseLocalizableText,
   parseNotices,
   parsePopup,
   parsePwa,
@@ -517,7 +519,7 @@ const checkScadFile = (file, id) => {
 };
 
 // The design list from the config, or auto-discovered root .scad files.
-function resolveDesignList(config, SOURCE) {
+function resolveDesignList(config, SOURCE, languages, defaultTag) {
   // Shared validator for a config `designs[].presets.images` map entry: an
   // object mapping string keys to non-empty string values. The per-key
   // cross-check (real bundled preset names) happens later in buildDesigns,
@@ -594,12 +596,12 @@ function resolveDesignList(config, SOURCE) {
       applyGroupSpec(d.presets ?? {}, CONFIG_SPEC.designs.items.properties.presets, `designs[${id}].presets`);
       return {
         id,
-        label: d.label ?? humanize(d.id),
+        label: d.label != null ? parseLocalizableText(d.label, `designs[${id}].label`, languages, defaultTag) : humanize(d.id),
         file: checkScadFile(d.file ?? `${d.id}.scad`, id),
         // Heavy designs skip the debounced auto-render (the user renders on demand).
         heavy: d.heavy ?? false,
         // Optional dropdown grouping header (designs sharing a group cluster).
-        group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
+        group: d.group != null ? parseLocalizableText(d.group, `designs[${id}].group`, languages, defaultTag) : null,
         presetImagesSrc: checkPresetImages(d.presets?.images, id),
       };
     });
@@ -711,13 +713,13 @@ function resolvePresetImages({
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
-function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register }) {
+function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register, languages, defaultTag }) {
   // designDir -> Set of every design's sidecar base seen in that directory,
   // collected below as each design is processed; used after the .map() to
   // find sidecar-SHAPED files that match no design at all (see the orphan
   // scan below).
   const sidecarBasesByDir = new Map();
-  const designs = resolveDesignList(config, SOURCE).map(({ presetImagesSrc, ...d }) => {
+  const designs = resolveDesignList(config, SOURCE, languages, defaultTag).map(({ presetImagesSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
@@ -1023,31 +1025,129 @@ function checkAssetCoverage(designs, walkedByDesign, assets) {
 // `intro`, and each `##` heading after that becomes a `{ title, body }`
 // section. Setting `file` alongside `sections` or `intro` fails the build,
 // naming both keys. A pane with no `file` passes through unchanged.
-function resolveHelpPane(raw, CONFIG_DIR, mustExist, what) {
+//
+// `file` also accepts an object of locale tag -> path (when `languages` is
+// passed): each locale's file is split independently, then stitched into
+// `LocalizableText` `intro`/`sections[].title`/`sections[].body` values — one
+// map entry per locale that supplied a file. Every locale's file must split
+// into the SAME NUMBER of `##` sections, in the same order, so a section's
+// per-locale title/body line up positionally; a locale's own missing intro
+// (nothing before its first `##`) only survives into the map when the
+// DEFAULT locale's file has one too (see the comment at that check) — the
+// simplest rule that keeps `intro`'s object form satisfying
+// `parseLocalizableText`'s own "must include defaultTag" invariant without
+// forcing every locale to write introductory prose.
+function resolveHelpPane(raw, CONFIG_DIR, mustExist, what, languages, defaultTag) {
   if (raw?.file == null) return raw;
-  // Validate BEFORE resolving: same shape as prose-files.mjs's resolveFileField
-  // (this is the same "<field>File" idiom, but with `sections` synthesized
-  // from Markdown instead of a single string). A non-string or blank value
-  // must fail with the usual optional-string message, not escape as a raw
-  // Node TypeError out of node:path's resolve() below.
-  if (typeof raw.file !== "string" || !raw.file.trim())
-    throw optionalStringFieldError(`${what}.file`);
-  const file = raw.file.trim();
+  const fileVal = raw.file;
   if (raw.sections != null)
     throw new Error(`gen-schema: both '${what}.sections' and '${what}.file' are set — remove one.`);
   if (raw.intro != null)
     throw new Error(`gen-schema: both '${what}.intro' and '${what}.file' are set — remove one.`);
-  const abs = mustExist(resolve(CONFIG_DIR, file), `${what}.file '${file}'`);
-  const { intro, sections } = splitHelpMarkdown(readFileSync(abs, "utf-8"));
+
+  const readAndSplit = (rel, errPath) => {
+    // Validate BEFORE resolving: same shape as prose-files.mjs's
+    // resolveFileField. A non-string or blank value must fail with the usual
+    // optional-string message, not escape as a raw Node TypeError out of
+    // node:path's resolve() below.
+    if (typeof rel !== "string" || !rel.trim()) throw optionalStringFieldError(errPath);
+    const file = rel.trim();
+    const abs = mustExist(resolve(CONFIG_DIR, file), `${errPath} '${file}'`);
+    return splitHelpMarkdown(readFileSync(abs, "utf-8"));
+  };
+
   const { file: _file, ...rest } = raw;
-  return { ...rest, ...(intro ? { intro } : {}), sections };
+
+  if (typeof fileVal === "string") {
+    const { intro, sections } = readAndSplit(fileVal, `${what}.file`);
+    return { ...rest, ...(intro ? { intro } : {}), sections };
+  }
+  if (fileVal && typeof fileVal === "object" && !Array.isArray(fileVal)) {
+    if (!languages)
+      throw new Error(
+        `gen-schema: '${what}.file' must be a file path (this field doesn't support per-locale forms)`
+      );
+    const entries = Object.entries(fileVal);
+    if (entries.length === 0)
+      throw new Error(`gen-schema: '${what}.file' must have at least one locale entry`);
+    const tags = new Set(languages);
+    const perTag = {};
+    for (const [tag, rel] of entries) {
+      if (!tags.has(tag))
+        throw new Error(
+          `gen-schema: '${what}.file' has an entry for locale "${tag}", which isn't one of this ` +
+            `deployment's enabled locales.\n  Valid tags: ${[...tags].join(", ")}`
+        );
+      perTag[tag] = readAndSplit(rel, `${what}.file.${tag}`);
+    }
+    if (!(defaultTag in perTag))
+      throw new Error(
+        `gen-schema: '${what}.file' must include an entry for "${defaultTag}", this deployment's default locale`
+      );
+    const tagList = Object.keys(perTag);
+    const sectionCount = perTag[defaultTag].sections.length;
+    for (const tag of tagList) {
+      if (perTag[tag].sections.length !== sectionCount)
+        throw new Error(
+          `gen-schema: '${what}.file' locale "${tag}" splits into ${perTag[tag].sections.length} section(s) ` +
+            `from its '##' headings, but "${defaultTag}" splits into ${sectionCount} — every locale's file ` +
+            `must split into the same number of sections, in the same order`
+        );
+    }
+    const intro = perTag[defaultTag].intro
+      ? Object.fromEntries(tagList.filter((tag) => perTag[tag].intro).map((tag) => [tag, perTag[tag].intro]))
+      : null;
+    const sections = Array.from({ length: sectionCount }, (_, i) => ({
+      title: Object.fromEntries(tagList.map((tag) => [tag, perTag[tag].sections[i].title])),
+      body: Object.fromEntries(tagList.map((tag) => [tag, perTag[tag].sections[i].body])),
+    }));
+    return { ...rest, ...(intro ? { intro } : {}), sections };
+  }
+  throw optionalStringFieldError(`${what}.file`);
+}
+
+// Apply the build-only `LocalizableText` invariants (an object-form value's
+// tags must be ⊆ `languages` and include `defaultTag`; see
+// `parseLocalizableText`) to every leaf `resolveHelp`'s loose `checkHelpShape`
+// pass already confirmed is string-or-locale-map-shaped, and trims each. Runs
+// AFTER checkHelpShape (see `resolveHelp`) so a structurally malformed `help`
+// (missing sections, a non-object tab, …) still gets checkHelpShape's own
+// message rather than a confusing one from here.
+function localizeHelpSection(s, what, languages, defaultTag) {
+  return {
+    title: parseLocalizableText(s.title, `${what}.title`, languages, defaultTag, { required: true }),
+    body: parseLocalizableText(s.body, `${what}.body`, languages, defaultTag, { required: true }),
+  };
+}
+
+function localizeHelpContent(help, languages, defaultTag) {
+  const out = { ...help };
+  if (out.title !== undefined) out.title = parseLocalizableText(out.title, "help.title", languages, defaultTag);
+  if (out.intro !== undefined) out.intro = parseLocalizableText(out.intro, "help.intro", languages, defaultTag);
+  if (Array.isArray(out.sections))
+    out.sections = out.sections.map((s, i) =>
+      localizeHelpSection(s, `help.sections[${i}]`, languages, defaultTag)
+    );
+  if (Array.isArray(out.tabs))
+    out.tabs = out.tabs.map((tab, i) => {
+      const what = `help.tabs[${i}]`;
+      const t = {
+        ...tab,
+        label: parseLocalizableText(tab.label, `${what}.label`, languages, defaultTag, { required: true }),
+      };
+      if (t.intro !== undefined) t.intro = parseLocalizableText(t.intro, `${what}.intro`, languages, defaultTag);
+      t.sections = t.sections.map((s, j) => localizeHelpSection(s, `${what}.sections[${j}]`, languages, defaultTag));
+      return t;
+    });
+  return out;
 }
 
 // Optional `help` config block, with any `file` (top-level, or per-tab)
 // resolved to its derived `intro`/`sections` first, see resolveHelpPane
 // above. Everything else about `help` is passed through verbatim (see
-// CONFIG_SPEC.help's comment): this is the only pre-processing it gets.
-export function resolveHelp(raw, CONFIG_DIR, mustExist) {
+// CONFIG_SPEC.help's comment) apart from the `LocalizableText` normalisation
+// `localizeHelpContent` applies at the end.
+export function resolveHelp(raw, CONFIG_DIR, mustExist, languages, defaultTag) {
   if (raw == null) return null;
   // `help`'s contents are passed through verbatim (see CONFIG_SPEC.help's
   // comment), but its SHAPE is checked here like every other block: a
@@ -1058,7 +1158,7 @@ export function resolveHelp(raw, CONFIG_DIR, mustExist) {
     throw new Error(
       `gen-schema: 'help', when set, must be an object (got ${JSON.stringify(raw)})`
     );
-  const help = resolveHelpPane(raw, CONFIG_DIR, mustExist, "help");
+  const help = resolveHelpPane(raw, CONFIG_DIR, mustExist, "help", languages, defaultTag);
   const resolved = Array.isArray(help.tabs)
     ? {
         ...help,
@@ -1067,7 +1167,7 @@ export function resolveHelp(raw, CONFIG_DIR, mustExist) {
             throw new Error(
               `gen-schema: 'help.tabs[${i}]' must be an object (got ${JSON.stringify(tab)})`
             );
-          return resolveHelpPane(tab, CONFIG_DIR, mustExist, `help.tabs[${i}]`);
+          return resolveHelpPane(tab, CONFIG_DIR, mustExist, `help.tabs[${i}]`, languages, defaultTag);
         }),
       }
     : help;
@@ -1082,7 +1182,7 @@ export function resolveHelp(raw, CONFIG_DIR, mustExist) {
       `gen-schema: ${msg}\n  (the app rejects this at startup, so it would fail the deployed site)`
     );
   });
-  return resolved;
+  return localizeHelpContent(resolved, languages, defaultTag);
 }
 
 // Optional raw-CSS escape hatch. Unlike `colors` — a safe, validated token map
@@ -1224,7 +1324,13 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
 // annotation, whose resolved Markdown IS served as a file).
 //
 // Mutates `config` in place, which is what the parsers downstream read.
-function resolveProseFields(config, CONFIG_DIR, mustExist) {
+// `languages`/`defaultTag` (this deployment's resolved locale set — see
+// parseIdentity, which MUST run before this: that's why generate() resolves
+// identity first) let `popup.bodyFile`/`fileImport.noteFile` accept the
+// per-locale map form (resolveFileField, above); `licenses[].textFile` is
+// deliberately NOT passed them — license text stays single-language (see
+// SoftwareLicense's own comment).
+function resolveProseFields(config, CONFIG_DIR, mustExist, languages, defaultTag) {
   if (config.popup)
     config.popup = resolveFileField({
       obj: config.popup,
@@ -1233,6 +1339,8 @@ function resolveProseFields(config, CONFIG_DIR, mustExist) {
       CONFIG_DIR,
       mustExist,
       path: "popup",
+      languages,
+      defaultTag,
     });
   if (config.fileImport && typeof config.fileImport === "object" && !Array.isArray(config.fileImport))
     config.fileImport = resolveFileField({
@@ -1242,6 +1350,8 @@ function resolveProseFields(config, CONFIG_DIR, mustExist) {
       CONFIG_DIR,
       mustExist,
       path: "fileImport",
+      languages,
+      defaultTag,
     });
   if (Array.isArray(config.licenses))
     config.licenses = config.licenses.map((entry, i) =>
@@ -1305,6 +1415,11 @@ function checkAfterExportHelpTab(UI, HELP) {
 // this deployment's resolved `languages` (parseIdentity, above): STRINGS'
 // per-locale object values are validated against it.
 function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE, LANGUAGES) {
+  // The deployment's resolved default locale (parseLanguages always puts it
+  // first, see its own comment): every `LocalizableText` field below
+  // (popup/fileImport.note/notices[].label/licenses[].note/help) requires an
+  // object-form value to carry this tag's entry, see `parseLocalizableText`.
+  const DEFAULT_TAG = LANGUAGES[0];
   // `features`/`format`/`fonts`/`fontFallback` now live under `render` (moved
   // in from the top level): they're genuine render inputs, so they stay
   // folded into renderHash below exactly as before; only their config PATH
@@ -1343,21 +1458,21 @@ function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE, LANGUAGES) {
   const SHORT_NAME = PWA.shortName ?? TITLE;
   // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
   // Absent -> null -> no import button.
-  const FILE_IMPORT = parseFileImport(config.fileImport);
+  const FILE_IMPORT = parseFileImport(config.fileImport, LANGUAGES, DEFAULT_TAG);
 
   // Optional one-off notice dialog shown over the app on load. Validated; absent
   // -> null -> no popup.
-  const POPUP = parsePopup(config.popup);
+  const POPUP = parsePopup(config.popup, LANGUAGES, DEFAULT_TAG);
   // Optional help content; passed through verbatim (any `file` resolved to
   // its derived intro/sections first, see resolveHelp). Absent -> null ->
   // the app falls back to its generic, project-agnostic default help.
-  const HELP = resolveHelp(config.help, CONFIG_DIR, mustExist);
+  const HELP = resolveHelp(config.help, CONFIG_DIR, mustExist, LANGUAGES, DEFAULT_TAG);
   // Config-driven notice categories surfaced on the OpenSCAD output panel.
   // Validated; off by default (omitted -> none).
-  const NOTICES = parseNotices(config.notices);
+  const NOTICES = parseNotices(config.notices, LANGUAGES, DEFAULT_TAG);
   // Optional extra third-party software / license notices. Validated and
   // appended (never replacing the built-ins) by the in-app licenses modal.
-  const LICENSES_EXTRA = parseLicenses(config.licenses);
+  const LICENSES_EXTRA = parseLicenses(config.licenses, LANGUAGES, DEFAULT_TAG);
   // Optional per-deployment UI text overrides (config's `strings` key),
   // validated against the bundled English catalogue's key set and (for a
   // per-locale object value) this deployment's own LANGUAGES, see
@@ -1609,9 +1724,17 @@ export function generate({
   // Everything in the config is resolved relative to the config file's directory.
   const CONFIG_DIR = dirname(configPath);
 
-  resolveProseFields(config, CONFIG_DIR, mustExist);
-
+  // Identity FIRST, prose fields SECOND: resolveProseFields' `bodyFile`/
+  // `noteFile` pre-pass now accepts a per-locale map (see prose-files.mjs's
+  // resolveFileField), which needs this deployment's resolved `languages`/
+  // default tag — LANGUAGES only exists once parseIdentity has run. Every
+  // downstream localizable field (popup/fileImport.note/notices[].label/
+  // licenses[].note/designs[].label,group/help) is threaded the same
+  // DEFAULT_TAG (LANGUAGES[0], see parseConfigBlocks) from here on.
   const { TITLE, ID, DESCRIPTION, LANG, DIR, LANGUAGES } = parseIdentity(config);
+  const DEFAULT_TAG = LANGUAGES[0];
+
+  resolveProseFields(config, CONFIG_DIR, mustExist, LANGUAGES, DEFAULT_TAG);
 
   // `source` defaults to "." (designs live beside the config); set it to point
   // elsewhere (e.g. "examples", a sibling checkout, or an absolute path).
@@ -1699,6 +1822,8 @@ export function generate({
     relPosix,
     copyAsset,
     register: registry.register,
+    languages: LANGUAGES,
+    defaultTag: DEFAULT_TAG,
   });
   const defaultDesign = resolveDefaultDesign(config, designs);
   checkPopupMode(POPUP, designs);

@@ -5,7 +5,7 @@
 // initial designs.json to keep that lean) and rendered through the same safe
 // Markdown subset: now including `#`/`##`/`###` headings.
 import { useEffect, useState } from "react";
-import type { Design } from "../openscad/types";
+import type { LocalizedDesign } from "../openscad/types";
 import { assetUrl } from "../lib/assetUrl";
 import { cn } from "../lib/utils";
 import { Modal, MODAL_BODY } from "./Modal";
@@ -30,7 +30,7 @@ export function DesignDocModal({
   design,
   onClose,
 }: {
-  design: Design;
+  design: LocalizedDesign;
   onClose: () => void;
 }) {
   useLocale(); // subscription only: re-render this component's t() calls on a locale switch

@@ -7,6 +7,7 @@ import { safeUrl } from "../lib/safeUrl";
 import { Modal, MODAL_BODY, MODAL_INTRO } from "./Modal";
 import { t } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
+import { lxOpt } from "../lib/configI18n";
 
 export function LicensesModal({
   versions,
@@ -25,8 +26,14 @@ export function LicensesModal({
   extra?: SoftwareLicense[];
   onClose: () => void;
 }) {
-  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
-  const all = mergeLicenses(licenseList(versions), extra);
+  const { tag } = useLocale();
+  // Project `note` (the only localizable field a config `licenses[]` entry
+  // carries — see `SoftwareLicense`'s own comment) to a plain string BEFORE
+  // merging, so `mergeLicenses`/`combineNotes` (src/lib/licenses.ts) keep
+  // their existing plain-string contract, shared with the built-in entries
+  // `licenseList()` itself already returns resolved.
+  const localizedExtra = extra.map((l) => ({ ...l, note: lxOpt(l.note, tag) }));
+  const all = mergeLicenses(licenseList(versions), localizedExtra);
   return (
     <Modal title={t("bar.licenses")} onClose={onClose}>
       <p className={MODAL_INTRO}>

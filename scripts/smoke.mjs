@@ -32,6 +32,19 @@ import {
 // `strings` section) onto the tag the app will actually boot into.
 import { LOCALE_TAGS, collapseToAvailable, bestFitLocale } from "../src/lib/localeRegistry.ts";
 
+// Mirrors src/lib/configI18n.ts's `lx`: not imported directly, since this
+// script drives the BUILT app from outside rather than importing app source
+// (same reason `uiText`'s `strings` projection below is hand-mirrored rather
+// than importing i18n.ts). Projects a `LocalizableText` config value (a
+// design's `label`/`group`, or a `popup` field) to a plain string for `tag`,
+// falling back to `defaultTag`'s entry; a plain string passes through
+// unchanged either way, so every call site below stays correct whether or
+// not the config being smoke-tested localizes that particular field.
+function lxAt(v, tag, defaultTag) {
+  if (v == null || typeof v === "string") return v;
+  return v[tag] ?? v[defaultTag] ?? "";
+}
+
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
 // means it may be shut, so click the Output bell when it's not already open.
@@ -114,17 +127,20 @@ async function selectDesign(page, id) {
 // "Don't show this again" checkbox). `mode` alone is the whole answer:
 // gen-schema's checkPopupMode refuses to build a "picker" config with fewer
 // than two designs, so there is no single-design fallback shape to derive.
-async function checkWelcomePopup({ page, check, schema }) {
+async function checkWelcomePopup({ page, check, schema, lx }) {
   console.log("=== welcome popup ===");
   if (schema.popup) {
-    const popup = page.getByRole("dialog", { name: schema.popup.header });
+    const header = lx(schema.popup.header);
+    const body = lx(schema.popup.body);
+    const footnote = lx(schema.popup.footnote);
+    const popup = page.getByRole("dialog", { name: header });
     check((await popup.count()) > 0, "welcome popup shown on load");
-    if (/\]\(/.test(schema.popup.body ?? "")) {
+    if (/\]\(/.test(body ?? "")) {
       check((await popup.getByRole("link").count()) > 0, "popup body renders its link");
     }
-    if (schema.popup.footnote) {
+    if (footnote) {
       check(
-        (await popup.getByText(schema.popup.footnote, { exact: true }).count()) > 0,
+        (await popup.getByText(footnote, { exact: true }).count()) > 0,
         "popup renders its configured footnote"
       );
     }
@@ -154,13 +170,13 @@ async function checkWelcomePopup({ page, check, schema }) {
       const card = popup.locator("button[data-design]").first();
       check((await card.count()) > 0, "picker popup shows selectable design cards");
       await closeAndProbe(() => card.click());
-      await waitDialogClosed(page, schema.popup.header).catch(() => {});
+      await waitDialogClosed(page, header).catch(() => {});
       check((await page.getByRole("dialog").count()) === 0, "picking a design card dismisses the popup");
     } else {
       // Non-picker modes show a config-driven primary button (schema.popup.button)
       // that dismisses the popup and, when there's more than one design, opens
       // the design picker so the next step is obvious.
-      const buttonLabel = schema.popup.button ?? "OK";
+      const buttonLabel = lx(schema.popup.button) ?? "OK";
       const cta = popup.getByRole("button", { name: buttonLabel, exact: true });
       check((await cta.count()) > 0, `popup shows its configured button "${buttonLabel}"`);
       const dontShow = popup.getByRole("checkbox");
@@ -172,7 +188,7 @@ async function checkWelcomePopup({ page, check, schema }) {
       // handle afterward.
       if (opensPicker) await cta.click();
       else await closeAndProbe(() => cta.click());
-      await waitDialogClosed(page, schema.popup.header).catch(() => {});
+      await waitDialogClosed(page, header).catch(() => {});
       // Scope this to the POPUP: with more than one design the CTA hands over
       // to the design picker, which under `ui.gallery` is itself a dialog.
       check((await popup.count()) === 0, "popup dismissed");
@@ -2410,9 +2426,6 @@ async function main() {
     const schema = JSON.parse(
       await readFile(fileURLToPath(new URL("../src/generated/designs.json", import.meta.url)), "utf-8")
     );
-    const designs = schema.designs ?? [];
-    for (const d of designs) designLabels[d.id] = d.label;
-    const ids = designs.map((d) => d.id);
     // Chrome copy comes from the i18n catalogue (src/locales/en.json), which a
     // deployment overrides per key via the config's `strings` block, so build
     // the matchers from what the app will ACTUALLY render, not from stock
@@ -2436,6 +2449,14 @@ async function main() {
     // NOT necessarily `defaultTag` — a deployment whose `languages` excludes
     // "en" boots into its own default instead, same as the app does.
     const bootTag = bestFitLocale([PINNED_LOCALE.locale], enabledTags) ?? defaultTag;
+    // Bound `lxAt` (this file's own mirror of configI18n.ts's `lx`): projects
+    // a config-authored `LocalizableText` value (a design's `label`, a
+    // `popup` field, …) to the tag this run actually boots into, same
+    // fallback rule as the app itself.
+    const lx = (v) => lxAt(v, bootTag, defaultTag);
+    const designs = schema.designs ?? [];
+    for (const d of designs) designLabels[d.id] = lx(d.label);
+    const ids = designs.map((d) => d.id);
     // A `strings` value is either a plain string (the pre-Phase-4 shape,
     // applies unconditionally) or an object of locale tag -> string (Phase
     // 4): project the latter onto `bootTag`, falling back to the built-in
@@ -2465,7 +2486,7 @@ async function main() {
     };
     console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);
 
-    const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName, labels };
+    const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName, labels, lx };
     // The popup is cleared BEFORE the first render wait, and the order is
     // load-bearing: a `picker` popup IS the design chooser, and App holds the
     // whole render path back while it owns the first screen (useRenderPipeline's

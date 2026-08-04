@@ -8,7 +8,7 @@
 // StatusStrip.tsx) rather than a row above the tabs, which also means it
 // survives this panel being collapsed to its rail.
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import type { Design } from "../openscad/types";
+import type { LocalizedDesign } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
@@ -45,7 +45,7 @@ const MAX_WIDTH = 600;
 const DEFAULT_WIDTH = 360;
 
 interface Props {
-  design: Design;
+  design: LocalizedDesign;
   values: Values;
   bundled: ParsedSet[];
   userPresets: string[];

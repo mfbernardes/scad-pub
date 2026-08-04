@@ -1,0 +1,54 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "languages": ["en", "de"],
+  "designs": [
+    {
+      "id": "widget",
+      "label": { "en": "Widget", "de": "Gerät" },
+      "group": { "en": "Tools", "de": "Werkzeuge" }
+    }
+  ],
+  "popup": {
+    "header": { "en": "Welcome", "de": "Willkommen" },
+    "bodyFile": { "en": "widget-prose-i18n-popup.en.md", "de": "widget-prose-i18n-popup.de.md" },
+    "button": { "en": "Start", "de": "Los geht's" },
+    "footnote": { "en": "Runs in your browser.", "de": "Läuft in deinem Browser." }
+  },
+  "notices": [
+    {
+      "marker": "alert",
+      "label": {
+        "one": { "en": "alert", "de": "Warnung" },
+        "other": { "en": "alerts", "de": "Warnungen" }
+      }
+    }
+  ],
+  "licenses": [
+    {
+      "name": "Acme Widget Library",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2024 Acme Corp",
+      "url": "https://example.com/acme",
+      "licenseUrl": "https://example.com/acme/LICENSE",
+      "note": { "en": "Bundled helper geometry.", "de": "Gebündelte Hilfsgeometrie." }
+    }
+  ],
+  "help": {
+    "title": { "en": "User guide", "de": "Anleitung" },
+    "intro": { "en": "Shared intro.", "de": "Gemeinsame Einleitung." },
+    "tabs": [
+      {
+        "id": "start",
+        "label": { "en": "Getting started", "de": "Erste Schritte" },
+        "sections": [
+          {
+            "title": { "en": "Step 1", "de": "Schritt 1" },
+            "body": { "en": "Pick a design.", "de": "Wähle ein Design." }
+          }
+        ]
+      }
+    ]
+  },
+  "render": { "features": [], "fonts": [] }
+}

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import schemaJson from "./generated/designs.json";
-import type { Design, ParamValue } from "./openscad/types";
+import type { LocalizedDesign, ParamValue } from "./openscad/types";
 import { validateSchema } from "./lib/schema";
 import {
   defaultsFor,
@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { t } from "./lib/i18n";
 import { localeStore, useLocale, applyLocale, getDesignStrings } from "./lib/localeStore";
 import { localizeDesign } from "./lib/designI18n";
+import { lxDesignEntry } from "./lib/configI18n";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/ui/sonner";
@@ -159,18 +160,25 @@ export default function App() {
     dismiss: dismissUpdate,
   } = useServiceWorkerUpdate();
   const [designId, setDesignId] = useState(initialState.designId);
-  // Localized to the active locale (src/lib/designI18n.ts's `localizeDesign`
-  // is a no-op, same-reference passthrough when the tag has no sidecar for
-  // this design, so an untranslated design/locale costs nothing beyond the
-  // memo's own equality check). `locale.designsGeneration` — alongside
+  // Localized to the active locale in two steps: `lxDesignEntry` (see
+  // src/lib/configI18n.ts) first projects the config-authored `label`/`group`
+  // to the active locale — the ONLY step that runs for a plain (non-object)
+  // config, so it's not a no-op the way `localizeDesign` can be — then
+  // `localizeDesign` (src/lib/designI18n.ts) applies the design's own sidecar
+  // translation (a no-op, same-reference passthrough when the tag has no
+  // sidecar for this design). `locale.designsGeneration` — alongside
   // `locale.tag` — re-runs this when the active tag's design-strings bundle
   // finishes loading even on a load that didn't change `tag` itself (the
   // default-tag init load, see localeStore.ts's own doc); every OTHER read
   // site downstream (ParamForm, paramGroups, DimensionInfo, ReviewDialog,
   // DesignPicker, …) keeps reading `design.*` unchanged, oblivious to
   // translation having happened at all.
-  const design = useMemo<Design>(
-    () => localizeDesign(schema.designs.find((d) => d.id === designId)!, getDesignStrings(designId)),
+  const design = useMemo<LocalizedDesign>(
+    () =>
+      localizeDesign(
+        lxDesignEntry(schema.designs.find((d) => d.id === designId)!, locale.tag),
+        getDesignStrings(designId)
+      ),
     // `locale.tag`/`.designsGeneration`: getDesignStrings() reads the locale
     // store's module-singleton state directly, so react-hooks can't see that
     // this call is locale-sensitive (same reasoning as ReviewDialog.tsx's own
@@ -179,13 +187,9 @@ export default function App() {
     [designId, locale.tag, locale.designsGeneration]
   );
   // The FULL design list, localized the same way, for the two pickers
-  // (PopupModal's gallery, AppShell's compact/gallery DesignPicker): only
-  // `description` (see designI18n.ts's `localizeDesign`) ever shows there.
-  // `label`/`group` are config-authored, not part of a sidecar (docs/config.md
-  // "Design translations"), so they render in the deployment's own language
-  // regardless of the active locale — unchanged by this map.
-  const localizedDesigns = useMemo<Design[]>(
-    () => schema.designs.map((d) => localizeDesign(d, getDesignStrings(d.id))),
+  // (PopupModal's gallery, AppShell's compact/gallery DesignPicker).
+  const localizedDesigns = useMemo<LocalizedDesign[]>(
+    () => schema.designs.map((d) => localizeDesign(lxDesignEntry(d, locale.tag), getDesignStrings(d.id))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [locale.tag, locale.designsGeneration]
   );
