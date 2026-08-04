@@ -53,6 +53,22 @@ function checkStringMap(
   }
 }
 
+/** Whether `v` is a valid `LocalizableText` (src/openscad/types.ts): a plain
+ *  string, or an object whose own values are all strings (a locale tag ->
+ *  string map). Doesn't check the object form's build-time invariants (must
+ *  include the default tag, every key a shipped locale) — those are
+ *  gen-schema's job (`parseLocalizableText`); this only guards the shape the
+ *  app indexes into (`src/lib/configI18n.ts`'s `lx`). `requireNonEmpty`
+ *  additionally rejects a blank string or an empty object, for a field that
+ *  was already required to be non-empty before it could carry a locale map. */
+function isLocalizableText(v: unknown, requireNonEmpty = false): boolean {
+  if (typeof v === "string") return !requireNonEmpty || v.length > 0;
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const entries = Object.values(v as Record<string, unknown>);
+  if (requireNonEmpty && entries.length === 0) return false;
+  return entries.every((x) => typeof x === "string");
+}
+
 function checkParam(p: unknown, designId: string): void {
   const where = `design '${designId}'`;
   if (!p || typeof p !== "object") fail(`${where} has a non-object param`);
@@ -85,7 +101,10 @@ function checkDesign(d: unknown): void {
   if (typeof design.id !== "string") fail("a design has no id");
   const id = design.id;
   if (typeof design.file !== "string") fail(`design '${id}' has no file`);
-  if (typeof design.label !== "string") fail(`design '${id}' has no label`);
+  if (!isLocalizableText(design.label, true))
+    fail(`design '${id}' 'label' must be a non-empty string, or an object of locale: string pairs`);
+  if (design.group != null && !isLocalizableText(design.group, true))
+    fail(`design '${id}' 'group' must be a string, or an object of locale: string pairs`);
   for (const key of ["sections", "params", "presets"] as const) {
     if (!Array.isArray(design[key])) fail(`design '${id}' '${key}' must be an array`);
   }
@@ -160,23 +179,23 @@ export function validateSchema(raw: unknown): Schema {
     if (typeof s.fileImport !== "object" || Array.isArray(s.fileImport))
       fail("'fileImport' must be an object or null");
     const fi = s.fileImport as Record<string, unknown>;
-    if (fi.note !== undefined && typeof fi.note !== "string")
-      fail("'fileImport.note' must be a string");
+    if (fi.note !== undefined && !isLocalizableText(fi.note))
+      fail("'fileImport.note' must be a string, or an object of locale: string pairs");
   }
   if (s.popup != null) {
     if (typeof s.popup !== "object" || Array.isArray(s.popup))
       fail("'popup' must be an object or null");
     const p = s.popup as Record<string, unknown>;
     for (const key of ["header", "body"] as const) {
-      if (typeof p[key] !== "string" || !p[key])
-        fail(`'popup.${key}' must be a non-empty string`);
+      if (!isLocalizableText(p[key], true))
+        fail(`'popup.${key}' must be a non-empty string, or an object of locale: string pairs`);
     }
     if (!POPUP_MODES.includes(p.mode as string))
       fail("'popup.mode' must be \"always\", \"once\", \"dismissible\" or \"picker\"");
-    if (p.button !== undefined && (typeof p.button !== "string" || !p.button))
-      fail("'popup.button', when set, must be a non-empty string");
-    if (p.footnote !== undefined && (typeof p.footnote !== "string" || !p.footnote))
-      fail("'popup.footnote', when set, must be a non-empty string");
+    if (p.button !== undefined && !isLocalizableText(p.button, true))
+      fail("'popup.button', when set, must be a non-empty string, or an object of locale: string pairs");
+    if (p.footnote !== undefined && !isLocalizableText(p.footnote, true))
+      fail("'popup.footnote', when set, must be a non-empty string, or an object of locale: string pairs");
   }
   if (s.notices !== undefined) {
     if (!Array.isArray(s.notices)) fail("'notices' must be an array");
@@ -189,8 +208,8 @@ export function validateSchema(raw: unknown): Schema {
         fail("a notice category is missing required object 'label' ({ one, other })");
       const label = e.label as Record<string, unknown>;
       for (const key of ["one", "other"] as const)
-        if (typeof label[key] !== "string" || !label[key])
-          fail(`a notice 'label.${key}' must be a non-empty string`);
+        if (!isLocalizableText(label[key], true))
+          fail(`a notice 'label.${key}' must be a non-empty string, or an object of locale: string pairs`);
       if (e.color !== undefined && typeof e.color !== "string")
         fail("a notice 'color' must be a string");
       if (e.attention !== undefined && typeof e.attention !== "boolean")

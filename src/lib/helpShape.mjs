@@ -12,8 +12,18 @@
 // cannot import TypeScript, and a contract that has to hold at build time and
 // at runtime cannot be written twice and stay one contract.
 
+// A `LocalizableText` leaf (src/openscad/types.ts's own doc): a plain string,
+// or an object whose own values are all strings (a locale tag -> string map).
+// Doesn't check the object form's build-time invariants (must include the
+// default tag, every key a shipped locale) — gen-schema's own
+// `parseLocalizableText` (scripts/lib/config-parsers.mjs) does, ahead of this
+// shape check; this only guards what `src/lib/configI18n.ts`'s `lx` indexes into.
+const isLocalizableText = (x) =>
+  typeof x === "string" ||
+  (!!x && typeof x === "object" && !Array.isArray(x) && Object.values(x).every((v) => typeof v === "string"));
+
 const isSection = (x) =>
-  !!x && typeof x === "object" && typeof x.title === "string" && typeof x.body === "string";
+  !!x && typeof x === "object" && isLocalizableText(x.title) && isLocalizableText(x.body);
 const isSectionList = (x) => Array.isArray(x) && x.every(isSection);
 
 // The id the Overview tab HelpModal synthesizes (top-level `sections`
@@ -38,8 +48,8 @@ export function checkHelpShape(help, fail) {
   if (typeof help !== "object" || Array.isArray(help))
     fail("'help' must be { title?, intro?, sections?, tabs? } or null");
   const h = /** @type {Record<string, unknown>} */ (help);
-  if (h.title !== undefined && typeof h.title !== "string") fail("'help.title' must be a string");
-  if (h.intro !== undefined && typeof h.intro !== "string") fail("'help.intro' must be a string");
+  if (h.title !== undefined && !isLocalizableText(h.title)) fail("'help.title' must be a string");
+  if (h.intro !== undefined && !isLocalizableText(h.intro)) fail("'help.intro' must be a string");
   if (h.sections !== undefined && !isSectionList(h.sections))
     fail("'help.sections' must be an array of { title, body }");
   if (h.tabs !== undefined) {
@@ -51,9 +61,9 @@ export function checkHelpShape(help, fail) {
       if (
         !raw ||
         typeof raw !== "object" ||
-        typeof (/** @type {Record<string, unknown>} */ (raw)).label !== "string" ||
+        !isLocalizableText((/** @type {Record<string, unknown>} */ (raw)).label) ||
         ((/** @type {Record<string, unknown>} */ (raw)).intro !== undefined &&
-          typeof (/** @type {Record<string, unknown>} */ (raw)).intro !== "string") ||
+          !isLocalizableText((/** @type {Record<string, unknown>} */ (raw)).intro)) ||
         !isSectionList((/** @type {Record<string, unknown>} */ (raw)).sections)
       )
         fail("'help.tabs' must be an array of { id?, label, intro?, sections: [{ title, body }] }");

@@ -126,6 +126,17 @@ function nodeToSchema(node) {
 
   if (node.type === "enum") return { ...base, type: "string", enum: node.values };
 
+  // `localizable: true` (config-spec.mjs's `localizable()` factory): a
+  // `LocalizableText`-valued field — a plain string (every locale), or an
+  // object of locale tag -> string. Checked ahead of the generic `custom`
+  // string handling below, since every `localizable` field is also
+  // `custom: true` (the object form's real invariants — must include the
+  // default tag, every key a shipped locale — need this deployment's
+  // resolved `languages`, which a static schema can't express; this emits
+  // only the SHAPE, same "best-effort" stance as every other bespoke field).
+  if (node.localizable)
+    return { ...base, anyOf: [{ type: "string" }, { type: "object", additionalProperties: { type: "string" } }] };
+
   // `"color"` (config-spec.mjs's `color()` factory) is a real, distinct type
   // for config-parsers.mjs's own validateFieldValue dispatch, but it isn't a
   // legal JSON Schema type: a schema-consuming editor would reject the

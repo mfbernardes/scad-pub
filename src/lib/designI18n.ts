@@ -6,15 +6,16 @@
 // paramGroups, DimensionInfo, ReviewDialog/reviewSummary, ResetButton,
 // ViewerEditOnModel, DesignDocModal, DesignPicker, …) keeps reading
 // `design.*` completely unchanged — App.tsx calls this once, in its design
-// memo, and everything downstream is oblivious to translation ever having
-// happened.
+// memo (right after `src/lib/configI18n.ts`'s `lxDesignEntry`, which resolves
+// the config-authored `label`/`group` first), and everything downstream is
+// oblivious to either projection having happened.
 //
 // gen-schema.mjs's scripts/lib/design-strings.mjs validates a sidecar at
 // BUILD time against the design it translates (unknown param/section/choice,
 // stale key, …); this module trusts that a `DesignStrings` it's handed
 // already passed that check — it does no validation of its own, only
 // substitution.
-import type { Design, Param } from "../openscad/types";
+import type { LocalizedDesign, Param } from "../openscad/types";
 
 /** One parameter's translatable fields — a subset of `Param`'s own shape
  *  (see scripts/lib/design-strings.mjs's PARAM_KEYS): `choices` keys off the
@@ -63,11 +64,11 @@ export interface DesignI18nFile {
   designs: Record<string, DesignStrings>;
 }
 
-// Whether `s` has anything that could change a `Design` (i.e. localizeDesign
-// has real work to do). `echo` is deliberately excluded: it never touches the
-// `Design` object itself (see localizeEcho below), so a sidecar that sets
-// ONLY `echo` entries still means "nothing to project here, hand back the
-// same Design reference".
+// Whether `s` has anything that could change a `LocalizedDesign` (i.e.
+// localizeDesign has real work to do). `echo` is deliberately excluded: it
+// never touches the design object itself (see localizeEcho below), so a
+// sidecar that sets ONLY `echo` entries still means "nothing to project here,
+// hand back the same reference".
 function affectsDesign(s: DesignStrings): boolean {
   return (
     s.description !== undefined ||
@@ -96,15 +97,20 @@ function localizeParam(p: Param, sectionMap: Record<string, string>, ps: DesignP
 }
 
 /**
- * Project `s` onto `design`, returning a new `Design` — or the SAME
+ * Project `s` onto `design`, returning a new `LocalizedDesign` — or the SAME
  * reference when `s` is absent or translates nothing that would change it
  * (see `affectsDesign`), so a design with no sidecar for the active locale
  * costs nothing beyond the one check and never breaks a memo/identity
  * comparison downstream. Parameter NAMES and choice VALUES are never
  * translated (they're the wire identity `-D name=value` render args and
  * stored preset/URL state key off) — only their display labels/text.
+ *
+ * `design` is expected to already be a `LocalizedDesign` (its `label`/`group`
+ * resolved by `src/lib/configI18n.ts`'s `lxDesignEntry`, run ahead of this):
+ * this function never reads or writes either field, so it passes them
+ * through untouched either way.
  */
-export function localizeDesign(design: Design, s: DesignStrings | undefined): Design {
+export function localizeDesign(design: LocalizedDesign, s: DesignStrings | undefined): LocalizedDesign {
   if (!s || !affectsDesign(s)) return design;
 
   const sectionMap = s.sections ?? {};

@@ -10,7 +10,7 @@
 // "React 18.3" while the app bundled 19.x. What's hard-coded is only what a
 // dependency bump can't invalidate: names, copyright lines, license texts.
 import oflText from "../licenses/OFL-1.1.txt?raw";
-import type { SoftwareLicense } from "../openscad/types";
+import type { ResolvedSoftwareLicense } from "../openscad/types";
 import { t } from "./i18n";
 
 /**
@@ -65,7 +65,7 @@ const mit = (copyright: string) =>
 // `version`, `license` (SPDX id), `copyright`, `url`/`licenseUrl`/`sourceUrl`
 // and `text` are legal facts and proper nouns, and stay verbatim in every
 // locale.
-export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
+export function licenseList(versions: BuildVersions = {}): ResolvedSoftwareLicense[] {
   const pkg = (name: string) => versions.packages?.[name];
   // React and React-DOM share one entry (they version in lockstep); if an
   // install ever splits them, say so rather than quietly naming one.
@@ -168,12 +168,12 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
  * original relative order.
  */
 export function mergeLicenses(
-  builtins: SoftwareLicense[],
-  extras: SoftwareLicense[]
-): SoftwareLicense[] {
+  builtins: ResolvedSoftwareLicense[],
+  extras: ResolvedSoftwareLicense[]
+): ResolvedSoftwareLicense[] {
   const norm = (s: string) => s.trim().toLowerCase();
   const merged = builtins.map((b) => ({ ...b }));
-  const appended: SoftwareLicense[] = [];
+  const appended: ResolvedSoftwareLicense[] = [];
 
   for (const extra of extras) {
     const idx = merged.findIndex((b) => norm(b.name) === norm(extra.name));

@@ -3,6 +3,7 @@
 // config's `help`, so no design-specific copy is baked into the app. A config
 // may group its guide into multiple tabs (`help.tabs`); without tabs it renders as
 // a single pane exactly as before.
+import { useMemo } from "react";
 import { Modal, MODAL_BODY, MODAL_INTRO } from "./Modal";
 import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
@@ -10,10 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/t
 import { cn } from "../lib/utils";
 import { HardDriveDownload as InstallIcon } from "lucide-react";
 import { defaultHelp } from "../lib/defaultHelp";
-import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
+import type { HelpContent, ResolvedHelpSection, ResolvedHelpTab } from "../openscad/types";
 import { t } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
 import { OVERVIEW_TAB_ID } from "../lib/helpShape.mjs";
+import { lxHelp } from "../lib/configI18n";
 
 /* The help sections' typography, applied to the scrolling body wrapper (the
    Markdown renderer emits bare p/ul/li).
@@ -38,7 +40,7 @@ function HelpSections({
   sections,
 }: {
   intro?: string;
-  sections: HelpSection[];
+  sections: ResolvedHelpSection[];
 }) {
   return (
     <>
@@ -59,7 +61,7 @@ function HelpSections({
 
 /** Tab strip + panels, built on the shared Radix Tabs primitive (which provides
  *  the full ARIA tabs pattern (roving tabindex, arrow/Home/End nav) for free). */
-function HelpTabs({ tabs, initialTab }: { tabs: HelpTab[]; initialTab?: string }) {
+function HelpTabs({ tabs, initialTab }: { tabs: ResolvedHelpTab[]; initialTab?: string }) {
   // `initialTab` (from ui.afterExport's "Open printing help" action, or any
   // other future deep link) picks which tab is active on mount: matched by
   // `id` first, then by its exact label (back-compat with a config written
@@ -124,12 +126,18 @@ export function HelpModal({
    *  panel's "Open printing help" action), see HelpTabs' own doc. */
   initialTab?: string;
 }) {
-  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
-  const content = help ?? defaultHelp();
+  const { tag } = useLocale();
+  const raw = help ?? defaultHelp();
+  // Project every LocalizableText leaf (title/intro/sections/tabs, and each
+  // tab's own intro/sections) to a plain string for the active locale, ONCE,
+  // rather than at each render site below: `defaultHelp()` returns plain
+  // strings already (valid LocalizableText, since `lx` passes a string
+  // straight through), so this is a no-op cost-wise for the default content.
+  const content = useMemo(() => lxHelp(raw, tag), [raw, tag]);
   // Normalise to tabs when the config supplies any. Top-level `sections` (the
   // single-pane form) become a leading "Overview" tab so adding `tabs` to an
   // existing help never drops the original content.
-  const tabs: HelpTab[] | null = content.tabs?.length
+  const tabs: ResolvedHelpTab[] | null = content.tabs?.length
     ? [
         ...(content.sections?.length
           ? [{ id: OVERVIEW_TAB_ID, label: t("help.overviewTab"), sections: content.sections }]

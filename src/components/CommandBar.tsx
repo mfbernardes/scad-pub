@@ -4,7 +4,7 @@
 // via the auto-opening output console; PWA install is demoted to the Help
 // modal, so the bar stays lean.
 import { memo } from "react";
-import type { Design, Schema, RenderResult } from "../openscad/types";
+import type { LocalizedDesign, Schema, RenderResult } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
 import { DesignHeading } from "./DesignHeading";
 import { BarBrand } from "./BarBrand";
@@ -15,7 +15,7 @@ import { cn } from "../lib/utils";
 
 interface Props {
   schema: Schema;
-  designs: Design[];
+  designs: LocalizedDesign[];
   designId: string;
   theme: "dark" | "light";
   themeMode: "light" | "dark" | "auto";

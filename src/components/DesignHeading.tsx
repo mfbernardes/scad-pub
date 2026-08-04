@@ -4,7 +4,7 @@
 // Both layouts render it and both used to spell it out themselves, which
 // drifted. Same precedent as ActionDock: mount it in each layout's own
 // positioning context, but write the markup once.
-import type { Design } from "../openscad/types";
+import type { LocalizedDesign } from "../openscad/types";
 import { DesignPicker } from "./DesignPicker";
 import { BookOpen as GuideIcon } from "lucide-react";
 import { IconButton } from "./IconButton";
@@ -22,7 +22,7 @@ export function DesignHeading({
   onShowDoc,
   docClassName,
 }: {
-  designs: Design[];
+  designs: LocalizedDesign[];
   designId: string;
   /** The active design's label; falls back to the id when nothing resolves. */
   label: string;

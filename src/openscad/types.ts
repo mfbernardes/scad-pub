@@ -50,6 +50,31 @@ export interface ViewerControls {
 }
 
 /**
+ * Config-authored text (see docs/config.md's "Localizing config text") that is
+ * either the SAME for every locale (a plain string) or varies per locale (an
+ * object of locale tag -> string). Distinct from a design's own sidecar
+ * TRANSLATION (`.strings.<tag>.json`; see "Design translations"): a sidecar
+ * selects a whole FILE per locale, so its own fields stay plain strings once
+ * loaded, while a `LocalizableText` leaf carries every locale's text in the
+ * ONE value gen-schema embeds into designs.json, and nothing has picked a
+ * locale for it yet. Object-form build-time invariants (gen-schema.mjs's
+ * `parseLocalizableText`): must include the deployment's default locale tag,
+ * and every key must be one of the deployment's enabled `languages`.
+ *
+ * A raw `LocalizableText` value must never reach JSX directly — `Record<string,
+ * string>` isn't a valid React child, so an unprojected value is a compile
+ * error, not a silent "[object Object]". Project it first, at the read site,
+ * via `src/lib/configI18n.ts`'s `lx`/`lxOpt`/`lxHelp`/`lxNotice`/
+ * `lxDesignEntry`. The handful of types below that carry a `LocalizableText`
+ * leaf (`HelpSection`, `HelpTab`, `HelpContent`, `Design`) are the RAW shapes
+ * designs.json stores; their `Resolved*` counterparts (`ResolvedHelpSection`,
+ * `ResolvedHelpTab`, `ResolvedHelpContent`) or the ad hoc plain-string shape a
+ * projection function returns are what a render-facing consumer actually
+ * receives.
+ */
+export type LocalizableText = string | Record<string, string>;
+
+/**
  * Build-time viewer configuration (config `viewer`): presentation, framing,
  * and per-control visibility. None of it affects the exported bytes or the
  * render cache (absent from renderHash).
@@ -168,7 +193,11 @@ export type Param = ParamBase &
 
 export interface Design {
   id: string;
-  label: string;
+  /** Picker label (config `designs[].label`, defaulting to a humanized id).
+   *  Config-authored, not part of a design's sidecar translation — see
+   *  docs/config.md's "Localizing config text". Project via
+   *  `src/lib/configI18n.ts`'s `lxDesignEntry` before display: see `LocalizedDesign`. */
+  label: LocalizableText;
   /** Source-relative path of the design's root .scad (e.g. "nameplate.scad"). */
   file: string;
   /** Source-relative paths of bundled parameterSets JSON files for this design. */
@@ -176,8 +205,9 @@ export interface Design {
   /** Slow to render: skip the debounced auto-render and render on demand. */
   heavy?: boolean;
   /** Optional dropdown grouping label; designs sharing a group cluster under a
-   *  header in the design picker. Null/absent designs render ungrouped. */
-  group?: string | null;
+   *  header in the design picker. Null/absent designs render ungrouped.
+   *  Config-authored (see `label`'s own comment); project via `lxDesignEntry`. */
+  group?: LocalizableText | null;
   /** Optional short description, shown under the label in the design picker. */
   description?: string | null;
   /** Optional served URL of the design's icon (shown in the picker and used as
@@ -227,15 +257,38 @@ export interface Design {
   reviewNote?: string | null;
 }
 
-/** One titled section of the in-app help, with a Markdown-subset body. */
+/**
+ * A `Design` after resolving its config-authored `label`/`group` to the active
+ * locale (`src/lib/configI18n.ts`'s `lxDesignEntry`), ahead of a design's own
+ * sidecar translation (`src/lib/designI18n.ts`'s `localizeDesign`). This is the
+ * shape every render-facing consumer (ParamForm, DesignPicker, CommandBar,
+ * ResetButton, DesignDocModal, …) actually receives; `Design` itself keeps
+ * `label`/`group` as `LocalizableText` (the raw, generated-schema shape) so an
+ * unprojected value reaching JSX is a compile error.
+ */
+export type LocalizedDesign = Omit<Design, "label" | "group"> & {
+  label: string;
+  group?: string | null;
+};
+
+/** One titled section of the in-app help, with a Markdown-subset body. Raw
+ *  (designs.json) shape — project via `src/lib/configI18n.ts`'s `lxHelp` before
+ *  display; see `ResolvedHelpSection`. */
 export interface HelpSection {
+  title: LocalizableText;
+  body: LocalizableText;
+}
+
+/** `HelpSection` after locale projection: what HelpModal actually renders. */
+export interface ResolvedHelpSection {
   title: string;
   body: string;
 }
 
 /** One tab of the in-app help: a labelled group of sections with its own
  *  optional intro. A config may supply multiple tabs; the Help modal renders a tab
- *  strip when any are present. */
+ *  strip when any are present. Raw (designs.json) shape — project via `lxHelp`;
+ *  see `ResolvedHelpTab`. */
 export interface HelpTab {
   /**
    * Optional stable id, unique across this help's tabs. Lets `ui.afterExport.helpTab`
@@ -245,29 +298,56 @@ export interface HelpTab {
    */
   id?: string;
   /** Tab-strip label. */
-  label: string;
+  label: LocalizableText;
   /** Optional intro paragraph shown above this tab's sections. */
-  intro?: string;
+  intro?: LocalizableText;
   sections: HelpSection[];
+}
+
+/** `HelpTab` after locale projection. */
+export interface ResolvedHelpTab {
+  id?: string;
+  label: string;
+  intro?: string;
+  sections: ResolvedHelpSection[];
 }
 
 /** The Help modal's content. `sections` renders as a single pane; supplying
  *  `tabs` renders a tab strip (top-level `sections`, if any, become a leading
- *  tab so adding tabs never drops existing content). */
+ *  tab so adding tabs never drops existing content). Raw (designs.json) shape
+ *  — project via `src/lib/configI18n.ts`'s `lxHelp` (see `ResolvedHelpContent`)
+ *  before rendering; HelpModal does this once, in a `[content, tag]` memo. */
 export interface HelpContent {
   /** Heading shown at the top of the Help modal (default "How to use this configurator"). */
-  title?: string;
-  intro?: string;
+  title?: LocalizableText;
+  intro?: LocalizableText;
   /** Single-pane sections (the default form). */
   sections?: HelpSection[];
   /** When present, the modal renders a tab strip; multiple tabs are supported. */
   tabs?: HelpTab[];
 }
 
-/** One third-party software component and its license attribution, shown in the
- *  open-source licenses modal. Mirrors the built-in entries in
- *  src/lib/licenses.ts; a consumer config can APPEND more via the `licenses`
- *  config key (the built-ins are never replaced). */
+/** `HelpContent` after locale projection: what HelpModal actually renders. */
+export interface ResolvedHelpContent {
+  title?: string;
+  intro?: string;
+  sections?: ResolvedHelpSection[];
+  tabs?: ResolvedHelpTab[];
+}
+
+/**
+ * One third-party software component and its license attribution, shown in the
+ * open-source licenses modal. Mirrors the built-in entries in
+ * src/lib/licenses.ts; a consumer config can APPEND more via the `licenses`
+ * config key (the built-ins are never replaced). Raw (designs.json) shape for
+ * a config-supplied entry: `note` is the one field a config's `licenses[]`
+ * entry can localize (`text`/`textFile` stay single-language — legal license
+ * text isn't something to machine-vary per locale). Project `note` via
+ * `src/lib/configI18n.ts`'s `lxOpt` before merging with the built-ins
+ * (`src/lib/licenses.ts`'s `mergeLicenses`, which — like the built-in entries
+ * `licenseList()` itself returns — stays plain-string-typed, see
+ * `ResolvedSoftwareLicense`).
+ */
 export interface SoftwareLicense {
   name: string;
   version?: string;
@@ -276,14 +356,20 @@ export interface SoftwareLicense {
   copyright: string;
   /** Project homepage. */
   url: string;
-  /** Canonical license text (reproduced inline for permissive licenses). */
+  /** Canonical license text (reproduced inline for permissive licenses). Always
+   *  a plain string, even for a config-supplied entry: not localizable. */
   text?: string;
   /** Where the full license / corresponding source can be obtained. */
   licenseUrl: string;
   /** Source location, required for copyleft (GPL) components. */
   sourceUrl?: string;
-  note?: string;
+  note?: LocalizableText;
 }
+
+/** `SoftwareLicense` with `note` resolved to a plain string: the shape
+ *  `src/lib/licenses.ts`'s `licenseList()`/`mergeLicenses()`/`combineNotes()`
+ *  operate on, and what `LicensesModal` renders. */
+export type ResolvedSoftwareLicense = Omit<SoftwareLicense, "note"> & { note?: string };
 
 /**
  * Config for the Files dialog. There is no generic import button: importing is
@@ -295,9 +381,11 @@ export interface SoftwareLicense {
 export interface FileImport {
   /**
    * Optional help text shown above the file list. Rendered as a Markdown
-   * subset (paragraphs, bullet lists, **bold**, `code`, links).
+   * subset (paragraphs, bullet lists, **bold**, `code`, links). Raw
+   * (designs.json) shape — project via `src/lib/configI18n.ts`'s `lxOpt`
+   * before rendering (FileBar does this).
    */
-  note?: string;
+  note?: LocalizableText;
 }
 
 /**
@@ -331,6 +419,13 @@ export interface RenderConfig {
  * badge. Build-time, from the config's `notices` key. OpenSCAD's own
  * warnings/errors and assert failures are handled separately and are not
  * configurable (see src/lib/diagnostics.ts).
+ *
+ * This is the RESOLVED (plain-string) shape `src/lib/diagnostics.ts` and
+ * `src/lib/readiness.ts` operate on, and what `src/lib/i18n.ts`'s
+ * `selectPlural` expects for `label` — those signatures stay unchanged.
+ * `Schema.notices` itself carries `RawNoticeCategory[]` (below); project one
+ * with `src/lib/configI18n.ts`'s `lxNotice` before it reaches this shape,
+ * which `useReadinessModel` does in its own tag-dependent memo.
  */
 export interface NoticeCategory {
   /** The design-defined marker, matched as `: <marker>:` within an echo. */
@@ -362,6 +457,18 @@ export interface NoticeCategory {
   subsumedByFont?: boolean;
 }
 
+/** `NoticeCategory`, but as generated into designs.json: `label`'s two CLDR
+ *  forms are each a `LocalizableText` leaf rather than a plain string. Project
+ *  with `src/lib/configI18n.ts`'s `lxNotice` before use — see `NoticeCategory`'s
+ *  own comment. */
+export interface RawNoticeCategory {
+  marker: string;
+  label: { one: LocalizableText; other: LocalizableText };
+  color?: string;
+  attention?: boolean;
+  subsumedByFont?: boolean;
+}
+
 /** How often the configurable `popup` notice is shown. */
 export type PopupMode = "always" | "once" | "dismissible" | "picker";
 
@@ -371,10 +478,11 @@ export type PopupMode = "always" | "once" | "dismissible" | "picker";
  * subset as `help` (bold, code, links, bullet lists).
  */
 export interface PopupNotice {
-  /** Dialog header / title. */
-  header: string;
+  /** Dialog header / title. Raw (designs.json) shape — project via
+   *  `src/lib/configI18n.ts`'s `lx`/`lxOpt` before rendering (PopupModal does this). */
+  header: LocalizableText;
   /** Dialog body: a Markdown-subset string (supports links). */
-  body: string;
+  body: LocalizableText;
   /**
    * Display policy: "always" (every visit), "once" (first visit only), or
    * "dismissible" (every visit until the user ticks "Don't show this again").
@@ -386,14 +494,14 @@ export interface PopupNotice {
    * clicking it closes the popup and, when there's more than one design, opens
    * the design picker so the user's obvious next step is to choose what to make.
    */
-  button?: string;
+  button?: LocalizableText;
   /**
    * Optional plain-text footnote, rendered small and muted at the bottom of
    * the dialog, in every mode (including "picker"). For a short standing
    * disclosure that doesn't belong in `body`'s main message, e.g. "Everything
    * runs in your browser. Nothing is uploaded." Plain text, not Markdown.
    */
-  footnote?: string;
+  footnote?: LocalizableText;
 }
 
 // The rule: `designs.json` (the `Schema` below, and the
@@ -599,9 +707,11 @@ export interface Schema {
   /**
    * Config-driven notice categories surfaced on the OpenSCAD output panel. Each
    * is a design-defined marker plus its badge label and optional colour. Empty
-   * (the default) when the config omits the `notices` key.
+   * (the default) when the config omits the `notices` key. Raw shape — project
+   * each entry with `src/lib/configI18n.ts`'s `lxNotice` before use (see
+   * `RawNoticeCategory`'s own comment).
    */
-  notices: NoticeCategory[];
+  notices: RawNoticeCategory[];
   /**
    * Extra third-party software / license notices supplied by the consumer
    * config, APPENDED after the app's built-in attributions (src/lib/licenses.ts)

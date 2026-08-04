@@ -1,0 +1,11 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "languages": ["en", "de"],
+  "popup": {
+    "header": { "en": "Welcome", "fr": "Bienvenue" },
+    "body": "Configure a widget."
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}

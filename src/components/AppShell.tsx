@@ -19,7 +19,7 @@
 // policy (useSheetPolicy.ts). Are extracted hooks this component composes, not
 // logic it owns itself.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
-import type { Design, Schema, UiConfig, WorkerProgress } from "../openscad/types";
+import type { LocalizedDesign, Schema, UiConfig, WorkerProgress } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
 import type { RenderMetrics } from "../lib/renderMetrics";
@@ -147,8 +147,8 @@ function ActionDock({
 
 interface Props {
   schema: Schema;
-  design: Design;
-  designs: Design[];
+  design: LocalizedDesign;
+  designs: LocalizedDesign[];
   values: Values;
   /** Values behind the current render: what the measurements panel reads. */
   renderedValues: Values;

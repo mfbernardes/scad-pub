@@ -36,6 +36,26 @@ const num = (extra = {}) => ({
   ...extra,
 });
 
+// A `LocalizableText`-valued field (src/openscad/types.ts's own doc;
+// docs/config.md's "Localizing config text"): a plain string (shows for
+// every locale), or an object of locale tag -> string. Runtime validation is
+// bespoke (scripts/lib/config-parsers.mjs's `parseLocalizableText`, which
+// needs this deployment's resolved `languages`/default tag — not something a
+// generic applyGroupSpec field descriptor has access to), so `custom: true`
+// like every other bespoke-parsed leaf (see the file-top comment): the
+// containing parser (parsePopup, parseFileImport, …) validates/resolves the
+// raw value itself, after applyGroupSpec's own unknown-key-rejecting walk.
+// `localizable: true` is a second, independent marker read only by
+// gen-config-schema.mjs's `nodeToSchema`, which emits the string-or-locale-map
+// `anyOf` this shape needs instead of the plain `{ type: "string" }` a bare
+// `custom: true` string field would otherwise get.
+const localizable = (extra = {}) => ({
+  type: "string",
+  custom: true,
+  localizable: true,
+  ...extra,
+});
+
 // A CSS-colour-valued scalar field (hex / rgb() / hsl() / named: the same
 // COLOR_VALUE_RE strictness every colour input in this config uses). Exists
 // as its own field kind (rather than folding colour-shaped strings into
@@ -364,10 +384,12 @@ export const CONFIG_SPEC = {
           required: true,
           description: "Design id (charset [A-Za-z0-9._-]+); used in URLs, storage, filenames.",
         },
-        label: { type: "string", description: "Picker label; defaults to a humanized id." },
+        label: localizable({ description: "Picker label; defaults to a humanized id. Localizable." }),
         file: { type: "string", description: "Path to the .scad file, relative to 'source'; defaults to '<id>.scad'." },
         heavy: { type: "boolean", default: false, description: "Start this design in manual-render mode." },
-        group: { type: "string", description: "Dropdown/gallery grouping header; consecutive same-value designs cluster." },
+        group: localizable({
+          description: "Dropdown/gallery grouping header; consecutive same-value designs cluster. Localizable.",
+        }),
         // No `description`/`media`/`review` here: a design's picker
         // description, icon, gallery image, doc, and curated review
         // label/note come ONLY from its own .scad annotations now
@@ -530,7 +552,9 @@ export const CONFIG_SPEC = {
     description: "Enables the Files dialog. true for defaults, or an options object; omit/false/null for no Files action.",
     rootTypeError: "gen-schema: 'fileImport' must be true, an options object, or null",
     properties: {
-      note: str({ description: "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'." }),
+      note: localizable({
+        description: "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'. Localizable.",
+      }),
       // Same pre-pass/resolution pattern as popup.bodyFile above (see its
       // comment): resolved into 'note' before applyGroupSpec ever sees this
       // key, so it's registered here as `custom: true` purely for doc
@@ -544,20 +568,27 @@ export const CONFIG_SPEC = {
     description: "One-off notice dialog shown over the app on load.",
     rootTypeError: "gen-schema: 'popup' must be an object with 'header', 'body' and an optional 'mode'",
     properties: {
-      header: str({ required: true, description: "Dialog title." }),
-      body: str({ required: true, description: "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'." }),
+      header: localizable({ required: true, description: "Dialog title. Localizable, see docs/config.md." }),
+      body: localizable({
+        required: true,
+        description: "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'. Localizable.",
+      }),
       // Resolved by gen-schema.mjs's prose-file pre-pass (scripts/lib/prose-files.mjs)
       // BEFORE this spec's own applyGroupSpec walk ever runs: a config-relative
-      // Markdown file whose contents become 'body', so `body` is populated by the
-      // time the `required` check above sees it. `custom: true` because the
-      // read-a-file behaviour is bespoke, like render.features/pwa.categories (see
-      // the file-top comment). It's registered here purely for doc-coverage /
-      // schema-emission, and is never itself present by the time applyGroupSpec
-      // walks this node (the pre-pass deletes it after resolving 'body').
+      // Markdown file (or, for a per-locale 'body', an object of locale tag ->
+      // Markdown file) whose contents become 'body', so `body` is populated by
+      // the time parsePopup's own required check sees it. `custom: true`
+      // because the read-a-file behaviour is bespoke, like
+      // render.features/pwa.categories (see the file-top comment). It's
+      // registered here purely for doc-coverage / schema-emission, and is
+      // never itself present by the time applyGroupSpec walks this node (the
+      // pre-pass deletes it after resolving 'body').
       bodyFile: fileAlt("body"),
       mode: enumField(["always", "once", "dismissible", "picker"], "once", { description: "Popup frequency." }),
-      button: str({ description: "Primary-button label; overrides the default 'OK'." }),
-      footnote: str({ description: "Short plain-text line shown small and muted at the bottom." }),
+      button: localizable({ description: "Primary-button label; overrides the default 'OK'. Localizable." }),
+      footnote: localizable({
+        description: "Short plain-text line shown small and muted at the bottom. Localizable.",
+      }),
     },
   },
   help: {
@@ -609,8 +640,11 @@ export const CONFIG_SPEC = {
             "singular/plural forms (selected via Intl.PluralRules, the same as src/lib/i18n.ts's tn()). " +
             "Defaults to 'marker'.",
           properties: {
-            one: str({ description: "Singular override; falls back to 'other' when omitted." }),
-            other: str({ required: true, description: "Plural/default form, used whenever 'one' is unset." }),
+            one: localizable({ description: "Singular override; falls back to 'other' when omitted. Localizable." }),
+            other: localizable({
+              required: true,
+              description: "Plural/default form, used whenever 'one' is unset. Localizable.",
+            }),
           },
         },
         color: { type: "string", description: "Badge fill colour, a plain CSS colour." },
@@ -667,7 +701,7 @@ export const CONFIG_SPEC = {
           type: "string",
           description: "Corresponding-source link (required by copyleft licenses).",
         },
-        note: { type: "string", description: "One-line description." },
+        note: localizable({ description: "One-line description. Localizable (unlike 'text'/'textFile', see docs/config.md)." }),
       },
     },
   },

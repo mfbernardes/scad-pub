@@ -2,19 +2,19 @@
 // confirms via an AlertDialog only when there are unsaved changes (current
 // parameter values differ from the design's defaults); otherwise it's a no-op.
 import { useMemo, useState, type ReactNode } from "react";
-import type { Design } from "../openscad/types";
+import type { LocalizedDesign } from "../openscad/types";
 import { defaultsFor, type Values } from "../lib/presets";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { t } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
 
-function isModified(design: Design, values: Values): boolean {
+function isModified(design: LocalizedDesign, values: Values): boolean {
   const defaults = defaultsFor(design);
   return design.params.some((p) => values[p.name] !== defaults[p.name]);
 }
 
 interface Props {
-  design: Design;
+  design: LocalizedDesign;
   values: Values;
   onReset: () => void;
   className?: string;

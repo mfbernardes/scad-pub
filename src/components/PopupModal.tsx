@@ -10,11 +10,12 @@ import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
-import type { Design, PopupNotice } from "../openscad/types";
+import type { LocalizedDesign, PopupNotice } from "../openscad/types";
 import { DesignGallery } from "./DesignPicker";
 import { isDesignChooser } from "../lib/popup";
 import { t } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
+import { lx, lxOpt } from "../lib/configI18n";
 
 export function PopupModal({
   popup,
@@ -29,12 +30,16 @@ export function PopupModal({
   onClose: (remember: boolean) => void;
   /** The primary button: closes and advances (e.g. opens the design picker). */
   onPrimary: (remember: boolean) => void;
-  designs: Design[];
+  designs: LocalizedDesign[];
   designId: string;
   onDesignChange: (id: string) => void;
 }) {
-  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
+  const { tag } = useLocale();
   const [dontShow, setDontShow] = useState(false);
+  const header = lx(popup.header, tag);
+  const body = lx(popup.body, tag);
+  const button = lxOpt(popup.button, tag);
+  const footnoteText = lxOpt(popup.footnote, tag);
 
   // "once" persists on every close; "dismissible" only when the box is ticked;
   // "always" never persists. Shared by the incidental close and the primary CTA
@@ -51,17 +56,17 @@ export function PopupModal({
   // Small, muted standing disclosure: same treatment in every mode, incl.
   // the picker below (plain text, not Markdown: it's meant for a short,
   // config-fixed line, not free-form content).
-  const footnote = popup.footnote && (
+  const footnote = footnoteText && (
     <p className="notice-footnote m-0 text-[0.78rem] leading-[1.4] text-muted-foreground">
-      {popup.footnote}
+      {footnoteText}
     </p>
   );
 
   if (isDesignChooser(popup)) {
     return (
-      <Modal title={popup.header} onClose={() => onClose(true)}>
+      <Modal title={header} onClose={() => onClose(true)}>
         <div className={cn(MODAL_BODY, "flex flex-col gap-3")}>
-          <Markdown body={popup.body} />
+          <Markdown body={body} />
           <DesignGallery
             designs={designs}
             value={designId}
@@ -77,7 +82,7 @@ export function PopupModal({
   }
 
   return (
-    <Modal title={popup.header} onClose={close}>
+    <Modal title={header} onClose={close}>
       <div
         className={cn(
           MODAL_BODY,
@@ -85,7 +90,7 @@ export function PopupModal({
           "[&_ul]:my-[0.4rem] [&_ul]:pl-[1.1rem] [&_ul]:text-[0.9rem] [&_ul]:leading-[1.5] [&_ul]:text-foreground"
         )}
       >
-        <Markdown body={popup.body} />
+        <Markdown body={body} />
       </div>
       <div className="modal-actions flex flex-wrap items-center gap-2 px-4 pb-4">
         {popup.mode === "dismissible" && (
@@ -98,7 +103,7 @@ export function PopupModal({
           </Label>
         )}
         <Button className="notice-ok ml-auto" onClick={primary}>
-          {popup.button ?? t("popup.ok")}
+          {button ?? t("popup.ok")}
         </Button>
         {footnote && <div className="basis-full">{footnote}</div>}
       </div>

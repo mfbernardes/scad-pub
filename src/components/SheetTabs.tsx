@@ -28,7 +28,7 @@
 // ends — BottomSheet measures the Peek height down to that element's bottom
 // edge. The pill renders AFTER the tab row (not before it) so mounting or
 // unmounting it never shifts the measured element's own position.
-import type { Design } from "../openscad/types";
+import type { LocalizedDesign } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
@@ -48,7 +48,7 @@ import { cn } from "../lib/utils";
 type Tab = PanelTab;
 
 interface Props {
-  design: Design;
+  design: LocalizedDesign;
   values: Values;
   bundled: ParsedSet[];
   userPresets: string[];

@@ -20,7 +20,7 @@
 // <name>" kept on its aria-label/title for assistive tech and hover. One
 // presentation for both layouts: the docked desktop panel is resizable and
 // narrows to the same problem.
-import type { Design } from "../openscad/types";
+import type { LocalizedDesign } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { useAppActions } from "../lib/appActions";
 import { ResetButton } from "./ResetButton";
@@ -29,7 +29,7 @@ import { t, tn } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
 
 interface Props {
-  design: Design;
+  design: LocalizedDesign;
   values: Values;
   /** The selected preset's values, or null when no preset is selected (baseline is defaults). */
   presetBaseline: Values | null;
