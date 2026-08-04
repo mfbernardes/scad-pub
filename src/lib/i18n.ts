@@ -1,17 +1,17 @@
-// i18n.ts: minimal, dependency-free translation layer, deliberately a
-// SUBSET of a full i18n system: English-only, one bundle
-// (src/locales/en.json), no locale switching, no generated locales.json. The
-// flat dot-namespaced key -> string bundle is the source of truth; `t()`
-// resolves a key through config `strings` override -> the bundle -> the bare
-// key, and `tn()` layers CLDR plural-category selection on top (`${key}#one`
-// / `${key}#other`: the only two categories English needs). See
-// docs/config.md's `strings` section for the operator-facing override
-// surface (schema.strings, validated by scripts/lib/config-parsers.mjs's
-// parseStrings against src/locales/en.json).
+// i18n.ts: the translation layer. The flat dot-namespaced key -> string
+// bundle is the source of truth; `t()` resolves a key through a config
+// `strings` override -> the active locale's bundle -> English -> the bare
+// key, and `tn()` layers CLDR plural-category selection on top
+// (`${key}#<category>` before `${key}#other`) using the active locale's own
+// `Intl.PluralRules`. See docs/config.md's `strings` section for the
+// operator-facing override surface.
 //
-// `makeT` is the pure, testable factory (no schema/JSON coupling: tests hand
-// it a synthetic bundle). The module-level `t`/`tn` exports below bind it to
-// the generated schema's `strings` override, which is what the app imports.
+// `t`/`tn` are stable delegating functions over a mutable current binding so
+// the many importing modules never re-import after a locale switch;
+// `rebind()` (called by src/lib/localeStore.ts, which owns the switch
+// sequencing, loading and persistence) swaps that binding. `makeT` is the
+// pure, testable factory behind it (no schema/JSON coupling: tests hand it a
+// synthetic bundle).
 //
 // The `{ type: "json" }` import attribute is required because this module is
 // also imported directly by tests/i18n.test.mjs through the TS-source
@@ -22,14 +22,29 @@
 import en from "../locales/en.json" with { type: "json" };
 import schemaJson from "../generated/designs.json" with { type: "json" };
 import type { Schema } from "../openscad/types";
+import { LOCALE_TAGS, collapseToAvailable } from "./localeRegistry";
 
 export type Bundle = Record<string, string>;
 export type Vars = Record<string, string | number>;
 
-// One shared instance: `tn()` runs on keystroke-frequency render paths, and
-// constructing a PluralRules is comparatively costly. English-only, matching
-// this module's scope.
-const EN_PLURAL_RULES = new Intl.PluralRules("en");
+/** A deployment's `strings` config block: a plain string overrides the
+ *  deployment's default locale only; an object overrides per-locale (keyed
+ *  by locale tag). See `overridesForLocale`. */
+export type ConfigStrings = Record<string, string | Record<string, string>>;
+
+// Cached per locale rather than one shared instance: `tn()` runs on
+// keystroke-frequency render paths, and constructing a PluralRules is
+// comparatively costly, but the active locale can now change at runtime.
+const pluralRulesCache = new Map<string, Intl.PluralRules>();
+
+function pluralRulesFor(locale: string): Intl.PluralRules {
+  let rules = pluralRulesCache.get(locale);
+  if (!rules) {
+    rules = new Intl.PluralRules(locale);
+    pluralRulesCache.set(locale, rules);
+  }
+  return rules;
+}
 
 function hasOwn(obj: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
@@ -48,7 +63,9 @@ function interpolate(template: string, vars?: Vars): string {
  * `t`/`tn` functions. Kept dependency-free and schema-agnostic so tests can
  * drive it with a synthetic bundle instead of the real one.
  */
-export function makeT(bundle: Bundle, overrides: Bundle = {}) {
+export function makeT(bundle: Bundle, overrides: Bundle = {}, locale = "en") {
+  const pluralRules = pluralRulesFor(locale);
+
   function resolve(key: string): string | undefined {
     if (hasOwn(overrides, key)) return overrides[key];
     if (hasOwn(bundle, key)) return bundle[key];
@@ -69,7 +86,7 @@ export function makeT(bundle: Bundle, overrides: Bundle = {}) {
 
   function tn(key: string, count: number, vars?: Vars): string {
     // ECMA-402 returns "other" for a non-finite count, so this never throws.
-    const category = EN_PLURAL_RULES.select(count);
+    const category = pluralRules.select(count);
     const merged: Vars = { ...vars, count };
     const withCategory = `${key}#${category}`;
     if (resolve(withCategory) !== undefined) return t(withCategory, merged);
@@ -90,13 +107,59 @@ export function makeT(bundle: Bundle, overrides: Bundle = {}) {
  * badge label (`{ one, other }`; see docs/config.md's Notice badges section).
  * `one` is optional and falls back to `other`, mirroring `tn()`'s own
  * fall-through-to-`#other` behaviour. Deliberately NOT a bespoke
- * `count === 1` check: English happens to have only two CLDR categories, but
- * the selection itself should go through `Intl.PluralRules` like every other
+ * `count === 1` check: the selection itself should go through
+ * `Intl.PluralRules`, for the CURRENT locale (see `rebind`), like every other
  * plural decision in this app, not reimplement its own rule.
  */
 export function selectPlural(count: number, forms: { one?: string; other: string }): string {
-  const category = EN_PLURAL_RULES.select(count);
+  const category = pluralRulesFor(currentTag).select(count);
   return (category === "one" ? forms.one : undefined) ?? forms.other;
+}
+
+/**
+ * Projects a deployment's `strings` config block to a flat override `Bundle`
+ * for one active locale `tag`: a plain string value overrides only when
+ * `tag` is the deployment's default locale (so an existing flat `strings`
+ * block, written before per-locale overrides existed, keeps applying
+ * verbatim while that locale is active); an object value contributes its
+ * `tag` entry when present. Missing/undefined `strings` yields `{}`.
+ */
+export function overridesForLocale(
+  strings: ConfigStrings | undefined,
+  tag: string,
+  defaultTag: string
+): Bundle {
+  const result: Bundle = {};
+  if (!strings) return result;
+  for (const [key, value] of Object.entries(strings)) {
+    if (typeof value === "string") {
+      if (tag === defaultTag) result[key] = value;
+    } else if (hasOwn(value, tag)) {
+      result[key] = value[tag];
+    }
+  }
+  return result;
+}
+
+let currentTag = "en";
+let currentBinding!: ReturnType<typeof makeT>;
+
+/**
+ * Swaps the module's current `t`/`tn` binding to `locale`. `localeBundle` is
+ * the loaded chrome catalogue for a non-English locale (null for English, or
+ * on any failed/not-yet-loaded switch); it's merged UNDER `en` so a key the
+ * locale hasn't translated yet falls back to English rather than the bare
+ * key, and an untranslated plural category still reaches `tn`'s `#other`/
+ * bare-key fallback. `overrides` is this locale's projection of the
+ * deployment's `strings` config (see `overridesForLocale`). Called by
+ * src/lib/localeStore.ts, which owns switch sequencing, loading order and
+ * persistence; never call this with an unloaded locale's bundle.
+ */
+export function rebind(tag: string, localeBundle: Bundle | null, overrides: Bundle): void {
+  const merged: Bundle =
+    tag === "en" || localeBundle === null ? (en as Bundle) : { ...(en as Bundle), ...localeBundle };
+  currentBinding = makeT(merged, overrides, tag);
+  currentTag = tag;
 }
 
 // Route through `unknown`: the generated JSON is validated at runtime by
@@ -104,13 +167,19 @@ export function selectPlural(count: number, forms: { one?: string; other: string
 // deployment's `strings` (string-literal keys) can't satisfy vs
 // Record<string, string>.
 const schema = schemaJson as unknown as Schema;
-const bound = makeT(en as Bundle, schema.strings ?? {});
+const defaultTag = collapseToAvailable(schema.lang ?? "en", LOCALE_TAGS) ?? "en";
+rebind("en", null, overridesForLocale(schema.strings as ConfigStrings | undefined, "en", defaultTag));
 
 /** Resolve a catalogue key to display text, interpolating `{name}` vars.
- *  Resolution order: config `strings` override -> the bundled English
- *  catalogue -> the bare key (logging a dev-time warning on a true miss). */
-export const t = bound.t;
-/** Like `t`, but selects `${key}#<CLDR category>` for `count` via
- *  `Intl.PluralRules`, falling back to `#other`, and merges `{count}` into
- *  `vars` before resolving each candidate through the same chain as `t`. */
-export const tn = bound.tn;
+ *  Resolution order: config `strings` override -> the active locale's
+ *  catalogue -> English -> the bare key (logging a dev-time warning on a true
+ *  miss). Delegates to the current binding (see `rebind`), so it keeps
+ *  resolving through the active locale after a runtime switch without
+ *  callers re-importing anything. */
+export const t = (key: string, vars?: Vars): string => currentBinding.t(key, vars);
+/** Like `t`, but selects `${key}#<CLDR category>` for `count` via the active
+ *  locale's `Intl.PluralRules`, falling back to `#other`, and merges
+ *  `{count}` into `vars` before resolving each candidate through the same
+ *  chain as `t`. */
+export const tn = (key: string, count: number, vars?: Vars): string =>
+  currentBinding.tn(key, count, vars);
