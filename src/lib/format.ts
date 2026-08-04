@@ -6,10 +6,13 @@
 import type { Param } from "../openscad/types";
 import type { Values } from "./presets";
 import { fontValueLabel } from "./fontChoices";
+import { t, formatNumber } from "./i18n";
 
-/** One millimetre figure, always with at least one decimal (90 -> "90.0"). */
+/** One millimetre figure, always with at least one decimal (90 -> "90.0").
+ *  Display only (DimensionInfo, reviewSummary, the viewer's dimension
+ *  overlay) — never feeds a render arg, URL state or an `<input>` value. */
 export function mm(n: number): string {
-  return (Math.round(n * 10) / 10).toFixed(1);
+  return formatNumber(n, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 /**
@@ -34,7 +37,7 @@ export function formatParamValue(param: Param, values: Values): string | null {
   }
   switch (param.type) {
     case "boolean":
-      return raw ? "Yes" : "No";
+      return raw ? t("common.yes") : t("common.no");
     case "string": {
       const s = String(raw).trim();
       return s ? s + unit : null;

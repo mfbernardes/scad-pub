@@ -4,6 +4,7 @@
 // comparing against: the selected preset's values, or the design's defaults.
 import type { Param, ParamValue } from "../openscad/types";
 import type { Values } from "./presets";
+import { t } from "./i18n";
 
 /** A param's display label: its Customizer description, falling back to the
  *  underlying OpenSCAD variable name. */
@@ -26,7 +27,7 @@ export function changedParams(params: Param[], prev: Values, next: Values): Para
 
 /** A friendly one-liner for a param's value, for "was <value>" text. */
 export function displayValue(p: Param, v: ParamValue): string {
-  if (p.type === "boolean") return v ? "on" : "off";
+  if (p.type === "boolean") return v ? t("common.on") : t("common.off");
   if (p.type === "enum") return p.choices.find((c) => c.value === String(v))?.label ?? String(v);
   return String(v);
 }

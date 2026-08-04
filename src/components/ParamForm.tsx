@@ -860,14 +860,17 @@ function ParamDrift({
   presetName: string | null | undefined;
   onChange: (name: string, value: ParamValue) => void;
 }) {
+  const target = presetName ?? t("paramForm.defaultTarget");
   return (
     <span className="param-drift flex items-center gap-[0.4rem] text-[0.78rem] text-muted-foreground">
-      <span className="line-through">was {displayValue(param, baseline[param.name])}</span>
+      <span className="line-through">
+        {t("paramForm.wasValue", { value: displayValue(param, baseline[param.name]) })}
+      </span>
       <button
         type="button"
         className="param-drift-revert -m-[6px] inline-flex shrink-0 cursor-pointer items-center rounded-[4px] border-none bg-transparent p-[6px] pointer-coarse:-m-[16px] pointer-coarse:p-[16px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1"
-        aria-label={`Revert ${label} to ${presetName ?? "default"}`}
-        title={`Revert to ${presetName ?? "default"}`}
+        aria-label={t("paramForm.revertAria", { label, target })}
+        title={t("paramForm.revertTitle", { target })}
         onClick={() => revertToBaseline(param, baseline, onChange)}
       >
         <RevertIcon size={12} aria-hidden="true" />

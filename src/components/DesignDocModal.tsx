@@ -10,6 +10,8 @@ import { assetUrl } from "../lib/assetUrl";
 import { cn } from "../lib/utils";
 import { Modal, MODAL_BODY } from "./Modal";
 import { Markdown } from "./Markdown";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 // Typography for the doc body (the Markdown renderer emits bare h2/h3/h4/p/ul).
 // Mirrors HelpModal's HELP_BODY, extended to cover the heading levels a full doc
@@ -31,6 +33,7 @@ export function DesignDocModal({
   design: Design;
   onClose: () => void;
 }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   // idle→loading→(text|error). `design.doc` is guaranteed by the caller (the
   // trigger only renders when it's set), but we guard defensively.
   const [text, setText] = useState<string | null>(null);
@@ -60,14 +63,12 @@ export function DesignDocModal({
   }, [design.doc]);
 
   return (
-    <Modal title={`About the ${design.label}`} onClose={onClose}>
+    <Modal title={t("docModal.title", { label: design.label })} onClose={onClose}>
       <div className={DOC_BODY} tabIndex={0}>
         {error ? (
-          <p className="text-[0.88rem] text-muted-foreground">
-            Couldn't load this design's documentation. Check your connection and try again.
-          </p>
+          <p className="text-[0.88rem] text-muted-foreground">{t("docModal.loadFailed")}</p>
         ) : text === null ? (
-          <p className="text-[0.88rem] text-muted-foreground">Loading…</p>
+          <p className="text-[0.88rem] text-muted-foreground">{t("docModal.loading")}</p>
         ) : (
           <Markdown body={text} />
         )}
