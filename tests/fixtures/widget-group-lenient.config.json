@@ -1,0 +1,8 @@
+{
+  "source": "src",
+  "designs": [
+    { "id": "widget", "label": "Widget", "group": "   " },
+    { "id": "collapsible", "label": "Collapsible", "group": 42 }
+  ],
+  "render": { "features": [], "fonts": [] }
+}

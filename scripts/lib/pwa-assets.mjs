@@ -52,6 +52,16 @@ const MIME = {
 };
 const mimeOf = (src) => MIME[src.slice(src.lastIndexOf(".") + 1).toLowerCase()];
 
+// A design's `label` is a `LocalizableText` (src/openscad/types.ts's own doc):
+// a plain string, or an object of locale tag -> string. The manifest itself
+// stays at the deployment's CONFIGURED language, never per-visitor (see
+// docs/config.md's Localizing-config-text exclusions, alongside `title`/
+// `description`/`pwa.*`), so a derived shortcut's name/short_name project a
+// map-valued label to `defaultTag` here rather than shipping the raw object
+// into manifest.webmanifest — the manifest is static, generated once at
+// build time, with no client-side locale to resolve against.
+const lxDefault = (v, defaultTag) => (typeof v === "string" ? v : (v?.[defaultTag] ?? ""));
+
 // Optional build-time SVG→PNG rasterizer (@resvg/resvg-js). Present in dev
 // builds; gracefully absent in minimal CI environments that didn't npm install.
 let Resvg = null;
@@ -94,6 +104,12 @@ export function generatePwaAssets({
   BG_COLOR,
   CATEGORIES,
   designs,
+  // This deployment's resolved default locale tag (LANGUAGES[0], see
+  // gen-schema.mjs's generate()): projects a `LocalizableText` design
+  // `label` for a derived shortcut, see `lxDefault` above. Defaults to "en"
+  // so a caller that never localizes anything (every fixture-driven unit
+  // test) needs no change.
+  defaultTag = "en",
   mustExist,
   register,
   isTracked,
@@ -416,12 +432,15 @@ export function generatePwaAssets({
           : {}),
       }));
   } else if (designs.length > 1) {
-    shortcuts = designs.map((d) => ({
-      name: d.label,
-      short_name: d.label,
-      url: `./#d=${d.id}`,
-      ...(d.icon ? { icons: [iconDescriptor(d.icon)] } : {}),
-    }));
+    shortcuts = designs.map((d) => {
+      const label = lxDefault(d.label, defaultTag);
+      return {
+        name: label,
+        short_name: label,
+        url: `./#d=${d.id}`,
+        ...(d.icon ? { icons: [iconDescriptor(d.icon)] } : {}),
+      };
+    });
   }
 
   const manifest = {

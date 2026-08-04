@@ -1,0 +1,9 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "languages": ["en", "de"],
+  "designs": [
+    { "id": "widget", "label": { "en": "Widget", "de": "Gerät" }, "file": "widget-meta.scad" },
+    { "id": "collapsible", "label": "Collapsible" }
+  ]
+}

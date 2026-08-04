@@ -8,16 +8,27 @@ import type { PopupNotice } from "../openscad/types";
 
 const KEY = "popup.seen.v1";
 
+// `header`/`body`/`button` are `LocalizableText` (a plain string, or a
+// locale-tag map). A plain string encodes to ITSELF, unprefixed — the exact
+// pre-LocalizableText behaviour (contentHash's `s` was a bare template
+// interpolation) — so an existing all-plain-string config's hash, and
+// therefore its returning visitors' remembered-dismissal state, is byte-for-
+// byte unchanged by this field's shape having widened; only a config that
+// actually adopts the object form gets a new hash (once, the first time it
+// does). An object encodes as `obj:` + JSON.stringify: the `obj:` prefix is
+// what keeps that form from ever colliding with a plain string that
+// happened to look like the same JSON text. This stays locale-invariant on
+// purpose: a translation added for one locale re-shows the popup to every
+// locale's visitors, not just that one, which is a fine, simple rule.
+function encodeField(v: string | Record<string, string> | undefined): string {
+  if (v === undefined) return "";
+  return typeof v === "string" ? v : `obj:${JSON.stringify(v)}`;
+}
+
 // A small, stable hash of the popup's content + mode. Lets "once"/"dismissible"
 // re-appear when a deploy changes the message, instead of staying hidden forever.
-// `header`/`body`/`button` are `LocalizableText` (a plain string, or a
-// locale-tag map) — JSON.stringify rather than raw interpolation so either
-// form hashes deterministically and a plain string vs. an equivalent
-// single-entry object can't collide; this stays locale-invariant on purpose:
-// a translation added for one locale re-shows the popup to every locale's
-// visitors, not just that one, which is a fine, simple rule.
 function contentHash(popup: PopupNotice): string {
-  const s = `${popup.mode}\n${JSON.stringify(popup.header)}\n${JSON.stringify(popup.body)}\n${JSON.stringify(popup.button ?? "")}`;
+  const s = `${popup.mode}\n${encodeField(popup.header)}\n${encodeField(popup.body)}\n${encodeField(popup.button)}`;
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   return (h >>> 0).toString(36);

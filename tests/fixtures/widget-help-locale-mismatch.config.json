@@ -1,0 +1,14 @@
+{
+  "source": "src",
+  "languages": ["en", "de"],
+  "help": {
+    "tabs": [
+      {
+        "label": "Getting started",
+        "file": { "en": "widget-help-locale.en.md", "de": "widget-help-locale-mismatch.de.md" }
+      }
+    ]
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}
