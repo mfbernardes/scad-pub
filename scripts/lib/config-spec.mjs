@@ -320,6 +320,26 @@ export const CONFIG_SPEC = {
   },
   lang: { type: "string", default: "en", description: "Document/manifest language, a BCP-47 tag." },
   dir: { type: "enum", values: ["ltr", "rtl", "auto"], default: "ltr", description: "Document/manifest text direction." },
+  // Which of ScadPub's shipped chrome locales (src/lib/localeRegistry.ts's
+  // LOCALE_TAGS) this deployment offers at runtime — the language switcher's
+  // option list, and what src/lib/localeStore.ts's `enabledTags` is built
+  // from. `custom: true`: an array of registry-tag strings needs the
+  // cross-reference-against-the-locale-registry validation parseLanguages
+  // (scripts/lib/config-parsers.mjs) does, not a shape applyTopLevelScalars
+  // can express. See that function's own comment for the exact default and
+  // validation rules, including how an unshipped `lang` (e.g. "fr") resolves
+  // to a single-locale deployment.
+  languages: {
+    type: "array",
+    items: { type: "string" },
+    custom: true,
+    description:
+      "Which shipped chrome locales (see src/lib/localeRegistry.ts) this deployment's language " +
+      "switcher offers. Defaults to every shipped locale, 'lang' first, when 'lang' is one of " +
+      "them; otherwise to a single-locale deployment (the switcher stays hidden). When set, " +
+      "every entry must name a shipped locale and the set must include the deployment's " +
+      "resolved default locale.",
+  },
 
   // Manifest-only; see PWA_THEME_COLOR_SPEC and the `pwa` node below.
   pwa: PWA_SPEC,
@@ -658,7 +678,21 @@ export const CONFIG_SPEC = {
     // open-ended key space, like `help` above; no `properties` of its own, so
     // `openKeys` is documentation more than mechanism here too.
     openKeys: true,
-    description: "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys.",
+    // Each VALUE is either a plain string (overrides the deployment's
+    // default locale only, full back-compat with a config written before
+    // per-locale overrides existed) or an object of locale tag -> string
+    // (overrides one `languages` entry at a time). `mapValue` tells
+    // gen-config-schema.mjs's nodeToSchema to emit that same string-or-map
+    // union as this object's `additionalProperties`, rather than the
+    // unrestricted "any property" shape a key-less object would otherwise
+    // get (see nodeToSchema's own comment on the marker).
+    mapValue: {
+      anyOf: [{ type: "string" }, { type: "object", additionalProperties: { type: "string" } }],
+    },
+    description:
+      "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys. Each " +
+      "value is a plain string (overrides the deployment's default locale only) or an object of " +
+      "locale tag: string pairs (each tag must be one of this deployment's 'languages').",
   },
 };
 

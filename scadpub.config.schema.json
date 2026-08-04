@@ -60,6 +60,16 @@
         }
       ]
     },
+    "languages": {
+      "description": "Which shipped chrome locales (see src/lib/localeRegistry.ts) this deployment's language switcher offers. Defaults to every shipped locale, 'lang' first, when 'lang' is one of them; otherwise to a single-locale deployment (the switcher stays hidden). When set, every entry must name a shipped locale and the set must include the deployment's resolved default locale.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "pwa": {
       "description": "Manifest-only PWA chrome (install metadata, icons, theming) that feeds manifest.webmanifest and the icon rasterizer at build time. Not mirrored into designs.json — the app itself never reads a 'pwa' object.",
       "type": [
@@ -1248,11 +1258,24 @@
       }
     },
     "strings": {
-      "description": "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys.",
+      "description": "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys. Each value is a plain string (overrides the deployment's default locale only) or an object of locale tag: string pairs (each tag must be one of this deployment's 'languages').",
       "type": [
         "object",
         "null"
-      ]
+      ],
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        ]
+      }
     }
   },
   "additionalProperties": false

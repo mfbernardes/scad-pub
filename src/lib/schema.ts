@@ -213,13 +213,25 @@ export function validateSchema(raw: unknown): Schema {
   }
   if (s.id !== undefined && typeof s.id !== "string") fail("'id' must be a string");
   if (s.lang !== undefined && typeof s.lang !== "string") fail("'lang' must be a string");
-  if (s.strings !== undefined)
-    checkStringMap(
-      s.strings,
-      "'strings' must be an object of key: string pairs",
-      (key) => `'strings.${key}' must be a string`,
-      false
-    );
+  if (s.languages !== undefined) {
+    if (!Array.isArray(s.languages) || s.languages.length === 0)
+      fail("'languages' must be a non-empty array of strings");
+    for (const tag of s.languages)
+      if (typeof tag !== "string" || !tag) fail("'languages' entries must be non-empty strings");
+  }
+  if (s.strings !== undefined) {
+    if (typeof s.strings !== "object" || s.strings === null || Array.isArray(s.strings))
+      fail("'strings' must be an object of key: string, or key: (locale: string) pairs");
+    for (const [key, value] of Object.entries(s.strings as Record<string, unknown>)) {
+      if (typeof value === "string") continue;
+      checkStringMap(
+        value,
+        `'strings.${key}' must be a string, or an object of locale: string pairs`,
+        (tag) => `'strings.${key}.${tag}' must be a string`,
+        false
+      );
+    }
+  }
   if (s.dir !== undefined && !TEXT_DIRECTIONS.includes(s.dir as string))
     fail("'dir' must be \"ltr\", \"rtl\" or \"auto\"");
   if (s.defaultDesign != null) {

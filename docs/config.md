@@ -44,6 +44,11 @@ These keys set the document chrome and, through the `pwa` block, the Progressive
 - **`id`**: namespaces localStorage, IndexedDB, and preset cache. Defaults to `"scadpub"`
 - **`description`**: `<meta>` description and PWA manifest description
 - **`lang`** / **`dir`**: document and manifest language (a BCP-47 tag, default `"en"`) and text direction (`"ltr"` by default, `"rtl"`, or `"auto"`). ScadPub emits them onto `<html lang dir>` and into the manifest
+- **`languages`**: optional array of locale tags this deployment's runtime language switcher offers, from the locales ScadPub ships a chrome translation for (`en`, `de` today — see `src/lib/localeRegistry.ts`). Omit it and every shipped locale is offered, `lang` first, as long as `lang` itself is one of them; when `lang` names a locale ScadPub doesn't ship (e.g. `"fr"`), the deployment defaults to single-locale instead — offering only `"en"` (chrome text falls back to English, and the switcher stays hidden; this is the existing behaviour for a `lang`-only deployment, unchanged). Set it explicitly to offer a SUBSET of the shipped locales (`["en", "de"]` to restrict to just those two, say, on a deployment that otherwise ships more); every entry must name a shipped locale, and the set must always include the deployment's *resolved* default locale (`lang` itself when it's shipped, otherwise `"en"`) — omitting it fails the build
+
+```jsonc
+{ "lang": "de", "languages": ["de", "en"] }
+```
 - **`pwa`**: manifest-only fields (`shortName`, `icon`, `iconMaskable`, `themeColor`, `backgroundColor`, `categories`, `screenshots`, `shortcuts`, `install`), see [PWA manifest (`pwa`)](#pwa-manifest-pwa). `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg` from it
 
 ### Design sources
@@ -419,21 +424,22 @@ Load order, last wins: app bundle CSS -> `colors` `<style>` -> `extraCss` `<link
 
 ## Text overrides (`strings`)
 
-ScadPub’s own chrome text (the readiness pill, the Review dialog, attention cards, the export dock, the output console and the share/export toasts) is generated from a small built-in catalogue (`src/locales/en.json`), resolved through `src/lib/i18n.ts`'s `t()`/`tn()`. The optional `strings` config key lets a deployment override any of those keys without a fork:
+ScadPub’s own chrome text (the readiness pill, the Review dialog, attention cards, the export dock, the output console, the share/export toasts, and the rest of the app’s UI copy) is generated from a small built-in catalogue (`src/locales/en.json`), resolved at runtime through `src/lib/i18n.ts`'s `t()`/`tn()` against the visitor’s active locale (see [`languages`](#app-identity-and-pwa) and `src/lib/localeStore.ts`). The optional `strings` config key lets a deployment override any of those keys without a fork, in either of two shapes:
 
 ```jsonc
 {
   "strings": {
     "action.export": "Download for printing",
-    "review.title": "Check before you print"
+    "review.title": { "en": "Check before you print", "de": "Vor dem Drucken prüfen" }
   }
 }
 ```
 
-- Each key must already exist in `src/locales/en.json`: an unknown key (typically a typo) fails the build, pointing you at that catalogue. There is no way to *add* a brand-new key this way, only override an existing one.
-- Each value is a plain string. Where the built-in text interpolates a variable (`{count}`, `{format}`, …), keep the same `{name}` placeholder(s) in your override: an override that drops a placeholder renders literal text where the value would have gone.
-- A pluralized key is **two** catalogue keys, suffixed `#one` and `#other` (English’s only two [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) plural categories). E.g. `review.issueCount#one` (“{count} issue to review”) and `review.issueCount#other` (“{count} issues to review”). Override both together if you override either, so a count of exactly 1 doesn’t fall back to the built-in English text while every other count uses yours.
-- This surface is intentionally a **subset** of ScadPub’s UI, not a full translation layer: it covers the surfaces `t()`/`tn()` have been wired into so far (see `src/locales/en.json` for the exhaustive key list). Older/legacy panels (the parameter form, the Presets tab, the Files dialog’s own body copy, the Help modal chrome, …) are not yet routed through this catalogue and stay plain English regardless of `strings`.
+- A **plain string** value overrides the deployment’s *default* locale only (`lang`, or its resolved fallback — see [`languages`](#app-identity-and-pwa)): the pre-per-locale shape, and still the right one for a single-locale deployment, or for the one locale you actually want to override.
+- An **object** value overrides per locale, keyed by locale tag (`{ "en": "…", "de": "…" }`): each key must be one of the deployment’s enabled `languages`, and the object needs at least one entry. A locale left out of the object simply keeps the built-in catalogue text for that key.
+- Either way, each key must already exist in `src/locales/en.json`: an unknown key (typically a typo) fails the build, pointing you at that catalogue. There is no way to *add* a brand-new key this way, only override an existing one.
+- Each string value interpolates the same way the built-in text does. Where the built-in text uses a variable (`{count}`, `{format}`, …), keep the same `{name}` placeholder(s) in your override: an override that drops a placeholder renders literal text where the value would have gone.
+- A pluralized key is **two** catalogue keys, suffixed `#one` and `#other`, since those are the only two catalogue keys `src/locales/en.json` (and therefore `strings`, which validates against it) ever defines — English’s only two [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) plural categories. E.g. `review.issueCount#one` (“{count} issue to review”) and `review.issueCount#other` (“{count} issues to review”). Override both together if you override either, so a count of exactly 1 doesn’t fall back to the built-in text while every other count uses yours.
 - `strings` never affects geometry, so it’s absent from `renderHash`.
 
 ## Import file (`fileImport`)
@@ -689,6 +695,8 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 - **`subsumedByFont`**: optional boolean, default `false`. Only meaningful alongside `attention: true`. Marks a category whose notices are a *symptom* of a missing font rather than their own separate issue, for example a design that warns about text overflowing once a substitute family was used. While a font the design asked for isn’t loaded, and it is unambiguous which font parameter that is (the design has one font parameter, or exactly one fell back), this category’s pending notices are folded into the font item instead of being listed again beside it. With no font missing, they count exactly as normal
 
 Omit `notices`, or set it to `[]`, and no marker categories are recognised. Design echoes appear only in the raw log. The bundled example config (`scadpub.config.json`) opts in with `alert` and `note` categories. The example `tag` design echoes them in specific, parameter-driven situations so you can see the badges appear.
+
+`label`, like a design’s own `group`/picker `label` and a curated review row’s label, is config- or design-authored text, not chrome text: it stays in the deployment’s own language regardless of a visitor’s active locale, and is not projected per-locale the way `strings`’ per-locale values are. A multi-locale deployment that wants a translated badge noun has no per-locale hook for it today — only a single `{ one, other }` pair, in whichever language the config itself is written in.
 
 > **Hardcoded, not configurable:** OpenSCAD’s own `WARNING:` lines surface as warning messages, and `assert()` failures (`ERROR: Assertion …`) surface as a message **and** an `asserts` count badge. These work regardless of `notices`.
 

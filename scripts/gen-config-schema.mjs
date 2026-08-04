@@ -139,6 +139,18 @@ function nodeToSchema(node) {
   if (node.type === "array")
     return { ...base, type: "array", items: node.items ? nodeToSchema(node.items) : {} };
 
+  // A dynamically-keyed object whose VALUES all share one shape (`strings`:
+  // catalogue key -> string-or-locale-map), as opposed to `acceptsString`
+  // below (the object form's PROPERTY SET is fixed but the object itself is
+  // also accepted bare as a string) or the plain `{ type: "object" }`
+  // fallback further down (genuinely untyped values, `help`/`colors`/a
+  // `logo`/`pwa.themeColor` object form). `node.mapValue` is already a JSON
+  // Schema fragment (config-spec.mjs's `strings` node builds it directly, see
+  // that node's own comment), so it's used verbatim as `additionalProperties`
+  // rather than routed back through this function.
+  if (node.type === "object" && node.mapValue)
+    return { ...base, type: "object", additionalProperties: node.mapValue };
+
   // A field that accepts EITHER a plain string OR an object with no fixed key
   // set (`designs[].presets.images`: a directory path, or a preset-name ->
   // path map). Distinct from the primitive-shorthand-plus-options-object

@@ -44,6 +44,11 @@ import { checkHelpShape } from "../src/lib/helpShape.mjs";
 // requires that, see CLAUDE.md), and schema.ts's only value import is
 // helpShape.mjs, so no app code is dragged into the build script.
 import { validateSchema } from "../src/lib/schema.ts";
+// Data-only (no JSON, no React): the registry of locales ScadPub ships chrome
+// translations for, imported directly under Node's type stripping, the same
+// as src/lib/schema.ts above. `LOCALE_TAGS` feeds parseLanguages's
+// `registryTags` argument (see parseIdentity below).
+import { LOCALE_TAGS } from "../src/lib/localeRegistry.ts";
 import { slugifyPresetNames } from "./lib/preset-slug.mjs";
 import { resolveWorkerDependencyClosure } from "./lib/worker-deps.mjs";
 import { generatePwaAssets, commitPwaBatch } from "./lib/pwa-assets.mjs";
@@ -57,6 +62,7 @@ import {
   parseFileImport,
   parseFormat,
   parseLang,
+  parseLanguages,
   parseLicenses,
   parseNotices,
   parsePopup,
@@ -81,6 +87,7 @@ export {
   parseFileImport,
   parseFormat,
   parseLang,
+  parseLanguages,
   parseLicenses,
   parseNotices,
   parsePopup,
@@ -201,7 +208,13 @@ function parseIdentity(config) {
   // to interpolate into the generated <html lang dir> attributes and the manifest.
   const LANG = parseLang(config.lang);
   const DIR = parseDir(config.dir);
-  return { TITLE, ID, DESCRIPTION, LANG, DIR };
+  // Which shipped chrome locales this deployment's language switcher offers
+  // (config's `languages` key); computed alongside LANG since parseLanguages
+  // needs it to resolve the default-locale rules described in its own
+  // comment (scripts/lib/config-parsers.mjs). Always resolves to a
+  // non-empty array, unlike most optional fields here.
+  const LANGUAGES = parseLanguages(config.languages, LOCALE_TAGS, LANG);
+  return { TITLE, ID, DESCRIPTION, LANG, DIR, LANGUAGES };
 }
 
 // Fonts are referenced by basename under /fonts. An entry is either a font
@@ -1157,8 +1170,10 @@ function checkAfterExportHelpTab(UI, HELP) {
 // out of generate() because it was 90 uninterrupted lines of `const X =
 // parseX(config.x)` between two steps that genuinely do sequence.
 //
-// `TITLE` is only here for `shortName`'s documented fallback.
-function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE) {
+// `TITLE` is only here for `shortName`'s documented fallback. `LANGUAGES` is
+// this deployment's resolved `languages` (parseIdentity, above): STRINGS'
+// per-locale object values are validated against it.
+function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE, LANGUAGES) {
   // `features`/`format`/`fonts`/`fontFallback` now live under `render` (moved
   // in from the top level): they're genuine render inputs, so they stay
   // folded into renderHash below exactly as before; only their config PATH
@@ -1213,9 +1228,10 @@ function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE) {
   // appended (never replacing the built-ins) by the in-app licenses modal.
   const LICENSES_EXTRA = parseLicenses(config.licenses);
   // Optional per-deployment UI text overrides (config's `strings` key),
-  // validated against the bundled English catalogue's key set, see
+  // validated against the bundled English catalogue's key set and (for a
+  // per-locale object value) this deployment's own LANGUAGES, see
   // src/lib/i18n.ts and docs/config.md's `strings` section. Absent -> {}.
-  const STRINGS = parseStrings(config.strings, enCatalogKeys());
+  const STRINGS = parseStrings(config.strings, enCatalogKeys(), LANGUAGES);
 
   checkAfterExportHelpTab(UI, HELP);
   return {
@@ -1242,7 +1258,7 @@ function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE) {
 function assembleSchema(parts) {
   const {
     SOURCE, relPosix, renderHash, version, components, BIN_ASSETS, TITLE, SHORT_NAME,
-    ID, DESCRIPTION, LANG, DIR, STRINGS, PWA, appleSplash, COLORS, extraCss, logo,
+    ID, DESCRIPTION, LANG, DIR, LANGUAGES, STRINGS, PWA, appleSplash, COLORS, extraCss, logo,
     FORMAT, VIEWER, FEATURES, RENDER, FONTS, FONT_FAMILIES, FONT_FACES, FILE_IMPORT,
     POPUP, NOTICES, HELP, LICENSES_EXTRA, UI, defaultDesign, assets, designs,
   } = parts;
@@ -1271,6 +1287,11 @@ function assembleSchema(parts) {
     description: DESCRIPTION,
     lang: LANG,
     dir: DIR,
+    // Always a non-empty array (parseLanguages' own contract, see
+    // parseIdentity): a single-locale deployment still emits its one tag
+    // rather than omitting the key, so src/lib/localeStore.ts never has to
+    // special-case an absent value from a build that predates this field.
+    languages: LANGUAGES,
     strings: STRINGS,
     // `pwa.themeColor.{dark,light}` in the config, still flat here, see the
     // module-level comment above generate() (and CONFIG_SPEC.pwa's own) for
@@ -1433,7 +1454,7 @@ export function generate({
 
   resolveProseFields(config, CONFIG_DIR, mustExist);
 
-  const { TITLE, ID, DESCRIPTION, LANG, DIR } = parseIdentity(config);
+  const { TITLE, ID, DESCRIPTION, LANG, DIR, LANGUAGES } = parseIdentity(config);
 
   // `source` defaults to "." (designs live beside the config); set it to point
   // elsewhere (e.g. "examples", a sibling checkout, or an absolute path).
@@ -1474,7 +1495,7 @@ export function generate({
     NOTICES,
     LICENSES_EXTRA,
     STRINGS,
-  } = parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE);
+  } = parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE, LANGUAGES);
   const { FONTS, FONT_FAMILIES, FONT_FACES, fontPaths, fontsConf, fontWrites } = bundleFonts(
     config,
     SOURCE,
@@ -1645,6 +1666,7 @@ export function generate({
     DESCRIPTION,
     LANG,
     DIR,
+    LANGUAGES,
     STRINGS,
     PWA,
     appleSplash,
