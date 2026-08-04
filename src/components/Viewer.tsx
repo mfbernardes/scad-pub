@@ -220,7 +220,13 @@ export const Viewer = forwardRef<
     onModelPick?: (pos: { x: number; y: number }) => void;
   }
 >(function Viewer({ stl, theme, designId, presetId, reframeOnPreset = true, showDimensions = false, view = DEFAULT_VIEW, showGrid = false, onMeasure, editable = false, onModelPick }, ref) {
-  useLocale(); // subscription only: re-render this component's t() calls (WebGL error copy) on a locale switch
+  // Subscribes for this component's own t() calls (WebGL error copy) on a
+  // locale switch; `tag` is also threaded into the dimension-overlay effects
+  // below as an explicit dep: mm() (format.ts) is locale-sensitive (decimal
+  // comma under German), but the overlay's sprite labels are canvas textures
+  // baked once by syncDimensions, not React text, so nothing re-renders them
+  // on a locale switch without it (same pattern as useReadinessModel).
+  const { tag } = useLocale();
   // Latest selected view, read inside the [stl]-only reframe effect and the
   // imperative handle without re-running them.
   const viewRef = useRef(view);
@@ -933,16 +939,21 @@ export const Viewer = forwardRef<
     // showDimensions/showGrid are read fresh on a theme change; their own
     // effects below handle plain toggles. resetEpoch: a rebuilt scene (see
     // the setup effect) starts with none of this applied, and re-running
-    // this effect is cheaper than duplicating it there.
+    // this effect is cheaper than duplicating it there. tag: the dimension
+    // overlay's sprite labels are baked canvas textures (mm(), locale-
+    // sensitive), so a locale switch needs the same rebuild a theme switch
+    // already triggers here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme, resetEpoch]);
+  }, [theme, resetEpoch, tag]);
 
   // Show/hide the dimension overlay on toggle (geometry stays put, and so
-  // does the camera: the ruler never re-frames, see chromeInsets).
+  // does the camera: the ruler never re-frames, see chromeInsets). Also
+  // re-syncs on a locale switch (tag): mm()'s baked sprite labels wouldn't
+  // otherwise pick up the new decimal format while the overlay stays shown.
   useEffect(() => {
     syncDimensions(showDimensions);
     requestRenderRef.current();
-  }, [showDimensions]);
+  }, [showDimensions, tag]);
 
   // Show/hide the reference grid on toggle (geometry stays put). Invalidating a
   // frame is the whole cost: under the studio style the contact shadow is NOT
@@ -1091,6 +1102,12 @@ export const Viewer = forwardRef<
     const prevSize = modelSizeRef.current;
     const boundsChanged = !prevSize || !sizesEqual(prevSize, size);
     modelSizeRef.current = size.clone();
+    // Not `tag`-dependent: this whole effect only reruns on new geometry
+    // (deps [stl, resetEpoch]), and adding `tag` here would force a full
+    // mesh/material/shadow rebuild on every locale switch just to refresh
+    // three sprite textures. The lightweight [showDimensions, tag] effect
+    // above already re-syncs those labels on a locale-only change; this call
+    // stays scoped to what it's named for — new bounds.
     if (boundsChanged) syncDimensions(showDimensions); // refresh the overlay for the new bounds
     onMeasureRef.current?.({ x: size.x, y: size.y, z: size.z });
 

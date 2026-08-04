@@ -12,7 +12,10 @@ import { t, formatNumber } from "./i18n";
  *  Display only (DimensionInfo, reviewSummary, the viewer's dimension
  *  overlay) — never feeds a render arg, URL state or an `<input>` value. */
 export function mm(n: number): string {
-  return formatNumber(n, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  // useGrouping: false — a CAD callout is a technical readout, not prose: a
+  // grouped "1,000.0" (or de's dot-grouped "1.000,0", misreadable as a
+  // decimal point) is wrong here even though formatNumber groups by default.
+  return formatNumber(n, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false });
 }
 
 /**

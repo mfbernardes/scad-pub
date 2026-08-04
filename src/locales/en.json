@@ -259,7 +259,7 @@
   "metrics.lastRender": "Last render:",
   "metrics.slowest": "Slowest this session:",
   "metrics.changed": "Changed:",
-  "metrics.cachedSuffix": " (cached)",
+  "metrics.cachedDuration": "{duration} (cached)",
   "metrics.durationMs": "{n} ms",
   "metrics.durationSeconds": "{n} s",
   "files.sizeB": "{n} B",

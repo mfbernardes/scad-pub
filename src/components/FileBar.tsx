@@ -30,16 +30,18 @@ interface Props {
   onClearFiles: () => void;
 }
 
+// useGrouping: false throughout — a file size is a technical readout, not
+// prose: formatNumber's default grouping would render "1,024 B"/"1.024 B".
 function formatSize(bytes: number): string {
-  if (bytes < 1024) return t("files.sizeB", { n: formatNumber(bytes) });
+  if (bytes < 1024) return t("files.sizeB", { n: formatNumber(bytes, { useGrouping: false }) });
   if (bytes < 1024 * 1024) {
     const frac = bytes < 10 * 1024 ? 1 : 0;
     return t("files.sizeKb", {
-      n: formatNumber(bytes / 1024, { minimumFractionDigits: frac, maximumFractionDigits: frac }),
+      n: formatNumber(bytes / 1024, { minimumFractionDigits: frac, maximumFractionDigits: frac, useGrouping: false }),
     });
   }
   return t("files.sizeMb", {
-    n: formatNumber(bytes / (1024 * 1024), { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+    n: formatNumber(bytes / (1024 * 1024), { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }),
   });
 }
 
