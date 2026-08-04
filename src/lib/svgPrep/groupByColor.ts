@@ -11,9 +11,11 @@ import { effectiveFill } from "./regions";
 
 const ELEMENT_NODE = 1;
 
+export type GroupByColorErrorCode = "no-shapes" | "already-grouped" | "one-colour" | "transformed";
+
 export interface GroupByColorResult {
   changes: string[];
-  error: string | null;
+  error: { code: GroupByColorErrorCode } | null;
 }
 
 function pruneEmptyGroups(root: Element): void {
@@ -81,13 +83,10 @@ function deepestCommonAncestor(shapes: Element[], root: Element): Element {
 
 export function groupByColor(root: Element): GroupByColorResult {
   const allShapes = iterElements(root).filter((el) => SHAPE_TAGS.has(localName(el)));
-  if (allShapes.length === 0) return { changes: [], error: "no shapes to group" };
+  if (allShapes.length === 0) return { changes: [], error: { code: "no-shapes" } };
   const shapes = allShapes.filter((sh) => !inNamedRegion(sh, root));
   if (shapes.length === 0) {
-    return {
-      changes: [],
-      error: "every shape is already in a named colour region — nothing to regroup",
-    };
+    return { changes: [], error: { code: "already-grouped" } };
   }
 
   // New groups are created in the shapes' deepest common ancestor: moving a
@@ -106,12 +105,7 @@ export function groupByColor(root: Element): GroupByColorResult {
         el.getAttribute("clip-path") ||
         el.getAttribute("mask")
       ) {
-        return {
-          changes: [],
-          error:
-            "some shapes are transformed or clipped, so regrouping could move " +
-            "them — group them by colour in your editor instead",
-        };
+        return { changes: [], error: { code: "transformed" } };
       }
       node = el.parentNode;
     }
@@ -135,10 +129,7 @@ export function groupByColor(root: Element): GroupByColorResult {
   // whose loose remainder happens to be one colour still has that remainder
   // worth grouping, and must not be refused as "only one colour found".
   if (order.length < 2 && shapes.length === allShapes.length) {
-    return {
-      changes: [],
-      error: "only one colour found — nothing to separate",
-    };
+    return { changes: [], error: { code: "one-colour" } };
   }
 
   for (const sh of shapes) sh.parentNode?.removeChild(sh);

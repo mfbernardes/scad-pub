@@ -23,7 +23,7 @@ export { check } from "./check";
 // through, one stage at a time, rather than only end-to-end via prepareSvg.
 export { applyFixes, fixViewBoxOrigin } from "./fixes";
 export { groupByColor } from "./groupByColor";
-export type { GroupByColorResult } from "./groupByColor";
+export type { GroupByColorResult, GroupByColorErrorCode } from "./groupByColor";
 export {
   parseLayersArg,
   parseLayerSpec,
@@ -42,7 +42,7 @@ export type { Finding, Level, Region } from "./types";
 
 import { check } from "./check";
 import { applyFixes } from "./fixes";
-import { groupByColor } from "./groupByColor";
+import { groupByColor, type GroupByColorErrorCode } from "./groupByColor";
 import { canvasEntry, deriveRegions, formatLayers, parseLayersArg } from "./regions";
 import type { Finding, Region } from "./types";
 
@@ -103,6 +103,19 @@ export function serializeSvg(root: Element): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(root)}\n`;
 }
 
+// English text kept only for this call site's own display, pending the coded
+// Change/svgPrepText refactor (Phase 2 of the translation coverage plan): the
+// codes below are groupByColor's real contract; this map is display, not
+// control flow.
+const GROUP_BY_COLOR_ERROR_TEXT: Record<GroupByColorErrorCode, string> = {
+  "no-shapes": "no shapes to group",
+  "already-grouped": "every shape is already in a named colour region — nothing to regroup",
+  "one-colour": "only one colour found — nothing to separate",
+  transformed:
+    "some shapes are transformed or clipped, so regrouping could move them — " +
+    "group them by colour in your editor instead",
+};
+
 /** Run group-by-colour once when the drawing has no named regions yet, so that
  *  painting alone defines the regions. Its idempotent "already grouped" and
  *  benign "single colour" outcomes are swallowed; other notes are returned. */
@@ -110,10 +123,8 @@ function autoGroupByColor(root: Element): string[] {
   if (deriveRegions(root).length > 0) return [];
   const { changes, error } = groupByColor(root);
   if (error) {
-    if (error.includes("already in a named") || error.includes("only one colour")) {
-      return [];
-    }
-    return [`Group by colour: ${error}`];
+    if (error.code === "already-grouped" || error.code === "one-colour") return [];
+    return [`Group by colour: ${GROUP_BY_COLOR_ERROR_TEXT[error.code]}`];
   }
   return changes;
 }

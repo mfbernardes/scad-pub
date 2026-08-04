@@ -143,8 +143,21 @@ test("group-by-colour is idempotent on already-named regions", () => {
   );
   const res = groupByColor(root);
   assert.equal(res.changes.length, 0);
-  assert.match(res.error, /already in a named/);
+  assert.equal(res.error.code, "already-grouped");
   assert.equal(formatLayers(deriveRegions(root)), "walls:gray, rooms:white");
+});
+
+test("group-by-colour reports every error as a code, not just the two swallowed here", () => {
+  const empty = parse(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>`);
+  assert.equal(groupByColor(empty).error.code, "no-shapes");
+
+  const oneColour = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10">
+       <rect x="0" y="0" width="10" height="10" fill="gray"/>
+       <rect x="10" y="0" width="10" height="10" fill="gray"/>
+     </svg>`,
+  );
+  assert.equal(groupByColor(oneColour).error.code, "one-colour");
 });
 
 test("group-by-colour keeps a fill inherited from the group a shape is lifted from", () => {
@@ -186,7 +199,7 @@ test("group-by-colour refuses when a transform sits between container and shape"
        <rect x="10" y="0" width="10" height="10" fill="white"/>
      </svg>`,
   );
-  assert.match(groupByColor(root).error, /transformed or clipped/);
+  assert.equal(groupByColor(root).error.code, "transformed");
 });
 
 test("a single colour derives a blank layers string (no per-region split)", () => {
@@ -929,7 +942,7 @@ test("group-by-colour prunes the groups it empties", () => {
       `</svg>`
   );
   // `old` is a named region, so nothing is loose: grouping refuses.
-  assert.match(groupByColor(root).error, /already in a named/);
+  assert.equal(groupByColor(root).error.code, "already-grouped");
 
   const loose = parse(
     `<svg viewBox="0 0 10 10">` +
