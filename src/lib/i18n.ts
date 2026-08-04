@@ -176,13 +176,16 @@ const schema = schemaJson as unknown as Schema;
  *  the two modules can never disagree about which locale is the default. */
 export const defaultTag = collapseToAvailable(schema.lang ?? "en", LOCALE_TAGS) ?? "en";
 
-// Binds at the deployment's default locale, not hardcoded "en": Phase 1 has
-// no locale bundle to load yet (localeBundle is null, so `rebind` falls back
-// to the plain English catalogue), but the binding's tag and the `strings`
-// projection below must already be `defaultTag` — otherwise a `lang: "de"`
-// deployment's flat `strings` overrides (which apply only "at the default
-// locale", see `overridesForLocale`) would silently never apply, since
-// nothing else rebinds until a locale switch happens.
+// Binds at the deployment's default locale, not hardcoded "en": this module
+// runs before any async import can resolve, so `localeBundle` is null here
+// (`rebind` falls back to the plain English catalogue) — a non-"en" default
+// locale's real bundle arrives later, from localeStore.ts's own init load,
+// which rebinds again once it does. But the binding's TAG and the `strings`
+// projection below must already be `defaultTag` from this first call —
+// otherwise a `lang: "de"` deployment's flat `strings` overrides (which
+// apply only "at the default locale", see `overridesForLocale`) would
+// silently never apply, since nothing else rebinds `currentTag` until a
+// locale switch happens.
 rebind(defaultTag, null, overridesForLocale(schema.strings as ConfigStrings | undefined, defaultTag, defaultTag));
 
 /** Resolve a catalogue key to display text, interpolating `{name}` vars.

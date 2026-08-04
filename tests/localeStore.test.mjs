@@ -378,6 +378,98 @@ test("createLocaleStore: a same-tag early return does not starve the still-in-fl
   );
 });
 
+// Phase 6 MAJOR fix: a non-"en" default deployment used to never load its
+// own chrome bundle. The synchronous `rebind(defaultTag, null, …)` in
+// i18n.ts binds English text under the default tag purely as a first-paint
+// stub; nothing ever replaced it unless the visitor switched away and back,
+// because the OLD init load only ever fetched design strings, and
+// `setLocale(defaultTag)` while already "active" hit the same-tag early
+// return and skipped loading entirely. Net effect: a `lang: "de"`
+// deployment showed English chrome with "Deutsch" active in the selector.
+
+test("createLocaleStore: construction with a non-'en' default locale fires an init load for its OWN chrome bundle and rebinds it", async () => {
+  const rebindCalls = [];
+  const store = createLocaleStore({
+    loadChrome: { de: () => Promise.resolve({ "a.b": "Hallo" }) },
+    persist: () => {},
+    schemaLang: "de",
+    enabledTags: ["de", "en"],
+    onRebind: (tag, bundle, overrides) => rebindCalls.push({ tag, bundle, overrides }),
+  });
+  const before = store.getSnapshot();
+  assert.equal(before.tag, "de", "state starts at the default tag immediately, synchronously");
+  assert.equal(rebindCalls.length, 0, "no rebind yet: the init load hasn't resolved");
+
+  await Promise.resolve().then(() => Promise.resolve());
+  assert.equal(rebindCalls.length, 1);
+  assert.deepEqual(rebindCalls[0], { tag: "de", bundle: { "a.b": "Hallo" }, overrides: {} });
+  assert.notStrictEqual(store.getSnapshot(), before, "the init chrome load bumps the snapshot");
+});
+
+test("createLocaleStore: the default-tag init load is discarded when a real switch already landed first", async () => {
+  const initLoad = deferred();
+  const rebindCalls = [];
+  const store = createLocaleStore({
+    loadChrome: { de: () => initLoad.promise, fr: () => Promise.resolve({}) },
+    persist: () => {},
+    schemaLang: "de",
+    enabledTags: ["de", "en", "fr"],
+    onRebind: (tag, bundle, overrides) => rebindCalls.push({ tag, bundle, overrides }),
+  });
+  // A real switch away from the default lands BEFORE the init load resolves.
+  await store.setLocale("fr");
+  assert.equal(store.getSnapshot().tag, "fr");
+  assert.deepEqual(rebindCalls.map((c) => c.tag), ["fr"]);
+
+  // The slow init load for "de" resolves after "fr" already won: it must not
+  // overwrite the newer state or call onRebind a second time.
+  initLoad.resolve({ "a.b": "Hallo" });
+  await Promise.resolve().then(() => Promise.resolve());
+  assert.equal(store.getSnapshot().tag, "fr", "a stale init resolution must not override newer state");
+  assert.deepEqual(rebindCalls.map((c) => c.tag), ["fr"], "the discarded init load must not rebind");
+});
+
+test("createLocaleStore: re-selecting the default tag before its chrome ever loaded performs a REAL load, not a same-tag no-op", async () => {
+  const deLoad = deferred();
+  const rebindCalls = [];
+  const persistCalls = [];
+  const store = createLocaleStore({
+    loadChrome: { de: () => deLoad.promise },
+    persist: (tag) => persistCalls.push(tag),
+    schemaLang: "de",
+    enabledTags: ["de", "en"],
+    onRebind: (tag, bundle, overrides) => rebindCalls.push({ tag, bundle, overrides }),
+  });
+  assert.equal(store.getSnapshot().tag, "de");
+  assert.equal(rebindCalls.length, 0, "chrome hasn't loaded yet (the init load is still pending)");
+
+  // Re-select the "already active" default tag explicitly — e.g. the user
+  // opening the language selector and picking the tag it already shows.
+  const pending = store.setLocale("de");
+  deLoad.resolve({ "a.b": "Hallo" });
+  await pending;
+
+  assert.equal(rebindCalls.length, 1, "a REAL load ran — a same-tag no-op would never call onRebind");
+  assert.deepEqual(rebindCalls[0], { tag: "de", bundle: { "a.b": "Hallo" }, overrides: {} });
+  assert.deepEqual(persistCalls, ["de"]);
+});
+
+test("createLocaleStore: once the default tag's chrome has genuinely loaded, re-selecting it IS a true no-op again", async () => {
+  const rebindCalls = [];
+  const store = createLocaleStore({
+    loadChrome: { de: () => Promise.resolve({ "a.b": "Hallo" }) },
+    persist: () => {},
+    schemaLang: "de",
+    enabledTags: ["de", "en"],
+    onRebind: (tag, bundle, overrides) => rebindCalls.push({ tag, bundle, overrides }),
+  });
+  await Promise.resolve().then(() => Promise.resolve()); // let the init load land
+  assert.equal(rebindCalls.length, 1);
+
+  await store.setLocale("de");
+  assert.equal(rebindCalls.length, 1, "already loaded: re-selecting the default tag must not reload it");
+});
+
 test("deriveEnabledTags: a real schema.languages array passes through verbatim", () => {
   assert.deepEqual(deriveEnabledTags(["de", "en"], "de"), ["de", "en"]);
 });

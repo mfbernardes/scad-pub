@@ -2430,12 +2430,12 @@ async function main() {
     const enabledTags =
       Array.isArray(schema.languages) && schema.languages.length > 0 ? schema.languages : [defaultTag];
     // The tag the app actually boots into under this harness's PINNED_LOCALE
-    // ("en-US", see lib/browser.mjs): mirrors localeStore.ts's
-    // resolveInitialLocale with no persisted choice, so best-fit "en-US"
-    // against the deployment's enabled locales, falling back to the collapsed
-    // default. NOT necessarily `defaultTag` — a deployment whose `languages`
-    // excludes "en" boots into its own default instead, same as the app does.
-    const bootTag = bestFitLocale(["en-US"], enabledTags) ?? defaultTag;
+    // (see lib/browser.mjs): mirrors localeStore.ts's resolveInitialLocale
+    // with no persisted choice, so best-fit the pinned locale against the
+    // deployment's enabled locales, falling back to the collapsed default.
+    // NOT necessarily `defaultTag` — a deployment whose `languages` excludes
+    // "en" boots into its own default instead, same as the app does.
+    const bootTag = bestFitLocale([PINNED_LOCALE.locale], enabledTags) ?? defaultTag;
     // A `strings` value is either a plain string (the pre-Phase-4 shape,
     // applies unconditionally) or an object of locale tag -> string (Phase
     // 4): project the latter onto `bootTag`, falling back to the built-in
