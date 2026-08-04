@@ -13,7 +13,30 @@ import {
 } from "./dom";
 import { CSS_IMPORT_RE, CSS_URL_RE, isSameDocumentRef } from "../cssRefs.mjs";
 import { gFormat, parseViewBox } from "./geometry";
-import type { Change } from "./types";
+import type { Change, Vars } from "./types";
+
+/** Every Change code this module can emit, as the single source of truth: the
+ *  `change` helper below types each call site against it, so a typo or a code
+ *  missing from this list fails to compile, and src/lib/svgPrepText.ts's own
+ *  table-coverage test (tests/svgPrepText.test.mjs) asserts against this
+ *  export too, so a code ADDED here without a matching catalogue entry fails
+ *  a test instead of shipping silently. groupByColor.ts's own "grouped-colour"
+ *  Change isn't in this list — it's minted where it's emitted, not here. */
+export const CHANGE_CODES = [
+  "layer-kept",
+  "layer-usable",
+  "layer-renamed",
+  "recentred",
+  "removed-background",
+  "removed-active",
+  "removed-external",
+  "style-fills",
+] as const;
+export type FixChangeCode = (typeof CHANGE_CODES)[number];
+
+function change(code: FixChangeCode, vars?: Vars): Change {
+  return { code, vars };
+}
 
 /** Rename each Inkscape layer's id to its label so it is selectable. Only touches
  *  layer groups whose label differs from the id, sanitises the label into a
@@ -29,16 +52,14 @@ export function fixInkscapeIds(root: Element): Change[] {
   }
   for (const { el, label, id: gid, target } of trappedLayers(els)) {
     if (existing.has(target)) {
-      changes.push({ code: "layer-kept", vars: { label } });
+      changes.push(change("layer-kept", { label }));
       continue;
     }
     el.setAttribute("id", target);
     if (gid) existing.delete(gid);
     existing.add(target);
     changes.push(
-      target === label
-        ? { code: "layer-usable", vars: { label } }
-        : { code: "layer-renamed", vars: { label, target } },
+      target === label ? change("layer-usable", { label }) : change("layer-renamed", { label, target }),
     );
   }
   return changes;
@@ -68,7 +89,7 @@ export function fixViewBoxOrigin(root: Element): Change[] {
   for (const node of metadata) root.appendChild(node);
   root.appendChild(wrapper);
   root.setAttribute("viewBox", `0 0 ${gFormat(w)} ${gFormat(h)}`);
-  return [{ code: "recentred" }];
+  return [change("recentred")];
 }
 
 // Whether the element sets its own fill (a `fill=` attribute or a `fill:` in its
@@ -149,7 +170,7 @@ export function resolveStyleFills(root: Element): Change[] {
       count += 1;
     }
   }
-  return count ? [{ code: "style-fills", vars: { count } }] : [];
+  return count ? [change("style-fills", { count })] : [];
 }
 
 /** Drop any full-canvas background rectangle. OpenSCAD fills every shape, so a
@@ -166,7 +187,7 @@ function removeCanvasBackground(root: Element): Change[] {
       count += 1;
     }
   }
-  return count ? [{ code: "removed-background", vars: { count } }] : [];
+  return count ? [change("removed-background", { count })] : [];
 }
 
 /** Remove every element that can execute (see ACTIVE_TAGS), and neutralise what
@@ -187,7 +208,7 @@ export function removeActiveContent(root: Element): Change[] {
       count += 1;
     }
   }
-  if (count) changes.push({ code: "removed-active", vars: { count } });
+  if (count) changes.push(change("removed-active", { count }));
 
   let fetches = 0;
   for (const el of els) {
@@ -205,7 +226,7 @@ export function removeActiveContent(root: Element): Change[] {
       });
     if (cleaned !== css) el.textContent = cleaned;
   }
-  if (fetches) changes.push({ code: "removed-external", vars: { count: fetches } });
+  if (fetches) changes.push(change("removed-external", { count: fetches }));
   return changes;
 }
 

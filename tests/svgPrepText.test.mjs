@@ -11,8 +11,24 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rebind, defaultTag, overridesForLocale } from "../src/lib/i18n.ts";
-import { findingText, changeText, prepErrorText } from "../src/lib/svgPrepText.ts";
-import { SvgPrepError } from "../src/lib/svgPrep/index.ts";
+import {
+  findingText,
+  changeText,
+  prepErrorText,
+  FIND_KEY,
+  FIND_KEY_PLAIN,
+  HINT_KEY,
+  CHANGE_KEY,
+  CHANGE_KEY_PLAIN,
+  GROUP_KEY,
+} from "../src/lib/svgPrepText.ts";
+import {
+  SvgPrepError,
+  FIND_CODES as ENGINE_FIND_CODES,
+  CHANGE_CODES as ENGINE_CHANGE_CODES,
+  GROUP_BY_COLOR_ERROR_CODES,
+  GROUP_BY_COLOR_CHANGE_CODES,
+} from "../src/lib/svgPrep/index.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LOCALES = join(HERE, "..", "src", "locales");
@@ -29,12 +45,50 @@ function restoreDefaultBinding() {
   rebind(defaultTag, null, overridesForLocale(generatedSchema.strings, defaultTag, defaultTag));
 }
 
-// The engine's own codes, hand-listed here (not imported from svgPrepText.ts's
-// internal tables) so this file is an independent check that every code the
-// engine can actually PRODUCE — not just every code svgPrepText.ts happens to
-// know about — resolves to real text. check.ts pins its codes at 18 (see its
-// own test file); this list must match.
-const FIND_CODES = {
+// The engine's codes that are ACTUALLY reachable ("already-grouped"/
+// "one-colour" are swallowed by autoGroupByColor before a Change is ever
+// minted — see src/lib/svgPrep/index.ts) — the set svgPrepText.ts's GROUP_KEY
+// table is measured against below.
+const SURFACED_GROUP_CODES = [...GROUP_BY_COLOR_ERROR_CODES].filter(
+  (c) => c !== "already-grouped" && c !== "one-colour",
+);
+
+test("svgPrepText's finding tables cover exactly check.ts's FIND_CODES — no more, no less", () => {
+  const covered = [...Object.keys(FIND_KEY), ...Object.keys(FIND_KEY_PLAIN)];
+  assert.deepEqual(covered.sort(), [...ENGINE_FIND_CODES].sort());
+  // No code appears in both the pluralised and plain tables.
+  assert.deepEqual(
+    Object.keys(FIND_KEY).filter((c) => c in FIND_KEY_PLAIN),
+    [],
+  );
+});
+
+test("svgPrepText's hint table covers every finding code except regions-available", () => {
+  const withoutHint = [...ENGINE_FIND_CODES].filter((c) => !(c in HINT_KEY));
+  assert.deepEqual(withoutHint, ["regions-available"]);
+});
+
+test("svgPrepText's change tables cover exactly fixes.ts's + groupByColor.ts's Change codes", () => {
+  const covered = [...Object.keys(CHANGE_KEY), ...Object.keys(CHANGE_KEY_PLAIN)];
+  assert.deepEqual(
+    covered.sort(),
+    [...ENGINE_CHANGE_CODES, ...GROUP_BY_COLOR_CHANGE_CODES].sort(),
+  );
+  assert.deepEqual(
+    Object.keys(CHANGE_KEY).filter((c) => c in CHANGE_KEY_PLAIN),
+    [],
+  );
+});
+
+test("svgPrepText's group table covers exactly the codes autoGroupByColor actually surfaces", () => {
+  assert.deepEqual(Object.keys(GROUP_KEY).sort(), [...SURFACED_GROUP_CODES].sort());
+});
+
+// Representative vars per code, for the "resolves to real text" round-trip
+// below — not the source of truth for WHICH codes exist (the tests above,
+// against the engine's own exports, are); this list is asserted to cover the
+// exact same codes so a code added to the engine also gets exercised here.
+const FIND_VARS = {
   "no-viewbox": {},
   "viewbox-origin": {},
   "no-geometry": {},
@@ -57,7 +111,7 @@ const FIND_CODES = {
 // Every finding code pairs its message with a hint except this one.
 const NO_HINT_CODE = "regions-available";
 
-const CHANGE_CODES = {
+const CHANGE_VARS = {
   "layer-kept": { label: "walls" },
   "layer-usable": { label: "walls" },
   "layer-renamed": { label: "Ground floor, walls", target: "Ground_floor__walls" },
@@ -76,8 +130,19 @@ const CHANGE_CODES = {
 
 const PREP_ERROR_CODES = ["not-svg", "spec-separator"];
 
+test("FIND_VARS exercises exactly the engine's FIND_CODES", () => {
+  assert.deepEqual(Object.keys(FIND_VARS).sort(), [...ENGINE_FIND_CODES].sort());
+});
+
+test("CHANGE_VARS exercises exactly the engine's CHANGE_CODES plus grouped-colour plus the surfaced group codes", () => {
+  assert.deepEqual(
+    Object.keys(CHANGE_VARS).sort(),
+    [...ENGINE_CHANGE_CODES, ...GROUP_BY_COLOR_CHANGE_CODES, ...SURFACED_GROUP_CODES].sort(),
+  );
+});
+
 test("every finding code resolves to real text, with a hint iff declared", () => {
-  for (const [code, vars] of Object.entries(FIND_CODES)) {
+  for (const [code, vars] of Object.entries(FIND_VARS)) {
     const { message, hint } = findingText({ level: "WARN", code, vars });
     assert.equal(typeof message, "string", `${code}: message must be a string`);
     assert.ok(message.length > 0, `${code}: message must not be empty`);
@@ -93,7 +158,7 @@ test("every finding code resolves to real text, with a hint iff declared", () =>
 });
 
 test("every change/group code resolves to real text", () => {
-  for (const [code, vars] of Object.entries(CHANGE_CODES)) {
+  for (const [code, vars] of Object.entries(CHANGE_VARS)) {
     const text = changeText({ code, vars });
     assert.equal(typeof text, "string", `${code}: must be a string`);
     assert.ok(text.length > 0, `${code}: must not be empty`);
@@ -142,7 +207,7 @@ test("list vars are joined through Intl.ListFormat before interpolation", () => 
   assert.match(message, /rooms.*walls/);
 });
 
-test("region-missing falls back to \"(none)\" when no region is available — a display concern, not check.ts's", () => {
+test("region-missing falls back to svgPrep.noneAvailable when no region is available — a display concern, not check.ts's", () => {
   const { message } = findingText({
     level: "ERROR",
     code: "region-missing",

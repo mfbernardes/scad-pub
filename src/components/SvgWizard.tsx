@@ -85,7 +85,11 @@ function FindingList({ findings, empty }: { findings: Finding[]; empty: string }
         const { message, hint } = findingText(f);
         return (
           <li key={`${f.code}-${i}`} className="flex gap-2 text-sm leading-[1.4]">
-            <Badge variant={LEVEL_BADGE[f.level]} className="mt-[1px] shrink-0">
+            <Badge
+              variant={LEVEL_BADGE[f.level]}
+              className="mt-[1px] shrink-0"
+              data-level={f.level}
+            >
               {t(LEVEL_KEY[f.level])}
             </Badge>
             <span className="min-w-0">

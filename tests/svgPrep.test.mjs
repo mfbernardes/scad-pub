@@ -13,13 +13,17 @@ import {
   analyze,
   applyFixes,
   canvasEntry,
+  CHANGE_CODES,
   check,
   deriveLayers,
   displayColor,
   parseColor,
   deriveRegions,
+  FIND_CODES,
   formatLayerSpec,
   formatLayers,
+  GROUP_BY_COLOR_CHANGE_CODES,
+  GROUP_BY_COLOR_ERROR_CODES,
   groupByColor,
   isCanvasEntry,
   isRenderableColor,
@@ -37,6 +41,57 @@ const parse = (svg) =>
   new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
 const roundtrip = (root) => parse(serializeSvg(root));
 const codes = (root, layers = []) => check(root, layers).map((f) => f.code);
+
+// Pins the engine's emitted-code exports (check.ts's FIND_CODES, fixes.ts's
+// CHANGE_CODES, groupByColor.ts's GROUP_BY_COLOR_ERROR_CODES/
+// _CHANGE_CODES) to their known sets: src/lib/svgPrepText.ts's own
+// table-coverage test (tests/svgPrepText.test.mjs) asserts against these SAME
+// exports, so a code added to the engine without also landing here — and
+// without a matching catalogue entry — fails a test instead of shipping
+// silently.
+test("the engine's emitted-code exports are exactly its known codes", () => {
+  assert.deepEqual(
+    [...FIND_CODES].sort(),
+    [
+      "active-content",
+      "content-outside-viewbox",
+      "covers-canvas",
+      "ignored",
+      "inkscape-trap",
+      "no-geometry",
+      "no-viewbox",
+      "open-paths",
+      "region-is-label",
+      "region-missing",
+      "regions-available",
+      "shapes-outside-regions",
+      "stroke-only",
+      "styled-fill",
+      "text",
+      "too-many-regions",
+      "undersized",
+      "viewbox-origin",
+    ].sort(),
+  );
+  assert.deepEqual(
+    [...CHANGE_CODES].sort(),
+    [
+      "layer-kept",
+      "layer-renamed",
+      "layer-usable",
+      "recentred",
+      "removed-active",
+      "removed-background",
+      "removed-external",
+      "style-fills",
+    ].sort(),
+  );
+  assert.deepEqual(
+    [...GROUP_BY_COLOR_ERROR_CODES].sort(),
+    ["already-grouped", "no-shapes", "one-colour", "transformed"].sort(),
+  );
+  assert.deepEqual([...GROUP_BY_COLOR_CHANGE_CODES], ["grouped-colour"]);
+});
 
 test("check flags OpenSCAD's sharp edges (text, stroke-only, off-origin viewBox)", () => {
   const root = parse(

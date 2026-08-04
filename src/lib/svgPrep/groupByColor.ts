@@ -12,7 +12,25 @@ import type { Change } from "./types";
 
 const ELEMENT_NODE = 1;
 
-export type GroupByColorErrorCode = "no-shapes" | "already-grouped" | "one-colour" | "transformed";
+// The single source of truth for groupByColor's own error codes: every
+// `return { ..., error: { code: ... } }` site below is typed against it, so a
+// typo or an added code missing from this list fails to compile, and
+// src/lib/svgPrepText.ts's table-coverage test (tests/svgPrepText.test.mjs)
+// asserts against this export too. "already-grouped"/"one-colour" are
+// swallowed before a Change ever surfaces (see index.ts's autoGroupByColor);
+// "no-shapes"/"transformed" are the two that reach display.
+export const GROUP_BY_COLOR_ERROR_CODES = [
+  "no-shapes",
+  "already-grouped",
+  "one-colour",
+  "transformed",
+] as const;
+export type GroupByColorErrorCode = (typeof GROUP_BY_COLOR_ERROR_CODES)[number];
+
+/** The one Change code this module mints itself (fixes.ts's CHANGE_CODES
+ *  covers its own, disjoint set). */
+export const GROUP_BY_COLOR_CHANGE_CODES = ["grouped-colour"] as const;
+type GroupByColorChangeCode = (typeof GROUP_BY_COLOR_CHANGE_CODES)[number];
 
 export interface GroupByColorResult {
   changes: Change[];
@@ -153,7 +171,8 @@ export function groupByColor(root: Element): GroupByColorResult {
     group.setAttribute("fill", disp);
     for (const sh of bucket.shapes) group.appendChild(sh);
     container.appendChild(group);
-    changes.push({ code: "grouped-colour", vars: { count: bucket.shapes.length, color: disp } });
+    const code: GroupByColorChangeCode = "grouped-colour";
+    changes.push({ code, vars: { count: bucket.shapes.length, color: disp } });
   }
   pruneEmptyGroups(root);
   return { changes, error: null };

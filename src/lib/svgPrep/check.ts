@@ -19,7 +19,39 @@ import { canvasBackgrounds } from "./background";
 import { contentBbox, parseViewBox } from "./geometry";
 import { deriveRegions, effectiveFill, groupIndex, shapesUnder } from "./regions";
 import { MAX_RELIABLE_REGIONS } from "./limits";
-import type { Finding, Region } from "./types";
+import type { Finding, Level, Region, Vars } from "./types";
+
+/** Every code `check()` can emit, as the single source of truth: the `push`
+ *  helper below types each call site against it, so a typo or a code missing
+ *  from this list fails to compile, and src/lib/svgPrepText.ts's own
+ *  table-coverage test (tests/svgPrepText.test.mjs) asserts against this
+ *  export too, so a code ADDED here without a matching catalogue entry fails
+ *  a test instead of shipping silently. */
+export const FIND_CODES = [
+  "no-viewbox",
+  "viewbox-origin",
+  "no-geometry",
+  "text",
+  "stroke-only",
+  "open-paths",
+  "covers-canvas",
+  "active-content",
+  "ignored",
+  "styled-fill",
+  "inkscape-trap",
+  "regions-available",
+  "too-many-regions",
+  "shapes-outside-regions",
+  "region-is-label",
+  "region-missing",
+  "content-outside-viewbox",
+  "undersized",
+] as const;
+export type FindCode = (typeof FIND_CODES)[number];
+
+function push(findings: Finding[], level: Level, code: FindCode, vars?: Vars): void {
+  findings.push({ level, code, vars });
+}
 
 /**
  * Run every compatibility check.
@@ -35,23 +67,23 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
 
   const vb = parseViewBox(root);
   if (vb === null) {
-    findings.push({ level: "WARN", code: "no-viewbox" });
+    push(findings, "WARN", "no-viewbox");
   } else {
     const [minx, miny] = vb;
     if (Math.abs(minx) > 1e-6 || Math.abs(miny) > 1e-6) {
-      findings.push({ level: "WARN", code: "viewbox-origin" });
+      push(findings, "WARN", "viewbox-origin");
     }
   }
 
   const els = iterElements(root);
   const shapes = els.filter((el) => SHAPE_TAGS.has(localName(el)));
   if (shapes.length === 0) {
-    findings.push({ level: "ERROR", code: "no-geometry" });
+    push(findings, "ERROR", "no-geometry");
   }
 
   const texts = els.filter((el) => TEXT_TAGS.has(localName(el)));
   if (texts.length > 0) {
-    findings.push({ level: "WARN", code: "text", vars: { count: texts.length } });
+    push(findings, "WARN", "text", { count: texts.length });
   }
 
   const strokeOnly: Element[] = [];
@@ -70,10 +102,10 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
     }
   }
   if (strokeOnly.length > 0) {
-    findings.push({ level: "WARN", code: "stroke-only", vars: { count: strokeOnly.length } });
+    push(findings, "WARN", "stroke-only", { count: strokeOnly.length });
   }
   if (openPaths > 0) {
-    findings.push({ level: "WARN", code: "open-paths", vars: { count: openPaths } });
+    push(findings, "WARN", "open-paths", { count: openPaths });
   }
 
   // Canvas-background trap: OpenSCAD fills every shape, so a rectangle covering
@@ -82,7 +114,7 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
   // map/pictogram that renders as one block.
   const backgrounds = canvasBackgrounds(root);
   if (backgrounds.length > 0) {
-    findings.push({ level: "WARN", code: "covers-canvas", vars: { count: backgrounds.length } });
+    push(findings, "WARN", "covers-canvas", { count: backgrounds.length });
   }
 
   // Active content: reported on its own terms, because the reason it matters
@@ -101,11 +133,7 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
     const names = [
       ...new Set([...active, ...fetching].map((el) => `<${localName(el)}>`)),
     ].sort();
-    findings.push({
-      level: "WARN",
-      code: "active-content",
-      vars: { count: active.length + fetching.length, names },
-    });
+    push(findings, "WARN", "active-content", { count: active.length + fetching.length, names });
   }
 
   const ignored = new Map<string, number>();
@@ -119,7 +147,7 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
       ignored.set(name, (ignored.get(name) ?? 0) + 1);
   }
   for (const name of [...ignored.keys()].sort()) {
-    findings.push({ level: "WARN", code: "ignored", vars: { tag: name, count: ignored.get(name)! } });
+    push(findings, "WARN", "ignored", { tag: name, count: ignored.get(name)! });
   }
 
   // CSS-styled fills: OpenSCAD ignores <style> entirely, so a region painted only
@@ -131,7 +159,7 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
       (el) => el.getAttribute("class") && !effectiveFill(el)[1],
     );
     if (styled.length > 0) {
-      findings.push({ level: "WARN", code: "styled-fill", vars: { count: styled.length } });
+      push(findings, "WARN", "styled-fill", { count: styled.length });
     }
   }
 
@@ -144,7 +172,7 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
     // locale-invariant on purpose (see CLAUDE.md's D3 rule) since it names the
     // drawing's own ids, which never translate.
     const names = trapped.map((t) => `"${t.label}" (id=${t.id})`);
-    findings.push({ level: "WARN", code: "inkscape-trap", vars: { count: trapped.length, names } });
+    push(findings, "WARN", "inkscape-trap", { count: trapped.length, names });
   }
 
   // Only the ids deriveRegions can ACTUALLY emit, not every `<g id>` in the
@@ -155,18 +183,14 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
   const derived = regions ?? deriveRegions(root);
   const regionIds = derived.map((r) => r.id).sort();
   if (regionIds.length > 0) {
-    findings.push({ level: "INFO", code: "regions-available", vars: { regions: regionIds } });
+    push(findings, "INFO", "regions-available", { regions: regionIds });
   }
 
   // More regions than a slicer handles reliably (small regions merge or drop).
   // Raised here rather than only in the wizard's own JSX, so a non-wizard
   // consumer of `check` gets the caution too.
   if (regionIds.length > MAX_RELIABLE_REGIONS) {
-    findings.push({
-      level: "WARN",
-      code: "too-many-regions",
-      vars: { count: regionIds.length, max: MAX_RELIABLE_REGIONS },
-    });
+    push(findings, "WARN", "too-many-regions", { count: regionIds.length, max: MAX_RELIABLE_REGIONS });
   }
 
   // Shapes that belong to no region at all. With regions in play these vanish
@@ -184,7 +208,7 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
     );
     const orphans = shapes.filter((sh) => !claimed.has(sh));
     if (orphans.length > 0) {
-      findings.push({ level: "WARN", code: "shapes-outside-regions", vars: { count: orphans.length } });
+      push(findings, "WARN", "shapes-outside-regions", { count: orphans.length });
     }
   }
 
@@ -192,12 +216,12 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
   for (const name of layers) {
     if (byId.has(name)) continue;
     if (byLabel.has(name)) {
-      findings.push({ level: "ERROR", code: "region-is-label", vars: { name } });
+      push(findings, "ERROR", "region-is-label", { name });
     } else {
-      // The "(none)" fallback for an empty region list is a display concern
-      // (svgPrepText.ts), not this module's: `regions` is passed through as-is,
-      // possibly empty.
-      findings.push({ level: "ERROR", code: "region-missing", vars: { name, regions: regionIds } });
+      // The svgPrep.noneAvailable fallback for an empty region list is a
+      // display concern (svgPrepText.ts), not this module's: `regions` is
+      // passed through as-is, possibly empty.
+      push(findings, "ERROR", "region-missing", { name, regions: regionIds });
     }
   }
 
@@ -217,11 +241,11 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
       bx1 > minx + w + 1e-6 ||
       by1 > miny + h + 1e-6
     ) {
-      findings.push({ level: "WARN", code: "content-outside-viewbox" });
+      push(findings, "WARN", "content-outside-viewbox");
     } else if (w > 0 && h > 0) {
       const fillFrac = ((bx1 - bx0) * (by1 - by0)) / (w * h);
       if (fillFrac < 0.5) {
-        findings.push({ level: "INFO", code: "undersized" });
+        push(findings, "INFO", "undersized");
       }
     }
   }
