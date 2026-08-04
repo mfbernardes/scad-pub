@@ -29,12 +29,13 @@ import {
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { WASM_VERSION } from "./wasm-version.mjs";
 import { computeRenderHash, computeBinAssetVersions } from "./lib/hash.mjs";
 import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "./lib/fonts.mjs";
 import { humanize, parseParams } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
+import { parseDesignStrings } from "./lib/design-strings.mjs";
 import { createDestinationRegistry, reconcileGenerated } from "./lib/destinations.mjs";
 import { sanitizeBrowserFacingSvg } from "./lib/svg-sanitize.mjs";
 import { resolveFileField } from "./lib/prose-files.mjs";
@@ -103,6 +104,7 @@ export { parseFontFallback, renderFontsConf, fontFamilyNames } from "./lib/fonts
 export { firstSentence, parseEnumHint, parseParams } from "./lib/params.mjs";
 export { resolveFileField } from "./lib/prose-files.mjs";
 export { splitHelpMarkdown } from "./lib/help-file.mjs";
+export { parseDesignStrings } from "./lib/design-strings.mjs";
 
 // Every top-level key gen-schema (or its helpers) reads from scadpub.config.json,
 // derived from scripts/lib/config-spec.mjs rather than hand-maintained here. A
@@ -174,6 +176,11 @@ export const extOf = (relPath) => {
   // able to steer that write out of the staged tree.
   return /^\.[A-Za-z0-9]+$/.test(ext) ? ext : "";
 };
+
+// Escape a literal string for embedding in a RegExp — used to build a
+// design's own translation-sidecar filename pattern (buildDesigns) from its
+// basename, which is arbitrary user-chosen text, not itself regex-safe.
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Load + sanity-check the config. Catches genuinely typo'd / stale top-level
 // keys: a whole-key typo would otherwise be silently ignored (see
@@ -794,6 +801,63 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // `reviewNote`: the design's own file-level `// @reviewNote "<text>"`
     // annotation. The sole source now, with no config-level override left.
     const reviewNote = meta.reviewNote ?? null;
+
+    // Design-translation sidecars: `<design>.strings.<tag>.json` beside the
+    // design's own .scad (docs/config.md "Design translations"), the same
+    // sibling-file idiom as the parameterSets `.json` above. Two passes: probe
+    // each REGISTRY tag's exact filename directly (the file a translation for
+    // a locale ScadPub actually ships would be named), then separately scan
+    // the whole directory for anything else shaped like a sidecar — a typo'd
+    // tag (`widget.strings.dee.json`) matches no registry probe and would
+    // otherwise sit there silently forever, translating nothing and telling no
+    // one. Never copyAsset/register'd: a sidecar must never reach
+    // public/scad/ or renderHash, so parsing is the only thing that happens
+    // to it here; `stringsByTag` is a transient field generate() reads to
+    // build src/generated/i18n/<tag>.json, then strips before assembleSchema
+    // (see its own `designs.map` at the end of this file).
+    const designDir = dirname(abs);
+    const sidecarBase = basename(d.file).replace(/\.scad$/, "");
+    const sidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.strings\\.([A-Za-z0-9-]+)\\.json$`);
+    for (const name of readdirSync(designDir)) {
+      const m = name.match(sidecarRe);
+      if (!m) continue;
+      if (!LOCALE_TAGS.includes(m[1]))
+        throw new Error(
+          `gen-schema: design '${d.id}' translation sidecar '${relPosix(join(designDir, name))}' names ` +
+            `an unshipped locale tag '${m[1]}'.\n  Valid tags: ${LOCALE_TAGS.join(", ")}`
+        );
+    }
+    const sidecarCtxParams = params.map((p) => ({
+      name: p.name,
+      choices: p.type === "enum" ? p.choices.map((c) => c.value) : null,
+      hasInfo: p.info != null,
+    }));
+    const stringsByTag = {};
+    for (const tag of LOCALE_TAGS) {
+      const sidecarRel = d.file.replace(/\.scad$/, `.strings.${tag}.json`);
+      const sidecarAbs = join(SOURCE, sidecarRel);
+      if (!existsSync(sidecarAbs)) continue;
+      checkContained(sidecarAbs, `design '${d.id}' translation sidecar '${sidecarRel}'`, relPosix(abs));
+      let json;
+      try {
+        json = JSON.parse(readFileSync(sidecarAbs, "utf-8"));
+      } catch (err) {
+        throw new Error(
+          `gen-schema: '${sidecarRel}' is not valid JSON:\n  ${err.message}`,
+          { cause: err }
+        );
+      }
+      stringsByTag[tag] = parseDesignStrings(json, {
+        file: sidecarRel,
+        designId: d.id,
+        params: sidecarCtxParams,
+        sections,
+        hasDescription: meta.description != null,
+        reviewLabels: new Set(Object.keys(reviewLabels)),
+        hasReviewNote: reviewNote != null,
+      });
+    }
+
     // Strip the transient `reviewLabel` annotation flag off each param before
     // it reaches designs.json: it's already folded into `reviewLabels` above,
     // and src/openscad/types.ts's ParamBase carries no such field. That's
@@ -819,6 +883,10 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       ...(presetImages ? { presetImages } : {}),
       // Only present when at least one parameter carries a `// @review` annotation.
       ...(Object.keys(reviewLabels).length ? { reviewLabels } : {}),
+      // Transient (see the sidecar-discovery comment above): read by generate()
+      // to build src/generated/i18n/<tag>.json, then stripped before
+      // assembleSchema — never reaches designs.json.
+      ...(Object.keys(stringsByTag).length ? { stringsByTag } : {}),
     };
   });
 }
@@ -1319,7 +1387,11 @@ function assembleSchema(parts) {
     ui: UI,
     defaultDesign,
     assets: [...assets].sort(),
-    designs: designs.map(({ abs, ...d }) => d),
+    // `stringsByTag` (buildDesigns' transient sidecar bundle, see its own
+    // comment) is read by generate() to write src/generated/i18n/<tag>.json
+    // BEFORE this function runs, so it's stripped here alongside `abs`:
+    // neither belongs in designs.json.
+    designs: designs.map(({ abs, stringsByTag, ...d }) => d),
   };
 }
 
@@ -1335,6 +1407,8 @@ function commitOutputs({
   outSchemaDir,
   outPublicDir,
   schema,
+  i18nByTag,
+  designCount,
   fontWrites,
   fontsConf,
   fontCopies,
@@ -1418,6 +1492,26 @@ function commitOutputs({
     join(outSchemaDir, "designs.json"),
     JSON.stringify(schema, null, 2) + "\n"
   );
+
+  // One file PER REGISTRY TAG (i18nByTag already covers every tag, see
+  // generate()'s own comment), wiped and rewritten wholesale so a tag a
+  // previous run wrote for (now unshipped, or its last sidecar removed) never
+  // lingers as a stale file src/lib/localeStore.ts's static import map would
+  // otherwise still be able to reach. src/generated/ is gitignored (see
+  // CLAUDE.md), so — unlike outPublicDir's mixed-ownership tree — nothing
+  // here needs M8's reconciliation dance: the whole directory is this tool's
+  // alone, safe to wipe and repopulate outright.
+  const outI18nDir = join(outSchemaDir, "i18n");
+  rmSync(outI18nDir, { recursive: true, force: true });
+  mkdirSync(outI18nDir, { recursive: true });
+  for (const tag of Object.keys(i18nByTag)) {
+    const covered = Object.keys(i18nByTag[tag].designs).length;
+    writeFileSync(
+      join(outI18nDir, `${tag}.json`),
+      JSON.stringify(i18nByTag[tag], null, 2) + "\n"
+    );
+    console.log(`gen-schema: design strings ${tag}: ${covered}/${designCount} designs`);
+  }
 }
 
 // The whole build, in phases. Each is a function above rather than a labelled
@@ -1653,6 +1747,19 @@ export function generate({
     ? computeBinAssetVersions({ fontPaths, fontsConf, outPublicDir })
     : {};
 
+  // Fold every design's `stringsByTag` (buildDesigns' transient sidecar
+  // bundle) into one file PER REGISTRY TAG, keyed by design id — computed
+  // here, while `designs` still carries it, since assembleSchema strips it
+  // before designs.json is built (see that call's own comment). Written for
+  // EVERY tag (even one no design translated), so
+  // src/lib/localeStore.ts's static per-tag import map never dangles.
+  const i18nByTag = {};
+  for (const tag of LOCALE_TAGS) {
+    const byDesign = {};
+    for (const d of designs) if (d.stringsByTag?.[tag]) byDesign[d.id] = d.stringsByTag[tag];
+    i18nByTag[tag] = { designs: byDesign };
+  }
+
   const schema = assembleSchema({
     SOURCE,
     relPosix,
@@ -1705,6 +1812,8 @@ export function generate({
     outSchemaDir,
     outPublicDir,
     schema,
+    i18nByTag,
+    designCount: designs.length,
     fontWrites,
     fontsConf,
     fontCopies,

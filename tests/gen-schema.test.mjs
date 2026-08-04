@@ -49,6 +49,7 @@ import {
   isRiskyExternalFontCopy,
   isTrackedFile,
   extOf,
+  parseDesignStrings,
 } from "../scripts/gen-schema.mjs";
 import { validateSchema } from "../src/lib/schema.ts";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
@@ -4825,4 +4826,245 @@ test("a malformed @collapsed gets its own message, not the unknown-annotation on
   const msg = parseError(`// @collapsed extra\n/* [Main] */\n// A.\na = 1;\n`);
   assert.match(msg, /malformed @collapsed annotation/);
   assert.doesNotMatch(msg, /unknown annotation/);
+});
+
+// ── Design translation sidecars (Phase 5) ───────────────────────────────────
+// scripts/lib/design-strings.mjs's parseDesignStrings is unit-tested directly
+// against a synthetic ctx first (no fixture tree needed); the gen-schema
+// integration (sibling discovery, the unshipped-tag scan, i18n/<tag>.json
+// emission, the assets-glob guard, renderHash isolation) is then exercised
+// through generate() against throwaway temp source trees — NOT the shared
+// tests/fixtures/src/widget.scad tree those error cases would otherwise have
+// to add stray/malformed sidecar files next to, which every other
+// widget-based fixture (70+ configs) also builds against.
+
+function designStringsCtx(overrides = {}) {
+  return {
+    file: "d.strings.de.json",
+    designId: "d",
+    params: [
+      { name: "label", choices: null, hasInfo: false },
+      { name: "width", choices: null, hasInfo: true },
+      { name: "style", choices: ["flat", "raised"], hasInfo: false },
+    ],
+    sections: ["Main"],
+    hasDescription: true,
+    reviewLabels: new Set(["label"]),
+    hasReviewNote: true,
+    ...overrides,
+  };
+}
+
+test("parseDesignStrings: an empty object is a valid, warn-free no-op", () => {
+  assert.deepEqual(parseDesignStrings({}, designStringsCtx()), {});
+});
+
+test("parseDesignStrings: rejects an unknown top-level key", () => {
+  assert.throws(
+    () => parseDesignStrings({ bogus: "x" }, designStringsCtx()),
+    /'d\.strings\.de\.json' '\.' has unknown key 'bogus'/
+  );
+});
+
+test("parseDesignStrings: rejects an unknown parameter name", () => {
+  assert.throws(
+    () => parseDesignStrings({ params: { nope: { description: "x" } } }, designStringsCtx()),
+    /'params\["nope"\]' does not match any parameter in design 'd'/
+  );
+});
+
+test("parseDesignStrings: rejects an unknown section name", () => {
+  assert.throws(
+    () => parseDesignStrings({ sections: { Nope: "x" } }, designStringsCtx()),
+    /'sections\["Nope"\]' does not match any section in design 'd'/
+  );
+});
+
+test("parseDesignStrings: rejects translating the canonical 'Hidden' section", () => {
+  assert.throws(
+    () => parseDesignStrings({ sections: { Hidden: "x" } }, designStringsCtx()),
+    /names a canonical OpenSCAD section/
+  );
+});
+
+test("parseDesignStrings: rejects a choices key that isn't a declared choice value", () => {
+  assert.throws(
+    () => parseDesignStrings({ params: { style: { choices: { stale: "x" } } } }, designStringsCtx()),
+    /'params\["style"\]\.choices\["stale"\]' is not a declared choice value/
+  );
+  // Same rule for a non-enum param: it has no declared choices at all.
+  assert.throws(
+    () => parseDesignStrings({ params: { label: { choices: { anything: "x" } } } }, designStringsCtx()),
+    /not a declared choice value/
+  );
+});
+
+test("parseDesignStrings: accepts a choices translation for a declared value", () => {
+  const out = parseDesignStrings(
+    { params: { style: { choices: { flat: "Flach" } } } },
+    designStringsCtx()
+  );
+  assert.equal(out.params.style.choices.flat, "Flach");
+});
+
+test("parseDesignStrings: rejects an info translation for a param without @info", () => {
+  assert.throws(
+    () => parseDesignStrings({ params: { label: { info: { label: "x" } } } }, designStringsCtx()),
+    /'label' carries no '\/\/ @info' annotation to translate/
+  );
+});
+
+test("parseDesignStrings: accepts an info translation for a param that has @info", () => {
+  const out = parseDesignStrings({ params: { width: { info: { label: "Breite" } } } }, designStringsCtx());
+  assert.equal(out.params.width.info.label, "Breite");
+});
+
+test("parseDesignStrings: rejects a description translation when the design has no @description", () => {
+  assert.throws(
+    () => parseDesignStrings({ description: "x" }, designStringsCtx({ hasDescription: false })),
+    /design 'd' has no '\/\/ @description' to translate/
+  );
+});
+
+test("parseDesignStrings: rejects reviewLabels for a param without @review", () => {
+  assert.throws(
+    () => parseDesignStrings({ reviewLabels: { width: "x" } }, designStringsCtx()),
+    /does not match any parameter carrying '\/\/ @review'/
+  );
+});
+
+test("parseDesignStrings: rejects reviewNote when the design has no @reviewNote", () => {
+  assert.throws(
+    () => parseDesignStrings({ reviewNote: "x" }, designStringsCtx({ hasReviewNote: false })),
+    /design 'd' has no '\/\/ @reviewNote' to translate/
+  );
+});
+
+test("parseDesignStrings: every leaf value must be a non-empty string", () => {
+  assert.throws(() => parseDesignStrings({ description: 5 }, designStringsCtx()), /must be a non-empty string/);
+  assert.throws(() => parseDesignStrings({ description: "" }, designStringsCtx()), /must be a non-empty string/);
+  assert.throws(
+    () => parseDesignStrings({ params: { label: { description: "" } } }, designStringsCtx()),
+    /must be a non-empty string/
+  );
+  assert.throws(
+    () => parseDesignStrings({ echo: { "Total width": 5 } }, designStringsCtx()),
+    /must be a non-empty string/
+  );
+});
+
+test("parseDesignStrings: 'echo' is a free-form source-string map with no cross-check against the design", () => {
+  const out = parseDesignStrings(
+    { echo: { "Anything the design happens to echo": "Whatever it translates to" } },
+    designStringsCtx()
+  );
+  assert.equal(out.echo["Anything the design happens to echo"], "Whatever it translates to");
+});
+
+// ── gen-schema integration: sibling discovery, emission, renderHash isolation
+
+function i18nOutDirs(prefix) {
+  const out = mkdtempSync(join(tmpdir(), `gen-schema-${prefix}-out-`));
+  return { outSchemaDir: join(out, "schema"), outScadDir: join(out, "scad") };
+}
+
+test("the checked-in widget.scad sidecar fixture is discovered and folded into src/generated/i18n/<tag>.json for every registry tag", () => {
+  const { schema, out } = run("widget-i18n.config.json");
+  // Transient: never reaches designs.json.
+  assert.equal(schema.designs[0].stringsByTag, undefined);
+  const de = JSON.parse(readFileSync(join(out, "schema", "i18n", "de.json"), "utf-8"));
+  assert.deepEqual(Object.keys(de.designs), ["widget"]);
+  assert.equal(de.designs.widget.description, "Ein kleines Widget.");
+  assert.equal(de.designs.widget.sections.Main, "Haupt");
+  assert.equal(de.designs.widget.params.style.choices.flat, "Flach");
+  assert.equal(de.designs.widget.echo["Total width"], "Gesamtbreite");
+  // Written for EVERY registry tag, even one no design translated.
+  const en = JSON.parse(readFileSync(join(out, "schema", "i18n", "en.json"), "utf-8"));
+  assert.deepEqual(en, { designs: {} });
+});
+
+test("renderHash is identical with and without a design's translation sidecar present", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-hash-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const gen = () => generate({ ...i18nOutDirs("hash"), configPath: join(src, "c.config.json") }).renderHash;
+
+  const withoutSidecar = gen();
+  writeFileSync(join(src, "d.strings.de.json"), "{}\n");
+  const withSidecar = gen();
+  rmSync(join(src, "d.strings.de.json"));
+  const afterRemoval = gen();
+
+  assert.equal(withSidecar, withoutSidecar, "a present sidecar must not change renderHash");
+  assert.equal(afterRemoval, withoutSidecar);
+});
+
+test("a translation sidecar naming an unshipped locale tag fails the build, listing valid tags", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-badtag-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.strings.xx.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("badtag"), configPath: join(src, "c.config.json") }),
+    /translation sidecar 'd\.strings\.xx\.json' names an unshipped locale tag 'xx'.*Valid tags: en, de/s
+  );
+});
+
+test("an 'assets' entry directly naming a translation sidecar fails the build", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-directasset-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.strings.de.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: ".",
+      assets: ["d.strings.de.json"],
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("directasset"), configPath: join(src, "c.config.json") }),
+    /asset 'd\.strings\.de\.json' names a design-translation sidecar/
+  );
+});
+
+test("a glob 'assets' entry silently excludes translation sidecars, with a one-time warning", () => {
+  // Config and SOURCE live in SEPARATE directories here (unlike the other
+  // tests in this section): "**/*.json" globs the whole SOURCE tree, and a
+  // sibling config.json would otherwise be swept up by it too, muddying the
+  // "the sidecar was the glob's only match" assertion below.
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-i18n-globasset-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.strings.de.json"), "{}\n");
+  writeFileSync(
+    join(root, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      assets: ["**/*.json"],
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  let schema;
+  try {
+    schema = generate({ ...i18nOutDirs("globasset"), configPath: join(root, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(schema.assets, []); // the sidecar was the glob's only match
+  const hits = warnings.filter((w) => w.includes("d.strings.de.json"));
+  assert.equal(hits.length, 1, `expected exactly one warning naming the sidecar, got: ${JSON.stringify(warnings)}`);
+  assert.ok(hits[0].includes("excluded 1 design-translation sidecar"));
 });
