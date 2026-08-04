@@ -12,11 +12,21 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeT, overridesForLocale, rebind, t, tn } from "../src/lib/i18n.ts";
+import { makeT, overridesForLocale, rebind, defaultTag, t, tn } from "../src/lib/i18n.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LOCALES = join(HERE, "..", "src", "locales");
 const en = JSON.parse(readFileSync(join(LOCALES, "en.json"), "utf-8"));
+const generatedSchema = JSON.parse(
+  readFileSync(join(HERE, "..", "src", "generated", "designs.json"), "utf-8")
+);
+
+// Reproduces exactly what i18n.ts's own module-scope init binds, so a test
+// that rebinds away from it can restore the ORIGINAL binding rather than a
+// hardcoded "en" that would be wrong for a non-English-default deployment.
+function restoreDefaultBinding() {
+  rebind(defaultTag, null, overridesForLocale(generatedSchema.strings, defaultTag, defaultTag));
+}
 
 test("t(): resolves from the bundle when the key is present", () => {
   const { t } = makeT({ "a.b": "Hello" });
@@ -150,9 +160,10 @@ test("rebind(): the delegating t/tn exports reflect the current binding", () => 
     assert.equal(tn("item.count", 1), "«1 item»");
     assert.equal(tn("item.count", 5), "«5 items»");
   } finally {
-    // The module-level en binding is process-global state; restore it so a
-    // later test in this file (or a differently-ordered run) sees English.
-    rebind("en", null, {});
+    // The module-level binding is process-global state; restore it so a
+    // later test in this file (or a differently-ordered run) sees the same
+    // binding i18n.ts's own module init produced.
+    restoreDefaultBinding();
   }
 });
 
@@ -161,6 +172,6 @@ test("rebind(): a config override still wins over the locale bundle", () => {
     rebind("en-XA", { "greet.hello": "«Hello»" }, { "greet.hello": "Configured override" });
     assert.equal(t("greet.hello"), "Configured override");
   } finally {
-    rebind("en", null, {});
+    restoreDefaultBinding();
   }
 });

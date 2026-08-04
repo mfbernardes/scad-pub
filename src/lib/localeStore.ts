@@ -15,7 +15,7 @@ import {
   bestFitLocale,
   type LocaleMeta,
 } from "./localeRegistry";
-import { rebind, overridesForLocale, type Bundle, type ConfigStrings } from "./i18n";
+import { rebind, overridesForLocale, defaultTag, type Bundle, type ConfigStrings } from "./i18n";
 import { ns } from "./appId";
 import { readLocal, writeLocal } from "./safeStorage";
 
@@ -45,10 +45,13 @@ function localeMeta(tag: string): LocaleMeta {
  * DOM-free store factory: builds the switch/subscribe/snapshot machinery
  * over injected loaders so tests can drive it with stubs. Switch sequencing
  * (see the plan): a last-wins request token guards against two in-flight
- * `setLocale` calls resolving out of order; state swaps and subscribers are
- * notified only after the load resolves; a rejected load leaves the current
- * state untouched and rejects the returned promise; persistence runs only
- * when `opts.persist !== false`.
+ * `setLocale` calls resolving out of order — bumped on every call, including
+ * one that targets the already-active tag, so a slower switch still in
+ * flight goes stale too; state swaps and subscribers are notified only after
+ * the load resolves; a rejected load leaves state untouched and rejects the
+ * caller ONLY when that call is still the governing (latest) one — a
+ * superseded call's own failure resolves silently instead; persistence runs
+ * only when `opts.persist !== false`.
  */
 export function createLocaleStore(deps: CreateLocaleStoreDeps) {
   const {
@@ -80,7 +83,17 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
   }
 
   async function setLocale(tag: string, opts: { persist?: boolean } = {}): Promise<void> {
-    if (tag === state.tag) return;
+    if (tag === state.tag) {
+      // Already there: no load, no rebind, no notify (nothing actually
+      // changed) — but still bump the token, so a SLOWER switch still in
+      // flight (e.g. en -> de (slow) -> en) goes stale and can't overwrite
+      // this settled state when its load eventually resolves. Persistence is
+      // still an explicit choice this call can make (e.g. a user re-picking
+      // the already-active locale from a selector), so it's honored here too.
+      requestToken++;
+      if (opts.persist !== false) persist(tag);
+      return;
+    }
     if (!enabledTags.includes(tag)) {
       throw new Error(`localeStore: "${tag}" is not an enabled locale`);
     }
@@ -91,10 +104,19 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
       throw new Error(`localeStore: no chrome loader registered for locale "${tag}"`);
     }
     const designLoader = loadDesignStrings?.[tag];
-    const [bundle] = await Promise.all([
-      chromeLoader ? chromeLoader() : Promise.resolve(null),
-      designLoader ? designLoader() : Promise.resolve(undefined),
-    ]);
+
+    let bundle: Bundle | null;
+    try {
+      [bundle] = await Promise.all([
+        chromeLoader ? chromeLoader() : Promise.resolve(null),
+        designLoader ? designLoader() : Promise.resolve(undefined),
+      ]);
+    } catch (err) {
+      // A superseded request's own failure must not surface: only the
+      // governing (latest) request may reject its caller.
+      if (token !== requestToken) return;
+      throw err;
+    }
 
     // Superseded by a later setLocale call: that call's own resolution owns
     // the state swap and notification, so this one is a silent no-op.
@@ -127,7 +149,6 @@ export function resolveInitialLocale(
 }
 
 const schema = schemaJson as unknown as Schema;
-const registryDefaultTag = collapseToAvailable(schema.lang ?? "en", LOCALE_TAGS) ?? "en";
 
 /**
  * Sets `<html lang>`/`<html dir>` for a multi-locale deployment. Single-locale
@@ -140,7 +161,7 @@ const registryDefaultTag = collapseToAvailable(schema.lang ?? "en", LOCALE_TAGS)
  */
 export function applyLocale(state: LocaleState, multiLocale: boolean): void {
   if (typeof document === "undefined" || !multiLocale) return;
-  const lang = state.tag === registryDefaultTag ? (schema.lang ?? registryDefaultTag) : state.tag;
+  const lang = state.tag === defaultTag ? (schema.lang ?? defaultTag) : state.tag;
   document.documentElement.lang = lang;
   document.documentElement.dir = state.dir;
 }
@@ -148,7 +169,7 @@ export function applyLocale(state: LocaleState, multiLocale: boolean): void {
 // Phase 4 reads `schema.languages` for enabledTags; until then every
 // deployment ships exactly its default locale, so the store below never has
 // anywhere else to switch to and stays inert.
-const enabledTags: readonly string[] = [registryDefaultTag];
+const enabledTags: readonly string[] = [defaultTag];
 
 // Phase 2 adds the "de" thunk here once src/locales/de.json exists.
 const loadChrome: Record<string, () => Promise<Bundle>> = {};
@@ -158,7 +179,7 @@ const store = createLocaleStore({
   persist: (tag) => {
     writeLocal(ns("lang"), tag);
   },
-  schemaLang: schema.lang ?? "en",
+  schemaLang: defaultTag,
   configStrings: schema.strings as ConfigStrings | undefined,
   enabledTags,
 });
@@ -166,8 +187,8 @@ const store = createLocaleStore({
 {
   const persisted = readLocal(ns("lang"));
   const navLangs = typeof navigator !== "undefined" ? (navigator.languages ?? []) : [];
-  const initial = resolveInitialLocale(persisted, navLangs, enabledTags, registryDefaultTag);
-  if (initial !== registryDefaultTag) {
+  const initial = resolveInitialLocale(persisted, navLangs, enabledTags, defaultTag);
+  if (initial !== defaultTag) {
     void store.setLocale(initial, { persist: false }).catch(() => {});
   }
 }

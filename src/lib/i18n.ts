@@ -58,10 +58,12 @@ function interpolate(template: string, vars?: Vars): string {
 }
 
 /**
- * Pure factory behind the default `t`/`tn` exports: given the bundled English
- * catalogue and an optional config `strings` override map, returns bound
- * `t`/`tn` functions. Kept dependency-free and schema-agnostic so tests can
- * drive it with a synthetic bundle instead of the real one.
+ * Pure factory behind the default `t`/`tn` exports: given a catalogue (for a
+ * non-English locale this is `en` merged with the locale's own translations,
+ * see `rebind`), an optional config `strings` override map, and the locale
+ * whose CLDR plural rules `tn()` should use, returns bound `t`/`tn`
+ * functions. Kept dependency-free and schema-agnostic so tests can drive it
+ * with a synthetic bundle instead of the real one.
  */
 export function makeT(bundle: Bundle, overrides: Bundle = {}, locale = "en") {
   const pluralRules = pluralRulesFor(locale);
@@ -167,8 +169,21 @@ export function rebind(tag: string, localeBundle: Bundle | null, overrides: Bund
 // deployment's `strings` (string-literal keys) can't satisfy vs
 // Record<string, string>.
 const schema = schemaJson as unknown as Schema;
-const defaultTag = collapseToAvailable(schema.lang ?? "en", LOCALE_TAGS) ?? "en";
-rebind("en", null, overridesForLocale(schema.strings as ConfigStrings | undefined, "en", defaultTag));
+
+/** This deployment's default locale: `schema.lang` collapsed to a registry
+ *  tag, or "en" when unset/unshipped. The single source of truth for it —
+ *  src/lib/localeStore.ts imports this rather than recomputing its own, so
+ *  the two modules can never disagree about which locale is the default. */
+export const defaultTag = collapseToAvailable(schema.lang ?? "en", LOCALE_TAGS) ?? "en";
+
+// Binds at the deployment's default locale, not hardcoded "en": Phase 1 has
+// no locale bundle to load yet (localeBundle is null, so `rebind` falls back
+// to the plain English catalogue), but the binding's tag and the `strings`
+// projection below must already be `defaultTag` — otherwise a `lang: "de"`
+// deployment's flat `strings` overrides (which apply only "at the default
+// locale", see `overridesForLocale`) would silently never apply, since
+// nothing else rebinds until a locale switch happens.
+rebind(defaultTag, null, overridesForLocale(schema.strings as ConfigStrings | undefined, defaultTag, defaultTag));
 
 /** Resolve a catalogue key to display text, interpolating `{name}` vars.
  *  Resolution order: config `strings` override -> the active locale's
