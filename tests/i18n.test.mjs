@@ -1,18 +1,18 @@
 // Tests the localization core (src/lib/i18n.ts): the makeT() factory's
-// override/fallback chain, {var} interpolation, and tn()'s CLDR
-// plural-category selection. The layer is intentionally a SUBSET of a full
-// i18n system. English-only, one bundle (src/locales/en.json), no locale
-// switching, so there's no en/de key-parity check here (that's
-// tests/i18nCoverage.test.mjs's job in reverse: catching a DEAD key). This
-// file instead asserts every catalogue value is a non-empty string, the
-// real-world analogue of the donor branch's "every catalogue value is a
-// non-empty string" check.
+// override/fallback chain, {var} interpolation, tn()'s CLDR plural-category
+// selection (including a non-English locale with more categories),
+// overridesForLocale()'s projection of the config `strings` union shape, and
+// the rebind()-backed delegating t/tn exports. There's no en/de key-parity
+// check here (that's tests/i18nCoverage.test.mjs's job in reverse: catching a
+// DEAD key). This file instead asserts every catalogue value is a non-empty
+// string, the real-world analogue of the donor branch's "every catalogue
+// value is a non-empty string" check.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeT } from "../src/lib/i18n.ts";
+import { makeT, overridesForLocale, rebind, t, tn } from "../src/lib/i18n.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LOCALES = join(HERE, "..", "src", "locales");
@@ -96,5 +96,71 @@ test("a pluralized key in src/locales/en.json always has both #one and #other", 
   for (const base of bases) {
     assert.ok(`${base}#one` in en, `en.json is missing '${base}#one'`);
     assert.ok(`${base}#other` in en, `en.json is missing '${base}#other'`);
+  }
+});
+
+test("makeT(): a locale with more than one/other CLDR categories resolves its own (Polish few/many)", () => {
+  const { tn } = makeT(
+    { "item.count#one": "{count} rzecz", "item.count#few": "{count} rzeczy", "item.count#other": "{count} rzeczy" },
+    {},
+    "pl"
+  );
+  assert.equal(tn("item.count", 1), "1 rzecz");
+  // Polish cardinal: 2-4 (excluding 12-14) selects "few".
+  assert.equal(tn("item.count", 2), "2 rzeczy");
+});
+
+test("makeT(): defaults to English plural rules when locale is omitted", () => {
+  const { tn } = makeT({ "item.count#one": "{count} item", "item.count#other": "{count} items" });
+  assert.equal(tn("item.count", 1), "1 item");
+  assert.equal(tn("item.count", 2), "2 items");
+});
+
+test("overridesForLocale(): a plain string value applies only at the default locale", () => {
+  const strings = { "a.b": "Default-locale override" };
+  assert.deepEqual(overridesForLocale(strings, "en", "en"), { "a.b": "Default-locale override" });
+  assert.deepEqual(overridesForLocale(strings, "de", "en"), {});
+});
+
+test("overridesForLocale(): an object value contributes its tag's entry", () => {
+  const strings = { "a.b": { en: "Hello override", de: "Hallo Override" } };
+  assert.deepEqual(overridesForLocale(strings, "en", "en"), { "a.b": "Hello override" });
+  assert.deepEqual(overridesForLocale(strings, "de", "en"), { "a.b": "Hallo Override" });
+});
+
+test("overridesForLocale(): an object value with no entry for the active tag contributes nothing", () => {
+  const strings = { "a.b": { de: "Hallo Override" } };
+  assert.deepEqual(overridesForLocale(strings, "fr", "en"), {});
+});
+
+test("overridesForLocale(): undefined strings yields an empty bundle", () => {
+  assert.deepEqual(overridesForLocale(undefined, "en", "en"), {});
+});
+
+// "en-XA" is a structurally valid BCP-47 tag (the conventional pseudo-locale
+// code) whose plural rules resolve to English's, so it exercises rebind's
+// non-English path without needing a second real translation.
+test("rebind(): the delegating t/tn exports reflect the current binding", () => {
+  try {
+    rebind("en-XA", { "greet.hello": "«Hello»" }, {});
+    assert.equal(t("greet.hello"), "«Hello»");
+    assert.equal(t("status.building"), en["status.building"], "untranslated key falls back to English");
+
+    rebind("en-XA", { "item.count#one": "«{count} item»", "item.count#other": "«{count} items»" }, {});
+    assert.equal(tn("item.count", 1), "«1 item»");
+    assert.equal(tn("item.count", 5), "«5 items»");
+  } finally {
+    // The module-level en binding is process-global state; restore it so a
+    // later test in this file (or a differently-ordered run) sees English.
+    rebind("en", null, {});
+  }
+});
+
+test("rebind(): a config override still wins over the locale bundle", () => {
+  try {
+    rebind("en-XA", { "greet.hello": "«Hello»" }, { "greet.hello": "Configured override" });
+    assert.equal(t("greet.hello"), "Configured override");
+  } finally {
+    rebind("en", null, {});
   }
 });
