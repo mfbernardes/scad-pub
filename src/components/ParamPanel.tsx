@@ -255,7 +255,7 @@ export function ParamPanel({
         onPointerCancel={onPointerUp}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize parameter panel"
+        aria-label={t("panel.resize")}
         aria-valuenow={width}
         aria-valuemin={MIN_WIDTH}
         aria-valuemax={MAX_WIDTH}

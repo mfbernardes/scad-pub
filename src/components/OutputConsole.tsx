@@ -107,7 +107,7 @@ export function OutputConsole({
               className={cn(chipTabTrigger, "px-3")}
               title={contributing.length > 1 ? contributing.map((b) => `${b.count} ${b.label}`).join(", ") : undefined}
             >
-              Notices
+              {t("console.notices")}
               {noticeTotal > 0 && (
                 <Badge
                   variant={hasAssert ? "destructive" : anyAttention ? "warn" : "secondary"}
@@ -119,14 +119,14 @@ export function OutputConsole({
               )}
             </TabsTrigger>
             <TabsTrigger value="log" className={cn(chipTabTrigger, "px-3")}>
-              Log
+              {t("console.log")}
             </TabsTrigger>
             <TabsTrigger value="metrics" className={cn(chipTabTrigger, "px-3")}>
-              Metrics
+              {t("console.metrics")}
             </TabsTrigger>
           </TabsList>
           <IconButton
-            label="Close Messages"
+            label={t("console.close")}
             className="output-console__close my-1 ml-auto mr-[0.4rem] shrink-0 self-center"
             onClick={onClose}
           >
@@ -155,7 +155,7 @@ export function OutputConsole({
                 ))}
               </ul>
             ) : (
-              <p className="px-3 py-2 text-[0.85rem] text-muted-foreground">No notices or warnings.</p>
+              <p className="px-3 py-2 text-[0.85rem] text-muted-foreground">{t("console.noNotices")}</p>
             )}
           </TabsContent>
           <TabsContent value="log" className="mt-0">

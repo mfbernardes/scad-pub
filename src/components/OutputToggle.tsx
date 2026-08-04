@@ -92,7 +92,7 @@ export function OutputToggle({
       onClick={onToggleOutput}
       aria-label={bellLabel}
       aria-pressed={outputOpen}
-      title="Messages"
+      title={t("console.title")}
       // How many messages are pending, independent of whether the badge is
       // currently rendering them: the stable hook the smoke suite reads to
       // know which half of the `showCount` contract applies, so the check

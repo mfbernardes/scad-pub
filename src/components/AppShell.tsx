@@ -82,6 +82,8 @@ import { useOutputConsole } from "../lib/useOutputConsole";
 import { useSheetPolicy } from "../lib/useSheetPolicy";
 import { ReviewDialog } from "./ReviewDialog";
 import { StatusStrip, type StatusStripProps } from "./StatusStrip";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 const ADVANCED_SETTINGS_KEY = ns("settings.advanced");
 
@@ -223,6 +225,7 @@ export const AppShell = memo(function AppShell({
   exportSuccess,
   onDismissExportSuccess,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const actions = useAppActions();
   // `ui.essentials` is what decides whether `@advanced` params are hideable at
   // all: docs/config.md and docs/annotations.md both scope the whole feature
@@ -613,10 +616,10 @@ export const AppShell = memo(function AppShell({
           each href always matches the one target that actually exists:
           #params(-mobile), and #main-content on the mounted branch's root. */}
       <a className={SKIP_LINK_CLASS} href="#main-content">
-        Skip to main content
+        {t("appShell.skipToMain")}
       </a>
       <a className={SKIP_LINK_CLASS} href={isMobile ? "#params-mobile" : "#params"}>
-        Skip to parameters
+        {t("appShell.skipToParams")}
       </a>
 
       {/* Only the active layout mounts (M7): desktop and mobile used to both
@@ -759,7 +762,7 @@ export const AppShell = memo(function AppShell({
               type="button"
               className="output-console__scrim absolute inset-x-0 top-0 bottom-[calc(var(--safe-area-bottom)+var(--mobile-peek-height))] z-[31] bg-black/40"
               onClick={closeOutput}
-              aria-label="Close Messages"
+              aria-label={t("console.close")}
             />
           )}
           <OutputConsole
