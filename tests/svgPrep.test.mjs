@@ -89,7 +89,7 @@ test("safe fix normalises an off-origin viewBox by wrapping in a translate", () 
        <rect x="10" y="20" width="100" height="50" fill="gray"/>
      </svg>`,
   );
-  assert.match(applyFixes(root).join(" "), /re-centred the drawing/);
+  assert.ok(applyFixes(root).some((c) => c.code === "recentred"));
   const fixed = roundtrip(root);
   assert.equal(fixed.getAttribute("viewBox"), "0 0 100 50");
   assert.match(serializeSvg(fixed), /translate\(-10,-20\)/);
@@ -568,7 +568,9 @@ test("an Inkscape label with spaces or commas becomes a valid, spec-safe id", ()
      </svg>`,
   );
   const changes = applyFixes(root);
-  assert.ok(changes.some((c) => c.includes('named "Ground_floor__walls"')));
+  assert.ok(
+    changes.some((c) => c.code === "layer-renamed" && c.vars.target === "Ground_floor__walls"),
+  );
   const spec = formatLayers(deriveRegions(root));
   assert.equal(spec, "Ground_floor__walls:gray, Térreo:white");
   // Unicode letters are valid NCName characters: renaming them would mangle
@@ -607,7 +609,7 @@ test("check reports scripts, animation and external style references", () => {
   assert.ok(found, "active content is reported");
   assert.equal(found.level, "WARN");
   for (const tag of ["<script>", "<animate>", "<style>"])
-    assert.ok(found.message.includes(tag), `${tag} named`);
+    assert.ok(found.vars.names.includes(tag), `${tag} named`);
 });
 
 test("applyFixes strips what executes and what fetches, keeping the colours", () => {
@@ -662,7 +664,7 @@ test("open-paths counts unclosed subpaths", () => {
   );
   const finding = check(root).find((f) => f.code === "open-paths");
   assert.ok(finding, "the unclosed path is reported");
-  assert.match(finding.message, /1 unclosed path/);
+  assert.equal(finding.vars.count, 1);
 });
 
 test("region-is-label is an ERROR naming a layer requested by its label", () => {
@@ -694,9 +696,7 @@ test("regions-available advertises only ids derivation can emit", () => {
   );
   const finding = check(root).find((f) => f.code === "regions-available");
   assert.ok(finding);
-  assert.match(finding.message, /rooms, walls/);
-  assert.ok(!finding.message.includes("outer"), "a wrapper group is not a region");
-  assert.ok(!finding.message.includes("empty"), "a shapeless group is not a region");
+  assert.deepEqual(finding.vars.regions, ["rooms", "walls"], "a wrapper/shapeless group is not a region");
   assert.deepEqual(
     deriveRegions(root).map((r) => r.id).sort(),
     ["rooms", "walls"],
@@ -729,7 +729,7 @@ test("shapes outside every region are reported rather than vanishing", () => {
   );
   const finding = check(root).find((f) => f.code === "shapes-outside-regions");
   assert.ok(finding, "the loose circle is reported");
-  assert.match(finding.message, /1 shape/);
+  assert.equal(finding.vars.count, 1);
   // With no regions at all there is nothing to be outside of.
   const plain = parse(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle r="4" fill="black"/></svg>`,
@@ -987,7 +987,13 @@ test("check and applyFixes agree on which Inkscape layers are trapped", () => {
   const root = parse(svg);
   assert.ok(codes(root).includes("inkscape-trap"), "the id/label mismatch is reported");
   const changes = applyFixes(root);
-  assert.ok(changes.some((c) => c.includes("walls")), "and renamed");
-  assert.ok(!changes.some((c) => c.includes('"roof"')), "the already-named layer is untouched");
+  assert.ok(
+    changes.some((c) => c.code === "layer-usable" && c.vars.label === "walls"),
+    "and renamed",
+  );
+  assert.ok(
+    changes.every((c) => c.vars?.label !== "roof"),
+    "the already-named layer is untouched",
+  );
   assert.ok(!codes(root).includes("inkscape-trap"), "nothing is left trapped after the fix");
 });
