@@ -25,9 +25,8 @@ function Slider({
   );
   // Radix puts role="slider" on the Thumb, so the accessible name has to live
   // there (not on the Root): forward aria-label/labelledby down to each thumb.
-  // Every current caller supplies its own aria-label (the param's own label),
-  // but a bare fallback keeps a future label-less Slider from shipping with no
-  // accessible name at all rather than silently failing axe.
+  // A generic fallback name beats no name: it keeps a future label-less
+  // Slider from silently failing axe.
   const thumbLabelledBy = props["aria-labelledby"];
   const thumbLabel = props["aria-label"] ?? (thumbLabelledBy ? undefined : t("common.slider"));
 

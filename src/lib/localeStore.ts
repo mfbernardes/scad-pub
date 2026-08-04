@@ -18,7 +18,7 @@ import {
 import { rebind, overridesForLocale, defaultTag, type Bundle, type ConfigStrings } from "./i18n";
 import type { DesignI18nFile, DesignStrings } from "./designI18n";
 import { ns } from "./appId";
-import { readLocal, writeLocal } from "./safeStorage";
+import { readLocal, writeLocal, removeLocal } from "./safeStorage";
 
 export interface LocaleState {
   tag: string;
@@ -85,6 +85,13 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
 
   let state: LocaleState = { tag: defaultTag, dir: localeMeta(defaultTag).dir, designsGeneration: 0 };
   let requestToken = 0;
+  // Bumped ONLY by a real tag switch (never by setLocale's same-tag early
+  // return, which bumps `requestToken` instead): the init default-tag design
+  // load below must survive a same-tag re-selection of the default locale
+  // racing ahead of it, or that early return would starve `designsById` for
+  // the rest of the session with no reload path while staying on the default
+  // tag (Phase 6 review finding).
+  let switchToken = 0;
   // The active tag's per-design translation bundle, keyed by design id.
   // Swapped alongside `state` (see setLocale and the default-tag init load
   // below) — never read directly, only through `getDesignStrings`.
@@ -124,6 +131,7 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
       throw new Error(`localeStore: "${tag}" is not an enabled locale`);
     }
     const token = ++requestToken;
+    switchToken++;
 
     const chromeLoader = tag === "en" ? undefined : loadChrome[tag];
     if (tag !== "en" && !chromeLoader) {
@@ -167,15 +175,15 @@ export function createLocaleStore(deps: CreateLocaleStoreDeps) {
   // default never calls `setLocale` at all (see the module-init block at the
   // bottom of this file), so without this the default tag's own sidecars
   // (see `loadDesignStrings`'s own doc) would never load. Non-blocking: the
-  // captured token is checked before applying, so a REAL switch racing ahead
-  // of this slow load (away from, or back to, defaultTag) always wins —
-  // exactly the same staleness guard `setLocale` uses, just against a token
-  // captured before any switch has happened.
+  // captured token is checked against `switchToken`, not `requestToken` — a
+  // REAL switch racing ahead of this slow load (away from, or back to,
+  // defaultTag) always wins, but a same-tag `setLocale` call resolving first
+  // must NOT count as one (see `switchToken`'s own comment above).
   if (loadDesignStrings?.[defaultTag]) {
-    const initToken = requestToken;
+    const initToken = switchToken;
     loadDesignStrings[defaultTag]()
       .then((file) => {
-        if (initToken !== requestToken) return; // superseded by a real switch already
+        if (initToken !== switchToken) return; // superseded by a real switch already
         designsById = file?.designs ?? {};
         state = { ...state, designsGeneration: state.designsGeneration + 1 };
         notify();
@@ -311,12 +319,7 @@ const store = createLocaleStore({
 // default locale, so a region-flavored tag like `de-AT` isn't narrowed here
 // either.
 if (enabledTags.length <= 1 && readLocal(ns("lang")) !== null) {
-  try {
-    localStorage.removeItem(ns("lang"));
-  } catch {
-    // Storage unavailable (private mode, quota, policy): nothing was
-    // actually persisted, so there's nothing left to correct.
-  }
+  removeLocal(ns("lang"));
   if (typeof document !== "undefined") document.documentElement.lang = schema.lang ?? defaultTag;
 }
 

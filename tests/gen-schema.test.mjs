@@ -370,7 +370,7 @@ test("languages: an entry that isn't a shipped locale fails the build, naming th
 test("languages: omitting the deployment's default locale fails the build", () => {
   assert.throws(
     () => run("widget-languages-missing-default.config.json"),
-    /'languages' must include "de" — a deployment's default locale \(from 'lang'\) must always be offered/
+    /'languages' must include "de" — the deployment's resolved default locale \(from 'lang' when shipped, else "en"\) must always be offered/
   );
 });
 
@@ -2082,6 +2082,9 @@ test("parseLanguages: default rules — shipped 'lang' offers every registry tag
   assert.deepEqual(parseLanguages(null, ["en", "de"], "en"), ["en", "de"]);
   assert.deepEqual(parseLanguages(undefined, ["en", "de"], "de"), ["de", "en"]);
   assert.deepEqual(parseLanguages(null, ["en", "de"], "fr"), ["en"]);
+  // A region-flavored 'lang' collapses to its registry tag before deriving
+  // the default: "de-AT" ships as "de", not a distinct unshipped locale.
+  assert.deepEqual(parseLanguages(null, ["en", "de"], "de-AT"), ["de", "en"]);
 });
 
 test("parseLanguages: an explicit array is validated, normalised, deduplicated and default-first", () => {
@@ -2105,7 +2108,7 @@ test("parseLanguages: an explicit array is validated, normalised, deduplicated a
   );
   assert.throws(
     () => parseLanguages(["en"], ["en", "de"], "de"),
-    /'languages' must include "de" — a deployment's default locale \(from 'lang'\) must always be offered/
+    /'languages' must include "de" — the deployment's resolved default locale \(from 'lang' when shipped, else "en"\) must always be offered/
   );
 });
 
@@ -4887,6 +4890,36 @@ test("parseDesignStrings: rejects translating the canonical 'Hidden' section", (
   );
 });
 
+test("parseDesignStrings: rejects two translations colliding on the same final section name", () => {
+  assert.throws(
+    () =>
+      parseDesignStrings(
+        { sections: { Size: "Größe", Style: "Größe" } },
+        designStringsCtx({ sections: ["Size", "Style"] })
+      ),
+    /translates section "Size" and section "Style" to the same name "Größe" — translated section names must stay unique/
+  );
+});
+
+test("parseDesignStrings: rejects a translation colliding with an untranslated sibling section's name", () => {
+  assert.throws(
+    () =>
+      parseDesignStrings(
+        { sections: { Size: "Style" } },
+        designStringsCtx({ sections: ["Size", "Style"] })
+      ),
+    /translates section "Size" and section "Style" to the same name "Style" — translated section names must stay unique/
+  );
+});
+
+test("parseDesignStrings: accepts distinct section translations that don't collide", () => {
+  const out = parseDesignStrings(
+    { sections: { Size: "Größe", Style: "Stil" } },
+    designStringsCtx({ sections: ["Size", "Style"] })
+  );
+  assert.deepEqual(out.sections, { Size: "Größe", Style: "Stil" });
+});
+
 test("parseDesignStrings: rejects a choices key that isn't a declared choice value", () => {
   assert.throws(
     () => parseDesignStrings({ params: { style: { choices: { stale: "x" } } } }, designStringsCtx()),
@@ -5016,6 +5049,23 @@ test("a translation sidecar naming an unshipped locale tag fails the build, list
   );
 });
 
+test("a translation sidecar whose tag is a wrongly-cased shipped locale fails the build, naming the expected lowercase form", () => {
+  // A case-insensitive filesystem (macOS, Windows) resolves this the same as
+  // 'd.strings.de.json', so it must be caught explicitly rather than silently
+  // loaded as (or silently ignored instead of) the "de" sidecar.
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-badcase-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.strings.DE.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("badcase"), configPath: join(src, "c.config.json") }),
+    /translation sidecar 'd\.strings\.DE\.json' names locale tag 'DE', but sidecar tags are matched case-sensitively\. Rename it to 'd\.strings\.de\.json'\./
+  );
+});
+
 test("an 'assets' entry directly naming a translation sidecar fails the build", () => {
   const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-directasset-"));
   writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
@@ -5033,6 +5083,33 @@ test("an 'assets' entry directly naming a translation sidecar fails the build", 
     () => generate({ ...i18nOutDirs("directasset"), configPath: join(src, "c.config.json") }),
     /asset 'd\.strings\.de\.json' names a design-translation sidecar/
   );
+});
+
+test("an orphaned sidecar-shaped file matching no design's basename warns, but does not fail the build", () => {
+  // Simulates a design rename: 'widget.scad' became 'd.scad' (still the only
+  // design), but its old translation sidecar was left behind under the old
+  // basename. The per-design scan only ever looks for ITS OWN design's base
+  // ('d'), so this must be caught by the separate orphan scan instead.
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-orphan-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "widget.strings.de.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  let schema;
+  try {
+    schema = generate({ ...i18nOutDirs("orphan"), configPath: join(src, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(schema.designs.length === 1); // the build still succeeds
+  const hits = warnings.filter((w) => w.includes("widget.strings.de.json"));
+  assert.equal(hits.length, 1, `expected exactly one orphan warning, got: ${JSON.stringify(warnings)}`);
+  assert.ok(hits[0].includes("match no design in their directory"));
 });
 
 test("a glob 'assets' entry silently excludes translation sidecars, with a one-time warning", () => {

@@ -29,9 +29,8 @@ import {
 // Data-only (no JSON, no React): reused directly under Node's type stripping,
 // the same way scripts/gen-schema.mjs imports it, to project a per-locale
 // `strings` override (schema.strings' object-valued form, see docs/config.md's
-// `strings` section) onto the deployment's own default locale — the ONLY
-// locale a fresh, unauthenticated smoke run ever boots into.
-import { LOCALE_TAGS, collapseToAvailable } from "../src/lib/localeRegistry.ts";
+// `strings` section) onto the tag the app will actually boot into.
+import { LOCALE_TAGS, collapseToAvailable, bestFitLocale } from "../src/lib/localeRegistry.ts";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
@@ -2424,19 +2423,28 @@ async function main() {
     );
     // The deployment's default locale (src/lib/i18n.ts's `defaultTag` formula,
     // repeated here rather than imported since that module also pulls in the
-    // designs.json JSON-import machinery smoke.mjs doesn't otherwise need):
-    // smoke never switches locale, so this is the only one `strings` ever
-    // needs to project onto.
+    // designs.json JSON-import machinery smoke.mjs doesn't otherwise need).
     const defaultTag = collapseToAvailable(schema.lang ?? "en", LOCALE_TAGS) ?? "en";
+    // Enabled locales for this deployment (mirrors localeStore.ts's
+    // deriveEnabledTags; not imported, for the same reason as defaultTag above).
+    const enabledTags =
+      Array.isArray(schema.languages) && schema.languages.length > 0 ? schema.languages : [defaultTag];
+    // The tag the app actually boots into under this harness's PINNED_LOCALE
+    // ("en-US", see lib/browser.mjs): mirrors localeStore.ts's
+    // resolveInitialLocale with no persisted choice, so best-fit "en-US"
+    // against the deployment's enabled locales, falling back to the collapsed
+    // default. NOT necessarily `defaultTag` — a deployment whose `languages`
+    // excludes "en" boots into its own default instead, same as the app does.
+    const bootTag = bestFitLocale(["en-US"], enabledTags) ?? defaultTag;
     // A `strings` value is either a plain string (the pre-Phase-4 shape,
     // applies unconditionally) or an object of locale tag -> string (Phase
-    // 4): project the latter onto `defaultTag`, falling back to the built-in
+    // 4): project the latter onto `bootTag`, falling back to the built-in
     // English catalogue exactly like a miss on the plain-string form already
     // did.
     const uiText = (key) => {
       const raw = schema.strings?.[key];
       if (typeof raw === "string") return raw;
-      if (raw && typeof raw === "object" && typeof raw[defaultTag] === "string") return raw[defaultTag];
+      if (raw && typeof raw === "object" && typeof raw[bootTag] === "string") return raw[bootTag];
       return catalogue[key] ?? "";
     };
     // Panel tab names are catalogue keys (presets.title/settings.title), not

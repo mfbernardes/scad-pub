@@ -712,7 +712,12 @@ function resolvePresetImages({
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
 function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register }) {
-  return resolveDesignList(config, SOURCE).map(({ presetImagesSrc, ...d }) => {
+  // designDir -> Set of every design's sidecar base seen in that directory,
+  // collected below as each design is processed; used after the .map() to
+  // find sidecar-SHAPED files that match no design at all (see the orphan
+  // scan below).
+  const sidecarBasesByDir = new Map();
+  const designs = resolveDesignList(config, SOURCE).map(({ presetImagesSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
@@ -817,15 +822,33 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // (see its own `designs.map` at the end of this file).
     const designDir = dirname(abs);
     const sidecarBase = basename(d.file).replace(/\.scad$/, "");
-    const sidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.strings\\.([A-Za-z0-9-]+)\\.json$`);
+    if (!sidecarBasesByDir.has(designDir)) sidecarBasesByDir.set(designDir, new Set());
+    sidecarBasesByDir.get(designDir).add(sidecarBase);
+    // Case-insensitive: a macOS/Windows filesystem resolves `widget.strings.de.json`
+    // and `widget.Strings.DE.json` to the same file, so the exact-case probe
+    // below (`sidecarAbs`) would happily load a wrongly-cased sidecar on those
+    // filesystems while this scan, if case-sensitive, stayed blind to it —
+    // the file would silently take effect without ever being caught as
+    // misnamed. Matching case-insensitively here means every such file is at
+    // least SEEN; the tag-case check right below decides whether to accept or
+    // reject it.
+    const sidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.strings\\.([A-Za-z0-9-]+)\\.json$`, "i");
     for (const name of readdirSync(designDir)) {
       const m = name.match(sidecarRe);
       if (!m) continue;
-      if (!LOCALE_TAGS.includes(m[1]))
+      const tag = m[1];
+      if (LOCALE_TAGS.includes(tag)) continue;
+      const lower = tag.toLowerCase();
+      if (LOCALE_TAGS.includes(lower))
         throw new Error(
           `gen-schema: design '${d.id}' translation sidecar '${relPosix(join(designDir, name))}' names ` +
-            `an unshipped locale tag '${m[1]}'.\n  Valid tags: ${LOCALE_TAGS.join(", ")}`
+            `locale tag '${tag}', but sidecar tags are matched case-sensitively. Rename it to ` +
+            `'${sidecarBase}.strings.${lower}.json'.`
         );
+      throw new Error(
+        `gen-schema: design '${d.id}' translation sidecar '${relPosix(join(designDir, name))}' names ` +
+          `an unshipped locale tag '${tag}'.\n  Valid tags: ${LOCALE_TAGS.join(", ")}`
+      );
     }
     const sidecarCtxParams = params.map((p) => ({
       name: p.name,
@@ -889,6 +912,29 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       ...(Object.keys(stringsByTag).length ? { stringsByTag } : {}),
     };
   });
+
+  // Orphaned sidecar-shaped files: a `<base>.strings.<tag>.json` whose base
+  // matches no design in its own directory — most often a design renamed (or
+  // removed) without its old translation following it — is invisible to the
+  // per-design scan above, which only ever looks for ITS OWN design's base.
+  // Left alone it translates nothing and fails nothing, silently rotting
+  // forever; warn instead so it gets noticed.
+  const GENERIC_SIDECAR_RE = /^(.+)\.strings\.[A-Za-z0-9-]+\.json$/i;
+  const orphaned = [];
+  for (const [dir, bases] of sidecarBasesByDir) {
+    for (const name of readdirSync(dir)) {
+      const m = name.match(GENERIC_SIDECAR_RE);
+      if (!m || bases.has(m[1])) continue;
+      orphaned.push(relPosix(join(dir, name)));
+    }
+  }
+  if (orphaned.length)
+    console.warn(
+      `gen-schema: ${orphaned.length} design-translation sidecar file(s) match no design in their ` +
+        `directory (an orphan left behind by a design rename?), so they translate nothing: ${orphaned.join(", ")}`
+    );
+
+  return designs;
 }
 
 // Optional default design shown when a visit carries no `#d=` deep link. Must

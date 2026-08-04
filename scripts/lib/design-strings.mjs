@@ -101,6 +101,26 @@ export function parseDesignStrings(json, ctx) {
         );
       requireNonEmptyString(file, value, `sections["${name}"]`);
     }
+
+    // Reject collisions in the FINAL localized section-name set: a section
+    // left untranslated keeps its own original name, so two sections can end
+    // up sharing a name either because two translations collide, or because
+    // one translation happens to match an untranslated sibling's name.
+    // `SectionNavigator` and collapse state key sections by name and can't
+    // tell two same-named sections apart.
+    const producedBy = new Map(); // final name -> original section name that produced it first
+    for (const original of sections) {
+      const final = Object.prototype.hasOwnProperty.call(json.sections, original)
+        ? json.sections[original]
+        : original;
+      const collidesWith = producedBy.get(final);
+      if (collidesWith !== undefined)
+        fail(
+          file,
+          `translates section "${collidesWith}" and section "${original}" to the same name "${final}" — translated section names must stay unique`
+        );
+      producedBy.set(final, original);
+    }
   }
 
   if (json.params !== undefined) {

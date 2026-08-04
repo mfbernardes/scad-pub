@@ -298,6 +298,86 @@ test("deriveEnabledTags: an unshipped config lang resolves to a single 'en' tag,
   );
 });
 
+test("createLocaleStore: the init default-tag design-strings load populates designsById and bumps designsGeneration", async () => {
+  const initLoad = deferred();
+  const store = createLocaleStore({
+    loadChrome: {},
+    loadDesignStrings: { en: () => initLoad.promise },
+    persist: () => {},
+    schemaLang: "en",
+    enabledTags: ["en"],
+    onRebind: () => {},
+  });
+  const before = store.getSnapshot();
+  assert.equal(store.getDesignStrings("widget"), undefined);
+  initLoad.resolve({ designs: { widget: { description: "A widget" } } });
+  await Promise.resolve().then(() => Promise.resolve()); // let the .then() microtask run
+  assert.deepEqual(store.getDesignStrings("widget"), { description: "A widget" });
+  assert.equal(store.getSnapshot().designsGeneration, before.designsGeneration + 1);
+  assert.notStrictEqual(store.getSnapshot(), before, "a design-strings-only update still bumps the snapshot");
+});
+
+test("createLocaleStore: a rejected init default-tag design-strings load is tolerated (no throw, no state change)", async () => {
+  const store = createLocaleStore({
+    loadChrome: {},
+    loadDesignStrings: { en: () => Promise.reject(new Error("network down")) },
+    persist: () => {},
+    schemaLang: "en",
+    enabledTags: ["en"],
+    onRebind: () => {},
+  });
+  const before = store.getSnapshot();
+  await Promise.resolve().then(() => Promise.resolve());
+  assert.strictEqual(store.getSnapshot(), before);
+  assert.equal(store.getDesignStrings("widget"), undefined);
+});
+
+test("createLocaleStore: setLocale swaps the design-strings bundle alongside the chrome bundle", async () => {
+  const store = createLocaleStore({
+    loadChrome: { de: () => Promise.resolve({}) },
+    loadDesignStrings: {
+      en: () => Promise.resolve({ designs: { widget: { description: "A widget" } } }),
+      de: () => Promise.resolve({ designs: { widget: { description: "Ein Widget" } } }),
+    },
+    persist: () => {},
+    schemaLang: "en",
+    enabledTags: ["en", "de"],
+    onRebind: () => {},
+  });
+  await Promise.resolve().then(() => Promise.resolve()); // let the init en load settle
+  assert.deepEqual(store.getDesignStrings("widget"), { description: "A widget" });
+
+  await store.setLocale("de");
+  assert.deepEqual(store.getDesignStrings("widget"), { description: "Ein Widget" });
+
+  await store.setLocale("en");
+  assert.deepEqual(store.getDesignStrings("widget"), { description: "A widget" });
+});
+
+test("createLocaleStore: a same-tag early return does not starve the still-in-flight init default-tag design-strings load (Phase 6 review finding)", async () => {
+  const initLoad = deferred();
+  const store = createLocaleStore({
+    loadChrome: {},
+    loadDesignStrings: { en: () => initLoad.promise },
+    persist: () => {},
+    schemaLang: "en",
+    enabledTags: ["en"],
+    onRebind: () => {},
+  });
+  // Re-select the already-active default tag while the init load is still
+  // pending — the early-return path in setLocale must not invalidate it.
+  await store.setLocale("en");
+  assert.equal(store.getDesignStrings("widget"), undefined, "still pending");
+
+  initLoad.resolve({ designs: { widget: { description: "A widget" } } });
+  await Promise.resolve().then(() => Promise.resolve());
+  assert.deepEqual(
+    store.getDesignStrings("widget"),
+    { description: "A widget" },
+    "the init load must still land after a same-tag early return raced ahead of it"
+  );
+});
+
 test("deriveEnabledTags: a real schema.languages array passes through verbatim", () => {
   assert.deepEqual(deriveEnabledTags(["de", "en"], "de"), ["de", "en"]);
 });

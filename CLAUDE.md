@@ -199,11 +199,17 @@ at 2.66:1, under 1.4.11's 3:1) and can only say "amber", never what is wrong.
   `.output-console__close`, `.brand-logo` and friends. No stylesheet rule targets them; the
   smoke/vis/capture scripts and the `extraCss` escape hatch do.
 - **UI text goes through the i18n catalogue.** ScadPub’s chrome copy lives in
-  `src/locales/en.json` and is read via `t()`/`tn()` in `src/lib/i18n.ts`, so a deployment can
-  override any key through the config’s `strings` block (validated at build time). Add the key
-  to the catalogue before referencing it; `tests/i18nCoverage.test.mjs` also fails on a
-  catalogue key nothing in `src/` uses. It is a subset, not a translation layer: older panels
-  still carry plain English.
+  `src/locales/<tag>.json` (`en` is source of truth; `de` ships; parity and coverage tests
+  enforce matching key sets) and is read via `t()`/`tn()`, with runtime language switching
+  through `src/lib/localeStore.ts`'s `useLocale()`. Rules the reviews already cite: (1) no
+  module-scope `t()`/`tn()` — a guard test enforces it; (2) indirection tables store *keys*,
+  resolved at render (`views.ts`); (3) every text-rendering component subscribes via
+  `useLocale()`; (4) memoized derivations of translated text take the locale tag as a dep; (5)
+  design-supplied text is translated via per-design `.strings.<tag>.json` sidecars
+  ([docs/config.md#design-translations](docs/config.md#design-translations)), never
+  annotations, never in `renderHash`. `defaultHelp.ts`, `licenses.ts` notes,
+  `svgPrep/check.ts` and `SvgWizard.tsx` stay deliberately English-only prose — a known
+  follow-up, not an oversight.
 - **Font availability is decided in the app, not in OpenSCAD.** `gen-schema` reads each bundled
   font’s family and face from its `name` table and flags font params `isFont`; those render as
   `FontSelect`, which unions bundled with imported fonts and preserves stored value strings so
