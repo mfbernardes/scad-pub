@@ -519,6 +519,27 @@ const checkScadFile = (file, id) => {
 };
 
 // The design list from the config, or auto-discovered root .scad files.
+// `group`'s pre-LocalizableText behaviour was permissive by design: any
+// non-string value (or a blank/whitespace-only string) silently collapsed to
+// `null` (unset) rather than failing the build — the same "a malformed
+// optional value quietly becomes absent" leniency `collapseEmptyToNull`
+// gives an empty tuning object elsewhere in this config (see
+// config-spec.mjs's file-top comment). Restored here for the plain-string
+// form specifically, so an existing config's `group` still behaves
+// identically. The new OBJECT (LocalizableText map) form has no back-compat
+// history to preserve — it's validated strictly through
+// `parseLocalizableText`, same as every other localizable field, so a
+// genuinely malformed map (a locale outside `languages`, a missing default
+// tag, a non-string entry) still fails the build rather than silently
+// disappearing.
+function parseGroupLocalizable(raw, id, languages, defaultTag) {
+  if (raw == null) return null;
+  if (typeof raw === "string") return raw.trim() ? raw.trim() : null;
+  if (typeof raw === "object" && !Array.isArray(raw))
+    return parseLocalizableText(raw, `designs[${id}].group`, languages, defaultTag);
+  return null;
+}
+
 function resolveDesignList(config, SOURCE, languages, defaultTag) {
   // Shared validator for a config `designs[].presets.images` map entry: an
   // object mapping string keys to non-empty string values. The per-key
@@ -601,7 +622,7 @@ function resolveDesignList(config, SOURCE, languages, defaultTag) {
         // Heavy designs skip the debounced auto-render (the user renders on demand).
         heavy: d.heavy ?? false,
         // Optional dropdown grouping header (designs sharing a group cluster).
-        group: d.group != null ? parseLocalizableText(d.group, `designs[${id}].group`, languages, defaultTag) : null,
+        group: parseGroupLocalizable(d.group, id, languages, defaultTag),
         presetImagesSrc: checkPresetImages(d.presets?.images, id),
       };
     });
@@ -1904,6 +1925,7 @@ export function generate({
       BG_COLOR: PWA.backgroundColor,
       CATEGORIES: PWA.categories,
       designs,
+      defaultTag: DEFAULT_TAG,
       mustExist,
       register: registry.register,
       isTracked: isTrackedFile,

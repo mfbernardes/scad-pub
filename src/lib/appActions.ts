@@ -35,9 +35,10 @@ export interface AppActions {
   /** Switches the active locale (see src/lib/localeStore.ts); a failed
    *  load's rejection is handled by the caller (App.tsx), not here. */
   localeChange: (tag: string) => void;
-  /** Opens the Help modal, optionally scrolled straight to a tab (matched by
-   *  its exact `help.tabs[].label`, see HelpModal's `initialTab`). Omit for
-   *  the modal's default landing tab. */
+  /** Opens the Help modal, optionally scrolled straight to a tab (matched
+   *  id-first, then by its exact label — see HelpModal's `initialTab` and
+   *  gen-schema.mjs's checkAfterExportHelpTab, which validates a config's
+   *  reference the same way). Omit for the modal's default landing tab. */
   showHelp: (tab?: string) => void;
   showDesignDoc: () => void;
   showLicenses: () => void;

@@ -676,6 +676,28 @@ test("lang/dir + per-design shortcut icons + screenshot fields reach the manifes
   assert.equal(manifest.screenshots[0].platform, "android");
 });
 
+test("a derived shortcut's name/short_name project a LocalizableText design label to the default locale, never the raw object", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  generate({
+    configPath: join(FIXTURES, "widget-shortcut-locale-label.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  const widgetShortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
+  // "en" is this fixture's resolved default locale (languages[0]).
+  assert.equal(widgetShortcut.name, "Widget");
+  assert.equal(widgetShortcut.short_name, "Widget");
+  assert.equal(typeof widgetShortcut.name, "string");
+  // A plain-string label (the pre-existing shape) is unaffected.
+  const collapsibleShortcut = manifest.shortcuts.find((s) => s.url === "./#d=collapsible");
+  assert.equal(collapsibleShortcut.name, "Collapsible");
+  assert.equal(collapsibleShortcut.short_name, "Collapsible");
+});
+
 test("a PNG design icon is served as-is and its real pixel size reaches the manifest", () => {
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   const schema = generate({
@@ -705,6 +727,19 @@ test("heavy defaults to false when unset", () => {
 test("group defaults to null when unset", () => {
   const { schema } = run("widget-autodeps.config.json");
   assert.equal(schema.designs[0].group, null);
+});
+
+// `group`'s pre-LocalizableText leniency is deliberately preserved (see
+// parseGroupLocalizable's own comment): a blank/whitespace-only string or a
+// non-string, non-object value silently collapses to null (unset) rather
+// than failing the build — a STRICTER build was considered and rejected here
+// specifically, unlike help/notices/licenses[].note/designs[].label, which
+// now do reject a malformed value (see docs/config.md's Localizing-config-
+// text "stricter than before" note).
+test("group: a blank/whitespace string or a non-string, non-object value silently becomes null, not a build error", () => {
+  const { schema } = run("widget-group-lenient.config.json");
+  assert.equal(schema.designs.find((d) => d.id === "widget").group, null);
+  assert.equal(schema.designs.find((d) => d.id === "collapsible").group, null);
 });
 
 test("a source-relative font path is referenced by basename", () => {
@@ -1418,6 +1453,15 @@ test("notices: label accepts { one, other } — 'other' required, 'one' optional
     /'notices\[0\]\.label': unknown key 'subtitle'\.\s*\n\s*Valid keys: one, other/
   );
   assert.throws(() => parseNotices([{ marker: "n", label: [] }]), /'notices\[0\]\.label' must be a string/);
+  // Adversarial shape: a locale-tag map at the OUTER `label` level (as if
+  // `label` itself, rather than each of its `one`/`other` leaves, were the
+  // LocalizableText value). This is structurally disjoint from `{ one, other
+  // }` — "en"/"de" are neither key — so it's caught by the ordinary
+  // unknown-key check, not silently accepted or misread as the wrong axis.
+  assert.throws(
+    () => parseNotices([{ marker: "n", label: { en: "alert", de: "Warnung" } }]),
+    /'notices\[0\]\.label': unknown key 'en'\.\s*\n\s*Valid keys: one, other/
+  );
 });
 
 test("notices: labelOne is rejected, pointing at label: { one, other }", () => {
@@ -2365,6 +2409,60 @@ test("LocalizableText: an object missing the deployment's default-locale entry f
   assert.throws(
     () => run("widget-prose-i18n-missing-default.config.json"),
     /'popup\.header' must include an entry for "en", this deployment's default locale/
+  );
+});
+
+test("help.tabs[].file: a per-locale object splits each locale's file independently into one LocalizableText intro/sections", () => {
+  const { schema } = run("widget-help-locale.config.json");
+  const tab = schema.help.tabs[0];
+  assert.deepEqual(tab.intro, { en: "Shared intro.", de: "Gemeinsame Einleitung." });
+  assert.equal(tab.sections.length, 2);
+  assert.deepEqual(tab.sections[0].title, { en: "Pick a design", de: "Design wählen" });
+  assert.deepEqual(tab.sections[0].body, { en: "Use the dropdown.", de: "Nutze das Dropdown." });
+  assert.deepEqual(tab.sections[1].title, { en: "Adjust parameters", de: "Parameter anpassen" });
+  assert.deepEqual(tab.sections[1].body, {
+    en: "The panel lists what you can change.",
+    de: "Das Panel listet, was du ändern kannst.",
+  });
+});
+
+test("help.tabs[].file: a locale's file splitting into a different number of '##' sections fails the build", () => {
+  assert.throws(
+    () => run("widget-help-locale-mismatch.config.json"),
+    /'help\.tabs\[0\]\.file' locale "de" splits into 1 section\(s\).*but "en" splits into 2/s
+  );
+});
+
+test("help.tabs[].file: a non-default locale's missing intro just leaves that locale out of the intro map", () => {
+  // "en" (default) has an intro, "de" has none (nothing before its first
+  // '##'): the resulting intro map carries only "en" — a visitor on "de"
+  // falls back to it via lx()'s own map[tag] ?? map[defaultTag] rule.
+  const { schema } = run("widget-help-locale-nointro-de.config.json");
+  assert.deepEqual(schema.help.tabs[0].intro, { en: "Shared intro." });
+});
+
+test("help.tabs[].file: intro is omitted entirely when the DEFAULT locale's file has none, even if another locale's does", () => {
+  // "en" (default) has no intro; "de" does. Per the documented rule (see
+  // docs/config.md's Sourcing-help-from-Markdown-files section), intro only
+  // ever appears when the default locale's file supplies one, so "de"'s
+  // intro text is dropped here rather than producing an object missing the
+  // default tag (which would violate LocalizableText's own invariant).
+  const { schema } = run("widget-help-locale-nointro-en.config.json");
+  assert.equal("intro" in schema.help.tabs[0], false);
+});
+
+test("resolveFileField: licenses[].textFile rejects a per-locale object — this field doesn't support per-locale forms", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { textFile: { en: "a.md", de: "b.md" } },
+        field: "text",
+        fileField: "textFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "licenses[0]",
+      }),
+    /'licenses\[0\]\.textFile' must be a file path \(this field doesn't support per-locale forms\)/
   );
 });
 
