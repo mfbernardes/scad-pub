@@ -22,3 +22,14 @@ export function writeLocal(key: string, value: string): boolean {
     return false;
   }
 }
+
+/** Best-effort removal: a thrown/unavailable storage means there was nothing
+ *  persisted to begin with, so failure and success are equally fine to the
+ *  caller — same degrade-to-no-op contract as readLocal/writeLocal. */
+export function removeLocal(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Storage unavailable: nothing was actually persisted either.
+  }
+}

@@ -40,8 +40,11 @@ const DEP_RE = /^\s*(?:use|include)\s*<([^>]+)>/;
 // input, and reaching public/scad/ (hence renderHash) would invalidate every
 // deployment's persisted geometry cache on a translation edit that cannot
 // affect a single triangle. This is the one place a broad config `assets`
-// glob (`**/*.json`, say) could otherwise sweep one in.
-const SIDECAR_RE = /\.strings\.[A-Za-z0-9-]+\.json$/;
+// glob (`**/*.json`, say) could otherwise sweep one in. Case-insensitive for
+// the same reason gen-schema.mjs's own sidecar scan is: a case-insensitive
+// filesystem (macOS, Windows) would otherwise let a wrongly-cased sidecar
+// (`widget.Strings.DE.json`) slip past this exclusion and get bundled.
+const SIDECAR_RE = /\.strings\.[A-Za-z0-9-]+\.json$/i;
 
 /**
  * Build the SOURCE-bound asset resolution helpers used by generate().

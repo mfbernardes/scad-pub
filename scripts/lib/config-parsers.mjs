@@ -298,8 +298,8 @@ export function parseLanguages(raw, registryTags, lang) {
   });
   if (!seen.has(resolvedDefault))
     throw new Error(
-      `gen-schema: 'languages' must include "${resolvedDefault}" — a deployment's default ` +
-        `locale (from 'lang') must always be offered`
+      `gen-schema: 'languages' must include "${resolvedDefault}" — the deployment's resolved ` +
+        `default locale (from 'lang' when shipped, else "en") must always be offered`
     );
   if (normalized[0] === resolvedDefault) return normalized;
   return [resolvedDefault, ...normalized.filter((tag) => tag !== resolvedDefault)];
