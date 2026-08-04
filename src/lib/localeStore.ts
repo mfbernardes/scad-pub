@@ -5,7 +5,7 @@
 // every `useLocale()` instance rather than per-hook `useState`: many
 // components need the same active tag, and a switch has to notify all of
 // them from one async load, not from N independent ones.
-import { useSyncExternalStore } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import schemaJson from "../generated/designs.json" with { type: "json" };
 import type { Schema } from "../openscad/types";
 import {
@@ -216,15 +216,41 @@ const store = createLocaleStore({
  *  just subscribing (`useLocale()` below). */
 export const localeStore = store;
 
-/** `LocaleMeta` for every locale enabled on this deployment. */
-export function availableLocales(): LocaleMeta[] {
-  return LOCALES.filter((locale) => enabledTags.includes(locale.tag));
+// `enabledTags` is fixed for the deployment's lifetime (Phase 4 will read it
+// from config at BUILD time, still not a runtime-varying value), so this list
+// is computed once rather than re-filtered on every `useLocale()` call —
+// keeping one stable array reference across renders, not just stable
+// contents, matters below.
+const ENABLED_LOCALES: readonly LocaleMeta[] = LOCALES.filter((locale) => enabledTags.includes(locale.tag));
+
+/** `LocaleMeta` for every locale enabled on this deployment. Same array
+ *  reference every call (see `ENABLED_LOCALES`). */
+export function availableLocales(): readonly LocaleMeta[] {
+  return ENABLED_LOCALES;
+}
+
+export interface LocaleSnapshot {
+  tag: string;
+  dir: "ltr" | "rtl";
+  locales: readonly LocaleMeta[];
 }
 
 /** Subscribes to the active locale. Re-renders on any runtime switch; the
  *  returned `locales` list is this deployment's enabled locales, for a
- *  language selector. */
-export function useLocale(): { tag: string; dir: "ltr" | "rtl"; locales: LocaleMeta[] } {
+ *  language selector. The returned object is referentially stable across
+ *  renders that don't change the locale (safe to put directly in a `useEffect`/
+ *  `useMemo` dependency array): `state` is a pure function of the store's own
+ *  snapshot, which the store already keeps stable across renders where
+ *  nothing changed (see localeStore.test.mjs's getSnapshot-identity case), so
+ *  caching the last {tag,dir,locales} wrapper in a per-hook-instance ref —
+ *  the same lazy-ref-init pattern as `appActions.ts`'s stable callbacks, see
+ *  CLAUDE.md — keyed on that same `state` reference reuses one wrapper object
+ *  for as long as the locale hasn't actually changed. */
+export function useLocale(): LocaleSnapshot {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  return { tag: state.tag, dir: state.dir, locales: availableLocales() };
+  const cache = useRef<{ state: LocaleState; snapshot: LocaleSnapshot } | null>(null);
+  if (cache.current === null || cache.current.state !== state) {
+    cache.current = { state, snapshot: { tag: state.tag, dir: state.dir, locales: ENABLED_LOCALES } };
+  }
+  return cache.current.snapshot;
 }

@@ -32,7 +32,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import { makeCheck } from "./lib/check.mjs";
-import { launchChromium, dismissWelcomePopup } from "./lib/browser.mjs";
+import { launchChromium, dismissWelcomePopup, PINNED_LOCALE } from "./lib/browser.mjs";
 import { startServer } from "./serve-dist.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -65,7 +65,7 @@ try {
   const port = server.address().port;
 
   browser = await launchChromium();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const page = await browser.newPage({ ...PINNED_LOCALE, viewport: { width: 1280, height: 900 } });
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "networkidle" });
   await dismissWelcomePopup(page);
   await page.waitForSelector("canvas", { timeout: 180000 });

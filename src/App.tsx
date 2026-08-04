@@ -136,6 +136,9 @@ export default function App() {
   const locale = useLocale();
   // Multi-locale deployments only: a single-locale one leaves the
   // config-injected <html lang/dir> alone (see applyLocale's own doc).
+  // `locale` is safe as the sole dep: useLocale() returns a referentially
+  // stable object across renders that don't change the active locale (see
+  // its own doc in localeStore.ts), so this effect doesn't re-fire every render.
   useEffect(() => {
     applyLocale(locale, locale.locales.length > 1);
   }, [locale]);

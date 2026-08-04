@@ -69,6 +69,22 @@ for (const file of localeFiles) {
     assert.deepEqual(mismatches, [], `${file} placeholder mismatches:\n${mismatches.join("\n")}`);
   });
 
+  test(`${file}: every #-suffixed key's base is one of en.json's declared plural bases`, () => {
+    // Catches a stray "status.ready#one"-style key: its base ("status.ready")
+    // passes the base-key-set test above (that key DOES exist in en.json,
+    // just never as a plural), so only a check against en's PLURAL bases
+    // specifically (not its full base-key set) catches the mistake.
+    const strayPlurals = Object.keys(bundle)
+      .filter((k) => k.includes("#"))
+      .map((k) => k.split("#")[0])
+      .filter((base) => !pluralBases.has(base));
+    assert.deepEqual(
+      [...new Set(strayPlurals)],
+      [],
+      `${file} has #-suffixed keys for a base en.json never pluralizes: ${strayPlurals.join(", ")}`
+    );
+  });
+
   test(`${file}: every plural base provides exactly this locale's CLDR categories`, () => {
     const expected = new Set(new Intl.PluralRules(tag).resolvedOptions().pluralCategories);
     const problems = [];
@@ -98,8 +114,11 @@ for (const file of localeFiles) {
 // (column-0) `const`/`export const` binding whose initializer starts with a
 // `t(`/`tn(` call — cheap, like i18nCoverage.test.mjs's own dead-key scan,
 // and good enough to catch the shape of the bug that actually occurred.
+// "ui/" (src/components/ui/) is NOT skipped: Phase 3 adds t() calls to
+// ui/slider and ui/spinner's default copy, and the guard has to cover them
+// like every other source file.
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
-const SKIP_DIRS = new Set(["node_modules", "generated", "ui"]);
+const SKIP_DIRS = new Set(["node_modules", "generated"]);
 const MODULE_SCOPE_T = /^(export )?const [A-Za-z_$][\w$]*(?:\s*:\s*[^=]+)?\s*=\s*tn?\(/;
 
 function collectCodeFiles(dir) {
