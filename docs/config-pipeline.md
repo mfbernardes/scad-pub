@@ -57,6 +57,15 @@ Every one is opt-in.
 - **`rootTypeError`** — a plain-string override naming a field's actual accepted shapes
   (`fileImport` is `true`/an object/`null`, `popup` needs `header`+`body`), where the
   generic message would be less useful.
+- **`mapValue`** — a dynamically-keyed object (like `openKeys`'s open key space) whose
+  *values* all share one shape, given as a ready-made JSON Schema fragment used verbatim as
+  `additionalProperties` (`strings`: a catalogue key maps to a plain string, or an object of
+  locale tag: string pairs). Distinct from `acceptsString` below: that describes a *fixed*
+  property set also reachable via a primitive shorthand, this describes an open key space
+  whose values are typed.
+- **`acceptsString`** — a field that accepts either a plain string or an object with no fixed
+  key set (`designs[].presets.images`: a directory path, or a preset-name -> path map).
+  Emitted as an `anyOf` of the primitive and object forms, distinct from `mapValue` above.
 
 ## Validating `designs.json` at runtime (`src/lib/schema.ts`)
 

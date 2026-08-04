@@ -15,6 +15,9 @@
 // mould, and config-spec.mjs only registers their keys for unknown-key
 // rejection and schema emission.
 import { CONFIG_SPEC, COLOR_TOKENS, PWA_THEME_COLOR_DEFAULTS } from "./config-spec.mjs";
+// Data-only (no JSON, no React) — safe to import directly under Node's type
+// stripping, the same way gen-schema.mjs already imports src/lib/schema.ts.
+import { collapseToAvailable } from "../../src/lib/localeRegistry.ts";
 export { COLOR_TOKENS };
 
 // `prefix(path)` renders the leading part of a validation-error message. One
@@ -231,6 +234,75 @@ export function parseDir(raw) {
         `(got ${JSON.stringify(raw)})`
     );
   return raw;
+}
+
+// Validate the optional `languages` config key: which of ScadPub's shipped
+// chrome locales this deployment's language switcher offers at runtime.
+// `registryTags` is the caller's (gen-schema's) LOCALE_TAGS import and `lang`
+// its already-validated `lang` value, so this module needs no direct
+// dependency on the generated schema or a hard-coded tag list of its own.
+//
+// `resolvedDefault` is the single locale src/lib/i18n.ts's `defaultTag` (and,
+// downstream, src/lib/localeStore.ts's own copy of that same formula) resolve
+// to for this deployment: `collapseToAvailable(lang, registryTags)` when
+// `lang` names a shipped locale, else the hard-coded "en" fallback — the
+// EXACT expression i18n.ts uses. Every rule below is phrased in terms of it
+// rather than `lang` directly, so `languages` can never disagree with which
+// locale the app actually boots into:
+//   - raw omitted/null: `lang` shipped -> every registry tag, resolvedDefault
+//     first (a deployment that never mentions `languages` gets every
+//     translation ScadPub ships). `lang` NOT shipped (e.g. "fr") ->
+//     `[resolvedDefault]` = `["en"]`, a single-locale deployment — not
+//     `[lang]` (`["fr"]`): that would leave `schema.languages` naming a tag
+//     the store's `defaultTag` never actually binds to, since the store
+//     computes `defaultTag` with this identical collapse-or-"en" formula (see
+//     localeStore.ts's `enabledTags` comment for the other half of this
+//     reconciliation).
+//   - raw provided: a non-empty array of unique locale tags, each of which
+//     must collapse to a registry tag (unshipped entries and duplicates both
+//     fail the build, naming the offending entry). The set must include
+//     `resolvedDefault` — the default locale must always be offered, even
+//     when `lang` itself isn't shipped and `resolvedDefault` is therefore
+//     "en" rather than a literal reading of `lang`. Normalized to registry
+//     tags, `resolvedDefault` first, the declared order preserved otherwise.
+export function parseLanguages(raw, registryTags, lang) {
+  const shippedDefault = collapseToAvailable(lang, registryTags);
+  const resolvedDefault = shippedDefault ?? "en";
+  if (raw == null) {
+    if (shippedDefault !== null)
+      return [shippedDefault, ...registryTags.filter((tag) => tag !== shippedDefault)];
+    return [resolvedDefault];
+  }
+  if (!Array.isArray(raw) || raw.length === 0)
+    throw new Error("gen-schema: 'languages' must be a non-empty array of locale tags");
+  const seen = new Set();
+  const normalized = [];
+  raw.forEach((entry, i) => {
+    if (typeof entry !== "string" || !entry.trim())
+      throw new Error(
+        `gen-schema: 'languages[${i}]' must be a non-empty string (got ${JSON.stringify(entry)})`
+      );
+    const tag = collapseToAvailable(entry.trim(), registryTags);
+    if (tag === null)
+      throw new Error(
+        `gen-schema: 'languages[${i}]' (${JSON.stringify(entry)}) is not a locale ScadPub ships ` +
+          `a chrome translation for.\n  Valid tags: ${registryTags.join(", ")}`
+      );
+    if (seen.has(tag))
+      throw new Error(
+        `gen-schema: 'languages[${i}]' (${JSON.stringify(entry)}) duplicates locale "${tag}", ` +
+          `already listed in 'languages'`
+      );
+    seen.add(tag);
+    normalized.push(tag);
+  });
+  if (!seen.has(resolvedDefault))
+    throw new Error(
+      `gen-schema: 'languages' must include "${resolvedDefault}" — a deployment's default ` +
+        `locale (from 'lang') must always be offered`
+    );
+  if (normalized[0] === resolvedDefault) return normalized;
+  return [resolvedDefault, ...normalized.filter((tag) => tag !== resolvedDefault)];
 }
 
 // The model formats OpenSCAD can export and the viewer can parse.
@@ -643,11 +715,28 @@ export function parseUi(raw) {
 // module stays free of file I/O. Fails the build with a clear message pointing
 // at the catalogue rather than silently accepting a key `t()` will never
 // resolve. Returns {} when unset.
-export function parseStrings(raw, validKeys) {
+//
+// Each VALUE is one of two shapes (src/lib/i18n.ts's `ConfigStrings`,
+// consumed at runtime by `overridesForLocale`):
+//   - a plain string: overrides the deployment's DEFAULT locale only — full
+//     back-compat with a config written before per-locale overrides existed,
+//     see overridesForLocale's own comment for why that's tied to the default
+//     locale specifically rather than "whichever locale is active".
+//   - an object of locale tag -> string: a per-locale override. Every key
+//     must be one of `enabledTags` (this deployment's resolved `languages`,
+//     the caller's already-parsed set) — an override for a locale the
+//     deployment doesn't offer could never be reached by `t()`, so it fails
+//     the build the same way an unknown catalogue key does. Must carry at
+//     least one entry (an empty object overrides nothing, so it's rejected as
+//     likely author error rather than silently accepted). `enabledTags`
+//     defaults to `["en"]` so existing direct callers (unit tests exercising
+//     only the plain-string form) don't need updating for this parameter.
+export function parseStrings(raw, validKeys, enabledTags = ["en"]) {
   if (raw == null) return {};
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'strings' must be an object of key: string pairs");
   const known = new Set(validKeys);
+  const tags = new Set(enabledTags);
   const out = {};
   for (const [key, value] of Object.entries(raw)) {
     if (!known.has(key))
@@ -655,9 +744,34 @@ export function parseStrings(raw, validKeys) {
         `gen-schema: unknown 'strings' key '${key}'.\n` +
           `  See src/locales/en.json for the full list of valid keys.`
       );
-    if (typeof value !== "string")
-      throw new Error(`gen-schema: 'strings.${key}' must be a string (got ${JSON.stringify(value)})`);
-    out[key] = value;
+    if (typeof value === "string") {
+      out[key] = value;
+      continue;
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const entries = Object.entries(value);
+      if (entries.length === 0)
+        throw new Error(`gen-schema: 'strings.${key}' must have at least one locale entry`);
+      const localized = {};
+      for (const [tag, text] of entries) {
+        if (!tags.has(tag))
+          throw new Error(
+            `gen-schema: 'strings.${key}' has an entry for locale "${tag}", which isn't one of ` +
+              `this deployment's enabled locales.\n  Valid tags: ${[...tags].join(", ")}`
+          );
+        if (typeof text !== "string")
+          throw new Error(
+            `gen-schema: 'strings.${key}.${tag}' must be a string (got ${JSON.stringify(text)})`
+          );
+        localized[tag] = text;
+      }
+      out[key] = localized;
+      continue;
+    }
+    throw new Error(
+      `gen-schema: 'strings.${key}' must be a string, or an object of locale tag: string pairs ` +
+        `(got ${JSON.stringify(value)})`
+    );
   }
   return out;
 }

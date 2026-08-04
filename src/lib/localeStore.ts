@@ -166,11 +166,6 @@ export function applyLocale(state: LocaleState, multiLocale: boolean): void {
   document.documentElement.dir = state.dir;
 }
 
-// Phase 4 narrows this to `schema.languages`. For now every deployment can
-// reach every locale that has a chrome bundle: defaultTag first (so an
-// index-0 assumption elsewhere — e.g. a selector's default highlight — picks
-// the deployment's own default), then the rest of `loadChrome`'s keys ("en"
-// is implicit: it needs no loader).
 // No `{ with: { type: "json" } }` attribute here, unlike i18n.ts's STATIC
 // English import: Vite left this dynamic import's specifier untransformed
 // with the attribute present (it still pointed at the literal source path at
@@ -183,14 +178,32 @@ export function applyLocale(state: LocaleState, multiLocale: boolean): void {
 const loadChrome: Record<string, () => Promise<Bundle>> = {
   de: () => import("../locales/de.json").then((m) => m.default),
 };
-// "en" is always available (no loader needed: rebind falls back to the plain
-// English catalogue), so it's added explicitly rather than read off
-// `loadChrome`'s keys.
-const shippedTags = ["en", ...Object.keys(loadChrome)];
-const enabledTags: readonly string[] = [
-  defaultTag,
-  ...shippedTags.filter((tag) => tag !== defaultTag),
-];
+
+/**
+ * `enabledTags` derivation: this deployment's build-time-validated
+ * `schema.languages` (scripts/lib/config-parsers.mjs's `parseLanguages`,
+ * always a non-empty array of registry tags, default-locale first) when
+ * present, else `[fallbackTag]` — the fallback only matters for a
+ * designs.json built before this field existed, since gen-schema now always
+ * emits `languages`. `fallbackTag` is `defaultTag` at the real call site
+ * below: the SAME formula (`collapseToAvailable(schema.lang, LOCALE_TAGS) ??
+ * "en"`) `parseLanguages` itself falls back to for an unshipped `lang`, so a
+ * single-locale deployment's one enabled tag and the tag this store (and
+ * i18n.ts) actually binds to can never disagree — see parseLanguages's own
+ * comment for the other half of this reconciliation. Exported so tests can
+ * drive it without constructing a whole schema.
+ */
+export function deriveEnabledTags(languages: unknown, fallbackTag: string): readonly string[] {
+  if (
+    Array.isArray(languages) &&
+    languages.length > 0 &&
+    languages.every((tag) => typeof tag === "string")
+  )
+    return languages;
+  return [fallbackTag];
+}
+
+const enabledTags: readonly string[] = deriveEnabledTags(schema.languages, defaultTag);
 
 const store = createLocaleStore({
   loadChrome,
@@ -201,6 +214,37 @@ const store = createLocaleStore({
   configStrings: schema.strings as ConfigStrings | undefined,
   enabledTags,
 });
+
+// Review finding (Phase 2): the pre-paint inline script (index.html) writes a
+// persisted `ns("lang")` choice straight onto `<html lang>` before this
+// module — or React — ever runs, with no validation against the CURRENT
+// build's locale set. For a multi-locale deployment that's fine (a real
+// switch only ever persists a real enabled tag, and `applyLocale` corrects it
+// again once the store settles). For a SINGLE-locale deployment `applyLocale`
+// is a deliberate no-op (see its own comment above), so a key surviving a
+// config change — a deployment that used to ship a second locale, dropped
+// it, and a returning visitor's storage still carries that old choice — would
+// keep flashing the wrong `<html lang>` on every future visit with nothing
+// left in this file's own code path to ever correct it again.
+//
+// The smallest sound fix that stays inside this module (no
+// `%APP_MULTI_LOCALE%` build-time HTML substitution, no App-level plumbing):
+// the moment this module runs, drop any such stale key outright, so every
+// SUBSEQUENT visit's pre-paint read is a clean miss, and correct THIS visit's
+// `<html lang>` right away rather than leaving the pre-paint script's now-
+// wrong guess in place for the rest of the page's life. `schema.lang` (not
+// the bare `defaultTag`) mirrors `applyLocale`'s own choice of value for the
+// default locale, so a region-flavored tag like `de-AT` isn't narrowed here
+// either.
+if (enabledTags.length <= 1 && readLocal(ns("lang")) !== null) {
+  try {
+    localStorage.removeItem(ns("lang"));
+  } catch {
+    // Storage unavailable (private mode, quota, policy): nothing was
+    // actually persisted, so there's nothing left to correct.
+  }
+  if (typeof document !== "undefined") document.documentElement.lang = schema.lang ?? defaultTag;
+}
 
 {
   const persisted = readLocal(ns("lang"));

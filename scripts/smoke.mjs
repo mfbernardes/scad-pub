@@ -26,6 +26,12 @@ import {
   waitDialogClosed,
   PINNED_LOCALE,
 } from "./lib/browser.mjs";
+// Data-only (no JSON, no React): reused directly under Node's type stripping,
+// the same way scripts/gen-schema.mjs imports it, to project a per-locale
+// `strings` override (schema.strings' object-valued form, see docs/config.md's
+// `strings` section) onto the deployment's own default locale — the ONLY
+// locale a fresh, unauthenticated smoke run ever boots into.
+import { LOCALE_TAGS, collapseToAvailable } from "../src/lib/localeRegistry.ts";
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
@@ -2416,7 +2422,23 @@ async function main() {
     const catalogue = JSON.parse(
       await readFile(fileURLToPath(new URL("../src/locales/en.json", import.meta.url)), "utf-8")
     );
-    const uiText = (key) => schema.strings?.[key] ?? catalogue[key] ?? "";
+    // The deployment's default locale (src/lib/i18n.ts's `defaultTag` formula,
+    // repeated here rather than imported since that module also pulls in the
+    // designs.json JSON-import machinery smoke.mjs doesn't otherwise need):
+    // smoke never switches locale, so this is the only one `strings` ever
+    // needs to project onto.
+    const defaultTag = collapseToAvailable(schema.lang ?? "en", LOCALE_TAGS) ?? "en";
+    // A `strings` value is either a plain string (the pre-Phase-4 shape,
+    // applies unconditionally) or an object of locale tag -> string (Phase
+    // 4): project the latter onto `defaultTag`, falling back to the built-in
+    // English catalogue exactly like a miss on the plain-string form already
+    // did.
+    const uiText = (key) => {
+      const raw = schema.strings?.[key];
+      if (typeof raw === "string") return raw;
+      if (raw && typeof raw === "object" && typeof raw[defaultTag] === "string") return raw[defaultTag];
+      return catalogue[key] ?? "";
+    };
     // Panel tab names are catalogue keys (presets.title/settings.title), not
     // config fields.
     const presetsTabName = uiText("presets.title") || "Presets";

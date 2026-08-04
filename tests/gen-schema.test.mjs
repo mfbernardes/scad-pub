@@ -36,6 +36,7 @@ import {
   parseParams,
   parseFontFallback,
   parseLang,
+  parseLanguages,
   parseDir,
   parsePwa,
   parsePwaThemeColor,
@@ -337,6 +338,48 @@ test("lang/dir default to en/ltr and pass through to the schema", () => {
   assert.equal(schema.dir, "rtl");
 });
 
+test("languages: omitted + a shipped 'lang' (default 'en') defaults to every registry tag, default first", () => {
+  const { schema } = run("widget.config.json");
+  assert.deepEqual(schema.languages, ["en", "de"]);
+});
+
+test("languages: omitted + an unshipped 'lang' (e.g. \"fr\") defaults to a single \"en\" tag", () => {
+  // Not `["fr"]`: src/lib/i18n.ts's `defaultTag` resolves an unshipped `lang`
+  // to "en" (collapseToAvailable(...) ?? "en"), and `languages`' single entry
+  // must name that SAME tag so src/lib/localeStore.ts's `enabledTags` and the
+  // locale the app actually boots into can never disagree — see
+  // parseLanguages's own comment (scripts/lib/config-parsers.mjs).
+  const { schema } = run("widget-lang-unshipped.config.json");
+  assert.equal(schema.lang, "fr");
+  assert.deepEqual(schema.languages, ["en"]);
+});
+
+test("languages: an explicit array is normalised to registry tags, default locale first", () => {
+  const { schema } = run("widget-languages.config.json");
+  assert.deepEqual(schema.languages, ["en", "de"]);
+});
+
+test("languages: an entry that isn't a shipped locale fails the build, naming the entry and the valid tags", () => {
+  assert.throws(
+    () => run("widget-languages-badtag.config.json"),
+    /'languages\[1\]' \("fr"\) is not a locale ScadPub ships a chrome translation for\.\s*\n\s*Valid tags: en, de/
+  );
+});
+
+test("languages: omitting the deployment's default locale fails the build", () => {
+  assert.throws(
+    () => run("widget-languages-missing-default.config.json"),
+    /'languages' must include "de" — a deployment's default locale \(from 'lang'\) must always be offered/
+  );
+});
+
+test("languages: an empty array fails the build (must be non-empty)", () => {
+  assert.throws(
+    () => run("widget-languages-empty.config.json"),
+    /'languages' must be a non-empty array of locale tags/
+  );
+});
+
 test("render tuning and defaultDesign pass through to the schema", () => {
   const { schema } = run("widget-designmeta.config.json");
   assert.deepEqual(schema.render, { heavyMs: 9000, cache: { maxEntries: 4, persistent: false } });
@@ -506,6 +549,30 @@ test("strings: an unknown key fails the build, pointing at the catalogue", () =>
   assert.throws(
     () => run("widget-strings-badkey.config.json"),
     /unknown 'strings' key 'action.exprot'.*See src\/locales\/en\.json/s
+  );
+});
+
+test("strings: a per-locale object value lands in the schema verbatim", () => {
+  const { schema } = run("widget-strings-locale.config.json");
+  assert.deepEqual(schema.strings, {
+    "action.export": { en: "Download now", de: "Jetzt herunterladen" },
+  });
+});
+
+test("strings: a per-locale object value naming a locale outside this deployment's languages fails the build", () => {
+  assert.throws(
+    () => run("widget-strings-locale-badtag.config.json"),
+    /'strings\.action\.export' has an entry for locale "fr", which isn't one of this deployment's enabled locales\.\s*\n\s*Valid tags: en, de/
+  );
+});
+
+test("strings: a per-locale object value naming a locale outside a RESTRICTED single-locale 'languages' fails the build", () => {
+  // The deployment restricts itself to ["en"], so an override entry for "de"
+  // — a locale ScadPub ships, but this deployment doesn't enable — is
+  // rejected exactly like an entry for an unshipped tag would be.
+  assert.throws(
+    () => run("widget-strings-locale-restricted.config.json"),
+    /'strings\.action\.export' has an entry for locale "de", which isn't one of this deployment's enabled locales\.\s*\n\s*Valid tags: en/
   );
 });
 
@@ -1980,6 +2047,64 @@ test("parseStrings: absent -> {}, a known key overrides, an unknown key fails wi
   assert.throws(
     () => parseStrings({ "action.export": 5 }, validKeys),
     /'strings\.action\.export' must be a string/
+  );
+});
+
+test("parseStrings: a per-locale object value validates each key against enabledTags", () => {
+  const validKeys = ["action.export", "action.share", "review.title"];
+  assert.deepEqual(
+    parseStrings({ "action.export": { en: "Download now", de: "Jetzt herunterladen" } }, validKeys, [
+      "en",
+      "de",
+    ]),
+    { "action.export": { en: "Download now", de: "Jetzt herunterladen" } }
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": {} }, validKeys, ["en", "de"]),
+    /'strings\.action\.export' must have at least one locale entry/
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": { fr: "x" } }, validKeys, ["en", "de"]),
+    /'strings\.action\.export' has an entry for locale "fr", which isn't one of this deployment's enabled locales\.\s*\n\s*Valid tags: en, de/
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": { en: 5 } }, validKeys, ["en"]),
+    /'strings\.action\.export\.en' must be a string \(got 5\)/
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": ["en"] }, validKeys, ["en"]),
+    /'strings\.action\.export' must be a string, or an object of locale tag: string pairs/
+  );
+});
+
+test("parseLanguages: default rules — shipped 'lang' offers every registry tag, unshipped 'lang' is single-locale \"en\"", () => {
+  assert.deepEqual(parseLanguages(null, ["en", "de"], "en"), ["en", "de"]);
+  assert.deepEqual(parseLanguages(undefined, ["en", "de"], "de"), ["de", "en"]);
+  assert.deepEqual(parseLanguages(null, ["en", "de"], "fr"), ["en"]);
+});
+
+test("parseLanguages: an explicit array is validated, normalised, deduplicated and default-first", () => {
+  assert.deepEqual(parseLanguages(["de", "en"], ["en", "de"], "en"), ["en", "de"]);
+  assert.deepEqual(parseLanguages(["de-AT"], ["en", "de"], "de"), ["de"]);
+  assert.throws(
+    () => parseLanguages([], ["en", "de"], "en"),
+    /'languages' must be a non-empty array of locale tags/
+  );
+  assert.throws(
+    () => parseLanguages("en", ["en", "de"], "en"),
+    /'languages' must be a non-empty array of locale tags/
+  );
+  assert.throws(
+    () => parseLanguages(["en", "fr"], ["en", "de"], "en"),
+    /'languages\[1\]' \("fr"\) is not a locale ScadPub ships a chrome translation for/
+  );
+  assert.throws(
+    () => parseLanguages(["en", "de", "de-AT"], ["en", "de"], "en"),
+    /'languages\[2\]' \("de-AT"\) duplicates locale "de"/
+  );
+  assert.throws(
+    () => parseLanguages(["en"], ["en", "de"], "de"),
+    /'languages' must include "de" — a deployment's default locale \(from 'lang'\) must always be offered/
   );
 });
 

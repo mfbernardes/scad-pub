@@ -503,13 +503,26 @@ export interface Schema {
   /** Document / manifest text direction. Default "ltr". */
   dir?: "ltr" | "rtl" | "auto";
   /**
+   * Which shipped chrome locales (src/lib/localeRegistry.ts's LOCALE_TAGS)
+   * this deployment's language switcher offers, resolved at build time by
+   * scripts/lib/config-parsers.mjs's `parseLanguages` from the config's
+   * `languages` key. Always present and non-empty: a single-locale
+   * deployment still carries its one tag rather than omitting the field.
+   * src/lib/localeStore.ts reads it as `enabledTags`.
+   */
+  languages?: string[];
+  /**
    * Optional per-deployment UI text overrides (config's `strings` key; see
    * docs/config.md and src/lib/i18n.ts). Keyed by the same dot-namespaced
    * keys (including plural `#one`/`#other` variants) as
    * src/locales/en.json, and validated at build time against that catalogue's
-   * key set. Consulted first, ahead of the bundled English catalogue.
+   * key set. Consulted first, ahead of the bundled English catalogue. Each
+   * value is either a plain string (overrides the deployment's default
+   * locale only) or an object of locale tag -> string (a per-locale
+   * override, each tag validated against `languages`); see
+   * src/lib/i18n.ts's `ConfigStrings` and `overridesForLocale`.
    */
-  strings?: Record<string, string>;
+  strings?: Record<string, string | Record<string, string>>;
   /** Optional help content shown in the Help modal. When null, a generic,
    *  project-agnostic default is used. */
   help: HelpContent | null;

@@ -10,9 +10,9 @@
 // rebind) actually connects the store to `t()` end to end.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { collapseToAvailable, bestFitLocale } from "../src/lib/localeRegistry.ts";
-import { createLocaleStore, resolveInitialLocale } from "../src/lib/localeStore.ts";
-import { rebind, t } from "../src/lib/i18n.ts";
+import { collapseToAvailable, bestFitLocale, LOCALE_TAGS } from "../src/lib/localeRegistry.ts";
+import { createLocaleStore, resolveInitialLocale, deriveEnabledTags } from "../src/lib/localeStore.ts";
+import { rebind, t, overridesForLocale } from "../src/lib/i18n.ts";
 
 // A controllable promise so a test can hold a "load" pending, then resolve or
 // reject it on its own schedule.
@@ -267,4 +267,44 @@ test("createLocaleStore + i18n rebind: a pseudo-locale bundle flips t() output a
   } finally {
     rebind("en", null, {});
   }
+});
+
+// Phase 4 config-surface reconciliation (Phase 2 review finding 9): a config
+// with an UNSHIPPED `lang` (e.g. "fr") and no explicit `languages` gets a
+// single-locale `schema.languages`. gen-schema's `parseLanguages` resolves
+// that single tag the same way src/lib/i18n.ts's `defaultTag` resolves for
+// this exact deployment shape — `collapseToAvailable(lang, LOCALE_TAGS) ??
+// "en"`, i.e. "en", NOT the literal unshipped `lang` — so `deriveEnabledTags`
+// below must land on the identical tag rather than trusting a stale/foreign
+// value: the two can never name two different active locales.
+test("deriveEnabledTags: an unshipped config lang resolves to a single 'en' tag, matching i18n's defaultTag", () => {
+  const unshippedLang = "fr";
+  const resolvedDefaultTag = collapseToAvailable(unshippedLang, LOCALE_TAGS) ?? "en";
+  assert.equal(resolvedDefaultTag, "en"); // "fr" isn't a registry tag
+
+  // No `schema.languages` at all (an older build, or this exact single-locale
+  // default): falls back to `[fallbackTag]`.
+  const enabledTags = deriveEnabledTags(undefined, resolvedDefaultTag);
+  assert.deepEqual(enabledTags, ["en"]);
+  assert.ok(enabledTags.length <= 1, "a single-locale deployment must hide the language selector");
+
+  // A flat (plain-string) `strings` override still applies: it's keyed to
+  // whichever tag IS the deployment's default, not to the literal `lang`
+  // value, so it must project through unchanged.
+  const flatStrings = { "action.export": "Télécharger" };
+  assert.deepEqual(
+    overridesForLocale(flatStrings, resolvedDefaultTag, resolvedDefaultTag),
+    { "action.export": "Télécharger" }
+  );
+});
+
+test("deriveEnabledTags: a real schema.languages array passes through verbatim", () => {
+  assert.deepEqual(deriveEnabledTags(["de", "en"], "de"), ["de", "en"]);
+});
+
+test("deriveEnabledTags: malformed languages (empty, non-array, non-string entries) falls back to [fallbackTag]", () => {
+  assert.deepEqual(deriveEnabledTags(undefined, "en"), ["en"]);
+  assert.deepEqual(deriveEnabledTags(null, "en"), ["en"]);
+  assert.deepEqual(deriveEnabledTags([], "en"), ["en"]);
+  assert.deepEqual(deriveEnabledTags(["en", 5], "en"), ["en"]);
 });
