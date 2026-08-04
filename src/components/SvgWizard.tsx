@@ -363,26 +363,28 @@ export function SvgWizard({
 
         <DialogFooter>
           {terminalError ? (
-            <Button variant="outline" onClick={onCancel}>
+            <Button variant="outline" className="svg-wizard__choose-file" onClick={onCancel}>
               Choose another file
             </Button>
           ) : (
             <div className="flex w-full items-center justify-between gap-2">
               <Button
                 variant="ghost"
+                className="svg-wizard__back"
                 onClick={() => (step === 1 ? onCancel() : setStep((step - 1) as Step))}
               >
                 {step === 1 ? "Cancel" : "Back"}
               </Button>
               {step < lastStep ? (
                 <Button
+                  className="svg-wizard__advance"
                   onClick={step === 1 ? applyAndAdvance : () => setStep((step + 1) as Step)}
                   disabled={step !== 1 && blockedByError}
                 >
                   {step === 1 ? "Fix & continue" : "Next"}
                 </Button>
               ) : (
-                <Button onClick={finish} disabled={blockedByError || blockedByHeight}>
+                <Button className="svg-wizard__finish" onClick={finish} disabled={blockedByError || blockedByHeight}>
                   Use this SVG
                 </Button>
               )}
