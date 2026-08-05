@@ -125,6 +125,25 @@ function buildMap(textByTag, languages, getter) {
   return out;
 }
 
+// Like `buildMap`, but validates each present value as a non-empty string AT
+// THE TEXT FILE THAT OWNS IT (`pathsByTag[tag]`, `leafPath`) rather than
+// leaving a malformed leaf to surface downstream from parseLocalizableText's
+// generic per-key check, whose message ("'popup.button.de' must be a
+// non-empty string") reads like a scadpub.config.json path even though the
+// author's mistake — and the fix — lives entirely in the text file.
+function buildValidatedMap(textByTag, pathsByTag, languages, getter, leafPath) {
+  const out = {};
+  for (const tag of languages) {
+    const t = textByTag[tag];
+    if (t === undefined) continue;
+    const v = getter(t);
+    if (v === undefined || v === null) continue;
+    requireNonEmptyString(pathsByTag[tag], v, leafPath);
+    out[tag] = v;
+  }
+  return out;
+}
+
 // A field this deployment's text file(s) cover must not ALSO be written
 // inline in scadpub.config.json — "config has no text at all" is meant
 // literally. `configPath` is the field's dotted path in the config (for the
@@ -137,16 +156,34 @@ function inlineConflict(value, configPath, defaultFile) {
     );
 }
 
+// The `<field>File` companions (popup.bodyFile, fileImport.noteFile — see
+// scripts/lib/prose-files.mjs) have no text-mode counterpart: unlike a
+// `help.tabs[].file` leaf (which text mode DOES support, see foldHelpTab),
+// there is nowhere in a text file for a config-relative Markdown PATH to go —
+// only the prose itself, as a plain string leaf. `inlineConflict`'s generic
+// "move it to '<file>'" wording is actively wrong here (there's no slot to
+// move it TO), so this says what to do instead: write the content as a string
+// at `targetLeaf` in the text file, since the text file is already the
+// Markdown-capable place this prose belongs.
+function inlineFileVariantConflict(value, configPath, targetLeaf, defaultFile) {
+  if (value != null)
+    throw new Error(
+      `gen-schema: config text mode: '${configPath}' is set inline in scadpub.config.json, but this ` +
+        `deployment has 'text' configured — file-backed prose like '${configPath}' isn't supported in ` +
+        `text mode. Put the content directly as a string at '${targetLeaf}' in '${defaultFile}' instead.`
+    );
+}
+
 function foldPopup(config, textByTag, pathsByTag, languages, defaultTag) {
   const defaultFile = pathsByTag[defaultTag];
-  const anyText = languages.some((tag) => textByTag[tag]?.popup !== undefined);
+  const offendingTag = languages.find((tag) => textByTag[tag]?.popup !== undefined);
   if (!config.popup || typeof config.popup !== "object") {
-    if (anyText) fail(defaultFile, `sets 'popup', but this config has no 'popup' block`);
+    if (offendingTag) fail(pathsByTag[offendingTag], `sets 'popup', but this config has no 'popup' block`);
     return;
   }
   inlineConflict(config.popup.header, "popup.header", defaultFile);
   inlineConflict(config.popup.body, "popup.body", defaultFile);
-  inlineConflict(config.popup.bodyFile, "popup.bodyFile", defaultFile);
+  inlineFileVariantConflict(config.popup.bodyFile, "popup.bodyFile", "popup.body", defaultFile);
   inlineConflict(config.popup.button, "popup.button", defaultFile);
   inlineConflict(config.popup.footnote, "popup.footnote", defaultFile);
 
@@ -154,35 +191,33 @@ function foldPopup(config, textByTag, pathsByTag, languages, defaultTag) {
     const p = textByTag[tag]?.popup;
     if (p !== undefined) requireObject(pathsByTag[tag], p, "popup");
   }
-  const header = buildMap(textByTag, languages, (t) => t.popup?.header);
-  const body = buildMap(textByTag, languages, (t) => t.popup?.body);
+  const header = buildValidatedMap(textByTag, pathsByTag, languages, (t) => t.popup?.header, "popup.header");
+  const body = buildValidatedMap(textByTag, pathsByTag, languages, (t) => t.popup?.body, "popup.body");
   if (!(defaultTag in header)) fail(defaultFile, `must set 'popup.header' — this deployment's 'popup' block requires it`);
   if (!(defaultTag in body)) fail(defaultFile, `must set 'popup.body' — this deployment's 'popup' block requires it`);
-  requireNonEmptyString(defaultFile, header[defaultTag], "popup.header");
-  requireNonEmptyString(defaultFile, body[defaultTag], "popup.body");
   config.popup.header = header;
   config.popup.body = body;
-  const button = buildMap(textByTag, languages, (t) => t.popup?.button);
+  const button = buildValidatedMap(textByTag, pathsByTag, languages, (t) => t.popup?.button, "popup.button");
   if (Object.keys(button).length) config.popup.button = button;
-  const footnote = buildMap(textByTag, languages, (t) => t.popup?.footnote);
+  const footnote = buildValidatedMap(textByTag, pathsByTag, languages, (t) => t.popup?.footnote, "popup.footnote");
   if (Object.keys(footnote).length) config.popup.footnote = footnote;
 }
 
 function foldFileImport(config, textByTag, pathsByTag, languages, defaultTag) {
   const defaultFile = pathsByTag[defaultTag];
-  const anyText = languages.some((tag) => textByTag[tag]?.fileImport !== undefined);
+  const offendingTag = languages.find((tag) => textByTag[tag]?.fileImport !== undefined);
   if (!config.fileImport) {
-    if (anyText) fail(defaultFile, `sets 'fileImport', but this config has no 'fileImport' block`);
+    if (offendingTag) fail(pathsByTag[offendingTag], `sets 'fileImport', but this config has no 'fileImport' block`);
     return;
   }
-  const note = buildMap(textByTag, languages, (t) => t.fileImport?.note);
+  const note = buildValidatedMap(textByTag, pathsByTag, languages, (t) => t.fileImport?.note, "fileImport.note");
   if (config.fileImport === true) {
     if (!Object.keys(note).length) return;
     config.fileImport = {}; // upgrade the boolean shorthand so 'note' has somewhere to land
   }
   if (typeof config.fileImport !== "object" || Array.isArray(config.fileImport)) return; // malformed; the real parser reports it
   inlineConflict(config.fileImport.note, "fileImport.note", defaultFile);
-  inlineConflict(config.fileImport.noteFile, "fileImport.noteFile", defaultFile);
+  inlineFileVariantConflict(config.fileImport.noteFile, "fileImport.noteFile", "fileImport.note", defaultFile);
   if (Object.keys(note).length) config.fileImport.note = note;
 }
 
@@ -269,9 +304,9 @@ function foldHelpTab(tabConfig, tabId, textByTag, pathsByTag, languages, default
 
 function foldHelp(config, textByTag, pathsByTag, languages, defaultTag) {
   const defaultFile = pathsByTag[defaultTag];
-  const anyText = languages.some((tag) => textByTag[tag]?.help !== undefined);
+  const offendingTag = languages.find((tag) => textByTag[tag]?.help !== undefined);
   if (!config.help || typeof config.help !== "object") {
-    if (anyText) fail(defaultFile, `sets 'help', but this config has no 'help' block`);
+    if (offendingTag) fail(pathsByTag[offendingTag], `sets 'help', but this config has no 'help' block`);
     return;
   }
   inlineConflict(config.help.intro, "help.intro", defaultFile);
@@ -379,6 +414,7 @@ function foldNotices(config, textByTag, pathsByTag, languages, defaultTag) {
       }
       requireObject(file, raw, `notices.${entry.marker}`);
       requireNonEmptyString(file, raw.other, `notices.${entry.marker}.other`);
+      if (raw.one !== undefined) requireNonEmptyString(file, raw.one, `notices.${entry.marker}.one`);
       other[tag] = raw.other;
       one[tag] = raw.one ?? raw.other;
     }
@@ -400,7 +436,13 @@ function foldLicenses(config, textByTag, pathsByTag, languages, defaultFile) {
   for (const entry of licenses) {
     if (typeof entry.name !== "string") continue; // the real parser reports this
     inlineConflict(entry.note, `licenses[name=${JSON.stringify(entry.name)}].note`, defaultFile);
-    const note = buildMap(textByTag, languages, (t) => t.licenses?.[entry.name]?.note);
+    const note = buildValidatedMap(
+      textByTag,
+      pathsByTag,
+      languages,
+      (t) => t.licenses?.[entry.name]?.note,
+      `licenses.${JSON.stringify(entry.name)}.note`
+    );
     if (Object.keys(note).length) entry.note = note;
   }
 }
@@ -419,9 +461,21 @@ function foldDesigns(config, textByTag, pathsByTag, languages, defaultFile) {
     if (typeof entry.id !== "string") continue; // the real parser reports this
     inlineConflict(entry.label, `designs[id=${entry.id}].label`, defaultFile);
     inlineConflict(entry.group, `designs[id=${entry.id}].group`, defaultFile);
-    const label = buildMap(textByTag, languages, (t) => t.designs?.[entry.id]?.label);
+    const label = buildValidatedMap(
+      textByTag,
+      pathsByTag,
+      languages,
+      (t) => t.designs?.[entry.id]?.label,
+      `designs.${entry.id}.label`
+    );
     if (Object.keys(label).length) entry.label = label;
-    const group = buildMap(textByTag, languages, (t) => t.designs?.[entry.id]?.group);
+    const group = buildValidatedMap(
+      textByTag,
+      pathsByTag,
+      languages,
+      (t) => t.designs?.[entry.id]?.group,
+      `designs.${entry.id}.group`
+    );
     if (Object.keys(group).length) entry.group = group;
   }
 }

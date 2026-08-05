@@ -56,6 +56,9 @@
           "additionalProperties": {
             "type": "object",
             "properties": {
+              "label": {
+                "type": "string"
+              },
               "intro": {
                 "type": "string"
               },

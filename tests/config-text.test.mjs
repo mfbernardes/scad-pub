@@ -7,12 +7,13 @@
 // deep-equal designs.json.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generate } from "../scripts/gen-schema.mjs";
 import { flattenTextLeaves, configTextCoverage, computeTextStamps, textDrift } from "../scripts/lib/config-text.mjs";
+import { buildConfigTextSchema } from "../scripts/gen-config-schema.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
@@ -141,6 +142,49 @@ test("inline prose alongside 'text' fails the build, naming the config path and 
   );
 });
 
+test("inline 'popup.bodyFile'/'fileImport.noteFile' alongside 'text' explains there's no file slot for them in text mode", () => {
+  const root = baseTree();
+  writeConfig(root, baseConfig({ popup: { mode: "dismissible", bodyFile: "printing.md" } }));
+  writeText(root, "text.en.json", baseTextEn());
+  writeText(root, "text.de.json", baseTextDe());
+  assert.throws(
+    () => build(root),
+    /'popup\.bodyFile' is set inline.*file-backed prose.*isn't supported in text mode.*'popup\.body' in.*text\.en\.json/s
+  );
+
+  const root2 = baseTree();
+  writeConfig(root2, baseConfig({ fileImport: { noteFile: "printing.md" } }));
+  writeText(root2, "text.en.json", baseTextEn());
+  writeText(root2, "text.de.json", baseTextDe());
+  assert.throws(
+    () => build(root2),
+    /'fileImport\.noteFile' is set inline.*file-backed prose.*isn't supported in text mode.*'fileImport\.note' in.*text\.en\.json/s
+  );
+});
+
+test("a malformed leaf in a NON-default locale's text file names that text file, not a phantom config path", () => {
+  const root = baseTree();
+  writeConfig(root, baseConfig());
+  writeText(root, "text.en.json", baseTextEn());
+  // 'de' sets 'popup.button' to a non-string: not a leaf popup.header/body
+  // requires (this deployment doesn't set a custom button at all), so this
+  // exercises validation of a per-locale OPTIONAL leaf, not the default-tag
+  // required-leaf check popup.header/body already had.
+  writeText(root, "text.de.json", { ...baseTextDe(), popup: { ...baseTextDe().popup, button: 42 } });
+  assert.throws(() => {
+    try {
+      build(root);
+    } catch (e) {
+      // The error must name the DE TEXT FILE this leaf actually lives in —
+      // never a 'popup.button.de'-shaped path, which would read as a
+      // scadpub.config.json location that (in text mode) doesn't exist.
+      assert.match(e.message, /text\.de\.json/);
+      assert.doesNotMatch(e.message, /popup\.button\.de/);
+      throw e;
+    }
+  }, /'popup\.button' must be a non-empty string/);
+});
+
 test("a text file naming an unknown help tab id fails the build", () => {
   const root = baseTree();
   writeConfig(root, baseConfig());
@@ -198,6 +242,35 @@ test("a section-count mismatch between locales fails the build, naming both coun
   assert.throws(
     () => build(root),
     /'help\.tabs\.walkthrough\.sections' has 1 section\(s\), but locale "en" has 2/
+  );
+});
+
+test("a non-default locale translating a tab's label alone (no sections) fails the build — a tab is omit-or-fully-translate, not leaf-sparse", () => {
+  const root = baseTree();
+  writeConfig(root, baseConfig());
+  writeText(root, "text.en.json", baseTextEn());
+  const de = baseTextDe();
+  // 'de' sets ONLY the label for 'walkthrough', not the sections its
+  // sections-mode default entry requires — distinct from omitting the tab
+  // entirely (legal, see the sparse-fallback test above).
+  de.help.tabs.walkthrough = { label: "Nur der Titel" };
+  writeText(root, "text.de.json", de);
+  assert.throws(
+    () => build(root),
+    /'help\.tabs\.walkthrough\.sections' has 0 section\(s\), but locale "en" has 1/
+  );
+});
+
+test("a non-default locale translating a file-backed tab's label alone (no file) fails the build", () => {
+  const root = baseTree();
+  writeConfig(root, baseConfig());
+  writeText(root, "text.en.json", baseTextEn());
+  const de = baseTextDe();
+  de.help.tabs.printing = { label: "Nur der Titel" }; // no 'file'
+  writeText(root, "text.de.json", de);
+  assert.throws(
+    () => build(root),
+    /'help\.tabs\.printing' must set 'file' — locale "en" uses 'file' for this tab/
   );
 });
 
@@ -289,6 +362,64 @@ test("flattenTextLeaves/configTextCoverage/textDrift: coverage and drift over a 
   assert.deepEqual(textDrift({ en: changed }, "en", stamps), ["popup.header"]);
 });
 
+test("a text file with an unknown top-level key fails the build, naming the file and the key", () => {
+  const root = baseTree();
+  writeConfig(root, baseConfig());
+  writeText(root, "text.en.json", { ...baseTextEn(), bogusTopLevelKey: "x" });
+  writeText(root, "text.de.json", baseTextDe());
+  assert.throws(() => build(root), /text\.en\.json.*unknown key 'bogusTopLevelKey'/s);
+});
+
+test("a non-default locale's text file may be an empty object — nothing is required outside the default locale", () => {
+  const root = baseTree();
+  writeConfig(root, baseConfig());
+  writeText(root, "text.en.json", baseTextEn());
+  writeText(root, "text.de.json", {});
+  const schema = build(root);
+  // Every LocalizableText map this deployment produces carries only 'en':
+  // 'de' contributed nothing, so every leaf falls back to the default at
+  // runtime rather than the build failing.
+  assert.deepEqual(schema.popup.header, { en: "Welcome" });
+  const walkthrough = schema.help.tabs.find((t) => t.id === "walkthrough");
+  assert.deepEqual(walkthrough.label, { en: "Walkthrough" });
+});
+
+test("a NON-default locale's text file setting a block the config doesn't have names THAT locale's file, not the default's", () => {
+  const root = baseTree();
+  // No 'popup' block in the config at all.
+  const config = baseConfig();
+  delete config.popup;
+  writeConfig(root, config);
+  writeText(root, "text.en.json", { help: baseTextEn().help }); // 'en' stays clean
+  writeText(root, "text.de.json", { help: baseTextDe().help, popup: { header: "Willkommen" } }); // 'de' is the offender
+  assert.throws(() => build(root), /text\.de\.json.*sets 'popup', but this config has no 'popup' block/s);
+});
+
+test("the config-text stamps file ('<config-basename>.text.stamps.json') is excluded from a broad 'assets' glob", () => {
+  const root = baseTree();
+  writeConfig(root, baseConfig({ assets: ["**/*.json"] }));
+  writeText(root, "text.en.json", baseTextEn());
+  writeText(root, "text.de.json", baseTextDe());
+  writeFileSync(join(root, "c.config.text.stamps.json"), JSON.stringify({ "popup.header": "deadbeef" }));
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  let schema;
+  try {
+    schema = build(root);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(
+    !schema.assets.includes("c.config.text.stamps.json"),
+    `stamps file must never be bundled as an asset, got: ${JSON.stringify(schema.assets)}`
+  );
+  assert.ok(
+    warnings.some((w) => w.includes("c.config.text.stamps.json")),
+    `expected a warning naming the excluded stamps file, got: ${JSON.stringify(warnings)}`
+  );
+});
+
 // ── The load-bearing equivalence test ──────────────────────────────────────
 //
 // tests/fixtures/config-text-equiv.inline.json is a byte-preserving snapshot
@@ -318,4 +449,76 @@ test("equivalence: the pre-migration inline config and the migrated structure+te
   const { scadpubVersion: _vA, ...restA } = schemaA;
   const { scadpubVersion: _vB, ...restB } = schemaB;
   assert.deepEqual(restA, restB);
+});
+
+// ── scadpub.config.text.schema.json actually accepts what the fold requires ──
+//
+// No ajv (or any JSON Schema validator) is a project dependency, so this is a
+// minimal recursive walk covering exactly the subset of draft-2020-12
+// buildConfigTextSchema (scripts/gen-config-schema.mjs) emits: `type`,
+// `properties`, `additionalProperties` (false, or a schema for dynamically-
+// keyed objects like `notices`/`help.tabs`), `items`, `anyOf`, `required`.
+// It exists to catch exactly the bug this test suite missed the first time:
+// the committed schema shape disagreeing with what a real, fold-accepted text
+// file looks like (here, `help.tabs.<id>` requiring `label`, which the schema
+// forgot). Returns a list of violation strings; empty means valid.
+function validateAgainstSchema(value, schema, path = "$") {
+  const violations = [];
+  if (schema.anyOf) {
+    const branchResults = schema.anyOf.map((branch) => validateAgainstSchema(value, branch, path));
+    if (branchResults.every((v) => v.length)) violations.push(`${path}: matches none of ${schema.anyOf.length} anyOf branches`);
+    return violations;
+  }
+  if (schema.type === "string") {
+    if (typeof value !== "string") violations.push(`${path}: expected string, got ${JSON.stringify(value)}`);
+    return violations;
+  }
+  if (schema.type === "array") {
+    if (!Array.isArray(value)) {
+      violations.push(`${path}: expected array, got ${JSON.stringify(value)}`);
+      return violations;
+    }
+    if (schema.items) value.forEach((v, i) => violations.push(...validateAgainstSchema(v, schema.items, `${path}[${i}]`)));
+    return violations;
+  }
+  if (schema.type === "object") {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      violations.push(`${path}: expected object, got ${JSON.stringify(value)}`);
+      return violations;
+    }
+    for (const key of schema.required ?? [])
+      if (!(key in value)) violations.push(`${path}: missing required key '${key}'`);
+    const known = new Set(Object.keys(schema.properties ?? {}));
+    for (const [key, v] of Object.entries(value)) {
+      if (known.has(key)) {
+        violations.push(...validateAgainstSchema(v, schema.properties[key], `${path}.${key}`));
+      } else if (schema.additionalProperties === false) {
+        violations.push(`${path}.${key}: not permitted by the schema (additionalProperties: false)`);
+      } else if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
+        violations.push(...validateAgainstSchema(v, schema.additionalProperties, `${path}.${key}`));
+      }
+    }
+    return violations;
+  }
+  return violations; // no 'type' (or an unhandled one): nothing this walk can check
+}
+
+test("buildConfigTextSchema's tab-entry properties include 'label' (the fold's own required slot)", () => {
+  const schema = buildConfigTextSchema();
+  const tabEntrySchema = schema.properties.help.properties.tabs.additionalProperties;
+  assert.ok(
+    "label" in tabEntrySchema.properties,
+    "a 'help.tabs.<id>' entry's schema must offer 'label' — foldHelpTab requires it on the default " +
+      "locale's entry, so omitting it here means every real tabbed text file fails validation " +
+      "against 'additionalProperties: false'"
+  );
+});
+
+test("both shipped text files (scadpub.text.en.json, scadpub.text.de.json) validate against the emitted schema", () => {
+  const schema = buildConfigTextSchema();
+  for (const file of ["scadpub.text.en.json", "scadpub.text.de.json"]) {
+    const text = JSON.parse(readFileSync(join(ROOT, file), "utf-8"));
+    const violations = validateAgainstSchema(text, schema);
+    assert.deepEqual(violations, [], `${file} disagrees with scadpub.config.text.schema.json:\n  ${violations.join("\n  ")}`);
+  }
 });
