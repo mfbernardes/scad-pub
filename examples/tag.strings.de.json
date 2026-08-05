@@ -1,0 +1,132 @@
+{
+  "description": "Personalisiertes Namensschild mit Text.",
+  "sections": {
+    "Tag": "Etikett",
+    "Text": "Text",
+    "Emblem (SVG)": "Emblem (SVG)",
+    "Hanging hole": "Aufhängeloch",
+    "Quality": "Qualität"
+  },
+  "params": {
+    "width": {
+      "description": "Breite des Etiketts (mm).",
+      "help": "Breite des Etiketts (mm)."
+    },
+    "height": {
+      "description": "Höhe des Etiketts (mm).",
+      "help": "Höhe des Etiketts (mm)."
+    },
+    "thickness": {
+      "description": "Dicke der Grundplatte (mm).",
+      "help": "Dicke der Grundplatte (mm).",
+      "info": {
+        "label": "Plattendicke",
+        "unit": "mm"
+      }
+    },
+    "corner_radius": {
+      "description": "Eckenradius; 0 für eckige Ecken (mm).",
+      "help": "Eckenradius; 0 für eckige Ecken (mm).",
+      "info": {
+        "label": "Eckenradius",
+        "unit": "mm"
+      }
+    },
+    "plate_color": {
+      "description": "Farbe der Platte selbst.",
+      "help": "Farbe der Platte selbst. Hier festgelegt statt der eigenen Einfärbung des Viewers überlassen, damit Export, Vorschau und die Kartengrafik des Designs übereinstimmen.",
+      "info": {
+        "label": "Plattenfarbe"
+      }
+    },
+    "label": {
+      "description": "Text, der auf das Etikett geprägt wird.",
+      "help": "Text, der auf das Etikett geprägt wird. Leer lassen für keinen Text.",
+      "info": {
+        "label": "Gravierter Text"
+      }
+    },
+    "text_size": {
+      "description": "Schrifthöhe (mm).",
+      "help": "Schrifthöhe (mm).",
+      "info": {
+        "label": "Texthöhe",
+        "unit": "mm"
+      }
+    },
+    "text_depth": {
+      "description": "Wie weit der Text aus der Platte heraussteht (oder in sie einsinkt) (mm).",
+      "help": "Wie weit der Text aus der Platte heraussteht (oder in sie einsinkt) (mm)."
+    },
+    "font": {
+      "description": "Schriftfamilie/-stil.",
+      "help": "Schriftfamilie/-stil. Auf die Familie einer hochgeladenen Schrift ändern, z. B. „DejaVu Sans“.",
+      "info": {
+        "label": "Schrift"
+      }
+    },
+    "text_color": {
+      "description": "Farbe des erhabenen Texts: ein beliebiger OpenSCAD-Farbname oder „#rrggbb“.",
+      "help": "Farbe des erhabenen Texts: ein beliebiger OpenSCAD-Farbname oder „#rrggbb“. In die 3MF exportiert, damit der Viewer (und farbfähige Slicer) sie anzeigen.",
+      "info": {
+        "label": "Textfarbe"
+      }
+    },
+    "engrave_text": {
+      "description": "Text in die Platte eingravieren, statt ihn zu erheben.",
+      "help": "Text in die Platte eingravieren, statt ihn zu erheben."
+    },
+    "show_emblem": {
+      "description": "Ein SVG-Emblem auf das Etikett extrudieren.",
+      "help": "Ein SVG-Emblem auf das Etikett extrudieren."
+    },
+    "svg_file": {
+      "description": "Zu importierende SVG-Datei.",
+      "help": "Zu importierende SVG-Datei. Die mitgelieferte Vorgabe ist „emblem.svg“; legen Sie Ihre eigene ab, der Assistent prüft und korrigiert sie für den OpenSCAD-Import."
+    },
+    "emblem_size": {
+      "description": "Zielbreite des Emblems; die Höhe folgt dem Seitenverhältnis der SVG (mm).",
+      "help": "Zielbreite des Emblems; die Höhe folgt dem Seitenverhältnis der SVG (mm)."
+    },
+    "emblem_color": {
+      "description": "Farbe des erhabenen Emblems im Export, wie die Textfarbe oben.",
+      "help": "Farbe des erhabenen Emblems im Export, wie die Textfarbe oben.",
+      "info": {
+        "label": "Emblemfarbe"
+      }
+    },
+    "emblem_height": {
+      "description": "Wie weit das Emblem aus der Platte heraussteht (mm).",
+      "help": "Wie weit das Emblem aus der Platte heraussteht (mm)."
+    },
+    "hole": {
+      "description": "Ein Loch zum Aufhängen oder Auffädeln des Etiketts hinzufügen.",
+      "help": "Ein Loch zum Aufhängen oder Auffädeln des Etiketts hinzufügen."
+    },
+    "hole_diameter": {
+      "description": "Lochdurchmesser (mm).",
+      "help": "Lochdurchmesser (mm). Nur verwendet, wenn das Loch aktiviert ist.",
+      "info": {
+        "label": "Lochdurchmesser",
+        "unit": "mm"
+      }
+    },
+    "facet_angle": {
+      "description": "Maximaler Facettenwinkel; niedriger ist glatter, aber langsamer.",
+      "help": "Maximaler Facettenwinkel; niedriger ist glatter, aber langsamer."
+    },
+    "facet_size": {
+      "description": "Maximale Facettengröße (mm); niedriger ist glatter, aber langsamer.",
+      "help": "Maximale Facettengröße (mm); niedriger ist glatter, aber langsamer."
+    }
+  },
+  "reviewLabels": {
+    "label": "Text",
+    "font": "Schriftart"
+  },
+  "reviewNote": "Der gravierte oder erhabene Text behält Ihre Groß-/Kleinschreibung exakt wie eingegeben.",
+  "presets": {
+    "Large tag": "Großes Etikett",
+    "With hole": "Mit Loch"
+  }
+}
