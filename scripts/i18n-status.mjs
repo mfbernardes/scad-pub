@@ -25,6 +25,14 @@ import { loadConfig, parseIdentity, makeMustExist, buildDesigns } from "./gen-sc
 import { createAssetTools } from "./lib/assets.mjs";
 import { createDestinationRegistry } from "./lib/destinations.mjs";
 import { translatableFields, coverageForTag, computeStamps, driftFields, sha256Hex } from "./lib/i18n-coverage.mjs";
+import {
+  parseTextKey,
+  loadTextFiles,
+  configTextCoverage,
+  computeTextStamps,
+  textDrift,
+  textStampsPath,
+} from "./lib/config-text.mjs";
 
 const FIELD_CLASSES = ["description", "params", "sections", "reviewLabels", "reviewNote", "presets", "doc"];
 
@@ -62,9 +70,14 @@ function readStamps(path) {
 }
 
 /** Reload the design/config, following gen-schema.mjs's own parse steps, and
- *  return `{ designs, LANGUAGES, DEFAULT_TAG, SOURCE, configPath }`. Writes
- *  buildDesigns' file copies into a throwaway temp dir, removed before
- *  returning. */
+ *  return `{ designs, LANGUAGES, DEFAULT_TAG, SOURCE, configPath, textByTag,
+ *  TEXT_PATHS }`. Writes buildDesigns' file copies into a throwaway temp dir,
+ *  removed before returning. `textByTag`/`TEXT_PATHS` are the config-text
+ *  pre-pass's own two halves (scripts/lib/config-text.mjs) — loaded but NOT
+ *  folded into `config`, since this tool only reports on the text files
+ *  themselves (coverage/stamps), not on the app-facing schema `generate()`
+ *  would produce from them. Both are `null` for a deployment with no `text`
+ *  key. */
 function loadDesigns(configPath) {
   const mustExist = makeMustExist(configPath);
   mustExist(configPath, "config file");
@@ -72,6 +85,8 @@ function loadDesigns(configPath) {
   const CONFIG_DIR = dirname(configPath);
   const { LANGUAGES } = parseIdentity(config);
   const DEFAULT_TAG = LANGUAGES[0];
+  const TEXT_PATHS = parseTextKey(config.text, LANGUAGES, DEFAULT_TAG, CONFIG_DIR, mustExist);
+  const textByTag = TEXT_PATHS ? loadTextFiles(TEXT_PATHS) : null;
 
   const SOURCE = resolve(CONFIG_DIR, config.source ?? ".");
   mustExist(SOURCE, `source directory '${config.source ?? "."}'`);
@@ -115,9 +130,10 @@ function loadDesigns(configPath) {
   }
   for (const msg of captured) {
     if (/translation of .* may be stale/.test(msg)) continue;
+    if (/config text may be stale/.test(msg)) continue;
     console.warn(msg);
   }
-  return { designs, LANGUAGES, DEFAULT_TAG, SOURCE, configPath };
+  return { designs, LANGUAGES, DEFAULT_TAG, SOURCE, configPath, CONFIG_DIR, textByTag, TEXT_PATHS };
 }
 
 /** The (design, tag) pairs worth reporting: every enabled NON-default locale,
@@ -206,20 +222,73 @@ function writeStamps(designs, LANGUAGES, SOURCE) {
   return written;
 }
 
+/** Config-text coverage section (scripts/lib/config-text.mjs's
+ *  `configTextCoverage`): one line per enabled non-default locale, the same
+ *  covered/total shape as the design coverage report above, but over the
+ *  text FILES' own leaves rather than a design's fields. Absent entirely for
+ *  a deployment with no `text` key. */
+function formatConfigTextCoverage(textByTag, LANGUAGES, DEFAULT_TAG) {
+  if (!textByTag) return { lines: [], incomplete: 0 };
+  const coverage = configTextCoverage(textByTag, LANGUAGES, DEFAULT_TAG);
+  const lines = ["config text (default: " + DEFAULT_TAG + ")"];
+  let incomplete = 0;
+  for (const tag of LANGUAGES) {
+    if (tag === DEFAULT_TAG) continue;
+    const { translated, total } = coverage[tag];
+    lines.push(`  ${tag.padEnd(14)} ${translated}/${total}`);
+    if (translated < total) incomplete++;
+  }
+  return { lines, incomplete };
+}
+
+function formatConfigTextDrift(textByTag, DEFAULT_TAG, configPath, CONFIG_DIR) {
+  if (!textByTag) return [];
+  const stampsPath = textStampsPath(configPath, CONFIG_DIR);
+  if (!existsSync(stampsPath)) return [];
+  const stamps = readStamps(stampsPath);
+  return textDrift(textByTag, DEFAULT_TAG, stamps).map(
+    (path) => `config text: '${path}' may be stale (source changed since it was stamped)`
+  );
+}
+
+/** (Re)write `<config-basename>.text.stamps.json` beside the config, hashing
+ *  every leaf of the DEFAULT locale's text file — see
+ *  scripts/lib/config-text.mjs's `computeTextStamps`. No-op (removes nothing)
+ *  for a deployment with no `text` key. */
+function writeConfigTextStamps(textByTag, DEFAULT_TAG, configPath, CONFIG_DIR) {
+  if (!textByTag) return false;
+  const stamps = computeTextStamps(textByTag, DEFAULT_TAG);
+  const sorted = {};
+  for (const path of Object.keys(stamps).sort()) sorted[path] = stamps[path];
+  writeFileSync(textStampsPath(configPath, CONFIG_DIR), JSON.stringify(sorted, null, 2) + "\n");
+  return true;
+}
+
 export function run({ configPath, strict = false, stamp = false } = {}) {
-  const { designs, LANGUAGES, DEFAULT_TAG, SOURCE } = loadDesigns(configPath);
+  const { designs, LANGUAGES, DEFAULT_TAG, SOURCE, CONFIG_DIR, textByTag } = loadDesigns(configPath);
   const out = [];
   out.push(`i18n-status: config '${configPath}', languages: ${LANGUAGES.join(", ")} (default: ${DEFAULT_TAG})`);
 
-  if (LANGUAGES.length < 2 && !designs.some((d) => d.stringsByTag?.[DEFAULT_TAG] || d.docLocales?.length)) {
+  if (
+    LANGUAGES.length < 2 &&
+    !designs.some((d) => d.stringsByTag?.[DEFAULT_TAG] || d.docLocales?.length) &&
+    !textByTag
+  ) {
     out.push("No non-default locale is enabled (and no default-locale translations exist); nothing to report.");
     return { text: out.join("\n"), incomplete: 0, drift: [] };
   }
 
-  const { lines, incomplete } = formatCoverageReport(designs, LANGUAGES, DEFAULT_TAG);
+  const { lines, incomplete: designIncomplete } = formatCoverageReport(designs, LANGUAGES, DEFAULT_TAG);
   out.push("", ...lines);
 
-  const drift = formatDriftReport(designs, SOURCE);
+  const { lines: textLines, incomplete: textIncomplete } = formatConfigTextCoverage(textByTag, LANGUAGES, DEFAULT_TAG);
+  if (textLines.length) out.push("", ...textLines);
+  const incomplete = designIncomplete + textIncomplete;
+
+  const drift = [
+    ...formatDriftReport(designs, SOURCE),
+    ...formatConfigTextDrift(textByTag, DEFAULT_TAG, configPath, CONFIG_DIR),
+  ];
   if (drift.length) {
     out.push("", "Drift warnings:");
     for (const d of drift) out.push(`  ${d}`);
@@ -228,9 +297,14 @@ export function run({ configPath, strict = false, stamp = false } = {}) {
   if (stamp) {
     const written = writeStamps(designs, LANGUAGES, SOURCE);
     out.push("", `Wrote/updated stamps for ${written} design(s).`);
+    if (writeConfigTextStamps(textByTag, DEFAULT_TAG, configPath, CONFIG_DIR))
+      out.push("Wrote/updated config text stamps.");
   }
 
-  out.push("", `${incomplete} design/locale pair(s) have incomplete coverage.`);
+  out.push(
+    "",
+    `${incomplete} design/locale pair(s) and config-text locale(s) have incomplete coverage.`
+  );
   if (strict && incomplete > 0) out.push("--strict: failing due to incomplete coverage.");
 
   return { text: out.join("\n"), incomplete, drift };

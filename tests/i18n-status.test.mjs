@@ -180,6 +180,90 @@ test("translatableFields: a param with @info but neither a custom label nor a de
   assert.equal(byClass.params.total, 1);
 });
 
+// A minimal config-text deployment: one design, no design sidecars (so the
+// design-coverage section stays trivially 0/0-ish and each test's assertions
+// stay focused on the config-text section specifically).
+function configTextFixture({ deText } = {}) {
+  const src = mkdtempSync(join(tmpdir(), "i18n-status-text-"));
+  // No section header, no param comment: zero design-translatable fields, so
+  // every test here reads the config-text section in isolation from the
+  // (unrelated) per-design coverage report above it.
+  writeFileSync(join(src, "d.scad"), 'label = "hi";\n');
+  writeFileSync(
+    join(src, "text.en.json"),
+    JSON.stringify({ popup: { header: "Welcome", body: "Body EN" } })
+  );
+  writeFileSync(join(src, "text.de.json"), JSON.stringify(deText ?? { popup: { header: "Willkommen" } }));
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: ".",
+      languages: ["en", "de"],
+      text: { en: "text.en.json", de: "text.de.json" },
+      designs: [{ id: "d" }],
+      popup: { mode: "dismissible" },
+    })
+  );
+  return src;
+}
+
+test("run(): reports config-text coverage per non-default locale, the default file as the reference set", () => {
+  const src = configTextFixture();
+  const { text, incomplete } = run({ configPath: join(src, "c.config.json") });
+  assert.match(text, /config text \(default: en\)/);
+  // 'de' only sets popup.header, out of 2 leaves (header + body) in 'en'.
+  assert.match(text, /de\s+1\/2/);
+  assert.ok(incomplete >= 1);
+});
+
+test("run(): full config-text coverage across every locale reports 0 incomplete", () => {
+  const src = configTextFixture({ deText: { popup: { header: "Willkommen", body: "Body DE" } } });
+  const { text, incomplete } = run({ configPath: join(src, "c.config.json") });
+  assert.match(text, /de\s+2\/2/);
+  assert.equal(incomplete, 0);
+});
+
+test("run({ stamp: true }): writes '<config-basename>.text.stamps.json' hashing the default locale's leaves, then a second run reports no drift", () => {
+  const src = configTextFixture();
+  const first = run({ configPath: join(src, "c.config.json"), stamp: true });
+  assert.match(first.text, /Wrote\/updated config text stamps\./);
+
+  const stamps = JSON.parse(readFileSync(join(src, "c.config.text.stamps.json"), "utf-8"));
+  assert.deepEqual(Object.keys(stamps).sort(), ["popup.body", "popup.header"]);
+  assert.equal(stamps["popup.header"], createHash("sha256").update("Welcome", "utf8").digest("hex"));
+
+  const second = run({ configPath: join(src, "c.config.json") });
+  assert.equal(second.drift.filter((d) => d.startsWith("config text:")).length, 0, JSON.stringify(second.drift));
+});
+
+test("run(): editing the default locale's text after stamping surfaces a config-text drift warning", () => {
+  const src = configTextFixture();
+  run({ configPath: join(src, "c.config.json"), stamp: true });
+
+  writeFileSync(join(src, "text.en.json"), JSON.stringify({ popup: { header: "Welcome!", body: "Body EN" } }));
+
+  const { drift } = run({ configPath: join(src, "c.config.json") });
+  const configDrift = drift.filter((d) => d.startsWith("config text:"));
+  assert.equal(configDrift.length, 1);
+  assert.match(configDrift[0], /'popup\.header' may be stale/);
+});
+
+test("run(): a deployment with no 'text' key reports no config-text section at all", () => {
+  const src = mkdtempSync(join(tmpdir(), "i18n-status-notext-"));
+  writeFileSync(join(src, "d.scad"), '/* [Main] */\n// The label.\nlabel = "hi";\n');
+  writeFileSync(
+    join(src, "d.strings.de.json"),
+    JSON.stringify({ params: { label: { description: "Der Text." } } })
+  );
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", languages: ["en", "de"], designs: [{ id: "d", label: "D" }] })
+  );
+  const { text } = run({ configPath: join(src, "c.config.json") });
+  assert.doesNotMatch(text, /config text \(default:/);
+});
+
 test("CLI --strict exits 1 when coverage is incomplete, 0 when it's complete", () => {
   const src = coverageFixture();
   assert.throws(() =>

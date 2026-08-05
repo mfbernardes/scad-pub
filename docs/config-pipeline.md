@@ -78,6 +78,35 @@ Every one is opt-in.
   *container* whose values share one shape, while `localizable` describes one ordinary FIELD
   whose own value is that shape.
 
+## Config text fold (`scripts/lib/config-text.mjs`)
+
+The opt-in `text` config key (docs/config.md "Localizing config text") moves every
+`LocalizableText` value out of `scadpub.config.json` into one JSON file per locale. It's a
+pure pre-pass, not a new parser track: `generate()` calls `parseTextKey` (validates the
+`text` map itself — default locale required, every tag ⊆ `languages`, every path exists)
+and, when it returns non-null, `foldConfigText` — right after `parseIdentity` (so
+`LANGUAGES`/`DEFAULT_TAG` are known) and *before* `resolveProseFields`, so every downstream
+step (`resolveProseFields`, `parseConfigBlocks`, `resolveDesignList`) sees exactly the
+object it would have seen from an inline config. `foldConfigText` cross-checks each text
+file against the config's own structure — a `help.tabs[]` entry by its (in text mode,
+required) `id`, a `notices[]` entry by `marker`, a `licenses[]` entry by `name`, a
+`designs[]` entry by `id` — and writes the resulting `{ tag: value, … }` maps directly onto
+`config`'s own fields (mutating it in place, the same idiom `resolveProseFields`'s
+`bodyFile`/`noteFile` pre-pass already uses). It never re-implements a field's real
+invariants (non-empty string, must include the default tag): those still run once,
+downstream, in `parseLocalizableText`/`parseNoticeLabel`/`resolveHelpPane` exactly as for an
+inline value — the fold's own validation is limited to what only IT can check (the
+join-key cross-references, section-count parity between locales, and the "no inline prose
+once `text` is set" conflict check). This is also the equivalence contract's mechanism: a
+deployment expressed as structure + text files and the same deployment expressed inline
+diverge nowhere past this pre-pass, so `tests/config-text.test.mjs`'s load-bearing
+equivalence test — an inline fixture and this repo's own migrated
+`scadpub.config.json`/`scadpub.text.*.json` pair — asserts a deep-equal `designs.json`.
+`gen-config-schema.mjs` emits a second committed schema, `scadpub.config.text.schema.json`,
+for the text file's own (looser, hand-written — it isn't `CONFIG_SPEC`-derived, since a
+text file's keys mirror config *surfaces* rather than the config's own top-level shape)
+shape, freshness-tested the same way as the main one.
+
 ## Validating `designs.json` at runtime (`src/lib/schema.ts`)
 
 `schema.ts` is the **fourth** hand-written description of the schema's shape, after
