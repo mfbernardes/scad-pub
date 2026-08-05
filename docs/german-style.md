@@ -18,7 +18,9 @@ One canonical German term per concept. Never use the alternatives listed.
 
 | Concept | Canonical | Never |
 |---|---|---|
-| The preview render process | Vorschau … erstellen / … aktualisieren | Render, Rendering (as a verb) |
+| The preview render process | Vorschau … erstellen / … aktualisieren | Render, rendern (as a verb for the preview) |
+| One completed render run (Metrics tab) | Rendering | der Render |
+| The activity, nominalized ("rendering and export") | Rendern | — |
 | The WASM subsystem that renders | Render-Engine | 3D-Engine, Renderer |
 | Save the print-ready file | Herunterladen / Download | Exportieren (reserved for presets) |
 | Move a preset file in/out as JSON | Exportieren / Importieren | — |
@@ -41,7 +43,7 @@ One canonical German term per concept. Never use the alternatives listed.
 | Raised relief | erhaben | erhöht |
 | Sunken/incised relief | eingraviert / eingravieren | — |
 | The print base | Grundplatte (first/defining reference) or Platte (short form in flowing text) | — |
-| Touch a control (touchscreen) | antippen | tippen (kept only where space is genuinely constrained, e.g. a dense aria-label) |
+| Touch a control (touchscreen) | antippen — „tippen Sie auf …“ is fine in flowing prose | bare „tippen“ as a label verb (ambiguous with typing); allowed only in space-constrained aria text |
 | Press with a mouse | klicken | — |
 | Push a physical/on-screen button verb in remediation copy | drücken | — |
 | Move a slider/pointer | ziehen | — |
