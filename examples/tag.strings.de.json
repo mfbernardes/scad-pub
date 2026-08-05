@@ -25,8 +25,8 @@
       }
     },
     "corner_radius": {
-      "description": "Eckenradius; 0 für eckige Ecken (mm).",
-      "help": "Eckenradius; 0 für eckige Ecken (mm).",
+      "description": "Eckenradius; 0 für rechtwinklige Ecken (mm).",
+      "help": "Eckenradius; 0 für rechtwinklige Ecken (mm).",
       "info": {
         "label": "Eckenradius",
         "unit": "mm"
@@ -73,8 +73,8 @@
       }
     },
     "engrave_text": {
-      "description": "Text in die Platte eingravieren, statt ihn zu erheben.",
-      "help": "Text in die Platte eingravieren, statt ihn zu erheben."
+      "description": "Text in die Platte eingravieren, statt ihn erhaben auszuführen.",
+      "help": "Text in die Platte eingravieren, statt ihn erhaben auszuführen."
     },
     "show_emblem": {
       "description": "Ein SVG-Emblem auf das Etikett extrudieren.",

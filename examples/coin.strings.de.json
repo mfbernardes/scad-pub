@@ -58,8 +58,8 @@
       "help": "Farbe des erhabenen Texts im Export."
     },
     "engrave_text": {
-      "description": "Text in die Vorderseite eingravieren, statt ihn zu erheben.",
-      "help": "Text in die Vorderseite eingravieren, statt ihn zu erheben."
+      "description": "Text in die Vorderseite eingravieren, statt ihn erhaben auszuführen.",
+      "help": "Text in die Vorderseite eingravieren, statt ihn erhaben auszuführen."
     },
     "hole": {
       "description": "Ein Loch am oberen Rand zum Aufhängen hinzufügen.",
