@@ -206,14 +206,23 @@ const TEXT_SECTION_SCHEMA = {
   additionalProperties: false,
 };
 
-// A help pane's own shape (top-level 'help', or one 'help.tabs.<id>' entry):
-// inline sections, or a single Markdown 'file' — see
-// scripts/lib/config-text.mjs's foldHelp/foldHelpTab, which decide per-tab
-// which form is in play from the DEFAULT locale's own entry.
+// A help pane's own shape (top-level 'help'): inline sections, or a single
+// Markdown 'file' — see scripts/lib/config-text.mjs's foldHelp, which decides
+// which form is in play from the DEFAULT locale's own entry. The top-level
+// pane carries no 'label' (nothing picks a single-pane help by name); one
+// 'help.tabs.<id>' entry is the same shape PLUS 'label' (TEXT_HELP_TAB_PROPERTIES
+// below) — foldHelpTab requires it on the default locale's entry, so leaving
+// it off this schema would make every real tabbed text file fail validation
+// against 'additionalProperties: false'.
 const TEXT_HELP_PANE_PROPERTIES = {
   intro: { type: "string" },
   sections: { type: "array", items: TEXT_SECTION_SCHEMA },
   file: { type: "string", description: "Config-relative Markdown file, split into intro/sections at build time." },
+};
+
+const TEXT_HELP_TAB_PROPERTIES = {
+  label: { type: "string" },
+  ...TEXT_HELP_PANE_PROPERTIES,
 };
 
 // scadpub.config.text.schema.json: the shape of ONE locale's text file (see
@@ -255,7 +264,7 @@ export function buildConfigTextSchema() {
           tabs: {
             type: "object",
             description: "Keyed by 'help.tabs[].id' in scadpub.config.json.",
-            additionalProperties: { type: "object", properties: TEXT_HELP_PANE_PROPERTIES, additionalProperties: false },
+            additionalProperties: { type: "object", properties: TEXT_HELP_TAB_PROPERTIES, additionalProperties: false },
           },
         },
         additionalProperties: false,
