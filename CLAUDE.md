@@ -210,7 +210,8 @@ at 2.66:1, under 1.4.11's 3:1) and can only say "amber", never what is wrong.
   `useLocale()`; (4) memoized derivations of translated text take the locale tag as a dep; (5)
   design-supplied text is translated via per-design `.strings.<tag>.json` sidecars
   ([docs/config.md#design-translations](docs/config.md#design-translations)), never
-  annotations, never in `renderHash`; `npm run i18n:status` audits that coverage (and, with a
+  annotations, never in `renderHash`; German copy follows the glossary and style rules in
+  [docs/german-style.md](docs/german-style.md). `npm run i18n:status` audits that coverage (and, with a
   tracked `<design>.strings.stamps.json`, content drift since a translation was made) per
   design × locale — informational by default, `--strict` for CI. `svgPrep`'s engine
   (`src/lib/svgPrep/`) stays i18n-free on purpose (its Node tests assert on structured

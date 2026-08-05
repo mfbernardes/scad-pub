@@ -7,7 +7,7 @@
       "help": "Buchstaben und Zahlen werden unterstützt."
     },
     "style": {
-      "choices": { "flat": "Flach", "raised": "Erhöht" }
+      "choices": { "flat": "Flach", "raised": "Erhaben" }
     }
   },
   "echo": { "Total width": "Gesamtbreite" }
