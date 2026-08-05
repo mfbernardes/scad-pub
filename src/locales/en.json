@@ -45,6 +45,8 @@
   "attention.useBundledFont": "Use a bundled font",
   "attention.noticePending": "{count} {label} pending",
   "attention.viewMessages": "View messages",
+  "fontMissing.lead": "“{family}” isn’t loaded — text may render in another font.",
+  "fontMissing.useFamily": "Use {name}",
   "exportSuccess.title": "Your file is on its way",
   "exportSuccess.body": "Check your browser's downloads, then slice and print when you're ready.",
   "exportSuccess.openHelp": "Open printing help",

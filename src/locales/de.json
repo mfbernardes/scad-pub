@@ -45,6 +45,8 @@
   "attention.useBundledFont": "Mitgelieferte Schrift verwenden",
   "attention.noticePending": "{count} {label} ausstehend",
   "attention.viewMessages": "Meldungen anzeigen",
+  "fontMissing.lead": "„{family}“ ist nicht geladen — der Text kann in einer anderen Schrift dargestellt werden.",
+  "fontMissing.useFamily": "{name} verwenden",
   "exportSuccess.title": "Ihre Datei ist unterwegs",
   "exportSuccess.body": "Prüfen Sie die Downloads Ihres Browsers — in den Slicer laden und drucken können Sie, sobald Sie bereit sind.",
   "exportSuccess.openHelp": "Druckhilfe öffnen",

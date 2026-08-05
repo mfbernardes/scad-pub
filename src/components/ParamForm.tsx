@@ -148,6 +148,7 @@ function FontMissingHint({
   fallback: { value: string; label: string } | null;
   onUse: (next: string) => void;
 }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   // The action links that actually fix a missing font (import it, or switch
   // to a loaded family).
   // `pointer-coarse:min-h-11`: these two are where the entire missing-font flow
@@ -162,20 +163,20 @@ function FontMissingHint({
       role="status"
     >
       <span className="text-[0.82rem] leading-[1.4] text-foreground">
-        “{family}” isn’t loaded — text may render in another font.
+        {t("fontMissing.lead", { family })}
       </span>
       <FontImportActions
         className="flex flex-wrap gap-x-4 gap-y-1"
         renderImport={(open) => (
           <button type="button" className={actionBtn} onClick={open}>
-            <UploadIcon size={13} aria-hidden="true" /> Import font…
+            <UploadIcon size={13} aria-hidden="true" /> {t("attention.importFont")}
           </button>
         )}
         renderFallback={
           fallback
             ? () => (
                 <button type="button" className={actionBtn} onClick={() => onUse(fallback.value)}>
-                  Use {fallback.label}
+                  {t("fontMissing.useFamily", { name: fallback.label })}
                 </button>
               )
             : undefined
