@@ -1,0 +1,49 @@
+{
+  "description": "Eine SVG, extrudiert als farbiges Reliefpanel.",
+  "sections": {
+    "Panel": "Panel",
+    "SVG source": "SVG-Quelle"
+  },
+  "params": {
+    "panel_width": {
+      "description": "Panelbreite (mm).",
+      "help": "Panelbreite (mm)."
+    },
+    "panel_height": {
+      "description": "Panelhöhe (mm).",
+      "help": "Panelhöhe (mm)."
+    },
+    "base_thickness": {
+      "description": "Grundplattendicke (mm).",
+      "help": "Grundplattendicke (mm)."
+    },
+    "relief_height": {
+      "description": "Wie weit das Relief aus der Platte heraussteht (mm).",
+      "help": "Wie weit das Relief aus der Platte heraussteht (mm)."
+    },
+    "corner_radius": {
+      "description": "Eckenradius der Platte (mm).",
+      "help": "Eckenradius der Platte (mm)."
+    },
+    "margin": {
+      "description": "Abstand zwischen der Zeichnung und dem Plattenrand (mm).",
+      "help": "Abstand zwischen der Zeichnung und dem Plattenrand (mm)."
+    },
+    "base_color": {
+      "description": "Farbe der Grundplatte.",
+      "help": "Farbe der Grundplatte."
+    },
+    "relief_color": {
+      "description": "Farbe eines einfarbigen Reliefs (leeres svg_layers).",
+      "help": "Farbe eines einfarbigen Reliefs (leeres svg_layers)."
+    },
+    "svg_file": {
+      "description": "Die zu extrudierende Zeichnung.",
+      "help": "Die zu extrudierende Zeichnung. Legen Sie eine SVG ab; der Assistent prüft und korrigiert sie für den OpenSCAD-Import und liest anschließend die Bereichsfarben in die Liste unten ein."
+    },
+    "svg_layers": {
+      "description": "Bereichsfarben & -höhen",
+      "help": "Farben und Höhen pro Bereich: ein „id:Farbe“ pro benanntem SVG-Bereich (z. B. „sky:skyblue, ground:yellowgreen“); ein bloßer Wert benennt einen Bereich, dessen Id bereits seine Farbe ist, und eine Id der Form „c<hex>“ wird zu „#hex“ erweitert. Ein drittes Feld hebt diesen Bereich auf eine eigene Höhe an („house:#cd5c5c:2“); ohne dieses wird relief_height verwendet. Ein vorangestellter „BxH“-Eintrag benennt die Zeichenfläche der Zeichnung, wodurch sich die Bereiche zentrieren lassen. Leer lassen, um die gesamte Zeichnung als ein Relief zu extrudieren. Wird vom SVG-Assistenten ausgefüllt."
+    }
+  }
+}
