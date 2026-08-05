@@ -20,7 +20,7 @@ Verwenden Sie den SVG-Assistenten, bevor Sie die Panelmaße feinabstimmen:
 
 ## Tipps für einen sauberen Druck
 
-Diese Einstellungen erleichtern das Slicen und Drucken des Reliefs:
+Diese Einstellungen erleichtern die Arbeit im Slicer und den Druck des Reliefs:
 
 - Halten Sie Konturen und kleine Details kräftig genug für Ihre Düsengröße.
 - Eine **Reliefhöhe** von etwa `1–1.5 mm` wirkt gut, ohne die Druckzeit unnötig zu verlängern.
