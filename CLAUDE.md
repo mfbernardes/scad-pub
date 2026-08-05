@@ -217,7 +217,11 @@ at 2.66:1, under 1.4.11's 3:1) and can only say "amber", never what is wrong.
   (`src/lib/svgPrep/`) stays i18n-free on purpose (its Node tests assert on structured
   `{code, vars}` findings/changes/errors, not prose) and `src/lib/svgPrepText.ts` is the sole
   place that resolves a code to catalogue text. Config-authored prose (popup, notices, help,
-  design labels/groups) is leaf-localizable — `string | Record<tag, string>` — and MUST be
+  design labels/groups) is leaf-localizable — `string | Record<tag, string>` — optionally
+  moved out of `scadpub.config.json` entirely into per-locale text files via the opt-in
+  `text` key (`scripts/lib/config-text.mjs`, folded back into those same leaves before
+  anything else runs, so nothing past that pre-pass — including this file's own
+  `configI18n.ts` projection — changes) — and MUST be
   projected through `src/lib/configI18n.ts`'s `lx`/`lxOpt`/`lxHelp`/`lxNotice`/`lxDesignEntry`
   before it reaches JSX; the raw vs. `Resolved*` type split in `types.ts` makes an unprojected
   value a compile error. Machine-readable output stays locale-invariant on purpose — SVG

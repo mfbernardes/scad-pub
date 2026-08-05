@@ -36,6 +36,13 @@ import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "
 import { humanize, parseParams } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
 import { parseDesignStrings } from "./lib/design-strings.mjs";
+import {
+  parseTextKey,
+  loadTextFiles,
+  foldConfigText,
+  textDrift,
+  textStampsPath,
+} from "./lib/config-text.mjs";
 import { translatableFields, driftFields, sha256Hex } from "./lib/i18n-coverage.mjs";
 import { createDestinationRegistry, reconcileGenerated } from "./lib/destinations.mjs";
 import { sanitizeBrowserFacingSvg } from "./lib/svg-sanitize.mjs";
@@ -108,6 +115,16 @@ export { firstSentence, parseEnumHint, parseParams } from "./lib/params.mjs";
 export { resolveFileField } from "./lib/prose-files.mjs";
 export { splitHelpMarkdown } from "./lib/help-file.mjs";
 export { parseDesignStrings } from "./lib/design-strings.mjs";
+export {
+  parseTextKey,
+  loadTextFiles,
+  foldConfigText,
+  flattenTextLeaves,
+  configTextCoverage,
+  computeTextStamps,
+  textDrift,
+  textStampsPath,
+} from "./lib/config-text.mjs";
 
 // Re-exported so scripts/i18n-status.mjs can drive the SAME config-loading
 // and design-parsing steps generate() itself uses, rather than re-implementing
@@ -1906,6 +1923,40 @@ export function generate({
   // DEFAULT_TAG (LANGUAGES[0], see parseConfigBlocks) from here on.
   const { TITLE, ID, DESCRIPTION, LANG, DIR, LANGUAGES } = parseIdentity(config);
   const DEFAULT_TAG = LANGUAGES[0];
+
+  // Config text mode (scripts/lib/config-text.mjs, docs/config.md
+  // "Localizing config text"): an opt-in pre-pass that folds every locale's
+  // text file into `config`'s own LocalizableText-shaped fields BEFORE
+  // resolveProseFields/parseConfigBlocks/buildDesigns ever see them, so the
+  // rest of the pipeline runs unchanged — a config expressed this way and one
+  // with the same prose written inline produce a deep-equal designs.json.
+  const TEXT_PATHS = parseTextKey(config.text, LANGUAGES, DEFAULT_TAG, CONFIG_DIR, mustExist);
+  if (TEXT_PATHS) {
+    const textByTag = loadTextFiles(TEXT_PATHS);
+    foldConfigText(config, textByTag, TEXT_PATHS, { languages: LANGUAGES, defaultTag: DEFAULT_TAG });
+
+    // Content-drift WARNING (never an error, same contract as a design's own
+    // `<design>.strings.stamps.json`, see buildDesigns): a tracked
+    // `<config-basename>.text.stamps.json` beside the config (written by
+    // `npm run i18n:status -- --stamp`, never by hand) records what the
+    // DEFAULT locale's text looked like when translations were last stamped.
+    // No stamps file -> no opinion.
+    const stampsPath = textStampsPath(configPath, CONFIG_DIR);
+    if (existsSync(stampsPath)) {
+      let stamps;
+      try {
+        stamps = JSON.parse(readFileSync(stampsPath, "utf-8"));
+      } catch (err) {
+        throw new Error(`gen-schema: '${stampsPath}' is not valid JSON:\n  ${err.message}`, { cause: err });
+      }
+      for (const path of textDrift(textByTag, DEFAULT_TAG, stamps)) {
+        console.warn(
+          `gen-schema: config text may be stale: '${path}' changed in the default locale's text ` +
+            `file since it was stamped`
+        );
+      }
+    }
+  }
 
   resolveProseFields(config, CONFIG_DIR, mustExist, LANGUAGES, DEFAULT_TAG);
 

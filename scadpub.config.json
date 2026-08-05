@@ -7,10 +7,6 @@
   "designs": [
     {
       "id": "tag",
-      "label": {
-        "en": "Tag",
-        "de": "Etikett"
-      },
       "presets": {
         "images": {
           "Large tag": "examples/tag-preset-large.png",
@@ -19,15 +15,10 @@
       }
     },
     {
-      "id": "coin",
-      "label": {
-        "en": "Coin",
-        "de": "Münze"
-      }
+      "id": "coin"
     },
     {
-      "id": "panel",
-      "label": "Panel"
+      "id": "panel"
     }
   ],
   "assets": [
@@ -66,180 +57,34 @@
   },
   "fileImport": true,
   "popup": {
-    "header": {
-      "en": "Welcome to ScadPub",
-      "de": "Willkommen bei ScadPub"
-    },
-    "body": {
-      "en": "Configure an OpenSCAD design in your browser and export a ready-to-print model — everything runs locally.\n\nScadPub is open source: see the [project on GitHub](https://github.com/mfbernardes/scad-pub).",
-      "de": "Konfigurieren Sie ein OpenSCAD-Design in Ihrem Browser und exportieren Sie ein druckfertiges Modell — alles läuft lokal.\n\nScadPub ist Open Source: siehe das [Projekt auf GitHub](https://github.com/mfbernardes/scad-pub)."
-    },
-    "mode": "dismissible",
-    "footnote": {
-      "en": "Everything runs in your browser. Nothing is uploaded.",
-      "de": "Alles läuft in Ihrem Browser. Nichts wird hochgeladen."
-    }
+    "mode": "dismissible"
   },
   "help": {
-    "intro": {
-      "en": "Customize an OpenSCAD design in your browser and download a ready-to-print model — everything runs on your device.",
-      "de": "Passen Sie ein OpenSCAD-Design in Ihrem Browser an und laden Sie ein druckfertiges Modell herunter — alles läuft auf Ihrem Gerät."
-    },
     "tabs": [
       {
-        "id": "walkthrough",
-        "label": {
-          "en": "Walkthrough",
-          "de": "Rundgang"
-        },
-        "intro": {
-          "en": "A full pass through the app, start to finish. This tab is intentionally long so you can see it scroll on its own.",
-          "de": "Ein vollständiger Durchlauf durch die App, von Anfang bis Ende. Dieser Tab ist absichtlich lang, damit Sie sehen, wie er von selbst scrollt."
-        },
-        "sections": [
-          {
-            "title": {
-              "en": "1. Pick a design",
-              "de": "1. Design wählen"
-            },
-            "body": {
-              "en": "Use the design name in the top bar to switch between the available designs. Each one auto-sizes to the settings you choose.",
-              "de": "Verwenden Sie den Designnamen in der oberen Leiste, um zwischen den verfügbaren Designs zu wechseln. Jedes passt sich automatisch an die von Ihnen gewählten Einstellungen an."
-            }
-          },
-          {
-            "title": {
-              "en": "2. Make it yours",
-              "de": "2. Nach Wunsch anpassen"
-            },
-            "body": {
-              "en": "The **Customize** tab lists what you can change, grouped into sections.\n\n- Drag a slider (or type a number), pick from a dropdown, type text, or flip a switch.\n- Tap the small **ⓘ** next to a label for a fuller explanation.\n- Click a **section header** to fold or unfold it; some start folded.\n- Some settings only appear when another one makes them relevant.\n- **Find a setting…** narrows the list as you type. A long form also offers **Jump to section** (the list button beside it) to skip straight to one.\n- Once you've changed something, a strip at the **top** of the tab counts your changes and offers **Reset to defaults** — or, with a preset applied, **Revert** to it.",
-              "de": "Der Tab **Anpassen** listet auf, was Sie ändern können, gruppiert in Abschnitte.\n\n- Ziehen Sie einen Schieberegler (oder geben Sie eine Zahl ein), wählen Sie aus einer Auswahlliste, geben Sie Text ein oder betätigen Sie einen Schalter.\n- Tippen Sie auf das kleine **ⓘ** neben einer Bezeichnung für eine ausführlichere Erklärung.\n- Klicken Sie auf eine **Abschnittsüberschrift**, um sie ein- oder auszuklappen; manche sind anfangs eingeklappt.\n- Manche Einstellungen erscheinen erst, wenn eine andere sie relevant macht.\n- **Einstellung suchen…** grenzt die Liste beim Tippen ein. Ein langes Formular bietet außerdem **Zu Abschnitt springen** (die Listenschaltfläche daneben), um direkt zu einem zu springen.\n- Sobald Sie etwas geändert haben, zählt eine Leiste **oben** im Tab Ihre Änderungen und bietet **Auf Standardwerte zurücksetzen** — oder, bei angewendeter Voreinstellung, **Verwerfen**, um zu ihr zurückzukehren."
-            }
-          },
-          {
-            "title": {
-              "en": "3. Look around the preview",
-              "de": "3. Vorschau ansehen"
-            },
-            "body": {
-              "en": "**Drag** to spin the model, **scroll or pinch** to zoom, and **right-drag** (or two fingers) to move it.",
-              "de": "**Ziehen** dreht das Modell, **Scrollen oder Zusammenziehen** zoomt, und **mit der rechten Maustaste ziehen** (oder mit zwei Fingern) verschiebt es."
-            }
-          },
-          {
-            "title": {
-              "en": "4. Keep the preview fresh",
-              "de": "4. Vorschau aktuell halten"
-            },
-            "body": {
-              "en": "With **Live preview** on, the model updates a moment after each change. The switch is under the settings panel on a wide screen, and in the **⋮** menu (top right) on a phone.\n\nFor a slow design it pauses itself — press **Update** over the preview when you're ready.",
-              "de": "Ist **Live-Vorschau** aktiviert, aktualisiert sich das Modell kurz nach jeder Änderung. Der Schalter befindet sich auf einem breiten Bildschirm unter dem Einstellungsbereich und auf dem Telefon im **⋮**-Menü (oben rechts).\n\nBei einem langsamen Design pausiert sie sich selbst — drücken Sie **Aktualisieren** über der Vorschau, wenn Sie bereit sind."
-            }
-          },
-          {
-            "title": {
-              "en": "5. Save & reuse settings (presets)",
-              "de": "5. Einstellungen speichern & wiederverwenden (Voreinstellungen)"
-            },
-            "body": {
-              "en": "The **Presets** tab lists **Ready-made** starting points and the presets **Saved by you** (stored in this browser).\n\n- **Save** keeps your current settings under a name; **Export** writes them to an OpenSCAD `parameterSets` JSON, which also opens in the desktop OpenSCAD Customizer.",
-              "de": "Der Tab **Voreinstellungen** listet **Fertige Voreinstellungen** als Ausgangspunkte sowie die Voreinstellungen **Von Ihnen gespeichert** (in diesem Browser abgelegt) auf.\n\n- **Speichern** sichert Ihre aktuellen Einstellungen unter einem Namen; **Exportieren** schreibt sie in eine OpenSCAD-`parameterSets`-JSON-Datei, die sich auch im Desktop-OpenSCAD-Customizer öffnen lässt."
-            }
-          },
-          {
-            "title": {
-              "en": "6. Add files (fonts, SVGs…)",
-              "de": "6. Dateien hinzufügen (Schriften, SVGs…)"
-            },
-            "body": {
-              "en": "Some designs can use a file of yours — a font for lettering, or an SVG drawing. You add each one **from the control that needs it**, not from a separate upload screen:\n\n- **Fonts** (`.ttf`/`.otf`): choose **Import font…** in a design's font menu. The font then shows there by name, for every design.\n- **Drawings** (`.svg`): use the drawing control's **Prepare SVG…** to bring one in.\n- The **Files** action (top bar, or the **⋮** menu on a phone) is where you **manage** what you've imported — see each file's type and size, remove one, or clear all. You don't import from there.\n- Files stay in this browser and come back on your next visit; nothing is uploaded to a server.",
-              "de": "Manche Designs können eine eigene Datei von Ihnen verwenden — eine Schrift für Schriftzüge oder eine SVG-Zeichnung. Sie fügen jede davon **über das Steuerelement hinzu, das sie benötigt**, nicht über einen separaten Upload-Bildschirm:\n\n- **Schriften** (`.ttf`/`.otf`): wählen Sie **Schrift importieren…** im Schriftmenü eines Designs. Die Schrift erscheint dort anschließend unter ihrem Namen, für jedes Design.\n- **Zeichnungen** (`.svg`): verwenden Sie **SVG vorbereiten…** des Zeichnungssteuerelements, um eine einzubringen.\n- Die Aktion **Dateien** (obere Leiste oder auf dem Telefon das **⋮**-Menü) ist der Ort, an dem Sie **verwalten**, was Sie importiert haben — Typ und Größe jeder Datei ansehen, eine entfernen oder alle löschen. Von dort importieren Sie nicht.\n- Dateien bleiben in diesem Browser und sind bei Ihrem nächsten Besuch wieder da; nichts wird auf einen Server hochgeladen."
-            }
-          },
-          {
-            "title": {
-              "en": "7. Download & share",
-              "de": "7. Herunterladen & teilen"
-            },
-            "body": {
-              "en": "The two buttons over the preview:\n\n- **Download for 3D printing** — get the printable mesh (with colours) for your slicer.\n- **Share** (**Copy link** where your browser can't share directly) — a link that reopens this exact design, settings and preset.\n\n**Save image**, for a picture of the preview, is in the top bar — or the **⋮** menu on a phone.\n\nIf anything needs a look before you download, a coloured pill appears just above those buttons (“1 issue to review”). Tap it — or Download — to open **Review**, which summarises what you're about to get and what's unresolved. Once the model has rendered you can still choose **Download anyway**; while a render has failed, that stays unavailable.",
-              "de": "Die beiden Schaltflächen über der Vorschau:\n\n- **Download für 3D-Druck** — das druckfertige Mesh (mit Farben) für Ihren Slicer.\n- **Teilen** (**Link kopieren**, wenn Ihr Browser nicht direkt teilen kann) — ein Link, der genau dieses Design mit Einstellungen und Voreinstellung wieder öffnet.\n\n**Bild speichern**, für ein Bild der Vorschau, finden Sie in der oberen Leiste — oder auf dem Telefon im **⋮**-Menü.\n\nMuss vor dem Herunterladen noch etwas geprüft werden, erscheint direkt über diesen Schaltflächen eine farbige Pille („1 Punkt zu prüfen“). Tippen Sie sie an — oder **Download für 3D-Druck** —, um **Prüfen** zu öffnen, das zusammenfasst, was Sie erhalten und was noch ungeklärt ist. Sobald die Vorschau erstellt wurde, können Sie weiterhin **Trotzdem herunterladen** wählen; ist die letzte Vorschau fehlgeschlagen, bleibt das nicht verfügbar."
-            }
-          },
-          {
-            "title": {
-              "en": "8. Appearance & info",
-              "de": "8. Aussehen & Info"
-            },
-            "body": {
-              "en": "The **sun/moon** button cycles light → dark → auto, and the **ⓘ** button lists open-source licenses. Both sit in the top bar on a wide screen, and in the **⋮** menu (top right) on a phone.",
-              "de": "Die Schaltfläche **Sonne/Mond** durchläuft hell → dunkel → automatisch, und die Schaltfläche **ⓘ** listet Open-Source-Lizenzen auf. Beide sitzen auf einem breiten Bildschirm in der oberen Leiste und auf dem Telefon im **⋮**-Menü (oben rechts)."
-            }
-          }
-        ]
+        "id": "walkthrough"
       },
       {
-        "id": "printing",
-        "label": {
-          "en": "Printing",
-          "de": "Druck"
-        },
-        "file": {
-          "en": "examples/help-printing.md",
-          "de": "examples/help-printing.de.md"
-        }
+        "id": "printing"
       },
       {
-        "id": "troubleshooting",
-        "label": {
-          "en": "Troubleshooting",
-          "de": "Fehlerbehebung"
-        },
-        "sections": [
-          {
-            "title": {
-              "en": "The preview fails or looks wrong",
-              "de": "Die Vorschau schlägt fehl oder sieht falsch aus"
-            },
-            "body": {
-              "en": "Open **Messages** (the bell in the top bar) — the design reports what it didn't like there, and the **Log** tab has the full technical output.",
-              "de": "Öffnen Sie **Meldungen** (die Glocke in der oberen Leiste) — das Design meldet dort, was ihm nicht gefallen hat, und der Tab **Protokoll** enthält die vollständige technische Ausgabe."
-            }
-          }
-        ]
+        "id": "troubleshooting"
       }
     ]
   },
   "notices": [
     {
       "marker": "alert",
-      "label": {
-        "one": {
-          "en": "alert",
-          "de": "Warnung"
-        },
-        "other": {
-          "en": "alerts",
-          "de": "Warnungen"
-        }
-      },
       "color": "#e0a458",
       "attention": true
     },
     {
       "marker": "note",
-      "label": {
-        "one": {
-          "en": "note",
-          "de": "Hinweis"
-        },
-        "other": {
-          "en": "notes",
-          "de": "Hinweise"
-        }
-      },
       "color": "#86a9ff"
     }
-  ]
+  ],
+  "text": {
+    "en": "scadpub.text.en.json",
+    "de": "scadpub.text.de.json"
+  }
 }

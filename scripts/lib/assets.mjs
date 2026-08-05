@@ -39,8 +39,13 @@ const DEP_RE = /^\s*(?:use|include)\s*<([^>]+)>/;
 // its `<design>.strings.stamps.json` freshness-stamp sibling (the literal tag
 // "stamps" already matches the first alternative — no separate pattern
 // needed), and `<design>.doc.<tag>.md` per-locale `@doc` translations (see
-// gen-schema.mjs's buildDesigns). None of these are ever bundled: they're
-// authored/derived translation text, not render input, and reaching
+// gen-schema.mjs's buildDesigns), plus a config text deployment's own
+// `<config-basename>.text.stamps.json` freshness stamp (scripts/i18n-status.mjs
+// `--stamp`, scripts/lib/config-text.mjs, docs/config.md "Localizing config
+// text") — the same idea one level up: it sits beside the CONFIG, not a
+// design, but SOURCE and CONFIG_DIR coincide often enough (`source: "."`)
+// that a broad glob can still reach it. None of these are ever bundled:
+// they're authored/derived translation text, not render input, and reaching
 // public/scad/ (hence renderHash) would invalidate every deployment's
 // persisted geometry cache on a translation edit that cannot affect a single
 // triangle. This is the one place a broad config `assets` glob (`**/*.json`,
@@ -48,7 +53,7 @@ const DEP_RE = /^\s*(?:use|include)\s*<([^>]+)>/;
 // gen-schema.mjs's own sidecar scan is: a case-insensitive filesystem (macOS,
 // Windows) would otherwise let a wrongly-cased sidecar (`widget.Strings.DE.json`)
 // slip past this exclusion and get bundled.
-const SIDECAR_RE = /\.(?:strings\.[A-Za-z0-9-]+\.json|doc\.[A-Za-z0-9-]+\.md)$/i;
+const SIDECAR_RE = /\.(?:strings\.[A-Za-z0-9-]+\.json|doc\.[A-Za-z0-9-]+\.md|text\.stamps\.json)$/i;
 
 /**
  * Build the SOURCE-bound asset resolution helpers used by generate().

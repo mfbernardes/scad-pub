@@ -51,6 +51,7 @@ These keys set the document chrome and, through the `pwa` block, the Progressive
   ```
 
 - **`pwa`**: manifest-only fields (`shortName`, `icon`, `iconMaskable`, `themeColor`, `backgroundColor`, `categories`, `screenshots`, `shortcuts`, `install`), see [PWA manifest (`pwa`)](#pwa-manifest-pwa). `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg` from it
+- **`text`**: optional — moves every config-authored prose value (English included) out of this file into per-locale text files instead of writing it inline. See [Localizing config text](#localizing-config-text)
 
 ### Design sources
 
@@ -505,7 +506,55 @@ ScadPub’s own chrome text (the readiness pill, the Review dialog, attention ca
 
 ## Localizing config text
 
-`strings` (above) overrides ScadPub’s own **chrome** copy — text the app itself owns, out of a fixed catalogue. Several *config-authored* fields — `popup.header`/`body`/`button`/`footnote`, `fileImport.note`, `notices[].label`’s `one`/`other`, `licenses[].note`, `designs[].label`/`group`, and every text field under `help` — are prose **you** write, with no catalogue key to override. Each of those fields accepts a `LocalizableText` value: either shape, independently, per field:
+`strings` (above) overrides ScadPub’s own **chrome** copy — text the app itself owns, out of a fixed catalogue. Several *config-authored* fields — `popup.header`/`body`/`button`/`footnote`, `fileImport.note`, `notices[].label`’s `one`/`other`, `licenses[].note`, `designs[].label`/`group`, and every text field under `help` — are prose **you** write, with no catalogue key to override. Each of those fields accepts a `LocalizableText` value, and there are two ways to write one: **text files** (the opt-in `text` key, recommended for anything beyond a tiny single-page config) or **inline** (a plain string or `{ tag: string }` map written directly into `scadpub.config.json`, the default when `text` is absent).
+
+### Text files (`text`)
+
+Set the top-level `text` key and every `LocalizableText` field above moves out of `scadpub.config.json` into one JSON file per locale — English included. The config keeps structure (which tabs exist, which notices, which designs, ids, colors, modes); the text files hold every word a visitor reads:
+
+```jsonc
+// scadpub.config.json — structure only, no prose
+{
+  "languages": ["en", "de"],
+  "text": { "en": "scadpub.text.en.json", "de": "scadpub.text.de.json" },
+  "popup": { "mode": "dismissible" },
+  "help": { "tabs": [{ "id": "walkthrough" }, { "id": "printing" }] },
+  "notices": [{ "marker": "alert", "color": "#e0a458" }],
+  "designs": [{ "id": "tag" }]
+}
+```
+
+```jsonc
+// scadpub.text.de.json — same shape as every other locale's file
+{
+  "$schema": "./scadpub.config.text.schema.json",
+  "popup": { "header": "Willkommen bei ScadPub", "body": "…", "footnote": "…" },
+  "help": {
+    "intro": "…",
+    "tabs": {
+      "walkthrough": { "label": "Rundgang", "sections": [{ "title": "…", "body": "…" }] },
+      "printing": { "label": "Druck", "file": "examples/help-printing.de.md" }
+    }
+  },
+  "notices": { "alert": { "one": "Warnung", "other": "Warnungen" } },
+  "designs": { "tag": { "label": "Etikett" } },
+  "strings": { "action.export": "Für den Druck herunterladen" }
+}
+```
+
+- The `text` map is locale tag → config-relative file path. The **default locale’s** file (`lang`, collapsed, or `languages[0]` — see [`languages`](#app-identity-and-pwa)) is **required and must be complete**: it defines the base text for every structural slot this config declares — each `help.tabs[]` entry needs a `label` (plus `sections` or `file`), `popup` needs `header`/`body` when configured, and so on. Every other enabled locale’s file is optional and may be **sparse**: a leaf it omits falls back to the default locale’s value at runtime, the same `map[tag] ?? map[defaultTag]` rule the inline object form uses.
+- **With `text` set, inline prose in any field it covers becomes a build error** naming the field and the text file it belongs in instead — “config has no text” is meant literally, not as a suggestion. Non-prose fields (`title`/`description`/everything under `pwa`, ids, markers, colors, modes, paths, `designs[].presets.images`) stay in the config either way; they were never localizable.
+- **Join keys**: a text file’s `help.tabs` entries are matched to `help.tabs[]` by **`id`** — which `text` mode requires every tab to set, since it’s the only stable handle once the label itself moves out of the config. `notices` entries match by **`marker`**, `licenses` entries by **`name`**, `designs` entries by **`id`**. A text file naming a tab id/marker/license name/design id that doesn’t exist in the config fails the build.
+- **Sections match by index**: a tab’s (or single-pane `help`’s) `sections` array lines up positionally between locales — the same rule `help.file`’s per-locale object form already used (see below). Every locale that sets `sections` for a pane must supply exactly as many entries as the default locale’s file, in the same order; a mismatch fails the build, naming both counts.
+- **`file` leaves** (a tab’s `file`, or top-level `help.file`) name a config-relative Markdown file **per locale**, resolved and split into `intro`/`sections` exactly like the inline object form described below — one text-file entry, one path, per locale.
+- **`strings`** (the chrome-catalogue overrides, see [Text overrides](#text-overrides-strings) above) gets its own key inside each text file, one source of truth per key: with `text` set, `scadpub.config.json`’s own `strings` block must be empty, and every override lives in the text files instead.
+- A **committed JSON Schema**, `scadpub.config.text.schema.json` (generated the same way `scadpub.config.schema.json` is, from `scripts/gen-config-schema.mjs`), documents the text file’s own shape for editor tooling.
+- `npm run i18n:status` reports coverage for `text` the same way it reports design-translation coverage: per enabled non-default locale, how many of the default locale’s text-file leaves that locale’s own file also sets, the default file as the reference set; `--strict` folds it into the same exit code. `npm run i18n:status -- --stamp` (re)writes a tracked `<config-basename>.text.stamps.json` (e.g. `scadpub.config.text.stamps.json`) beside the config, hashing the default locale’s current text; from then on both `gen-schema` (a build-log warning, never a failure) and `i18n:status` flag a leaf whose stamped hash no longer matches the current text — the same “warn, never fail” contract [design-translation drift](#keeping-translations-up-to-date) uses. The stamps file is excluded from `assets` bundling/orphan handling like a design’s own `.strings.stamps.json`.
+- None of this affects geometry, so `text`’s fold happens before `renderHash` is computed and every field it touches stays absent from it, same as the inline forms below.
+
+### Inline (no `text` key)
+
+Without `text`, every field above still accepts a `LocalizableText` value written directly in the config — the shape every one of these fields has always accepted, and still the right choice for a config small enough that splitting it into files buys nothing:
 
 ```jsonc
 {
@@ -519,12 +568,12 @@ ScadPub’s own chrome text (the readiness pill, the Review dialog, attention ca
 }
 ```
 
-- A **plain string** shows for **every** locale — the same value regardless of which locale a visitor has selected. This is the shape every one of these fields already accepted before per-locale config prose existed, so an existing config needs no changes.
-- An **object** overrides per locale, keyed by locale tag (`{ "en": "…", "de": "…" }`): it **must include an entry for the deployment’s default locale** (`lang`, collapsed to a shipped tag, or `"en"` — the same resolved default `languages` itself defaults around, see [`languages`](#app-identity-and-pwa)), and every key must be one of the deployment’s enabled `languages` — an unshipped or unenabled tag fails the build. A locale the object leaves out falls back to the default locale’s entry at runtime, the same `map[tag] ?? map[defaultTag]` rule everywhere this shape appears.
+- A **plain string** shows for **every** locale — the same value regardless of which locale a visitor has selected.
+- An **object** overrides per locale, keyed by locale tag (`{ "en": "…", "de": "…" }`): it **must include an entry for the deployment’s default locale** (`lang`, collapsed to a shipped tag, or `"en"` — the same resolved default `languages` itself defaults around, see [`languages`](#app-identity-and-pwa)), and every key must be one of the deployment’s enabled `languages` — an unshipped or unenabled tag fails the build. A locale the object leaves out falls back to the default locale’s entry at runtime.
 - This is a **different rule** from `strings`’ own per-locale object (a plain string there applies only to the *default* locale, back-compat with a config written before per-locale `strings` existed — see [Text overrides](#text-overrides-strings) above). Here, a plain string applies to **every** locale: the field never had a “default-locale-only” shape to stay backward compatible with, since a single `LocalizableText` value replaces the field’s value outright rather than sitting alongside a catalogue.
-- A **file-backed** counterpart (`popup.bodyFile`, `fileImport.noteFile`, `help.file`, `help.tabs[].file`) accepts the same two shapes at the PATH level: a single config-relative path (as before), or an object of locale tag -> config-relative path. Each locale’s file is read independently at build time and the results become that field’s `LocalizableText` map — the same default-tag/enabled-`languages` rules apply to the path object as to an inline value. For `help.file`/`help.tabs[].file` specifically, every locale’s file must split into the **same number** of `##` sections, in the same order (so a section’s per-locale title/body line up); a locale’s file with no text before its first `##` only contributes an `intro` entry when the **default** locale’s file has one too. `licenses[].textFile` (and `licenses[].text`) is the one file-backed field that stays single-language — see [Open-source notices](#open-source-notices-licenses) below.
+- A **file-backed** counterpart (`popup.bodyFile`, `fileImport.noteFile`, `help.file`, `help.tabs[].file`) accepts the same two shapes at the PATH level: a single config-relative path, or an object of locale tag -> config-relative path. Each locale’s file is read independently at build time and the results become that field’s `LocalizableText` map — the same default-tag/enabled-`languages` rules apply to the path object as to an inline value. For `help.file`/`help.tabs[].file` specifically, every locale’s file must split into the **same number** of `##` sections, in the same order (so a section’s per-locale title/body line up); a locale’s file with no text before its first `##` only contributes an `intro` entry when the **default** locale’s file has one too. `licenses[].textFile` (and `licenses[].text`) is the one file-backed field that stays single-language — see [Open-source notices](#open-source-notices-licenses) below.
 - None of this affects geometry, so every field above stays absent from `renderHash`.
-- **Slightly stricter than before, on purpose:** `help`’s section/tab text, `notices[].label`’s `one`/`other`, and `licenses[].note` now reject a blank string or the wrong type outright (an empty label is an authoring mistake, not something worth silently swallowing) — before `LocalizableText` existed these fields typically had no dedicated shape check of their own, or none this thorough. `designs[].label`/`group` are the deliberate exception: `group` in particular already had a permissive “anything that isn’t a real string quietly becomes unset” rule, and that rule is preserved unchanged for its plain-string form — only the new per-locale object form is validated strictly.
+- **Strict on purpose:** `help`’s section/tab text, `notices[].label`’s `one`/`other`, and `licenses[].note` reject a blank string or the wrong type outright (an empty label is an authoring mistake, not something worth silently swallowing). `designs[].label`/`group` are the deliberate exception: `group` in particular has a permissive “anything that isn’t a real string quietly becomes unset” rule for its plain-string form — only the per-locale object form is validated strictly.
 
 **What stays fixed at the build’s configured language, not localizable this way** (see also [`lang`](#app-identity-and-pwa)): `title`, `description`, everything under `pwa` (manifest fields, install metadata) — including a `pwa.shortcuts` entry ScadPub derives from a `LocalizableText` `designs[].label`, projected to the deployment’s default locale — and `<title>`/`<meta>` — the document’s own identity is one thing per deployment, not something a visitor’s locale switch changes. `echo("@review", …)` values (curated review overrides) and a design’s own annotation text (translated instead through its `.strings.<tag>.json` sidecar, a different mechanism — see [Design translations](#design-translations)) are unaffected by `LocalizableText` too.
 

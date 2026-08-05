@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_SPEC } from "../scripts/lib/config-spec.mjs";
-import { buildConfigSchema } from "../scripts/gen-config-schema.mjs";
+import { buildConfigSchema, buildConfigTextSchema } from "../scripts/gen-config-schema.mjs";
 import { generate, parseLang, parseDir, parseFormat } from "../scripts/gen-schema.mjs";
 import {
   POPUP_MODES,
@@ -37,6 +37,24 @@ test("scadpub.config.schema.json is up to date with config-spec.mjs", () => {
     committed,
     fresh,
     "scadpub.config.schema.json is stale — run `npm run gen` (or " +
+      "`node scripts/gen-config-schema.mjs`) and commit the result."
+  );
+});
+
+// scadpub.config.text.schema.json (scripts/lib/config-text.mjs's own doc, and
+// docs/config.md "Localizing config text"): same freshness mechanism as the
+// main config schema above, over the hand-written (not CONFIG_SPEC-derived)
+// text-file schema — see buildConfigTextSchema's own comment for why it can't
+// be derived the same way the main one is.
+test("scadpub.config.text.schema.json is up to date with buildConfigTextSchema", () => {
+  const committed = JSON.parse(
+    readFileSync(join(ROOT, "scadpub.config.text.schema.json"), "utf-8")
+  );
+  const fresh = buildConfigTextSchema();
+  assert.deepEqual(
+    committed,
+    fresh,
+    "scadpub.config.text.schema.json is stale — run `npm run gen` (or " +
       "`node scripts/gen-config-schema.mjs`) and commit the result."
   );
 });

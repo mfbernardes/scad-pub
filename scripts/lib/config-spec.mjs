@@ -363,6 +363,26 @@ export const CONFIG_SPEC = {
       "resolved default locale.",
   },
 
+  // Opt-in: moves ALL config-authored prose (English included) out of this
+  // file into per-locale text files, folded back in before any other
+  // validation runs (scripts/lib/config-text.mjs's `foldConfigText`, wired in
+  // scripts/gen-schema.mjs's generate() between parseIdentity and
+  // resolveProseFields). `custom: true` like `languages` above: the map's
+  // real invariants (default tag required, every tag a shipped/enabled
+  // locale, every path exists) need this deployment's resolved languages, not
+  // a shape `applyTopLevelScalars` can express. See docs/config.md
+  // "Localizing config text".
+  text: {
+    type: "object",
+    custom: true,
+    mapValue: { type: "string" },
+    description:
+      "Opt-in: locale tag -> config-relative text-file path, moving ALL config-authored prose " +
+      "(English included) into per-locale files instead of writing it inline. The default " +
+      "locale's file is required and must be complete; every field it covers becomes a build " +
+      "error if also written inline. See docs/config.md 'Localizing config text'.",
+  },
+
   // Manifest-only; see PWA_THEME_COLOR_SPEC and the `pwa` node below.
   pwa: PWA_SPEC,
 

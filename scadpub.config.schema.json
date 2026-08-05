@@ -70,6 +70,16 @@
         "type": "string"
       }
     },
+    "text": {
+      "description": "Opt-in: locale tag -> config-relative text-file path, moving ALL config-authored prose (English included) into per-locale files instead of writing it inline. The default locale's file is required and must be complete; every field it covers becomes a build error if also written inline. See docs/config.md 'Localizing config text'.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "pwa": {
       "description": "Manifest-only PWA chrome (install metadata, icons, theming) that feeds manifest.webmanifest and the icon rasterizer at build time. Not mirrored into designs.json — the app itself never reads a 'pwa' object.",
       "type": [
