@@ -60,7 +60,7 @@
     },
     "font": {
       "description": "Schriftfamilie/-stil.",
-      "help": "Schriftfamilie/-stil. Auf die Familie einer hochgeladenen Schrift ändern, z. B. „DejaVu Sans“.",
+      "help": "Schriftfamilie/-stil. Auf die Familie einer importierten Schrift ändern, z. B. „DejaVu Sans“.",
       "info": {
         "label": "Schrift"
       }

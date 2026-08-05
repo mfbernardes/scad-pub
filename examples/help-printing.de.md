@@ -2,7 +2,7 @@ So gelingt ein sauberer Druck von der heruntergeladenen Datei.
 
 ## Material
 
-**PLA** eignet sich für diese Designs gut. Slicen Sie die heruntergeladene 3MF-Datei wie jede andere Datei.
+**PLA** eignet sich für diese Designs gut. Laden Sie die heruntergeladene 3MF-Datei wie jede andere Datei in den Slicer.
 
 ## Stützstrukturen
 

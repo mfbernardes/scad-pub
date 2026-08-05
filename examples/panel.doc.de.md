@@ -16,7 +16,7 @@ Verwenden Sie den SVG-Assistenten, bevor Sie die Panelmaße feinabstimmen:
 
 - Öffnen Sie **SVG vorbereiten…** und ziehen Sie Ihre Zeichnung hinein. Der Assistent prüft sie, behebt gängige Probleme und liest die Farbe jedes benannten Bereichs ein.
 - Passen Sie die Panelgröße und die **Reliefhöhe** an, bis die Vorschau passt.
-- Klicken Sie auf **Download für 3D-Druck** und slicen Sie die Datei wie jede andere.
+- Klicken Sie auf **Download für 3D-Druck** und laden Sie die Datei wie jede andere in den Slicer.
 
 ## Tipps für einen sauberen Druck
 

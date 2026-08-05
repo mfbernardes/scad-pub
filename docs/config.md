@@ -127,7 +127,7 @@ The map form remains the escape hatch for a preset whose name and image file gen
 
 ### Design translations
 
-A design’s own text — its `// @description`, section names, each parameter’s doc comment and enum choice labels, its `@info`/`@review` labels, its `@reviewNote` — is authored once, in whatever language the `.scad` file itself is written in. For a deployment that ships more than one [`languages`](#app-identity-and-pwa), translate it with a **sidecar file** next to the design: `<design>.strings.<tag>.json`, where `<design>` is the `.scad` file’s own basename and `<tag>` is one of the deployment’s shipped locale tags (`en`, `de`, …; see `src/lib/localeRegistry.ts`). `nameplate.scad`’s German translation lives at `nameplate.strings.de.json`, beside it.
+A design’s own text — its `// @description`, section names, each parameter’s doc comment and enum choice labels, its `@info`/`@review` labels, its `@reviewNote` — is authored once, in whatever language the `.scad` file itself is written in. For a deployment that ships more than one [`languages`](#app-identity-and-pwa), translate it with a **sidecar file** next to the design: `<design>.strings.<tag>.json`, where `<design>` is the `.scad` file’s own basename and `<tag>` is one of the deployment’s shipped locale tags (`en`, `de`, …; see `src/lib/localeRegistry.ts`). `nameplate.scad`’s German translation lives at `nameplate.strings.de.json`, beside it. Writing the `de` sidecar? Follow [docs/german-style.md](german-style.md)’s glossary and register rules.
 
 ```jsonc
 // nameplate.strings.de.json
