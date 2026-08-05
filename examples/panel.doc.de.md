@@ -7,7 +7,7 @@ Verwandeln Sie jede beliebige SVG-Zeichnung in eine farbige Reliefplakette: eine
 Das Panel-Design exportiert eine druckfertige 3MF-Datei mit Relief- und Farbdaten:
 
 - Eine abgerundete Grundplatte, die Sie mit **Panelbreite**, **Panelhöhe** und **Grundplattendicke** dimensionieren.
-- Ihr Motiv, erhoben um die **Reliefhöhe** und von einem optionalen **Rand** eingefasst.
+- Ihr Motiv, um die **Reliefhöhe** angehoben und von einem optionalen **Rand** eingefasst.
 - Bereichsfarben bleiben in der exportierten `3MF`-Datei erhalten, bereit für einen Multimaterial-Slicer.
 
 ## Erste Schritte

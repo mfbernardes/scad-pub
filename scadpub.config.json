@@ -27,10 +27,7 @@
     },
     {
       "id": "panel",
-      "label": {
-        "en": "Panel",
-        "de": "Schild"
-      }
+      "label": "Panel"
     }
   ],
   "assets": [
@@ -113,11 +110,11 @@
           {
             "title": {
               "en": "2. Make it yours",
-              "de": "2. Passen Sie es an"
+              "de": "2. Nach Wunsch anpassen"
             },
             "body": {
               "en": "The **Customize** tab lists what you can change, grouped into sections.\n\n- Drag a slider (or type a number), pick from a dropdown, type text, or flip a switch.\n- Tap the small **ⓘ** next to a label for a fuller explanation.\n- Click a **section header** to fold or unfold it; some start folded.\n- Some settings only appear when another one makes them relevant.\n- **Find a setting…** narrows the list as you type. A long form also offers **Jump to section** (the list button beside it) to skip straight to one.\n- Once you've changed something, a strip at the **top** of the tab counts your changes and offers **Reset to defaults** — or, with a preset applied, **Revert** to it.",
-              "de": "Der Tab **Anpassen** listet auf, was Sie ändern können, gruppiert in Abschnitte.\n\n- Ziehen Sie einen Schieberegler (oder geben Sie eine Zahl ein), wählen Sie aus einem Dropdown, geben Sie Text ein oder betätigen Sie einen Schalter.\n- Tippen Sie auf das kleine **ⓘ** neben einer Bezeichnung für eine ausführlichere Erklärung.\n- Klicken Sie auf eine **Abschnittsüberschrift**, um sie ein- oder auszuklappen; manche starten eingeklappt.\n- Manche Einstellungen erscheinen erst, wenn eine andere sie relevant macht.\n- **Einstellung suchen…** grenzt die Liste beim Tippen ein. Ein langes Formular bietet außerdem **Zu Abschnitt springen** (die Listenschaltfläche daneben), um direkt zu einem zu springen.\n- Sobald Sie etwas geändert haben, zählt eine Leiste **oben** im Tab Ihre Änderungen und bietet **Auf Standardwerte zurücksetzen** — oder, bei angewendeter Voreinstellung, **Verwerfen**, um zu ihr zurückzukehren."
+              "de": "Der Tab **Anpassen** listet auf, was Sie ändern können, gruppiert in Abschnitte.\n\n- Ziehen Sie einen Schieberegler (oder geben Sie eine Zahl ein), wählen Sie aus einem Dropdown, geben Sie Text ein oder betätigen Sie einen Schalter.\n- Tippen Sie auf das kleine **ⓘ** neben einer Bezeichnung für eine ausführlichere Erklärung.\n- Klicken Sie auf eine **Abschnittsüberschrift**, um sie ein- oder auszuklappen; manche sind anfangs eingeklappt.\n- Manche Einstellungen erscheinen erst, wenn eine andere sie relevant macht.\n- **Einstellung suchen…** grenzt die Liste beim Tippen ein. Ein langes Formular bietet außerdem **Zu Abschnitt springen** (die Listenschaltfläche daneben), um direkt zu einem zu springen.\n- Sobald Sie etwas geändert haben, zählt eine Leiste **oben** im Tab Ihre Änderungen und bietet **Auf Standardwerte zurücksetzen** — oder, bei angewendeter Voreinstellung, **Verwerfen**, um zu ihr zurückzukehren."
             }
           },
           {
@@ -157,7 +154,7 @@
             },
             "body": {
               "en": "Some designs can use a file of yours — a font for lettering, or an SVG drawing. You add each one **from the control that needs it**, not from a separate upload screen:\n\n- **Fonts** (`.ttf`/`.otf`): choose **Import font…** in a design's font menu. The font then shows there by name, for every design.\n- **Drawings** (`.svg`): use the drawing control's **Prepare SVG…** to bring one in.\n- The **Files** action (top bar, or the **⋮** menu on a phone) is where you **manage** what you've imported — see each file's type and size, remove one, or clear all. You don't import from there.\n- Files stay in this browser and come back on your next visit; nothing is uploaded to a server.",
-              "de": "Manche Designs können eine eigene Datei von Ihnen verwenden — eine Schrift für Schriftzüge oder eine SVG-Zeichnung. Sie fügen jede davon **über das Steuerelement hinzu, das sie benötigt**, nicht über einen separaten Upload-Bildschirm:\n\n- **Schriften** (`.ttf`/`.otf`): wählen Sie **Schrift importieren…** im Schriftmenü eines Designs. Die Schrift erscheint dort danach namentlich für jedes Design.\n- **Zeichnungen** (`.svg`): verwenden Sie **SVG vorbereiten…** des Zeichnungs-Steuerelements, um eine einzubringen.\n- Die Aktion **Dateien** (obere Leiste oder auf dem Telefon das **⋮**-Menü) ist der Ort, an dem Sie **verwalten**, was Sie importiert haben — Typ und Größe jeder Datei ansehen, eine entfernen oder alle löschen. Von dort importieren Sie nicht.\n- Dateien bleiben in diesem Browser und sind bei Ihrem nächsten Besuch wieder da; nichts wird auf einen Server hochgeladen."
+              "de": "Manche Designs können eine eigene Datei von Ihnen verwenden — eine Schrift für Schriftzüge oder eine SVG-Zeichnung. Sie fügen jede davon **über das Steuerelement hinzu, das sie benötigt**, nicht über einen separaten Upload-Bildschirm:\n\n- **Schriften** (`.ttf`/`.otf`): wählen Sie **Schrift importieren…** im Schriftmenü eines Designs. Die Schrift erscheint dort anschließend unter ihrem Namen, für jedes Design.\n- **Zeichnungen** (`.svg`): verwenden Sie **SVG vorbereiten…** des Zeichnungs-Steuerelements, um eine einzubringen.\n- Die Aktion **Dateien** (obere Leiste oder auf dem Telefon das **⋮**-Menü) ist der Ort, an dem Sie **verwalten**, was Sie importiert haben — Typ und Größe jeder Datei ansehen, eine entfernen oder alle löschen. Von dort importieren Sie nicht.\n- Dateien bleiben in diesem Browser und sind bei Ihrem nächsten Besuch wieder da; nichts wird auf einen Server hochgeladen."
             }
           },
           {
