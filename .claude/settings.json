@@ -1,17 +1,5 @@
 {
   "attribution": {
     "sessionUrl": false
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && branch=$(git rev-parse --abbrev-ref HEAD) && git fetch origin \"$branch\" >/dev/null 2>&1 && git merge --ff-only \"origin/$branch\" >/dev/null 2>&1; true"
-          }
-        ]
-      }
-    ]
   }
 }
