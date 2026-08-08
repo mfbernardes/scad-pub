@@ -1480,6 +1480,13 @@ async function checkSignageDesign({ page, check, ids, schema }) {
 // purpose: a layout that never swaps still fails, only later.
 const LAYOUT_SWAP_MS = 20000;
 
+// A detent flip is only a class swap, but it re-renders the whole sheet body
+// (a full ParamForm on a large config) on the same main thread the mobile
+// Viewer is on, and CI runs this harness beside a second browser on a shared
+// runner. At 3s Playwright reported the class as visible and still timed out —
+// the poll landed past the deadline. A detent that never arrives still fails.
+const SHEET_SETTLE_MS = 15000;
+
 async function checkResponsiveLayout({ browser, base, check, schema, paramsTabName }) {
   console.log("=== responsive layout: single mounted tree + state across a breakpoint change (M7) ===");
   const context = await browser.newContext({
@@ -1517,9 +1524,9 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     // presets), so ParamForm only mounts once Parameters is active. Radix
     // Tabs unmounts inactive tab content.
     await page.locator(".sheet-handle").click(); // peek -> half
-    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
+    await page.waitForSelector(".bottom-sheet--half", { timeout: SHEET_SETTLE_MS });
     await page.getByRole("tab", { name: paramsTabName }).first().click();
-    await page.waitForSelector(".param-form", { timeout: 3000 });
+    await page.waitForSelector(".param-form", { timeout: SHEET_SETTLE_MS });
     check((await page.locator(".param-form").count()) === 1, "exactly one ParamForm is mounted");
 
     // The sheet's form toolbar is the search field ALONE. Its two former
@@ -1653,7 +1660,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
     );
 
     await page.locator(".sheet-handle").click(); // peek -> half
-    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
+    await page.waitForSelector(".bottom-sheet--half", { timeout: SHEET_SETTLE_MS });
     check(
       !(await page.locator(".app-shell__mobile-background").getAttribute("inert").catch(() => null)),
       "background is not inert at half"
@@ -1661,7 +1668,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
 
     // Full: modal. Background goes inert, and Tab must never escape the sheet.
     await page.locator(".sheet-handle").click(); // half -> full
-    await page.waitForSelector(".bottom-sheet--full", { timeout: 3000 });
+    await page.waitForSelector(".bottom-sheet--full", { timeout: SHEET_SETTLE_MS });
     check(
       (await page.locator(".app-shell__mobile-background").getAttribute("inert")) === "",
       "background is inert at full"
@@ -1693,7 +1700,7 @@ async function checkResponsiveLayout({ browser, base, check, schema, paramsTabNa
 
     // Escape collapses the modal detent and un-inerts the background.
     await page.keyboard.press("Escape");
-    await page.waitForSelector(".bottom-sheet--half", { timeout: 3000 });
+    await page.waitForSelector(".bottom-sheet--half", { timeout: SHEET_SETTLE_MS });
     check(
       !(await page.locator(".app-shell__mobile-background").getAttribute("inert").catch(() => null)),
       "Escape collapses full and un-inerts the background"
