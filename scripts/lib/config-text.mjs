@@ -347,7 +347,14 @@ function foldHelp(config, textByTag, pathsByTag, languages, defaultTag) {
     const fileMap = {};
     for (const tag of languages) {
       const h = textByTag[tag]?.help;
-      if (h === undefined || h.file === undefined) continue;
+      if (h === undefined) continue;
+      if (h.file === undefined)
+        fail(
+          pathsByTag[tag],
+          `'help' must set 'file' — locale "${defaultTag}" uses 'file' for this deployment's help, so every ` +
+            `locale that translates it must too`
+        );
+      if (h.sections !== undefined) fail(pathsByTag[tag], `'help' sets both 'file' and 'sections' — remove one`);
       requireNonEmptyString(pathsByTag[tag], h.file, "help.file");
       fileMap[tag] = h.file;
     }
@@ -360,12 +367,20 @@ function foldHelp(config, textByTag, pathsByTag, languages, defaultTag) {
   const perTag = {};
   for (const tag of languages) {
     const h = textByTag[tag]?.help;
-    if (h === undefined || h.sections === undefined) continue;
-    const sections = h.sections;
-    if (!Array.isArray(sections) || sections.length !== defaultSections.length)
+    if (h === undefined) continue;
+    if (h.file !== undefined)
       fail(
         pathsByTag[tag],
-        `'help.sections' must match locale "${defaultTag}"'s section count (${defaultSections.length})`
+        `'help' sets 'file', but locale "${defaultTag}" uses inline 'sections' for this deployment's help — ` +
+          `every locale must use the same form`
+      );
+    const sections = h.sections ?? [];
+    if (!Array.isArray(sections)) fail(pathsByTag[tag], `'help.sections' must be an array`);
+    if (sections.length !== defaultSections.length)
+      fail(
+        pathsByTag[tag],
+        `'help.sections' has ${sections.length} section(s), but locale "${defaultTag}" has ` +
+          `${defaultSections.length} — every locale must split into the same number of sections, in the same order`
       );
     sections.forEach((s, i) => {
       requireObject(pathsByTag[tag], s, `help.sections[${i}]`);

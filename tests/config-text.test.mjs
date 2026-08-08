@@ -261,6 +261,79 @@ test("a non-default locale translating a tab's label alone (no sections) fails t
   );
 });
 
+test("single-pane help: a non-default locale's 'help' with 'intro' only, while the default locale uses 'file', fails the build", () => {
+  const root = baseTree();
+  const config = baseConfig();
+  delete config.help.tabs;
+  writeConfig(root, config);
+  writeText(root, "text.en.json", { ...baseTextEn(), help: { file: "printing.md" } });
+  const de = baseTextDe();
+  // 'de' translates only 'intro', never 'file' — a partial single-pane
+  // translation, not a legitimate omission of the whole pane.
+  de.help = { intro: "Nur die Einleitung" };
+  writeText(root, "text.de.json", de);
+  assert.throws(() => build(root), /'help' must set 'file' — locale "en" uses 'file' for this deployment's help/);
+});
+
+test("single-pane help: a non-default locale using 'sections' while the default locale uses 'file' fails the build", () => {
+  const root = baseTree();
+  const config = baseConfig();
+  delete config.help.tabs;
+  writeConfig(root, config);
+  writeText(root, "text.en.json", { ...baseTextEn(), help: { file: "printing.md" } });
+  const de = baseTextDe();
+  de.help = { sections: [{ title: "Eins", body: "Eins Text" }] };
+  writeText(root, "text.de.json", de);
+  assert.throws(
+    () => build(root),
+    /'help' must set 'file' — locale "en" uses 'file' for this deployment's help/
+  );
+});
+
+test("single-pane help: a non-default locale using 'file' while the default locale uses 'sections' fails the build", () => {
+  const root = baseTree();
+  const config = baseConfig();
+  delete config.help.tabs;
+  writeConfig(root, config);
+  writeText(root, "text.en.json", { ...baseTextEn(), help: { sections: [{ title: "One", body: "Body one" }] } });
+  const de = baseTextDe();
+  de.help = { file: "printing.de.md" };
+  writeText(root, "text.de.json", de);
+  assert.throws(
+    () => build(root),
+    /'help' sets 'file', but locale "en" uses inline 'sections' for this deployment's help/
+  );
+});
+
+test("single-pane help: a non-default locale's section count mismatch fails the build, naming both counts", () => {
+  const root = baseTree();
+  const config = baseConfig();
+  delete config.help.tabs;
+  writeConfig(root, config);
+  writeText(root, "text.en.json", {
+    ...baseTextEn(),
+    help: { sections: [{ title: "One", body: "Body one" }, { title: "Two", body: "Body two" }] },
+  });
+  const de = baseTextDe();
+  de.help = { sections: [{ title: "Eins", body: "Eins Text" }] };
+  writeText(root, "text.de.json", de);
+  assert.throws(() => build(root), /'help\.sections' has 1 section\(s\), but locale "en" has 2/);
+});
+
+test("single-pane help: omitting 'help' entirely in a non-default locale still falls back to the default (a legitimate omission)", () => {
+  const root = baseTree();
+  const config = baseConfig();
+  delete config.help.tabs;
+  writeConfig(root, config);
+  writeText(root, "text.en.json", {
+    ...baseTextEn(),
+    help: { sections: [{ title: "One", body: "Body one" }] },
+  });
+  writeText(root, "text.de.json", { popup: baseTextDe().popup }); // no 'help' at all
+  const schema = build(root);
+  assert.deepEqual(schema.help.sections[0].title, { en: "One" });
+});
+
 test("a non-default locale translating a file-backed tab's label alone (no file) fails the build", () => {
   const root = baseTree();
   writeConfig(root, baseConfig());
