@@ -45,6 +45,22 @@ export interface ParsedSet {
   values: Values;
 }
 
+/** Thrown by `parseParameterSetsFile` for its one known, expected failure
+ *  (the file parses as JSON but carries no `parameterSets` object) so the UI
+ *  layer (PresetPicker) can resolve a catalogue key instead of surfacing
+ *  `.message`, which is hardcoded English — the same {code}-over-message
+ *  shape src/lib/svgPrep/types.ts's `SvgPrepError` uses for its own engine.
+ *  A malformed-JSON `SyntaxError` from `JSON.parse` above is NOT wrapped:
+ *  that failure is generic (Chrome/Firefox word their own message
+ *  differently), not something this module can usefully localize itself, and
+ *  PresetPicker already has a locale-neutral fallback reason for it. */
+export class ParameterSetsFormatError extends Error {
+  constructor() {
+    super("Not an OpenSCAD parameterSets file (missing parameterSets).");
+    this.name = "ParameterSetsFormatError";
+  }
+}
+
 /** Parse a parameterSets file, coercing string values to the design's types. */
 export function parseParameterSetsFile(
   design: Design,
@@ -52,7 +68,7 @@ export function parseParameterSetsFile(
 ): ParsedSet[] {
   const data = JSON.parse(text) as Partial<ParameterSetsFile>;
   if (!data.parameterSets || typeof data.parameterSets !== "object")
-    throw new Error("Not an OpenSCAD parameterSets file (missing parameterSets).");
+    throw new ParameterSetsFormatError();
   const byName = new Map(design.params.map((p) => [p.name, p]));
   return Object.entries(data.parameterSets).map(([name, raw]) => {
     const values: Values = defaultsFor(design);

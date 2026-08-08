@@ -199,6 +199,7 @@
   "presets.empty": "No presets yet — set things up the way you like, then save them below.",
   "presets.importParseError": "Couldn't import “{name}”: {reason}",
   "presets.importInvalidReason": "not a valid parameterSets file.",
+  "presets.importNotParameterSets": "not an OpenSCAD parameterSets file (missing parameterSets).",
   "presets.importEmpty": "“{name}” has no parameter sets to import.",
   "help.topicsAria": "Help topics",
   "help.defaultTitle": "How to use this configurator",

@@ -17,6 +17,7 @@ import {
   savePreset,
   toParameterSetsFile,
   parseParameterSetsFile,
+  ParameterSetsFormatError,
 } from "../lib/presets";
 import { downloadBlob } from "../lib/download";
 import { parsePresetCardName } from "../lib/presetCard";
@@ -247,12 +248,19 @@ export function PresetPicker({
     try {
       parsed = parseParameterSetsFile(design, await file.text());
     } catch (err) {
-      toast.error(
-        t("presets.importParseError", {
-          name: file.name,
-          reason: err instanceof Error ? err.message : t("presets.importInvalidReason"),
-        })
-      );
+      // ParameterSetsFormatError is the parser's one known, expected failure
+      // (see its own doc): map it to a catalogue reason rather than its
+      // hardcoded-English `.message`, which would otherwise land untranslated
+      // inside this (translated) toast. Any other error (malformed JSON, …)
+      // keeps its generic `.message` when it's an Error, or the catalogue's
+      // locale-neutral fallback reason otherwise.
+      const reason =
+        err instanceof ParameterSetsFormatError
+          ? t("presets.importNotParameterSets")
+          : err instanceof Error
+            ? err.message
+            : t("presets.importInvalidReason");
+      toast.error(t("presets.importParseError", { name: file.name, reason }));
       return;
     }
     if (parsed.length === 0) {
