@@ -3,7 +3,7 @@
 // (ParamPanel/SheetTabs), so the two can never disagree on which sections show.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { visibleGroups } from "../src/lib/paramGroups.ts";
+import { visibleGroups, remapOpenSections } from "../src/lib/paramGroups.ts";
 
 function param(name, section, overrides = {}) {
   return {
@@ -103,4 +103,23 @@ test("visibleGroups: empty groups are dropped", () => {
     visibleGroups(d, {}).map((g) => g.section),
     ["A", "B"]
   );
+});
+
+test("remapOpenSections: carries a section's open/closed state to its translated name at the same position", () => {
+  const prev = { Main: true, Advanced: false };
+  const next = remapOpenSections(["Haupt", "Erweitert"], ["Main", "Advanced"], prev, new Set());
+  assert.deepEqual(next, { Haupt: true, Erweitert: false });
+});
+
+test("remapOpenSections: a position missing from the previous map falls back to defaultClosed", () => {
+  // Simulates a fresh design with no prior state at all — every position is
+  // 'missing', so every section should get its collapsed-default state.
+  const next = remapOpenSections(["A", "B"], [], {}, new Set(["B"]));
+  assert.deepEqual(next, { A: true, B: false });
+});
+
+test("remapOpenSections: an out-of-range position (fewer previous sections) falls back to defaultClosed", () => {
+  const prev = { Main: false };
+  const next = remapOpenSections(["Main", "Extra"], ["Main"], prev, new Set());
+  assert.deepEqual(next, { Main: false, Extra: true });
 });

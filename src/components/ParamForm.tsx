@@ -10,7 +10,7 @@ import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { displayValue } from "../lib/paramDiff";
-import { visibleGroups } from "../lib/paramGroups";
+import { visibleGroups, remapOpenSections } from "../lib/paramGroups";
 import { prefersReducedMotion } from "../lib/matchMedia";
 import { clampNumber, committedNumber, finiteDraft, typedCommitValue } from "../lib/numberDraft";
 import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
@@ -556,11 +556,21 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
   // Re-derive whenever `design` changes, during render rather than in an
   // effect (the documented "adjusting state when a prop changes" pattern):
   // this is a synchronous reset of state fully derived from `design`, not a
-  // side effect on an external system.
+  // side effect on an external system. A locale switch re-projects `design`
+  // through lxDesignEntry/localizeDesign (App.tsx) and hands back a new
+  // object with the SAME `id` — only section NAMES change, never their
+  // order (localizeDesign maps `sections` positionally, see its own doc) —
+  // so that case remaps the open/closed state by position onto the new
+  // names instead of resetting it, and only a genuine design switch (a
+  // different `id`) drops back to the design's static defaults.
   const lastOpenSectionsDesign = useRef(design);
-  if (lastOpenSectionsDesign.current !== design) {
+  if (lastOpenSectionsDesign.current.id !== design.id) {
     lastOpenSectionsDesign.current = design;
     setOpenSections(initOpenSections(design, collapsedDefault));
+  } else if (lastOpenSectionsDesign.current !== design) {
+    const prevSections = lastOpenSectionsDesign.current.sections;
+    lastOpenSectionsDesign.current = design;
+    setOpenSections((prev) => remapOpenSections(design.sections, prevSections, prev, collapsedDefault));
   }
 
   // Imperative "jump to a section" for the SectionNavigator. `openSection`
