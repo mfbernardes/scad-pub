@@ -29,7 +29,7 @@ import {
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { WASM_VERSION } from "./wasm-version.mjs";
 import { computeRenderHash, computeBinAssetVersions } from "./lib/hash.mjs";
 import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "./lib/fonts.mjs";
@@ -766,6 +766,15 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
   // find sidecar-SHAPED files that match no design at all (see the orphan
   // scan below).
   const sidecarBasesByDir = new Map();
+  // Every directory that currently holds at least one design's '// @doc'
+  // target, collected below as each design is processed; scoped just like
+  // sidecarBasesByDir's directories, but doc's own orphan scan (below) can't
+  // reuse that Map's "matches no known BASE" test — a doc translation carries
+  // no infix distinguishing it from an unrelated multi-dot Markdown file
+  // (this repo's own `help-printing.de.md` sits right beside a live doc and
+  // must never be misread as one of ITS translations), so it instead checks
+  // each candidate's OWN base file for physical presence in the directory.
+  const docDirs = new Set();
   const designs = resolveDesignList(config, SOURCE, languages, defaultTag).map(({ presetImagesSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
@@ -824,9 +833,20 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // geometry).
     let doc = null;
     let docAbs = null;
+    // Directory/basename/extension of the doc file itself, e.g.
+    // 'docs/guides/nameplate.md' -> ('docs/guides', 'nameplate', '.md').
+    // Per-locale doc translations (below) are named from these, not from the
+    // design's own basename, since the doc can live anywhere the '// @doc'
+    // path points it.
+    let docDir = null;
+    let docBase = null;
+    let docExt = null;
     if (meta.doc) {
       docAbs = mustExist(resolve(dirname(abs), meta.doc), `design '${d.id}' doc '${meta.doc}'`);
       checkContained(docAbs, `design '${d.id}' doc '${meta.doc}'`, relPosix(abs));
+      docDir = dirname(docAbs);
+      docExt = extname(docAbs);
+      docBase = basename(docAbs, docExt);
       const name = `${d.id}-doc.md`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' doc`);
@@ -961,59 +981,76 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       });
     }
 
-    // Per-locale `@doc` translations: `<design>.doc.<tag>.md` beside the
-    // design's own .scad, mirroring the `.strings.<tag>.json` mechanics just
-    // above — probe per REGISTRY tag, plus a directory scan for anything
-    // doc-sidecar-SHAPED that isn't (wrong case, or an unshipped tag) — but
-    // for a whole alternate FILE rather than a JSON field, since a doc
-    // translation has no field-level structure design-strings.mjs could
-    // validate. Copied via register+copyFileSync exactly like the base `doc`
-    // above and NEVER copyAsset, so it stays out of renderHash the same way
-    // (pure prose, cannot affect geometry).
-    const docSidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.(doc)\\.([A-Za-z0-9-]+)\\.md$`, "i");
+    // Migration guard for the RETIRED '<design>.doc.<tag>.md' naming: a doc
+    // translation used to sit beside the .scad regardless of where '// @doc'
+    // pointed the doc itself; it now sits beside the DOC file (below), so a
+    // leftover old-style file must fail loudly with exactly where it belongs
+    // now, rather than silently translating nothing.
+    const oldDocSidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.doc\\.([A-Za-z0-9-]+)\\.md$`, "i");
     for (const name of readdirSync(designDir)) {
-      const m = name.match(docSidecarRe);
+      const m = name.match(oldDocSidecarRe);
       if (!m) continue;
-      const [, infix, tag] = m;
-      // Same rename-hint treatment as the strings-sidecar scan above: a
-      // wrongly-cased 'doc' infix is silently inert on Linux, silently read
-      // on macOS.
-      if (infix !== "doc")
-        throw new Error(
-          `gen-schema: design '${d.id}' doc translation '${relPosix(join(designDir, name))}' has the ` +
-            `wrong case for 'doc' in its filename, but doc sidecar filenames are matched case-sensitively. ` +
-            `Rename it to '${sidecarBase}.doc.${tag}.md'.`
-        );
-      if (LOCALE_TAGS.includes(tag)) continue;
-      const lower = tag.toLowerCase();
-      if (LOCALE_TAGS.includes(lower))
-        throw new Error(
-          `gen-schema: design '${d.id}' doc translation '${relPosix(join(designDir, name))}' names ` +
-            `locale tag '${tag}', but doc sidecar tags are matched case-sensitively. Rename it to ` +
-            `'${sidecarBase}.doc.${lower}.md'.`
-        );
-      throw new Error(
-        `gen-schema: design '${d.id}' doc translation '${relPosix(join(designDir, name))}' names ` +
-          `an unshipped locale tag '${tag}'.\n  Valid tags: ${LOCALE_TAGS.join(", ")}`
-      );
-    }
-    const docLocales = [];
-    for (const tag of LOCALE_TAGS) {
-      const docSidecarRel = d.file.replace(/\.scad$/, `.doc.${tag}.md`);
-      const docSidecarAbs = join(SOURCE, docSidecarRel);
-      if (!existsSync(docSidecarAbs)) continue;
+      const [, tag] = m;
+      const oldRel = relPosix(join(designDir, name));
       if (!doc)
         throw new Error(
-          `gen-schema: '${docSidecarRel}' exists, but design '${d.id}' has no '// @doc' to translate`
+          `gen-schema: '${oldRel}' is named like a doc translation, but design '${d.id}' has no '// @doc' to translate`
         );
-      checkContained(docSidecarAbs, `design '${d.id}' doc translation '${docSidecarRel}'`, relPosix(abs));
-      const name = `${d.id}-doc.${tag}.md`;
-      const dest = join(outScadDir, name);
-      register(dest, `design '${d.id}' doc translation (${tag})`);
-      copyFileSync(docSidecarAbs, dest);
-      docLocales.push(tag);
+      const newRel = relPosix(join(docDir, `${docBase}.${tag}${docExt}`));
+      throw new Error(
+        `gen-schema: design '${d.id}' doc translation '${oldRel}' uses the retired '<design>.doc.<tag>.md' ` +
+          `naming. A doc translation now lives beside the doc file it translates — move it to '${newRel}'.`
+      );
     }
-    docLocales.sort();
+
+    // Per-locale `@doc` translations: `<docbase><tag><ext>` beside the DOC
+    // file itself (not the design's .scad, which may sit elsewhere), the
+    // same tag inserted before the extension that `.strings.<tag>.json` uses
+    // for the .scad and per-locale help Markdown uses for a help tab file —
+    // probe per REGISTRY tag, plus a directory scan for anything shaped like
+    // this design's own doc translation that isn't (wrong case, or an
+    // unshipped tag). No field-level structure to validate (a doc
+    // translation is a whole alternate FILE, not a JSON field). Copied via
+    // register+copyFileSync exactly like the base `doc` above and NEVER
+    // copyAsset, so it stays out of renderHash the same way (pure prose,
+    // cannot affect geometry).
+    let docLocales = [];
+    if (doc) {
+      const docSidecarRe = new RegExp(`^${escapeRegExp(docBase)}\\.([A-Za-z0-9-]+)${escapeRegExp(docExt)}$`, "i");
+      for (const name of readdirSync(docDir)) {
+        const m = name.match(docSidecarRe);
+        if (!m) continue;
+        const [, tag] = m;
+        if (LOCALE_TAGS.includes(tag)) continue;
+        const lower = tag.toLowerCase();
+        if (LOCALE_TAGS.includes(lower))
+          throw new Error(
+            `gen-schema: design '${d.id}' doc translation '${relPosix(join(docDir, name))}' names locale tag ` +
+              `'${tag}', but doc translation tags are matched case-sensitively. Rename it to ` +
+              `'${docBase}.${lower}${docExt}'.`
+          );
+        throw new Error(
+          `gen-schema: design '${d.id}' doc translation '${relPosix(join(docDir, name))}' names an unshipped ` +
+            `locale tag '${tag}'.\n  Valid tags: ${LOCALE_TAGS.join(", ")}`
+        );
+      }
+      for (const tag of LOCALE_TAGS) {
+        const docSidecarAbs = join(docDir, `${docBase}.${tag}${docExt}`);
+        if (!existsSync(docSidecarAbs)) continue;
+        checkContained(
+          docSidecarAbs,
+          `design '${d.id}' doc translation '${relPosix(docSidecarAbs)}'`,
+          relPosix(abs)
+        );
+        const name = `${d.id}-doc.${tag}.md`;
+        const dest = join(outScadDir, name);
+        register(dest, `design '${d.id}' doc translation (${tag})`);
+        copyFileSync(docSidecarAbs, dest);
+        docLocales.push(tag);
+      }
+      docLocales.sort();
+      docDirs.add(docDir);
+    }
 
     // Content-drift WARNING (never an error — see docs/config.md "Keeping
     // translations up to date"): when this design carries a
@@ -1077,12 +1114,12 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       ...(presetImages ? { presetImages } : {}),
       // Only present when at least one parameter carries a `// @review` annotation.
       ...(Object.keys(reviewLabels).length ? { reviewLabels } : {}),
-      // Only present when at least one `<design>.doc.<tag>.md` translation
-      // exists, sorted for a deterministic designs.json. Unlike `stringsByTag`
-      // below, this ships INTO designs.json (src/openscad/types.ts's
-      // `Design.docLocales`): DesignDocModal reads it directly to pick the
-      // active locale's doc URL, so it isn't transient the way a sidecar's
-      // parsed CONTENT is.
+      // Only present when at least one per-locale doc translation exists
+      // (beside the doc file itself, see above), sorted for a deterministic
+      // designs.json. Unlike `stringsByTag` below, this ships INTO
+      // designs.json (src/openscad/types.ts's `Design.docLocales`):
+      // DesignDocModal reads it directly to pick the active locale's doc
+      // URL, so it isn't transient the way a sidecar's parsed CONTENT is.
       ...(docLocales.length ? { docLocales } : {}),
       // Transient (see the sidecar-discovery comment above): read by generate()
       // to build src/generated/i18n/<tag>.json, then stripped before
@@ -1098,15 +1135,15 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     };
   });
 
-  // Orphaned sidecar-shaped files: a `<base>.strings.<tag>.json` (a stamps
+  // Orphaned strings-sidecar files: a `<base>.strings.<tag>.json` (a stamps
   // file's literal "stamps" tag matches the same pattern, see the loop's own
-  // comment above) or a `<base>.doc.<tag>.md` whose base matches no design in
-  // its own directory — most often a design renamed (or removed) without its
-  // old translation following it — is invisible to the per-design scans
-  // above, which only ever look for ITS OWN design's base. Left alone it
-  // translates nothing and fails nothing, silently rotting forever; warn
-  // instead so it gets noticed.
-  const GENERIC_SIDECAR_RE = /^(.+)\.(?:strings\.[A-Za-z0-9-]+\.json|doc\.[A-Za-z0-9-]+\.md)$/i;
+  // comment above) whose base matches no design in its own directory — most
+  // often a design renamed (or removed) without its old translation
+  // following it — is invisible to the per-design scan above, which only
+  // ever looks for ITS OWN design's base. Left alone it translates nothing
+  // and fails nothing, silently rotting forever; warn instead so it gets
+  // noticed.
+  const GENERIC_SIDECAR_RE = /^(.+)\.strings\.[A-Za-z0-9-]+\.json$/i;
   const orphaned = [];
   for (const [dir, bases] of sidecarBasesByDir) {
     for (const name of readdirSync(dir)) {
@@ -1119,6 +1156,37 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     console.warn(
       `gen-schema: ${orphaned.length} design-translation sidecar file(s) match no design in their ` +
         `directory (an orphan left behind by a design rename?), so they translate nothing: ${orphaned.join(", ")}`
+    );
+
+  // Orphaned doc translations: unlike a strings sidecar, `<docbase>.<tag>.md`
+  // carries no infix marking it as translation-shaped, so candidacy is
+  // restricted to a locale-tag-shaped middle segment (case-insensitive
+  // against the registry) — but even that isn't enough on its own: an
+  // unrelated Markdown file can still coincidentally end in `.<tag>.md`
+  // (this repo's own `help-printing.de.md`, an explicit help-tab file, sits
+  // right beside `panel.md`'s live doc). What makes a candidate a genuine
+  // ORPHAN rather than a false hit is that its own base file no longer
+  // exists at all — a doc renamed (or removed) without its translations
+  // following it — so the test is physical presence of `<base>.md` in the
+  // SAME directory listing, not whether any design's '// @doc' currently
+  // points at it (a translation for a base that still exists, live or not,
+  // is never flagged: at worst it's unreferenced, not provably orphaned).
+  const docOrphanRe = new RegExp(`^(.+)\\.(${LOCALE_TAGS.map(escapeRegExp).join("|")})\\.md$`, "i");
+  const orphanedDocs = [];
+  for (const dir of docDirs) {
+    const entries = new Set(readdirSync(dir));
+    for (const name of entries) {
+      const m = name.match(docOrphanRe);
+      if (!m) continue;
+      const [, base] = m;
+      if (entries.has(`${base}.md`)) continue;
+      orphanedDocs.push(relPosix(join(dir, name)));
+    }
+  }
+  if (orphanedDocs.length)
+    console.warn(
+      `gen-schema: ${orphanedDocs.length} doc translation file(s) match no design's current '// @doc' in ` +
+        `their directory (an orphan left behind by a doc rename?), so they translate nothing: ${orphanedDocs.join(", ")}`
     );
 
   return designs;

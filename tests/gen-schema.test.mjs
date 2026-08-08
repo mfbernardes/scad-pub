@@ -5392,12 +5392,56 @@ test("a glob 'assets' entry silently excludes translation sidecars, with a one-t
   assert.ok(hits[0].includes("excluded 1 design-translation sidecar"));
 });
 
+test("a glob 'assets' entry silently excludes a doc translation too (the base doc itself still bundles as a plain asset)", () => {
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-i18n-globasset-doc-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  // Named 'guide.md', not 'd-doc.md': the served base-doc copy is already
+  // 'd-doc.md' (<id>-doc.md for id "d"), and this test also bundles the doc
+  // as a plain asset via the glob below — a same-named source file would
+  // collide with that served copy in outScadDir, which is a real but
+  // unrelated hazard this test isn't about.
+  writeFileSync(join(src, "d.scad"), `// @doc guide.md\n/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "guide.md"), "# D\n\nThe base doc.\n");
+  writeFileSync(join(src, "guide.de.md"), "# D\n\nDie Basisdokumentation.\n");
+  writeFileSync(
+    join(root, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      assets: ["**/*.md"],
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  let schema;
+  try {
+    schema = generate({ ...i18nOutDirs("globasset-doc"), configPath: join(root, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(schema.assets, ["guide.md"]);
+  const hits = warnings.filter((w) => w.includes("guide.de.md"));
+  assert.equal(
+    hits.length,
+    1,
+    `expected exactly one warning naming the doc translation, got: ${JSON.stringify(warnings)}`
+  );
+  assert.ok(hits[0].includes("excluded 1 design-translation sidecar"));
+});
+
 // ── @doc per-locale sidecars, preset-name translation, freshness stamps
 // (Phase 4) ──────────────────────────────────────────────────────────────
 // Isolated throwaway source trees, exactly like the strings-sidecar
 // integration tests above: tests/fixtures/src/ is shared by 70+ configs, so
 // none of this touches it — see that section's own comment for why.
 
+// A translation lives beside the DOC file, not the design: this fixture
+// deliberately gives the doc a different basename ('d-doc.md') than the
+// design ('d.scad') so a test using the design's own basename instead would
+// visibly fail rather than passing by coincidence.
 function docFixtureSrc(prefix) {
   const src = mkdtempSync(join(tmpdir(), `gen-schema-doc-${prefix}-`));
   writeFileSync(join(src, "d.scad"), `// @doc d-doc.md\n/* [Main] */\n// The label.\nlabel = "hi";\n`);
@@ -5409,9 +5453,9 @@ function docFixtureSrc(prefix) {
   return src;
 }
 
-test("docLocales: a '<design>.doc.<tag>.md' sidecar is discovered, copied to '<id>-doc.<tag>.md', and listed sorted", () => {
+test("docLocales: a doc translation beside the doc file is discovered, copied to '<id>-doc.<tag>.md', and listed sorted", () => {
   const src = docFixtureSrc("basic");
-  writeFileSync(join(src, "d.doc.de.md"), "# D\n\nDie Basisdokumentation.\n");
+  writeFileSync(join(src, "d-doc.de.md"), "# D\n\nDie Basisdokumentation.\n");
   const out = mkdtempSync(join(tmpdir(), "gen-schema-doc-basic-out-"));
   const outPublicDir = join(out, "public");
   const schema = generate({
@@ -5430,43 +5474,69 @@ test("docLocales: a '<design>.doc.<tag>.md' sidecar is discovered, copied to '<i
   assert.ok(precache.shell.includes("scad/d-doc.de.md"));
 });
 
-test("docLocales is absent when no doc sidecar exists", () => {
+test("docLocales: a doc translation is found beside the doc file even when the doc lives in its own subdirectory, away from the .scad", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-doc-nested-"));
+  mkdirSync(join(src, "docs", "guides"), { recursive: true });
+  writeFileSync(join(src, "d.scad"), `// @doc docs/guides/d.md\n/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "docs", "guides", "d.md"), "# D\n\nThe base doc.\n");
+  writeFileSync(join(src, "docs", "guides", "d.de.md"), "# D\n\nDie Basisdokumentation.\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-doc-nested-out-"));
+  const outPublicDir = join(out, "public");
+  const schema = generate({
+    configPath: join(src, "c.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(outPublicDir, "scad"),
+    outPublicDir,
+  });
+  const d = schema.designs[0];
+  assert.deepEqual(d.docLocales, ["de"]);
+  assert.equal(
+    readFileSync(join(outPublicDir, "scad", "d-doc.de.md"), "utf-8"),
+    "# D\n\nDie Basisdokumentation.\n"
+  );
+});
+
+test("docLocales is absent when no doc translation exists", () => {
   const src = docFixtureSrc("absent");
   const schema = generate({ ...i18nOutDirs("doc-absent"), configPath: join(src, "c.config.json") });
   assert.equal(schema.designs[0].docLocales, undefined);
 });
 
-test("a doc sidecar naming a wrongly-cased shipped locale fails the build, naming the expected lowercase form", () => {
+test("a doc translation naming a wrongly-cased shipped locale fails the build, naming the expected lowercase form", () => {
   const src = docFixtureSrc("badcase");
-  writeFileSync(join(src, "d.doc.DE.md"), "# D\n");
+  writeFileSync(join(src, "d-doc.DE.md"), "# D\n");
   assert.throws(
     () => generate({ ...i18nOutDirs("doc-badcase"), configPath: join(src, "c.config.json") }),
-    /doc translation 'd\.doc\.DE\.md' names locale tag 'DE', but doc sidecar tags are matched case-sensitively\. Rename it to 'd\.doc\.de\.md'\./
+    /doc translation 'd-doc\.DE\.md' names locale tag 'DE', but doc translation tags are matched case-sensitively\. Rename it to 'd-doc\.de\.md'\./
   );
 });
 
-test("a doc sidecar naming an unshipped locale tag fails the build, listing valid tags", () => {
+test("a doc translation naming an unshipped locale tag fails the build, listing valid tags", () => {
   const src = docFixtureSrc("badtag");
-  writeFileSync(join(src, "d.doc.xx.md"), "# D\n");
+  writeFileSync(join(src, "d-doc.xx.md"), "# D\n");
   assert.throws(
     () => generate({ ...i18nOutDirs("doc-badtag"), configPath: join(src, "c.config.json") }),
     new RegExp(
-      `doc translation 'd\\.doc\\.xx\\.md' names an unshipped locale tag 'xx'.*Valid tags: ${LOCALE_TAGS.join(", ")}`,
+      `doc translation 'd-doc\\.xx\\.md' names an unshipped locale tag 'xx'.*Valid tags: ${LOCALE_TAGS.join(", ")}`,
       "s"
     )
   );
 });
 
-test("a doc sidecar with a wrongly-cased 'doc' infix fails the build, naming the canonical form", () => {
-  const src = docFixtureSrc("badinfix");
-  writeFileSync(join(src, "d.Doc.de.md"), "# D\n");
+test("an old-style '<design>.doc.<tag>.md' translation beside a doc-bearing design fails the build, naming the new location beside the doc file", () => {
+  const src = docFixtureSrc("migrate");
+  writeFileSync(join(src, "d.doc.de.md"), "# D\n");
   assert.throws(
-    () => generate({ ...i18nOutDirs("doc-badinfix"), configPath: join(src, "c.config.json") }),
-    /doc translation 'd\.Doc\.de\.md' has the wrong case for 'doc'.*Rename it to 'd\.doc\.de\.md'\./
+    () => generate({ ...i18nOutDirs("doc-migrate"), configPath: join(src, "c.config.json") }),
+    /doc translation 'd\.doc\.de\.md' uses the retired '<design>\.doc\.<tag>\.md' naming.*move it to 'd-doc\.de\.md'/s
   );
 });
 
-test("a doc sidecar for a design with no '// @doc' fails the build", () => {
+test("an old-style '<design>.doc.<tag>.md' file beside a design with no '// @doc' fails the build", () => {
   const src = mkdtempSync(join(tmpdir(), "gen-schema-doc-nodocbase-"));
   writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
   writeFileSync(join(src, "d.doc.de.md"), "# D\n");
@@ -5476,13 +5546,22 @@ test("a doc sidecar for a design with no '// @doc' fails the build", () => {
   );
   assert.throws(
     () => generate({ ...i18nOutDirs("doc-nodocbase"), configPath: join(src, "c.config.json") }),
-    /'d\.doc\.de\.md' exists, but design 'd' has no '\/\/ @doc' to translate/
+    /'d\.doc\.de\.md' is named like a doc translation, but design 'd' has no '\/\/ @doc' to translate/
   );
 });
 
-test("an orphaned doc-sidecar-shaped file matching no design's basename warns, but does not fail the build", () => {
-  const src = docFixtureSrc("orphan");
-  writeFileSync(join(src, "widget.doc.de.md"), "# Orphan\n");
+test("an orphaned doc translation left behind by a doc rename warns, but does not fail the build", () => {
+  // Simulate the state right after 'd-doc.md' was renamed to 'd-manual.md'
+  // without its German translation following it: the '// @doc' now points
+  // at 'd-manual.md', but 'd-doc.de.md' is still sitting in the directory.
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-doc-orphan-"));
+  writeFileSync(join(src, "d.scad"), `// @doc d-manual.md\n/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d-manual.md"), "# D\n\nThe base doc.\n");
+  writeFileSync(join(src, "d-doc.de.md"), "# Alte Übersetzung\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
   const warnings = [];
   const originalWarn = console.warn;
   console.warn = (msg) => warnings.push(msg);
@@ -5493,19 +5572,21 @@ test("an orphaned doc-sidecar-shaped file matching no design's basename warns, b
     console.warn = originalWarn;
   }
   assert.equal(schema.designs.length, 1);
-  const hits = warnings.filter((w) => w.includes("widget.doc.de.md"));
+  assert.equal(schema.designs[0].docLocales, undefined); // 'd-manual.md' has no translation of its own
+  const hits = warnings.filter((w) => w.includes("d-doc.de.md"));
   assert.equal(hits.length, 1, `expected exactly one orphan warning, got: ${JSON.stringify(warnings)}`);
+  assert.ok(hits[0].includes("match no design's current"));
 });
 
-test("renderHash is identical with and without a design's doc-locale sidecar present", () => {
+test("renderHash is identical with and without a design's doc translation present", () => {
   const src = docFixtureSrc("hash");
   const gen = () => generate({ ...i18nOutDirs("doc-hash"), configPath: join(src, "c.config.json") }).renderHash;
   const without = gen();
-  writeFileSync(join(src, "d.doc.de.md"), "# D\n\nDie Basisdokumentation.\n");
+  writeFileSync(join(src, "d-doc.de.md"), "# D\n\nDie Basisdokumentation.\n");
   const withDoc = gen();
-  rmSync(join(src, "d.doc.de.md"));
+  rmSync(join(src, "d-doc.de.md"));
   const afterRemoval = gen();
-  assert.equal(withDoc, without, "a present doc sidecar must not change renderHash");
+  assert.equal(withDoc, without, "a present doc translation must not change renderHash");
   assert.equal(afterRemoval, without);
 });
 
