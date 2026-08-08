@@ -2161,7 +2161,7 @@ async function checkViewerHudReachable({ browser, base, check }) {
         // green "half" result measured at peek: the failure mode this whole
         // check exists to catch, reported as a pass.
         const reached = await page
-          .waitForSelector(`.bottom-sheet--${detent}`, { timeout: 3000 })
+          .waitForSelector(`.bottom-sheet--${detent}`, { timeout: SHEET_SETTLE_MS })
           .then(() => true)
           .catch(() => false);
         check(reached, `${width}x${height}: sheet reached the ${detent} detent`);
