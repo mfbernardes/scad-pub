@@ -7,6 +7,7 @@
 import type { Param } from "../openscad/types";
 import type { Values } from "./presets";
 import { changedParams, paramLabel } from "./paramDiff";
+import { t, formatNumber } from "./i18n";
 
 export interface RenderMetric {
   ms: number;
@@ -21,9 +22,18 @@ export interface RenderMetrics {
 
 export const emptyMetrics: RenderMetrics = { last: null, slowest: null };
 
-/** "214 ms" under a second, "4.2 s" at or above it. */
+/** "214 ms" under a second, "4.2 s" at or above it. Only feeds the Output
+ *  console's Metrics tab — renderStatus.ts's own "{ms} ms" digits stay raw
+ *  and locale-invariant on purpose, since scripts/smoke.mjs matches them with
+ *  a plain /\d+ ms/ regex. `useGrouping: false`: a duration is a technical
+ *  readout, not prose — formatNumber's default grouping would render a
+ *  4-digit ms count as "1,234 ms". */
 export function formatDuration(ms: number): string {
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+  return ms >= 1000
+    ? t("metrics.durationSeconds", {
+        n: formatNumber(ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }),
+      })
+    : t("metrics.durationMs", { n: formatNumber(Math.round(ms), { useGrouping: false }) });
 }
 
 /**

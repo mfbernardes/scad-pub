@@ -1,0 +1,28 @@
+{
+  "de": {
+    "description": "60488069cc247fa905aacc96a3dc858aff8da8866e21c7788e9aae21a3d38c1b",
+    "doc": "72061adc80e392b421c7a26cc1faf86b4a527e16c2bcef0236ee115b1ff59af6",
+    "params.base_color.description": "5776300505e3322021da8090f52b5d2fd5ba99f5183820b790f4f0f47c4287aa",
+    "params.base_color.help": "5776300505e3322021da8090f52b5d2fd5ba99f5183820b790f4f0f47c4287aa",
+    "params.base_thickness.description": "ed03c05d10a3cfc55a7aee67f4959e4ea6c2c3a369731d95c75ddcae9685eda2",
+    "params.base_thickness.help": "ed03c05d10a3cfc55a7aee67f4959e4ea6c2c3a369731d95c75ddcae9685eda2",
+    "params.corner_radius.description": "7d1c05c1384108716b81e15f3458cf4972053c2278728a37842961afa974ead0",
+    "params.corner_radius.help": "7d1c05c1384108716b81e15f3458cf4972053c2278728a37842961afa974ead0",
+    "params.margin.description": "0bdf086b072ff91895a0d70fc9d7f611734e8d9d2b8a003247dc941a65beef59",
+    "params.margin.help": "0bdf086b072ff91895a0d70fc9d7f611734e8d9d2b8a003247dc941a65beef59",
+    "params.panel_height.description": "9a2d955b80845f23009b88b6a76f7eccb384b9ac7abde79e272b962448d40453",
+    "params.panel_height.help": "9a2d955b80845f23009b88b6a76f7eccb384b9ac7abde79e272b962448d40453",
+    "params.panel_width.description": "e66341e4452a19f01ad5fe6c6fc9b22f43065edf55e26d064e95563cf19b7910",
+    "params.panel_width.help": "e66341e4452a19f01ad5fe6c6fc9b22f43065edf55e26d064e95563cf19b7910",
+    "params.relief_color.description": "393a231b107be87f63bed41043df2fa7e8e0f3d0499afab4322a3fcabe6bd654",
+    "params.relief_color.help": "393a231b107be87f63bed41043df2fa7e8e0f3d0499afab4322a3fcabe6bd654",
+    "params.relief_height.description": "b80d986af7315a690e760c880fb53f1b327c863a347ad3c0764171e28f6233ed",
+    "params.relief_height.help": "b80d986af7315a690e760c880fb53f1b327c863a347ad3c0764171e28f6233ed",
+    "params.svg_file.description": "920cfa0fb5d40d8264f530f0b4b45db45b37a0cbb34bb72fc27880de1e89a4dd",
+    "params.svg_file.help": "facb915a3814cafa3a1da729fb8ee60abd710dd8624d9fb95c886f69c5eb542b",
+    "params.svg_layers.description": "de9f654f7db2c3b9f790eb565f26bd8674283cb9fc2085a6c913d215adf4e426",
+    "params.svg_layers.help": "8105a08b85b72bb150a27516b39ba3f683bd29112ad0cc8532dcde386057a8e2",
+    "sections.Panel": "d0d91173008b6f839a8380e77582a9072bef1d0971459683f35ca072792818f5",
+    "sections.SVG source": "b2f2e4afa54ef1d847064afb653ef6db798a42f222307f1a856d03303f631f14"
+  }
+}

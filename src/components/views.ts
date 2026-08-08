@@ -15,18 +15,20 @@ export type ViewName =
 
 export interface ViewOption {
   id: ViewName;
-  label: string;
+  /** Catalogue key, resolved via `t()` at render (see CLAUDE.md: an
+   *  indirection table stores keys, never resolved text). */
+  labelKey: string;
 }
 
 // Order shown in the picker dropdown.
 export const VIEW_OPTIONS: ViewOption[] = [
-  { id: "isometric", label: "Isometric" },
-  { id: "top", label: "Top" },
-  { id: "bottom", label: "Bottom" },
-  { id: "front", label: "Front" },
-  { id: "back", label: "Back" },
-  { id: "left", label: "Left" },
-  { id: "right", label: "Right" },
+  { id: "isometric", labelKey: "views.isometric" },
+  { id: "top", labelKey: "views.top" },
+  { id: "bottom", labelKey: "views.bottom" },
+  { id: "front", labelKey: "views.front" },
+  { id: "back", labelKey: "views.back" },
+  { id: "left", labelKey: "views.left" },
+  { id: "right", labelKey: "views.right" },
 ];
 
 // Unit-ish direction from the model centre to the camera for each preset. The

@@ -29,21 +29,35 @@ import {
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { WASM_VERSION } from "./wasm-version.mjs";
 import { computeRenderHash, computeBinAssetVersions } from "./lib/hash.mjs";
 import { fontFaces, fontFamilyNames, parseFontFallback, renderFontsConf } from "./lib/fonts.mjs";
 import { humanize, parseParams } from "./lib/params.mjs";
 import { createAssetTools } from "./lib/assets.mjs";
+import { parseDesignStrings } from "./lib/design-strings.mjs";
+import {
+  parseTextKey,
+  loadTextFiles,
+  foldConfigText,
+  textDrift,
+  textStampsPath,
+} from "./lib/config-text.mjs";
+import { translatableFields, driftFields, sha256Hex } from "./lib/i18n-coverage.mjs";
 import { createDestinationRegistry, reconcileGenerated } from "./lib/destinations.mjs";
 import { sanitizeBrowserFacingSvg } from "./lib/svg-sanitize.mjs";
 import { resolveFileField } from "./lib/prose-files.mjs";
 import { splitHelpMarkdown } from "./lib/help-file.mjs";
-import { checkHelpShape } from "../src/lib/helpShape.mjs";
+import { checkHelpShape, OVERVIEW_TAB_ID } from "../src/lib/helpShape.mjs";
 // TypeScript, imported directly: Node strips the types (the repo already
 // requires that, see CLAUDE.md), and schema.ts's only value import is
 // helpShape.mjs, so no app code is dragged into the build script.
 import { validateSchema } from "../src/lib/schema.ts";
+// Data-only (no JSON, no React): the registry of locales ScadPub ships chrome
+// translations for, imported directly under Node's type stripping, the same
+// as src/lib/schema.ts above. `LOCALE_TAGS` feeds parseLanguages's
+// `registryTags` argument (see parseIdentity below).
+import { LOCALE_TAGS } from "../src/lib/localeRegistry.ts";
 import { slugifyPresetNames } from "./lib/preset-slug.mjs";
 import { resolveWorkerDependencyClosure } from "./lib/worker-deps.mjs";
 import { generatePwaAssets, commitPwaBatch } from "./lib/pwa-assets.mjs";
@@ -57,7 +71,9 @@ import {
   parseFileImport,
   parseFormat,
   parseLang,
+  parseLanguages,
   parseLicenses,
+  parseLocalizableText,
   parseNotices,
   parsePopup,
   parsePwa,
@@ -81,7 +97,9 @@ export {
   parseFileImport,
   parseFormat,
   parseLang,
+  parseLanguages,
   parseLicenses,
+  parseLocalizableText,
   parseNotices,
   parsePopup,
   parsePwa,
@@ -96,6 +114,25 @@ export { parseFontFallback, renderFontsConf, fontFamilyNames } from "./lib/fonts
 export { firstSentence, parseEnumHint, parseParams } from "./lib/params.mjs";
 export { resolveFileField } from "./lib/prose-files.mjs";
 export { splitHelpMarkdown } from "./lib/help-file.mjs";
+export { parseDesignStrings } from "./lib/design-strings.mjs";
+export {
+  parseTextKey,
+  loadTextFiles,
+  foldConfigText,
+  flattenTextLeaves,
+  configTextCoverage,
+  computeTextStamps,
+  textDrift,
+  textStampsPath,
+} from "./lib/config-text.mjs";
+
+// Re-exported so scripts/i18n-status.mjs can drive the SAME config-loading
+// and design-parsing steps generate() itself uses, rather than re-implementing
+// any part of them: see that script's own doc for why it needs the pre-strip
+// per-design shape (`stringsByTag`/`presetNames`/`docAbs`) buildDesigns
+// produces, which designs.json's own generate() output no longer carries once
+// assembleSchema strips it.
+export { loadConfig, parseIdentity, makeMustExist, buildDesigns };
 
 // Every top-level key gen-schema (or its helpers) reads from scadpub.config.json,
 // derived from scripts/lib/config-spec.mjs rather than hand-maintained here. A
@@ -168,6 +205,11 @@ export const extOf = (relPath) => {
   return /^\.[A-Za-z0-9]+$/.test(ext) ? ext : "";
 };
 
+// Escape a literal string for embedding in a RegExp — used to build a
+// design's own translation-sidecar filename pattern (buildDesigns) from its
+// basename, which is arbitrary user-chosen text, not itself regex-safe.
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // Load + sanity-check the config. Catches genuinely typo'd / stale top-level
 // keys: a whole-key typo would otherwise be silently ignored (see
 // KNOWN_TOP_LEVEL_KEYS).
@@ -201,7 +243,13 @@ function parseIdentity(config) {
   // to interpolate into the generated <html lang dir> attributes and the manifest.
   const LANG = parseLang(config.lang);
   const DIR = parseDir(config.dir);
-  return { TITLE, ID, DESCRIPTION, LANG, DIR };
+  // Which shipped chrome locales this deployment's language switcher offers
+  // (config's `languages` key); computed alongside LANG since parseLanguages
+  // needs it to resolve the default-locale rules described in its own
+  // comment (scripts/lib/config-parsers.mjs). Always resolves to a
+  // non-empty array, unlike most optional fields here.
+  const LANGUAGES = parseLanguages(config.languages, LOCALE_TAGS, LANG);
+  return { TITLE, ID, DESCRIPTION, LANG, DIR, LANGUAGES };
 }
 
 // Fonts are referenced by basename under /fonts. An entry is either a font
@@ -497,7 +545,28 @@ const checkScadFile = (file, id) => {
 };
 
 // The design list from the config, or auto-discovered root .scad files.
-function resolveDesignList(config, SOURCE) {
+// `group`'s pre-LocalizableText behaviour was permissive by design: any
+// non-string value (or a blank/whitespace-only string) silently collapsed to
+// `null` (unset) rather than failing the build — the same "a malformed
+// optional value quietly becomes absent" leniency `collapseEmptyToNull`
+// gives an empty tuning object elsewhere in this config (see
+// config-spec.mjs's file-top comment). Restored here for the plain-string
+// form specifically, so an existing config's `group` still behaves
+// identically. The new OBJECT (LocalizableText map) form has no back-compat
+// history to preserve — it's validated strictly through
+// `parseLocalizableText`, same as every other localizable field, so a
+// genuinely malformed map (a locale outside `languages`, a missing default
+// tag, a non-string entry) still fails the build rather than silently
+// disappearing.
+function parseGroupLocalizable(raw, id, languages, defaultTag) {
+  if (raw == null) return null;
+  if (typeof raw === "string") return raw.trim() ? raw.trim() : null;
+  if (typeof raw === "object" && !Array.isArray(raw))
+    return parseLocalizableText(raw, `designs[${id}].group`, languages, defaultTag);
+  return null;
+}
+
+function resolveDesignList(config, SOURCE, languages, defaultTag) {
   // Shared validator for a config `designs[].presets.images` map entry: an
   // object mapping string keys to non-empty string values. The per-key
   // cross-check (real bundled preset names) happens later in buildDesigns,
@@ -574,12 +643,12 @@ function resolveDesignList(config, SOURCE) {
       applyGroupSpec(d.presets ?? {}, CONFIG_SPEC.designs.items.properties.presets, `designs[${id}].presets`);
       return {
         id,
-        label: d.label ?? humanize(d.id),
+        label: d.label != null ? parseLocalizableText(d.label, `designs[${id}].label`, languages, defaultTag) : humanize(d.id),
         file: checkScadFile(d.file ?? `${d.id}.scad`, id),
         // Heavy designs skip the debounced auto-render (the user renders on demand).
         heavy: d.heavy ?? false,
         // Optional dropdown grouping header (designs sharing a group cluster).
-        group: typeof d.group === "string" && d.group.trim() ? d.group.trim() : null,
+        group: parseGroupLocalizable(d.group, id, languages, defaultTag),
         presetImagesSrc: checkPresetImages(d.presets?.images, id),
       };
     });
@@ -691,8 +760,13 @@ function resolvePresetImages({
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
-function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register }) {
-  return resolveDesignList(config, SOURCE).map(({ presetImagesSrc, ...d }) => {
+function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register, languages, defaultTag }) {
+  // designDir -> Set of every design's sidecar base seen in that directory,
+  // collected below as each design is processed; used after the .map() to
+  // find sidecar-SHAPED files that match no design at all (see the orphan
+  // scan below).
+  const sidecarBasesByDir = new Map();
+  const designs = resolveDesignList(config, SOURCE, languages, defaultTag).map(({ presetImagesSrc, ...d }) => {
     const abs = mustExist(join(SOURCE, d.file), `design '${d.id}' source file '${d.file}'`);
     checkContained(abs, `design '${d.id}' source file '${d.file}'`, `design '${d.id}' config entry`);
     const { params, sections, collapsedSections, meta } = parseParams(abs);
@@ -749,13 +823,14 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // modal. Pure prose, so it's excluded from renderHash (it can't affect
     // geometry).
     let doc = null;
+    let docAbs = null;
     if (meta.doc) {
-      const src = mustExist(resolve(dirname(abs), meta.doc), `design '${d.id}' doc '${meta.doc}'`);
-      checkContained(src, `design '${d.id}' doc '${meta.doc}'`, relPosix(abs));
+      docAbs = mustExist(resolve(dirname(abs), meta.doc), `design '${d.id}' doc '${meta.doc}'`);
+      checkContained(docAbs, `design '${d.id}' doc '${meta.doc}'`, relPosix(abs));
       const name = `${d.id}-doc.md`;
       const dest = join(outScadDir, name);
       register(dest, `design '${d.id}' doc`);
-      copyFileSync(src, dest);
+      copyFileSync(docAbs, dest);
       doc = `scad/${name}`;
     }
     const presetNames = presets.length ? readPresetNames(presetAbs, presetRel, d.id) : [];
@@ -781,6 +856,202 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // `reviewNote`: the design's own file-level `// @reviewNote "<text>"`
     // annotation. The sole source now, with no config-level override left.
     const reviewNote = meta.reviewNote ?? null;
+
+    // Design-translation sidecars: `<design>.strings.<tag>.json` beside the
+    // design's own .scad (docs/config.md "Design translations"), the same
+    // sibling-file idiom as the parameterSets `.json` above. Two passes: probe
+    // each REGISTRY tag's exact filename directly (the file a translation for
+    // a locale ScadPub actually ships would be named), then separately scan
+    // the whole directory for anything else shaped like a sidecar — a typo'd
+    // tag (`widget.strings.dee.json`) matches no registry probe and would
+    // otherwise sit there silently forever, translating nothing and telling no
+    // one. Never copyAsset/register'd: a sidecar must never reach
+    // public/scad/ or renderHash, so parsing is the only thing that happens
+    // to it here; `stringsByTag` is a transient field generate() reads to
+    // build src/generated/i18n/<tag>.json, then strips before assembleSchema
+    // (see its own `designs.map` at the end of this file).
+    const designDir = dirname(abs);
+    const sidecarBase = basename(d.file).replace(/\.scad$/, "");
+    if (!sidecarBasesByDir.has(designDir)) sidecarBasesByDir.set(designDir, new Set());
+    sidecarBasesByDir.get(designDir).add(sidecarBase);
+    // Case-insensitive: a macOS/Windows filesystem resolves `widget.strings.de.json`
+    // and `widget.Strings.DE.json` to the same file, so the exact-case probe
+    // below (`sidecarAbs`) would happily load a wrongly-cased sidecar on those
+    // filesystems while this scan, if case-sensitive, stayed blind to it —
+    // the file would silently take effect without ever being caught as
+    // misnamed. Matching case-insensitively here means every such file is at
+    // least SEEN; the tag-case check right below decides whether to accept or
+    // reject it.
+    const sidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.(strings)\\.([A-Za-z0-9-]+)\\.json$`, "i");
+    for (const name of readdirSync(designDir)) {
+      const m = name.match(sidecarRe);
+      if (!m) continue;
+      const [, infix, tag] = m;
+      // The `i` flag above catches the file at all regardless of case; a
+      // wrongly-cased `strings` infix (`.Strings.`/`.STRINGS.`) would
+      // otherwise pass every check below unnoticed — matched here, but
+      // loaded by the per-tag probe further down via an exact-case path
+      // that only a case-INsensitive filesystem (macOS) resolves to it. On
+      // Linux it stays silently inert instead. Reject it the same way as a
+      // wrongly-cased tag.
+      if (infix !== "strings")
+        throw new Error(
+          `gen-schema: design '${d.id}' translation sidecar '${relPosix(join(designDir, name))}' has the ` +
+            `wrong case for 'strings' in its filename, but sidecar filenames are matched case-sensitively. ` +
+            `Rename it to '${sidecarBase}.strings.${tag}.json'.`
+        );
+      // `<base>.strings.stamps.json` (the i18n:status freshness-stamp file,
+      // see scripts/i18n-status.mjs) is sidecar-SHAPED but not a locale
+      // sidecar at all: "stamps" would otherwise match this loop's tag
+      // capture and get rejected as an unshipped locale. It's handled
+      // (parsed for drift warnings) separately below, never through this scan
+      // — but a wrongly-cased 'stamps' is caught here for the same reason as
+      // the 'strings' infix above.
+      if (tag.toLowerCase() === "stamps") {
+        if (tag !== "stamps")
+          throw new Error(
+            `gen-schema: design '${d.id}' translation sidecar '${relPosix(join(designDir, name))}' has the ` +
+              `wrong case for 'stamps' in its filename, but sidecar filenames are matched case-sensitively. ` +
+              `Rename it to '${sidecarBase}.strings.stamps.json'.`
+          );
+        continue;
+      }
+      if (LOCALE_TAGS.includes(tag)) continue;
+      const lower = tag.toLowerCase();
+      if (LOCALE_TAGS.includes(lower))
+        throw new Error(
+          `gen-schema: design '${d.id}' translation sidecar '${relPosix(join(designDir, name))}' names ` +
+            `locale tag '${tag}', but sidecar tags are matched case-sensitively. Rename it to ` +
+            `'${sidecarBase}.strings.${lower}.json'.`
+        );
+      throw new Error(
+        `gen-schema: design '${d.id}' translation sidecar '${relPosix(join(designDir, name))}' names ` +
+          `an unshipped locale tag '${tag}'.\n  Valid tags: ${LOCALE_TAGS.join(", ")}`
+      );
+    }
+    const sidecarCtxParams = params.map((p) => ({
+      name: p.name,
+      choices: p.type === "enum" ? p.choices.map((c) => c.value) : null,
+      hasInfo: p.info != null,
+    }));
+    const stringsByTag = {};
+    for (const tag of LOCALE_TAGS) {
+      const sidecarRel = d.file.replace(/\.scad$/, `.strings.${tag}.json`);
+      const sidecarAbs = join(SOURCE, sidecarRel);
+      if (!existsSync(sidecarAbs)) continue;
+      checkContained(sidecarAbs, `design '${d.id}' translation sidecar '${sidecarRel}'`, relPosix(abs));
+      let json;
+      try {
+        json = JSON.parse(readFileSync(sidecarAbs, "utf-8"));
+      } catch (err) {
+        throw new Error(
+          `gen-schema: '${sidecarRel}' is not valid JSON:\n  ${err.message}`,
+          { cause: err }
+        );
+      }
+      stringsByTag[tag] = parseDesignStrings(json, {
+        file: sidecarRel,
+        designId: d.id,
+        params: sidecarCtxParams,
+        sections,
+        hasDescription: meta.description != null,
+        reviewLabels: new Set(Object.keys(reviewLabels)),
+        hasReviewNote: reviewNote != null,
+        presetNames,
+      });
+    }
+
+    // Per-locale `@doc` translations: `<design>.doc.<tag>.md` beside the
+    // design's own .scad, mirroring the `.strings.<tag>.json` mechanics just
+    // above — probe per REGISTRY tag, plus a directory scan for anything
+    // doc-sidecar-SHAPED that isn't (wrong case, or an unshipped tag) — but
+    // for a whole alternate FILE rather than a JSON field, since a doc
+    // translation has no field-level structure design-strings.mjs could
+    // validate. Copied via register+copyFileSync exactly like the base `doc`
+    // above and NEVER copyAsset, so it stays out of renderHash the same way
+    // (pure prose, cannot affect geometry).
+    const docSidecarRe = new RegExp(`^${escapeRegExp(sidecarBase)}\\.(doc)\\.([A-Za-z0-9-]+)\\.md$`, "i");
+    for (const name of readdirSync(designDir)) {
+      const m = name.match(docSidecarRe);
+      if (!m) continue;
+      const [, infix, tag] = m;
+      // Same rename-hint treatment as the strings-sidecar scan above: a
+      // wrongly-cased 'doc' infix is silently inert on Linux, silently read
+      // on macOS.
+      if (infix !== "doc")
+        throw new Error(
+          `gen-schema: design '${d.id}' doc translation '${relPosix(join(designDir, name))}' has the ` +
+            `wrong case for 'doc' in its filename, but doc sidecar filenames are matched case-sensitively. ` +
+            `Rename it to '${sidecarBase}.doc.${tag}.md'.`
+        );
+      if (LOCALE_TAGS.includes(tag)) continue;
+      const lower = tag.toLowerCase();
+      if (LOCALE_TAGS.includes(lower))
+        throw new Error(
+          `gen-schema: design '${d.id}' doc translation '${relPosix(join(designDir, name))}' names ` +
+            `locale tag '${tag}', but doc sidecar tags are matched case-sensitively. Rename it to ` +
+            `'${sidecarBase}.doc.${lower}.md'.`
+        );
+      throw new Error(
+        `gen-schema: design '${d.id}' doc translation '${relPosix(join(designDir, name))}' names ` +
+          `an unshipped locale tag '${tag}'.\n  Valid tags: ${LOCALE_TAGS.join(", ")}`
+      );
+    }
+    const docLocales = [];
+    for (const tag of LOCALE_TAGS) {
+      const docSidecarRel = d.file.replace(/\.scad$/, `.doc.${tag}.md`);
+      const docSidecarAbs = join(SOURCE, docSidecarRel);
+      if (!existsSync(docSidecarAbs)) continue;
+      if (!doc)
+        throw new Error(
+          `gen-schema: '${docSidecarRel}' exists, but design '${d.id}' has no '// @doc' to translate`
+        );
+      checkContained(docSidecarAbs, `design '${d.id}' doc translation '${docSidecarRel}'`, relPosix(abs));
+      const name = `${d.id}-doc.${tag}.md`;
+      const dest = join(outScadDir, name);
+      register(dest, `design '${d.id}' doc translation (${tag})`);
+      copyFileSync(docSidecarAbs, dest);
+      docLocales.push(tag);
+    }
+    docLocales.sort();
+
+    // Content-drift WARNING (never an error — see docs/config.md "Keeping
+    // translations up to date"): when this design carries a
+    // `<base>.strings.stamps.json` (written by `npm run i18n:status --
+    // stamp`, never by hand), compare each stamped field's recorded hash
+    // against its CURRENT authored-source hash. A mismatch means the source
+    // text moved since the translation was stamped, so the existing
+    // translation may no longer match it. No stamps file -> no opinion.
+    const stampsAbs = join(designDir, `${sidecarBase}.strings.stamps.json`);
+    if (existsSync(stampsAbs)) {
+      let stampsJson;
+      try {
+        stampsJson = JSON.parse(readFileSync(stampsAbs, "utf-8"));
+      } catch (err) {
+        throw new Error(
+          `gen-schema: '${relPosix(stampsAbs)}' is not valid JSON:\n  ${err.message}`,
+          { cause: err }
+        );
+      }
+      const docHash = docAbs ? sha256Hex(readFileSync(docAbs, "utf-8")) : undefined;
+      const fields = translatableFields({
+        description,
+        sections,
+        params,
+        reviewLabels,
+        reviewNote,
+        presetNames,
+        docSourceText: docAbs ? readFileSync(docAbs, "utf-8") : null,
+      });
+      for (const [tag, tagStamps] of Object.entries(stampsJson)) {
+        for (const path of driftFields(fields, tagStamps, docHash)) {
+          console.warn(
+            `gen-schema: ${tag} translation of ${path} may be stale (source changed since it was stamped)`
+          );
+        }
+      }
+    }
+
     // Strip the transient `reviewLabel` annotation flag off each param before
     // it reaches designs.json: it's already folded into `reviewLabels` above,
     // and src/openscad/types.ts's ParamBase carries no such field. That's
@@ -806,8 +1077,51 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       ...(presetImages ? { presetImages } : {}),
       // Only present when at least one parameter carries a `// @review` annotation.
       ...(Object.keys(reviewLabels).length ? { reviewLabels } : {}),
+      // Only present when at least one `<design>.doc.<tag>.md` translation
+      // exists, sorted for a deterministic designs.json. Unlike `stringsByTag`
+      // below, this ships INTO designs.json (src/openscad/types.ts's
+      // `Design.docLocales`): DesignDocModal reads it directly to pick the
+      // active locale's doc URL, so it isn't transient the way a sidecar's
+      // parsed CONTENT is.
+      ...(docLocales.length ? { docLocales } : {}),
+      // Transient (see the sidecar-discovery comment above): read by generate()
+      // to build src/generated/i18n/<tag>.json, then stripped before
+      // assembleSchema — never reaches designs.json.
+      ...(Object.keys(stringsByTag).length ? { stringsByTag } : {}),
+      // Transient, like `stringsByTag`: this design's bundled-preset NAMES and
+      // its base `@doc` file's absolute path (or null), read by
+      // scripts/i18n-status.mjs (via this same `buildDesigns`) to compute
+      // translation coverage/drift without re-deriving either. Never reaches
+      // designs.json.
+      presetNames,
+      docAbs,
     };
   });
+
+  // Orphaned sidecar-shaped files: a `<base>.strings.<tag>.json` (a stamps
+  // file's literal "stamps" tag matches the same pattern, see the loop's own
+  // comment above) or a `<base>.doc.<tag>.md` whose base matches no design in
+  // its own directory — most often a design renamed (or removed) without its
+  // old translation following it — is invisible to the per-design scans
+  // above, which only ever look for ITS OWN design's base. Left alone it
+  // translates nothing and fails nothing, silently rotting forever; warn
+  // instead so it gets noticed.
+  const GENERIC_SIDECAR_RE = /^(.+)\.(?:strings\.[A-Za-z0-9-]+\.json|doc\.[A-Za-z0-9-]+\.md)$/i;
+  const orphaned = [];
+  for (const [dir, bases] of sidecarBasesByDir) {
+    for (const name of readdirSync(dir)) {
+      const m = name.match(GENERIC_SIDECAR_RE);
+      if (!m || bases.has(m[1])) continue;
+      orphaned.push(relPosix(join(dir, name)));
+    }
+  }
+  if (orphaned.length)
+    console.warn(
+      `gen-schema: ${orphaned.length} design-translation sidecar file(s) match no design in their ` +
+        `directory (an orphan left behind by a design rename?), so they translate nothing: ${orphaned.join(", ")}`
+    );
+
+  return designs;
 }
 
 // Optional default design shown when a visit carries no `#d=` deep link. Must
@@ -896,31 +1210,129 @@ function checkAssetCoverage(designs, walkedByDesign, assets) {
 // `intro`, and each `##` heading after that becomes a `{ title, body }`
 // section. Setting `file` alongside `sections` or `intro` fails the build,
 // naming both keys. A pane with no `file` passes through unchanged.
-function resolveHelpPane(raw, CONFIG_DIR, mustExist, what) {
+//
+// `file` also accepts an object of locale tag -> path (when `languages` is
+// passed): each locale's file is split independently, then stitched into
+// `LocalizableText` `intro`/`sections[].title`/`sections[].body` values — one
+// map entry per locale that supplied a file. Every locale's file must split
+// into the SAME NUMBER of `##` sections, in the same order, so a section's
+// per-locale title/body line up positionally; a locale's own missing intro
+// (nothing before its first `##`) only survives into the map when the
+// DEFAULT locale's file has one too (see the comment at that check) — the
+// simplest rule that keeps `intro`'s object form satisfying
+// `parseLocalizableText`'s own "must include defaultTag" invariant without
+// forcing every locale to write introductory prose.
+function resolveHelpPane(raw, CONFIG_DIR, mustExist, what, languages, defaultTag) {
   if (raw?.file == null) return raw;
-  // Validate BEFORE resolving: same shape as prose-files.mjs's resolveFileField
-  // (this is the same "<field>File" idiom, but with `sections` synthesized
-  // from Markdown instead of a single string). A non-string or blank value
-  // must fail with the usual optional-string message, not escape as a raw
-  // Node TypeError out of node:path's resolve() below.
-  if (typeof raw.file !== "string" || !raw.file.trim())
-    throw optionalStringFieldError(`${what}.file`);
-  const file = raw.file.trim();
+  const fileVal = raw.file;
   if (raw.sections != null)
     throw new Error(`gen-schema: both '${what}.sections' and '${what}.file' are set — remove one.`);
   if (raw.intro != null)
     throw new Error(`gen-schema: both '${what}.intro' and '${what}.file' are set — remove one.`);
-  const abs = mustExist(resolve(CONFIG_DIR, file), `${what}.file '${file}'`);
-  const { intro, sections } = splitHelpMarkdown(readFileSync(abs, "utf-8"));
+
+  const readAndSplit = (rel, errPath) => {
+    // Validate BEFORE resolving: same shape as prose-files.mjs's
+    // resolveFileField. A non-string or blank value must fail with the usual
+    // optional-string message, not escape as a raw Node TypeError out of
+    // node:path's resolve() below.
+    if (typeof rel !== "string" || !rel.trim()) throw optionalStringFieldError(errPath);
+    const file = rel.trim();
+    const abs = mustExist(resolve(CONFIG_DIR, file), `${errPath} '${file}'`);
+    return splitHelpMarkdown(readFileSync(abs, "utf-8"));
+  };
+
   const { file: _file, ...rest } = raw;
-  return { ...rest, ...(intro ? { intro } : {}), sections };
+
+  if (typeof fileVal === "string") {
+    const { intro, sections } = readAndSplit(fileVal, `${what}.file`);
+    return { ...rest, ...(intro ? { intro } : {}), sections };
+  }
+  if (fileVal && typeof fileVal === "object" && !Array.isArray(fileVal)) {
+    if (!languages)
+      throw new Error(
+        `gen-schema: '${what}.file' must be a file path (this field doesn't support per-locale forms)`
+      );
+    const entries = Object.entries(fileVal);
+    if (entries.length === 0)
+      throw new Error(`gen-schema: '${what}.file' must have at least one locale entry`);
+    const tags = new Set(languages);
+    const perTag = {};
+    for (const [tag, rel] of entries) {
+      if (!tags.has(tag))
+        throw new Error(
+          `gen-schema: '${what}.file' has an entry for locale "${tag}", which isn't one of this ` +
+            `deployment's enabled locales.\n  Valid tags: ${[...tags].join(", ")}`
+        );
+      perTag[tag] = readAndSplit(rel, `${what}.file.${tag}`);
+    }
+    if (!(defaultTag in perTag))
+      throw new Error(
+        `gen-schema: '${what}.file' must include an entry for "${defaultTag}", this deployment's default locale`
+      );
+    const tagList = Object.keys(perTag);
+    const sectionCount = perTag[defaultTag].sections.length;
+    for (const tag of tagList) {
+      if (perTag[tag].sections.length !== sectionCount)
+        throw new Error(
+          `gen-schema: '${what}.file' locale "${tag}" splits into ${perTag[tag].sections.length} section(s) ` +
+            `from its '##' headings, but "${defaultTag}" splits into ${sectionCount} — every locale's file ` +
+            `must split into the same number of sections, in the same order`
+        );
+    }
+    const intro = perTag[defaultTag].intro
+      ? Object.fromEntries(tagList.filter((tag) => perTag[tag].intro).map((tag) => [tag, perTag[tag].intro]))
+      : null;
+    const sections = Array.from({ length: sectionCount }, (_, i) => ({
+      title: Object.fromEntries(tagList.map((tag) => [tag, perTag[tag].sections[i].title])),
+      body: Object.fromEntries(tagList.map((tag) => [tag, perTag[tag].sections[i].body])),
+    }));
+    return { ...rest, ...(intro ? { intro } : {}), sections };
+  }
+  throw optionalStringFieldError(`${what}.file`);
+}
+
+// Apply the build-only `LocalizableText` invariants (an object-form value's
+// tags must be ⊆ `languages` and include `defaultTag`; see
+// `parseLocalizableText`) to every leaf `resolveHelp`'s loose `checkHelpShape`
+// pass already confirmed is string-or-locale-map-shaped, and trims each. Runs
+// AFTER checkHelpShape (see `resolveHelp`) so a structurally malformed `help`
+// (missing sections, a non-object tab, …) still gets checkHelpShape's own
+// message rather than a confusing one from here.
+function localizeHelpSection(s, what, languages, defaultTag) {
+  return {
+    title: parseLocalizableText(s.title, `${what}.title`, languages, defaultTag, { required: true }),
+    body: parseLocalizableText(s.body, `${what}.body`, languages, defaultTag, { required: true }),
+  };
+}
+
+function localizeHelpContent(help, languages, defaultTag) {
+  const out = { ...help };
+  if (out.title !== undefined) out.title = parseLocalizableText(out.title, "help.title", languages, defaultTag);
+  if (out.intro !== undefined) out.intro = parseLocalizableText(out.intro, "help.intro", languages, defaultTag);
+  if (Array.isArray(out.sections))
+    out.sections = out.sections.map((s, i) =>
+      localizeHelpSection(s, `help.sections[${i}]`, languages, defaultTag)
+    );
+  if (Array.isArray(out.tabs))
+    out.tabs = out.tabs.map((tab, i) => {
+      const what = `help.tabs[${i}]`;
+      const t = {
+        ...tab,
+        label: parseLocalizableText(tab.label, `${what}.label`, languages, defaultTag, { required: true }),
+      };
+      if (t.intro !== undefined) t.intro = parseLocalizableText(t.intro, `${what}.intro`, languages, defaultTag);
+      t.sections = t.sections.map((s, j) => localizeHelpSection(s, `${what}.sections[${j}]`, languages, defaultTag));
+      return t;
+    });
+  return out;
 }
 
 // Optional `help` config block, with any `file` (top-level, or per-tab)
 // resolved to its derived `intro`/`sections` first, see resolveHelpPane
 // above. Everything else about `help` is passed through verbatim (see
-// CONFIG_SPEC.help's comment): this is the only pre-processing it gets.
-export function resolveHelp(raw, CONFIG_DIR, mustExist) {
+// CONFIG_SPEC.help's comment) apart from the `LocalizableText` normalisation
+// `localizeHelpContent` applies at the end.
+export function resolveHelp(raw, CONFIG_DIR, mustExist, languages, defaultTag) {
   if (raw == null) return null;
   // `help`'s contents are passed through verbatim (see CONFIG_SPEC.help's
   // comment), but its SHAPE is checked here like every other block: a
@@ -931,7 +1343,7 @@ export function resolveHelp(raw, CONFIG_DIR, mustExist) {
     throw new Error(
       `gen-schema: 'help', when set, must be an object (got ${JSON.stringify(raw)})`
     );
-  const help = resolveHelpPane(raw, CONFIG_DIR, mustExist, "help");
+  const help = resolveHelpPane(raw, CONFIG_DIR, mustExist, "help", languages, defaultTag);
   const resolved = Array.isArray(help.tabs)
     ? {
         ...help,
@@ -940,7 +1352,7 @@ export function resolveHelp(raw, CONFIG_DIR, mustExist) {
             throw new Error(
               `gen-schema: 'help.tabs[${i}]' must be an object (got ${JSON.stringify(tab)})`
             );
-          return resolveHelpPane(tab, CONFIG_DIR, mustExist, `help.tabs[${i}]`);
+          return resolveHelpPane(tab, CONFIG_DIR, mustExist, `help.tabs[${i}]`, languages, defaultTag);
         }),
       }
     : help;
@@ -955,7 +1367,7 @@ export function resolveHelp(raw, CONFIG_DIR, mustExist) {
       `gen-schema: ${msg}\n  (the app rejects this at startup, so it would fail the deployed site)`
     );
   });
-  return resolved;
+  return localizeHelpContent(resolved, languages, defaultTag);
 }
 
 // Optional raw-CSS escape hatch. Unlike `colors` — a safe, validated token map
@@ -1023,6 +1435,11 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
     for (const preset of d.presets) shell.add(`scad/${preset}`);
     if (d.icon) shell.add(d.icon);
     if (d.doc) shell.add(d.doc);
+    // Per-locale `@doc` translations (docLocales), same offline reasoning as
+    // the base doc above: DesignDocModal fetches `<id>-doc.<tag>.md` on
+    // demand, so a visitor who installed the app before opening it in that
+    // locale would otherwise see it fail offline.
+    for (const tag of d.docLocales ?? []) shell.add(`scad/${d.id}-doc.${tag}.md`);
     // The gallery's artwork and the preset cards' thumbnails: a deployment
     // using either renders a broken screen offline without them, exactly like
     // a missing icon.
@@ -1097,7 +1514,13 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
 // annotation, whose resolved Markdown IS served as a file).
 //
 // Mutates `config` in place, which is what the parsers downstream read.
-function resolveProseFields(config, CONFIG_DIR, mustExist) {
+// `languages`/`defaultTag` (this deployment's resolved locale set — see
+// parseIdentity, which MUST run before this: that's why generate() resolves
+// identity first) let `popup.bodyFile`/`fileImport.noteFile` accept the
+// per-locale map form (resolveFileField, above); `licenses[].textFile` is
+// deliberately NOT passed them — license text stays single-language (see
+// SoftwareLicense's own comment).
+function resolveProseFields(config, CONFIG_DIR, mustExist, languages, defaultTag) {
   if (config.popup)
     config.popup = resolveFileField({
       obj: config.popup,
@@ -1106,6 +1529,8 @@ function resolveProseFields(config, CONFIG_DIR, mustExist) {
       CONFIG_DIR,
       mustExist,
       path: "popup",
+      languages,
+      defaultTag,
     });
   if (config.fileImport && typeof config.fileImport === "object" && !Array.isArray(config.fileImport))
     config.fileImport = resolveFileField({
@@ -1115,6 +1540,8 @@ function resolveProseFields(config, CONFIG_DIR, mustExist) {
       CONFIG_DIR,
       mustExist,
       path: "fileImport",
+      languages,
+      defaultTag,
     });
   if (Array.isArray(config.licenses))
     config.licenses = config.licenses.map((entry, i) =>
@@ -1135,19 +1562,36 @@ function resolveProseFields(config, CONFIG_DIR, mustExist) {
 // exists. Cross-field, so it can't live in parseUi (config-parsers.mjs): it
 // needs HELP, which is only resolved once the whole config is parsed. Mirrors
 // HelpModal's own tab-list logic — top-level `help.sections` synthesize a
-// leading "Overview" tab when `help.tabs` are also present — so a value that
-// passes here is guaranteed to match a tab the modal renders.
+// leading "Overview" tab (id `OVERVIEW_TAB_ID`) when `help.tabs` are also
+// present — so a value that passes here is guaranteed to match a tab the
+// modal renders.
+//
+// Resolves id-first, then falls back to a plain-string label (back-compat
+// with a config written before tab ids existed): `HelpModal`'s own matching
+// (HelpTabs' `initialTab` handling) follows the same order. A tab whose label
+// is a per-locale map (see docs/config.md's "Localizing config text") can
+// never equal a plain-string reference, so a reference that only matches by
+// label is unreachable once any tab's label stops being a plain string —
+// the error below calls that out and points at `id` instead of leaving the
+// author to guess.
 function checkAfterExportHelpTab(UI, HELP) {
   if (!UI.afterExport?.helpTab) return;
-  const tabLabels = HELP?.tabs?.length
-    ? [...(HELP.sections?.length ? ["Overview"] : []), ...HELP.tabs.map((t) => t.label)]
+  const ref = UI.afterExport.helpTab;
+  const tabs = HELP?.tabs?.length
+    ? [...(HELP.sections?.length ? [{ id: OVERVIEW_TAB_ID, label: "Overview" }] : []), ...HELP.tabs]
     : [];
-  if (tabLabels.includes(UI.afterExport.helpTab)) return;
+  if (tabs.some((t) => t.id === ref)) return;
+  if (tabs.some((t) => typeof t.label === "string" && t.label === ref)) return;
+  const hasLocalizedLabel = tabs.some((t) => t.label && typeof t.label === "object");
+  const names = tabs.map((t) => t.id ?? t.label);
   throw new Error(
-    `gen-schema: 'ui.afterExport.helpTab' is ${JSON.stringify(UI.afterExport.helpTab)}, but no 'help' tab has that label.\n` +
-      (tabLabels.length
-        ? `  Available tabs: ${tabLabels.map((l) => JSON.stringify(l)).join(", ")}`
-        : `  This config's 'help' has no tabs defined.`)
+    `gen-schema: 'ui.afterExport.helpTab' is ${JSON.stringify(ref)}, but no 'help' tab has that id or label.\n` +
+      (names.length
+        ? `  Available: ${names.map((n) => JSON.stringify(n)).join(", ")}`
+        : `  This config's 'help' has no tabs defined.`) +
+      (hasLocalizedLabel
+        ? `\n  This help has per-locale tab labels — reference the tab by its 'id' instead.`
+        : "")
   );
 }
 
@@ -1157,8 +1601,15 @@ function checkAfterExportHelpTab(UI, HELP) {
 // out of generate() because it was 90 uninterrupted lines of `const X =
 // parseX(config.x)` between two steps that genuinely do sequence.
 //
-// `TITLE` is only here for `shortName`'s documented fallback.
-function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE) {
+// `TITLE` is only here for `shortName`'s documented fallback. `LANGUAGES` is
+// this deployment's resolved `languages` (parseIdentity, above): STRINGS'
+// per-locale object values are validated against it.
+function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE, LANGUAGES) {
+  // The deployment's resolved default locale (parseLanguages always puts it
+  // first, see its own comment): every `LocalizableText` field below
+  // (popup/fileImport.note/notices[].label/licenses[].note/help) requires an
+  // object-form value to carry this tag's entry, see `parseLocalizableText`.
+  const DEFAULT_TAG = LANGUAGES[0];
   // `features`/`format`/`fonts`/`fontFallback` now live under `render` (moved
   // in from the top level): they're genuine render inputs, so they stay
   // folded into renderHash below exactly as before; only their config PATH
@@ -1197,25 +1648,26 @@ function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE) {
   const SHORT_NAME = PWA.shortName ?? TITLE;
   // Optional generic file-import button (fonts, SVGs, data files, …). Validated.
   // Absent -> null -> no import button.
-  const FILE_IMPORT = parseFileImport(config.fileImport);
+  const FILE_IMPORT = parseFileImport(config.fileImport, LANGUAGES, DEFAULT_TAG);
 
   // Optional one-off notice dialog shown over the app on load. Validated; absent
   // -> null -> no popup.
-  const POPUP = parsePopup(config.popup);
+  const POPUP = parsePopup(config.popup, LANGUAGES, DEFAULT_TAG);
   // Optional help content; passed through verbatim (any `file` resolved to
   // its derived intro/sections first, see resolveHelp). Absent -> null ->
   // the app falls back to its generic, project-agnostic default help.
-  const HELP = resolveHelp(config.help, CONFIG_DIR, mustExist);
+  const HELP = resolveHelp(config.help, CONFIG_DIR, mustExist, LANGUAGES, DEFAULT_TAG);
   // Config-driven notice categories surfaced on the OpenSCAD output panel.
   // Validated; off by default (omitted -> none).
-  const NOTICES = parseNotices(config.notices);
+  const NOTICES = parseNotices(config.notices, LANGUAGES, DEFAULT_TAG);
   // Optional extra third-party software / license notices. Validated and
   // appended (never replacing the built-ins) by the in-app licenses modal.
-  const LICENSES_EXTRA = parseLicenses(config.licenses);
+  const LICENSES_EXTRA = parseLicenses(config.licenses, LANGUAGES, DEFAULT_TAG);
   // Optional per-deployment UI text overrides (config's `strings` key),
-  // validated against the bundled English catalogue's key set, see
+  // validated against the bundled English catalogue's key set and (for a
+  // per-locale object value) this deployment's own LANGUAGES, see
   // src/lib/i18n.ts and docs/config.md's `strings` section. Absent -> {}.
-  const STRINGS = parseStrings(config.strings, enCatalogKeys());
+  const STRINGS = parseStrings(config.strings, enCatalogKeys(), LANGUAGES);
 
   checkAfterExportHelpTab(UI, HELP);
   return {
@@ -1242,7 +1694,7 @@ function parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE) {
 function assembleSchema(parts) {
   const {
     SOURCE, relPosix, renderHash, version, components, BIN_ASSETS, TITLE, SHORT_NAME,
-    ID, DESCRIPTION, LANG, DIR, STRINGS, PWA, appleSplash, COLORS, extraCss, logo,
+    ID, DESCRIPTION, LANG, DIR, LANGUAGES, STRINGS, PWA, appleSplash, COLORS, extraCss, logo,
     FORMAT, VIEWER, FEATURES, RENDER, FONTS, FONT_FAMILIES, FONT_FACES, FILE_IMPORT,
     POPUP, NOTICES, HELP, LICENSES_EXTRA, UI, defaultDesign, assets, designs,
   } = parts;
@@ -1271,6 +1723,11 @@ function assembleSchema(parts) {
     description: DESCRIPTION,
     lang: LANG,
     dir: DIR,
+    // Always a non-empty array (parseLanguages' own contract, see
+    // parseIdentity): a single-locale deployment still emits its one tag
+    // rather than omitting the key, so src/lib/localeStore.ts never has to
+    // special-case an absent value from a build that predates this field.
+    languages: LANGUAGES,
     strings: STRINGS,
     // `pwa.themeColor.{dark,light}` in the config, still flat here, see the
     // module-level comment above generate() (and CONFIG_SPEC.pwa's own) for
@@ -1298,7 +1755,11 @@ function assembleSchema(parts) {
     ui: UI,
     defaultDesign,
     assets: [...assets].sort(),
-    designs: designs.map(({ abs, ...d }) => d),
+    // `stringsByTag`/`presetNames`/`docAbs` (buildDesigns' transient fields,
+    // see their own comments) are read by generate()/scripts/i18n-status.mjs
+    // BEFORE this function runs, so they're stripped here alongside `abs`:
+    // none of the four belongs in designs.json.
+    designs: designs.map(({ abs, stringsByTag, presetNames, docAbs, ...d }) => d),
   };
 }
 
@@ -1314,6 +1775,8 @@ function commitOutputs({
   outSchemaDir,
   outPublicDir,
   schema,
+  i18nByTag,
+  designCount,
   fontWrites,
   fontsConf,
   fontCopies,
@@ -1397,6 +1860,26 @@ function commitOutputs({
     join(outSchemaDir, "designs.json"),
     JSON.stringify(schema, null, 2) + "\n"
   );
+
+  // One file PER REGISTRY TAG (i18nByTag already covers every tag, see
+  // generate()'s own comment), wiped and rewritten wholesale so a tag a
+  // previous run wrote for (now unshipped, or its last sidecar removed) never
+  // lingers as a stale file src/lib/localeStore.ts's static import map would
+  // otherwise still be able to reach. src/generated/ is gitignored (see
+  // CLAUDE.md), so — unlike outPublicDir's mixed-ownership tree — nothing
+  // here needs M8's reconciliation dance: the whole directory is this tool's
+  // alone, safe to wipe and repopulate outright.
+  const outI18nDir = join(outSchemaDir, "i18n");
+  rmSync(outI18nDir, { recursive: true, force: true });
+  mkdirSync(outI18nDir, { recursive: true });
+  for (const tag of Object.keys(i18nByTag)) {
+    const covered = Object.keys(i18nByTag[tag].designs).length;
+    writeFileSync(
+      join(outI18nDir, `${tag}.json`),
+      JSON.stringify(i18nByTag[tag], null, 2) + "\n"
+    );
+    console.log(`gen-schema: design strings ${tag}: ${covered}/${designCount} designs`);
+  }
 }
 
 // The whole build, in phases. Each is a function above rather than a labelled
@@ -1431,9 +1914,51 @@ export function generate({
   // Everything in the config is resolved relative to the config file's directory.
   const CONFIG_DIR = dirname(configPath);
 
-  resolveProseFields(config, CONFIG_DIR, mustExist);
+  // Identity FIRST, prose fields SECOND: resolveProseFields' `bodyFile`/
+  // `noteFile` pre-pass now accepts a per-locale map (see prose-files.mjs's
+  // resolveFileField), which needs this deployment's resolved `languages`/
+  // default tag — LANGUAGES only exists once parseIdentity has run. Every
+  // downstream localizable field (popup/fileImport.note/notices[].label/
+  // licenses[].note/designs[].label,group/help) is threaded the same
+  // DEFAULT_TAG (LANGUAGES[0], see parseConfigBlocks) from here on.
+  const { TITLE, ID, DESCRIPTION, LANG, DIR, LANGUAGES } = parseIdentity(config);
+  const DEFAULT_TAG = LANGUAGES[0];
 
-  const { TITLE, ID, DESCRIPTION, LANG, DIR } = parseIdentity(config);
+  // Config text mode (scripts/lib/config-text.mjs, docs/config.md
+  // "Localizing config text"): an opt-in pre-pass that folds every locale's
+  // text file into `config`'s own LocalizableText-shaped fields BEFORE
+  // resolveProseFields/parseConfigBlocks/buildDesigns ever see them, so the
+  // rest of the pipeline runs unchanged — a config expressed this way and one
+  // with the same prose written inline produce a deep-equal designs.json.
+  const TEXT_PATHS = parseTextKey(config.text, LANGUAGES, DEFAULT_TAG, CONFIG_DIR, mustExist);
+  if (TEXT_PATHS) {
+    const textByTag = loadTextFiles(TEXT_PATHS);
+    foldConfigText(config, textByTag, TEXT_PATHS, { languages: LANGUAGES, defaultTag: DEFAULT_TAG });
+
+    // Content-drift WARNING (never an error, same contract as a design's own
+    // `<design>.strings.stamps.json`, see buildDesigns): a tracked
+    // `<config-basename>.text.stamps.json` beside the config (written by
+    // `npm run i18n:status -- --stamp`, never by hand) records what the
+    // DEFAULT locale's text looked like when translations were last stamped.
+    // No stamps file -> no opinion.
+    const stampsPath = textStampsPath(configPath, CONFIG_DIR);
+    if (existsSync(stampsPath)) {
+      let stamps;
+      try {
+        stamps = JSON.parse(readFileSync(stampsPath, "utf-8"));
+      } catch (err) {
+        throw new Error(`gen-schema: '${stampsPath}' is not valid JSON:\n  ${err.message}`, { cause: err });
+      }
+      for (const path of textDrift(textByTag, DEFAULT_TAG, stamps)) {
+        console.warn(
+          `gen-schema: config text may be stale: '${path}' changed in the default locale's text ` +
+            `file since it was stamped`
+        );
+      }
+    }
+  }
+
+  resolveProseFields(config, CONFIG_DIR, mustExist, LANGUAGES, DEFAULT_TAG);
 
   // `source` defaults to "." (designs live beside the config); set it to point
   // elsewhere (e.g. "examples", a sibling checkout, or an absolute path).
@@ -1474,7 +1999,7 @@ export function generate({
     NOTICES,
     LICENSES_EXTRA,
     STRINGS,
-  } = parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE);
+  } = parseConfigBlocks(config, CONFIG_DIR, mustExist, TITLE, LANGUAGES);
   const { FONTS, FONT_FAMILIES, FONT_FACES, fontPaths, fontsConf, fontWrites } = bundleFonts(
     config,
     SOURCE,
@@ -1521,6 +2046,8 @@ export function generate({
     relPosix,
     copyAsset,
     register: registry.register,
+    languages: LANGUAGES,
+    defaultTag: DEFAULT_TAG,
   });
   const defaultDesign = resolveDefaultDesign(config, designs);
   checkPopupMode(POPUP, designs);
@@ -1601,6 +2128,7 @@ export function generate({
       BG_COLOR: PWA.backgroundColor,
       CATEGORIES: PWA.categories,
       designs,
+      defaultTag: DEFAULT_TAG,
       mustExist,
       register: registry.register,
       isTracked: isTrackedFile,
@@ -1632,6 +2160,19 @@ export function generate({
     ? computeBinAssetVersions({ fontPaths, fontsConf, outPublicDir })
     : {};
 
+  // Fold every design's `stringsByTag` (buildDesigns' transient sidecar
+  // bundle) into one file PER REGISTRY TAG, keyed by design id — computed
+  // here, while `designs` still carries it, since assembleSchema strips it
+  // before designs.json is built (see that call's own comment). Written for
+  // EVERY tag (even one no design translated), so
+  // src/lib/localeStore.ts's static per-tag import map never dangles.
+  const i18nByTag = {};
+  for (const tag of LOCALE_TAGS) {
+    const byDesign = {};
+    for (const d of designs) if (d.stringsByTag?.[tag]) byDesign[d.id] = d.stringsByTag[tag];
+    i18nByTag[tag] = { designs: byDesign };
+  }
+
   const schema = assembleSchema({
     SOURCE,
     relPosix,
@@ -1645,6 +2186,7 @@ export function generate({
     DESCRIPTION,
     LANG,
     DIR,
+    LANGUAGES,
     STRINGS,
     PWA,
     appleSplash,
@@ -1683,6 +2225,8 @@ export function generate({
     outSchemaDir,
     outPublicDir,
     schema,
+    i18nByTag,
+    designCount: designs.length,
     fontWrites,
     fontsConf,
     fontCopies,

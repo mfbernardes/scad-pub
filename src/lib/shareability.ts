@@ -10,6 +10,7 @@ import type { Design } from "../openscad/types";
 import type { Values } from "./presets";
 import { familyOf, styleOf, faceKeyOf } from "./fonts";
 import { fontFaces } from "./fontNameTable.mjs";
+import { t } from "./i18n";
 
 const FONT_EXTENSION_RE = /\.(ttf|otf|ttc)$/i;
 
@@ -98,9 +99,14 @@ export function computeShareability(
   return { complete: localOnly.length === 0, localOnly };
 }
 
-/** A short, user-facing summary of what a share link would be missing. */
+/** A short, user-facing summary of what a share link would be missing.
+ *  Resolved through `t()` at CALL time (copyLink in App.tsx runs this
+ *  synchronously in its click handler): the result is stored, but only in a
+ *  transient toast, the same event-time resolution the app's other toasts
+ *  use — there's no long-lived value here for a later locale switch to make
+ *  stale. */
 export function shareabilityWarning(shareability: Shareability): string | null {
   if (shareability.complete) return null;
   const names = [...new Set(shareability.localOnly.map((f) => f.name))].join(", ");
-  return `Link copied, but it won't include files only on this device: ${names}. Recipients need those too.`;
+  return t("share.missingFiles", { names });
 }

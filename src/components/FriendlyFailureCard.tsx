@@ -13,8 +13,10 @@
 // here would only repeat that.
 import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 export function FriendlyFailureCard({ info }: { info: FriendlyErrorInfo }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   return (
     <div className="friendly-failure flex flex-col gap-2">
       <p className="m-0 font-semibold text-foreground">{info.title}</p>

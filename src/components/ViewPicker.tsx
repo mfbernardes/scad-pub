@@ -9,6 +9,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Box as ViewIcon, Check as CheckIcon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { VIEW_OPTIONS, type ViewName } from "./views";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 /** The HUD's glass icon-button decoration, shared by every button in the
  *  viewer HUD (IconButtons get it via className; the picker trigger below
@@ -24,8 +26,11 @@ interface Props {
 }
 
 export function ViewPicker({ view, onSelect }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const [open, setOpen] = useState(false);
-  const current = VIEW_OPTIONS.find((o) => o.id === view)?.label ?? "View";
+  const currentOption = VIEW_OPTIONS.find((o) => o.id === view);
+  const current = currentOption ? t(currentOption.labelKey) : t("hud.viewHeading");
+  const viewLabel = t("hud.viewLabel", { view: current });
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {/* Same hover/focus Tooltip treatment as the rest of the HUD
@@ -44,14 +49,14 @@ export function ViewPicker({ view, onSelect }: Props) {
                 "border rounded-(--radius-sm) hover:border-brand data-[state=open]:border-brand data-[state=open]:text-brand",
                 HUD_GLASS_BTN
               )}
-              aria-label={`View: ${current}`}
-              title={`View: ${current}`}
+              aria-label={viewLabel}
+              title={viewLabel}
             >
               <ViewIcon size={18} />
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent side="left">{`View: ${current}`}</TooltipContent>
+        <TooltipContent side="left">{viewLabel}</TooltipContent>
       </Tooltip>
       <PopoverContent side="left" align="start" className="w-auto min-w-[9rem] p-1">
         <ViewOptionList
@@ -105,7 +110,7 @@ export function ViewOptionList({
               <span className="inline-flex w-4 shrink-0 text-brand" aria-hidden="true">
                 {active && <CheckIcon size={15} />}
               </span>
-              {o.label}
+              {t(o.labelKey)}
             </button>
           </li>
         );

@@ -7,6 +7,8 @@ content plan: define each supported OpenSCAD comment annotation, show its syntax
 
 ScadPub adds a handful of comment annotations that `gen-schema.mjs` parses. All are invisible to OpenSCAD and the desktop Customizer.
 
+Every annotation below is written **once**, in whatever language the `.scad` file itself is authored in — `@description`, `@label`, the doc-comment block, `@info`'s custom label, `@review`'s label, `@reviewNote`. There is no per-locale variant of any annotation. A deployment that ships more than one language translates this same text with a separate **sidecar file** next to the design instead — see [config.md’s “Design translations”](config.md#design-translations) — so the annotations stay the single, language-agnostic source a translation is projected onto, not something a translator edits directly.
+
 ## Design metadata (`// @description`, `// @icon`, `// @image`, `// @doc`)
 
 A design describes itself from its own `.scad` file: this is the **only** place its picker sub-label, thumbnail icon, gallery card art, and user-doc come from; there is no config-level override or escape hatch. Put these anywhere in the file. A header comment above the first section is the natural home:
@@ -23,7 +25,7 @@ label = "Room 1";
 - **`@description`**: the design’s picker sub-label.
 - **`@icon`**: a path to the design’s thumbnail, resolved **relative to the design’s own `.scad` file** (and checked to stay inside `source`). It may be a Scalable Vector Graphics (SVG), PNG, or WebP file. ScadPub serves it as-is and reuses it as the design’s manifest shortcut icon.
 - **`@image`**: a path to larger card artwork for `ui.gallery`, same path-resolution rule as `@icon`. May also be SVG, PNG, or WebP. When omitted, the gallery card falls back to `@icon` instead (see `ui.gallery` in [config.md](config.md#ui-behaviour-and-pwa)).
-- **`@doc`**: a path to the design’s own user-documentation Markdown file, same path-resolution rule as `@icon`. When present, the app shows a documentation button that opens the file’s contents in a modal.
+- **`@doc`**: a path to the design’s own user-documentation Markdown file, same path-resolution rule as `@icon`. When present, the app shows a documentation button that opens the file’s contents in a modal. A deployment shipping more than one [`languages`](config.md#app-identity-and-pwa) can translate it per locale with a `<design>.doc.<tag>.md` sidecar beside the design — see [config.md’s “Translating a design's own doc”](config.md#translating-a-designs-own-doc-designdoctagmd).
 
 First occurrence of each in the file wins; blank values are ignored. This keeps a design self-describing, and works even with auto-discovery, when the config lists no `designs[]` at all.
 

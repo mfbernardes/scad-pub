@@ -9,7 +9,8 @@ import { Upload as UploadIcon, FileCode as FileCodeIcon } from "lucide-react";
 import type { SvgFieldMeta } from "../openscad/types";
 import { useAppActions } from "../lib/appActions";
 import { isSvgMissing } from "../lib/svgFiles";
-import { t } from "../lib/i18n";
+import { t, formatNumber, type Vars } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { FileInput } from "./FileInput";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { Spinner } from "./ui/spinner";
@@ -66,22 +67,35 @@ function baseName(name: string): string {
 /** Reject an unreasonably large upload before reading it into memory. */
 const MAX_SVG_BYTES = 2 * 1024 * 1024; // 2 MB
 
+/** A rejection reason as a catalogue key + its interpolation vars, resolved
+ *  through `t()` at RENDER time (not when the rejection happens): storing the
+ *  already-resolved English string in state would go stale across a locale
+ *  switch while the message is still on screen (review finding 15, Phase 2). */
+interface RejectionReason {
+  key: string;
+  vars?: Vars;
+}
+
 /** A dropped/picked file must look like an SVG. The native picker's `accept`
  *  filters its own dialog, but a drag-drop bypasses it, so re-check here. */
-function svgRejectionReason(file: File): string | null {
+function svgRejectionReason(file: File): RejectionReason | null {
   const isSvg =
     file.type === "image/svg+xml" || /\.svg$/i.test(file.name);
-  if (!isSvg) return "That's not an SVG — choose a .svg file.";
+  if (!isSvg) return { key: "svg.rejectNotSvg" };
   if (file.size > MAX_SVG_BYTES)
-    return `That SVG is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). The limit is 2 MB — simplify the drawing and try again.`;
+    return {
+      key: "svg.rejectTooLarge",
+      vars: { size: formatNumber(file.size / 1024 / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) },
+    };
   return null;
 }
 
 export function SvgPrepareControl({ name, svg, value, label, onChange, availableSvgFiles, defaultHeight = null }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { change, addFile } = useAppActions();
   const [pending, setPending] = useState<{ text: string; fileName: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<RejectionReason | null>(null);
   // The value points at a drawing the renderer can't resolve (usually an
   // imported SVG the user has since removed). The drop zone below is the fix:
   // prepare/import it again, so the hint names what's gone.
@@ -133,7 +147,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
               {value ? (
                 <span className="min-w-0 [overflow-wrap:anywhere]">{value}</span>
               ) : (
-                "No SVG chosen"
+                t("svg.notChosen")
               )}
             </span>
             <button
@@ -142,12 +156,12 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
               onPointerEnter={preloadSvgWizard}
               onFocus={preloadSvgWizard}
               className="inline-flex cursor-pointer items-center gap-[0.4rem] rounded-(--radius-sm) border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground focus-visible:outline-offset-2"
-              aria-label={`Prepare SVG for ${label}`}
+              aria-label={t("svg.prepareForAria", { label })}
             >
-              <UploadIcon size={14} aria-hidden="true" /> Prepare SVG…
+              <UploadIcon size={14} aria-hidden="true" /> {t("svg.prepareCta")}
             </button>
             <span className="text-[0.78rem] text-muted-foreground">
-              Drop an SVG here or choose a file to check &amp; fix it for printing.
+              {t("svg.dropHint")}
             </span>
           </div>
         )}
@@ -164,7 +178,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
 
       {error && (
         <p role="alert" className="text-[0.78rem] text-destructive">
-          {error}
+          {t(error.key, error.vars)}
         </p>
       )}
 
@@ -175,12 +189,8 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
               role="alert"
               className="svg-prepare__wizard-error flex flex-col items-center gap-2 rounded-(--radius-sm) border border-dashed border-destructive/60 bg-destructive/5 px-3 py-4 text-center"
             >
-              <p className="text-sm text-foreground">
-                The SVG editor couldn't be loaded.
-              </p>
-              <p className="text-[0.78rem] text-muted-foreground">
-                Check your connection, then reload to try again.
-              </p>
+              <p className="text-sm text-foreground">{t("svg.wizardUnavailable")}</p>
+              <p className="text-[0.78rem] text-muted-foreground">{t("svg.wizardUnavailableReason")}</p>
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -190,7 +200,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
                   // reload re-requests every chunk from the network.
                   onClick={() => window.location.reload()}
                 >
-                  Reload
+                  {t("svg.wizardReload")}
                 </Button>
                 <Button
                   type="button"
@@ -198,7 +208,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
                   variant="outline"
                   onClick={() => setPending(null)}
                 >
-                  Cancel
+                  {t("svg.wizardCancel")}
                 </Button>
               </div>
             </div>
@@ -213,7 +223,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
                 className="svg-prepare__wizard-loading flex items-center justify-center gap-2 rounded-(--radius-sm) border border-dashed border-border bg-muted/40 px-3 py-4 text-sm text-muted-foreground"
               >
                 <Spinner className="size-4" aria-hidden="true" />
-                Loading SVG editor…
+                {t("svg.wizardLoading")}
               </div>
             }
           >

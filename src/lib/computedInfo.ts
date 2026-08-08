@@ -19,16 +19,14 @@ import { parseEchoTag, formatEchoValue } from "./echoTags";
 export interface ComputedInfo {
   label: string;
   unit: string;
-  /** Already formatted for display (quotes stripped, unit suffix appended). */
+  /** Formatted for display (quotes stripped), WITHOUT the unit suffix: the
+   *  BASE value alone. The unit is appended at RENDER time instead (see
+   *  DimensionInfo.tsx, which composes `value`/`unit` the same way
+   *  format.ts's `formatParamValue` does for a param's own `@info` row), so
+   *  `label`/`unit`/`value` can each be localized independently (AppShell's
+   *  computed-info memo maps `label` AND `unit` through `localizeEcho`; a
+   *  numeric `value` is never translated, see docs/config.md). */
   value: string;
-}
-
-// Format the raw OpenSCAD repr of the value arg for display (echoTags.ts's
-// formatEchoValue), then append the unit suffix the same way DimensionInfo
-// does: `value + " " + unit`, only when non-empty.
-function formatComputedValue(raw: string, unit: string): string {
-  const base = formatEchoValue(raw);
-  return unit ? `${base} ${unit}` : base;
 }
 
 /**
@@ -41,7 +39,7 @@ function formatComputedValue(raw: string, unit: string): string {
 export function parseComputedInfo(log: string[]): ComputedInfo[] {
   const out: ComputedInfo[] = [];
   for (const [label, unit, rawValue] of parseEchoTag(log, "@info", 2)) {
-    out.push({ label, unit, value: formatComputedValue(rawValue, unit) });
+    out.push({ label, unit, value: formatEchoValue(rawValue) });
   }
   return out;
 }

@@ -12,7 +12,9 @@ import { isSvgFile } from "../lib/svgFiles";
 import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
 import { Button } from "./ui/button";
-import { t } from "../lib/i18n";
+import { t, formatNumber } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
+import { lxOpt } from "../lib/configI18n";
 import { Trash2 as TrashIcon, File as FileIcon, X as XIcon } from "lucide-react";
 
 /** A user-imported file, with its byte size for display. */
@@ -29,10 +31,19 @@ interface Props {
   onClearFiles: () => void;
 }
 
+// useGrouping: false throughout — a file size is a technical readout, not
+// prose: formatNumber's default grouping would render "1,024 B"/"1.024 B".
 function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024) return t("files.sizeB", { n: formatNumber(bytes, { useGrouping: false }) });
+  if (bytes < 1024 * 1024) {
+    const frac = bytes < 10 * 1024 ? 1 : 0;
+    return t("files.sizeKb", {
+      n: formatNumber(bytes / 1024, { minimumFractionDigits: frac, maximumFractionDigits: frac, useGrouping: false }),
+    });
+  }
+  return t("files.sizeMb", {
+    n: formatNumber(bytes / (1024 * 1024), { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }),
+  });
 }
 
 /** The human label for a file's kind, inferred from its extension. */
@@ -43,13 +54,15 @@ function fileTypeLabel(name: string): string {
 }
 
 export function FileBar({ fileImport, loadedFiles, onRemoveFile, onClearFiles }: Props) {
+  const { tag } = useLocale();
   if (!fileImport) return null;
+  const note = lxOpt(fileImport.note, tag);
 
   return (
     <div className="file-manager flex flex-col gap-2 px-3 pt-2 pb-3">
-      {fileImport.note && (
+      {note && (
         <div className="text-[0.85rem] leading-[1.4] text-muted-foreground [&_:is(p,ul)]:m-0 [&_:is(p,ul)+:is(p,ul)]:mt-2 [&_ul]:pl-[1.1rem]">
-          <Markdown body={fileImport.note} />
+          <Markdown body={note} />
         </div>
       )}
 

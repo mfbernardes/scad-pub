@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import schemaJson from "./generated/designs.json";
-import type { Design, ParamValue } from "./openscad/types";
+import type { LocalizedDesign, ParamValue } from "./openscad/types";
 import { validateSchema } from "./lib/schema";
 import {
   defaultsFor,
@@ -36,6 +36,9 @@ import { ns } from "./lib/appId";
 import { readLocal, writeLocal } from "./lib/safeStorage";
 import { toast } from "sonner";
 import { t } from "./lib/i18n";
+import { localeStore, useLocale, applyLocale, getDesignStrings } from "./lib/localeStore";
+import { localizeDesign, localizePresetName } from "./lib/designI18n";
+import { lxDesignEntry } from "./lib/configI18n";
 import { AppActionsProvider, type AppActions } from "./lib/appActions";
 import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/ui/sonner";
@@ -132,6 +135,20 @@ export default function App() {
   // is up, and does not undo it afterwards). See the hook's own doc.
   useDocumentScrollLock();
   const { mode: themeMode, resolved: theme, cycle: cycleTheme, next: themeNext } = useTheme();
+  const locale = useLocale();
+  // Multi-locale deployments only: a single-locale one leaves the
+  // config-injected <html lang/dir> alone (see applyLocale's own doc).
+  // `locale` is safe as the sole dep: useLocale() returns a referentially
+  // stable object across renders that don't change the active locale (see
+  // its own doc in localeStore.ts), so this effect doesn't re-fire every render.
+  useEffect(() => {
+    applyLocale(locale, locale.locales.length > 1);
+  }, [locale]);
+  const localeChange = useCallback((tag: string) => {
+    void localeStore.setLocale(tag).catch(() => {
+      toast.error(t("lang.loadFailed"));
+    });
+  }, []);
   const { canInstall, promptInstall, installed } = useInstallPrompt();
   const online = useOnline();
   // True when this is the installed app in its own window (see the warm-up below).
@@ -143,9 +160,38 @@ export default function App() {
     dismiss: dismissUpdate,
   } = useServiceWorkerUpdate();
   const [designId, setDesignId] = useState(initialState.designId);
-  const design = useMemo<Design>(
-    () => schema.designs.find((d) => d.id === designId)!,
-    [designId]
+  // Localized to the active locale in two steps: `lxDesignEntry` (see
+  // src/lib/configI18n.ts) first projects the config-authored `label`/`group`
+  // to the active locale — the ONLY step that runs for a plain (non-object)
+  // config, so it's not a no-op the way `localizeDesign` can be — then
+  // `localizeDesign` (src/lib/designI18n.ts) applies the design's own sidecar
+  // translation (a no-op, same-reference passthrough when the tag has no
+  // sidecar for this design). `locale.designsGeneration` — alongside
+  // `locale.tag` — re-runs this when the active tag's design-strings bundle
+  // finishes loading even on a load that didn't change `tag` itself (the
+  // default-tag init load, see localeStore.ts's own doc); every OTHER read
+  // site downstream (ParamForm, paramGroups, DimensionInfo, ReviewDialog,
+  // DesignPicker, …) keeps reading `design.*` unchanged, oblivious to
+  // translation having happened at all.
+  const design = useMemo<LocalizedDesign>(
+    () =>
+      localizeDesign(
+        lxDesignEntry(schema.designs.find((d) => d.id === designId)!, locale.tag),
+        getDesignStrings(designId)
+      ),
+    // `locale.tag`/`.designsGeneration`: getDesignStrings() reads the locale
+    // store's module-singleton state directly, so react-hooks can't see that
+    // this call is locale-sensitive (same reasoning as ReviewDialog.tsx's own
+    // `tag` dep on buildReviewSummaryRows).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [designId, locale.tag, locale.designsGeneration]
+  );
+  // The FULL design list, localized the same way, for the two pickers
+  // (PopupModal's gallery, AppShell's compact/gallery DesignPicker).
+  const localizedDesigns = useMemo<LocalizedDesign[]>(
+    () => schema.designs.map((d) => localizeDesign(lxDesignEntry(d, locale.tag), getDesignStrings(d.id))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [locale.tag, locale.designsGeneration]
   );
   const [values, setValues] = useState<Values>(initialState.values);
   const [presetSel, setPresetSel] = useState(initialState.preset);
@@ -427,7 +473,24 @@ export default function App() {
       return bundledPresets.find((p) => p.name === parsedPreset.name)?.values ?? null;
     return loadPreset(design.id, parsedPreset.name);
   }, [parsedPreset, bundledPresets, design]);
-  const presetName = parsedPreset?.name ?? null;
+  // Display name only: a BUNDLED preset's stored name is translated through
+  // this design's sidecar `presets` map (see localizePresetName's own doc);
+  // a user-saved preset's name stays verbatim (it's never sidecar text —
+  // there's nothing in a translation file that could name it). Feeds
+  // PresetDiffBar's baseline/revert labels and ParamForm's revert target
+  // (both purely display); `parsedPreset`/`presetSel` stay the raw identity
+  // read everywhere else (urlState, presets.ts storage, `applyBundled`'s
+  // `bundled:<id>:<name>` id). `locale.designsGeneration` matters alongside
+  // `.tag`: design-strings load asynchronously, so a sidecar can finish
+  // arriving after this preset was already selected, and the generation
+  // counter is what tells this memo a fresh lookup is worth another try.
+  const presetDisplayName = useMemo(() => {
+    if (!parsedPreset) return null;
+    return parsedPreset.kind === "bundled"
+      ? localizePresetName(getDesignStrings(design.id), parsedPreset.name)
+      : parsedPreset.name;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsedPreset, design.id, locale.tag, locale.designsGeneration]);
   // The baseline "drifted" is measured against: the selected preset's values,
   // or the design's defaults when no preset is selected.
   const baseline = useMemo(() => presetBaseline ?? defaultsFor(design), [presetBaseline, design]);
@@ -568,6 +631,7 @@ export default function App() {
     clearFiles: clearImportedFiles,
     autoRenderChange: setAutoRender,
     cycleTheme,
+    localeChange,
     showHelp: showHelpModal,
     showDesignDoc: showDesignDocModal,
     showLicenses: showLicensesModal,
@@ -590,7 +654,7 @@ export default function App() {
           popup={popup}
           onClose={closePopup}
           onPrimary={popupPrimary}
-          designs={schema.designs}
+          designs={localizedDesigns}
           designId={designId}
           onDesignChange={handleDesignChange}
         />
@@ -680,7 +744,7 @@ export default function App() {
         <AppShell
           schema={schema}
           design={design}
-          designs={schema.designs}
+          designs={localizedDesigns}
           values={values}
           renderedValues={renderedValues}
           renderMetrics={renderMetrics}
@@ -688,7 +752,7 @@ export default function App() {
           userPresets={userPresets}
           selectedPreset={presetSel}
           presetBaseline={presetBaseline}
-          presetName={presetName}
+          presetName={presetDisplayName}
           baseline={baseline}
           changedParams={changedNames}
           userFiles={userFiles}

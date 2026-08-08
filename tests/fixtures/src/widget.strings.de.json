@@ -1,0 +1,14 @@
+{
+  "description": "Ein kleines Widget.",
+  "sections": { "Main": "Haupt" },
+  "params": {
+    "label": {
+      "description": "Der zu gravierende Text.",
+      "help": "Buchstaben und Zahlen werden unterstützt."
+    },
+    "style": {
+      "choices": { "flat": "Flach", "raised": "Erhaben" }
+    }
+  },
+  "echo": { "Total width": "Gesamtbreite" }
+}

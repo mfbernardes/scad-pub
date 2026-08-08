@@ -14,6 +14,7 @@ import { List as JumpIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { cn } from "../lib/utils";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 // A design earns the navigator only once it has at least this many visible
 // sections; a 1–3 section form is short enough to scan without it. Counted from
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function SectionNavigator({ sections, onSelect, className }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const [open, setOpen] = useState(false);
   // Below the threshold the form is short enough that a jump control is noise.
   if (sections.length < MIN_SECTIONS_FOR_NAV) return null;

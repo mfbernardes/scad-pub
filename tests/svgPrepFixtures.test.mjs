@@ -126,7 +126,7 @@ const CATEGORY_B = {
   "offcanvas.svg": "content-outside-viewbox",
   "nonzero_viewbox.svg": "viewbox-origin",
   "no_viewbox.svg": "no-viewbox",
-  "use_defs.svg": "ignored:use",
+  "use_defs.svg": "ignored",
 };
 
 for (const [file, code] of Object.entries(CATEGORY_B)) {
@@ -134,6 +134,12 @@ for (const [file, code] of Object.entries(CATEGORY_B)) {
     assert.ok(codes(parse(file)).includes(code), `${file} should raise ${code}`);
   });
 }
+
+test("use_defs.svg's ignored finding names the <use> tag", () => {
+  const finding = check(parse("use_defs.svg")).find((f) => f.code === "ignored");
+  assert.ok(finding);
+  assert.equal(finding.vars.tag, "use");
+});
 
 // Fixable issues must be gone after applyFixes re-checks clean of that code.
 const FIXABLE = {

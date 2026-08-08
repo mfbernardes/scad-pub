@@ -36,6 +36,26 @@ const num = (extra = {}) => ({
   ...extra,
 });
 
+// A `LocalizableText`-valued field (src/openscad/types.ts's own doc;
+// docs/config.md's "Localizing config text"): a plain string (shows for
+// every locale), or an object of locale tag -> string. Runtime validation is
+// bespoke (scripts/lib/config-parsers.mjs's `parseLocalizableText`, which
+// needs this deployment's resolved `languages`/default tag — not something a
+// generic applyGroupSpec field descriptor has access to), so `custom: true`
+// like every other bespoke-parsed leaf (see the file-top comment): the
+// containing parser (parsePopup, parseFileImport, …) validates/resolves the
+// raw value itself, after applyGroupSpec's own unknown-key-rejecting walk.
+// `localizable: true` is a second, independent marker read only by
+// gen-config-schema.mjs's `nodeToSchema`, which emits the string-or-locale-map
+// `anyOf` this shape needs instead of the plain `{ type: "string" }` a bare
+// `custom: true` string field would otherwise get.
+const localizable = (extra = {}) => ({
+  type: "string",
+  custom: true,
+  localizable: true,
+  ...extra,
+});
+
 // A CSS-colour-valued scalar field (hex / rgb() / hsl() / named: the same
 // COLOR_VALUE_RE strictness every colour input in this config uses). Exists
 // as its own field kind (rather than folding colour-shaped strings into
@@ -103,7 +123,9 @@ const AFTER_EXPORT_SPEC = {
   rootTypeError: "gen-schema: 'ui.afterExport' must be true, an options object, or null",
   properties: {
     helpTab: str({
-      description: "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
+      description:
+        "Opens Help scrolled to the tab with this id (help.tabs[].id, checked first) or, for " +
+        "back-compat, this exact label (help.tabs[].label); must name a real tab either way.",
     }),
   },
 };
@@ -320,6 +342,46 @@ export const CONFIG_SPEC = {
   },
   lang: { type: "string", default: "en", description: "Document/manifest language, a BCP-47 tag." },
   dir: { type: "enum", values: ["ltr", "rtl", "auto"], default: "ltr", description: "Document/manifest text direction." },
+  // Which of ScadPub's shipped chrome locales (src/lib/localeRegistry.ts's
+  // LOCALE_TAGS) this deployment offers at runtime — the language switcher's
+  // option list, and what src/lib/localeStore.ts's `enabledTags` is built
+  // from. `custom: true`: an array of registry-tag strings needs the
+  // cross-reference-against-the-locale-registry validation parseLanguages
+  // (scripts/lib/config-parsers.mjs) does, not a shape applyTopLevelScalars
+  // can express. See that function's own comment for the exact default and
+  // validation rules, including how an unshipped `lang` (e.g. "fr") resolves
+  // to a single-locale deployment.
+  languages: {
+    type: "array",
+    items: { type: "string" },
+    custom: true,
+    description:
+      "Which shipped chrome locales (see src/lib/localeRegistry.ts) this deployment's language " +
+      "switcher offers. Defaults to every shipped locale, 'lang' first, when 'lang' is one of " +
+      "them; otherwise to a single-locale deployment (the switcher stays hidden). When set, " +
+      "every entry must name a shipped locale and the set must include the deployment's " +
+      "resolved default locale.",
+  },
+
+  // Opt-in: moves ALL config-authored prose (English included) out of this
+  // file into per-locale text files, folded back in before any other
+  // validation runs (scripts/lib/config-text.mjs's `foldConfigText`, wired in
+  // scripts/gen-schema.mjs's generate() between parseIdentity and
+  // resolveProseFields). `custom: true` like `languages` above: the map's
+  // real invariants (default tag required, every tag a shipped/enabled
+  // locale, every path exists) need this deployment's resolved languages, not
+  // a shape `applyTopLevelScalars` can express. See docs/config.md
+  // "Localizing config text".
+  text: {
+    type: "object",
+    custom: true,
+    mapValue: { type: "string" },
+    description:
+      "Opt-in: locale tag -> config-relative text-file path, moving ALL config-authored prose " +
+      "(English included) into per-locale files instead of writing it inline. The default " +
+      "locale's file is required and must be complete; every field it covers becomes a build " +
+      "error if also written inline. See docs/config.md 'Localizing config text'.",
+  },
 
   // Manifest-only; see PWA_THEME_COLOR_SPEC and the `pwa` node below.
   pwa: PWA_SPEC,
@@ -342,10 +404,12 @@ export const CONFIG_SPEC = {
           required: true,
           description: "Design id (charset [A-Za-z0-9._-]+); used in URLs, storage, filenames.",
         },
-        label: { type: "string", description: "Picker label; defaults to a humanized id." },
+        label: localizable({ description: "Picker label; defaults to a humanized id. Localizable." }),
         file: { type: "string", description: "Path to the .scad file, relative to 'source'; defaults to '<id>.scad'." },
         heavy: { type: "boolean", default: false, description: "Start this design in manual-render mode." },
-        group: { type: "string", description: "Dropdown/gallery grouping header; consecutive same-value designs cluster." },
+        group: localizable({
+          description: "Dropdown/gallery grouping header; consecutive same-value designs cluster. Localizable.",
+        }),
         // No `description`/`media`/`review` here: a design's picker
         // description, icon, gallery image, doc, and curated review
         // label/note come ONLY from its own .scad annotations now
@@ -508,7 +572,9 @@ export const CONFIG_SPEC = {
     description: "Enables the Files dialog. true for defaults, or an options object; omit/false/null for no Files action.",
     rootTypeError: "gen-schema: 'fileImport' must be true, an options object, or null",
     properties: {
-      note: str({ description: "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'." }),
+      note: localizable({
+        description: "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'. Localizable.",
+      }),
       // Same pre-pass/resolution pattern as popup.bodyFile above (see its
       // comment): resolved into 'note' before applyGroupSpec ever sees this
       // key, so it's registered here as `custom: true` purely for doc
@@ -522,20 +588,27 @@ export const CONFIG_SPEC = {
     description: "One-off notice dialog shown over the app on load.",
     rootTypeError: "gen-schema: 'popup' must be an object with 'header', 'body' and an optional 'mode'",
     properties: {
-      header: str({ required: true, description: "Dialog title." }),
-      body: str({ required: true, description: "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'." }),
+      header: localizable({ required: true, description: "Dialog title. Localizable, see docs/config.md." }),
+      body: localizable({
+        required: true,
+        description: "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'. Localizable.",
+      }),
       // Resolved by gen-schema.mjs's prose-file pre-pass (scripts/lib/prose-files.mjs)
       // BEFORE this spec's own applyGroupSpec walk ever runs: a config-relative
-      // Markdown file whose contents become 'body', so `body` is populated by the
-      // time the `required` check above sees it. `custom: true` because the
-      // read-a-file behaviour is bespoke, like render.features/pwa.categories (see
-      // the file-top comment). It's registered here purely for doc-coverage /
-      // schema-emission, and is never itself present by the time applyGroupSpec
-      // walks this node (the pre-pass deletes it after resolving 'body').
+      // Markdown file (or, for a per-locale 'body', an object of locale tag ->
+      // Markdown file) whose contents become 'body', so `body` is populated by
+      // the time parsePopup's own required check sees it. `custom: true`
+      // because the read-a-file behaviour is bespoke, like
+      // render.features/pwa.categories (see the file-top comment). It's
+      // registered here purely for doc-coverage / schema-emission, and is
+      // never itself present by the time applyGroupSpec walks this node (the
+      // pre-pass deletes it after resolving 'body').
       bodyFile: fileAlt("body"),
       mode: enumField(["always", "once", "dismissible", "picker"], "once", { description: "Popup frequency." }),
-      button: str({ description: "Primary-button label; overrides the default 'OK'." }),
-      footnote: str({ description: "Short plain-text line shown small and muted at the bottom." }),
+      button: localizable({ description: "Primary-button label; overrides the default 'OK'. Localizable." }),
+      footnote: localizable({
+        description: "Short plain-text line shown small and muted at the bottom. Localizable.",
+      }),
     },
   },
   help: {
@@ -587,8 +660,11 @@ export const CONFIG_SPEC = {
             "singular/plural forms (selected via Intl.PluralRules, the same as src/lib/i18n.ts's tn()). " +
             "Defaults to 'marker'.",
           properties: {
-            one: str({ description: "Singular override; falls back to 'other' when omitted." }),
-            other: str({ required: true, description: "Plural/default form, used whenever 'one' is unset." }),
+            one: localizable({ description: "Singular override; falls back to 'other' when omitted. Localizable." }),
+            other: localizable({
+              required: true,
+              description: "Plural/default form, used whenever 'one' is unset. Localizable.",
+            }),
           },
         },
         color: { type: "string", description: "Badge fill colour, a plain CSS colour." },
@@ -645,7 +721,7 @@ export const CONFIG_SPEC = {
           type: "string",
           description: "Corresponding-source link (required by copyleft licenses).",
         },
-        note: { type: "string", description: "One-line description." },
+        note: localizable({ description: "One-line description. Localizable (unlike 'text'/'textFile', see docs/config.md)." }),
       },
     },
   },
@@ -658,7 +734,21 @@ export const CONFIG_SPEC = {
     // open-ended key space, like `help` above; no `properties` of its own, so
     // `openKeys` is documentation more than mechanism here too.
     openKeys: true,
-    description: "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys.",
+    // Each VALUE is either a plain string (overrides the deployment's
+    // default locale only, full back-compat with a config written before
+    // per-locale overrides existed) or an object of locale tag -> string
+    // (overrides one `languages` entry at a time). `mapValue` tells
+    // gen-config-schema.mjs's nodeToSchema to emit that same string-or-map
+    // union as this object's `additionalProperties`, rather than the
+    // unrestricted "any property" shape a key-less object would otherwise
+    // get (see nodeToSchema's own comment on the marker).
+    mapValue: {
+      anyOf: [{ type: "string" }, { type: "object", additionalProperties: { type: "string" } }],
+    },
+    description:
+      "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys. Each " +
+      "value is a plain string (overrides the deployment's default locale only) or an object of " +
+      "locale tag: string pairs (each tag must be one of this deployment's 'languages').",
   },
 };
 

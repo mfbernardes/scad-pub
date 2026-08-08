@@ -19,7 +19,7 @@
 // policy (useSheetPolicy.ts). Are extracted hooks this component composes, not
 // logic it owns itself.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
-import type { Design, Schema, UiConfig, WorkerProgress } from "../openscad/types";
+import type { LocalizedDesign, Schema, UiConfig, WorkerProgress } from "../openscad/types";
 import type { Values, ParsedSet } from "../lib/presets";
 import type { RenderResult } from "../openscad/types";
 import type { RenderMetrics } from "../lib/renderMetrics";
@@ -82,6 +82,9 @@ import { useOutputConsole } from "../lib/useOutputConsole";
 import { useSheetPolicy } from "../lib/useSheetPolicy";
 import { ReviewDialog } from "./ReviewDialog";
 import { StatusStrip, type StatusStripProps } from "./StatusStrip";
+import { t } from "../lib/i18n";
+import { useLocale, getDesignStrings } from "../lib/localeStore";
+import { localizeEcho } from "../lib/designI18n";
 
 const ADVANCED_SETTINGS_KEY = ns("settings.advanced");
 
@@ -144,8 +147,8 @@ function ActionDock({
 
 interface Props {
   schema: Schema;
-  design: Design;
-  designs: Design[];
+  design: LocalizedDesign;
+  designs: LocalizedDesign[];
   values: Values;
   /** Values behind the current render: what the measurements panel reads. */
   renderedValues: Values;
@@ -223,6 +226,7 @@ export const AppShell = memo(function AppShell({
   exportSuccess,
   onDismissExportSuccess,
 }: Props) {
+  const locale = useLocale(); // also feeds the computedInfo memo's echo-label translation below
   const actions = useAppActions();
   // `ui.essentials` is what decides whether `@advanced` params are hideable at
   // all: docs/config.md and docs/annotations.md both scope the whole feature
@@ -375,7 +379,28 @@ export const AppShell = memo(function AppShell({
 
   // Rows from `echo("@info", label, unit, value)`: internally-calculated
   // values the design surfaced at render time (see lib/computedInfo.ts).
-  const computedInfo = useMemo(() => parseComputedInfo(log), [log]);
+  // Each row's label AND unit are SOURCE strings the design's `.scad`
+  // literally echoed; `localizeEcho` maps each through this design's sidecar
+  // `echo` table (a free-form source-string -> translation lookup, since
+  // gen-schema has no static knowledge of what a design chooses to echo, see
+  // designI18n.ts's own doc) for the active locale, falling back to that
+  // source string unchanged on a miss — a unit ("mm") is just another
+  // echo-map source string, see docs/config.md. The numeric `value` is never
+  // translated. `locale.tag`/`.designsGeneration` are real dependencies here
+  // (unlike the bare subscription elsewhere): a locale switch, or the default
+  // tag's own async sidecar load, must re-map these labels/units even though
+  // `log` itself hasn't changed.
+  const computedInfo = useMemo(() => {
+    const strings = getDesignStrings(design.id);
+    return parseComputedInfo(log).map((row) => ({
+      ...row,
+      label: localizeEcho(strings, row.label),
+      unit: localizeEcho(strings, row.unit),
+    }));
+    // getDesignStrings() reads the locale store's module-singleton state
+    // directly, so react-hooks can't see that this call is locale-sensitive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [log, design.id, locale.tag, locale.designsGeneration]);
 
   // Production-readiness derivation (diagnostics/notices → count badges →
   // attention items → readiness → failure card state), plus the Review
@@ -613,10 +638,10 @@ export const AppShell = memo(function AppShell({
           each href always matches the one target that actually exists:
           #params(-mobile), and #main-content on the mounted branch's root. */}
       <a className={SKIP_LINK_CLASS} href="#main-content">
-        Skip to main content
+        {t("appShell.skipToMain")}
       </a>
       <a className={SKIP_LINK_CLASS} href={isMobile ? "#params-mobile" : "#params"}>
-        Skip to parameters
+        {t("appShell.skipToParams")}
       </a>
 
       {/* Only the active layout mounts (M7): desktop and mobile used to both
@@ -759,7 +784,7 @@ export const AppShell = memo(function AppShell({
               type="button"
               className="output-console__scrim absolute inset-x-0 top-0 bottom-[calc(var(--safe-area-bottom)+var(--mobile-peek-height))] z-[31] bg-black/40"
               onClick={closeOutput}
-              aria-label="Close Messages"
+              aria-label={t("console.close")}
             />
           )}
           <OutputConsole

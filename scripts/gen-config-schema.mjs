@@ -126,6 +126,17 @@ function nodeToSchema(node) {
 
   if (node.type === "enum") return { ...base, type: "string", enum: node.values };
 
+  // `localizable: true` (config-spec.mjs's `localizable()` factory): a
+  // `LocalizableText`-valued field — a plain string (every locale), or an
+  // object of locale tag -> string. Checked ahead of the generic `custom`
+  // string handling below, since every `localizable` field is also
+  // `custom: true` (the object form's real invariants — must include the
+  // default tag, every key a shipped locale — need this deployment's
+  // resolved `languages`, which a static schema can't express; this emits
+  // only the SHAPE, same "best-effort" stance as every other bespoke field).
+  if (node.localizable)
+    return { ...base, anyOf: [{ type: "string" }, { type: "object", additionalProperties: { type: "string" } }] };
+
   // `"color"` (config-spec.mjs's `color()` factory) is a real, distinct type
   // for config-parsers.mjs's own validateFieldValue dispatch, but it isn't a
   // legal JSON Schema type: a schema-consuming editor would reject the
@@ -138,6 +149,18 @@ function nodeToSchema(node) {
 
   if (node.type === "array")
     return { ...base, type: "array", items: node.items ? nodeToSchema(node.items) : {} };
+
+  // A dynamically-keyed object whose VALUES all share one shape (`strings`:
+  // catalogue key -> string-or-locale-map), as opposed to `acceptsString`
+  // below (the object form's PROPERTY SET is fixed but the object itself is
+  // also accepted bare as a string) or the plain `{ type: "object" }`
+  // fallback further down (genuinely untyped values, `help`/`colors`/a
+  // `logo`/`pwa.themeColor` object form). `node.mapValue` is already a JSON
+  // Schema fragment (config-spec.mjs's `strings` node builds it directly, see
+  // that node's own comment), so it's used verbatim as `additionalProperties`
+  // rather than routed back through this function.
+  if (node.type === "object" && node.mapValue)
+    return { ...base, type: "object", additionalProperties: node.mapValue };
 
   // A field that accepts EITHER a plain string OR an object with no fixed key
   // set (`designs[].presets.images`: a directory path, or a preset-name ->
@@ -171,11 +194,137 @@ export function buildConfigSchema() {
   };
 }
 
+// A `{ title?, body? }` help section — SPARSE on purpose: a config text
+// file's own section objects are validated for real by
+// scripts/lib/config-text.mjs (both keys required there, once the join
+// against the config's structure is known); this schema only offers editor
+// autocomplete/typo-catching, the same "best-effort, looser than the real
+// build" stance buildConfigSchema's own module comment states.
+const TEXT_SECTION_SCHEMA = {
+  type: "object",
+  properties: { title: { type: "string" }, body: { type: "string" } },
+  additionalProperties: false,
+};
+
+// A help pane's own shape (top-level 'help'): inline sections, or a single
+// Markdown 'file' — see scripts/lib/config-text.mjs's foldHelp, which decides
+// which form is in play from the DEFAULT locale's own entry. The top-level
+// pane carries no 'label' (nothing picks a single-pane help by name); one
+// 'help.tabs.<id>' entry is the same shape PLUS 'label' (TEXT_HELP_TAB_PROPERTIES
+// below) — foldHelpTab requires it on the default locale's entry, so leaving
+// it off this schema would make every real tabbed text file fail validation
+// against 'additionalProperties: false'.
+const TEXT_HELP_PANE_PROPERTIES = {
+  intro: { type: "string" },
+  sections: { type: "array", items: TEXT_SECTION_SCHEMA },
+  file: { type: "string", description: "Config-relative Markdown file, split into intro/sections at build time." },
+};
+
+const TEXT_HELP_TAB_PROPERTIES = {
+  label: { type: "string" },
+  ...TEXT_HELP_PANE_PROPERTIES,
+};
+
+// scadpub.config.text.schema.json: the shape of ONE locale's text file (see
+// docs/config.md "Localizing config text" and scripts/lib/config-text.mjs's
+// own module comment for the full contract). Hand-written, not derived from
+// CONFIG_SPEC: a text file's keys mirror config surfaces
+// (popup/help/fileImport/notices/licenses/designs/strings) rather than the
+// config's own top-level shape, and its real join-key/completeness/
+// count-parity invariants are cross-field checks against the CONFIG this file
+// accompanies — exactly the kind of thing buildConfigSchema's own comment
+// says a static schema can't express for any `custom` field. This is
+// deliberately loose in the same places: `notices`/`licenses`/`designs`/
+// `help.tabs` are dynamically-keyed (marker/name/id are the config's own),
+// and `strings` mirrors the main schema's own catalogue-keyed openness.
+export function buildConfigTextSchema() {
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    title: "ScadPub config text file",
+    description:
+      "One locale's text file, referenced by scadpub.config.json's 'text' key. Generated from " +
+      "scripts/gen-config-schema.mjs's buildConfigTextSchema — see docs/config.md 'Localizing config text'.",
+    type: "object",
+    properties: {
+      $schema: { type: "string" },
+      popup: {
+        type: "object",
+        properties: {
+          header: { type: "string" },
+          body: { type: "string" },
+          button: { type: "string" },
+          footnote: { type: "string" },
+        },
+        additionalProperties: false,
+      },
+      help: {
+        type: "object",
+        properties: {
+          ...TEXT_HELP_PANE_PROPERTIES,
+          tabs: {
+            type: "object",
+            description: "Keyed by 'help.tabs[].id' in scadpub.config.json.",
+            additionalProperties: { type: "object", properties: TEXT_HELP_TAB_PROPERTIES, additionalProperties: false },
+          },
+        },
+        additionalProperties: false,
+      },
+      fileImport: {
+        type: "object",
+        properties: { note: { type: "string" } },
+        additionalProperties: false,
+      },
+      notices: {
+        type: "object",
+        description: "Keyed by 'notices[].marker' in scadpub.config.json.",
+        additionalProperties: {
+          anyOf: [
+            { type: "string" },
+            {
+              type: "object",
+              properties: { one: { type: "string" }, other: { type: "string" } },
+              required: ["other"],
+              additionalProperties: false,
+            },
+          ],
+        },
+      },
+      licenses: {
+        type: "object",
+        description: "Keyed by 'licenses[].name' in scadpub.config.json.",
+        additionalProperties: {
+          type: "object",
+          properties: { note: { type: "string" } },
+          additionalProperties: false,
+        },
+      },
+      designs: {
+        type: "object",
+        description: "Keyed by 'designs[].id' in scadpub.config.json.",
+        additionalProperties: {
+          type: "object",
+          properties: { label: { type: "string" }, group: { type: "string" } },
+          additionalProperties: false,
+        },
+      },
+      strings: {
+        type: "object",
+        description: "Chrome-catalogue overrides for this locale, keyed like scadpub.config.json's own 'strings'.",
+        additionalProperties: { type: "string" },
+      },
+    },
+    additionalProperties: false,
+  };
+}
+
 function main() {
   const HERE = dirname(fileURLToPath(import.meta.url));
   const outPath = join(HERE, "..", "scadpub.config.schema.json");
   writeFileSync(outPath, JSON.stringify(buildConfigSchema(), null, 2) + "\n");
   console.log(`gen-config-schema: wrote ${outPath}`);
+  const textOutPath = join(HERE, "..", "scadpub.config.text.schema.json");
+  writeFileSync(textOutPath, JSON.stringify(buildConfigTextSchema(), null, 2) + "\n");
+  console.log(`gen-config-schema: wrote ${textOutPath}`);
 }
 
 // Run only when executed directly (not when imported by the tests).

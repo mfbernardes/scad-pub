@@ -3,12 +3,10 @@
   "title": "ScadPub",
   "id": "scadpub",
   "description": "ScadPub publishes OpenSCAD models as static browser-based configurators.",
-
   "source": "examples",
   "designs": [
     {
       "id": "tag",
-      "label": "Tag",
       "presets": {
         "images": {
           "Large tag": "examples/tag-preset-large.png",
@@ -16,11 +14,17 @@
         }
       }
     },
-    { "id": "coin", "label": "Coin" },
-    { "id": "panel", "label": "Panel" }
+    {
+      "id": "coin"
+    },
+    {
+      "id": "panel"
+    }
   ],
-  "assets": ["emblem.svg", "panel.svg"],
-
+  "assets": [
+    "emblem.svg",
+    "panel.svg"
+  ],
   "render": {
     "features": [],
     "fonts": [
@@ -28,87 +32,59 @@
       "LiberationSans-Regular.ttf"
     ]
   },
-
   "pwa": {
     "install": "off",
     "shortName": "ScadPub",
     "icon": "branding/scadpub-icon.svg",
     "iconMaskable": "branding/scadpub-icon-maskable.svg",
-    "themeColor": { "light": "#eef1f6", "dark": "#14161c" },
+    "themeColor": {
+      "light": "#eef1f6",
+      "dark": "#14161c"
+    },
     "backgroundColor": "#14161c",
-    "categories": ["utilities", "productivity", "graphics"]
+    "categories": [
+      "utilities",
+      "productivity",
+      "graphics"
+    ]
   },
   "ui": {
     "gallery": true,
     "essentials": true,
-    "afterExport": { "helpTab": "Printing" }
+    "afterExport": {
+      "helpTab": "printing"
+    }
   },
   "fileImport": true,
-
   "popup": {
-    "header": "Welcome to ScadPub",
-    "body": "Configure an OpenSCAD design in your browser and export a ready-to-print model — everything runs locally.\n\nScadPub is open source: see the [project on GitHub](https://github.com/mfbernardes/scad-pub).",
-    "mode": "dismissible",
-    "footnote": "Everything runs in your browser. Nothing is uploaded."
+    "mode": "dismissible"
   },
   "help": {
-    "intro": "Customize an OpenSCAD design in your browser and download a ready-to-print model — everything runs on your device.",
     "tabs": [
       {
-        "label": "Walkthrough",
-        "intro": "A full pass through the app, start to finish. This tab is intentionally long so you can see it scroll on its own.",
-        "sections": [
-          {
-            "title": "1. Pick a design",
-            "body": "Use the design name in the top bar to switch between the available designs. Each one auto-sizes to the settings you choose."
-          },
-          {
-            "title": "2. Make it yours",
-            "body": "The **Customize** tab lists what you can change, grouped into sections.\n\n- Drag a slider (or type a number), pick from a dropdown, type text, or flip a switch.\n- Tap the small **ⓘ** next to a label for a fuller explanation.\n- Click a **section header** to fold or unfold it; some start folded.\n- Some settings only appear when another one makes them relevant.\n- **Find a setting…** narrows the list as you type. A long form also offers **Jump to section** (the list button beside it) to skip straight to one.\n- Once you've changed something, a strip at the **top** of the tab counts your changes and offers **Reset to defaults** — or, with a preset applied, **Revert** to it."
-          },
-          {
-            "title": "3. Look around the preview",
-            "body": "**Drag** to spin the model, **scroll or pinch** to zoom, and **right-drag** (or two fingers) to move it."
-          },
-          {
-            "title": "4. Keep the preview fresh",
-            "body": "With **Live preview** on, the model updates a moment after each change. The switch is under the settings panel on a wide screen, and in the **⋮** menu (top right) on a phone.\n\nFor a slow design it pauses itself — press **Update** over the preview when you're ready."
-          },
-          {
-            "title": "5. Save & reuse settings (presets)",
-            "body": "The **Presets** tab lists **Ready-made** starting points and the presets **Saved by you** (stored in this browser).\n\n- **Save** keeps your current settings under a name; **Export** writes them to an OpenSCAD `parameterSets` JSON, which also opens in the desktop OpenSCAD Customizer."
-          },
-          {
-            "title": "6. Add files (fonts, SVGs…)",
-            "body": "Some designs can use a file of yours — a font for lettering, or an SVG drawing. You add each one **from the control that needs it**, not from a separate upload screen:\n\n- **Fonts** (`.ttf`/`.otf`): choose **Import font…** in a design's font menu. The font then shows there by name, for every design.\n- **Drawings** (`.svg`): use the drawing control's **Prepare SVG…** to bring one in.\n- The **Files** action (top bar, or the **⋮** menu on a phone) is where you **manage** what you've imported — see each file's type and size, remove one, or clear all. You don't import from there.\n- Files stay in this browser and come back on your next visit; nothing is uploaded to a server."
-          },
-          {
-            "title": "7. Download & share",
-            "body": "The two buttons over the preview:\n\n- **Download for 3D printing** — get the printable mesh (with colours) for your slicer.\n- **Share** (**Copy link** where your browser can't share directly) — a link that reopens this exact design, settings and preset.\n\n**Save image**, for a picture of the preview, is in the top bar — or the **⋮** menu on a phone.\n\nIf anything needs a look before you download, a coloured pill appears just above those buttons (“1 issue to review”). Tap it — or Download — to open **Review**, which summarises what you're about to get and what's unresolved. Once the model has rendered you can still choose **Download anyway**; while a render has failed, that stays unavailable."
-          },
-          {
-            "title": "8. Appearance & info",
-            "body": "The **sun/moon** button cycles light → dark → auto, and the **ⓘ** button lists open-source licenses. Both sit in the top bar on a wide screen, and in the **⋮** menu (top right) on a phone."
-          }
-        ]
+        "id": "walkthrough"
       },
       {
-        "label": "Printing",
-        "file": "examples/help-printing.md"
+        "id": "printing"
       },
       {
-        "label": "Troubleshooting",
-        "sections": [
-          {
-            "title": "The preview fails or looks wrong",
-            "body": "Open **Messages** (the bell in the top bar) — the design reports what it didn't like there, and the **Log** tab has the full technical output."
-          }
-        ]
+        "id": "troubleshooting"
       }
     ]
   },
   "notices": [
-    { "marker": "alert", "label": { "one": "alert", "other": "alerts" }, "color": "#e0a458", "attention": true },
-    { "marker": "note", "label": { "one": "note", "other": "notes" }, "color": "#86a9ff" }
-  ]
+    {
+      "marker": "alert",
+      "color": "#e0a458",
+      "attention": true
+    },
+    {
+      "marker": "note",
+      "color": "#86a9ff"
+    }
+  ],
+  "text": {
+    "en": "scadpub.text.en.json",
+    "de": "scadpub.text.de.json"
+  }
 }

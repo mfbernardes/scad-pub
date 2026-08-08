@@ -4,7 +4,23 @@
 // value rendered the same way wherever a visitor sees it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { mm, formatParamValue } from "../src/lib/format.ts";
+import { rebind, defaultTag, overridesForLocale } from "../src/lib/i18n.ts";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const generatedSchema = JSON.parse(
+  readFileSync(join(HERE, "..", "src", "generated", "designs.json"), "utf-8")
+);
+
+// Mirrors tests/i18n.test.mjs's own helper: restores the module-level binding
+// i18n.ts's init produced, so a test that rebinds away from it (to exercise
+// mm()'s locale sensitivity) leaves the file exactly as it found it.
+function restoreDefaultBinding() {
+  rebind(defaultTag, null, overridesForLocale(generatedSchema.strings, defaultTag, defaultTag));
+}
 
 function numberParam(name, overrides = {}) {
   return { name, section: "Main", description: name, help: "", type: "number", default: 0, ...overrides };
@@ -14,6 +30,19 @@ test("mm(): always shows at least one decimal", () => {
   assert.equal(mm(90), "90.0");
   assert.equal(mm(12.34), "12.3");
   assert.equal(mm(12.36), "12.4");
+});
+
+test("mm(): never groups digits — a CAD callout is a technical readout, not prose", () => {
+  // Ungrouped in English ("1234.5", not "1,234.5") and, critically, still
+  // ungrouped in German: de's grouping separator is a dot, which in an
+  // ungrouped decimal position would misread as the decimal point itself.
+  assert.equal(mm(1234.5), "1234.5");
+  try {
+    rebind("de", null, {});
+    assert.equal(mm(1234.5), "1234,5");
+  } finally {
+    restoreDefaultBinding();
+  }
 });
 
 test("formatParamValue(): number gets its @info unit appended", () => {

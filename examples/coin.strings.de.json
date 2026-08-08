@@ -1,0 +1,85 @@
+{
+  "description": "Runde Münze mit geprägtem Emblem.",
+  "sections": {
+    "Coin": "Münze",
+    "Text": "Text",
+    "Hanging hole": "Aufhängeloch",
+    "Quality": "Qualität"
+  },
+  "params": {
+    "diameter": {
+      "description": "Durchmesser der Münze (mm).",
+      "help": "Durchmesser der Münze (mm)."
+    },
+    "thickness": {
+      "description": "Dicke des Münzkörpers (mm).",
+      "help": "Dicke des Münzkörpers (mm)."
+    },
+    "border_width": {
+      "description": "Breite des Randrings auf der Vorderseite (mm).",
+      "help": "Breite des Randrings auf der Vorderseite (mm). Auf 0 setzen für eine schlichte Scheibe."
+    },
+    "border_height": {
+      "description": "Wie weit der Randring über die Vorderseite hinausragt (mm).",
+      "help": "Wie weit der Randring über die Vorderseite hinausragt (mm)."
+    },
+    "body_color": {
+      "description": "Farbe des Münzkörpers.",
+      "help": "Farbe des Münzkörpers. Hier festgelegt statt der eigenen Einfärbung des Viewers überlassen, damit Export, Vorschau und die Kartengrafik des Designs übereinstimmen.",
+      "info": {
+        "label": "Körperfarbe"
+      }
+    },
+    "border_color": {
+      "description": "Farbe des erhabenen Randrings im Export.",
+      "help": "Farbe des erhabenen Randrings im Export.",
+      "info": {
+        "label": "Randfarbe"
+      }
+    },
+    "label": {
+      "description": "Text, der auf die Vorderseite der Münze geprägt wird.",
+      "help": "Text, der auf die Vorderseite der Münze geprägt wird."
+    },
+    "text_size": {
+      "description": "Schrifthöhe (mm).",
+      "help": "Schrifthöhe (mm)."
+    },
+    "text_depth": {
+      "description": "Wie weit der Text aus der Vorderseite heraussteht (oder in sie einsinkt) (mm).",
+      "help": "Wie weit der Text aus der Vorderseite heraussteht (oder in sie einsinkt) (mm)."
+    },
+    "font": {
+      "description": "Schriftfamilie / -stil.",
+      "help": "Schriftfamilie / -stil. Verwendet standardmäßig eine Schrift, die ScadPub nicht mitliefert, um den Hinweis „Schrift nicht geladen“ zu zeigen: importieren Sie sie (oder klicken Sie auf die im Hinweis angebotene mitgelieferte Ersatzschrift), um die echte Vorderseite darzustellen."
+    },
+    "text_color": {
+      "description": "Farbe des erhabenen Texts im Export.",
+      "help": "Farbe des erhabenen Texts im Export."
+    },
+    "engrave_text": {
+      "description": "Text in die Vorderseite eingravieren, statt ihn erhaben auszuführen.",
+      "help": "Text in die Vorderseite eingravieren, statt ihn erhaben auszuführen."
+    },
+    "hole": {
+      "description": "Ein Loch am oberen Rand zum Aufhängen hinzufügen.",
+      "help": "Ein Loch am oberen Rand zum Aufhängen hinzufügen."
+    },
+    "hole_diameter": {
+      "description": "Lochdurchmesser (mm).",
+      "help": "Lochdurchmesser (mm)."
+    },
+    "facet_angle": {
+      "description": "Maximaler Facettenwinkel; niedriger ist glatter, aber langsamer.",
+      "help": "Maximaler Facettenwinkel; niedriger ist glatter, aber langsamer."
+    },
+    "facet_size": {
+      "description": "Maximale Facettengröße (mm).",
+      "help": "Maximale Facettengröße (mm)."
+    }
+  },
+  "echo": {
+    "Radius": "Radius",
+    "mm": "mm"
+  }
+}

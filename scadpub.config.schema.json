@@ -60,6 +60,26 @@
         }
       ]
     },
+    "languages": {
+      "description": "Which shipped chrome locales (see src/lib/localeRegistry.ts) this deployment's language switcher offers. Defaults to every shipped locale, 'lang' first, when 'lang' is one of them; otherwise to a single-locale deployment (the switcher stays hidden). When set, every entry must name a shipped locale and the set must include the deployment's resolved default locale.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "text": {
+      "description": "Opt-in: locale tag -> config-relative text-file path, moving ALL config-authored prose (English included) into per-locale files instead of writing it inline. The default locale's file is required and must be complete; every field it covers becomes a build error if also written inline. See docs/config.md 'Localizing config text'.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "pwa": {
       "description": "Manifest-only PWA chrome (install metadata, icons, theming) that feeds manifest.webmanifest and the icon rasterizer at build time. Not mirrored into designs.json — the app itself never reads a 'pwa' object.",
       "type": [
@@ -198,10 +218,20 @@
             "type": "string"
           },
           "label": {
-            "description": "Picker label; defaults to a humanized id.",
-            "type": [
-              "string",
-              "null"
+            "description": "Picker label; defaults to a humanized id. Localizable.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "file": {
@@ -220,10 +250,20 @@
             ]
           },
           "group": {
-            "description": "Dropdown/gallery grouping header; consecutive same-value designs cluster.",
-            "type": [
-              "string",
-              "null"
+            "description": "Dropdown/gallery grouping header; consecutive same-value designs cluster. Localizable.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "presets": {
@@ -882,7 +922,7 @@
               "type": "object",
               "properties": {
                 "helpTab": {
-                  "description": "Opens Help scrolled to the tab with this label; must name a real help.tabs[].label.",
+                  "description": "Opens Help scrolled to the tab with this id (help.tabs[].id, checked first) or, for back-compat, this exact label (help.tabs[].label); must name a real tab either way.",
                   "type": [
                     "string",
                     "null"
@@ -1009,10 +1049,20 @@
           "type": "object",
           "properties": {
             "note": {
-              "description": "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'.",
-              "type": [
-                "string",
-                "null"
+              "description": "Markdown-subset guidance shown atop the Files dialog. Mutually exclusive with 'noteFile'. Localizable.",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "noteFile": {
@@ -1038,12 +1088,32 @@
       ],
       "properties": {
         "header": {
-          "description": "Dialog title.",
-          "type": "string"
+          "description": "Dialog title. Localizable, see docs/config.md.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ]
         },
         "body": {
-          "description": "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'.",
-          "type": "string"
+          "description": "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'. Localizable.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ]
         },
         "bodyFile": {
           "description": "Config-relative Markdown file whose contents become 'body' at build time. Mutually exclusive with 'body' (setting both fails the build, naming both).",
@@ -1071,17 +1141,37 @@
           ]
         },
         "button": {
-          "description": "Primary-button label; overrides the default 'OK'.",
-          "type": [
-            "string",
-            "null"
+          "description": "Primary-button label; overrides the default 'OK'. Localizable.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "footnote": {
-          "description": "Short plain-text line shown small and muted at the bottom.",
-          "type": [
-            "string",
-            "null"
+          "description": "Short plain-text line shown small and muted at the bottom. Localizable.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       },
@@ -1121,15 +1211,35 @@
                 "type": "object",
                 "properties": {
                   "one": {
-                    "description": "Singular override; falls back to 'other' when omitted.",
-                    "type": [
-                      "string",
-                      "null"
+                    "description": "Singular override; falls back to 'other' when omitted. Localizable.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
                     ]
                   },
                   "other": {
-                    "description": "Plural/default form, used whenever 'one' is unset.",
-                    "type": "string"
+                    "description": "Plural/default form, used whenever 'one' is unset. Localizable.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1230,10 +1340,20 @@
             ]
           },
           "note": {
-            "description": "One-line description.",
-            "type": [
-              "string",
-              "null"
+            "description": "One-line description. Localizable (unlike 'text'/'textFile', see docs/config.md).",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         },
@@ -1248,11 +1368,24 @@
       }
     },
     "strings": {
-      "description": "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys.",
+      "description": "Per-deployment overrides of src/locales/en.json, keyed by the same catalogue keys. Each value is a plain string (overrides the deployment's default locale only) or an object of locale tag: string pairs (each tag must be one of this deployment's 'languages').",
       "type": [
         "object",
         "null"
-      ]
+      ],
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        ]
+      }
     }
   },
   "additionalProperties": false

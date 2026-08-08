@@ -43,6 +43,7 @@ npm run check:studio # builds a viewer.style "studio" variant and measures its l
 npm run check:svg  # serves each sanitized SVG to Chromium; asserts it makes no request
 npm run check:dist # asserts the BUILT artifact carries its sw.js version + CSP block
 npm run check:scad # drives the pinned OpenSCAD WASM to pin the language facts the parser assumes
+npm run i18n:status # design-translation sidecar coverage/drift report; -- --strict for CI, -- --stamp to record freshness
 npm run e2e:svg    # end-to-end run of the in-app SVG wizard against the BUILT app
 npm run screens    # capture every desktop + mobile view of the BUILT app
 ```
@@ -199,11 +200,36 @@ at 2.66:1, under 1.4.11's 3:1) and can only say "amber", never what is wrong.
   `.output-console__close`, `.brand-logo` and friends. No stylesheet rule targets them; the
   smoke/vis/capture scripts and the `extraCss` escape hatch do.
 - **UI text goes through the i18n catalogue.** ScadPub’s chrome copy lives in
-  `src/locales/en.json` and is read via `t()`/`tn()` in `src/lib/i18n.ts`, so a deployment can
-  override any key through the config’s `strings` block (validated at build time). Add the key
-  to the catalogue before referencing it; `tests/i18nCoverage.test.mjs` also fails on a
-  catalogue key nothing in `src/` uses. It is a subset, not a translation layer: older panels
-  still carry plain English.
+  `src/locales/<tag>.json` (`en` is source of truth; the shipped locales are
+  `src/lib/localeRegistry.ts`'s `LOCALES`; parity and coverage tests enforce matching key sets
+  across all of them — that parity check IS the chrome catalogue's freshness guarantee, no
+  separate audit tool needed) and is read via `t()`/`tn()`, with runtime language switching
+  through `src/lib/localeStore.ts`'s `useLocale()`. Rules the reviews already cite: (1) no
+  module-scope `t()`/`tn()` — a guard test enforces it; (2) indirection tables store *keys*,
+  resolved at render (`views.ts`); (3) every text-rendering component subscribes via
+  `useLocale()`; (4) memoized derivations of translated text take the locale tag as a dep; (5)
+  design-supplied text is translated via per-design `.strings.<tag>.json` sidecars
+  ([docs/config.md#design-translations](docs/config.md#design-translations)), never
+  annotations, never in `renderHash`; German copy follows the glossary and style rules in
+  [docs/german-style.md](docs/german-style.md). `npm run i18n:status` audits that coverage (and, with a
+  tracked `<design>.strings.stamps.json`, content drift since a translation was made) per
+  design × locale — informational by default, `--strict` for CI. `svgPrep`'s engine
+  (`src/lib/svgPrep/`) stays i18n-free on purpose (its Node tests assert on structured
+  `{code, vars}` findings/changes/errors, not prose) and `src/lib/svgPrepText.ts` is the sole
+  place that resolves a code to catalogue text. Config-authored prose (popup, notices, help,
+  design labels/groups) is leaf-localizable — `string | Record<tag, string>` — optionally
+  moved out of `scadpub.config.json` entirely into per-locale text files via the opt-in
+  `text` key (`scripts/lib/config-text.mjs`, folded back into those same leaves before
+  anything else runs, so nothing past that pre-pass — including this file's own
+  `configI18n.ts` projection — changes) — and MUST be
+  projected through `src/lib/configI18n.ts`'s `lx`/`lxOpt`/`lxHelp`/`lxNotice`/`lxDesignEntry`
+  before it reaches JSX; the raw vs. `Resolved*` type split in `types.ts` makes an unprojected
+  value a compile error. Machine-readable output stays locale-invariant on purpose — SVG
+  region/geometry numbers, `-D` render args, identity strings, `<input>` values, render-status
+  digits, `echo("@review", …)` values — each marked with a one-line comment where it appears.
+  Documented exclusions: `main.tsx`'s root error fallback (dependency-free English — the locale
+  machinery may be what broke) and the PWA manifest / `<title>`/`<meta>` (fixed at the build's
+  configured language; see docs/config.md's "Localizing config text").
 - **Font availability is decided in the app, not in OpenSCAD.** `gen-schema` reads each bundled
   font’s family and face from its `name` table and flags font params `isFont`; those render as
   `FontSelect`, which unions bundled with imported fonts and preserves stored value strings so

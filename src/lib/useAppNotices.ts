@@ -5,6 +5,7 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { t } from "./i18n";
+import { useLocale } from "./localeStore";
 
 export interface AppNoticesArgs {
   /** A render used defines the current bundle no longer declares. */
@@ -24,6 +25,12 @@ export function useAppNotices({
   dismissUpdate,
   online,
 }: AppNoticesArgs): void {
+  // A stable toast id REPLACES its previous instance rather than stacking, so
+  // adding the active locale `tag` to every effect below re-fires an already-
+  // showing notice in the new language on a runtime switch, instead of
+  // leaving it showing stale text until its own trigger condition changes.
+  const { tag } = useLocale();
+
   useEffect(() => {
     if (bundleStale)
       toast.error(t("notice.bundleStale"), {
@@ -31,7 +38,7 @@ export function useAppNotices({
         duration: Infinity,
         action: { label: t("notice.reload"), onClick: forceUpdate },
       });
-  }, [bundleStale, forceUpdate]);
+  }, [bundleStale, forceUpdate, tag]);
 
   useEffect(() => {
     if (updateReady && !bundleStale)
@@ -41,7 +48,7 @@ export function useAppNotices({
         action: { label: t("notice.reload"), onClick: applyUpdate },
         cancel: { label: t("notice.later"), onClick: dismissUpdate },
       });
-  }, [updateReady, bundleStale, applyUpdate, dismissUpdate]);
+  }, [updateReady, bundleStale, applyUpdate, dismissUpdate, tag]);
 
   // Offline indicator: a persistent (but reassuring) toast while offline, since
   // the cached WASM means rendering and export keep working. Clears on reconnect.
@@ -52,5 +59,5 @@ export function useAppNotices({
         duration: Infinity,
       });
     else toast.dismiss("offline");
-  }, [online]);
+  }, [online, tag]);
 }

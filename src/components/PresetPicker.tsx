@@ -17,10 +17,13 @@ import {
   savePreset,
   toParameterSetsFile,
   parseParameterSetsFile,
+  ParameterSetsFormatError,
 } from "../lib/presets";
 import { downloadBlob } from "../lib/download";
 import { parsePresetCardName } from "../lib/presetCard";
-import { t, tn } from "../lib/i18n";
+import { localizePresetName } from "../lib/designI18n";
+import { t, tn, formatList } from "../lib/i18n";
+import { useLocale, getDesignStrings } from "../lib/localeStore";
 import { Button } from "./ui/button";
 import { FileInput } from "./FileInput";
 import { Thumbnail } from "./Thumbnail";
@@ -67,18 +70,14 @@ const cardClass = (isSelected: boolean) =>
     isSelected ? "border-primary" : "border-border enabled:hover:border-brand"
   );
 
-// English conjunction join ("A, B, and C") for the import-collision dialog's
-// name list, module-level like i18n.ts's own EN_PLURAL_RULES since it's cheap
-// to share and pointless to reconstruct per render.
-const LIST_FORMAT = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
-
 /** Summarises colliding preset names for the import dialog: every name when
  *  there are few, else the first `max` with an "N more" tail folded into the
  *  same conjunction join, so "A, B, C, and 2 more" reads as one sentence
- *  instead of a truncated dump. */
+ *  instead of a truncated dump. Joins through i18n.ts's `formatList`, which
+ *  already reads the active locale's `Intl.ListFormat`. */
 function summarizeCollisions(names: string[], max = 3): string {
-  if (names.length <= max) return LIST_FORMAT.format(names);
-  return LIST_FORMAT.format([...names.slice(0, max), tn("presets.moreCount", names.length - max)]);
+  if (names.length <= max) return formatList(names);
+  return formatList([...names.slice(0, max), tn("presets.moreCount", names.length - max)]);
 }
 
 interface Props {
@@ -116,6 +115,20 @@ export function PresetPicker({
   onPresetsChange,
   compact = false,
 }: Props) {
+  // Subscribes this component to every locale-store change (tag switch AND
+  // a locale's own async sidecar load, see `designsGeneration` below) — the
+  // tag itself isn't read directly here; formatList/localizePresetName read
+  // the active locale from i18n.ts/localeStore.ts's own current binding.
+  useLocale();
+  // Display-only translation of a bundled preset's NAME (localizePresetName's
+  // own doc). Re-read on every render rather than memoized: calling
+  // useLocale() above already subscribes this component to every store
+  // change (tag switch AND a locale's own async sidecar load, see
+  // localeStore.ts's `designsGeneration`), so a stale closure here isn't a
+  // risk, and the map itself is a cheap object lookup. Every IDENTITY use of
+  // a preset name below (the `bundled:<id>:<name>` id, `presetImages` keys)
+  // stays on the raw `p.name`, never this.
+  const designStrings = getDesignStrings(design.id);
   // Whether the compact footer's import/export overflow is open (compact only).
   const [manageOpen, setManageOpen] = useState(false);
   // Preset images are optional per preset (docs/config.md's "Bundled presets"
@@ -235,13 +248,23 @@ export function PresetPicker({
     try {
       parsed = parseParameterSetsFile(design, await file.text());
     } catch (err) {
-      toast.error(
-        `Couldn't import "${file.name}": ${err instanceof Error ? err.message : "not a valid parameterSets file."}`
-      );
+      // ParameterSetsFormatError is the parser's one known, expected failure
+      // (see its own doc): map it to a catalogue reason rather than its
+      // hardcoded-English `.message`, which would otherwise land untranslated
+      // inside this (translated) toast. Any other error (malformed JSON, …)
+      // keeps its generic `.message` when it's an Error, or the catalogue's
+      // locale-neutral fallback reason otherwise.
+      const reason =
+        err instanceof ParameterSetsFormatError
+          ? t("presets.importNotParameterSets")
+          : err instanceof Error
+            ? err.message
+            : t("presets.importInvalidReason");
+      toast.error(t("presets.importParseError", { name: file.name, reason }));
       return;
     }
     if (parsed.length === 0) {
-      toast.error(`"${file.name}" has no parameter sets to import.`);
+      toast.error(t("presets.importEmpty", { name: file.name }));
       return;
     }
     const collisions = parsed.map((s) => s.name).filter((name) => userPresets.includes(name));
@@ -262,16 +285,16 @@ export function PresetPicker({
         name="preset-name"
         autoComplete="off"
         className="h-8 flex-1"
-        placeholder="Save these settings as…"
+        placeholder={t("presets.saveAsPlaceholder")}
         value={saveName}
-        aria-label="New preset name"
+        aria-label={t("presets.newNameAria")}
         onChange={(e) => setSaveName(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") handleSave();
         }}
       />
       <Button size="sm" onClick={handleSave} disabled={!saveName.trim()}>
-        Save
+        {t("presets.save")}
       </Button>
     </div>
   ) : null;
@@ -288,9 +311,9 @@ export function PresetPicker({
           size="sm"
           className={compact ? "min-h-11 w-full justify-start" : undefined}
           onClick={open}
-          title="Import presets from an OpenSCAD parameterSets file"
+          title={t("presets.importTitle")}
         >
-          <UploadIcon size={14} /> Import…
+          <UploadIcon size={14} /> {t("presets.import")}
         </Button>
       )}
     </FileInput>
@@ -302,13 +325,9 @@ export function PresetPicker({
       className={compact ? "min-h-11 w-full justify-start" : "ml-auto"}
       onClick={handleExport}
       disabled={userPresets.length === 0}
-      title={
-        userPresets.length
-          ? "Export your saved presets as an OpenSCAD parameterSets file"
-          : "Save a preset first"
-      }
+      title={userPresets.length ? t("presets.exportTitleReady") : t("presets.exportTitleEmpty")}
     >
-      <DownloadIcon size={14} /> Export
+      <DownloadIcon size={14} /> {t("presets.export")}
     </Button>
   );
 
@@ -368,7 +387,7 @@ export function PresetPicker({
         {bundled.length > 0 && (
           <section>
             <h2 className={sectionHeadingClass}>
-              Ready-made
+              {t("presets.readyMade")}
             </h2>
             {/* Presets with a configured image render as a card grid; the rest
                 render as plain list rows below them. We group (grid, then rows)
@@ -378,11 +397,12 @@ export function PresetPicker({
                 when there are no imaged presets the row list carries that label
                 instead, so a fully-imageless design is unchanged. */}
             {imagedBundled.length > 0 && (
-              <ul aria-label="Ready-made presets" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <ul aria-label={t("presets.readyMadeAria")} className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {imagedBundled.map((p) => {
                   const id = `bundled:${design.id}:${p.name}`;
                   const isSelected = selected === id;
-                  const parsed = parsePresetCardName(p.name);
+                  const displayName = localizePresetName(designStrings, p.name);
+                  const parsed = parsePresetCardName(displayName);
                   const image = design.presetImages?.[p.name];
                   return (
                     <li key={p.name}>
@@ -390,7 +410,7 @@ export function PresetPicker({
                         type="button"
                         className={cardClass(isSelected)}
                         aria-current={isSelected ? "true" : undefined}
-                        title={p.name}
+                        title={displayName}
                         onClick={() => applyBundled(p)}
                       >
                         <Thumbnail src={image!} />
@@ -433,7 +453,7 @@ export function PresetPicker({
               </ul>
             )}
             {plainBundled.length > 0 && (
-              <ul aria-label={imagedBundled.length > 0 ? "More ready-made presets" : "Ready-made presets"}>
+              <ul aria-label={imagedBundled.length > 0 ? t("presets.moreReadyMadeAria") : t("presets.readyMadeAria")}>
                 {plainBundled.map((p) => {
                   const id = `bundled:${design.id}:${p.name}`;
                   return (
@@ -443,7 +463,7 @@ export function PresetPicker({
                         aria-current={selected === id ? "true" : undefined}
                         onClick={() => applyBundled(p)}
                       >
-                        {p.name}
+                        {localizePresetName(designStrings, p.name)}
                       </button>
                     </li>
                   );
@@ -455,9 +475,9 @@ export function PresetPicker({
         {userPresets.length > 0 && (
           <section>
             <h2 className={sectionHeadingClass}>
-              Saved by you
+              {t("presets.savedByYou")}
             </h2>
-            <ul aria-label="Your saved presets">
+            <ul aria-label={t("presets.yourSavedAria")}>
               {userPresets.map((name) => {
                 const id = `user:${design.id}:${name}`;
                 return (
@@ -472,10 +492,10 @@ export function PresetPicker({
                     <button
                       className="shrink-0 rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.2rem] text-[0.8rem] text-muted-foreground enabled:hover:bg-muted enabled:hover:text-warn"
                       onClick={() => setDeleteTarget(name)}
-                      aria-label={`Delete preset "${name}"`}
-                      title={`Delete "${name}"`}
+                      aria-label={t("presets.deleteAria", { name })}
+                      title={t("presets.deleteTitle", { name })}
                     >
-                      Delete
+                      {t("presets.deleteLabel")}
                     </button>
                   </li>
                 );
@@ -485,7 +505,7 @@ export function PresetPicker({
         )}
         {bundled.length === 0 && userPresets.length === 0 && (
           <p className="px-[0.6rem] py-2 text-[0.85rem] text-muted-foreground">
-            No presets yet — set things up the way you like, then save them below.
+            {t("presets.empty")}
           </p>
         )}
       </div>
@@ -498,10 +518,10 @@ export function PresetPicker({
     <ConfirmDialog
       open={deleteTarget !== null}
       onOpenChange={(open) => !open && setDeleteTarget(null)}
-      title="Delete preset?"
-      description={`This permanently deletes your saved preset “${deleteTarget}”.`}
-      cancelLabel="Cancel"
-      confirmLabel="Delete"
+      title={t("presets.deleteConfirmTitle")}
+      description={t("presets.deleteConfirmBody", { name: deleteTarget ?? "" })}
+      cancelLabel={t("presets.cancel")}
+      confirmLabel={t("presets.deleteLabel")}
       onConfirm={() => {
         if (deleteTarget) handleDelete(deleteTarget);
         setDeleteTarget(null);

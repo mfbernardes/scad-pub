@@ -1,0 +1,82 @@
+{
+  "$schema": "./scadpub.config.text.schema.json",
+  "popup": {
+    "header": "Willkommen bei ScadPub",
+    "body": "Konfigurieren Sie ein OpenSCAD-Design in Ihrem Browser und exportieren Sie ein druckfertiges Modell — alles läuft lokal.\n\nScadPub ist Open Source: siehe das [Projekt auf GitHub](https://github.com/mfbernardes/scad-pub).",
+    "footnote": "Alles läuft in Ihrem Browser. Nichts wird hochgeladen."
+  },
+  "help": {
+    "intro": "Passen Sie ein OpenSCAD-Design in Ihrem Browser an und laden Sie ein druckfertiges Modell herunter — alles läuft auf Ihrem Gerät.",
+    "tabs": {
+      "walkthrough": {
+        "label": "Rundgang",
+        "intro": "Ein vollständiger Durchlauf durch die App, von Anfang bis Ende. Dieser Tab ist absichtlich lang, damit Sie sehen, wie er von selbst scrollt.",
+        "sections": [
+          {
+            "title": "1. Design wählen",
+            "body": "Verwenden Sie den Designnamen in der oberen Leiste, um zwischen den verfügbaren Designs zu wechseln. Jedes passt sich automatisch an die von Ihnen gewählten Einstellungen an."
+          },
+          {
+            "title": "2. Nach Wunsch anpassen",
+            "body": "Der Tab **Anpassen** listet auf, was Sie ändern können, gruppiert in Abschnitte.\n\n- Ziehen Sie einen Schieberegler (oder geben Sie eine Zahl ein), wählen Sie aus einer Auswahlliste, geben Sie Text ein oder betätigen Sie einen Schalter.\n- Tippen Sie auf das kleine **ⓘ** neben einer Bezeichnung für eine ausführlichere Erklärung.\n- Klicken Sie auf eine **Abschnittsüberschrift**, um sie ein- oder auszuklappen; manche sind anfangs eingeklappt.\n- Manche Einstellungen erscheinen erst, wenn eine andere sie relevant macht.\n- **Einstellung suchen…** grenzt die Liste beim Tippen ein. Ein langes Formular bietet außerdem **Zu Abschnitt springen** (die Listenschaltfläche daneben), um direkt zu einem zu springen.\n- Sobald Sie etwas geändert haben, zählt eine Leiste **oben** im Tab Ihre Änderungen und bietet **Auf Standardwerte zurücksetzen** — oder, bei angewendeter Voreinstellung, **Verwerfen**, um zu ihr zurückzukehren."
+          },
+          {
+            "title": "3. Vorschau ansehen",
+            "body": "**Ziehen** dreht das Modell, **Scrollen oder Zusammenziehen** zoomt, und **mit der rechten Maustaste ziehen** (oder mit zwei Fingern) verschiebt es."
+          },
+          {
+            "title": "4. Vorschau aktuell halten",
+            "body": "Ist **Live-Vorschau** aktiviert, aktualisiert sich das Modell kurz nach jeder Änderung. Der Schalter befindet sich auf einem breiten Bildschirm unter dem Einstellungsbereich und auf dem Telefon im **⋮**-Menü (oben rechts).\n\nBei einem langsamen Design pausiert sie sich selbst — drücken Sie **Aktualisieren** über der Vorschau, wenn Sie bereit sind."
+          },
+          {
+            "title": "5. Einstellungen speichern & wiederverwenden (Voreinstellungen)",
+            "body": "Der Tab **Voreinstellungen** listet **Fertige Voreinstellungen** als Ausgangspunkte sowie die Voreinstellungen **Von Ihnen gespeichert** (in diesem Browser abgelegt) auf.\n\n- **Speichern** sichert Ihre aktuellen Einstellungen unter einem Namen; **Exportieren** schreibt sie in eine OpenSCAD-`parameterSets`-JSON-Datei, die sich auch im Desktop-OpenSCAD-Customizer öffnen lässt."
+          },
+          {
+            "title": "6. Dateien hinzufügen (Schriften, SVGs…)",
+            "body": "Manche Designs können eine eigene Datei von Ihnen verwenden — eine Schrift für Schriftzüge oder eine SVG-Zeichnung. Sie fügen jede davon **über das Steuerelement hinzu, das sie benötigt**, nicht über einen separaten Upload-Bildschirm:\n\n- **Schriften** (`.ttf`/`.otf`): wählen Sie **Schrift importieren…** im Schriftmenü eines Designs. Die Schrift erscheint dort anschließend unter ihrem Namen, für jedes Design.\n- **Zeichnungen** (`.svg`): verwenden Sie **SVG vorbereiten…** des Zeichnungssteuerelements, um eine einzubringen.\n- Die Aktion **Dateien** (obere Leiste oder auf dem Telefon das **⋮**-Menü) ist der Ort, an dem Sie **verwalten**, was Sie importiert haben — Typ und Größe jeder Datei ansehen, eine entfernen oder alle löschen. Von dort importieren Sie nicht.\n- Dateien bleiben in diesem Browser und sind bei Ihrem nächsten Besuch wieder da; nichts wird auf einen Server hochgeladen."
+          },
+          {
+            "title": "7. Herunterladen & teilen",
+            "body": "Die beiden Schaltflächen über der Vorschau:\n\n- **Download für 3D-Druck** — das druckfertige Mesh (mit Farben) für Ihren Slicer.\n- **Teilen** (**Link kopieren**, wenn Ihr Browser nicht direkt teilen kann) — ein Link, der genau dieses Design mit Einstellungen und Voreinstellung wieder öffnet.\n\n**Bild speichern**, für ein Bild der Vorschau, finden Sie in der oberen Leiste — oder auf dem Telefon im **⋮**-Menü.\n\nMuss vor dem Herunterladen noch etwas geprüft werden, erscheint direkt über diesen Schaltflächen eine farbige Pille („1 Punkt zu prüfen“). Tippen Sie sie an — oder **Download für 3D-Druck** —, um **Prüfen** zu öffnen, das zusammenfasst, was Sie erhalten und was noch ungeklärt ist. Sobald die Vorschau erstellt wurde, können Sie weiterhin **Trotzdem herunterladen** wählen; ist die letzte Vorschau fehlgeschlagen, bleibt das nicht verfügbar."
+          },
+          {
+            "title": "8. Aussehen & Info",
+            "body": "Die Schaltfläche **Sonne/Mond** durchläuft hell → dunkel → automatisch, und die Schaltfläche **ⓘ** listet Open-Source-Lizenzen auf. Beide sitzen auf einem breiten Bildschirm in der oberen Leiste und auf dem Telefon im **⋮**-Menü (oben rechts)."
+          }
+        ]
+      },
+      "printing": {
+        "label": "Druck",
+        "file": "examples/help-printing.de.md"
+      },
+      "troubleshooting": {
+        "label": "Fehlerbehebung",
+        "sections": [
+          {
+            "title": "Die Vorschau schlägt fehl oder sieht falsch aus",
+            "body": "Öffnen Sie **Meldungen** (die Glocke in der oberen Leiste) — das Design meldet dort, was ihm nicht gefallen hat, und der Tab **Protokoll** enthält die vollständige technische Ausgabe."
+          }
+        ]
+      }
+    }
+  },
+  "notices": {
+    "alert": {
+      "one": "Warnung",
+      "other": "Warnungen"
+    },
+    "note": {
+      "one": "Hinweis",
+      "other": "Hinweise"
+    }
+  },
+  "designs": {
+    "tag": {
+      "label": "Etikett"
+    },
+    "coin": {
+      "label": "Münze"
+    }
+  }
+}

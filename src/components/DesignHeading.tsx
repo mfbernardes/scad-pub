@@ -4,10 +4,12 @@
 // Both layouts render it and both used to spell it out themselves, which
 // drifted. Same precedent as ActionDock: mount it in each layout's own
 // positioning context, but write the markup once.
-import type { Design } from "../openscad/types";
+import type { LocalizedDesign } from "../openscad/types";
 import { DesignPicker } from "./DesignPicker";
 import { BookOpen as GuideIcon } from "lucide-react";
 import { IconButton } from "./IconButton";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 export function DesignHeading({
   designs,
@@ -20,7 +22,7 @@ export function DesignHeading({
   onShowDoc,
   docClassName,
 }: {
-  designs: Design[];
+  designs: LocalizedDesign[];
   designId: string;
   /** The active design's label; falls back to the id when nothing resolves. */
   label: string;
@@ -32,6 +34,7 @@ export function DesignHeading({
   /** Layout-specific script hook class for the guide button. */
   docClassName: string;
 }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   return (
     <>
       {designs.length > 1 ? (
@@ -49,8 +52,8 @@ export function DesignHeading({
       )}
       {hasDoc && (
         <IconButton
-          label="Design guide"
-          title="About this design"
+          label={t("designHeading.guideLabel")}
+          title={t("designHeading.guideTitle")}
           onClick={onShowDoc}
           className={`size-7 shrink-0 p-[0.3rem] ${docClassName}`}
         >

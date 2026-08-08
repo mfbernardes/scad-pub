@@ -15,6 +15,9 @@
 // mould, and config-spec.mjs only registers their keys for unknown-key
 // rejection and schema emission.
 import { CONFIG_SPEC, COLOR_TOKENS, PWA_THEME_COLOR_DEFAULTS } from "./config-spec.mjs";
+// Data-only (no JSON, no React) — safe to import directly under Node's type
+// stripping, the same way gen-schema.mjs already imports src/lib/schema.ts.
+import { collapseToAvailable } from "../../src/lib/localeRegistry.ts";
 export { COLOR_TOKENS };
 
 // `prefix(path)` renders the leading part of a validation-error message. One
@@ -204,6 +207,75 @@ export const xmlEscape = (s) =>
 // verbatim into the generated `<html lang="…">` attribute and the manifest.
 const LANG_RE = /^[A-Za-z0-9-]{1,35}$/;
 
+// Validate and normalise a `LocalizableText` config leaf (src/openscad/types.ts's
+// own doc, docs/config.md's "Localizing config text"): a plain string (shows
+// for every locale), or an object of locale tag -> string (a per-locale
+// value). Every parser that touches a localizable field (popup, fileImport's
+// note, notices[].label's one/other, licenses[].note, designs[].label/group,
+// help) calls through here rather than re-deriving the object-form rules by
+// hand, so they can't drift between fields.
+//
+// Object-form invariants: must include `defaultTag` — the deployment's
+// resolved default locale (`languages[0]`, see parseLanguages) — since a
+// visitor viewing the default locale would otherwise find nothing to
+// `map[tag] ?? map[defaultTag]` fall back to (src/lib/configI18n.ts's `lx`);
+// every key must be one of `languages`, this deployment's enabled locales,
+// same as `strings`' own per-locale objects (parseStrings above). Requires at
+// least one entry (an empty object overrides nothing, likely author error).
+//
+// `path` is the field's full dotted config path, used the same way
+// `stringFieldError`'s callers already do. An OPTIONAL field
+// (button/footnote/note/group/…) checks `value != null` itself before
+// calling — `null` still means "not set" throughout this file, and this
+// function has no opinion on that, only on a VALUE that was actually
+// provided. `{ required }` mirrors `stringFieldError`'s own two message
+// shapes for a REQUIRED field (popup.header/body): "is required and must be
+// a non-empty string" for a missing OR blank value, rather than the
+// optional-field "when set, must be…" wording — a caller passing `required`
+// is expected to hand this function the raw (possibly `null`) value
+// directly, unlike an optional field's caller.
+export function parseLocalizableText(value, path, languages, defaultTag, { required = false } = {}) {
+  if (value == null) {
+    if (required) throw new Error(`${messagePrefix(path)} is required and must be a non-empty string`);
+    throw new Error(
+      `${messagePrefix(path)} must be a non-empty string, or an object of locale tag: string pairs`
+    );
+  }
+  if (typeof value === "string") {
+    if (!value.trim()) {
+      if (required) throw new Error(`${messagePrefix(path)} is required and must be a non-empty string`);
+      throw optionalStringFieldError(path);
+    }
+    return value.trim();
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const entries = Object.entries(value);
+    if (entries.length === 0)
+      throw new Error(`${messagePrefix(path)} must have at least one locale entry`);
+    const tags = new Set(languages);
+    const out = {};
+    for (const [tag, text] of entries) {
+      if (!tags.has(tag))
+        throw new Error(
+          `${messagePrefix(path)} has an entry for locale "${tag}", which isn't one of this ` +
+            `deployment's enabled locales.\n  Valid tags: ${[...tags].join(", ")}`
+        );
+      if (typeof text !== "string" || !text.trim())
+        throw new Error(`${messagePrefix(`${path}.${tag}`)} must be a non-empty string`);
+      out[tag] = text.trim();
+    }
+    if (!(defaultTag in out))
+      throw new Error(
+        `${messagePrefix(path)} must include an entry for "${defaultTag}", this deployment's default locale`
+      );
+    return out;
+  }
+  if (required) throw new Error(`${messagePrefix(path)} is required and must be a non-empty string`);
+  throw new Error(
+    `${messagePrefix(path)} must be a non-empty string, or an object of locale tag: string pairs`
+  );
+}
+
 // Validate the optional `lang` config key: the document/manifest language.
 // Defaults to "en". Fails the build on anything that isn't a plain BCP-47 tag.
 export function parseLang(raw) {
@@ -231,6 +303,75 @@ export function parseDir(raw) {
         `(got ${JSON.stringify(raw)})`
     );
   return raw;
+}
+
+// Validate the optional `languages` config key: which of ScadPub's shipped
+// chrome locales this deployment's language switcher offers at runtime.
+// `registryTags` is the caller's (gen-schema's) LOCALE_TAGS import and `lang`
+// its already-validated `lang` value, so this module needs no direct
+// dependency on the generated schema or a hard-coded tag list of its own.
+//
+// `resolvedDefault` is the single locale src/lib/i18n.ts's `defaultTag` (and,
+// downstream, src/lib/localeStore.ts's own copy of that same formula) resolve
+// to for this deployment: `collapseToAvailable(lang, registryTags)` when
+// `lang` names a shipped locale, else the hard-coded "en" fallback — the
+// EXACT expression i18n.ts uses. Every rule below is phrased in terms of it
+// rather than `lang` directly, so `languages` can never disagree with which
+// locale the app actually boots into:
+//   - raw omitted/null: `lang` shipped -> every registry tag, resolvedDefault
+//     first (a deployment that never mentions `languages` gets every
+//     translation ScadPub ships). `lang` NOT shipped (e.g. "fr") ->
+//     `[resolvedDefault]` = `["en"]`, a single-locale deployment — not
+//     `[lang]` (`["fr"]`): that would leave `schema.languages` naming a tag
+//     the store's `defaultTag` never actually binds to, since the store
+//     computes `defaultTag` with this identical collapse-or-"en" formula (see
+//     localeStore.ts's `enabledTags` comment for the other half of this
+//     reconciliation).
+//   - raw provided: a non-empty array of unique locale tags, each of which
+//     must collapse to a registry tag (unshipped entries and duplicates both
+//     fail the build, naming the offending entry). The set must include
+//     `resolvedDefault` — the default locale must always be offered, even
+//     when `lang` itself isn't shipped and `resolvedDefault` is therefore
+//     "en" rather than a literal reading of `lang`. Normalized to registry
+//     tags, `resolvedDefault` first, the declared order preserved otherwise.
+export function parseLanguages(raw, registryTags, lang) {
+  const shippedDefault = collapseToAvailable(lang, registryTags);
+  const resolvedDefault = shippedDefault ?? "en";
+  if (raw == null) {
+    if (shippedDefault !== null)
+      return [shippedDefault, ...registryTags.filter((tag) => tag !== shippedDefault)];
+    return [resolvedDefault];
+  }
+  if (!Array.isArray(raw) || raw.length === 0)
+    throw new Error("gen-schema: 'languages' must be a non-empty array of locale tags");
+  const seen = new Set();
+  const normalized = [];
+  raw.forEach((entry, i) => {
+    if (typeof entry !== "string" || !entry.trim())
+      throw new Error(
+        `gen-schema: 'languages[${i}]' must be a non-empty string (got ${JSON.stringify(entry)})`
+      );
+    const tag = collapseToAvailable(entry.trim(), registryTags);
+    if (tag === null)
+      throw new Error(
+        `gen-schema: 'languages[${i}]' (${JSON.stringify(entry)}) is not a locale ScadPub ships ` +
+          `a chrome translation for.\n  Valid tags: ${registryTags.join(", ")}`
+      );
+    if (seen.has(tag))
+      throw new Error(
+        `gen-schema: 'languages[${i}]' (${JSON.stringify(entry)}) duplicates locale "${tag}", ` +
+          `already listed in 'languages'`
+      );
+    seen.add(tag);
+    normalized.push(tag);
+  });
+  if (!seen.has(resolvedDefault))
+    throw new Error(
+      `gen-schema: 'languages' must include "${resolvedDefault}" — the deployment's resolved ` +
+        `default locale (from 'lang' when shipped, else "en") must always be offered`
+    );
+  if (normalized[0] === resolvedDefault) return normalized;
+  return [resolvedDefault, ...normalized.filter((tag) => tag !== resolvedDefault)];
 }
 
 // The model formats OpenSCAD can export and the viewer can parse.
@@ -322,14 +463,19 @@ export function parseColors(raw) {
 // fields must be non-empty; recognised optional fields must be strings when
 // present; unknown keys are dropped. Fails the build with a clear message
 // (consistent with gen-schema's other fail-fast checks). Returns [] when unset.
-export function parseLicenses(raw) {
+//
+// `note` is the one field a config entry can localize (`text`/`textFile` stay
+// single-language, see `SoftwareLicense`'s own comment in src/openscad/types.ts):
+// `languages`/`defaultTag` are this deployment's resolved locale set, needed
+// only for that field's `parseLocalizableText` call.
+export function parseLicenses(raw, languages, defaultTag) {
   if (raw == null) return [];
   if (!Array.isArray(raw))
     throw new Error(
       "gen-schema: 'licenses' must be an array of software/license entries"
     );
   const REQUIRED = ["name", "license", "copyright", "url", "licenseUrl"];
-  const OPTIONAL = ["version", "text", "sourceUrl", "note"];
+  const OPTIONAL = ["version", "text", "sourceUrl"];
   return raw.map((entry, i) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry))
       throw new Error(`gen-schema: 'licenses[${i}]' must be an object`);
@@ -347,6 +493,7 @@ export function parseLicenses(raw) {
         throw new Error(`gen-schema: 'licenses[${i}].${key}' must be a string`);
       out[key] = entry[key];
     }
+    if (entry.note != null) out.note = parseLocalizableText(entry.note, `licenses[${i}].note`, languages, defaultTag);
     return out;
   });
 }
@@ -356,11 +503,16 @@ export function parseLicenses(raw) {
 // reference but the app can't bundle (a font, an SVG to import(), a surface()
 // data file, …). Accepts `true` (defaults) or an options object. Fails the
 // build with a clear message on a bad shape. Returns null when not configured.
-export function parseFileImport(fileImport) {
+// `note` is `custom: true` in CONFIG_SPEC.fileImport (localizable, see that
+// node's comment), so `applyGroupSpec` recognises but skips it; resolved here
+// instead, the same relationship `parsePwa`'s `themeColor` has to `applyGroupSpec`.
+export function parseFileImport(fileImport, languages, defaultTag) {
   const raw = fileImport;
   if (raw == null || raw === false) return null;
   if (raw === true) return {};
-  return applyGroupSpec(raw, CONFIG_SPEC.fileImport, "fileImport");
+  const out = applyGroupSpec(raw, CONFIG_SPEC.fileImport, "fileImport");
+  if (raw.note != null) out.note = parseLocalizableText(raw.note, "fileImport.note", languages, defaultTag);
+  return out;
 }
 
 // Validate and normalise the optional `render` config block. `heavyMs` sets
@@ -479,9 +631,23 @@ export function parsePwa(raw) {
 // absent from renderHash. Returns null when not configured; fails the build
 // with a clear message on a bad shape (consistent with gen-schema's other
 // fail-fast checks).
-export function parsePopup(raw) {
+// `header`/`body`/`button`/`footnote` are `custom: true` (localizable) in
+// CONFIG_SPEC.popup, so `applyGroupSpec` only recognises the keys and skips
+// them; resolved here via `parseLocalizableText`, the same relationship
+// `parsePwa`'s `themeColor` has to `applyGroupSpec`. `body`'s `bodyFile` may
+// already have populated `raw.body` with a resolved `LocalizableText` map
+// (see gen-schema.mjs's `resolveProseFields`/`resolveFileField`) by the time
+// this runs, which `parseLocalizableText` accepts exactly like a
+// hand-written one.
+export function parsePopup(raw, languages, defaultTag) {
   if (raw == null) return null;
-  return applyGroupSpec(raw, CONFIG_SPEC.popup, "popup");
+  const out = applyGroupSpec(raw, CONFIG_SPEC.popup, "popup");
+  out.header = parseLocalizableText(raw.header, "popup.header", languages, defaultTag, { required: true });
+  out.body = parseLocalizableText(raw.body, "popup.body", languages, defaultTag, { required: true });
+  if (raw.button != null) out.button = parseLocalizableText(raw.button, "popup.button", languages, defaultTag);
+  if (raw.footnote != null)
+    out.footnote = parseLocalizableText(raw.footnote, "popup.footnote", languages, defaultTag);
+  return out;
 }
 
 // Validate and normalise the optional `notices` config block: the design-defined
@@ -516,7 +682,14 @@ export function parsePopup(raw) {
 // of count" and normalised to `{ one: v, other: v }`. A config still using the
 // old `label`/`labelOne` pair (plural-required, singular-optional) fails the
 // build with a clear pointer at this shape instead.
-function parseNoticeLabel(raw, marker, i) {
+// `raw.one`/`raw.other` are each independently `LocalizableText` (a plain
+// string, or an object of locale tag -> string; see `parseLocalizableText`)
+// — orthogonal to the outer string-shorthand this function already
+// implements ("the same word regardless of COUNT"): a shorthand string here
+// still means the same word for every count, and, per LocalizableText's own
+// rule, for every locale too, composing the two axes without either needing
+// to know about the other.
+function parseNoticeLabel(raw, marker, i, languages, defaultTag) {
   const path = `notices[${i}].label`;
   if (raw === undefined || raw === null) return { one: marker, other: marker };
   if (typeof raw === "string") {
@@ -529,19 +702,14 @@ function parseNoticeLabel(raw, marker, i) {
   for (const key of Object.keys(raw))
     if (key !== "one" && key !== "other")
       throw new Error(`gen-schema: '${path}': unknown key '${key}'.\n  Valid keys: one, other`);
-  if (typeof raw.other !== "string" || !raw.other.trim())
+  if (raw.other == null)
     throw new Error(`gen-schema: '${path}.other' is required and must be a non-empty string`);
-  const other = raw.other.trim();
-  let one = other;
-  if (raw.one !== undefined && raw.one !== null) {
-    if (typeof raw.one !== "string" || !raw.one.trim())
-      throw new Error(`gen-schema: '${path}.one', when set, must be a non-empty string`);
-    one = raw.one.trim();
-  }
+  const other = parseLocalizableText(raw.other, `${path}.other`, languages, defaultTag);
+  const one = raw.one != null ? parseLocalizableText(raw.one, `${path}.one`, languages, defaultTag) : other;
   return { one, other };
 }
 
-export function parseNotices(raw) {
+export function parseNotices(raw, languages, defaultTag) {
   if (raw == null) return [];
   if (!Array.isArray(raw))
     throw new Error(
@@ -577,7 +745,7 @@ export function parseNotices(raw) {
       );
     }
     seenMarkers.set(markerKey, i);
-    const out = { marker, label: parseNoticeLabel(entry.label, marker, i) };
+    const out = { marker, label: parseNoticeLabel(entry.label, marker, i, languages, defaultTag) };
     if (entry.color !== undefined && entry.color !== null) {
       if (typeof entry.color !== "string" || !COLOR_VALUE_RE.test(entry.color.trim()))
         throw new Error(
@@ -643,11 +811,28 @@ export function parseUi(raw) {
 // module stays free of file I/O. Fails the build with a clear message pointing
 // at the catalogue rather than silently accepting a key `t()` will never
 // resolve. Returns {} when unset.
-export function parseStrings(raw, validKeys) {
+//
+// Each VALUE is one of two shapes (src/lib/i18n.ts's `ConfigStrings`,
+// consumed at runtime by `overridesForLocale`):
+//   - a plain string: overrides the deployment's DEFAULT locale only — full
+//     back-compat with a config written before per-locale overrides existed,
+//     see overridesForLocale's own comment for why that's tied to the default
+//     locale specifically rather than "whichever locale is active".
+//   - an object of locale tag -> string: a per-locale override. Every key
+//     must be one of `enabledTags` (this deployment's resolved `languages`,
+//     the caller's already-parsed set) — an override for a locale the
+//     deployment doesn't offer could never be reached by `t()`, so it fails
+//     the build the same way an unknown catalogue key does. Must carry at
+//     least one entry (an empty object overrides nothing, so it's rejected as
+//     likely author error rather than silently accepted). `enabledTags`
+//     defaults to `["en"]` so existing direct callers (unit tests exercising
+//     only the plain-string form) don't need updating for this parameter.
+export function parseStrings(raw, validKeys, enabledTags = ["en"]) {
   if (raw == null) return {};
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new Error("gen-schema: 'strings' must be an object of key: string pairs");
   const known = new Set(validKeys);
+  const tags = new Set(enabledTags);
   const out = {};
   for (const [key, value] of Object.entries(raw)) {
     if (!known.has(key))
@@ -655,9 +840,34 @@ export function parseStrings(raw, validKeys) {
         `gen-schema: unknown 'strings' key '${key}'.\n` +
           `  See src/locales/en.json for the full list of valid keys.`
       );
-    if (typeof value !== "string")
-      throw new Error(`gen-schema: 'strings.${key}' must be a string (got ${JSON.stringify(value)})`);
-    out[key] = value;
+    if (typeof value === "string") {
+      out[key] = value;
+      continue;
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const entries = Object.entries(value);
+      if (entries.length === 0)
+        throw new Error(`gen-schema: 'strings.${key}' must have at least one locale entry`);
+      const localized = {};
+      for (const [tag, text] of entries) {
+        if (!tags.has(tag))
+          throw new Error(
+            `gen-schema: 'strings.${key}' has an entry for locale "${tag}", which isn't one of ` +
+              `this deployment's enabled locales.\n  Valid tags: ${[...tags].join(", ")}`
+          );
+        if (typeof text !== "string")
+          throw new Error(
+            `gen-schema: 'strings.${key}.${tag}' must be a string (got ${JSON.stringify(text)})`
+          );
+        localized[tag] = text;
+      }
+      out[key] = localized;
+      continue;
+    }
+    throw new Error(
+      `gen-schema: 'strings.${key}' must be a string, or an object of locale tag: string pairs ` +
+        `(got ${JSON.stringify(value)})`
+    );
   }
   return out;
 }

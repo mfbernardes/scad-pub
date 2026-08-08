@@ -1,16 +1,21 @@
 // HelpModal.tsx: renders the user guide from structured content. The content
-// is project-agnostic by default (DEFAULT_HELP) and fully overridable via the
+// is project-agnostic by default (defaultHelp()) and fully overridable via the
 // config's `help`, so no design-specific copy is baked into the app. A config
 // may group its guide into multiple tabs (`help.tabs`); without tabs it renders as
 // a single pane exactly as before.
+import { useMemo } from "react";
 import { Modal, MODAL_BODY, MODAL_INTRO } from "./Modal";
 import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger, chipTabTrigger } from "./ui/tabs";
 import { cn } from "../lib/utils";
 import { HardDriveDownload as InstallIcon } from "lucide-react";
-import { DEFAULT_HELP } from "../lib/defaultHelp";
-import type { HelpContent, HelpSection, HelpTab } from "../openscad/types";
+import { defaultHelp } from "../lib/defaultHelp";
+import type { HelpContent, ResolvedHelpSection, ResolvedHelpTab } from "../openscad/types";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
+import { OVERVIEW_TAB_ID } from "../lib/helpShape.mjs";
+import { lxHelp } from "../lib/configI18n";
 
 /* The help sections' typography, applied to the scrolling body wrapper (the
    Markdown renderer emits bare p/ul/li).
@@ -35,7 +40,7 @@ function HelpSections({
   sections,
 }: {
   intro?: string;
-  sections: HelpSection[];
+  sections: ResolvedHelpSection[];
 }) {
   return (
     <>
@@ -56,14 +61,22 @@ function HelpSections({
 
 /** Tab strip + panels, built on the shared Radix Tabs primitive (which provides
  *  the full ARIA tabs pattern (roving tabindex, arrow/Home/End nav) for free). */
-function HelpTabs({ tabs, initialTab }: { tabs: HelpTab[]; initialTab?: string }) {
+function HelpTabs({ tabs, initialTab }: { tabs: ResolvedHelpTab[]; initialTab?: string }) {
   // `initialTab` (from ui.afterExport's "Open printing help" action, or any
   // other future deep link) picks which tab is active on mount: matched by
-  // its exact label; an unmatched or omitted value falls back to the first
-  // tab. Radix Tabs' `defaultValue` is
-  // uncontrolled, so this only matters at mount: fine here since HelpModal
-  // remounts fresh every time it opens (see App.tsx's `{showHelp && <HelpModal/>}`).
-  const matched = initialTab ? tabs.findIndex((t) => t.label === initialTab) : -1;
+  // `id` first, then by its exact label (back-compat with a config written
+  // before tab ids existed — see gen-schema.mjs's checkAfterExportHelpTab,
+  // which validates a config's `helpTab` reference the same way); an
+  // unmatched or omitted value falls back to the first tab. Radix Tabs'
+  // `defaultValue` is uncontrolled, so this only matters at mount: fine here
+  // since HelpModal remounts fresh every time it opens (see App.tsx's
+  // `{showHelp && <HelpModal/>}`).
+  const matched = initialTab
+    ? (() => {
+        const byId = tabs.findIndex((t) => t.id === initialTab);
+        return byId >= 0 ? byId : tabs.findIndex((t) => t.label === initialTab);
+      })()
+    : -1;
   const defaultValue = matched >= 0 ? String(matched) : "0";
   // `min-h-0 flex-1` lets this tab block fill the dialog's remaining height and,
   // crucially, shrink below its content: otherwise the default `min-height:auto`
@@ -72,7 +85,7 @@ function HelpTabs({ tabs, initialTab }: { tabs: HelpTab[]; initialTab?: string }
     <Tabs defaultValue={defaultValue} className="min-h-0 flex-1 gap-0">
       <TabsList
         className="mx-4 mt-2 h-auto w-auto flex-wrap justify-start rounded-none border-0 border-b bg-transparent p-0"
-        aria-label="Help topics"
+        aria-label={t("help.topicsAria")}
       >
         {tabs.map((t, i) => (
           <TabsTrigger key={i} value={String(i)} className={cn(chipTabTrigger, "px-3")}>
@@ -113,21 +126,28 @@ export function HelpModal({
    *  panel's "Open printing help" action), see HelpTabs' own doc. */
   initialTab?: string;
 }) {
-  const content = help ?? DEFAULT_HELP;
+  const { tag } = useLocale();
+  const raw = help ?? defaultHelp();
+  // Project every LocalizableText leaf (title/intro/sections/tabs, and each
+  // tab's own intro/sections) to a plain string for the active locale, ONCE,
+  // rather than at each render site below: `defaultHelp()` returns plain
+  // strings already (valid LocalizableText, since `lx` passes a string
+  // straight through), so this is a no-op cost-wise for the default content.
+  const content = useMemo(() => lxHelp(raw, tag), [raw, tag]);
   // Normalise to tabs when the config supplies any. Top-level `sections` (the
   // single-pane form) become a leading "Overview" tab so adding `tabs` to an
   // existing help never drops the original content.
-  const tabs: HelpTab[] | null = content.tabs?.length
+  const tabs: ResolvedHelpTab[] | null = content.tabs?.length
     ? [
         ...(content.sections?.length
-          ? [{ label: "Overview", sections: content.sections }]
+          ? [{ id: OVERVIEW_TAB_ID, label: t("help.overviewTab"), sections: content.sections }]
           : []),
         ...content.tabs,
       ]
     : null;
 
   return (
-    <Modal title={content.title ?? "How to use this configurator"} onClose={onClose}>
+    <Modal title={content.title ?? t("help.defaultTitle")} onClose={onClose}>
       {content.intro && (
         <div className={MODAL_INTRO}>
           <Markdown body={content.intro} />
@@ -143,10 +163,10 @@ export function HelpModal({
       {canInstall && onInstall && (
         <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
           <span className="text-[0.85rem] text-muted-foreground">
-            Install this configurator for quick, offline access.
+            {t("help.installBlurb")}
           </span>
-          <Button size="sm" className="ml-auto" onClick={onInstall} title="Install as app">
-            <InstallIcon size={14} /> Install app
+          <Button size="sm" className="ml-auto" onClick={onInstall} title={t("help.installAsAppTitle")}>
+            <InstallIcon size={14} /> {t("help.installApp")}
           </Button>
         </div>
       )}

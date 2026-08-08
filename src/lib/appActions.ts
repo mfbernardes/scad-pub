@@ -32,9 +32,13 @@ export interface AppActions {
   clearFiles: () => void;
   autoRenderChange: (v: boolean) => void;
   cycleTheme: () => void;
-  /** Opens the Help modal, optionally scrolled straight to a tab (matched by
-   *  its exact `help.tabs[].label`, see HelpModal's `initialTab`). Omit for
-   *  the modal's default landing tab. */
+  /** Switches the active locale (see src/lib/localeStore.ts); a failed
+   *  load's rejection is handled by the caller (App.tsx), not here. */
+  localeChange: (tag: string) => void;
+  /** Opens the Help modal, optionally scrolled straight to a tab (matched
+   *  id-first, then by its exact label — see HelpModal's `initialTab` and
+   *  gen-schema.mjs's checkAfterExportHelpTab, which validates a config's
+   *  reference the same way). Omit for the modal's default landing tab. */
   showHelp: (tab?: string) => void;
   showDesignDoc: () => void;
   showLicenses: () => void;
@@ -77,6 +81,7 @@ export function AppActionsProvider({
       clearFiles: () => latest.current.clearFiles(),
       autoRenderChange: (v) => latest.current.autoRenderChange(v),
       cycleTheme: () => latest.current.cycleTheme(),
+      localeChange: (tag) => latest.current.localeChange(tag),
       showHelp: (tab) => latest.current.showHelp(tab),
       showDesignDoc: () => latest.current.showDesignDoc(),
       showLicenses: () => latest.current.showLicenses(),

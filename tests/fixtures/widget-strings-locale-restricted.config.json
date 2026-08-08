@@ -1,0 +1,9 @@
+{
+  "title": "Widget Studio",
+  "source": "src",
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "languages": ["en"],
+  "strings": {
+    "action.export": { "en": "Download now", "de": "Jetzt herunterladen" }
+  }
+}

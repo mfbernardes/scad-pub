@@ -17,13 +17,15 @@ export {
   isRenderableColor,
 } from "./colors";
 export type { Rgb } from "./colors";
-export { check } from "./check";
+export { check, FIND_CODES } from "./check";
+export type { FindCode } from "./check";
 // applyFixes/deriveRegions/deriveLayers/analyze are exported FOR THE TESTS as
 // well as the wizard: they are the seams the fixture suite drives the pipeline
 // through, one stage at a time, rather than only end-to-end via prepareSvg.
-export { applyFixes, fixViewBoxOrigin } from "./fixes";
-export { groupByColor } from "./groupByColor";
-export type { GroupByColorResult } from "./groupByColor";
+export { applyFixes, fixViewBoxOrigin, CHANGE_CODES } from "./fixes";
+export type { FixChangeCode } from "./fixes";
+export { groupByColor, GROUP_BY_COLOR_ERROR_CODES, GROUP_BY_COLOR_CHANGE_CODES } from "./groupByColor";
+export type { GroupByColorResult, GroupByColorErrorCode } from "./groupByColor";
 export {
   parseLayersArg,
   parseLayerSpec,
@@ -38,13 +40,14 @@ export {
 export type { LayerEntry } from "./regions";
 export { contentBbox, gFormat } from "./geometry";
 export type { Point, Bbox } from "./geometry";
-export type { Finding, Level, Region } from "./types";
+export { SvgPrepError } from "./types";
+export type { Change, Finding, Level, Region, Vars, VarValue } from "./types";
 
 import { check } from "./check";
 import { applyFixes } from "./fixes";
 import { groupByColor } from "./groupByColor";
 import { canvasEntry, deriveRegions, formatLayers, parseLayersArg } from "./regions";
-import type { Finding, Region } from "./types";
+import { SvgPrepError, type Change, type Finding, type Region } from "./types";
 
 export { MAX_RELIABLE_REGIONS } from "./limits";
 
@@ -83,8 +86,10 @@ export function analyze(root: Element, layersArg = ""): Analysis {
   };
 }
 
-/** Parse SVG text into its root element (browser DOMParser). Throws on invalid
- *  XML or a non-`<svg>` root. */
+/** Parse SVG text into its root element (browser DOMParser). Throws
+ *  SvgPrepError ("not-xml"/"not-svg") on invalid XML or a non-`<svg>` root;
+ *  `not-xml`'s `.message` keeps the parser's own detail, which isn't itself
+ *  translatable (see svgPrepText.ts's prepErrorText). */
 export function parseSvg(text: string): Element {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   // getElementsByTagName, not querySelector: the DOM subset this module targets
@@ -92,9 +97,9 @@ export function parseSvg(text: string): Element {
   // querySelector is browser-only — which left this, the wizard's ONE terminal
   // error path, unreachable from a test.
   const err = doc.getElementsByTagName("parsererror")[0];
-  if (err) throw new Error(err.textContent || "Not a valid SVG/XML file");
+  if (err) throw new SvgPrepError("not-xml", err.textContent || "Not a valid SVG/XML file");
   const root = doc.documentElement;
-  if (!root || root.localName !== "svg") throw new Error("Root element is not <svg>");
+  if (!root || root.localName !== "svg") throw new SvgPrepError("not-svg", "Root element is not <svg>");
   return root;
 }
 
@@ -105,15 +110,17 @@ export function serializeSvg(root: Element): string {
 
 /** Run group-by-colour once when the drawing has no named regions yet, so that
  *  painting alone defines the regions. Its idempotent "already grouped" and
- *  benign "single colour" outcomes are swallowed; other notes are returned. */
-function autoGroupByColor(root: Element): string[] {
+ *  benign "single colour" outcomes are swallowed; other notes are returned as
+ *  a Change carrying the error's own code (resolved via `svgPrep.group.<code>`
+ *  in svgPrepText.ts, not `svgPrep.change.<code>` — same code, a different
+ *  family of display text, since "no shapes to group" reads differently as an
+ *  auto-run aside than a Change would elsewhere). */
+function autoGroupByColor(root: Element): Change[] {
   if (deriveRegions(root).length > 0) return [];
   const { changes, error } = groupByColor(root);
   if (error) {
-    if (error.includes("already in a named") || error.includes("only one colour")) {
-      return [];
-    }
-    return [`Group by colour: ${error}`];
+    if (error.code === "already-grouped" || error.code === "one-colour") return [];
+    return [{ code: error.code }];
   }
   return changes;
 }
@@ -132,8 +139,8 @@ export interface PrepareResult {
   findings: Finding[];
   /** The named regions in effect (empty when colours are not derived). */
   regions: Region[];
-  /** Human-readable changes made by fixes and grouping. */
-  changes: string[];
+  /** Changes made by fixes and grouping, in display order. */
+  changes: Change[];
 }
 
 /**

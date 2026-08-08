@@ -21,6 +21,8 @@ import { ViewerEditOnModel } from "./ViewerEditOnModel";
 import { editOnModelParam, type Point } from "../lib/editOnModel";
 import { stageLoading } from "../lib/renderStatus";
 import { useAppActions } from "../lib/appActions";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 const Viewer = lazy(() =>
   import("./Viewer").then((m) => ({ default: m.Viewer }))
@@ -94,6 +96,7 @@ export function ViewerStage({
   suppressGestureHint = false,
   children,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { render } = useAppActions();
 
   // ── On-model text editing ("type on the sign") ───────────────────────────
@@ -148,7 +151,7 @@ export function ViewerStage({
       {stageLoading({ ready, rendering, result }) && (
         <div className="viewer-overlay pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-[0.8rem] bg-(--overlay) text-[0.9rem] text-muted-foreground">
           <Spinner className="size-9 text-muted-foreground" />
-          <p>{ready ? "Building your preview…" : "Getting things ready…"}</p>
+          <p>{ready ? t("viewer.buildingPreview") : t("viewer.gettingReady")}</p>
           {/* Only ever set pre-ready (see useRenderPipeline's progress state):
               a one-time ~10 MB WASM download on a cold Cache Storage miss.
               Warm reloads clear it before this overlay ever mounts, so it
@@ -159,7 +162,7 @@ export function ViewerStage({
             <Progress
               value={loadProgress.total ? Math.round((loadProgress.loaded / loadProgress.total) * 100) : undefined}
               className="w-40"
-              aria-label="Downloading the render engine"
+              aria-label={t("viewer.downloadingEngineAria")}
             />
           )}
         </div>

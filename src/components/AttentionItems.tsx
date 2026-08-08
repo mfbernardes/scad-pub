@@ -14,6 +14,7 @@ import { fontFallback } from "../lib/fontFallback";
 import { useAppActions } from "../lib/appActions";
 import { cn } from "../lib/utils";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { FontImportActions } from "./FontImportActions";
 import { Button } from "./ui/button";
 
@@ -51,6 +52,7 @@ export function AttentionItems({
   fontSuggestion,
   onOpenMessages,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { change } = useAppActions();
   if (attention.length === 0) return null;
   return (

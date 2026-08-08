@@ -15,6 +15,7 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { join, dirname, relative, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +37,7 @@ import {
   parseParams,
   parseFontFallback,
   parseLang,
+  parseLanguages,
   parseDir,
   parsePwa,
   parsePwaThemeColor,
@@ -48,11 +50,13 @@ import {
   isRiskyExternalFontCopy,
   isTrackedFile,
   extOf,
+  parseDesignStrings,
 } from "../scripts/gen-schema.mjs";
 import { validateSchema } from "../src/lib/schema.ts";
 import { sanitizeSvg } from "../scripts/lib/svg-sanitize.mjs";
 import { colorStyle } from "../src/lib/configCss.ts";
 import { componentVersions } from "../scripts/lib/dep-versions.mjs";
+import { LOCALE_TAGS } from "../src/lib/localeRegistry.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "fixtures");
@@ -337,6 +341,53 @@ test("lang/dir default to en/ltr and pass through to the schema", () => {
   assert.equal(schema.dir, "rtl");
 });
 
+test("languages: omitted + a shipped 'lang' (default 'en') defaults to every registry tag, default first", () => {
+  const { schema } = run("widget.config.json");
+  assert.deepEqual(schema.languages, [...LOCALE_TAGS]);
+});
+
+test("languages: omitted + an unshipped 'lang' (e.g. \"fr\") defaults to a single \"en\" tag", () => {
+  // Not `["fr"]`: src/lib/i18n.ts's `defaultTag` resolves an unshipped `lang`
+  // to "en" (collapseToAvailable(...) ?? "en"), and `languages`' single entry
+  // must name that SAME tag so src/lib/localeStore.ts's `enabledTags` and the
+  // locale the app actually boots into can never disagree — see
+  // parseLanguages's own comment (scripts/lib/config-parsers.mjs).
+  const { schema } = run("widget-lang-unshipped.config.json");
+  assert.equal(schema.lang, "fr");
+  assert.deepEqual(schema.languages, ["en"]);
+});
+
+test("languages: an explicit array is normalised to registry tags, default locale first", () => {
+  const { schema } = run("widget-languages.config.json");
+  assert.deepEqual(schema.languages, ["en", "de"]);
+});
+
+test("languages: an entry that isn't a shipped locale fails the build, naming the entry and the valid tags", () => {
+  const validTags = new RegExp(`Valid tags: ${LOCALE_TAGS.join(", ")}`);
+  assert.throws(() => run("widget-languages-badtag.config.json"), (err) => {
+    assert.match(
+      err.message,
+      /'languages\[1\]' \("fr"\) is not a locale ScadPub ships a chrome translation for\./
+    );
+    assert.match(err.message, validTags);
+    return true;
+  });
+});
+
+test("languages: omitting the deployment's default locale fails the build", () => {
+  assert.throws(
+    () => run("widget-languages-missing-default.config.json"),
+    /'languages' must include "de" — the deployment's resolved default locale \(from 'lang' when shipped, else "en"\) must always be offered/
+  );
+});
+
+test("languages: an empty array fails the build (must be non-empty)", () => {
+  assert.throws(
+    () => run("widget-languages-empty.config.json"),
+    /'languages' must be a non-empty array of locale tags/
+  );
+});
+
 test("render tuning and defaultDesign pass through to the schema", () => {
   const { schema } = run("widget-designmeta.config.json");
   assert.deepEqual(schema.render, { heavyMs: 9000, cache: { maxEntries: 4, persistent: false } });
@@ -509,6 +560,33 @@ test("strings: an unknown key fails the build, pointing at the catalogue", () =>
   );
 });
 
+test("strings: a per-locale object value lands in the schema verbatim", () => {
+  const { schema } = run("widget-strings-locale.config.json");
+  assert.deepEqual(schema.strings, {
+    "action.export": { en: "Download now", de: "Jetzt herunterladen" },
+  });
+});
+
+test("strings: a per-locale object value naming a locale outside this deployment's languages fails the build", () => {
+  assert.throws(
+    () => run("widget-strings-locale-badtag.config.json"),
+    // The fixture omits `languages`, so the enabled set is the real registry.
+    new RegExp(
+      `'strings\\.action\\.export' has an entry for locale "fr", which isn't one of this deployment's enabled locales\\.\\s*\\n\\s*Valid tags: ${LOCALE_TAGS.join(", ")}`
+    )
+  );
+});
+
+test("strings: a per-locale object value naming a locale outside a RESTRICTED single-locale 'languages' fails the build", () => {
+  // The deployment restricts itself to ["en"], so an override entry for "de"
+  // — a locale ScadPub ships, but this deployment doesn't enable — is
+  // rejected exactly like an entry for an unshipped tag would be.
+  assert.throws(
+    () => run("widget-strings-locale-restricted.config.json"),
+    /'strings\.action\.export' has an entry for locale "de", which isn't one of this deployment's enabled locales\.\s*\n\s*Valid tags: en/
+  );
+});
+
 test("per-design description + icon come from the design's own annotations", () => {
   const { schema, out } = run("widget-designmeta.config.json");
   const widget = schema.designs.find((d) => d.id === "widget");
@@ -608,6 +686,28 @@ test("lang/dir + per-design shortcut icons + screenshot fields reach the manifes
   assert.equal(manifest.screenshots[0].platform, "android");
 });
 
+test("a derived shortcut's name/short_name project a LocalizableText design label to the default locale, never the raw object", () => {
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
+  generate({
+    configPath: join(FIXTURES, "widget-shortcut-locale-label.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(out, "public", "scad"),
+    outPublicDir: join(out, "public"),
+  });
+  const manifest = JSON.parse(
+    readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
+  );
+  const widgetShortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
+  // "en" is this fixture's resolved default locale (languages[0]).
+  assert.equal(widgetShortcut.name, "Widget");
+  assert.equal(widgetShortcut.short_name, "Widget");
+  assert.equal(typeof widgetShortcut.name, "string");
+  // A plain-string label (the pre-existing shape) is unaffected.
+  const collapsibleShortcut = manifest.shortcuts.find((s) => s.url === "./#d=collapsible");
+  assert.equal(collapsibleShortcut.name, "Collapsible");
+  assert.equal(collapsibleShortcut.short_name, "Collapsible");
+});
+
 test("a PNG design icon is served as-is and its real pixel size reaches the manifest", () => {
   const out = mkdtempSync(join(tmpdir(), "gen-schema-"));
   const schema = generate({
@@ -637,6 +737,19 @@ test("heavy defaults to false when unset", () => {
 test("group defaults to null when unset", () => {
   const { schema } = run("widget-autodeps.config.json");
   assert.equal(schema.designs[0].group, null);
+});
+
+// `group`'s pre-LocalizableText leniency is deliberately preserved (see
+// parseGroupLocalizable's own comment): a blank/whitespace-only string or a
+// non-string, non-object value silently collapses to null (unset) rather
+// than failing the build — a STRICTER build was considered and rejected here
+// specifically, unlike help/notices/licenses[].note/designs[].label, which
+// now do reject a malformed value (see docs/config.md's Localizing-config-
+// text "stricter than before" note).
+test("group: a blank/whitespace string or a non-string, non-object value silently becomes null, not a build error", () => {
+  const { schema } = run("widget-group-lenient.config.json");
+  assert.equal(schema.designs.find((d) => d.id === "widget").group, null);
+  assert.equal(schema.designs.find((d) => d.id === "collapsible").group, null);
 });
 
 test("a source-relative font path is referenced by basename", () => {
@@ -1350,6 +1463,15 @@ test("notices: label accepts { one, other } — 'other' required, 'one' optional
     /'notices\[0\]\.label': unknown key 'subtitle'\.\s*\n\s*Valid keys: one, other/
   );
   assert.throws(() => parseNotices([{ marker: "n", label: [] }]), /'notices\[0\]\.label' must be a string/);
+  // Adversarial shape: a locale-tag map at the OUTER `label` level (as if
+  // `label` itself, rather than each of its `one`/`other` leaves, were the
+  // LocalizableText value). This is structurally disjoint from `{ one, other
+  // }` — "en"/"de" are neither key — so it's caught by the ordinary
+  // unknown-key check, not silently accepted or misread as the wrong axis.
+  assert.throws(
+    () => parseNotices([{ marker: "n", label: { en: "alert", de: "Warnung" } }]),
+    /'notices\[0\]\.label': unknown key 'en'\.\s*\n\s*Valid keys: one, other/
+  );
 });
 
 test("notices: labelOne is rejected, pointing at label: { one, other }", () => {
@@ -1859,7 +1981,7 @@ test("parseLicenses validates shape and required fields", () => {
           note: 5,
         },
       ]),
-    /'licenses\[0\]\.note' must be a string/
+    /'licenses\[0\]\.note' must be a non-empty string, or an object of locale tag: string pairs/
   );
 });
 
@@ -1891,7 +2013,7 @@ test("parseFileImport: true/object, defaults and errors", () => {
   assert.throws(() => parseFileImport([]), /'fileImport' must be true/);
   assert.throws(
     () => parseFileImport({ note: 5 }),
-    /'fileImport\.note', when set, must be a non-empty string/
+    /'fileImport\.note' must be a non-empty string, or an object of locale tag: string pairs/
   );
   // Blank/whitespace-only is rejected; what's kept is trimmed.
   assert.throws(
@@ -1983,6 +2105,67 @@ test("parseStrings: absent -> {}, a known key overrides, an unknown key fails wi
   );
 });
 
+test("parseStrings: a per-locale object value validates each key against enabledTags", () => {
+  const validKeys = ["action.export", "action.share", "review.title"];
+  assert.deepEqual(
+    parseStrings({ "action.export": { en: "Download now", de: "Jetzt herunterladen" } }, validKeys, [
+      "en",
+      "de",
+    ]),
+    { "action.export": { en: "Download now", de: "Jetzt herunterladen" } }
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": {} }, validKeys, ["en", "de"]),
+    /'strings\.action\.export' must have at least one locale entry/
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": { fr: "x" } }, validKeys, ["en", "de"]),
+    /'strings\.action\.export' has an entry for locale "fr", which isn't one of this deployment's enabled locales\.\s*\n\s*Valid tags: en, de/
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": { en: 5 } }, validKeys, ["en"]),
+    /'strings\.action\.export\.en' must be a string \(got 5\)/
+  );
+  assert.throws(
+    () => parseStrings({ "action.export": ["en"] }, validKeys, ["en"]),
+    /'strings\.action\.export' must be a string, or an object of locale tag: string pairs/
+  );
+});
+
+test("parseLanguages: default rules — shipped 'lang' offers every registry tag, unshipped 'lang' is single-locale \"en\"", () => {
+  assert.deepEqual(parseLanguages(null, ["en", "de"], "en"), ["en", "de"]);
+  assert.deepEqual(parseLanguages(undefined, ["en", "de"], "de"), ["de", "en"]);
+  assert.deepEqual(parseLanguages(null, ["en", "de"], "fr"), ["en"]);
+  // A region-flavored 'lang' collapses to its registry tag before deriving
+  // the default: "de-AT" ships as "de", not a distinct unshipped locale.
+  assert.deepEqual(parseLanguages(null, ["en", "de"], "de-AT"), ["de", "en"]);
+});
+
+test("parseLanguages: an explicit array is validated, normalised, deduplicated and default-first", () => {
+  assert.deepEqual(parseLanguages(["de", "en"], ["en", "de"], "en"), ["en", "de"]);
+  assert.deepEqual(parseLanguages(["de-AT"], ["en", "de"], "de"), ["de"]);
+  assert.throws(
+    () => parseLanguages([], ["en", "de"], "en"),
+    /'languages' must be a non-empty array of locale tags/
+  );
+  assert.throws(
+    () => parseLanguages("en", ["en", "de"], "en"),
+    /'languages' must be a non-empty array of locale tags/
+  );
+  assert.throws(
+    () => parseLanguages(["en", "fr"], ["en", "de"], "en"),
+    /'languages\[1\]' \("fr"\) is not a locale ScadPub ships a chrome translation for/
+  );
+  assert.throws(
+    () => parseLanguages(["en", "de", "de-AT"], ["en", "de"], "en"),
+    /'languages\[2\]' \("de-AT"\) duplicates locale "de"/
+  );
+  assert.throws(
+    () => parseLanguages(["en"], ["en", "de"], "de"),
+    /'languages' must include "de" — the deployment's resolved default locale \(from 'lang' when shipped, else "en"\) must always be offered/
+  );
+});
+
 test("parseUi: saveImage is absent by default, carried only when set, rejects non-booleans", () => {
   // Default is "shown": the key is not defaulted onto the object, so the app's
   // `ui.saveImage !== false` treats absent as true.
@@ -2044,17 +2227,62 @@ test("ui.afterExport.helpTab: build succeeds against the synthetic leading 'Over
   assert.equal(schema.ui.afterExport.helpTab, "Overview");
 });
 
-test("ui.afterExport.helpTab: build fails when no help tab has that label", () => {
+test("ui.afterExport.helpTab: build fails when no help tab has that id or label", () => {
   assert.throws(
     () => run("widget-afterexport-bad.config.json"),
-    /'ui\.afterExport\.helpTab' is "Nope", but no 'help' tab has that label/
+    /'ui\.afterExport\.helpTab' is "Nope", but no 'help' tab has that id or label/
   );
 });
 
 test("ui.afterExport.helpTab: build fails with a clear message when the config has no help tabs at all", () => {
   assert.throws(
     () => run("widget-afterexport-notabs.config.json"),
-    /'ui\.afterExport\.helpTab' is "Printing", but no 'help' tab has that label/
+    /'ui\.afterExport\.helpTab' is "Printing", but no 'help' tab has that id or label/
+  );
+});
+
+test("ui.afterExport.helpTab: resolves by tab id, ahead of label", () => {
+  const { schema } = run("widget-helptab-id.config.json");
+  assert.equal(schema.ui.afterExport.helpTab, "printing");
+  assert.equal(schema.help.tabs[1].id, "printing");
+});
+
+test("ui.afterExport.helpTab: a stale id fails the build, listing the available ids", () => {
+  assert.throws(
+    () => run("widget-helptab-stale-id.config.json"),
+    /'ui\.afterExport\.helpTab' is "printing", but no 'help' tab has that id or label.\s*\n\s*Available: "start"/
+  );
+});
+
+test("help.tabs[].id: must be unique, and \"overview\" is reserved for the synthetic Overview tab", () => {
+  const mustExist = (abs) => abs;
+  assert.throws(
+    () =>
+      resolveHelp(
+        {
+          tabs: [
+            { id: "a", label: "One", sections: [{ title: "T", body: "B" }] },
+            { id: "a", label: "Two", sections: [{ title: "T", body: "B" }] },
+          ],
+        },
+        "/cfg",
+        mustExist
+      ),
+    /'help\.tabs\[1\]\.id' \("a"\) duplicates an earlier tab's id/
+  );
+  assert.throws(
+    () =>
+      resolveHelp(
+        { tabs: [{ id: "overview", label: "One", sections: [{ title: "T", body: "B" }] }] },
+        "/cfg",
+        mustExist
+      ),
+    /'help\.tabs\[0\]\.id' is "overview", which is reserved/
+  );
+  assert.throws(
+    () =>
+      resolveHelp({ tabs: [{ id: "  ", label: "One", sections: [{ title: "T", body: "B" }] }] }, "/cfg", mustExist),
+    /'help\.tabs\[0\]\.id', when set, must be a non-empty string/
   );
 });
 
@@ -2139,6 +2367,113 @@ test("fileImport.noteFile: the referenced file's contents become 'note'", () => 
   const { schema } = run("widget-fileimport-file.config.json");
   assert.equal(schema.fileImport.note, "Import a font or SVG here.");
   assert.equal("noteFile" in schema.fileImport, false);
+});
+
+// Full-build LocalizableText coverage: popup (incl. a per-locale bodyFile —
+// this is also the load-bearing Risk-3 guard for generate()'s parseIdentity
+// -> resolveProseFields reorder, since resolving a per-locale bodyFile needs
+// LANGUAGES already resolved), notices[].label, licenses[].note,
+// designs[].label/group, and help (title/intro/tabs[].label/sections).
+test("LocalizableText: a full build resolves every touched field to its per-locale object form", () => {
+  const { schema } = run("widget-prose-i18n.config.json");
+  assert.deepEqual(schema.popup.header, { en: "Welcome", de: "Willkommen" });
+  assert.deepEqual(schema.popup.body, {
+    en: "Configure a widget and export a model. Nothing is uploaded.",
+    de: "Konfiguriere ein Widget und exportiere ein Modell. Nichts wird hochgeladen.",
+  });
+  assert.equal("bodyFile" in schema.popup, false);
+  assert.deepEqual(schema.popup.button, { en: "Start", de: "Los geht's" });
+  assert.deepEqual(schema.popup.footnote, {
+    en: "Runs in your browser.",
+    de: "Läuft in deinem Browser.",
+  });
+  assert.deepEqual(schema.notices[0].label, {
+    one: { en: "alert", de: "Warnung" },
+    other: { en: "alerts", de: "Warnungen" },
+  });
+  assert.deepEqual(schema.licenses[0].note, {
+    en: "Bundled helper geometry.",
+    de: "Gebündelte Hilfsgeometrie.",
+  });
+  assert.deepEqual(schema.designs[0].label, { en: "Widget", de: "Gerät" });
+  assert.deepEqual(schema.designs[0].group, { en: "Tools", de: "Werkzeuge" });
+  assert.deepEqual(schema.help.title, { en: "User guide", de: "Anleitung" });
+  assert.deepEqual(schema.help.intro, { en: "Shared intro.", de: "Gemeinsame Einleitung." });
+  assert.equal(schema.help.tabs[0].id, "start");
+  assert.deepEqual(schema.help.tabs[0].label, { en: "Getting started", de: "Erste Schritte" });
+  assert.deepEqual(schema.help.tabs[0].sections[0].title, { en: "Step 1", de: "Schritt 1" });
+  assert.deepEqual(schema.help.tabs[0].sections[0].body, {
+    en: "Pick a design.",
+    de: "Wähle ein Design.",
+  });
+});
+
+test("LocalizableText: an object entry naming a locale outside 'languages' fails the build", () => {
+  assert.throws(
+    () => run("widget-prose-i18n-bad-tag.config.json"),
+    /'popup\.header' has an entry for locale "fr", which isn't one of this deployment's enabled locales/
+  );
+});
+
+test("LocalizableText: an object missing the deployment's default-locale entry fails the build", () => {
+  assert.throws(
+    () => run("widget-prose-i18n-missing-default.config.json"),
+    /'popup\.header' must include an entry for "en", this deployment's default locale/
+  );
+});
+
+test("help.tabs[].file: a per-locale object splits each locale's file independently into one LocalizableText intro/sections", () => {
+  const { schema } = run("widget-help-locale.config.json");
+  const tab = schema.help.tabs[0];
+  assert.deepEqual(tab.intro, { en: "Shared intro.", de: "Gemeinsame Einleitung." });
+  assert.equal(tab.sections.length, 2);
+  assert.deepEqual(tab.sections[0].title, { en: "Pick a design", de: "Design wählen" });
+  assert.deepEqual(tab.sections[0].body, { en: "Use the dropdown.", de: "Nutze das Dropdown." });
+  assert.deepEqual(tab.sections[1].title, { en: "Adjust parameters", de: "Parameter anpassen" });
+  assert.deepEqual(tab.sections[1].body, {
+    en: "The panel lists what you can change.",
+    de: "Das Panel listet, was du ändern kannst.",
+  });
+});
+
+test("help.tabs[].file: a locale's file splitting into a different number of '##' sections fails the build", () => {
+  assert.throws(
+    () => run("widget-help-locale-mismatch.config.json"),
+    /'help\.tabs\[0\]\.file' locale "de" splits into 1 section\(s\).*but "en" splits into 2/s
+  );
+});
+
+test("help.tabs[].file: a non-default locale's missing intro just leaves that locale out of the intro map", () => {
+  // "en" (default) has an intro, "de" has none (nothing before its first
+  // '##'): the resulting intro map carries only "en" — a visitor on "de"
+  // falls back to it via lx()'s own map[tag] ?? map[defaultTag] rule.
+  const { schema } = run("widget-help-locale-nointro-de.config.json");
+  assert.deepEqual(schema.help.tabs[0].intro, { en: "Shared intro." });
+});
+
+test("help.tabs[].file: intro is omitted entirely when the DEFAULT locale's file has none, even if another locale's does", () => {
+  // "en" (default) has no intro; "de" does. Per the documented rule (see
+  // docs/config.md's Sourcing-help-from-Markdown-files section), intro only
+  // ever appears when the default locale's file supplies one, so "de"'s
+  // intro text is dropped here rather than producing an object missing the
+  // default tag (which would violate LocalizableText's own invariant).
+  const { schema } = run("widget-help-locale-nointro-en.config.json");
+  assert.equal("intro" in schema.help.tabs[0], false);
+});
+
+test("resolveFileField: licenses[].textFile rejects a per-locale object — this field doesn't support per-locale forms", () => {
+  assert.throws(
+    () =>
+      resolveFileField({
+        obj: { textFile: { en: "a.md", de: "b.md" } },
+        field: "text",
+        fileField: "textFile",
+        CONFIG_DIR: "/cfg",
+        mustExist: refusingMustExist,
+        path: "licenses[0]",
+      }),
+    /'licenses\[0\]\.textFile' must be a file path \(this field doesn't support per-locale forms\)/
+  );
 });
 
 // resolveFileField backs popup.bodyFile / fileImport.noteFile /
@@ -4700,4 +5035,588 @@ test("a malformed @collapsed gets its own message, not the unknown-annotation on
   const msg = parseError(`// @collapsed extra\n/* [Main] */\n// A.\na = 1;\n`);
   assert.match(msg, /malformed @collapsed annotation/);
   assert.doesNotMatch(msg, /unknown annotation/);
+});
+
+// ── Design translation sidecars (Phase 5) ───────────────────────────────────
+// scripts/lib/design-strings.mjs's parseDesignStrings is unit-tested directly
+// against a synthetic ctx first (no fixture tree needed); the gen-schema
+// integration (sibling discovery, the unshipped-tag scan, i18n/<tag>.json
+// emission, the assets-glob guard, renderHash isolation) is then exercised
+// through generate() against throwaway temp source trees — NOT the shared
+// tests/fixtures/src/widget.scad tree those error cases would otherwise have
+// to add stray/malformed sidecar files next to, which every other
+// widget-based fixture (70+ configs) also builds against.
+
+function designStringsCtx(overrides = {}) {
+  return {
+    file: "d.strings.de.json",
+    designId: "d",
+    params: [
+      { name: "label", choices: null, hasInfo: false },
+      { name: "width", choices: null, hasInfo: true },
+      { name: "style", choices: ["flat", "raised"], hasInfo: false },
+    ],
+    sections: ["Main"],
+    hasDescription: true,
+    reviewLabels: new Set(["label"]),
+    hasReviewNote: true,
+    ...overrides,
+  };
+}
+
+test("parseDesignStrings: an empty object is a valid, warn-free no-op", () => {
+  assert.deepEqual(parseDesignStrings({}, designStringsCtx()), {});
+});
+
+test("parseDesignStrings: rejects an unknown top-level key", () => {
+  assert.throws(
+    () => parseDesignStrings({ bogus: "x" }, designStringsCtx()),
+    /'d\.strings\.de\.json' '\.' has unknown key 'bogus'/
+  );
+});
+
+test("parseDesignStrings: rejects an unknown parameter name", () => {
+  assert.throws(
+    () => parseDesignStrings({ params: { nope: { description: "x" } } }, designStringsCtx()),
+    /'params\["nope"\]' does not match any parameter in design 'd'/
+  );
+});
+
+test("parseDesignStrings: rejects an unknown section name", () => {
+  assert.throws(
+    () => parseDesignStrings({ sections: { Nope: "x" } }, designStringsCtx()),
+    /'sections\["Nope"\]' does not match any section in design 'd'/
+  );
+});
+
+test("parseDesignStrings: rejects translating the canonical 'Hidden' section", () => {
+  assert.throws(
+    () => parseDesignStrings({ sections: { Hidden: "x" } }, designStringsCtx()),
+    /names a canonical OpenSCAD section/
+  );
+});
+
+test("parseDesignStrings: rejects two translations colliding on the same final section name", () => {
+  assert.throws(
+    () =>
+      parseDesignStrings(
+        { sections: { Size: "Größe", Style: "Größe" } },
+        designStringsCtx({ sections: ["Size", "Style"] })
+      ),
+    /translates section "Size" and section "Style" to the same name "Größe" — translated section names must stay unique/
+  );
+});
+
+test("parseDesignStrings: rejects a translation colliding with an untranslated sibling section's name", () => {
+  assert.throws(
+    () =>
+      parseDesignStrings(
+        { sections: { Size: "Style" } },
+        designStringsCtx({ sections: ["Size", "Style"] })
+      ),
+    /translates section "Size" and section "Style" to the same name "Style" — translated section names must stay unique/
+  );
+});
+
+test("parseDesignStrings: accepts distinct section translations that don't collide", () => {
+  const out = parseDesignStrings(
+    { sections: { Size: "Größe", Style: "Stil" } },
+    designStringsCtx({ sections: ["Size", "Style"] })
+  );
+  assert.deepEqual(out.sections, { Size: "Größe", Style: "Stil" });
+});
+
+test("parseDesignStrings: rejects a choices key that isn't a declared choice value", () => {
+  assert.throws(
+    () => parseDesignStrings({ params: { style: { choices: { stale: "x" } } } }, designStringsCtx()),
+    /'params\["style"\]\.choices\["stale"\]' is not a declared choice value/
+  );
+  // Same rule for a non-enum param: it has no declared choices at all.
+  assert.throws(
+    () => parseDesignStrings({ params: { label: { choices: { anything: "x" } } } }, designStringsCtx()),
+    /not a declared choice value/
+  );
+});
+
+test("parseDesignStrings: accepts a choices translation for a declared value", () => {
+  const out = parseDesignStrings(
+    { params: { style: { choices: { flat: "Flach" } } } },
+    designStringsCtx()
+  );
+  assert.equal(out.params.style.choices.flat, "Flach");
+});
+
+test("parseDesignStrings: rejects an info translation for a param without @info", () => {
+  assert.throws(
+    () => parseDesignStrings({ params: { label: { info: { label: "x" } } } }, designStringsCtx()),
+    /'label' carries no '\/\/ @info' annotation to translate/
+  );
+});
+
+test("parseDesignStrings: accepts an info translation for a param that has @info", () => {
+  const out = parseDesignStrings({ params: { width: { info: { label: "Breite" } } } }, designStringsCtx());
+  assert.equal(out.params.width.info.label, "Breite");
+});
+
+test("parseDesignStrings: rejects a description translation when the design has no @description", () => {
+  assert.throws(
+    () => parseDesignStrings({ description: "x" }, designStringsCtx({ hasDescription: false })),
+    /design 'd' has no '\/\/ @description' to translate/
+  );
+});
+
+test("parseDesignStrings: rejects reviewLabels for a param without @review", () => {
+  assert.throws(
+    () => parseDesignStrings({ reviewLabels: { width: "x" } }, designStringsCtx()),
+    /does not match any parameter carrying '\/\/ @review'/
+  );
+});
+
+test("parseDesignStrings: rejects reviewNote when the design has no @reviewNote", () => {
+  assert.throws(
+    () => parseDesignStrings({ reviewNote: "x" }, designStringsCtx({ hasReviewNote: false })),
+    /design 'd' has no '\/\/ @reviewNote' to translate/
+  );
+});
+
+test("parseDesignStrings: every leaf value must be a non-empty string", () => {
+  assert.throws(() => parseDesignStrings({ description: 5 }, designStringsCtx()), /must be a non-empty string/);
+  assert.throws(() => parseDesignStrings({ description: "" }, designStringsCtx()), /must be a non-empty string/);
+  assert.throws(
+    () => parseDesignStrings({ params: { label: { description: "" } } }, designStringsCtx()),
+    /must be a non-empty string/
+  );
+  assert.throws(
+    () => parseDesignStrings({ echo: { "Total width": 5 } }, designStringsCtx()),
+    /must be a non-empty string/
+  );
+});
+
+test("parseDesignStrings: 'echo' is a free-form source-string map with no cross-check against the design", () => {
+  const out = parseDesignStrings(
+    { echo: { "Anything the design happens to echo": "Whatever it translates to" } },
+    designStringsCtx()
+  );
+  assert.equal(out.echo["Anything the design happens to echo"], "Whatever it translates to");
+});
+
+// ── gen-schema integration: sibling discovery, emission, renderHash isolation
+
+function i18nOutDirs(prefix) {
+  const out = mkdtempSync(join(tmpdir(), `gen-schema-${prefix}-out-`));
+  return { outSchemaDir: join(out, "schema"), outScadDir: join(out, "scad") };
+}
+
+test("the checked-in widget.scad sidecar fixture is discovered and folded into src/generated/i18n/<tag>.json for every registry tag", () => {
+  const { schema, out } = run("widget-i18n.config.json");
+  // Transient: never reaches designs.json.
+  assert.equal(schema.designs[0].stringsByTag, undefined);
+  const de = JSON.parse(readFileSync(join(out, "schema", "i18n", "de.json"), "utf-8"));
+  assert.deepEqual(Object.keys(de.designs), ["widget"]);
+  assert.equal(de.designs.widget.description, "Ein kleines Widget.");
+  assert.equal(de.designs.widget.sections.Main, "Haupt");
+  assert.equal(de.designs.widget.params.style.choices.flat, "Flach");
+  assert.equal(de.designs.widget.echo["Total width"], "Gesamtbreite");
+  // Written for EVERY registry tag, even one no design translated: the
+  // fixture only ships a "de" sidecar, so every OTHER registry tag's file
+  // must still exist and come out empty.
+  for (const tag of LOCALE_TAGS) {
+    if (tag === "de") continue;
+    const bundle = JSON.parse(readFileSync(join(out, "schema", "i18n", `${tag}.json`), "utf-8"));
+    assert.deepEqual(bundle, { designs: {} });
+  }
+});
+
+test("renderHash is identical with and without a design's translation sidecar present", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-hash-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const gen = () => generate({ ...i18nOutDirs("hash"), configPath: join(src, "c.config.json") }).renderHash;
+
+  const withoutSidecar = gen();
+  writeFileSync(join(src, "d.strings.de.json"), "{}\n");
+  const withSidecar = gen();
+  rmSync(join(src, "d.strings.de.json"));
+  const afterRemoval = gen();
+
+  assert.equal(withSidecar, withoutSidecar, "a present sidecar must not change renderHash");
+  assert.equal(afterRemoval, withoutSidecar);
+});
+
+test("a translation sidecar naming an unshipped locale tag fails the build, listing valid tags", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-badtag-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.strings.xx.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("badtag"), configPath: join(src, "c.config.json") }),
+    new RegExp(
+      `translation sidecar 'd\\.strings\\.xx\\.json' names an unshipped locale tag 'xx'.*Valid tags: ${LOCALE_TAGS.join(", ")}`,
+      "s"
+    )
+  );
+});
+
+test("a translation sidecar whose tag is a wrongly-cased shipped locale fails the build, naming the expected lowercase form", () => {
+  // A case-insensitive filesystem (macOS, Windows) resolves this the same as
+  // 'd.strings.de.json', so it must be caught explicitly rather than silently
+  // loaded as (or silently ignored instead of) the "de" sidecar.
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-badcase-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.strings.DE.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("badcase"), configPath: join(src, "c.config.json") }),
+    /translation sidecar 'd\.strings\.DE\.json' names locale tag 'DE', but sidecar tags are matched case-sensitively\. Rename it to 'd\.strings\.de\.json'\./
+  );
+});
+
+test("a translation sidecar with a wrongly-cased 'strings' infix fails the build, naming the canonical form", () => {
+  // A case-insensitive filesystem loads 'd.Strings.de.json' as if it were
+  // 'd.strings.de.json' with nothing else to say about it; on a
+  // case-sensitive one it's silently inert instead. Reject both instead of
+  // letting behaviour diverge across platforms.
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-badinfix-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.Strings.de.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("badinfix"), configPath: join(src, "c.config.json") }),
+    /translation sidecar 'd\.Strings\.de\.json' has the wrong case for 'strings'.*Rename it to 'd\.strings\.de\.json'\./
+  );
+});
+
+test("a freshness-stamp file with a wrongly-cased 'stamps' tag fails the build, naming the canonical form", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-badstamps-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.strings.STAMPS.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("badstamps"), configPath: join(src, "c.config.json") }),
+    /translation sidecar 'd\.strings\.STAMPS\.json' has the wrong case for 'stamps'.*Rename it to 'd\.strings\.stamps\.json'\./
+  );
+});
+
+test("an 'assets' entry directly naming a translation sidecar fails the build", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-directasset-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.strings.de.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: ".",
+      assets: ["d.strings.de.json"],
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("directasset"), configPath: join(src, "c.config.json") }),
+    /asset 'd\.strings\.de\.json' names a design-translation sidecar/
+  );
+});
+
+test("an orphaned sidecar-shaped file matching no design's basename warns, but does not fail the build", () => {
+  // Simulates a design rename: 'widget.scad' became 'd.scad' (still the only
+  // design), but its old translation sidecar was left behind under the old
+  // basename. The per-design scan only ever looks for ITS OWN design's base
+  // ('d'), so this must be caught by the separate orphan scan instead.
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-i18n-orphan-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "widget.strings.de.json"), "{}\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  let schema;
+  try {
+    schema = generate({ ...i18nOutDirs("orphan"), configPath: join(src, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(schema.designs.length === 1); // the build still succeeds
+  const hits = warnings.filter((w) => w.includes("widget.strings.de.json"));
+  assert.equal(hits.length, 1, `expected exactly one orphan warning, got: ${JSON.stringify(warnings)}`);
+  assert.ok(hits[0].includes("match no design in their directory"));
+});
+
+test("a glob 'assets' entry silently excludes translation sidecars, with a one-time warning", () => {
+  // Config and SOURCE live in SEPARATE directories here (unlike the other
+  // tests in this section): "**/*.json" globs the whole SOURCE tree, and a
+  // sibling config.json would otherwise be swept up by it too, muddying the
+  // "the sidecar was the glob's only match" assertion below.
+  const root = mkdtempSync(join(tmpdir(), "gen-schema-i18n-globasset-"));
+  const src = join(root, "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.strings.de.json"), "{}\n");
+  writeFileSync(
+    join(root, "c.config.json"),
+    JSON.stringify({
+      title: "T",
+      source: "src",
+      assets: ["**/*.json"],
+      designs: [{ id: "d", label: "D" }],
+    })
+  );
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  let schema;
+  try {
+    schema = generate({ ...i18nOutDirs("globasset"), configPath: join(root, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(schema.assets, []); // the sidecar was the glob's only match
+  const hits = warnings.filter((w) => w.includes("d.strings.de.json"));
+  assert.equal(hits.length, 1, `expected exactly one warning naming the sidecar, got: ${JSON.stringify(warnings)}`);
+  assert.ok(hits[0].includes("excluded 1 design-translation sidecar"));
+});
+
+// ── @doc per-locale sidecars, preset-name translation, freshness stamps
+// (Phase 4) ──────────────────────────────────────────────────────────────
+// Isolated throwaway source trees, exactly like the strings-sidecar
+// integration tests above: tests/fixtures/src/ is shared by 70+ configs, so
+// none of this touches it — see that section's own comment for why.
+
+function docFixtureSrc(prefix) {
+  const src = mkdtempSync(join(tmpdir(), `gen-schema-doc-${prefix}-`));
+  writeFileSync(join(src, "d.scad"), `// @doc d-doc.md\n/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d-doc.md"), "# D\n\nThe base doc.\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  return src;
+}
+
+test("docLocales: a '<design>.doc.<tag>.md' sidecar is discovered, copied to '<id>-doc.<tag>.md', and listed sorted", () => {
+  const src = docFixtureSrc("basic");
+  writeFileSync(join(src, "d.doc.de.md"), "# D\n\nDie Basisdokumentation.\n");
+  const out = mkdtempSync(join(tmpdir(), "gen-schema-doc-basic-out-"));
+  const outPublicDir = join(out, "public");
+  const schema = generate({
+    configPath: join(src, "c.config.json"),
+    outSchemaDir: join(out, "schema"),
+    outScadDir: join(outPublicDir, "scad"),
+    outPublicDir,
+  });
+  const d = schema.designs[0];
+  assert.deepEqual(d.docLocales, ["de"]);
+  assert.equal(
+    readFileSync(join(outPublicDir, "scad", "d-doc.de.md"), "utf-8"),
+    "# D\n\nDie Basisdokumentation.\n"
+  );
+  const precache = JSON.parse(readFileSync(join(outPublicDir, "precache-manifest.json"), "utf-8"));
+  assert.ok(precache.shell.includes("scad/d-doc.de.md"));
+});
+
+test("docLocales is absent when no doc sidecar exists", () => {
+  const src = docFixtureSrc("absent");
+  const schema = generate({ ...i18nOutDirs("doc-absent"), configPath: join(src, "c.config.json") });
+  assert.equal(schema.designs[0].docLocales, undefined);
+});
+
+test("a doc sidecar naming a wrongly-cased shipped locale fails the build, naming the expected lowercase form", () => {
+  const src = docFixtureSrc("badcase");
+  writeFileSync(join(src, "d.doc.DE.md"), "# D\n");
+  assert.throws(
+    () => generate({ ...i18nOutDirs("doc-badcase"), configPath: join(src, "c.config.json") }),
+    /doc translation 'd\.doc\.DE\.md' names locale tag 'DE', but doc sidecar tags are matched case-sensitively\. Rename it to 'd\.doc\.de\.md'\./
+  );
+});
+
+test("a doc sidecar naming an unshipped locale tag fails the build, listing valid tags", () => {
+  const src = docFixtureSrc("badtag");
+  writeFileSync(join(src, "d.doc.xx.md"), "# D\n");
+  assert.throws(
+    () => generate({ ...i18nOutDirs("doc-badtag"), configPath: join(src, "c.config.json") }),
+    new RegExp(
+      `doc translation 'd\\.doc\\.xx\\.md' names an unshipped locale tag 'xx'.*Valid tags: ${LOCALE_TAGS.join(", ")}`,
+      "s"
+    )
+  );
+});
+
+test("a doc sidecar with a wrongly-cased 'doc' infix fails the build, naming the canonical form", () => {
+  const src = docFixtureSrc("badinfix");
+  writeFileSync(join(src, "d.Doc.de.md"), "# D\n");
+  assert.throws(
+    () => generate({ ...i18nOutDirs("doc-badinfix"), configPath: join(src, "c.config.json") }),
+    /doc translation 'd\.Doc\.de\.md' has the wrong case for 'doc'.*Rename it to 'd\.doc\.de\.md'\./
+  );
+});
+
+test("a doc sidecar for a design with no '// @doc' fails the build", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-doc-nodocbase-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(join(src, "d.doc.de.md"), "# D\n");
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("doc-nodocbase"), configPath: join(src, "c.config.json") }),
+    /'d\.doc\.de\.md' exists, but design 'd' has no '\/\/ @doc' to translate/
+  );
+});
+
+test("an orphaned doc-sidecar-shaped file matching no design's basename warns, but does not fail the build", () => {
+  const src = docFixtureSrc("orphan");
+  writeFileSync(join(src, "widget.doc.de.md"), "# Orphan\n");
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  let schema;
+  try {
+    schema = generate({ ...i18nOutDirs("doc-orphan"), configPath: join(src, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(schema.designs.length, 1);
+  const hits = warnings.filter((w) => w.includes("widget.doc.de.md"));
+  assert.equal(hits.length, 1, `expected exactly one orphan warning, got: ${JSON.stringify(warnings)}`);
+});
+
+test("renderHash is identical with and without a design's doc-locale sidecar present", () => {
+  const src = docFixtureSrc("hash");
+  const gen = () => generate({ ...i18nOutDirs("doc-hash"), configPath: join(src, "c.config.json") }).renderHash;
+  const without = gen();
+  writeFileSync(join(src, "d.doc.de.md"), "# D\n\nDie Basisdokumentation.\n");
+  const withDoc = gen();
+  rmSync(join(src, "d.doc.de.md"));
+  const afterRemoval = gen();
+  assert.equal(withDoc, without, "a present doc sidecar must not change renderHash");
+  assert.equal(afterRemoval, without);
+});
+
+test("renderHash is identical with and without a '<design>.strings.stamps.json' file present", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-stamps-hash-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const gen = () => generate({ ...i18nOutDirs("stamps-hash"), configPath: join(src, "c.config.json") }).renderHash;
+  const without = gen();
+  writeFileSync(join(src, "d.strings.stamps.json"), JSON.stringify({ de: { description: "deadbeef" } }) + "\n");
+  const withStamps = gen();
+  rmSync(join(src, "d.strings.stamps.json"));
+  const afterRemoval = gen();
+  assert.equal(withStamps, without, "a present stamps file must not change renderHash");
+  assert.equal(afterRemoval, without);
+});
+
+test("design-strings 'presets': a key matching a bundled preset name translates into src/generated/i18n/<tag>.json", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-presets-i18n-ok-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(
+    join(src, "d.json"),
+    JSON.stringify({
+      fileFormatVersion: "1",
+      parameterSets: { "Signs | Door plate (Imperial)": { label: "hey" } },
+    })
+  );
+  writeFileSync(
+    join(src, "d.strings.de.json"),
+    JSON.stringify({ presets: { "Signs | Door plate (Imperial)": "Schilder | Türschild (Imperial)" } })
+  );
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const out = i18nOutDirs("presets-ok");
+  generate({ ...out, configPath: join(src, "c.config.json") });
+  const de = JSON.parse(readFileSync(join(out.outSchemaDir, "i18n", "de.json"), "utf-8"));
+  assert.equal(de.designs.d.presets["Signs | Door plate (Imperial)"], "Schilder | Türschild (Imperial)");
+});
+
+test("design-strings 'presets': a name not matching a bundled preset fails the build", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-presets-i18n-bad-"));
+  writeFileSync(join(src, "d.scad"), `/* [Main] */\n// The label.\nlabel = "hi";\n`);
+  writeFileSync(
+    join(src, "d.json"),
+    JSON.stringify({ fileFormatVersion: "1", parameterSets: { Tall: { label: "hey" } } })
+  );
+  writeFileSync(join(src, "d.strings.de.json"), JSON.stringify({ presets: { "Not A Real Preset": "x" } }));
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  assert.throws(
+    () => generate({ ...i18nOutDirs("presets-bad"), configPath: join(src, "c.config.json") }),
+    /'presets\["Not A Real Preset"\]' does not match any bundled preset in design 'd'/
+  );
+});
+
+test("gen-schema warns (never fails) when a stamps file's recorded hash no longer matches the current source text", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-stamps-drift-"));
+  writeFileSync(
+    join(src, "d.scad"),
+    `// @description Original text.\n/* [Main] */\n// The label.\nlabel = "hi";\n`
+  );
+  writeFileSync(join(src, "d.strings.de.json"), JSON.stringify({ description: "Originaltext." }));
+  writeFileSync(
+    join(src, "d.strings.stamps.json"),
+    JSON.stringify({ de: { description: "not-the-real-hash" } })
+  );
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    generate({ ...i18nOutDirs("stamps-drift"), configPath: join(src, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  const hits = warnings.filter((w) => w.includes("de translation of description may be stale"));
+  assert.equal(hits.length, 1, JSON.stringify(warnings));
+});
+
+test("gen-schema does not warn when a stamps file's recorded hash matches the current source text", () => {
+  const src = mkdtempSync(join(tmpdir(), "gen-schema-stamps-nodrift-"));
+  writeFileSync(
+    join(src, "d.scad"),
+    `// @description Original text.\n/* [Main] */\n// The label.\nlabel = "hi";\n`
+  );
+  writeFileSync(join(src, "d.strings.de.json"), JSON.stringify({ description: "Originaltext." }));
+  writeFileSync(
+    join(src, "d.strings.stamps.json"),
+    JSON.stringify({ de: { description: createHash("sha256").update("Original text.", "utf8").digest("hex") } })
+  );
+  writeFileSync(
+    join(src, "c.config.json"),
+    JSON.stringify({ title: "T", source: ".", designs: [{ id: "d", label: "D" }] })
+  );
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    generate({ ...i18nOutDirs("stamps-nodrift"), configPath: join(src, "c.config.json") });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.filter((w) => w.includes("may be stale")).length, 0, JSON.stringify(warnings));
 });

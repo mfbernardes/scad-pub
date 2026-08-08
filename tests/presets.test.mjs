@@ -6,6 +6,7 @@ import {
   defaultsFor,
   toParameterSetsFile,
   parseParameterSetsFile,
+  ParameterSetsFormatError,
   presetLabel,
   parsePresetId,
   listPresets,
@@ -122,8 +123,8 @@ test("parse overlays defaults and ignores unknown keys", () => {
   assert.deepEqual(set.values, { text: "hi", thk: 9, flag: false, lang: "de" });
 });
 
-test("parse rejects a file without parameterSets", () => {
-  assert.throws(() => parseParameterSetsFile(design, "{}"), /parameterSets/);
+test("parse rejects a file without parameterSets, as the structured ParameterSetsFormatError PresetPicker maps to a catalogue key", () => {
+  assert.throws(() => parseParameterSetsFile(design, "{}"), ParameterSetsFormatError);
 });
 
 test("presetLabel extracts the name from type:designId:name", () => {

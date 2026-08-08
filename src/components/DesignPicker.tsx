@@ -2,7 +2,7 @@
 // desktop CommandBar and the mobile top bar (each wraps it differently and
 // handles the single-design fallback in its own markup).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import type { Design } from "../openscad/types";
+import type { LocalizedDesign } from "../openscad/types";
 import { Check as CheckIcon, ChevronDown as ChevronDownIcon } from "lucide-react";
 import {
   Dialog,
@@ -14,6 +14,7 @@ import {
 } from "./ui/dialog";
 import { preventTouchAutoFocus } from "../lib/pointer";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { THUMB_FRAME, Thumbnail } from "./Thumbnail";
 import {
   Select,
@@ -26,7 +27,7 @@ import {
 } from "./ui/select";
 
 interface Props {
-  designs: Design[];
+  designs: LocalizedDesign[];
   value: string;
   onChange: (id: string) => void;
   /**
@@ -44,8 +45,8 @@ interface Props {
 // group's run starts where its first design appears, and ungrouped designs
 // (group null/absent) stay as a headerless run. Falls back to a flat list when
 // no design declares a group.
-function groupDesigns(designs: Design[]): { group: string | null; items: Design[] }[] {
-  const runs: { group: string | null; items: Design[] }[] = [];
+function groupDesigns(designs: LocalizedDesign[]): { group: string | null; items: LocalizedDesign[] }[] {
+  const runs: { group: string | null; items: LocalizedDesign[] }[] = [];
   for (const d of designs) {
     const group = d.group ?? null;
     const last = runs[runs.length - 1];
@@ -60,6 +61,7 @@ export function DesignGallery({
   value,
   onChange,
 }: Pick<Props, "designs" | "value" | "onChange">) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const [query, setQuery] = useState("");
   // Whether the gallery's scroll port has content past its bottom edge, which
   // drives the fade above. Measured rather than assumed: the port's height
@@ -207,13 +209,14 @@ export function DesignGallery({
 }
 
 // A design's optional icon, shown as a small leading thumbnail in the dropdown.
-function designIcon(d: Design): ReactNode {
+function designIcon(d: LocalizedDesign): ReactNode {
   return d.icon ? (
     <img src={d.icon} alt="" aria-hidden="true" width={16} height={16} className="size-4 shrink-0 object-contain" />
   ) : undefined;
 }
 
 export function DesignPicker({ designs, value, onChange, openSignal, gallery = false }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const runs = groupDesigns(designs);
   const grouped = runs.some((r) => r.group !== null);
   const [open, setOpen] = useState(false);
@@ -263,7 +266,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, gallery = f
     );
   }
 
-  const item = (d: Design) => (
+  const item = (d: LocalizedDesign) => (
     <SelectItem key={d.id} value={d.id} icon={designIcon(d)} description={d.description ?? undefined}>
       {d.label}
     </SelectItem>
@@ -272,7 +275,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, gallery = f
     <Select value={value} onValueChange={onChange} open={open} onOpenChange={setOpen}>
       <SelectTrigger
         size="sm"
-        aria-label="Choose a design"
+        aria-label={t("designPicker.title")}
         className="font-display h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-0"
       >
         <SelectValue />

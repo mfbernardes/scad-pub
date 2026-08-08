@@ -28,11 +28,12 @@
 // ends — BottomSheet measures the Peek height down to that element's bottom
 // edge. The pill renders AFTER the tab row (not before it) so mounting or
 // unmounting it never shifts the measured element's own position.
-import type { Design } from "../openscad/types";
+import type { LocalizedDesign } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { useAppActions } from "../lib/appActions";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import type { PanelTab } from "../lib/usePanelState";
 import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import type { ReadinessState } from "../lib/readiness";
@@ -47,7 +48,7 @@ import { cn } from "../lib/utils";
 type Tab = PanelTab;
 
 interface Props {
-  design: Design;
+  design: LocalizedDesign;
   values: Values;
   bundled: ParsedSet[];
   userPresets: string[];
@@ -124,6 +125,7 @@ export function SheetTabs({
   onSearchBlur,
   sheetPill,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
   // Overridable via the config's `strings` block (src/locales/en.json's
   // presets.title/settings.title), see docs/config.md's "Text overrides".
@@ -141,7 +143,7 @@ export function SheetTabs({
     >
       <TabsList
         className="w-full shrink-0 rounded-none border-b bg-transparent p-0"
-        aria-label="Panel sections"
+        aria-label={t("sheet.panelSections")}
         data-sheet-peek-end
       >
         {tabs.map((t) => (

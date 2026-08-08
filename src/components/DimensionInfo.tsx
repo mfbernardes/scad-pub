@@ -20,6 +20,8 @@ import type { ComputedInfo } from "../lib/computedInfo";
 import { isVisible } from "../lib/visibility";
 import { cn } from "../lib/utils";
 import { mm, formatParamValue as formatValue } from "../lib/format";
+import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 interface Props {
   design: Design;
@@ -54,6 +56,7 @@ export function DimensionInfo({
   collapsed,
   onToggleCollapsed,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
 
   // The headline bounding box, then any params flagged `// @info` that are still
   // visible under their @showIf (if any) and have a non-empty formatted value.
@@ -91,7 +94,7 @@ export function DimensionInfo({
         // Preview out of date: dim + italic so a stale figure never reads as current.
         stale && "italic opacity-55"
       )}
-      aria-label="Model measurements"
+      aria-label={t("dimensionInfo.aria")}
     >
       <div
         className={cn(
@@ -106,7 +109,7 @@ export function DimensionInfo({
               type="button"
               onClick={onToggleCollapsed}
               aria-expanded={!collapsed}
-              title={collapsed ? "Show measurement details" : "Hide measurement details"}
+              title={collapsed ? t("dimensionInfo.showDetails") : t("dimensionInfo.hideDetails")}
               className="pointer-events-auto -m-1 inline-flex cursor-pointer items-center gap-[0.3rem] rounded-(--radius-sm) bg-transparent p-1 font-semibold text-foreground hover:text-brand"
             >
               <ChevronDown
@@ -114,10 +117,10 @@ export function DimensionInfo({
                 aria-hidden
                 className={cn("shrink-0 transition-transform", collapsed && "-rotate-90")}
               />
-              Dimensions
+              {t("dimensions.title")}
             </button>
           ) : (
-            "Dimensions"
+            t("dimensions.title")
           )}
         </dt>
         <dd className={dd}>{`${mm(size.x)} × ${mm(size.y)} × ${mm(size.z)} mm`}</dd>
@@ -133,7 +136,10 @@ export function DimensionInfo({
         computed.map((c, i) => (
           <div className={detailRow} key={`computed-${i}-${c.label}`}>
             <dt>{c.label}</dt>
-            <dd className={dd}>{c.value}</dd>
+            {/* Composes value+unit the same way format.ts's formatParamValue
+                does for a param's own @info row (`value + " " + unit`): the
+                unit lives on `c.value` no longer (see computedInfo.ts). */}
+            <dd className={dd}>{c.unit ? `${c.value} ${c.unit}` : c.value}</dd>
           </div>
         ))}
     </dl>

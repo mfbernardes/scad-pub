@@ -3,6 +3,7 @@
 // dot; kept framework-free (pure data + a derive function) so any indicator can
 // read the same states without drift.
 import type { RenderResult } from "../openscad/types";
+import { t } from "./i18n";
 
 export type RenderState = "idle" | "loading" | "rendering" | "ok" | "error" | "stale";
 
@@ -50,15 +51,21 @@ export function deriveRenderStatus({ rendering, ready, result, stale = false }: 
   state: RenderState;
   text: string;
 } {
-  // Keep the "N ms" / "Failed (exit N)" shapes below stable: the smoke and
-  // capture scripts wait on them via the `.render-status` hook.
-  if (!ready) return { state: "loading", text: "Getting ready…" };
-  if (rendering) return { state: "rendering", text: "Updating preview…" };
+  // Keep the "N ms" / "Failed (exit N)" shapes below stable (see the matching
+  // en.json templates): the smoke and capture scripts wait on them via the
+  // `.render-status` hook.
+  if (!ready) return { state: "loading", text: t("renderStatus.gettingReady") };
+  if (rendering) return { state: "rendering", text: t("renderStatus.updating") };
   // The preview no longer matches the controls: surfaced before "ok" so a
   // happy green "214 ms" never masks unrendered changes.
-  if (stale) return { state: "stale", text: "Preview out of date" };
-  if (!result) return { state: "idle", text: "Idle" };
+  if (stale) return { state: "stale", text: t("renderStatus.stale") };
+  if (!result) return { state: "idle", text: t("renderStatus.idle") };
   if (result.ok)
-    return { state: "ok", text: result.cached ? `${result.ms} ms (cached)` : `${result.ms} ms` };
-  return { state: "error", text: `Failed (exit ${result.exitCode})` };
+    return {
+      state: "ok",
+      text: result.cached
+        ? t("renderStatus.msCached", { ms: result.ms })
+        : t("renderStatus.ms", { ms: result.ms }),
+    };
+  return { state: "error", text: t("renderStatus.failed", { code: result.exitCode }) };
 }

@@ -8,11 +8,12 @@
 // StatusStrip.tsx) rather than a row above the tabs, which also means it
 // survives this panel being collapsed to its rail.
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import type { Design } from "../openscad/types";
+import type { LocalizedDesign } from "../openscad/types";
 import type { ParsedSet, Values } from "../lib/presets";
 import type { InstalledFont } from "../lib/fonts";
 import { ns } from "../lib/appId";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { useAppActions } from "../lib/appActions";
 import { visibleGroups } from "../lib/paramGroups";
 import type { PanelTab } from "../lib/usePanelState";
@@ -44,7 +45,7 @@ const MAX_WIDTH = 600;
 const DEFAULT_WIDTH = 360;
 
 interface Props {
-  design: Design;
+  design: LocalizedDesign;
   values: Values;
   bundled: ParsedSet[];
   userPresets: string[];
@@ -119,6 +120,7 @@ export function ParamPanel({
   failure,
   onSearchBlur,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { change, applyPreset, selectedPresetChange, presetsChange } = useAppActions();
   const [open, setOpen] = useState(() => {
     const v = readLocal(PANEL_OPEN_KEY);
@@ -253,7 +255,7 @@ export function ParamPanel({
         onPointerCancel={onPointerUp}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize parameter panel"
+        aria-label={t("panel.resize")}
         aria-valuenow={width}
         aria-valuemin={MIN_WIDTH}
         aria-valuemax={MAX_WIDTH}

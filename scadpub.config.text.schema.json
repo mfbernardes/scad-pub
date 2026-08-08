@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScadPub config text file",
+  "description": "One locale's text file, referenced by scadpub.config.json's 'text' key. Generated from scripts/gen-config-schema.mjs's buildConfigTextSchema — see docs/config.md 'Localizing config text'.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "popup": {
+      "type": "object",
+      "properties": {
+        "header": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "button": {
+          "type": "string"
+        },
+        "footnote": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "help": {
+      "type": "object",
+      "properties": {
+        "intro": {
+          "type": "string"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "file": {
+          "type": "string",
+          "description": "Config-relative Markdown file, split into intro/sections at build time."
+        },
+        "tabs": {
+          "type": "object",
+          "description": "Keyed by 'help.tabs[].id' in scadpub.config.json.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "intro": {
+                "type": "string"
+              },
+              "sections": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "file": {
+                "type": "string",
+                "description": "Config-relative Markdown file, split into intro/sections at build time."
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "fileImport": {
+      "type": "object",
+      "properties": {
+        "note": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "notices": {
+      "type": "object",
+      "description": "Keyed by 'notices[].marker' in scadpub.config.json.",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "one": {
+                "type": "string"
+              },
+              "other": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "other"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "licenses": {
+      "type": "object",
+      "description": "Keyed by 'licenses[].name' in scadpub.config.json.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "designs": {
+      "type": "object",
+      "description": "Keyed by 'designs[].id' in scadpub.config.json.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "strings": {
+      "type": "object",
+      "description": "Chrome-catalogue overrides for this locale, keyed like scadpub.config.json's own 'strings'.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

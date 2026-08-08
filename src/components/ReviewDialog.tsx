@@ -35,6 +35,7 @@ import { buildReviewSummaryRows } from "../lib/reviewSummary";
 import { useAppActions } from "../lib/appActions";
 import { cn } from "../lib/utils";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { AttentionItems } from "./AttentionItems";
 import { FriendlyFailureCard } from "./FriendlyFailureCard";
 import { Button } from "./ui/button";
@@ -88,11 +89,16 @@ export function ReviewDialog({
   canExport,
   onOpenMessages,
 }: Props) {
+  const { tag } = useLocale();
   const { exportModel } = useAppActions();
   const overrides = useMemo(() => parseReviewOverrides(result?.log ?? []), [result]);
+  // `tag`: buildReviewSummaryRows resolves the "Dimensions" row label via
+  // t() (see reviewSummary.ts) — react-hooks can't see that dependency-free
+  // call is locale-sensitive.
   const rows = useMemo(
     () => buildReviewSummaryRows(design, renderedValues, design.reviewLabels, measured, overrides),
-    [design, renderedValues, measured, overrides]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [design, renderedValues, measured, overrides, tag]
   );
 
   const handleDownload = () => {

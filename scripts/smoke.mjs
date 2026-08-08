@@ -24,7 +24,26 @@ import {
   dismissWelcomePopup,
   openDialog,
   waitDialogClosed,
+  PINNED_LOCALE,
 } from "./lib/browser.mjs";
+// Data-only (no JSON, no React): reused directly under Node's type stripping,
+// the same way scripts/gen-schema.mjs imports it, to project a per-locale
+// `strings` override (schema.strings' object-valued form, see docs/config.md's
+// `strings` section) onto the tag the app will actually boot into.
+import { LOCALES, LOCALE_TAGS, collapseToAvailable, bestFitLocale } from "../src/lib/localeRegistry.ts";
+
+// Mirrors src/lib/configI18n.ts's `lx`: not imported directly, since this
+// script drives the BUILT app from outside rather than importing app source
+// (same reason `uiText`'s `strings` projection below is hand-mirrored rather
+// than importing i18n.ts). Projects a `LocalizableText` config value (a
+// design's `label`/`group`, or a `popup` field) to a plain string for `tag`,
+// falling back to `defaultTag`'s entry; a plain string passes through
+// unchanged either way, so every call site below stays correct whether or
+// not the config being smoke-tested localizes that particular field.
+function lxAt(v, tag, defaultTag) {
+  if (v == null || typeof v === "string") return v;
+  return v[tag] ?? v[defaultTag] ?? "";
+}
 
 // Ensure the output console is open. It auto-opens when a render first surfaces
 // a notice/assert, but a manual close (or a notice present before this point)
@@ -108,17 +127,20 @@ async function selectDesign(page, id) {
 // "Don't show this again" checkbox). `mode` alone is the whole answer:
 // gen-schema's checkPopupMode refuses to build a "picker" config with fewer
 // than two designs, so there is no single-design fallback shape to derive.
-async function checkWelcomePopup({ page, check, schema }) {
+async function checkWelcomePopup({ page, check, schema, lx }) {
   console.log("=== welcome popup ===");
   if (schema.popup) {
-    const popup = page.getByRole("dialog", { name: schema.popup.header });
+    const header = lx(schema.popup.header);
+    const body = lx(schema.popup.body);
+    const footnote = lx(schema.popup.footnote);
+    const popup = page.getByRole("dialog", { name: header });
     check((await popup.count()) > 0, "welcome popup shown on load");
-    if (/\]\(/.test(schema.popup.body ?? "")) {
+    if (/\]\(/.test(body ?? "")) {
       check((await popup.getByRole("link").count()) > 0, "popup body renders its link");
     }
-    if (schema.popup.footnote) {
+    if (footnote) {
       check(
-        (await popup.getByText(schema.popup.footnote, { exact: true }).count()) > 0,
+        (await popup.getByText(footnote, { exact: true }).count()) > 0,
         "popup renders its configured footnote"
       );
     }
@@ -148,13 +170,13 @@ async function checkWelcomePopup({ page, check, schema }) {
       const card = popup.locator("button[data-design]").first();
       check((await card.count()) > 0, "picker popup shows selectable design cards");
       await closeAndProbe(() => card.click());
-      await waitDialogClosed(page, schema.popup.header).catch(() => {});
+      await waitDialogClosed(page, header).catch(() => {});
       check((await page.getByRole("dialog").count()) === 0, "picking a design card dismisses the popup");
     } else {
       // Non-picker modes show a config-driven primary button (schema.popup.button)
       // that dismisses the popup and, when there's more than one design, opens
       // the design picker so the next step is obvious.
-      const buttonLabel = schema.popup.button ?? "OK";
+      const buttonLabel = lx(schema.popup.button) ?? "OK";
       const cta = popup.getByRole("button", { name: buttonLabel, exact: true });
       check((await cta.count()) > 0, `popup shows its configured button "${buttonLabel}"`);
       const dontShow = popup.getByRole("checkbox");
@@ -166,7 +188,7 @@ async function checkWelcomePopup({ page, check, schema }) {
       // handle afterward.
       if (opensPicker) await cta.click();
       else await closeAndProbe(() => cta.click());
-      await waitDialogClosed(page, schema.popup.header).catch(() => {});
+      await waitDialogClosed(page, header).catch(() => {});
       // Scope this to the POPUP: with more than one design the CTA hands over
       // to the design picker, which under `ui.gallery` is itself a dialog.
       check((await popup.count()) === 0, "popup dismissed");
@@ -521,6 +543,85 @@ async function checkAxe({ page, check }) {
     if (pass === 0) {
       await page.locator('.command-bar__right button[aria-label^="Switch to"]').first().click();
     }
+  }
+}
+
+// One dedicated German pass, own context (a separate `locale: "de-DE"`
+// deliberately breaks with PINNED_LOCALE, unlike every other check in this
+// file): boot language, one accessible name, the language selector, one axe
+// sweep. Kept to a single focused function/context so it adds seconds, not
+// minutes, and skipped entirely on a single-locale build (nothing to prove).
+// Every piece of German text this reads comes from src/locales/de.json or
+// localeRegistry.ts's own locale data at runtime — never retyped here, so a
+// wording change on either side can't silently desync this check from what
+// the app actually renders.
+async function checkGermanLocale({ browser, base, check, enabledTags }) {
+  if (!enabledTags.includes("de")) return;
+  console.log("=== German locale (de-DE) ===");
+  const deCatalogue = JSON.parse(
+    await readFile(fileURLToPath(new URL("../src/locales/de.json", import.meta.url)), "utf-8")
+  );
+  const deLabel = LOCALES.find((l) => l.tag === "de")?.label;
+  // A fresh context has empty storage, so there is no persisted language
+  // choice to override the browser-locale best-fit (localeStore.ts's
+  // `resolveInitialLocale`) — this alone is enough for the app to boot into
+  // German with no interaction.
+  const context = await browser.newContext({ locale: "de-DE" });
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: "load" });
+    await dismissWelcomePopup(page);
+    // dismissWelcomePopup's own Escape can race a SECOND dialog its primary
+    // CTA opens (the design picker, on a config with more than one design):
+    // this context's extra locale-switch network activity (chrome + design
+    // sidecar fetches) can leave that dialog still mounting when the single
+    // Escape fires. Retry rather than assume one press lands in the window.
+    for (let i = 0; i < 10 && (await page.getByRole("dialog").count()) > 0; i++) {
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(300);
+    }
+    await waitRendered(page).catch(() => {});
+
+    // <html lang> is set at boot from a persisted choice only (index.html's
+    // inline script); with none, it flips to "de" asynchronously once
+    // localeStore's init load settles (applyLocale) — wait for that instead
+    // of racing it.
+    await page
+      .waitForFunction(() => document.documentElement.lang === "de", undefined, { timeout: 5000 })
+      .catch(() => {});
+    check((await page.getAttribute("html", "lang")) === "de", "german context: <html lang> is 'de'");
+
+    // One visible accessible name sourced from de.json: the top bar's Help
+    // icon button, unconditionally rendered by BarActions in both layouts.
+    const helpName = deCatalogue["bar.help"];
+    check(
+      (await page.getByRole("button", { name: helpName, exact: true }).count()) > 0,
+      `german context: a "${helpName}" (bar.help) accessible name is present`
+    );
+
+    // The language selector reports the German locale's own name (its
+    // trigger's title is i18n.ts's t("lang.current", {name}), templated here
+    // from de.json's own copy of that key rather than assumed).
+    const expectedTitle = deCatalogue["lang.current"]?.replace("{name}", deLabel ?? "");
+    const selectorTitle = await page.locator(".lang-select").first().getAttribute("title");
+    check(
+      !!deLabel && selectorTitle === expectedTitle,
+      `german context: language selector reports "${deLabel}" (got "${selectorTitle}")`
+    );
+
+    await injectAxe(page);
+    const axeRes = await page.evaluate(async () =>
+      window.axe.run(document, {
+        resultTypes: ["violations"],
+        runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
+      })
+    );
+    const serious = axeRes.violations.filter((v) => ["serious", "critical"].includes(v.impact));
+    for (const v of serious)
+      console.log(`  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node(s))`);
+    check(serious.length === 0, `german context axe: ${serious.length} serious/critical violation(s)`);
+  } finally {
+    await context.close();
   }
 }
 
@@ -1382,6 +1483,7 @@ const LAYOUT_SWAP_MS = 20000;
 async function checkResponsiveLayout({ browser, base, check, schema, paramsTabName }) {
   console.log("=== responsive layout: single mounted tree + state across a breakpoint change (M7) ===");
   const context = await browser.newContext({
+    ...PINNED_LOCALE,
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1620,6 +1722,7 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
 
   const firstVisit = async (width, height) => {
     const context = await browser.newContext({
+      ...PINNED_LOCALE,
       viewport: { width, height },
       deviceScaleFactor: 2,
       isMobile: true,
@@ -1734,6 +1837,7 @@ const DETENTS = ["peek", "half", "full"];
 async function checkDocumentNeverScrolls({ browser, base, check }) {
   console.log("=== fixed shell: the document never scrolls ===");
   const context = await browser.newContext({
+    ...PINNED_LOCALE,
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1797,6 +1901,7 @@ async function checkDocumentNeverScrolls({ browser, base, check }) {
 async function checkNothingOffscreen({ browser, base, check }) {
   console.log("=== narrow viewport: nothing escapes horizontally ===");
   const context = await browser.newContext({
+    ...PINNED_LOCALE,
     viewport: { width: 320, height: 568 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1964,7 +2069,7 @@ const scrollHelpScroller = (page, dy) =>
 async function checkHelpPopoverStaysWithItsRow({ browser, base, check, schema, paramsTabName }) {
   console.log("=== param help popover: stays with its row when the form scrolls ===");
   for (const [width, height, layout] of [[390, 844, "mobile sheet"], [1280, 900, "docked panel"]]) {
-    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+    const context = await browser.newContext({ ...PINNED_LOCALE, viewport: { width, height }, deviceScaleFactor: 1 });
     await context.addInitScript((key) => {
       try { localStorage.setItem(key, "1"); } catch { /* storage unavailable */ }
     }, `${schema?.id || "scadpub"}.sheet.introduced.v1`);
@@ -2023,6 +2128,7 @@ async function checkViewerHudReachable({ browser, base, check }) {
   console.log("=== viewer HUD reachability (narrow + short viewports) ===");
   for (const [width, height] of [[360, 740], [320, 568]]) {
     const context = await browser.newContext({
+      ...PINNED_LOCALE,
       viewport: { width, height },
       deviceScaleFactor: 2,
       isMobile: true,
@@ -2096,6 +2202,7 @@ async function checkViewerHudReachable({ browser, base, check }) {
 async function checkDialogFocusEntry({ browser, base, check }) {
   console.log("=== dialogs take focus when they open (touch) ===");
   const context = await browser.newContext({
+    ...PINNED_LOCALE,
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -2270,6 +2377,7 @@ async function checkResizerAnnouncedWidth({ page, check }) {
 async function checkSheetFocusTrap({ browser, base, check }) {
   console.log("=== the expanded sheet keeps Tab inside itself ===");
   const context = await browser.newContext({
+    ...PINNED_LOCALE,
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -2379,6 +2487,7 @@ const OWN_CONTEXT_CHECKS = [
   checkNothingOffscreen,
   checkSheetFocusTrap,
   checkDialogFocusEntry,
+  checkGermanLocale,
 ];
 
 async function main() {
@@ -2397,18 +2506,62 @@ async function main() {
     const schema = JSON.parse(
       await readFile(fileURLToPath(new URL("../src/generated/designs.json", import.meta.url)), "utf-8")
     );
-    const designs = schema.designs ?? [];
-    for (const d of designs) designLabels[d.id] = d.label;
-    const ids = designs.map((d) => d.id);
-    // Chrome copy comes from the i18n catalogue (src/locales/en.json), which a
-    // deployment overrides per key via the config's `strings` block, so build
-    // the matchers from what the app will ACTUALLY render, not from stock
-    // English. Plural keys carry `#one`/`#other` variants (either may show, so
-    // accept both) with a `{count}` placeholder standing in for a number.
-    const catalogue = JSON.parse(
+    // The deployment's default locale (src/lib/i18n.ts's `defaultTag` formula,
+    // repeated here rather than imported since that module also pulls in the
+    // designs.json JSON-import machinery smoke.mjs doesn't otherwise need).
+    const defaultTag = collapseToAvailable(schema.lang ?? "en", LOCALE_TAGS) ?? "en";
+    // Enabled locales for this deployment (mirrors localeStore.ts's
+    // deriveEnabledTags; not imported, for the same reason as defaultTag above).
+    const enabledTags =
+      Array.isArray(schema.languages) && schema.languages.length > 0 ? schema.languages : [defaultTag];
+    // The tag the app actually boots into under this harness's PINNED_LOCALE
+    // (see lib/browser.mjs): mirrors localeStore.ts's resolveInitialLocale
+    // with no persisted choice, so best-fit the pinned locale against the
+    // deployment's enabled locales, falling back to the collapsed default.
+    // NOT necessarily `defaultTag` — a deployment whose `languages` excludes
+    // "en" boots into its own default instead, same as the app does.
+    const bootTag = bestFitLocale([PINNED_LOCALE.locale], enabledTags) ?? defaultTag;
+    // Chrome copy comes from the i18n catalogue for the locale the app will
+    // ACTUALLY boot into, not always English (see i18n.ts's `rebind`): for a
+    // non-English `bootTag`, that locale's own bundle merged OVER
+    // `src/locales/en.json` — a key the locale hasn't translated yet still
+    // resolves through English, same fallback `rebind` gives the running app.
+    // Deployment overrides via the config's `strings` block are layered on
+    // top by `uiText` below, so the matchers reflect what the app actually
+    // renders, not stock English.
+    const enCatalogue = JSON.parse(
       await readFile(fileURLToPath(new URL("../src/locales/en.json", import.meta.url)), "utf-8")
     );
-    const uiText = (key) => schema.strings?.[key] ?? catalogue[key] ?? "";
+    const catalogue =
+      bootTag === "en"
+        ? enCatalogue
+        : {
+            ...enCatalogue,
+            ...JSON.parse(
+              await readFile(fileURLToPath(new URL(`../src/locales/${bootTag}.json`, import.meta.url)), "utf-8")
+            ),
+          };
+    // Bound `lxAt` (this file's own mirror of configI18n.ts's `lx`): projects
+    // a config-authored `LocalizableText` value (a design's `label`, a
+    // `popup` field, …) to the tag this run actually boots into, same
+    // fallback rule as the app itself.
+    const lx = (v) => lxAt(v, bootTag, defaultTag);
+    const designs = schema.designs ?? [];
+    for (const d of designs) designLabels[d.id] = lx(d.label);
+    const ids = designs.map((d) => d.id);
+    // A `strings` value is either a plain string (applies to the deployment's
+    // DEFAULT locale only, mirroring i18n.ts's `overridesForLocale` — never
+    // unconditionally, or a `de`-booting deployment's English override would
+    // wrongly apply while German is showing) or an object of locale tag ->
+    // string (applies only when it carries `bootTag`'s own entry). Either
+    // way, a miss falls through to `catalogue`, `bootTag`'s own resolved
+    // text, never straight to English.
+    const uiText = (key) => {
+      const raw = schema.strings?.[key];
+      if (typeof raw === "string") return bootTag === defaultTag ? raw : catalogue[key] ?? "";
+      if (raw && typeof raw === "object" && typeof raw[bootTag] === "string") return raw[bootTag];
+      return catalogue[key] ?? "";
+    };
     // Panel tab names are catalogue keys (presets.title/settings.title), not
     // config fields.
     const presetsTabName = uiText("presets.title") || "Presets";
@@ -2427,7 +2580,20 @@ async function main() {
     };
     console.log(`=== designs (${ids.length || 1}): ${ids.join(", ") || "(single)"}  ===`);
 
-    const ctx = { page, browser, check, base, dir, schema, ids, presetsTabName, paramsTabName, labels };
+    const ctx = {
+      page,
+      browser,
+      check,
+      base,
+      dir,
+      schema,
+      ids,
+      presetsTabName,
+      paramsTabName,
+      labels,
+      lx,
+      enabledTags,
+    };
     // The popup is cleared BEFORE the first render wait, and the order is
     // load-bearing: a `picker` popup IS the design chooser, and App holds the
     // whole render path back while it owns the first screen (useRenderPipeline's

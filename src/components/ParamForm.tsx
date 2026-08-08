@@ -10,13 +10,14 @@ import type { FriendlyErrorInfo } from "../lib/friendlyErrors";
 import type { Design, Param, ParamValue } from "../openscad/types";
 import type { Values } from "../lib/presets";
 import { displayValue } from "../lib/paramDiff";
-import { visibleGroups } from "../lib/paramGroups";
+import { visibleGroups, remapOpenSections } from "../lib/paramGroups";
 import { prefersReducedMotion } from "../lib/matchMedia";
 import { clampNumber, committedNumber, finiteDraft, typedCommitValue } from "../lib/numberDraft";
 import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
 import { fontFallback } from "../lib/fontFallback";
 import { nearestScrollParent } from "../lib/scrollParent";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 import { EssentialsToggle } from "./EssentialsToggle";
 import { FontImportActions } from "./FontImportActions";
 import { FontSelect } from "./FontSelect";
@@ -147,6 +148,7 @@ function FontMissingHint({
   fallback: { value: string; label: string } | null;
   onUse: (next: string) => void;
 }) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   // The action links that actually fix a missing font (import it, or switch
   // to a loaded family).
   // `pointer-coarse:min-h-11`: these two are where the entire missing-font flow
@@ -161,20 +163,20 @@ function FontMissingHint({
       role="status"
     >
       <span className="text-[0.82rem] leading-[1.4] text-foreground">
-        “{family}” isn’t loaded — text may render in another font.
+        {t("fontMissing.lead", { family })}
       </span>
       <FontImportActions
         className="flex flex-wrap gap-x-4 gap-y-1"
         renderImport={(open) => (
           <button type="button" className={actionBtn} onClick={open}>
-            <UploadIcon size={13} aria-hidden="true" /> Import font…
+            <UploadIcon size={13} aria-hidden="true" /> {t("attention.importFont")}
           </button>
         )}
         renderFallback={
           fallback
             ? () => (
                 <button type="button" className={actionBtn} onClick={() => onUse(fallback.value)}>
-                  Use {fallback.label}
+                  {t("fontMissing.useFamily", { name: fallback.label })}
                 </button>
               )
             : undefined
@@ -513,6 +515,9 @@ const DENSITY = {
 } as const;
 
 export const ParamForm = memo(function ParamForm({ design, values, onChange, search = "", showVarName = false, availableFontFamilies, fontSuggestion, installedFonts, availableSvgFiles, baseline, changedParams, presetName, showAdvanced = true, onShowAdvancedChange, compact = false, failure, ref }: Props) {
+  // Subscription only: re-render this component's t() calls on a locale
+  // switch. A useSyncExternalStore-backed hook works fine inside memo().
+  useLocale();
   const density = compact ? DENSITY.compact : DENSITY.regular;
   const q = search.toLowerCase();
   // Sections marked `// @collapsed` in the .scad start folded; every group is
@@ -551,11 +556,21 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
   // Re-derive whenever `design` changes, during render rather than in an
   // effect (the documented "adjusting state when a prop changes" pattern):
   // this is a synchronous reset of state fully derived from `design`, not a
-  // side effect on an external system.
+  // side effect on an external system. A locale switch re-projects `design`
+  // through lxDesignEntry/localizeDesign (App.tsx) and hands back a new
+  // object with the SAME `id` — only section NAMES change, never their
+  // order (localizeDesign maps `sections` positionally, see its own doc) —
+  // so that case remaps the open/closed state by position onto the new
+  // names instead of resetting it, and only a genuine design switch (a
+  // different `id`) drops back to the design's static defaults.
   const lastOpenSectionsDesign = useRef(design);
-  if (lastOpenSectionsDesign.current !== design) {
+  if (lastOpenSectionsDesign.current.id !== design.id) {
     lastOpenSectionsDesign.current = design;
     setOpenSections(initOpenSections(design, collapsedDefault));
+  } else if (lastOpenSectionsDesign.current !== design) {
+    const prevSections = lastOpenSectionsDesign.current.sections;
+    lastOpenSectionsDesign.current = design;
+    setOpenSections((prev) => remapOpenSections(design.sections, prevSections, prev, collapsedDefault));
   }
 
   // Imperative "jump to a section" for the SectionNavigator. `openSection`
@@ -856,14 +871,17 @@ function ParamDrift({
   presetName: string | null | undefined;
   onChange: (name: string, value: ParamValue) => void;
 }) {
+  const target = presetName ?? t("paramForm.defaultTarget");
   return (
     <span className="param-drift flex items-center gap-[0.4rem] text-[0.78rem] text-muted-foreground">
-      <span className="line-through">was {displayValue(param, baseline[param.name])}</span>
+      <span className="line-through">
+        {t("paramForm.wasValue", { value: displayValue(param, baseline[param.name]) })}
+      </span>
       <button
         type="button"
         className="param-drift-revert -m-[6px] inline-flex shrink-0 cursor-pointer items-center rounded-[4px] border-none bg-transparent p-[6px] pointer-coarse:-m-[16px] pointer-coarse:p-[16px] leading-[0] text-muted-foreground hover:text-brand focus-visible:text-brand focus-visible:outline-offset-1"
-        aria-label={`Revert ${label} to ${presetName ?? "default"}`}
-        title={`Revert to ${presetName ?? "default"}`}
+        aria-label={t("paramForm.revertAria", { label, target })}
+        title={t("paramForm.revertTitle", { target })}
         onClick={() => revertToBaseline(param, baseline, onChange)}
       >
         <RevertIcon size={12} aria-hidden="true" />

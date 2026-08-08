@@ -10,8 +10,8 @@
 // a comment or an unrelated string and pass here. It is deliberately cheap
 // (no AST parsing) — see CLAUDE.md's "UI text goes through the i18n
 // catalogue" convention. Ported from a donor branch's fuller i18n system;
-// this repo ships a single English bundle, so there's no de.json parity check
-// (see i18n.test.mjs).
+// de.json's key-set/plural-category parity with en.json is checked
+// separately, in tests/i18nParity.test.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";

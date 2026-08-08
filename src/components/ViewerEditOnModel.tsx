@@ -22,6 +22,7 @@ import { Input } from "./ui/input";
 import { useAppActions } from "../lib/appActions";
 import { clampEditorPosition, type Point } from "../lib/editOnModel";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 // The editor input's id: a fixed literal is fine because at most one editor is
 // open at a time (ViewerStage's single open flag), and it lets the <label>
@@ -45,6 +46,7 @@ interface Props {
 }
 
 export function ViewerEditOnModel({ param, value, anchor, mobile, wrapRef, onClose }: Props) {
+  useLocale(); // subscription only: re-render this component's t() calls on a locale switch
   const { change } = useAppActions();
   // Local text keeps the input from resetting when change() re-renders the
   // whole app (the panel's own string box works the same way).

@@ -1,0 +1,12 @@
+{
+  "source": "src",
+  "ui": { "afterExport": { "helpTab": "printing" } },
+  "help": {
+    "tabs": [
+      { "id": "start", "label": "Getting started", "sections": [{ "title": "Step 1", "body": "Pick a design." }] },
+      { "id": "printing", "label": "Printing tips", "sections": [{ "title": "Material", "body": "Use **PLA**." }] }
+    ]
+  },
+  "designs": [{ "id": "widget", "label": "Widget" }],
+  "render": { "features": [], "fonts": [] }
+}

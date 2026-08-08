@@ -51,3 +51,30 @@ export function visibleGroups(
     }))
     .filter((g) => g.params.length > 0);
 }
+
+/**
+ * Remap a per-section open/closed map from `prevSections` to `sections` by
+ * POSITION — for ParamForm's `openSections` state across a locale switch,
+ * where `localizeDesign` (src/lib/designI18n.ts) renames a section but never
+ * reorders `Design.sections` (see that module's own doc), so the user's fold
+ * state should follow a renamed section rather than reset with it. A
+ * position with nothing recorded for its previous name (an out-of-range
+ * index, or a name `prev` never saw) falls back to `defaultClosed`, the same
+ * default a genuine design switch would use.
+ */
+export function remapOpenSections(
+  sections: string[],
+  prevSections: string[],
+  prev: Record<string, boolean>,
+  defaultClosed: Set<string>
+): Record<string, boolean> {
+  return Object.fromEntries(
+    sections.map((section, i) => {
+      const prevSection = prevSections[i];
+      return [
+        section,
+        prevSection !== undefined && prevSection in prev ? prev[prevSection] : !defaultClosed.has(section),
+      ];
+    })
+  );
+}

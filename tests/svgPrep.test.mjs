@@ -13,13 +13,17 @@ import {
   analyze,
   applyFixes,
   canvasEntry,
+  CHANGE_CODES,
   check,
   deriveLayers,
   displayColor,
   parseColor,
   deriveRegions,
+  FIND_CODES,
   formatLayerSpec,
   formatLayers,
+  GROUP_BY_COLOR_CHANGE_CODES,
+  GROUP_BY_COLOR_ERROR_CODES,
   groupByColor,
   isCanvasEntry,
   isRenderableColor,
@@ -37,6 +41,57 @@ const parse = (svg) =>
   new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
 const roundtrip = (root) => parse(serializeSvg(root));
 const codes = (root, layers = []) => check(root, layers).map((f) => f.code);
+
+// Pins the engine's emitted-code exports (check.ts's FIND_CODES, fixes.ts's
+// CHANGE_CODES, groupByColor.ts's GROUP_BY_COLOR_ERROR_CODES/
+// _CHANGE_CODES) to their known sets: src/lib/svgPrepText.ts's own
+// table-coverage test (tests/svgPrepText.test.mjs) asserts against these SAME
+// exports, so a code added to the engine without also landing here — and
+// without a matching catalogue entry — fails a test instead of shipping
+// silently.
+test("the engine's emitted-code exports are exactly its known codes", () => {
+  assert.deepEqual(
+    [...FIND_CODES].sort(),
+    [
+      "active-content",
+      "content-outside-viewbox",
+      "covers-canvas",
+      "ignored",
+      "inkscape-trap",
+      "no-geometry",
+      "no-viewbox",
+      "open-paths",
+      "region-is-label",
+      "region-missing",
+      "regions-available",
+      "shapes-outside-regions",
+      "stroke-only",
+      "styled-fill",
+      "text",
+      "too-many-regions",
+      "undersized",
+      "viewbox-origin",
+    ].sort(),
+  );
+  assert.deepEqual(
+    [...CHANGE_CODES].sort(),
+    [
+      "layer-kept",
+      "layer-renamed",
+      "layer-usable",
+      "recentred",
+      "removed-active",
+      "removed-background",
+      "removed-external",
+      "style-fills",
+    ].sort(),
+  );
+  assert.deepEqual(
+    [...GROUP_BY_COLOR_ERROR_CODES].sort(),
+    ["already-grouped", "no-shapes", "one-colour", "transformed"].sort(),
+  );
+  assert.deepEqual([...GROUP_BY_COLOR_CHANGE_CODES], ["grouped-colour"]);
+});
 
 test("check flags OpenSCAD's sharp edges (text, stroke-only, off-origin viewBox)", () => {
   const root = parse(
@@ -89,7 +144,7 @@ test("safe fix normalises an off-origin viewBox by wrapping in a translate", () 
        <rect x="10" y="20" width="100" height="50" fill="gray"/>
      </svg>`,
   );
-  assert.match(applyFixes(root).join(" "), /re-centred the drawing/);
+  assert.ok(applyFixes(root).some((c) => c.code === "recentred"));
   const fixed = roundtrip(root);
   assert.equal(fixed.getAttribute("viewBox"), "0 0 100 50");
   assert.match(serializeSvg(fixed), /translate\(-10,-20\)/);
@@ -143,8 +198,21 @@ test("group-by-colour is idempotent on already-named regions", () => {
   );
   const res = groupByColor(root);
   assert.equal(res.changes.length, 0);
-  assert.match(res.error, /already in a named/);
+  assert.equal(res.error.code, "already-grouped");
   assert.equal(formatLayers(deriveRegions(root)), "walls:gray, rooms:white");
+});
+
+test("group-by-colour reports every error as a code, not just the two swallowed here", () => {
+  const empty = parse(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>`);
+  assert.equal(groupByColor(empty).error.code, "no-shapes");
+
+  const oneColour = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10">
+       <rect x="0" y="0" width="10" height="10" fill="gray"/>
+       <rect x="10" y="0" width="10" height="10" fill="gray"/>
+     </svg>`,
+  );
+  assert.equal(groupByColor(oneColour).error.code, "one-colour");
 });
 
 test("group-by-colour keeps a fill inherited from the group a shape is lifted from", () => {
@@ -186,7 +254,7 @@ test("group-by-colour refuses when a transform sits between container and shape"
        <rect x="10" y="0" width="10" height="10" fill="white"/>
      </svg>`,
   );
-  assert.match(groupByColor(root).error, /transformed or clipped/);
+  assert.equal(groupByColor(root).error.code, "transformed");
 });
 
 test("a single colour derives a blank layers string (no per-region split)", () => {
@@ -555,7 +623,9 @@ test("an Inkscape label with spaces or commas becomes a valid, spec-safe id", ()
      </svg>`,
   );
   const changes = applyFixes(root);
-  assert.ok(changes.some((c) => c.includes('named "Ground_floor__walls"')));
+  assert.ok(
+    changes.some((c) => c.code === "layer-renamed" && c.vars.target === "Ground_floor__walls"),
+  );
   const spec = formatLayers(deriveRegions(root));
   assert.equal(spec, "Ground_floor__walls:gray, Térreo:white");
   // Unicode letters are valid NCName characters: renaming them would mangle
@@ -594,7 +664,7 @@ test("check reports scripts, animation and external style references", () => {
   assert.ok(found, "active content is reported");
   assert.equal(found.level, "WARN");
   for (const tag of ["<script>", "<animate>", "<style>"])
-    assert.ok(found.message.includes(tag), `${tag} named`);
+    assert.ok(found.vars.names.includes(tag), `${tag} named`);
 });
 
 test("applyFixes strips what executes and what fetches, keeping the colours", () => {
@@ -649,7 +719,7 @@ test("open-paths counts unclosed subpaths", () => {
   );
   const finding = check(root).find((f) => f.code === "open-paths");
   assert.ok(finding, "the unclosed path is reported");
-  assert.match(finding.message, /1 unclosed path/);
+  assert.equal(finding.vars.count, 1);
 });
 
 test("region-is-label is an ERROR naming a layer requested by its label", () => {
@@ -681,9 +751,7 @@ test("regions-available advertises only ids derivation can emit", () => {
   );
   const finding = check(root).find((f) => f.code === "regions-available");
   assert.ok(finding);
-  assert.match(finding.message, /rooms, walls/);
-  assert.ok(!finding.message.includes("outer"), "a wrapper group is not a region");
-  assert.ok(!finding.message.includes("empty"), "a shapeless group is not a region");
+  assert.deepEqual(finding.vars.regions, ["rooms", "walls"], "a wrapper/shapeless group is not a region");
   assert.deepEqual(
     deriveRegions(root).map((r) => r.id).sort(),
     ["rooms", "walls"],
@@ -716,7 +784,7 @@ test("shapes outside every region are reported rather than vanishing", () => {
   );
   const finding = check(root).find((f) => f.code === "shapes-outside-regions");
   assert.ok(finding, "the loose circle is reported");
-  assert.match(finding.message, /1 shape/);
+  assert.equal(finding.vars.count, 1);
   // With no regions at all there is nothing to be outside of.
   const plain = parse(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle r="4" fill="black"/></svg>`,
@@ -929,7 +997,7 @@ test("group-by-colour prunes the groups it empties", () => {
       `</svg>`
   );
   // `old` is a named region, so nothing is loose: grouping refuses.
-  assert.match(groupByColor(root).error, /already in a named/);
+  assert.equal(groupByColor(root).error.code, "already-grouped");
 
   const loose = parse(
     `<svg viewBox="0 0 10 10">` +
@@ -974,7 +1042,13 @@ test("check and applyFixes agree on which Inkscape layers are trapped", () => {
   const root = parse(svg);
   assert.ok(codes(root).includes("inkscape-trap"), "the id/label mismatch is reported");
   const changes = applyFixes(root);
-  assert.ok(changes.some((c) => c.includes("walls")), "and renamed");
-  assert.ok(!changes.some((c) => c.includes('"roof"')), "the already-named layer is untouched");
+  assert.ok(
+    changes.some((c) => c.code === "layer-usable" && c.vars.label === "walls"),
+    "and renamed",
+  );
+  assert.ok(
+    changes.every((c) => c.vars?.label !== "roof"),
+    "the already-named layer is untouched",
+  );
   assert.ok(!codes(root).includes("inkscape-trap"), "nothing is left trapped after the fix");
 });

@@ -44,14 +44,21 @@ These keys set the document chrome and, through the `pwa` block, the Progressive
 - **`id`**: namespaces localStorage, IndexedDB, and preset cache. Defaults to `"scadpub"`
 - **`description`**: `<meta>` description and PWA manifest description
 - **`lang`** / **`dir`**: document and manifest language (a BCP-47 tag, default `"en"`) and text direction (`"ltr"` by default, `"rtl"`, or `"auto"`). ScadPub emits them onto `<html lang dir>` and into the manifest
+- **`languages`**: optional array of locale tags this deployment's runtime language switcher offers, from the shipped locales (see `src/lib/localeRegistry.ts`). Omit it and every shipped locale is offered, the *collapsed* default first, as long as `lang` collapses to one of them; when `lang` names a locale ScadPub doesn't ship (e.g. `"fr"`), the deployment defaults to single-locale instead — offering only `"en"` (chrome text falls back to English, and the switcher stays hidden; this is the existing behaviour for a `lang`-only deployment, unchanged). **This means an existing `lang: "en"` deployment with flat (single-string) `strings` becomes multi-locale by default**: German visitors get stock German chrome, not that deployment's curated overrides (a plain-string `strings` value only ever applies to the default locale — see [Text overrides](#text-overrides-strings)). `languages: ["en"]` is the opt-out, keeping the switcher hidden. Set it explicitly to offer a SUBSET of the shipped locales (`["en", "de"]` to restrict to just those two, say, on a deployment that otherwise ships more); every entry must name a shipped locale, and the set must always include — and list first — the deployment's *collapsed* default locale (`lang` collapsed to a shipped tag, e.g. `"de-AT"` → `"de"`; `"en"` when `lang` itself isn't shipped) — omitting it fails the build
+
+  ```jsonc
+  { "lang": "de", "languages": ["de", "en"] }
+  ```
+
 - **`pwa`**: manifest-only fields (`shortName`, `icon`, `iconMaskable`, `themeColor`, `backgroundColor`, `categories`, `screenshots`, `shortcuts`, `install`), see [PWA manifest (`pwa`)](#pwa-manifest-pwa). `gen-schema` generates `public/manifest.webmanifest` and `public/icon.svg` from it
+- **`text`**: optional — moves every config-authored prose value (English included) out of this file into per-locale text files instead of writing it inline. See [Localizing config text](#localizing-config-text)
 
 ### Design sources
 
 These keys tell `gen-schema` which `.scad` files and assets to bundle:
 
 - **`source`**: directory of Customizer-style `.scad` designs, relative to this config file. Defaults to `"."`
-- **`designs`**: explicit list with id, label, and optional `file`. Omit it to auto-discover designs. Set `"heavy": true` to start a design in manual-render mode
+- **`designs`**: explicit list with id, label, and optional `file`. Omit it to auto-discover designs. Set `"heavy": true` to start a design in manual-render mode. `label` (picker text, defaulting to a humanized `id`) is [localizable](#localizing-config-text)
 - **`defaultDesign`**: optional design `id` shown on a visit that carries no `#d=` deep link. A saved session or hash still wins. Must name a configured design; defaults to the first
 - **`assets`**: files or directories to copy verbatim. If omitted, `gen-schema` follows each design’s `use`/`include` graph
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under “Bundled” in the preset picker.
@@ -72,7 +79,7 @@ Each `designs[]` entry also accepts an optional **`group`** field: a header stri
 }
 ```
 
-- **`group`**: an optional string. Designs sharing the same `group` value cluster under a header showing that string (a `<SelectGroup>`/`<SelectLabel>` pair in the compact dropdown, an `<h3>` section heading in the `ui.gallery` card grid (`src/components/DesignPicker.tsx`)) and the value is also matched by the gallery’s search box, alongside `label`/`description`. Clustering follows `designs` array order and merges only **consecutive** entries: a run starts where a `group` value first appears and keeps absorbing later designs only while they repeat that exact value back-to-back; a design with a different (or absent) `group` breaks the run, so reusing the same group string further down the array (with something else in between) opens a second, separately headed section rather than joining the first. Omit `group`, or set it `null`, and that design renders in a headerless run; a config where no design sets `group` renders as a flat list with no headers at all
+- **`group`**: an optional string, [localizable](#localizing-config-text) like `label`. Designs sharing the same `group` value cluster under a header showing that string (a `<SelectGroup>`/`<SelectLabel>` pair in the compact dropdown, an `<h3>` section heading in the `ui.gallery` card grid (`src/components/DesignPicker.tsx`)) and the value is also matched by the gallery’s search box, alongside `label`/`description`. Clustering follows `designs` array order and merges only **consecutive** entries: a run starts where a `group` value first appears and keeps absorbing later designs only while they repeat that exact value back-to-back; a design with a different (or absent) `group` breaks the run, so reusing the same group string further down the array (with something else in between) opens a second, separately headed section rather than joining the first. Omit `group`, or set it `null`, and that design renders in a headerless run; a config where no design sets `group` renders as a flat list with no headers at all. Clustering and search both run on the value already resolved to the visitor’s active locale, so keep a `group` object’s per-locale text consistent across the designs meant to share a run — grouping is judged per locale, independently
 
 A curated review summary’s row labels and its note also come only from the design’s own `.scad` file: a parameter’s own `// @review "<label>"` comment and the design’s file-level `// @reviewNote "<text>"` (see [annotations.md](annotations.md#curated-review-label--review)). There is no config-level `review` field: no way to override a parameter’s label or the note from the config, and no way to add a label to a parameter the design didn’t annotate. A row’s value can still be overridden by an `echo("@review", param, value)` from the design itself (see [`echo("@review", …)`](annotations.md#curated-review-override-echoreview-)) when the printed model doesn’t literally match the stored parameter value (e.g. an uppercasing transform).
 
@@ -119,6 +126,64 @@ gen-schema: design 'tag' presets.images: 2/3 preset(s) matched an image in 'bran
 
 The map form remains the escape hatch for a preset whose name and image file genuinely don’t correspond mechanically.
 
+### Design translations
+
+A design’s own text — its `// @description`, section names, each parameter’s doc comment and enum choice labels, its `@info`/`@review` labels, its `@reviewNote` — is authored once, in whatever language the `.scad` file itself is written in. For a deployment that ships more than one [`languages`](#app-identity-and-pwa), translate it with a **sidecar file** next to the design: `<design>.strings.<tag>.json`, where `<design>` is the `.scad` file’s own basename and `<tag>` is one of the deployment’s shipped locale tags (`en`, `de`, …; see `src/lib/localeRegistry.ts`). `nameplate.scad`’s German translation lives at `nameplate.strings.de.json`, beside it. Writing the `de` sidecar? Follow [docs/german-style.md](german-style.md)’s glossary and register rules.
+
+```jsonc
+// nameplate.strings.de.json
+{
+  "description": "Ein kleines Namensschild.",
+  "sections": { "Size": "Größe" },
+  "params": {
+    "width": {
+      "description": "Breite der Platte.",
+      "help": "In Millimetern.",
+      "info": { "label": "Breite", "unit": "mm" }
+    },
+    "style": { "choices": { "round": "Rund", "square": "Eckig" } }
+  },
+  "reviewLabels": { "text": "Gravurtext" },
+  "reviewNote": "Wird exakt wie eingegeben gedruckt.",
+  "echo": { "Total width": "Gesamtbreite", "mm": "mm" },
+  "presets": { "Signs | Door plate (Imperial)": "Schilder | Türschild (Imperial)" }
+}
+```
+
+Every field is optional, and translates only what it names:
+
+A sidecar's own keys (distinct from `scadpub.config.json`'s — these belong to the `<design>.strings.<tag>.json` file, not the config):
+
+- `description` — the design’s `// @description`. Only legal if the design actually has one.
+- `sections` — section header text, keyed by the design’s own (authored-language) section name. A section left out keeps its authored name for this locale; `[Hidden]` can never appear here (it never reaches the UI at all, in any locale).
+- `params` — keyed by parameter name (never translated: it’s the underlying OpenSCAD variable, the `-D name=value` render argument, and the key stored/URL/preset state uses). Each entry may set `description` and/or `help` (the control’s label and its tooltip body), `choices` (an enum’s value -> translated label map — the stored value itself never changes), and `info` (`label`/`unit`, only legal on a parameter that carries its own `// @info` annotation).
+- `reviewLabels` — a parameter’s `// @review "<label>"` text, keyed by parameter name; only legal for a parameter that actually carries one.
+- `reviewNote` — the design’s `// @reviewNote`. Only legal if the design has one.
+- `echo` — a free-form map from a design’s own runtime-echoed string to its translation. This covers **two** distinct `echo("@info", …)` arguments (see [annotations.md](annotations.md#calculated-values-echoinfo-)): the row’s **label** (e.g. `"Total width"`) and, independently, its **unit** (e.g. `"mm"`) — a unit is just another echo-map source string, looked up and translated exactly the same way. Keep both entries in step: translating only the label but not the unit is legal (the unit simply stays as OpenSCAD echoed it) but usually not what you want. The row’s numeric **value** itself is never translated (see [Localizing config text](#localizing-config-text)’s exclusions). Unlike every other field, `gen-schema` has no static way to know what a design chooses to echo, so this map is never cross-checked against the design — only its values must be non-empty strings.
+- `presets` — a **bundled preset**’s exact name (as it appears as a key in the sibling `<design>.json` parameterSets file, see [Design sources](#design-sources)) mapped to its translated **full display string**, in the same `"Category | Title (Badge)"` syntax `src/lib/presetCard.ts`’s `parsePresetCardName` parses for the picker card (see “Bundled presets” above): a leading `"Overline | "` and/or a trailing `" (Badge)"` are optional in the translation exactly as they are in the source name, and the translated string is re-parsed the same way, so a translation can add, drop, or reword either piece independently of the source. The **stored preset name itself never changes** — only this display projection — so applying a bundled preset, `presetImages` lookups, and every other identity use of the name are unaffected. Each key must match a real bundled preset name (a stale or misspelled key fails the build, the same as `reviewLabels`/`choices` above); the value’s *syntax* is not validated at build time (a malformed translation degrades gracefully to a plain title, exactly as `parsePresetCardName` already does for a malformed source name). A user-saved preset’s name is never sidecar text and always displays verbatim, in any locale.
+
+Every other key, section, parameter name, or choice value is validated against the design it sits beside and fails the build if it doesn’t match — a stale or misspelled translation key is caught at build time, not silently ignored. That validation only runs for a sidecar sitting *beside a matching design file* (same basename, same directory): a `.strings.<tag>.json` file whose tag isn’t one `gen-schema` recognizes fails the build the same way, but only when it's found next to a design it could plausibly belong to. A sidecar orphaned by a design rename or removal — its basename no longer matches any design in that directory — isn’t validated against anything and translates nothing; `gen-schema` warns about it in the build log rather than failing, since it can’t tell a genuine leftover from a file mid-migration.
+
+Sidecar section translations key off the design’s own section names, but a translation only ever renames a section — it never reorders `Design.sections` (see `designI18n.ts`'s own doc) — so ParamForm's collapsed/expanded fold state survives a locale switch: it remaps each section's open/closed flag onto its translated name by position instead of resetting. Only a genuine design switch (a different design id) drops back to the design's `@collapsed` defaults.
+
+A design’s picker **`label`** and **`group`** (see [Design sources](#design-sources) above) are **not** part of a sidecar: they’re config-authored, not design-authored, so a sidecar file can’t translate them. That doesn’t mean they’re stuck in one language, though — both fields are independently [localizable](#localizing-config-text) at the config level (`designs[].label`/`.group` accepting the same string-or-locale-map `LocalizableText` shape as `popup`/`help`/etc.), a completely different mechanism from the sidecar this section otherwise documents.
+
+Sidecars are pure UI text: they’re parsed and validated at build time, but never copied into `public/scad/` and never folded into `renderHash` — adding, editing, or removing a translation never invalidates a cached render. (A config `assets` glob broad enough to otherwise sweep one up, e.g. `"**/*.json"`, has it filtered back out, with a build-log warning naming what was excluded; naming a sidecar directly in `assets` fails the build instead, since that can only be a mistake.)
+
+#### Translating a design's own doc (`<design>.doc.<tag>.md`)
+
+A design’s `// @doc` (see [annotations.md](annotations.md#design-metadata--description--icon--image--doc)) is a whole Markdown file, not a JSON field, so it has its own sidecar shape: `<design>.doc.<tag>.md`, beside the `.scad` file, mirroring the `.strings.<tag>.json` mechanics above (per-tag probe, a case-insensitive directory scan that catches a wrongly-cased or unshipped tag, an orphan warning for one left behind by a rename). `nameplate.scad`’s German doc translation lives at `nameplate.doc.de.md`. It is only legal for a design that actually has a `// @doc`: a doc translation with no base doc to translate fails the build, the same as translating a `description` a design never set. Like the base doc itself, a translation is copied to a served URL (`<id>-doc.<tag>.md`) and fetched by the browser on demand — never inlined into `designs.json`, never folded into `renderHash`. `DesignDocModal` fetches the active locale’s translation when one exists, falling back to the design’s own (authored-language) doc for any locale that has none.
+
+### Keeping translations up to date
+
+Sidecars are optional and per-field, so a deployment can ship a partial translation — a design missing its German `help` text just shows the English one for that field — by design, not as a bug to fix immediately. Three independent layers help you find and track what’s missing or gone stale, weakest guarantee to strongest:
+
+1. **Structural staleness is already a build error.** A sidecar key that doesn’t match a real section/parameter/choice/preset/annotation in the design it sits beside fails the build (see above) — a rename or removal can never ship a translation that silently points at nothing. This runs on every build; there is nothing to opt into.
+2. **Coverage**: `npm run i18n:status` reports, for every design and every enabled non-default locale, how many of each translatable field class (`description`, `params`, `sections`, `reviewLabels`, `reviewNote`, `presets`, `doc`) are translated versus total, plus a running total. It’s informational by default — an incomplete translation is a legitimate, shippable state — but `npm run i18n:status -- --strict` exits non-zero on any incomplete coverage, for a CI gate that wants one. `echo` entries are exempt from coverage (see below).
+3. **Content drift**: `npm run i18n:status -- --stamp` writes (or updates) a tracked `<design>.strings.stamps.json` beside the sidecars, recording the sha256 of the CURRENT authored source text for every field that tag’s sidecar actually translates (and of the base doc file, for a `doc` translation) — a stamp records what the translation was made *against*, so it only exists for fields that have one. From then on, both `gen-schema` (as a build-log **warning**, never a build failure) and `npm run i18n:status` compare each stamped field’s recorded hash against its current source-text hash and flag a mismatch: *“de translation of params.width.description may be stale (source changed since it was stamped)”*. No stamps file for a design → no drift opinion for it, so a casual translation with no stamping workflow is never burdened by this layer. A stamps file is sidecar-shaped for discovery purposes (the same orphan scan, the same `assets`-glob exclusion as the `.strings.<tag>.json`/`.doc.<tag>.md` files above) but is never copied into `public/scad/` and never folded into `renderHash`.
+
+A sidecar’s free-form `echo` map (design translations’ own `echo` key, above) is exempt from both coverage and drift: `gen-schema` has no static way to know what a design chooses to echo, so there is no fixed field list to measure either against — a missing echo translation is a legitimate fallback to the source string, not a gap.
+
 ### Rendering
 
 The `render` object gathers everything that affects render arguments, bundled fonts, and cache behavior. Two genuinely different kinds of field live in it, and that distinction matters for `renderHash`: the content hash folded into the persisted render-cache key:
@@ -164,6 +229,8 @@ Config paths are not all relative to the same thing. `gen-schema` resolves each 
 | **The design’s own `.scad` file** | the `// @icon`, `// @image`, and `// @doc` annotations |
 
 A path resolved against the design’s own file must additionally stay inside `source`: `gen-schema`'s `checkContained` check rejects a `// @icon`/`// @image`/`// @doc` (or a `use`/`include` target, or a symlink resolving outside it) that escapes upward with a build-time error. A config-relative path (`logo`, `pwa.icon`, …) is not checked against `source` at all: the config author who controls the config file’s directory is assumed to also control what it points at.
+
+`popup.bodyFile`/`help.file`/`help.tabs[].file` (not `licenses[].textFile`, which stays single-language) additionally accept an object of locale tag -> path, for a per-locale [`LocalizableText`](#localizing-config-text) value: each path in that object resolves against the same base as the plain-string form.
 
 ## SVG asset trust model
 
@@ -419,22 +486,98 @@ Load order, last wins: app bundle CSS -> `colors` `<style>` -> `extraCss` `<link
 
 ## Text overrides (`strings`)
 
-ScadPub’s own chrome text (the readiness pill, the Review dialog, attention cards, the export dock, the output console and the share/export toasts) is generated from a small built-in catalogue (`src/locales/en.json`), resolved through `src/lib/i18n.ts`'s `t()`/`tn()`. The optional `strings` config key lets a deployment override any of those keys without a fork:
+ScadPub’s own chrome text (the readiness pill, the Review dialog, attention cards, the export dock, the output console, the share/export toasts, and the rest of the app’s UI copy) is generated from a small built-in catalogue (`src/locales/en.json`), resolved at runtime through `src/lib/i18n.ts`'s `t()`/`tn()` against the visitor’s active locale (see [`languages`](#app-identity-and-pwa) and `src/lib/localeStore.ts`). The optional `strings` config key lets a deployment override any of those keys without a fork, in either of two shapes:
 
 ```jsonc
 {
   "strings": {
     "action.export": "Download for printing",
-    "review.title": "Check before you print"
+    "review.title": { "en": "Check before you print", "de": "Vor dem Drucken prüfen" }
   }
 }
 ```
 
-- Each key must already exist in `src/locales/en.json`: an unknown key (typically a typo) fails the build, pointing you at that catalogue. There is no way to *add* a brand-new key this way, only override an existing one.
-- Each value is a plain string. Where the built-in text interpolates a variable (`{count}`, `{format}`, …), keep the same `{name}` placeholder(s) in your override: an override that drops a placeholder renders literal text where the value would have gone.
-- A pluralized key is **two** catalogue keys, suffixed `#one` and `#other` (English’s only two [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) plural categories). E.g. `review.issueCount#one` (“{count} issue to review”) and `review.issueCount#other` (“{count} issues to review”). Override both together if you override either, so a count of exactly 1 doesn’t fall back to the built-in English text while every other count uses yours.
-- This surface is intentionally a **subset** of ScadPub’s UI, not a full translation layer: it covers the surfaces `t()`/`tn()` have been wired into so far (see `src/locales/en.json` for the exhaustive key list). Older/legacy panels (the parameter form, the Presets tab, the Files dialog’s own body copy, the Help modal chrome, …) are not yet routed through this catalogue and stay plain English regardless of `strings`.
+- A **plain string** value overrides the deployment’s *default* locale only (`lang`, or its resolved fallback — see [`languages`](#app-identity-and-pwa)): the pre-per-locale shape, and still the right one for a single-locale deployment, or for the one locale you actually want to override.
+- An **object** value overrides per locale, keyed by locale tag (`{ "en": "…", "de": "…" }`): each key must be one of the deployment’s enabled `languages`, and the object needs at least one entry. A locale left out of the object simply keeps the built-in catalogue text for that key.
+- Either way, each key must already exist in `src/locales/en.json`: an unknown key (typically a typo) fails the build, pointing you at that catalogue. There is no way to *add* a brand-new key this way, only override an existing one.
+- Each string value interpolates the same way the built-in text does. Where the built-in text uses a variable (`{count}`, `{format}`, …), keep the same `{name}` placeholder(s) in your override: an override that drops a placeholder renders literal text where the value would have gone.
+- A pluralized key is **two** catalogue keys, suffixed `#one` and `#other`, since those are the only two catalogue keys `src/locales/en.json` (and therefore `strings`, which validates against it) ever defines — English’s only two [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) plural categories. E.g. `review.issueCount#one` (“{count} issue to review”) and `review.issueCount#other` (“{count} issues to review”). Override both together if you override either, so a count of exactly 1 doesn’t fall back to the built-in text while every other count uses yours.
 - `strings` never affects geometry, so it’s absent from `renderHash`.
+
+## Localizing config text
+
+`strings` (above) overrides ScadPub’s own **chrome** copy — text the app itself owns, out of a fixed catalogue. Several *config-authored* fields — `popup.header`/`body`/`button`/`footnote`, `fileImport.note`, `notices[].label`’s `one`/`other`, `licenses[].note`, `designs[].label`/`group`, and every text field under `help` — are prose **you** write, with no catalogue key to override. Each of those fields accepts a `LocalizableText` value, and there are two ways to write one: **text files** (the opt-in `text` key, recommended for anything beyond a tiny single-page config) or **inline** (a plain string or `{ tag: string }` map written directly into `scadpub.config.json`, the default when `text` is absent).
+
+### Text files (`text`)
+
+Set the top-level `text` key and every `LocalizableText` field above moves out of `scadpub.config.json` into one JSON file per locale — English included. The config keeps structure (which tabs exist, which notices, which designs, ids, colors, modes); the text files hold every word a visitor reads:
+
+```jsonc
+// scadpub.config.json — structure only, no prose
+{
+  "languages": ["en", "de"],
+  "text": { "en": "scadpub.text.en.json", "de": "scadpub.text.de.json" },
+  "popup": { "mode": "dismissible" },
+  "help": { "tabs": [{ "id": "walkthrough" }, { "id": "printing" }] },
+  "notices": [{ "marker": "alert", "color": "#e0a458" }],
+  "designs": [{ "id": "tag" }]
+}
+```
+
+```jsonc
+// scadpub.text.de.json — same shape as every other locale's file
+{
+  "$schema": "./scadpub.config.text.schema.json",
+  "popup": { "header": "Willkommen bei ScadPub", "body": "…", "footnote": "…" },
+  "help": {
+    "intro": "…",
+    "tabs": {
+      "walkthrough": { "label": "Rundgang", "sections": [{ "title": "…", "body": "…" }] },
+      "printing": { "label": "Druck", "file": "examples/help-printing.de.md" }
+    }
+  },
+  "notices": { "alert": { "one": "Warnung", "other": "Warnungen" } },
+  "designs": { "tag": { "label": "Etikett" } },
+  "strings": { "action.export": "Für den Druck herunterladen" }
+}
+```
+
+- The `text` map is locale tag → config-relative file path. The **default locale’s** file (`lang`, collapsed, or `languages[0]` — see [`languages`](#app-identity-and-pwa)) is **required and must be complete**: it defines the base text for every structural slot this config declares — each `help.tabs[]` entry needs a `label` (plus `sections` or `file`), `popup` needs `header`/`body` when configured, and so on. Every other enabled locale’s file is optional and may be **sparse**, but sparseness is a different granularity for a help tab (or single-pane `help`) than for everything else:
+  - **`popup`/`fileImport`/`notices`/`licenses`/`designs`/`strings`**: sparse per **leaf**. A non-default locale can translate `popup.header` and leave `body` untranslated, translate one `notices` marker and skip another, and so on — each leaf independently falls back to the default locale’s value at runtime, the same `map[tag] ?? map[defaultTag]` rule the inline object form uses.
+  - **A `help` tab (or single-pane `help`)**: sparse per **tab**, not per leaf inside it. A non-default locale either **omits the tab entirely** (falls back to the default locale’s whole tab) or **fully translates it** — `label` plus, matching whichever form the default locale’s entry uses, either the complete `sections` array (same count as the default locale, in the same order) or `file`. Setting only `label` and leaving `sections`/`file` out fails the build (a 0-section tab, or a missing required `file`) rather than silently falling back per-field: a partially-translated tab would otherwise mix one locale’s section count with another’s, which the position-matched `sections` array can’t represent.
+- **With `text` set, inline prose in any field it covers becomes a build error** naming the field and the text file it belongs in instead — “config has no text” is meant literally, not as a suggestion. Non-prose fields (`title`/`description`/everything under `pwa`, ids, markers, colors, modes, paths, `designs[].presets.images`) stay in the config either way; they were never localizable.
+- **Join keys**: a text file’s `help.tabs` entries are matched to `help.tabs[]` by **`id`** — which `text` mode requires every tab to set, since it’s the only stable handle once the label itself moves out of the config. `notices` entries match by **`marker`**, `licenses` entries by **`name`**, `designs` entries by **`id`**. A text file naming a tab id/marker/license name/design id that doesn’t exist in the config fails the build.
+- **Sections match by index**: a tab’s (or single-pane `help`’s) `sections` array lines up positionally between locales — the same rule `help.file`’s per-locale object form already used (see below). Every locale that sets `sections` for a pane must supply exactly as many entries as the default locale’s file, in the same order; a mismatch fails the build, naming both counts.
+- **`file` leaves** (a tab’s `file`, or top-level `help.file`) name a config-relative Markdown file **per locale**, resolved and split into `intro`/`sections` exactly like the inline object form described below — one text-file entry, one path, per locale. This is `help` only: **`popup.bodyFile`/`fileImport.noteFile` have no text-mode counterpart** — there’s nowhere in a text file for a config-relative path to go, only the prose itself as a plain string leaf (`popup.body`, `fileImport.note`). Setting either `File` variant inline while `text` is configured fails the build with that pointer; write the Markdown content directly into the text file’s `popup.body`/`fileImport.note` string instead — the text file is already the place this prose belongs.
+- **`strings`** (the chrome-catalogue overrides, see [Text overrides](#text-overrides-strings) above) gets its own key inside each text file, one source of truth per key: with `text` set, `scadpub.config.json`’s own `strings` block must be empty, and every override lives in the text files instead.
+- A **committed JSON Schema**, `scadpub.config.text.schema.json` (generated the same way `scadpub.config.schema.json` is, from `scripts/gen-config-schema.mjs`), documents the text file’s own shape for editor tooling.
+- `npm run i18n:status` reports coverage for `text` the same way it reports design-translation coverage: per enabled non-default locale, how many of the default locale’s text-file leaves that locale’s own file also sets, the default file as the reference set; `--strict` folds it into the same exit code. `npm run i18n:status -- --stamp` (re)writes a tracked `<config-basename>.text.stamps.json` (e.g. `scadpub.config.text.stamps.json`) beside the config, hashing the default locale’s current text; from then on both `gen-schema` (a build-log warning, never a failure) and `i18n:status` flag a leaf whose stamped hash no longer matches the current text — the same “warn, never fail” contract [design-translation drift](#keeping-translations-up-to-date) uses. The stamps file is excluded from `assets` bundling/orphan handling like a design’s own `.strings.stamps.json`.
+- None of this affects geometry, so `text`’s fold happens before `renderHash` is computed and every field it touches stays absent from it, same as the inline forms below.
+
+### Inline (no `text` key)
+
+Without `text`, every field above still accepts a `LocalizableText` value written directly in the config — the shape every one of these fields has always accepted, and still the right choice for a config small enough that splitting it into files buys nothing:
+
+```jsonc
+{
+  "popup": {
+    "header": "Welcome",
+    "body": { "en": "Configure a design and export a 3MF.", "de": "Konfiguriere ein Design und exportiere eine 3MF." }
+  },
+  "designs": [
+    { "id": "tag", "label": { "en": "Tag", "de": "Etikett" }, "group": { "en": "Signage", "de": "Beschilderung" } }
+  ]
+}
+```
+
+- A **plain string** shows for **every** locale — the same value regardless of which locale a visitor has selected.
+- An **object** overrides per locale, keyed by locale tag (`{ "en": "…", "de": "…" }`): it **must include an entry for the deployment’s default locale** (`lang`, collapsed to a shipped tag, or `"en"` — the same resolved default `languages` itself defaults around, see [`languages`](#app-identity-and-pwa)), and every key must be one of the deployment’s enabled `languages` — an unshipped or unenabled tag fails the build. A locale the object leaves out falls back to the default locale’s entry at runtime.
+- This is a **different rule** from `strings`’ own per-locale object (a plain string there applies only to the *default* locale, back-compat with a config written before per-locale `strings` existed — see [Text overrides](#text-overrides-strings) above). Here, a plain string applies to **every** locale: the field never had a “default-locale-only” shape to stay backward compatible with, since a single `LocalizableText` value replaces the field’s value outright rather than sitting alongside a catalogue.
+- A **file-backed** counterpart (`popup.bodyFile`, `fileImport.noteFile`, `help.file`, `help.tabs[].file`) accepts the same two shapes at the PATH level: a single config-relative path, or an object of locale tag -> config-relative path. Each locale’s file is read independently at build time and the results become that field’s `LocalizableText` map — the same default-tag/enabled-`languages` rules apply to the path object as to an inline value. For `help.file`/`help.tabs[].file` specifically, every locale’s file must split into the **same number** of `##` sections, in the same order (so a section’s per-locale title/body line up); a locale’s file with no text before its first `##` only contributes an `intro` entry when the **default** locale’s file has one too. `licenses[].textFile` (and `licenses[].text`) is the one file-backed field that stays single-language — see [Open-source notices](#open-source-notices-licenses) below.
+- None of this affects geometry, so every field above stays absent from `renderHash`.
+- **Strict on purpose:** `help`’s section/tab text, `notices[].label`’s `one`/`other`, and `licenses[].note` reject a blank string or the wrong type outright (an empty label is an authoring mistake, not something worth silently swallowing). `designs[].label`/`group` are the deliberate exception: `group` in particular has a permissive “anything that isn’t a real string quietly becomes unset” rule for its plain-string form — only the per-locale object form is validated strictly.
+
+**What stays fixed at the build’s configured language, not localizable this way** (see also [`lang`](#app-identity-and-pwa)): `title`, `description`, everything under `pwa` (manifest fields, install metadata) — including a `pwa.shortcuts` entry ScadPub derives from a `LocalizableText` `designs[].label`, projected to the deployment’s default locale — and `<title>`/`<meta>` — the document’s own identity is one thing per deployment, not something a visitor’s locale switch changes. `echo("@review", …)` values (curated review overrides) and a design’s own annotation text (translated instead through its `.strings.<tag>.json` sidecar, a different mechanism — see [Design translations](#design-translations)) are unaffected by `LocalizableText` too.
 
 ## Import file (`fileImport`)
 
@@ -459,7 +602,7 @@ The **Files dialog is a manager**, not an importer: it lists what those controls
 }
 ```
 
-`fileImport` gates whether the **Files** action exists at all: omit it (or set it to `null`/`false`) and no Files action is shown. Its optional **`note`** renders as guidance at the top of the Files dialog, in a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content. Alternatively set **`noteFile`**: a config-relative Markdown file whose contents become `note` at build time, read and inlined the same way as `popup.bodyFile` (see [Popup notice](#popup-notice-popup)); setting both `note` and `noteFile` fails the build.
+`fileImport` gates whether the **Files** action exists at all: omit it (or set it to `null`/`false`) and no Files action is shown. Its optional **`note`** renders as guidance at the top of the Files dialog, in a small Markdown subset: paragraphs, `- ` bullet lists, `**bold**`, `` `code` ``, and `[links](url)`. It uses the same renderer as help and popup content, and is [localizable](#localizing-config-text). Alternatively set **`noteFile`**: a config-relative Markdown file (or, for a per-locale `note`, an object of locale tag -> Markdown file) whose contents become `note` at build time, read and inlined the same way as `popup.bodyFile` (see [Popup notice](#popup-notice-popup)); setting both `note` and `noteFile` fails the build.
 
 `fileImport` has no `accept`, `label`, or `maxBytes` fields: each contextual control (the font dropdown, the SVG drop zone) applies its own picker filter and size guard, so there is no generic import button left for those to configure. A config that still sets one fails the ordinary unknown-key check.
 
@@ -572,17 +715,17 @@ Show a one-off notice dialog over the app on load. Use it for a welcome message,
 }
 ```
 
-- **`header`**: the dialog title
-- **`body`**: the message, in the same Markdown subset used elsewhere. Links open in a new tab. Alternatively set **`bodyFile`**: a config-relative path to a Markdown file whose contents become `body` at build time. Setting both `body` and `bodyFile` fails the build, naming both. Unlike `designs[].doc` (fetched by the browser on demand), this file’s content is read at build time and inlined into the generated schema: the browser never makes a separate request for it
+- **`header`**: the dialog title. [Localizable](#localizing-config-text)
+- **`body`**: the message, in the same Markdown subset used elsewhere. Links open in a new tab. [Localizable](#localizing-config-text). Alternatively set **`bodyFile`**: a config-relative path to a Markdown file whose contents become `body` at build time — or, for a per-locale `body`, an object of locale tag -> Markdown file. Setting both `body` and `bodyFile` fails the build, naming both. Unlike `designs[].doc` (fetched by the browser on demand), this file’s content is read at build time and inlined into the generated schema: the browser never makes a separate request for it
 - **`mode`**: popup frequency:
   - **`always`**: shown on every visit. No opt-out
   - **`once`** (default): shown on the first visit only. Dismissing it with **OK**, the close button, Escape, or outside click remembers it so it will not return
   - **`dismissible`**: shown on every visit until you tick **Don’t show this again**. Closing without ticking the box shows it again next time
   - **`picker`**: the popup IS the design chooser (the visual gallery, as the app’s first screen) rather than a notice over the app. Intended for `ui.gallery: true` deployments. It needs **at least two designs** to choose between: `picker` with fewer fails the build, pointing at `"once"` for a plain notice, because a chooser with nothing to choose is a mistake in the config rather than a request for something else. Skipped when the URL hash already names a design (a shared link, or an installed app’s `#d=<id>` shortcut) since the choice it asks for has already been made; skipping isn’t remembered, so a later visit to the bare URL still gets the gallery. While it is on screen the render path stays parked, so its thumbnails have the connection to themselves
-- **`button`**: an optional label for the primary button, overriding the default `"OK"`. Must be a non-empty string when set. Has no effect in `picker` mode, that mode’s primary action is picking a design from the gallery, not clicking a button
-- **`footnote`**: an optional short line of plain text (not Markdown), shown small and muted at the bottom of the dialog in every mode, including `picker`. For a standing disclosure that doesn’t belong in the main `body` message, such as a privacy note
+- **`button`**: an optional label for the primary button, overriding the default `"OK"`. Must be a non-empty string when set. Has no effect in `picker` mode, that mode’s primary action is picking a design from the gallery, not clicking a button. [Localizable](#localizing-config-text)
+- **`footnote`**: an optional short line of plain text (not Markdown), shown small and muted at the bottom of the dialog in every mode, including `picker`. For a standing disclosure that doesn’t belong in the main `body` message, such as a privacy note. [Localizable](#localizing-config-text)
 
-The remembered state is namespaced by the configurator’s `id` and keyed by the popup’s content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It’s purely informational and doesn’t affect renders, so it never invalidates the geometry cache.
+The remembered state is namespaced by the configurator’s `id` and keyed by the popup’s content, so changing the `header`/`body`/`mode` in a later deploy re-shows the notice to returning users. It’s purely informational and doesn’t affect renders, so it never invalidates the geometry cache. The remembered hash covers every locale of a localized field at once: translating `header`/`body` for one locale re-shows the notice to every locale’s returning visitors, not only that one.
 
 ## UI behaviour and PWA
 
@@ -619,7 +762,7 @@ The optional `ui.afterExport` field turns on a compact, non-modal panel (`src/co
 }
 ```
 
-- **`helpTab`**: when set, the panel shows an “Open printing help” action that opens Help scrolled straight to the tab with this exact label (`HelpModal`'s `initialTab`, matched by [`help.tabs[].label`](#help-content-help)). **Validated at build time**: `gen-schema` fails the build if no tab in this config’s `help` carries that label. Omit to hide the action
+- **`helpTab`**: when set, the panel shows an “Open printing help” action that opens Help scrolled straight to a specific tab (`HelpModal`'s `initialTab`). Resolved **id-first**: matched against [`help.tabs[].id`](#help-content-help) first, and only when no tab carries that id does it fall back to an exact-label match (`help.tabs[].label`, back-compat with a config written before tab ids existed). The reserved id `"overview"` reaches the synthetic Overview tab a top-level `help.sections` produces alongside `tabs`, the same as the label `"Overview"` did before. **Validated at build time**: `gen-schema` fails the build if no tab in this config’s `help` carries that id or label
 
 The panel’s headline and body always come from the `strings` catalogue (`"exportSuccess.title"`, default “Your file is on its way”; `"exportSuccess.body"`, default a generic next-step line): override them there, the same way as any other chrome text, rather than through a second field on `afterExport`.
 
@@ -677,13 +820,20 @@ echo("tag: note: the label is engraved into the plate rather than raised");
 {
   "notices": [
     { "marker": "alert", "label": { "one": "alert", "other": "alerts" }, "color": "#e0a458" },
-    { "marker": "note",  "label": { "one": "note",  "other": "notes"  }, "color": "#86a9ff" }
+    {
+      "marker": "note",
+      "label": {
+        "one": { "en": "note", "de": "Hinweis" },
+        "other": { "en": "notes", "de": "Hinweise" }
+      },
+      "color": "#86a9ff"
+    }
   ]
 }
 ```
 
 - **`marker`**: required. The design-defined word, matched as `: <marker>:` inside an echo, case-insensitive. The first configured category that matches a line claims it
-- **`label`**: optional badge noun. Either a plain string used regardless of count (e.g. `"alerts"`), or an object with `other` (the plural/default form, required within the object) and an optional `one` (the singular form, falling back to `other` when omitted): the singular/plural is picked with the same [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) `Intl.PluralRules` logic `strings`' pluralized keys use (`#one`/`#other`), so a single pending notice never reads as “1 alerts”. Defaults to the `marker` (used for both forms) when omitted entirely. A config using the old `label`/`labelOne` pair fails the build with a pointer at this shape
+- **`label`**: optional badge noun. Either a plain string used regardless of count (e.g. `"alerts"`), or an object with `other` (the plural/default form, required within the object) and an optional `one` (the singular form, falling back to `other` when omitted): the singular/plural is picked with the same [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) `Intl.PluralRules` logic `strings`' pluralized keys use (`#one`/`#other`), so a single pending notice never reads as “1 alerts”. Defaults to the `marker` (used for both forms) when omitted entirely. A config using the old `label`/`labelOne` pair fails the build with a pointer at this shape. **`one` and `other` are each independently [localizable](#localizing-config-text)** — the `de` example above uses that shape for both — orthogonal to the singular/plural axis: a plain string for `other` still means “this word regardless of locale”, exactly as it always has
 - **`color`**: optional badge fill, as a plain CSS colour. For `#rgb`/`#rrggbb`, the badge text auto-switches between black and white to stay legible. Other colour forms keep the default badge text, so their contrast is your responsibility. Omit to use the default accent badge styling
 - **`attention`**: optional boolean, default `false`. Attention notices join OpenSCAD warnings, assertions, and missing fonts in the pre-download review dialog; **Download anyway** remains available
 - **`subsumedByFont`**: optional boolean, default `false`. Only meaningful alongside `attention: true`. Marks a category whose notices are a *symptom* of a missing font rather than their own separate issue, for example a design that warns about text overflowing once a substitute family was used. While a font the design asked for isn’t loaded, and it is unambiguous which font parameter that is (the design has one font parameter, or exactly one fell back), this category’s pending notices are folded into the font item instead of being listed again beside it. With no font missing, they count exactly as normal
@@ -694,7 +844,7 @@ Omit `notices`, or set it to `[]`, and no marker categories are recognised. Desi
 
 ## Help content (`help`)
 
-The **Help** dialog (the **?** button) is generated from `help`. Omit it for a generic, project-agnostic default; supply it to document your own designs. `body` (and `intro`) use the same Markdown subset as everywhere else: `**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, and `- ` bullets.
+The **Help** dialog (the **?** button) is generated from `help`. Omit it for a generic, project-agnostic default; supply it to document your own designs. `body` (and `intro`) use the same Markdown subset as everywhere else: `**bold**`, `` `code` ``, `[text](url)`, blank-line paragraphs, and `- ` bullets. `title`/`intro`, a section’s `title`/`body`, and a tab’s `label`/`intro` are each independently [localizable](#localizing-config-text).
 
 An optional **`title`** sets the dialog heading (default `"How to use this configurator"`).
 
@@ -717,7 +867,7 @@ Use `sections` for a flat list of help sections:
 
 ### Tabbed help
 
-Use `tabs` to group the guide into multiple panes. A tab strip appears, and each tab has a `label`, an optional `intro`, and its own `sections`:
+Use `tabs` to group the guide into multiple panes. A tab strip appears, and each tab has an optional `id`, a `label`, an optional `intro`, and its own `sections`:
 
 ```jsonc
 {
@@ -725,6 +875,7 @@ Use `tabs` to group the guide into multiple panes. A tab strip appears, and each
     "intro": "Shown once above every tab.",   // optional shared intro
     "tabs": [
       {
+        "id": "getting-started",              // optional, see below
         "label": "Getting started",
         "intro": "The basics.",               // optional per-tab intro
         "sections": [
@@ -732,6 +883,7 @@ Use `tabs` to group the guide into multiple panes. A tab strip appears, and each
         ]
       },
       {
+        "id": "printing",
         "label": "Printing tips",
         "sections": [
           { "title": "Material", "body": "**PLA** works well." },
@@ -745,11 +897,30 @@ Use `tabs` to group the guide into multiple panes. A tab strip appears, and each
 
 - Any number of tabs is supported; the strip is keyboard-navigable (arrow keys / Home / End) per the ARIA tabs pattern.
 - A top-level `intro` renders once above the tab strip; a per-tab `intro` renders above that tab’s sections.
-- If you supply **both** top-level `sections` and `tabs`, the top-level sections become a leading **Overview** tab. Adding `tabs` to an existing single-pane help never drops the original content. To control every label yourself, put all content inside `tabs` and leave top-level `sections` out.
+- If you supply **both** top-level `sections` and `tabs`, the top-level sections become a leading **Overview** tab (reserved id `"overview"`). Adding `tabs` to an existing single-pane help never drops the original content. To control every label yourself, put all content inside `tabs` and leave top-level `sections` out.
+- **`id`**: an optional stable identifier for the tab, unique across this `help`’s tabs. Lets [`ui.afterExport.helpTab`](#after-export-panel-uiafterexport) (and any other deep link) name a tab independent of its display label — useful once a tab’s `label` might change wording, or might differ per locale in a multi-locale deployment, where a plain-string reference could never match a per-locale label. The id `"overview"` is reserved for the synthetic Overview tab above; a config tab claiming it fails the build. Two tabs sharing an id also fails the build.
 
 ### Sourcing help from Markdown files
 
 Writing `sections` (and `intro`) inline means twenty-five `{title, body}` fragments joined by `\n\n` inside one JSON string: unreviewable in a diff, and unlintable by tools like markdownlint. As an alternative, set **`file`** (a config-relative path to a Markdown file) on the single-pane `help` object itself, or on any individual `tabs[]` entry. `gen-schema` splits that file’s content at build time: everything before the first `##` heading becomes that pane’s `intro`; each `##` heading after that starts a section, using the heading text as `title` and everything up to the next `##` heading (or the end of the file) as `body`. This maps exactly onto the `{title, body}` shape above, so a whole tab becomes one readable `.md` file instead of a handful of JSON fragments.
+
+`file` also accepts an object of locale tag -> path, for a per-locale pane: each locale’s file is split independently, then combined into `LocalizableText` `intro`/`sections[].title`/`sections[].body` values (see [Localizing config text](#localizing-config-text)). Every locale’s file must produce the **same number** of `##` sections, in the same order — a mismatch fails the build, naming the tab and both counts — since a section’s per-locale title/body are matched up positionally, not by heading text.
+
+```jsonc
+{
+  "help": {
+    "tabs": [
+      {
+        "label": { "en": "Getting started", "de": "Erste Schritte" },
+        "file": {
+          "en": "docs/help-getting-started.md",
+          "de": "docs/help-getting-started.de.md"
+        }
+      }
+    ]
+  }
+}
+```
 
 A pane with `file` may not also set `sections` or `intro` directly: either combination fails the build, naming both keys. A bare `#` heading (or `###` and deeper) does not start a new section: use `#` for the file’s own title if you want one (it stays as ordinary text inside `intro`), and `###` for structure within a section’s own body.
 
@@ -803,6 +974,7 @@ The **ⓘ** button lists the third-party components ScadPub itself bundles, incl
 
 - `name`, `license`, `copyright`, `url`, and `licenseUrl` are required; the rest are optional. Unknown keys are ignored.
 - Provide `sourceUrl` for copyleft components, such as GPL components, so the corresponding-source requirement is met. Provide `text` to reproduce a permissive license inline, or **`textFile`**, a config-relative path whose contents become `text` at build time (the full OFL/GPL/etc. text lives in its own file instead of a `\n`-joined JSON string). Setting both `text` and `textFile` fails the build.
+- `note` is [localizable](#localizing-config-text). `text`/`textFile` deliberately are **not**: reproduced license text is a legal artifact, not UI prose, so it stays a single value regardless of the visitor’s locale.
 - A malformed entry fails the build with a clear message.
 
 ### Merging with the built-ins

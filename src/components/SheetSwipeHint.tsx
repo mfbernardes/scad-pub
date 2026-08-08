@@ -24,6 +24,7 @@
 // as a role="status" live region carrying a plain-text, accessible label.
 import { useEffect } from "react";
 import { t } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 // How long the nudge stays up before auto-fading if the visitor never touches
 // the sheet: generous enough to read a short phrase, short enough not to
@@ -31,6 +32,7 @@ import { t } from "../lib/i18n";
 const FADE_TIMEOUT_MS = 8000;
 
 export function SheetSwipeHint({ onDismiss }: { onDismiss: () => void }) {
+  useLocale(); // subscription only: re-render this component's t() call on a locale switch
   useEffect(() => {
     const timer = setTimeout(onDismiss, FADE_TIMEOUT_MS);
     // The chip is pointer-events:none, so a tap/drag on the sheet always lands

@@ -10,7 +10,8 @@
 // "React 18.3" while the app bundled 19.x. What's hard-coded is only what a
 // dependency bump can't invalidate: names, copyright lines, license texts.
 import oflText from "../licenses/OFL-1.1.txt?raw";
-import type { SoftwareLicense } from "../openscad/types";
+import type { ResolvedSoftwareLicense } from "../openscad/types";
+import { t } from "./i18n";
 
 /**
  * Versions resolved at build time and carried in the generated schema. All
@@ -60,7 +61,11 @@ const mit = (copyright: string) =>
  * taken from the build. Consumer-configured notices are appended after these by
  * the licenses modal; the built-ins are never removed.
  */
-export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
+// Only `note` (the plain-language blurb) is translated below; `name`,
+// `version`, `license` (SPDX id), `copyright`, `url`/`licenseUrl`/`sourceUrl`
+// and `text` are legal facts and proper nouns, and stay verbatim in every
+// locale.
+export function licenseList(versions: BuildVersions = {}): ResolvedSoftwareLicense[] {
   const pkg = (name: string) => versions.packages?.[name];
   // React and React-DOM share one entry (they version in lockstep); if an
   // install ever splits them, say so rather than quietly naming one.
@@ -78,11 +83,7 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
       licenseUrl: "https://github.com/mfbernardes/scad-pub/blob/main/LICENSE",
       sourceUrl: "https://github.com/mfbernardes/scad-pub",
       text: mit("Copyright (c) 2026 Murillo Bernardes"),
-      note:
-        "This configurator itself. ScadPub publishes OpenSCAD models as static, " +
-        "browser-based configurators; its own source is MIT-licensed and available " +
-        "at the link above. The MIT license covers ScadPub's own code only — the " +
-        "bundled components listed below carry their own terms.",
+      note: t("licenses.note.scadpub"),
     },
     {
       name: "OpenSCAD (WebAssembly build)",
@@ -92,12 +93,7 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
       url: "https://openscad.org/",
       licenseUrl: "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
       sourceUrl: "https://github.com/openscad/openscad",
-      note:
-        "Renders the models in your browser. OpenSCAD is free software under the " +
-        "GNU GPL v2 (or later); the corresponding source is available at the link " +
-        "above. Its build also statically links further third-party libraries " +
-        "(e.g. CGAL, Boost, Eigen, Manifold, FreeType, HarfBuzz, fontconfig, " +
-        "libzip) under their own licenses — see the OpenSCAD source for those.",
+      note: t("licenses.note.openscad"),
     },
     {
       name: "three.js",
@@ -107,7 +103,7 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
       url: "https://threejs.org/",
       licenseUrl: "https://github.com/mrdoob/three.js/blob/dev/LICENSE",
       text: mit("Copyright © 2010-2024 three.js authors"),
-      note: "Renders the 3D preview.",
+      note: t("licenses.note.three"),
     },
     {
       name: "React & React-DOM",
@@ -117,7 +113,7 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
       url: "https://react.dev/",
       licenseUrl: "https://github.com/facebook/react/blob/main/LICENSE",
       text: mit("Copyright (c) Meta Platforms, Inc. and affiliates."),
-      note: "Powers the user interface.",
+      note: t("licenses.note.react"),
     },
     {
       name: "Liberation Fonts",
@@ -127,9 +123,7 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
       licenseUrl:
         "https://github.com/liberationfonts/liberation-fonts/blob/main/LICENSE",
       text: `Copyright © 2012 Red Hat, Inc.\nLiberation is a trademark of Red Hat, Inc.\n\n${oflText}`,
-      note:
-        "Bundled fallback typeface. Any external font a deployment requires " +
-        "(e.g. a license-restricted profile font) is not bundled and is uploaded by you.",
+      note: t("licenses.note.liberation"),
     },
     {
       name: "Atkinson Hyperlegible",
@@ -142,9 +136,7 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
       licenseUrl:
         "https://github.com/googlefonts/atkinson-hyperlegible/blob/main/OFL.txt",
       text: `Copyright 2020 Braille Institute of America, Inc.\n\n${oflText}`,
-      note:
-        "ScadPub bundles this (via Fontsource) as the interface's own display " +
-        "typeface, for the app chrome.",
+      note: t("licenses.note.atkinson"),
     },
   ];
 }
@@ -176,12 +168,12 @@ export function licenseList(versions: BuildVersions = {}): SoftwareLicense[] {
  * original relative order.
  */
 export function mergeLicenses(
-  builtins: SoftwareLicense[],
-  extras: SoftwareLicense[]
-): SoftwareLicense[] {
+  builtins: ResolvedSoftwareLicense[],
+  extras: ResolvedSoftwareLicense[]
+): ResolvedSoftwareLicense[] {
   const norm = (s: string) => s.trim().toLowerCase();
   const merged = builtins.map((b) => ({ ...b }));
-  const appended: SoftwareLicense[] = [];
+  const appended: ResolvedSoftwareLicense[] = [];
 
   for (const extra of extras) {
     const idx = merged.findIndex((b) => norm(b.name) === norm(extra.name));

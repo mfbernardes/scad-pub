@@ -34,6 +34,27 @@ import { dirname, join, resolve, relative, sep } from "node:path";
 // A `use <path>` / `include <path>` dependency directive.
 const DEP_RE = /^\s*(?:use|include)\s*<([^>]+)>/;
 
+// Design-translation sidecar filename shapes: `<design>.strings.<tag>.json`
+// (see docs/config.md "Design translations" and scripts/lib/design-strings.mjs),
+// its `<design>.strings.stamps.json` freshness-stamp sibling (the literal tag
+// "stamps" already matches the first alternative — no separate pattern
+// needed), and `<design>.doc.<tag>.md` per-locale `@doc` translations (see
+// gen-schema.mjs's buildDesigns), plus a config text deployment's own
+// `<config-basename>.text.stamps.json` freshness stamp (scripts/i18n-status.mjs
+// `--stamp`, scripts/lib/config-text.mjs, docs/config.md "Localizing config
+// text") — the same idea one level up: it sits beside the CONFIG, not a
+// design, but SOURCE and CONFIG_DIR coincide often enough (`source: "."`)
+// that a broad glob can still reach it. None of these are ever bundled:
+// they're authored/derived translation text, not render input, and reaching
+// public/scad/ (hence renderHash) would invalidate every deployment's
+// persisted geometry cache on a translation edit that cannot affect a single
+// triangle. This is the one place a broad config `assets` glob (`**/*.json`,
+// say) could otherwise sweep one in. Case-insensitive for the same reason
+// gen-schema.mjs's own sidecar scan is: a case-insensitive filesystem (macOS,
+// Windows) would otherwise let a wrongly-cased sidecar (`widget.Strings.DE.json`)
+// slip past this exclusion and get bundled.
+const SIDECAR_RE = /\.(?:strings\.[A-Za-z0-9-]+\.json|doc\.[A-Za-z0-9-]+\.md|text\.stamps\.json)$/i;
+
 /**
  * Build the SOURCE-bound asset resolution helpers used by generate().
  * @param {object} opts
@@ -257,6 +278,11 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
   // and "**/*.svg" every svg in the tree.
   const expandConfiguredAssets = (entries) => {
     const set = new Set();
+    // Every sidecar a glob matched, across every entry this call expands:
+    // reported once at the end (see below) rather than per-entry, so a config
+    // with several broad globs still gets one summary instead of a repeated
+    // warning per pattern.
+    const excludedSidecars = [];
     for (const entry of entries) {
       if (isGlob(entry)) {
         const matches = globAssets(entry);
@@ -265,7 +291,13 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
             `gen-schema: asset pattern '${entry}' matched no files under ${SOURCE}\n` +
               `  (referenced from ${configPath} — check its 'assets' globs)`
           );
-        for (const f of matches) set.add(f);
+        for (const f of matches) {
+          if (SIDECAR_RE.test(f)) {
+            excludedSidecars.push(f);
+            continue;
+          }
+          set.add(f);
+        }
         continue;
       }
       const abs = mustExist(resolve(SOURCE, entry), `asset '${entry}'`);
@@ -273,9 +305,24 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
       if (statSync(abs).isDirectory()) {
         for (const f of scadFilesUnder(abs, configPath)) set.add(f);
       } else {
-        set.add(relPosix(abs));
+        const rel = relPosix(abs);
+        // Unlike a glob match (silently excluded, see below): naming a
+        // sidecar directly is unambiguous intent, so it fails the build
+        // rather than being quietly dropped.
+        if (SIDECAR_RE.test(rel))
+          throw new Error(
+            `gen-schema: asset '${entry}' names a design-translation sidecar ('${rel}'), which must ` +
+              `never be bundled (it would reach public/scad/ and renderHash — see docs/config.md ` +
+              `"Design translations"). Remove it from 'assets'; gen-schema discovers it on its own.`
+          );
+        set.add(rel);
       }
     }
+    if (excludedSidecars.length)
+      console.warn(
+        `gen-schema: excluded ${excludedSidecars.length} design-translation sidecar file(s) from ` +
+          `'assets' (never bundled, see docs/config.md "Design translations"): ${excludedSidecars.join(", ")}`
+      );
     return set;
   };
 

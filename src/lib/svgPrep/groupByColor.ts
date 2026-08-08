@@ -8,12 +8,33 @@
 import { SHAPE_TAGS, SVG_NS, hasStructuralChildren, iterElements, localName } from "./dom";
 import { colorKey, displayColor, parseColor, slugForColor } from "./colors";
 import { effectiveFill } from "./regions";
+import type { Change } from "./types";
 
 const ELEMENT_NODE = 1;
 
+// The single source of truth for groupByColor's own error codes: every
+// `return { ..., error: { code: ... } }` site below is typed against it, so a
+// typo or an added code missing from this list fails to compile, and
+// src/lib/svgPrepText.ts's table-coverage test (tests/svgPrepText.test.mjs)
+// asserts against this export too. "already-grouped"/"one-colour" are
+// swallowed before a Change ever surfaces (see index.ts's autoGroupByColor);
+// "no-shapes"/"transformed" are the two that reach display.
+export const GROUP_BY_COLOR_ERROR_CODES = [
+  "no-shapes",
+  "already-grouped",
+  "one-colour",
+  "transformed",
+] as const;
+export type GroupByColorErrorCode = (typeof GROUP_BY_COLOR_ERROR_CODES)[number];
+
+/** The one Change code this module mints itself (fixes.ts's CHANGE_CODES
+ *  covers its own, disjoint set). */
+export const GROUP_BY_COLOR_CHANGE_CODES = ["grouped-colour"] as const;
+type GroupByColorChangeCode = (typeof GROUP_BY_COLOR_CHANGE_CODES)[number];
+
 export interface GroupByColorResult {
-  changes: string[];
-  error: string | null;
+  changes: Change[];
+  error: { code: GroupByColorErrorCode } | null;
 }
 
 function pruneEmptyGroups(root: Element): void {
@@ -81,13 +102,10 @@ function deepestCommonAncestor(shapes: Element[], root: Element): Element {
 
 export function groupByColor(root: Element): GroupByColorResult {
   const allShapes = iterElements(root).filter((el) => SHAPE_TAGS.has(localName(el)));
-  if (allShapes.length === 0) return { changes: [], error: "no shapes to group" };
+  if (allShapes.length === 0) return { changes: [], error: { code: "no-shapes" } };
   const shapes = allShapes.filter((sh) => !inNamedRegion(sh, root));
   if (shapes.length === 0) {
-    return {
-      changes: [],
-      error: "every shape is already in a named colour region — nothing to regroup",
-    };
+    return { changes: [], error: { code: "already-grouped" } };
   }
 
   // New groups are created in the shapes' deepest common ancestor: moving a
@@ -106,12 +124,7 @@ export function groupByColor(root: Element): GroupByColorResult {
         el.getAttribute("clip-path") ||
         el.getAttribute("mask")
       ) {
-        return {
-          changes: [],
-          error:
-            "some shapes are transformed or clipped, so regrouping could move " +
-            "them — group them by colour in your editor instead",
-        };
+        return { changes: [], error: { code: "transformed" } };
       }
       node = el.parentNode;
     }
@@ -135,10 +148,7 @@ export function groupByColor(root: Element): GroupByColorResult {
   // whose loose remainder happens to be one colour still has that remainder
   // worth grouping, and must not be refused as "only one colour found".
   if (order.length < 2 && shapes.length === allShapes.length) {
-    return {
-      changes: [],
-      error: "only one colour found — nothing to separate",
-    };
+    return { changes: [], error: { code: "one-colour" } };
   }
 
   for (const sh of shapes) sh.parentNode?.removeChild(sh);
@@ -149,7 +159,7 @@ export function groupByColor(root: Element): GroupByColorResult {
     const id = el.getAttribute("id");
     if (id) taken.add(id);
   }
-  const changes: string[] = [];
+  const changes: Change[] = [];
   for (const key of order) {
     const bucket = buckets.get(key)!;
     const gid = slugForColor(bucket.token, taken);
@@ -161,9 +171,8 @@ export function groupByColor(root: Element): GroupByColorResult {
     group.setAttribute("fill", disp);
     for (const sh of bucket.shapes) group.appendChild(sh);
     container.appendChild(group);
-    changes.push(
-      `grouped ${bucket.shapes.length} shape(s) into the "${disp}" colour region`,
-    );
+    const code: GroupByColorChangeCode = "grouped-colour";
+    changes.push({ code, vars: { count: bucket.shapes.length, color: disp } });
   }
   pruneEmptyGroups(root);
   return { changes, error: null };

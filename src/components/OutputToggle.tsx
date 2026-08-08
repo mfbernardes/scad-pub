@@ -20,6 +20,7 @@ import { cn } from "../lib/utils";
 import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";
 import { Bell as BellIcon, BellRing as BellRingIcon } from "lucide-react";
 import { t, tn } from "../lib/i18n";
+import { useLocale } from "../lib/localeStore";
 
 interface Props {
   outputOpen: boolean;
@@ -54,6 +55,7 @@ export function OutputToggle({
   status,
   className,
 }: Props) {
+  useLocale(); // subscription only: re-render this component's t()/tn() calls on a locale switch
   const hasNotices = noticeCount > 0;
   const showBadge = hasNotices && showCount;
   // A bell (ringing when notices are pending) reads far more clearly to a maker
@@ -90,7 +92,7 @@ export function OutputToggle({
       onClick={onToggleOutput}
       aria-label={bellLabel}
       aria-pressed={outputOpen}
-      title="Messages"
+      title={t("console.title")}
       // How many messages are pending, independent of whether the badge is
       // currently rendering them: the stable hook the smoke suite reads to
       // know which half of the `showCount` contract applies, so the check
@@ -127,7 +129,7 @@ export function OutputToggle({
           `render-status` hook the smoke/capture scripts read for completion. */}
       {derived && (
         <span className="render-status sr-only" role="status" aria-live="polite">
-          {`Render status: ${derived.text}`}
+          {t("status.renderStatusPrefix", { status: derived.text })}
         </span>
       )}
     </Button>

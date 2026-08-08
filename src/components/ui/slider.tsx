@@ -2,6 +2,8 @@ import * as React from "react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/lib/localeStore";
 
 function Slider({
   className,
@@ -11,6 +13,7 @@ function Slider({
   max = 100,
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root>) {
+  useLocale(); // subscription only: re-render this component's t() call on a locale switch
   const _values = React.useMemo(
     () =>
       Array.isArray(value)
@@ -22,8 +25,10 @@ function Slider({
   );
   // Radix puts role="slider" on the Thumb, so the accessible name has to live
   // there (not on the Root): forward aria-label/labelledby down to each thumb.
-  const thumbLabel = props["aria-label"];
+  // A generic fallback name beats no name: it keeps a future label-less
+  // Slider from silently failing axe.
   const thumbLabelledBy = props["aria-labelledby"];
+  const thumbLabel = props["aria-label"] ?? (thumbLabelledBy ? undefined : t("common.slider"));
 
   return (
     <SliderPrimitive.Root

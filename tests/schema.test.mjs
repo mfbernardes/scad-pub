@@ -284,6 +284,36 @@ test("validates the optional help (single-pane and tabbed) shape", () => {
     () => validateSchema({ ...validBase(), help: { intro: "x" } }),
     /'help' must provide/
   );
+  // a tab may carry an optional, unique id.
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      help: { tabs: [{ id: "one", label: "One", sections: [{ title: "T", body: "B" }] }] },
+    })
+  );
+  // "overview" is reserved for the synthetic Overview tab.
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        help: { tabs: [{ id: "overview", label: "One", sections: [{ title: "T", body: "B" }] }] },
+      }),
+    /'help\.tabs\[0\]\.id' is "overview", which is reserved/
+  );
+  // duplicate tab ids are rejected.
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        help: {
+          tabs: [
+            { id: "a", label: "One", sections: [{ title: "T", body: "B" }] },
+            { id: "a", label: "Two", sections: [{ title: "T", body: "B" }] },
+          ],
+        },
+      }),
+    /'help\.tabs\[1\]\.id' \("a"\) duplicates an earlier tab's id/
+  );
 });
 
 test("validates the notices' label shape ({ one, other })", () => {
@@ -341,6 +371,71 @@ test("validates the optional appended licenses", () => {
         licenses: [{ name: "Lib", license: "MIT", copyright: "(c)", url: "https://x" }],
       }),
     /missing required string 'licenseUrl'/
+  );
+});
+
+test("accepts LocalizableText object-form values for every touched field", () => {
+  // popup.header/body/button/footnote, fileImport.note, notices[].label.one/
+  // other, licenses[].note and designs[].label/group may each be a plain
+  // string (already covered elsewhere in this file) OR an object of locale
+  // tag -> string; validateSchema only guards the SHAPE (every value a
+  // string), not gen-schema's stricter build-time invariants (default tag
+  // present, tags ⊆ languages) — see isLocalizableText's own comment.
+  assert.doesNotThrow(() =>
+    validateSchema({
+      ...validBase(),
+      designs: [
+        {
+          id: "x",
+          label: { en: "X", de: "Y" },
+          group: { en: "Group", de: "Gruppe" },
+          file: "x.scad",
+          sections: [],
+          params: [],
+          presets: [],
+        },
+      ],
+      popup: {
+        header: { en: "Hi", de: "Hallo" },
+        body: { en: "Body", de: "Text" },
+        mode: "once",
+        button: { en: "OK", de: "OK" },
+        footnote: { en: "Note", de: "Hinweis" },
+      },
+      fileImport: { note: { en: "Note", de: "Hinweis" } },
+      notices: [{ marker: "alert", label: { one: { en: "alert", de: "Warnung" }, other: { en: "alerts", de: "Warnungen" } } }],
+      licenses: [
+        {
+          name: "Lib",
+          license: "MIT",
+          copyright: "(c) X",
+          url: "https://x",
+          licenseUrl: "https://x/LICENSE",
+        },
+      ],
+    })
+  );
+  // A design's label must be present and shape-valid either way.
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        designs: [{ id: "x", label: 5, file: "x.scad", sections: [], params: [], presets: [] }],
+      }),
+    /design 'x' 'label' must be a non-empty string, or an object of locale: string pairs/
+  );
+  assert.throws(
+    () =>
+      validateSchema({
+        ...validBase(),
+        designs: [{ id: "x", label: "X", group: 5, file: "x.scad", sections: [], params: [], presets: [] }],
+      }),
+    /design 'x' 'group' must be a string, or an object of locale: string pairs/
+  );
+  // An object value whose own entries aren't all strings is still rejected.
+  assert.throws(
+    () => validateSchema({ ...validBase(), popup: { header: { en: 5 }, body: "B", mode: "once" } }),
+    /'popup\.header' must be a non-empty string, or an object of locale: string pairs/
   );
 });
 
