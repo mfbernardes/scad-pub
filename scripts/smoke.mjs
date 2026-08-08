@@ -2506,14 +2506,6 @@ async function main() {
     const schema = JSON.parse(
       await readFile(fileURLToPath(new URL("../src/generated/designs.json", import.meta.url)), "utf-8")
     );
-    // Chrome copy comes from the i18n catalogue (src/locales/en.json), which a
-    // deployment overrides per key via the config's `strings` block, so build
-    // the matchers from what the app will ACTUALLY render, not from stock
-    // English. Plural keys carry `#one`/`#other` variants (either may show, so
-    // accept both) with a `{count}` placeholder standing in for a number.
-    const catalogue = JSON.parse(
-      await readFile(fileURLToPath(new URL("../src/locales/en.json", import.meta.url)), "utf-8")
-    );
     // The deployment's default locale (src/lib/i18n.ts's `defaultTag` formula,
     // repeated here rather than imported since that module also pulls in the
     // designs.json JSON-import machinery smoke.mjs doesn't otherwise need).
@@ -2529,6 +2521,26 @@ async function main() {
     // NOT necessarily `defaultTag` — a deployment whose `languages` excludes
     // "en" boots into its own default instead, same as the app does.
     const bootTag = bestFitLocale([PINNED_LOCALE.locale], enabledTags) ?? defaultTag;
+    // Chrome copy comes from the i18n catalogue for the locale the app will
+    // ACTUALLY boot into, not always English (see i18n.ts's `rebind`): for a
+    // non-English `bootTag`, that locale's own bundle merged OVER
+    // `src/locales/en.json` — a key the locale hasn't translated yet still
+    // resolves through English, same fallback `rebind` gives the running app.
+    // Deployment overrides via the config's `strings` block are layered on
+    // top by `uiText` below, so the matchers reflect what the app actually
+    // renders, not stock English.
+    const enCatalogue = JSON.parse(
+      await readFile(fileURLToPath(new URL("../src/locales/en.json", import.meta.url)), "utf-8")
+    );
+    const catalogue =
+      bootTag === "en"
+        ? enCatalogue
+        : {
+            ...enCatalogue,
+            ...JSON.parse(
+              await readFile(fileURLToPath(new URL(`../src/locales/${bootTag}.json`, import.meta.url)), "utf-8")
+            ),
+          };
     // Bound `lxAt` (this file's own mirror of configI18n.ts's `lx`): projects
     // a config-authored `LocalizableText` value (a design's `label`, a
     // `popup` field, …) to the tag this run actually boots into, same
@@ -2537,14 +2549,16 @@ async function main() {
     const designs = schema.designs ?? [];
     for (const d of designs) designLabels[d.id] = lx(d.label);
     const ids = designs.map((d) => d.id);
-    // A `strings` value is either a plain string (the pre-Phase-4 shape,
-    // applies unconditionally) or an object of locale tag -> string (Phase
-    // 4): project the latter onto `bootTag`, falling back to the built-in
-    // English catalogue exactly like a miss on the plain-string form already
-    // did.
+    // A `strings` value is either a plain string (applies to the deployment's
+    // DEFAULT locale only, mirroring i18n.ts's `overridesForLocale` — never
+    // unconditionally, or a `de`-booting deployment's English override would
+    // wrongly apply while German is showing) or an object of locale tag ->
+    // string (applies only when it carries `bootTag`'s own entry). Either
+    // way, a miss falls through to `catalogue`, `bootTag`'s own resolved
+    // text, never straight to English.
     const uiText = (key) => {
       const raw = schema.strings?.[key];
-      if (typeof raw === "string") return raw;
+      if (typeof raw === "string") return bootTag === defaultTag ? raw : catalogue[key] ?? "";
       if (raw && typeof raw === "object" && typeof raw[bootTag] === "string") return raw[bootTag];
       return catalogue[key] ?? "";
     };
