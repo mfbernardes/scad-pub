@@ -220,9 +220,9 @@ export interface Design {
    *  Null/absent hides the "Design guide" affordance. */
   doc?: string | null;
   /**
-   * Locale tags this design has a per-locale `@doc` translation for
-   * (`<design>.doc.<tag>.md`, see docs/config.md "Design translations"),
-   * sorted. Absent/empty when none exist. DesignDocModal fetches
+   * Locale tags this design has a per-locale `@doc` translation for (a file
+   * beside the doc itself, see docs/config.md "Translating a design's own
+   * doc"), sorted. Absent/empty when none exist. DesignDocModal fetches
    * `<id>-doc.<tag>.md` instead of `doc` when the active tag is listed here.
    */
   docLocales?: string[];

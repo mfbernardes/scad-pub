@@ -78,6 +78,24 @@ test("run(): reports per-class translated/total coverage for a partially-transla
   assert.ok(incomplete >= 1);
 });
 
+test("run(): a doc translation beside the doc file (not the design's basename) counts toward doc coverage and is stamped", () => {
+  const src = coverageFixture();
+  // 'd-doc.md' is the base doc (coverageFixture); the translation sits
+  // beside IT, named 'd-doc.de.md' — not 'd.doc.de.md' beside the design.
+  writeFileSync(join(src, "d-doc.de.md"), "# D\n\nDie Basisdokumentation.\n");
+
+  const { text } = run({ configPath: join(src, "c.config.json") });
+  assert.match(text, /doc\s+1\/1/);
+
+  const stamped = run({ configPath: join(src, "c.config.json"), stamp: true });
+  assert.match(stamped.text, /Wrote\/updated stamps for 1 design\(s\)\./);
+  const stamps = JSON.parse(readFileSync(join(src, "d.strings.stamps.json"), "utf-8"));
+  assert.equal(
+    stamps.de.doc,
+    createHash("sha256").update(readFileSync(join(src, "d-doc.md"), "utf-8"), "utf8").digest("hex")
+  );
+});
+
 test("run(): full coverage across every field class reports 0 incomplete pairs", () => {
   const src = mkdtempSync(join(tmpdir(), "i18n-status-full-"));
   writeFileSync(

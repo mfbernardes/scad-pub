@@ -120,8 +120,9 @@ export function translatableFields(d) {
     push("presets", `presets.${name}`, name, (s) => s?.presets?.[name] !== undefined);
   }
 
-  // `doc`'s "sidecar" is a whole sibling FILE (`<design>.doc.<tag>.md`), not a
-  // JSON key: coverage/drift for it are checked against `docLocales`/a
+  // `doc`'s "sidecar" is a whole sibling FILE beside the doc itself (a
+  // shipped locale tag inserted before its extension), not a JSON key:
+  // coverage/drift for it are checked against `docLocales`/a
   // separately-hashed doc file, not `has()` — see `isCovered`/stamp callers
   // below, which special-case `cls === "doc"` rather than calling `has()`.
   if (d.docSourceText != null) push("doc", "doc", d.docSourceText, null);

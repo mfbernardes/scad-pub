@@ -30,30 +30,44 @@
 // controls CONFIG_DIR is assumed to also control what it points at.
 import { readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
 import { dirname, join, resolve, relative, sep } from "node:path";
+// Data-only, imported directly under Node's type stripping (see
+// gen-schema.mjs's own import of this module for why that's safe).
+import { LOCALE_TAGS } from "../../src/lib/localeRegistry.ts";
 
 // A `use <path>` / `include <path>` dependency directive.
 const DEP_RE = /^\s*(?:use|include)\s*<([^>]+)>/;
+
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Design-translation sidecar filename shapes: `<design>.strings.<tag>.json`
 // (see docs/config.md "Design translations" and scripts/lib/design-strings.mjs),
 // its `<design>.strings.stamps.json` freshness-stamp sibling (the literal tag
 // "stamps" already matches the first alternative — no separate pattern
-// needed), and `<design>.doc.<tag>.md` per-locale `@doc` translations (see
-// gen-schema.mjs's buildDesigns), plus a config text deployment's own
-// `<config-basename>.text.stamps.json` freshness stamp (scripts/i18n-status.mjs
-// `--stamp`, scripts/lib/config-text.mjs, docs/config.md "Localizing config
-// text") — the same idea one level up: it sits beside the CONFIG, not a
-// design, but SOURCE and CONFIG_DIR coincide often enough (`source: "."`)
-// that a broad glob can still reach it. None of these are ever bundled:
-// they're authored/derived translation text, not render input, and reaching
-// public/scad/ (hence renderHash) would invalidate every deployment's
-// persisted geometry cache on a translation edit that cannot affect a single
-// triangle. This is the one place a broad config `assets` glob (`**/*.json`,
-// say) could otherwise sweep one in. Case-insensitive for the same reason
-// gen-schema.mjs's own sidecar scan is: a case-insensitive filesystem (macOS,
-// Windows) would otherwise let a wrongly-cased sidecar (`widget.Strings.DE.json`)
-// slip past this exclusion and get bundled.
-const SIDECAR_RE = /\.(?:strings\.[A-Za-z0-9-]+\.json|doc\.[A-Za-z0-9-]+\.md|text\.stamps\.json)$/i;
+// needed), and a per-locale `@doc` translation, named by inserting a shipped
+// locale tag before the doc file's own extension (`nameplate.de.md` beside
+// `nameplate.md`, see gen-schema.mjs's buildDesigns) — unlike the `.strings.`
+// sidecar, this carries no fixed infix to key off, so the exclusion is keyed
+// off the REGISTRY's tag list instead; a broad glob could otherwise sweep in
+// a translation for a doc it never even sees, since this module has no
+// per-design context to check the base against. Plus a config text
+// deployment's own `<config-basename>.text.stamps.json` freshness stamp
+// (scripts/i18n-status.mjs `--stamp`, scripts/lib/config-text.mjs,
+// docs/config.md "Localizing config text") — the same idea one level up: it
+// sits beside the CONFIG, not a design, but SOURCE and CONFIG_DIR coincide
+// often enough (`source: "."`) that a broad glob can still reach it. None of
+// these are ever bundled: they're authored/derived translation text, not
+// render input, and reaching public/scad/ (hence renderHash) would
+// invalidate every deployment's persisted geometry cache on a translation
+// edit that cannot affect a single triangle. This is the one place a broad
+// config `assets` glob (`**/*.json`, say) could otherwise sweep one in.
+// Case-insensitive for the same reason gen-schema.mjs's own sidecar scan is:
+// a case-insensitive filesystem (macOS, Windows) would otherwise let a
+// wrongly-cased sidecar (`widget.Strings.DE.json`) slip past this exclusion
+// and get bundled.
+const SIDECAR_RE = new RegExp(
+  `\\.(?:strings\\.[A-Za-z0-9-]+\\.json|(?:${LOCALE_TAGS.map(escapeRegExp).join("|")})\\.md|text\\.stamps\\.json)$`,
+  "i"
+);
 
 /**
  * Build the SOURCE-bound asset resolution helpers used by generate().
