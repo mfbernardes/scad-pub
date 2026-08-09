@@ -11,8 +11,8 @@ The single declarative description of the config's surface: every top-level key,
 key inside the handful that are themselves small nested objects. It is data, not
 behaviour. Three consumers read it:
 
-1. `gen-schema.mjs` derives `KNOWN_TOP_LEVEL_KEYS` — top-level unknown-key rejection —
-   from `Object.keys(CONFIG_SPEC)`.
+1. `config-spec.mjs` itself derives `KNOWN_TOP_LEVEL_KEYS` from `Object.keys(CONFIG_SPEC)`;
+   `gen-schema.mjs` imports it for top-level unknown-key rejection.
 2. `config-parsers.mjs`'s `applyGroupSpec` walks the `ui`, `viewer`, `render`, `fileImport`
    and `popup` nodes' `properties` to check and default each field; `gen-schema.mjs`'s
    `resolveDesignList` reuses it per `designs[]` entry against that entry's `presets`

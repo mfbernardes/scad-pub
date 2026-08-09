@@ -76,6 +76,8 @@ function technicalTail(log: string[], max: number): string[] {
     if (assertM) text = assertM[1].trim();
     else {
       const warnM = line.match(WARNING_RE);
+      // Locale-invariant on purpose: raw-log tail, alongside OpenSCAD's own
+      // untranslated ERROR:/WARNING: output.
       if (warnM) text = `Warning: ${warnM[1].trim()}`;
       else {
         const bootM = line.match(BOOTSTRAP_LOG_RE);

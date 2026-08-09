@@ -12,6 +12,9 @@ rule below exists to enforce.
 
 The reason a directive is as permissive as it is lives here — preserve it when editing.
 
+- **`default-src 'self'`** — the fallback for every fetch directive not listed below
+  (`media-src`, `frame-src`, `child-src`, …): anything the policy doesn't name explicitly is
+  same-origin only, so a new resource type added to the app fails closed rather than open.
 - **`script-src 'self' 'wasm-unsafe-eval' <hashes>`** — `'wasm-unsafe-eval'` is required
   for the OpenSCAD-WASM module's own WebAssembly compilation (`worker.ts`). The hashes
   allow-list exactly the inline theme script by content, nothing more. That script's body

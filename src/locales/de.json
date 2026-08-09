@@ -119,7 +119,7 @@
   "sheet.detentFull": "vollständig geöffnet",
   "sheet.handleLabel": "Parameterbereich — {state}. Antippen zum Durchschalten, Pfeil hoch/runter zum Anpassen",
   "settings.title": "Anpassen",
-  "settings.openPanel": "Bereich {label} öffnen",
+  "settings.openPanel": "Parameterbereich „{label}“ öffnen",
   "settings.jumpToSection": "Zum Abschnitt springen",
   "settings.showAllCount#one": "Alle Einstellungen anzeigen ({count} weitere)",
   "settings.showAllCount#other": "Alle Einstellungen anzeigen ({count} weitere)",

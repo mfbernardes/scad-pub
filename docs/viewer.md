@@ -175,10 +175,10 @@ whatever separates them must come from a light with an azimuth of its own. Two d
 choices follow.
 
 **Neither light's azimuth may line up with the camera's.** The default camera sits at
-world azimuth ≈ −53° (`VIEW_DIRECTIONS.isometric`); a light near that azimuth lights the
+world azimuth ≈ −59° (`VIEW_DIRECTIONS.isometric`); a light near that azimuth lights the
 two visible bevel faces almost equally — both lean towards the viewer/light together —
 which is the flat, un-emphasized look this rig replaces. KEY sits on world +X (azimuth 0°)
-and FILL on world −Y (azimuth −90°): respectively ~53° and ~37° from the camera's azimuth,
+and FILL on world −Y (azimuth −90°): respectively ~59° and ~31° from the camera's azimuth,
 and 90° from each other, so between them almost every stroke direction gets a lit bevel
 and a shaded one rather than two equally-grey ones — the vertical stems that dominate
 digits via KEY, the horizontal and curved strokes via FILL. FILL is deliberately the weaker

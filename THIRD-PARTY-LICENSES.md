@@ -53,4 +53,8 @@ These run at build and test time and are not part of the published site, so they
 do not constrain the output: vite, @vitejs/plugin-react (MIT), TypeScript,
 Tailwind CSS + `@tailwindcss/vite` + `tw-animate-css` (MIT, generate the
 stylesheet), `@resvg/resvg-js` (MPL-2.0, rasterizes the PWA icons), Playwright
-(Apache-2.0), axe-core (MPL-2.0), pixelmatch (ISC), pngjs (MIT).
+(Apache-2.0), axe-core (MPL-2.0), pixelmatch (ISC), pngjs (MIT),
+`@xmldom/xmldom` (MIT, build/test-side SVG parsing), fflate (MIT, WASM archive
+extraction), wrangler (MIT OR Apache-2.0) + `@cloudflare/vite-plugin` (MIT, together the
+optional Cloudflare deploy path), ESLint + typescript-eslint + globals (MIT),
+markdownlint-cli2 (MIT), fake-indexeddb (Apache-2.0, test-only IndexedDB).
