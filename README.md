@@ -81,12 +81,14 @@ scripts/
   gen-schema.mjs    parse Customizer params → schema + copy sources + PWA manifest/icons
   fetch-wasm.mjs    download the pinned OpenSCAD WASM snapshot (auto-run by predev/prebuild)
   smoke.mjs         headless end-to-end check of the built app
+  check-*.mjs, e2e-svg-wizard.mjs, i18n-status.mjs, screenshots.mjs, …
+                    the remaining gates and tooling behind the npm scripts in CLAUDE.md
 tests/              node:test unit suite + fixtures + visual baselines
 scadpub.config.json the config: title, branding, designs, help
-.github/workflows/ci.yml  unit tests + build + headless smoke; uploads dist
+.github/workflows/ci.yml  lint + unit tests + build + the check-script gates; uploads dist
 ```
 
-The OpenSCAD WASM is version-pinned in `scripts/wasm-version.mjs` (`PINNED_WASM_VERSION`) and checksum-verified; `scripts/fetch-wasm.mjs` does the actual download. Set `OPENSCAD_VERSION` to fetch a different (unverified: no checksum) version.
+The OpenSCAD WASM is version-pinned in `scripts/wasm-version.mjs` (`PINNED_WASM_VERSION`) and checksum-verified; `scripts/fetch-wasm.mjs` does the actual download. Setting `OPENSCAD_VERSION` to a different version requires a matching `OPENSCAD_SHA256`; without one the fetch refuses to download unless `ALLOW_UNVERIFIED_WASM=1` explicitly opts out of verification.
 
 ## Configure deployments
 
@@ -94,7 +96,7 @@ The configuration docs cover build-time options and OpenSCAD comment annotations
 
 See **[docs/config.md](docs/config.md)** for the full `scadpub.config.json` reference, including theme tokens, title/logo variants, and contextual file import.
 
-See **[docs/annotations.md](docs/annotations.md)** for the `@showIf` and `@collapsed` OpenSCAD annotations.
+See **[docs/annotations.md](docs/annotations.md)** for the full OpenSCAD annotation vocabulary (`@showIf`, `@collapsed`, `@font`, `@svg`, `@review`, and the rest).
 
 ## Develop locally
 
@@ -121,7 +123,7 @@ npm run vis            # compare
 npm run vis -- --update  # rewrite baselines
 ```
 
-CI (`.github/workflows/ci.yml`) runs unit tests, build, smoke test, and visual regression on every push/PR and uploads `dist` as an artifact. Visual regression is gated in CI, so an intentional UI change needs `npm run vis -- --update` and the updated baselines committed alongside it.
+CI (`.github/workflows/ci.yml`) runs lint, unit tests, and build (uploading `dist` as an artifact), then gates deploy on the full check suite: smoke test, visual regression, the Node-floor rebuild (`min-node`), and the `check:scad`/`check:svg`/`check:studio`/`check:dist`/`e2e:svg` scripts. Visual regression is gated in CI, so an intentional UI change needs `npm run vis -- --update` and the updated baselines committed alongside it.
 
 Dependabot (`.github/dependabot.yml`) checks npm and GitHub Actions dependencies weekly, batching routine minor/patch bumps into a single low-noise PR while giving the render-critical three.js (and any major bumps) their own individual PRs for review.
 

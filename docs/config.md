@@ -60,7 +60,7 @@ These keys tell `gen-schema` which `.scad` files and assets to bundle:
 - **`source`**: directory of Customizer-style `.scad` designs, relative to this config file. Defaults to `"."`
 - **`designs`**: explicit list with id, label, and optional `file`. Omit it to auto-discover designs. Set `"heavy": true` to start a design in manual-render mode. `label` (picker text, defaulting to a humanized `id`) is [localizable](#localizing-config-text)
 - **`defaultDesign`**: optional design `id` shown on a visit that carries no `#d=` deep link. A saved session or hash still wins. Must name a configured design; defaults to the first
-- **`assets`**: files or directories to copy verbatim. If omitted, `gen-schema` follows each design’s `use`/`include` graph
+- **`assets`**: files, directories, or glob patterns (`*`/`?`/`**`) to copy verbatim. If omitted, `gen-schema` follows each design’s `use`/`include` graph
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under “Bundled” in the preset picker.
 
 A `designs[]` entry’s own keys get the same unknown-key check as the top level: an unrecognised key fails the build, naming the offending design’s `id` and listing the keys an entry accepts. (A missing or malformed `id` is itself checked first, so that failure is reported on its own rather than as a confusing unknown-key error.)

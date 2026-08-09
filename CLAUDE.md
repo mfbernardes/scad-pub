@@ -52,7 +52,8 @@ npm run screens    # capture every desktop + mobile view of the BUILT app
 - Chromium for smoke/vis/screens: `npx playwright install chromium` on first run.
 - `BASE_PATH=/app/ npm run build` targets a subpath (GitHub Pages sets it from a repo
   variable); `SCADPUB_CONFIG=/path/to/config.json` builds a different deployment.
-- Pre-commit runs `tsc -b` and `npm test` on relevant changes.
+- Pre-commit runs `tsc -b`, `eslint --max-warnings 0` (a hard gate), `npm test` and
+  markdownlint on relevant changes.
 
 ## Everything renderable is generated at build time
 
@@ -161,7 +162,7 @@ pill in the export dock, above the Download button, and that `ReviewDialog` expl
 routes through that dialog rather than exporting anything short of `ready`. The pill mounts on
 both layouts, and on mobile it reappears a second place: `SheetTabs` reuses it inside the
 bottom sheet itself for the Full detent, where the export dock (and its copy of the pill) is
-hidden along with the rest of the floating chrome, see AppShell's `sheetAttentionPill`.
+hidden along with the rest of the floating chrome, see AppShell's `sheetStatusPill`.
 `ActionButtons` used to put an amber marker on Download so mobile could skip the pill and save a
 stacked row over the model; that marker is gone, because a small in-button graphic has to earn
 its contrast against a fill each deployment chooses (this repo's own dark palette put the pair
@@ -172,8 +173,8 @@ at 2.66:1, under 1.4.11's 3:1) and can only say "amber", never what is wrong.
 - **TypeScript 7 and 6 are installed side by side via npm aliases.** TS 7.0 is the native (Go)
   compiler and ships no programmatic API until 7.1, so anything that imports from `typescript`
    (typescript-eslint, peer range still `<6.1.0`) cannot run against it. `package.json`
-  therefore carries `"@typescript/native": "npm:typescript@^7"` (the `tsc` that build and
-  pre-commit use) and `"typescript": "npm:@typescript/typescript6@^6"` (the 6.x API lint
+  therefore carries `"@typescript/native": "npm:typescript@^7.0.2"` (the `tsc` that build and
+  pre-commit use) and `"typescript": "npm:@typescript/typescript6@^6.0.2"` (the 6.x API lint
   resolves, plus a `tsc6` binary). Do not “fix” this back to a plain `typescript` dependency; a
   straight bump to 7.x breaks `npm run lint`. Revisit when typescript-eslint supports the 7.x
   API.

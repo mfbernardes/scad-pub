@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // fetch-wasm.mjs: download the OpenSCAD WebAssembly "web" snapshot into
-// public/wasm/. Pinned to the SAME OpenSCAD version as the test suite
-// (tests/setup_openscad.sh), so in-browser renders match the committed
-// reference geometry. This snapshot ships Manifold and the textmetrics feature.
+// public/wasm/. The single version pin lives in scripts/wasm-version.mjs, so
+// every consumer (this fetch, check:scad, the tests) drives the same build.
+// This snapshot ships Manifold and the textmetrics feature.
 // The .wasm binary (~10 MB) is intentionally not committed.
 //
 // Pure Node (no bash/curl/unzip needed), so it runs the same on Windows, macOS,

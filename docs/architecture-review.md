@@ -7,7 +7,11 @@ content plan: record the July 2026 deep architecture review, and give every hist
 
 Reviews of the runtime app (`src/`), the build pipeline (`scripts/`,
 `vite.config.ts`, `public/sw.js`), and the test/CI setup. The most recent full
-pass ran at `8bd800c` (July 2026).
+pass ran at `8bd800c` (July 2026). Everything below — including counts like the
+test total — describes the tree as of that commit; work landed since (notably
+the i18n subsystem: runtime locale switching, design-translation sidecars,
+config text files, `npm run i18n:status`) postdates the pass and is not
+covered until a future review appends its own findings.
 
 This document has two jobs:
 
