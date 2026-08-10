@@ -59,6 +59,69 @@ test("scadpub.config.text.schema.json is up to date with buildConfigTextSchema",
   );
 });
 
+// `textSuppliable` (config-spec.mjs's own comment on the marker,
+// gen-config-schema.mjs's objectSchema): a field can be genuinely `required`
+// by the real parser (parsePopup, post config-text fold) while still being
+// legitimately ABSENT from the raw scadpub.config.json a deployment with
+// 'text' configured writes — scripts/lib/config-text.mjs's foldPopup fills it
+// in before parsePopup ever runs. The generated schema must not demand the
+// key be present.
+test("popup.header/popup.body are textSuppliable and excluded from the generated schema's 'required'", () => {
+  assert.equal(CONFIG_SPEC.popup.properties.header.required, true);
+  assert.equal(CONFIG_SPEC.popup.properties.header.textSuppliable, true);
+  assert.equal(CONFIG_SPEC.popup.properties.body.required, true);
+  assert.equal(CONFIG_SPEC.popup.properties.body.textSuppliable, true);
+
+  const schema = buildConfigSchema();
+  const popupRequired = schema.properties.popup.required ?? [];
+  assert.ok(!popupRequired.includes("header"), "'popup.header' must not be in the schema's required list");
+  assert.ok(!popupRequired.includes("body"), "'popup.body' must not be in the schema's required list");
+  // Presence is relaxed, but the field itself still isn't nullable — a
+  // text-mode config can OMIT 'popup.header', not set it to null inline.
+  assert.equal(schema.properties.popup.properties.header.type, undefined, "still a string/anyOf shape, no bare object type");
+});
+
+// The regression this schema exists to catch (docs/config-pipeline.md,
+// gen-config-schema.mjs's own file-top comment: "editor autocomplete and
+// typo-catching for the config author"): a schema that rejects the repo's own
+// checked-in config is worse than no schema. Structural only (this repo pins
+// ajv@6/draft-07; the generated schema is draft 2020-12, and a full validator
+// isn't warranted for one 'required'-list check) — walks every node's own
+// `required` array against the real scadpub.config.json, recursing through
+// `properties`/`items`/whichever `anyOf` branch shape-matches the value.
+function schemaBranchForValue(node, value) {
+  if (!node?.anyOf) return node;
+  const isPlainObject = typeof value === "object" && value !== null && !Array.isArray(value);
+  return node.anyOf.find((b) => (isPlainObject ? b.type === "object" || b.properties : b.type !== "object")) ?? node;
+}
+
+function findMissingRequired(node, value, path, missing) {
+  if (value === undefined || value === null) return;
+  const branch = schemaBranchForValue(node, value);
+  const isPlainObject = typeof value === "object" && value !== null && !Array.isArray(value);
+  if (isPlainObject) {
+    for (const key of branch?.required ?? [])
+      if (!(key in value)) missing.push(path ? `${path}.${key}` : key);
+    for (const [key, childNode] of Object.entries(branch?.properties ?? {}))
+      if (key in value) findMissingRequired(childNode, value[key], path ? `${path}.${key}` : key, missing);
+  } else if (Array.isArray(value) && branch?.items) {
+    value.forEach((item, i) => findMissingRequired(branch.items, item, `${path}[${i}]`, missing));
+  }
+}
+
+test("scadpub.config.schema.json's 'required' lists are satisfiable by the repo's own scadpub.config.json", () => {
+  const schema = JSON.parse(readFileSync(join(ROOT, "scadpub.config.schema.json"), "utf-8"));
+  const config = JSON.parse(readFileSync(join(ROOT, "scadpub.config.json"), "utf-8"));
+  const missing = [];
+  findMissingRequired(schema, config, "", missing);
+  assert.deepEqual(
+    missing,
+    [],
+    `scadpub.config.json omits key(s) the generated schema marks 'required': ${missing.join(", ")} — ` +
+      "either the config is genuinely broken, or the corresponding config-spec.mjs field needs 'textSuppliable'"
+  );
+});
+
 // Every key CONFIG_SPEC knows about, flattened to bare names (not paths):
 // the same name reused at different nesting levels (e.g. `id` on the config
 // itself and on a `designs[]` entry) only needs to be documented once.

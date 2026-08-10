@@ -1088,7 +1088,7 @@
       ],
       "properties": {
         "header": {
-          "description": "Dialog title. Localizable, see docs/config.md.",
+          "description": "Dialog title. Localizable, see docs/config.md. May be omitted here — a deployment with the top-level 'text' key configured supplies it from a text file instead (see docs/config.md \"Localizing config text\").",
           "anyOf": [
             {
               "type": "string"
@@ -1102,7 +1102,7 @@
           ]
         },
         "body": {
-          "description": "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'. Localizable.",
+          "description": "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'. Localizable. May be omitted here — a deployment with the top-level 'text' key configured supplies it from a text file instead (see docs/config.md \"Localizing config text\").",
           "anyOf": [
             {
               "type": "string"
@@ -1175,10 +1175,6 @@
           ]
         }
       },
-      "required": [
-        "header",
-        "body"
-      ],
       "additionalProperties": false
     },
     "help": {

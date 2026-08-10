@@ -82,16 +82,35 @@ function addNull(schema) {
 // `viewer`, `render`, `render.cache`, `popup`, `ui.afterExport`, and the
 // best-effort shapes for the bespoke/`custom` array-of-object and
 // object-of-object keys (colors, designs[], notices[], licenses[]).
+// Appended to a `textSuppliable` field's own description (config-spec.mjs's
+// comment on the marker has the full rationale): noted on the field itself,
+// not just left to the reader to infer from its absence in `required`.
+const TEXT_SUPPLIABLE_NOTE =
+  "May be omitted here — a deployment with the top-level 'text' key configured supplies it from a text " +
+  'file instead (see docs/config.md "Localizing config text").';
+
 function objectSchema(node) {
   const properties = {};
   const required = [];
   for (const [key, field] of Object.entries(node.properties)) {
     let fieldSchema = nodeToSchema(field);
     // Every field is nullable UNLESS it's genuinely required (see addNull's
-    // comment and config-spec.mjs's file-top one for the marker).
+    // comment and config-spec.mjs's file-top one for the marker). This is
+    // unaffected by `textSuppliable` below: a text-mode config still can't
+    // set the field to `null` inline, only omit it, so nullability stays
+    // keyed off `required` alone.
     if (!field.required) fieldSchema = addNull(fieldSchema);
+    if (field.textSuppliable) {
+      fieldSchema = {
+        ...fieldSchema,
+        description: fieldSchema.description ? `${fieldSchema.description} ${TEXT_SUPPLIABLE_NOTE}` : TEXT_SUPPLIABLE_NOTE,
+      };
+    }
     properties[key] = fieldSchema;
-    if (field.required) required.push(key);
+    // `textSuppliable` suppresses ONLY presence (this group's `required`
+    // list), not the field's own nullability above: a raw config validly
+    // OMITS the key when text-supplied, but still can't set it to `null`.
+    if (field.required && !field.textSuppliable) required.push(key);
   }
   const schema = { type: "object", properties };
   if (required.length) schema.required = required;
