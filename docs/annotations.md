@@ -75,7 +75,7 @@ Expression syntax:
 | `name == value` | `name` equals `value` |
 | `name != value` | `name` differs from `value` |
 
-`value` is a bare word, quoted string, number, or `true`/`false`. Combine with `&&` and `||` (OR of ANDs). A malformed expression fails safe: the control stays visible.
+`value` is a bare word, quoted string, number, or `true`/`false`. Combine with `&&` and `||` (OR of ANDs). A malformed expression — or one that references a parameter that doesn't exist — fails the build with a file:line error. The runtime keeps a control visible only as a backstop, for a schema built by an older or bypassed generator that slipped past that check.
 
 `@show-if` (with a hyphen) is accepted as an alias, case-insensitively.
 
@@ -101,7 +101,8 @@ When `ui.essentials` is enabled, parameters marked `// @advanced` start hidden
 behind **Show all settings**. Put the annotation in a parameter’s comment block
 to mark one parameter, or directly above a section header to mark the entire
 section. Unmarked parameters are essential by default. The annotation affects
-only the browser UI; every value is still sent to OpenSCAD.
+only the browser UI; every value is still sent to OpenSCAD. `// @advanced` takes
+no arguments: any trailing text on the line fails the build.
 
 ## Font selectors (`// @font`)
 
@@ -113,7 +114,7 @@ Mark a string parameter as a font selector. In the app, it renders as a **font d
 font = "Brand Display:style=Regular";
 ```
 
-The annotation is required. There is no name-based auto-detection, so ScadPub treats a param as a font selector only when you mark it `// @font`.
+The annotation is required. There is no name-based auto-detection, so ScadPub treats a param as a font selector only when you mark it `// @font`. It is valid only on a `string` or enum (`// [..]` dropdown) parameter; `@font` on any other type fails the build.
 
 It applies to both **free-text** string params and `// [..]` enum **dropdowns** of fixed font choices:
 
