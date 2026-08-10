@@ -36,6 +36,9 @@ export function useAppNotices({
       toast.error(t("notice.bundleStale"), {
         id: "bundle-stale",
         duration: Infinity,
+        // Reload is the only way out: a stale bundle can't safely keep
+        // running, so this one toast overrides the app-wide close button.
+        closeButton: false,
         action: { label: t("notice.reload"), onClick: forceUpdate },
       });
   }, [bundleStale, forceUpdate, tag]);
@@ -47,6 +50,11 @@ export function useAppNotices({
         duration: Infinity,
         action: { label: t("notice.reload"), onClick: applyUpdate },
         cancel: { label: t("notice.later"), onClick: dismissUpdate },
+        // The app-wide close button (✕) must behave like "Later", or the
+        // toast just resurrects on the next render with no way to keep it
+        // dismissed: applyUpdate/dismissUpdate are unstable identities, so
+        // this effect re-fires on every App render while updateReady holds.
+        onDismiss: dismissUpdate,
       });
   }, [updateReady, bundleStale, applyUpdate, dismissUpdate, tag]);
 
@@ -57,6 +65,9 @@ export function useAppNotices({
       toast(t("notice.offline"), {
         id: "offline",
         duration: Infinity,
+        // This is a live status, not a dismissible notice: the ✕ must not be
+        // able to hide "you're offline" while it's still true.
+        closeButton: false,
       });
     else toast.dismiss("offline");
   }, [online, tag]);

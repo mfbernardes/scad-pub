@@ -20,7 +20,9 @@ import { isCoarsePointer } from "../lib/pointer";
 import { t } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
 
-const HINT_SEEN_KEY = ns("hint.viewer.v1");
+// v2: the hint copy gained the "Tab in to use keyboard controls" mention, so
+// a returning visitor who dismissed v1 gets shown the new copy once too.
+const HINT_SEEN_KEY = ns("hint.viewer.v2");
 // How long the hint stays up before auto-fading if the visitor never touches
 // the viewer: generous enough to read a short sentence, short enough not to
 // linger indefinitely over the model.
@@ -72,7 +74,7 @@ export function ViewerGestureHint({ resultOk, suppressed = false }: { resultOk: 
   return (
     <div
       aria-hidden="true"
-      className="viewer-hint pointer-events-none whitespace-nowrap rounded-(--radius-sm) border border-(color:--glass-border) bg-(--glass-bg) px-3 py-[0.4rem] text-[0.78rem] text-muted-foreground shadow-(--elevation) transition-opacity duration-300 motion-reduce:transition-none"
+      className="viewer-hint pointer-events-none rounded-(--radius-sm) border border-(color:--glass-border) bg-(--glass-bg) px-3 py-[0.4rem] text-center text-[0.78rem] text-muted-foreground shadow-(--elevation) transition-opacity duration-300 motion-reduce:transition-none"
     >
       {text}
     </div>

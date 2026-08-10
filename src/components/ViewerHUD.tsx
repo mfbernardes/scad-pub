@@ -174,7 +174,10 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
               // native <button> (PopoverTrigger needs the ref), which means it
               // gets none of shadcn Button's focus styling either. Same recipe
               // as ViewPicker's trigger, the desktop twin of this control.
-              "inline-flex items-center justify-center outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-brand data-[state=open]:text-brand"
+              // Full-opacity ring: this button floats over --viewer-bg, where
+              // the app-wide /80 composites to 2.99:1 in light (under SC
+              // 1.4.11's 3:1).
+              "inline-flex items-center justify-center outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring data-[state=open]:border-brand data-[state=open]:text-brand"
             )}
             aria-label={triggerLabel}
             title={triggerLabel}

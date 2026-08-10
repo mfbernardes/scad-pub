@@ -18,7 +18,7 @@ import { cn } from "../lib/utils";
 // few icon controls that can't be an IconButton: e.g. a Popover trigger that
 // needs to compose its own asChild ref target. Match it without repeating it.
 export const ICON_BUTTON_CLASS =
-  "icon-btn size-8 rounded-(--radius-sm) p-[0.35rem] bg-muted border hover:border-brand";
+  "icon-btn size-8 rounded-(--radius-sm) p-[0.35rem] bg-muted border-input border hover:border-brand";
 
 interface Props {
   label: string;

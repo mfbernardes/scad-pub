@@ -79,13 +79,20 @@ export function DesignDocModal({
   return (
     <Modal title={t("docModal.title", { label: design.label })} onClose={onClose}>
       <div className={DOC_BODY} tabIndex={0}>
-        {current?.error ? (
-          <p className="text-[0.88rem] text-muted-foreground">{t("docModal.loadFailed")}</p>
-        ) : current?.text == null ? (
-          <p className="text-[0.88rem] text-muted-foreground">{t("docModal.loading")}</p>
-        ) : (
-          <Markdown body={current.text} />
-        )}
+        {/* The status region stays mounted with its text swapped: a region
+            inserted already containing its text is the case VoiceOver drops.
+            The fetched markdown renders outside it — a live region over the
+            doc body would read the entire document aloud. */}
+        <div role="status" aria-live="polite">
+          {current?.error ? (
+            <p className="text-[0.88rem] text-muted-foreground">{t("docModal.loadFailed")}</p>
+          ) : current?.text == null ? (
+            <p className="text-[0.88rem] text-muted-foreground">{t("docModal.loading")}</p>
+          ) : (
+            <p className="sr-only">{t("docModal.loaded")}</p>
+          )}
+        </div>
+        {current != null && !current.error && current.text != null && <Markdown body={current.text} />}
       </div>
     </Modal>
   );

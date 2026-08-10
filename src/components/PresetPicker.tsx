@@ -253,18 +253,26 @@ export function PresetPicker({
       // hardcoded-English `.message`, which would otherwise land untranslated
       // inside this (translated) toast. Any other error (malformed JSON, …)
       // keeps its generic `.message` when it's an Error, or the catalogue's
-      // locale-neutral fallback reason otherwise.
+      // locale-neutral fallback reason otherwise. duration: Infinity
+      // (WCAG 3.3.1) + a stable id: repeated failures replace this toast
+      // rather than stacking.
       const reason =
         err instanceof ParameterSetsFormatError
           ? t("presets.importNotParameterSets")
           : err instanceof Error
             ? err.message
             : t("presets.importInvalidReason");
-      toast.error(t("presets.importParseError", { name: file.name, reason }));
+      toast.error(t("presets.importParseError", { name: file.name, reason }), {
+        id: "preset-import-error",
+        duration: Infinity,
+      });
       return;
     }
     if (parsed.length === 0) {
-      toast.error(t("presets.importEmpty", { name: file.name }));
+      toast.error(t("presets.importEmpty", { name: file.name }), {
+        id: "preset-import-error",
+        duration: Infinity,
+      });
       return;
     }
     const collisions = parsed.map((s) => s.name).filter((name) => userPresets.includes(name));
@@ -360,7 +368,7 @@ export function PresetPicker({
             target floor the dock buttons and sheet tabs share; `ml-auto` pins
             it to the end when there is no save field to push it there. */}
         <PopoverTrigger
-          className="ml-auto inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-(--radius-sm) border-none bg-transparent text-muted-foreground outline-none transition-[color,box-shadow] hover:text-brand focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:text-brand"
+          className="ml-auto inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-(--radius-sm) border-none bg-transparent text-muted-foreground outline-none transition-[color,box-shadow] hover:text-brand focus-visible:ring-[3px] focus-visible:ring-ring/80 data-[state=open]:text-brand"
           aria-label={t("presets.manage")}
           title={t("presets.manage")}
         >
@@ -490,7 +498,11 @@ export function PresetPicker({
                       {name}
                     </button>
                     <button
-                      className="shrink-0 rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.2rem] text-[0.8rem] text-muted-foreground enabled:hover:bg-muted enabled:hover:text-warn"
+                      // pointer-coarse:min-h-11: matches ParamForm's own
+                      // missing-font action links, which raise this same
+                      // ~22px control to the coarse-pointer target floor
+                      // without touching the fine-pointer (mouse) size.
+                      className="inline-flex shrink-0 items-center rounded-(--radius-sm) border border-transparent bg-transparent px-[0.45rem] py-[0.2rem] pointer-coarse:min-h-11 text-[0.8rem] text-muted-foreground enabled:hover:bg-muted enabled:hover:text-warn"
                       onClick={() => setDeleteTarget(name)}
                       aria-label={t("presets.deleteAria", { name })}
                       title={t("presets.deleteTitle", { name })}

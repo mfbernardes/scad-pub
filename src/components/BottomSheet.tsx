@@ -362,15 +362,26 @@ export function BottomSheet({
   }, [heightFor, cancelHeightFrame, setDetent]);
 
   const onHandleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "ArrowUp") {
+    // ARIA slider pattern: ArrowRight joins ArrowUp (increase), ArrowLeft
+    // joins ArrowDown (decrease). All four arrows preventDefault, like
+    // Home/End below, so the sheet body doesn't scroll under the keypress.
+    if (e.key === "ArrowUp" || e.key === "ArrowRight") {
+      e.preventDefault();
       const idx = DETENT_ORDER.indexOf(detentRef.current);
       if (idx < DETENT_ORDER.length - 1) setDetent(DETENT_ORDER[idx + 1]);
-    } else if (e.key === "ArrowDown") {
+    } else if (e.key === "ArrowDown" || e.key === "ArrowLeft") {
+      e.preventDefault();
       const idx = DETENT_ORDER.indexOf(detentRef.current);
       if (idx > 0) setDetent(DETENT_ORDER[idx - 1]);
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       cycleDetent();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      setDetent(DETENT_ORDER[0]);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      setDetent(DETENT_ORDER[DETENT_ORDER.length - 1]);
     }
     // Escape is deliberately NOT handled here. The document-level trap below
     // owns it: both handlers used to fire for one keypress, running
@@ -554,12 +565,22 @@ export function BottomSheet({
               {t("sheet.done")}
             </button>
           )}
-          {/* Drag handle: single visible control; tap cycles, arrow keys resize. */}
+          {/* Drag handle: single visible control; tap cycles, arrow keys resize
+              (Home/End jump to the lowest/highest detent). role="slider", not
+              "button" (WCAG 4.1.2): it has an exposed current value (the
+              detent), and only a slider role guarantees AT announces that
+              value changing; aria-valuetext names it (DETENT_LABEL) rather
+              than exposing just the index. */}
           <div
             className="sheet-handle"
-            role="button"
+            role="slider"
             tabIndex={0}
-            aria-label={t("sheet.handleLabel", { state: t(DETENT_LABEL[detent]) })}
+            aria-orientation="vertical"
+            aria-valuemin={0}
+            aria-valuemax={DETENT_ORDER.length - 1}
+            aria-valuenow={DETENT_ORDER.indexOf(detent)}
+            aria-valuetext={t(DETENT_LABEL[detent])}
+            aria-label={t("sheet.handleLabel")}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}

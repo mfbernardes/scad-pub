@@ -155,7 +155,7 @@ export function SvgPrepareControl({ name, svg, value, label, onChange, available
               onClick={open}
               onPointerEnter={preloadSvgWizard}
               onFocus={preloadSvgWizard}
-              className="inline-flex cursor-pointer items-center gap-[0.4rem] rounded-(--radius-sm) border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground focus-visible:outline-offset-2"
+              className="inline-flex cursor-pointer items-center gap-[0.4rem] rounded-(--radius-sm) border border-input bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground focus-visible:outline-offset-2"
               aria-label={t("svg.prepareForAria", { label })}
             >
               <UploadIcon size={14} aria-hidden="true" /> {t("svg.prepareCta")}

@@ -49,7 +49,7 @@ export function LanguageSelect({ collapse = false }: Props) {
         title={t("lang.current", { name: current.label })}
         className={cn(
           ICON_BUTTON_CLASS,
-          "lang-select inline-flex w-auto items-center gap-1 border bg-muted px-[0.4rem] text-xs font-semibold uppercase shadow-none hover:border-brand focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          "lang-select inline-flex w-auto items-center gap-1 border bg-muted px-[0.4rem] text-xs font-semibold uppercase shadow-none hover:border-brand focus-visible:ring-[3px] focus-visible:ring-ring/80"
         )}
       >
         <LanguageIcon size={14} aria-hidden="true" />

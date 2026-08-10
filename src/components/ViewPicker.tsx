@@ -16,7 +16,7 @@ import { useLocale } from "../lib/localeStore";
  *  viewer HUD (IconButtons get it via className; the picker trigger below
  *  carries it directly). */
 export const HUD_GLASS_BTN =
-  "p-[0.45rem] bg-(--glass-bg) border-(color:--glass-border) shadow-(--elevation)";
+  "p-[0.45rem] bg-(--glass-bg) border-(color:--hud-border) shadow-(--elevation)";
 
 interface Props {
   /** The currently-applied view (checkmarked in the menu). */
@@ -45,7 +45,11 @@ export function ViewPicker({ view, onSelect }: Props) {
             <button
               type="button"
               className={cn(
-                "icon-btn size-8 inline-flex items-center justify-center cursor-pointer outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                // Full-opacity ring, not the app-wide /80: this button floats
+                // over --viewer-bg, where /80 composites to 2.99:1 in light
+                // (under SC 1.4.11's 3:1), unlike the primitives it borrows
+                // its base recipe from.
+                "icon-btn size-8 inline-flex items-center justify-center cursor-pointer outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring",
                 "border rounded-(--radius-sm) hover:border-brand data-[state=open]:border-brand data-[state=open]:text-brand",
                 HUD_GLASS_BTN
               )}

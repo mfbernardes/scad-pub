@@ -75,6 +75,11 @@ const LEVEL_KEY: Record<Finding["level"], string> = {
 // Blocking problems first, then warnings, then informational notes.
 const LEVEL_ORDER: Record<Finding["level"], number> = { ERROR: 0, WARN: 1, INFO: 2 };
 
+// The id the height-error paragraph publishes under, and every invalid height
+// Input's `aria-describedby` points at. One instance of the wizard is ever
+// mounted at a time, so a single static id is safe.
+const HEIGHT_ERROR_ID = "svg-wizard-height-error";
+
 function FindingList({ findings, empty }: { findings: Finding[]; empty: string }) {
   if (findings.length === 0)
     return <p className="text-sm text-muted-foreground">{empty}</p>;
@@ -321,6 +326,9 @@ export function SvgWizard({
                                 placeholder={defaultHeight === null ? "" : String(defaultHeight)}
                                 aria-label={t("svgWizard.regionHeightAria", { id: r.id })}
                                 aria-invalid={badHeights.has(r.id) || undefined}
+                                aria-describedby={
+                                  badHeights.has(r.id) && !blockedByError ? HEIGHT_ERROR_ID : undefined
+                                }
                                 onChange={(e) => setHeight(r.id, e.target.value)}
                               />
                               <span className="text-muted-foreground">{t("common.mm")}</span>
@@ -359,13 +367,23 @@ export function SvgWizard({
               </section>
             )}
 
-            {blockedByHeight && !blockedByError && (
-              <p className="svg-wizard__height-error mt-3 text-sm font-medium text-destructive">
-                {tn("svgWizard.heightError", badHeights.size, {
-                  names: formatList([...badHeights].map((id) => `“${id}”`)),
-                })}
-              </p>
-            )}
+            {/* status, not alert: this re-validates on every keystroke, and an
+                assertive interrupt mid-typing (e.g. "0.5" transiting through
+                the invalid "0") would talk over the visitor's own input. The
+                region stays mounted with its text swapped — a region inserted
+                already containing its text is the case VoiceOver drops. */}
+            <div role="status" aria-live="polite">
+              {blockedByHeight && !blockedByError && (
+                <p
+                  id={HEIGHT_ERROR_ID}
+                  className="svg-wizard__height-error mt-3 text-sm font-medium text-destructive"
+                >
+                  {tn("svgWizard.heightError", badHeights.size, {
+                    names: formatList([...badHeights].map((id) => `“${id}”`)),
+                  })}
+                </p>
+              )}
+            </div>
 
             {blockedByError && (
               <p className="mt-3 text-sm font-medium text-destructive">{t("svgWizard.blockedByError")}</p>

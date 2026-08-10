@@ -486,6 +486,70 @@ async function checkIdleRenderCount({ page, check }) {
   );
 }
 
+// Polls the same `data-render-count` hook checkIdleRenderCount reads, until it
+// stops advancing for `quietMs`: OrbitControls' damping keeps issuing render()
+// calls for a few seconds after several arrow presses (rotateLeft's per-key
+// step is generous, see Viewer.tsx's ORBIT_KEY_STEP), so a fixed short wait is
+// unreliable — either it's too long for every check that doesn't need it, or,
+// sized for those, too short to catch this one's damping tail.
+async function waitForIdleRenderCount(page, { quietMs = 400, timeoutMs = 6000 } = {}) {
+  const start = Date.now();
+  let last = await page.$eval(".viewer", (el) => Number(el.dataset.renderCount ?? "0"));
+  let lastChanged = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await page.waitForTimeout(100);
+    const cur = await page.$eval(".viewer", (el) => Number(el.dataset.renderCount ?? "0"));
+    if (cur !== last) {
+      last = cur;
+      lastChanged = Date.now();
+    } else if (Date.now() - lastChanged >= quietMs) {
+      return last;
+    }
+  }
+  return last;
+}
+
+// The viewer mount is a keyboard-operable control (onViewerKeyDown, WCAG
+// 2.1.1): focusing it and pressing arrows must actually move the camera, and
+// a held modifier (the browser's own Ctrl/Cmd +/- zoom, WCAG 1.4.4) must not
+// be hijacked. Screenshot diffing, not a render-count bump: OrbitControls'
+// damping means the visible frame keeps changing for a beat after the
+// keypress, so what matters is that the picture at rest actually moved.
+//
+// `page.screenshot({ clip })` over a `.viewer` element screenshot: the latter
+// scrolls the element into view as part of its own actionability check, which
+// was observed to blur the just-focused mount back to a top-bar control —
+// the bounding box is measured once, since the viewer doesn't move/resize
+// during this check.
+async function checkViewerKeyboardOrbit({ page, check }) {
+  console.log("=== viewer keyboard orbit (WCAG 2.1.1 / 1.4.4) ===");
+  await waitRendered(page, "viewer keyboard orbit"); // deterministic start: no render in flight
+  const viewer = page.locator(".app-shell__desktop .viewer");
+  const box = await viewer.boundingBox();
+  await viewer.focus();
+  check(
+    await page.evaluate(() => document.activeElement?.classList.contains("viewer")),
+    "focusing .viewer lands on the mount itself"
+  );
+
+  await waitForIdleRenderCount(page); // start from a genuinely settled frame
+  const before = await page.screenshot({ clip: box });
+  for (let i = 0; i < 8; i++) await page.keyboard.press("ArrowLeft");
+  await waitForIdleRenderCount(page);
+  const after = await page.screenshot({ clip: box });
+  check(Buffer.compare(before, after) !== 0, "ArrowLeft presses orbit the camera (frame changed)");
+
+  // Modifier guard: Ctrl+- is the browser's own zoom shortcut, not a dolly.
+  const beforeZoom = await page.screenshot({ clip: box });
+  await page.keyboard.press("Control+-");
+  await waitForIdleRenderCount(page);
+  const afterZoom = await page.screenshot({ clip: box });
+  check(
+    Buffer.compare(beforeZoom, afterZoom) === 0,
+    "Ctrl+- on the focused viewer is left to the browser (frame unchanged)"
+  );
+}
+
 // Inject axe-core via evaluate (the DevTools runtime channel), NOT
 // page.addScriptTag: serve-dist now sends the built dist/_headers, whose CSP
 // rightly refuses an inline <script> tag, and loosening the page's policy
@@ -2463,6 +2527,7 @@ const SHARED_PAGE_CHECKS = [
   checkFileImport,
   checkThemeToggle,
   checkIdleRenderCount,
+  checkViewerKeyboardOrbit,
   checkAxe,
   checkEveryDesignRenders,
   checkBundledPresets,

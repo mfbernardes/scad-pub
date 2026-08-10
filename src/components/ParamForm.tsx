@@ -16,7 +16,7 @@ import { clampNumber, committedNumber, finiteDraft, typedCommitValue } from "../
 import { familyOf, normalizeFamily, type InstalledFont } from "../lib/fonts";
 import { fontFallback } from "../lib/fontFallback";
 import { nearestScrollParent } from "../lib/scrollParent";
-import { t } from "../lib/i18n";
+import { t, formatNumber } from "../lib/i18n";
 import { useLocale } from "../lib/localeStore";
 import { EssentialsToggle } from "./EssentialsToggle";
 import { FontImportActions } from "./FontImportActions";
@@ -223,6 +223,24 @@ function revertToBaseline(
   if (bound && bound in baseline) onChange(bound, baseline[bound]);
 }
 
+/**
+ * The persistent, programmatic form of a numeric param's min/max (WCAG 3.3.2):
+ * unlike `clampHint`, which only appears after a commit gets clamped, this is
+ * always available to assistive tech via `aria-describedby`, so the range is
+ * known before a visitor ever gets it wrong. Null when the param has neither
+ * bound (nothing to describe).
+ */
+function rangeHintText(param: Extract<Param, { type: "number" }>): string | null {
+  const { min, max } = param;
+  // Locale-formatted (a German binding renders a decimal comma), like every
+  // other number ParamForm shows.
+  if (min !== undefined && max !== undefined)
+    return t("paramForm.rangeMinMax", { min: formatNumber(min), max: formatNumber(max) });
+  if (min !== undefined) return t("paramForm.rangeMin", { min: formatNumber(min) });
+  if (max !== undefined) return t("paramForm.rangeMax", { max: formatNumber(max) });
+  return null;
+}
+
 function NumberControl({
   param,
   value,
@@ -267,6 +285,9 @@ function NumberControl({
     setDraft(String(v));
     onChange(v);
   };
+
+  const rangeHint = rangeHintText(param);
+  const rangeHintId = `range-hint-${param.name}`;
 
   // Shared by blur and Enter: clamp whatever's left typed, commit it, and
   // normalise the draft text to match (e.g. a raw value beyond the range).
@@ -313,6 +334,7 @@ function NumberControl({
           step={param.step ?? "any"}
           value={draft}
           aria-label={label}
+          aria-describedby={rangeHint ? rangeHintId : undefined}
           onFocus={() => {
             focusedRef.current = true;
           }}
@@ -336,6 +358,11 @@ function NumberControl({
           }}
         />
       </div>
+      {rangeHint && (
+        <span id={rangeHintId} className="sr-only">
+          {rangeHint}
+        </span>
+      )}
       {clampHint && (
         <p className="text-[0.72rem] text-warn" role="status">
           {clampHint}
@@ -675,11 +702,17 @@ export const ParamForm = memo(function ParamForm({ design, values, onChange, sea
           {failure.body && <p className="mt-[0.2rem] pl-[1.1rem] text-muted-foreground">{failure.body}</p>}
         </div>
       )}
-      {groups.length === 0 && (
-        <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
-          {q ? t("paramForm.noMatches", { search }) : t("paramForm.nothingToCustomize")}
-        </p>
-      )}
+      {/* The live region stays mounted with its text swapped in and out: a
+          region inserted already containing its text is the case VoiceOver
+          drops, and a search that zeroes out every group replaces the whole
+          form, so it must announce (WCAG 4.1.3). */}
+      <div role="status" aria-live="polite">
+        {groups.length === 0 && (
+          <p className="px-1 py-5 text-center text-[0.9rem] text-muted-foreground">
+            {q ? t("paramForm.noMatches", { search }) : t("paramForm.nothingToCustomize")}
+          </p>
+        )}
+      </div>
       {groups.map(({ section, params }) => {
         const isOpen = openSections[section] ?? !collapsedDefault.has(section);
         return (
@@ -848,7 +881,7 @@ function ParamLabel({
         {help && <ParamHelp help={help} label={label} />}
       </span>
       {varName && (
-        <code className="param-var shrink-0 font-mono text-[11px] leading-[normal] text-muted-foreground">
+        <code className="param-var shrink-0 font-mono text-[0.6875rem] leading-[normal] text-muted-foreground">
           {varName}
         </code>
       )}

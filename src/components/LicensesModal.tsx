@@ -55,7 +55,7 @@ export function LicensesModal({
               {l.version && (
                 <span className="text-[0.85rem] font-normal text-muted-foreground"> {l.version}</span>
               )}
-              <span className="ml-auto rounded-(--radius-sm) border bg-muted px-2 font-mono text-[11px] leading-[normal] text-brand">
+              <span className="ml-auto rounded-(--radius-sm) border bg-muted px-2 font-mono text-[0.6875rem] leading-[normal] text-brand">
                 {l.license}
               </span>
             </h3>
@@ -79,7 +79,7 @@ export function LicensesModal({
                 <summary className="cursor-pointer text-[0.82rem] text-muted-foreground">
                   {t("licenses.showFullText")}
                 </summary>
-                <pre className="lic-text mt-2 max-h-64 overflow-auto overscroll-contain whitespace-pre-wrap rounded-(--radius-sm) bg-code px-[0.8rem] py-[0.6rem] font-mono text-[11px] leading-[1.45] text-muted-foreground">
+                <pre className="lic-text mt-2 max-h-64 overflow-auto overscroll-contain whitespace-pre-wrap rounded-(--radius-sm) bg-code px-[0.8rem] py-[0.6rem] font-mono text-[0.6875rem] leading-[1.45] text-muted-foreground">
                   {l.text}
                 </pre>
               </details>

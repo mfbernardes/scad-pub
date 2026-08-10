@@ -106,7 +106,7 @@ export function DesignGallery({
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t("designPicker.searchPlaceholder")}
           aria-label={t("designPicker.searchLabel")}
-          className="w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       )}
       {/* The scroll port shows about six cards and the dialog's footnote sits
@@ -276,7 +276,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, gallery = f
       <SelectTrigger
         size="sm"
         aria-label={t("designPicker.title")}
-        className="font-display h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-0"
+        className="font-display h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-[3px] focus-visible:ring-ring/80"
       >
         <SelectValue />
       </SelectTrigger>

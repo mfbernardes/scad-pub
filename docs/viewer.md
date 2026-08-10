@@ -103,6 +103,30 @@ serves both axes because pixels are square: the horizontal world-per-pixel is
 `2·distance·tanHalfH / width`, and with `tanHalfH = aspect·tanHalfV` and
 `aspect = width/height` that reduces to the vertical expression.
 
+## Keyboard operation
+
+`Viewer.tsx`'s `onViewerKeyDown` gives the mount itself (not OrbitControls) arrow-key
+orbit, Shift+arrow pan, and +/- zoom (WCAG 2.1.1): OrbitControls ships its own key
+support (`listenToKeyEvents`), but this app never enables it — the driving reasons
+below are about the *role*, not that omission.
+
+The mount carries `role="group"` with an `aria-roledescription` (not the plain group
+default) rather than `role="application"`. `application` was tried first and reverted: a
+screen reader's browse mode intercepts arrow keys for its own virtual cursor, and
+`application` stops that by handing every key through — including the ones a visitor
+meant for the rest of the page, not the model. That's a focus-mode trap with no upside
+for this feature's actual audience: a sighted keyboard user tabbing to the canvas
+already gets `onKeyDown` regardless of ARIA role, since the browser dispatches the event
+to focus, not to the accessibility tree. `group` + `aria-roledescription` names the
+control for anyone who *does* explore by role without silently rewriting how their AT
+handles every key on the page.
+
+The arrow-key convention (arrow = drag direction, Shift = pan) is chosen to mirror a
+mouse drag on this same element, not OrbitControls' own `listenToKeyEvents` convention
+(arrows pan, Ctrl/Shift/Meta+arrow orbits) — the inverse assignment. Consistency with
+the drag gesture immediately above it on the same surface mattered more than consistency
+with a control scheme this app doesn't otherwise expose.
+
 ## The studio lighting rig
 
 `buildStudioRig` has two branches. The `plain` one is a hemisphere light carrying most of

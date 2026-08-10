@@ -503,16 +503,33 @@ export default function App() {
   // One-time, post-export install nudge: only when the browser actually offers
   // install, the config allows it, and we haven't shown it before. Demoted per
   // the UX plan, never a standing prompt.
+  //
+  // "Shown" and "seen" are deliberately different events: `markSeen` only runs
+  // from a real user action — the install/dismiss buttons, or the toast's own
+  // close button/swipe (`onDismiss`) — so an ignored toast tries again on the
+  // visitor's next export instead of being marked seen on the offer alone.
+  // Belt-and-braces alongside INSTALL_HINT_KEY: storage can be blocked
+  // (private browsing, a hardened profile), and `readLocal` alone would then
+  // let every export re-show the hint. This in-memory flag caps it at once
+  // per page load regardless of whether persistence works.
+  const installHintShownRef = useRef(false);
   const offerInstallHint = useCallback(() => {
     if (!canInstall || installMode === "off") return;
-    if (readLocal(INSTALL_HINT_KEY)) return;
-    // Storage unavailable: skip the hint rather than risk repeating it.
-    if (!writeLocal(INSTALL_HINT_KEY, "1")) return;
+    if (installHintShownRef.current || readLocal(INSTALL_HINT_KEY)) return;
+    installHintShownRef.current = true;
+    const markSeen = () => writeLocal(INSTALL_HINT_KEY, "1");
     toast(t("install.hint"), {
       id: "install-hint",
-      duration: 12000,
-      action: { label: t("install.action"), onClick: () => void promptInstall() },
-      cancel: { label: t("install.dismiss"), onClick: () => {} },
+      duration: Infinity,
+      action: {
+        label: t("install.action"),
+        onClick: () => {
+          markSeen();
+          void promptInstall();
+        },
+      },
+      cancel: { label: t("install.dismiss"), onClick: markSeen },
+      onDismiss: markSeen,
     });
   }, [canInstall, promptInstall]);
 
