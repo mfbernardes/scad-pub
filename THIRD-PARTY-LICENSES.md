@@ -18,7 +18,7 @@ regardless of the licenses below.
 | **OpenSCAD-WASM** (`openscad.js`, `openscad.wasm`) | **GPL-2.0-or-later** (effective floor GPLv3 via CGAL) | <https://github.com/openscad/openscad> — official snapshots at <https://files.openscad.org/snapshots/> |
 | React, react-dom, scheduler, loose-envify, js-tokens | MIT | <https://github.com/facebook/react> |
 | three.js | MIT | <https://github.com/mrdoob/three.js> |
-| Radix UI primitives (`@radix-ui/react-*`: dialog, alert-dialog, popover, select, tabs, slider, switch, checkbox, label, slot) | MIT | <https://github.com/radix-ui/primitives> |
+| Radix UI primitives (`@radix-ui/react-*`: dialog, alert-dialog, popover, select, tabs, slider, switch, checkbox, label, slot, progress, tooltip) | MIT | <https://github.com/radix-ui/primitives> |
 | lucide-react (icons) | ISC | <https://github.com/lucide-icons/lucide> |
 | sonner (toasts) | MIT | <https://github.com/emilkowalski/sonner> |
 | clsx | MIT | <https://github.com/lukeed/clsx> |

@@ -22,6 +22,11 @@ const VERSIONS = {
     react: "19.2.7",
     "react-dom": "19.2.7",
     "@fontsource/atkinson-hyperlegible": "5.2.8",
+    "lucide-react": "1.28.0",
+    sonner: "2.0.7",
+    clsx: "2.1.1",
+    "tailwind-merge": "3.6.0",
+    "class-variance-authority": "0.7.1",
   },
 };
 
@@ -43,6 +48,11 @@ test("each entry's version comes from the build, never a literal", () => {
   assert.equal(entry(list, "three.js").version, "0.185.1");
   assert.equal(entry(list, "React & React-DOM").version, "19.2.7");
   assert.equal(entry(list, "Atkinson Hyperlegible").version, "5.2.8");
+  assert.equal(entry(list, "lucide-react").version, "1.28.0");
+  assert.equal(entry(list, "sonner").version, "2.0.7");
+  assert.equal(entry(list, "clsx").version, "2.1.1");
+  assert.equal(entry(list, "tailwind-merge").version, "3.6.0");
+  assert.equal(entry(list, "class-variance-authority").version, "0.7.1");
 
   // Change the build data and every displayed version follows it.
   const bumped = licenseList({
@@ -68,6 +78,39 @@ test("react and react-dom are reported separately if an install splits them", ()
     packages: { react: "19.2.7", "react-dom": "19.1.0" },
   });
   assert.equal(entry(split, "React & React-DOM").version, "19.2.7 / 19.1.0");
+});
+
+test("the previously-missing bundled runtime packages are all attributed", () => {
+  // The gap this file closes: Radix, lucide-react, sonner, clsx,
+  // tailwind-merge and class-variance-authority all ship in dist/
+  // (package.json "dependencies", THIRD-PARTY-LICENSES.md's bundled-at-runtime
+  // table) but were absent from the modal.
+  const list = licenseList(VERSIONS);
+  const names = list.map((l) => l.name);
+  assert.ok(names.includes("Radix UI primitives"));
+  assert.ok(names.includes("lucide-react"));
+  assert.ok(names.includes("sonner"));
+  assert.ok(names.includes("clsx"));
+  assert.ok(names.includes("tailwind-merge"));
+  assert.ok(names.includes("class-variance-authority"));
+
+  assert.equal(entry(list, "lucide-react").license, "ISC");
+  assert.equal(entry(list, "class-variance-authority").license, "Apache-2.0");
+  for (const name of ["Radix UI primitives", "sonner", "clsx", "tailwind-merge"]) {
+    assert.equal(entry(list, name).license, "MIT");
+  }
+});
+
+test("Radix UI primitives is one grouped entry with no single version claimed", () => {
+  // Covers 12 independently-versioned @radix-ui/react-* packages; showing
+  // none is the deliberate choice (see licenses.ts), not an oversight -
+  // inventing one version, or concatenating all 12, would misrepresent it.
+  const list = licenseList(VERSIONS);
+  const radix = entry(list, "Radix UI primitives");
+  assert.equal(list.filter((l) => l.name === "Radix UI primitives").length, 1);
+  assert.equal(radix.version, undefined);
+  assert.equal(radix.license, "MIT");
+  assert.equal(radix.copyright, "Copyright (c) 2022 WorkOS");
 });
 
 test("the resolver reads the versions actually installed for this build", () => {

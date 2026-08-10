@@ -30,6 +30,23 @@ export const BUNDLED_PACKAGES = [
   "react",
   "react-dom",
   "@fontsource/atkinson-hyperlegible",
+  "@radix-ui/react-alert-dialog",
+  "@radix-ui/react-checkbox",
+  "@radix-ui/react-dialog",
+  "@radix-ui/react-label",
+  "@radix-ui/react-popover",
+  "@radix-ui/react-progress",
+  "@radix-ui/react-select",
+  "@radix-ui/react-slider",
+  "@radix-ui/react-slot",
+  "@radix-ui/react-switch",
+  "@radix-ui/react-tabs",
+  "@radix-ui/react-tooltip",
+  "lucide-react",
+  "sonner",
+  "clsx",
+  "tailwind-merge",
+  "class-variance-authority",
 ];
 
 /**

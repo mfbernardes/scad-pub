@@ -5,6 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { componentVersions, BUNDLED_PACKAGES } from "../scripts/lib/dep-versions.mjs";
@@ -39,4 +40,19 @@ test("resolves against the given checkout, not the process cwd", () => {
   // Same reasoning as the version stamp: ScadPub builds run from a consumer
   // project's directory, so resolution is anchored to the ScadPub checkout.
   assert.deepEqual(componentVersions({ dir: "/nonexistent-checkout" }), {});
+});
+
+test("every package.json runtime dependency is a declared bundled package", () => {
+  // The inverse of licenses.test.mjs's "every bundled package the resolver
+  // reports is a declared dependency": together the two pin BUNDLED_PACKAGES
+  // as the *exact* set of package.json's "dependencies" (everything bundled
+  // into dist/, per this repo's dependencies/devDependencies split), so a new
+  // runtime dependency can't silently ship without a licenses.ts attribution.
+  const { dependencies } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
+  for (const name of Object.keys(dependencies)) {
+    assert.ok(
+      BUNDLED_PACKAGES.includes(name),
+      `${name} is a package.json dependency but missing from BUNDLED_PACKAGES`
+    );
+  }
 });
