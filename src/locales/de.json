@@ -137,7 +137,7 @@
   "render.autoPaused": "Dieses Design braucht länger ({seconds} s), daher ist die Live-Vorschau pausiert — drücken Sie nach Änderungen „Aktualisieren“.",
   "errorBoundary.viewerFailed": "Die 3D-Vorschau konnte nicht angezeigt werden.",
   "toast.shared": "{name} geteilt",
-  "toast.exported": "{name} exportiert",
+  "toast.exported": "{name} heruntergeladen",
   "toast.saved": "{name} gespeichert",
   "render.heavyManualStart": "Dieses Design braucht länger, daher ist die Live-Vorschau pausiert — drücken Sie nach Änderungen „Aktualisieren“.",
   "notice.bundleStale": "Diese Seite läuft mit einer veralteten Version. Zum Aktualisieren neu laden.",
