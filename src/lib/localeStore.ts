@@ -417,12 +417,6 @@ export const localeStore = store;
 // contents, matters below.
 const ENABLED_LOCALES: readonly LocaleMeta[] = LOCALES.filter((locale) => enabledTags.includes(locale.tag));
 
-/** `LocaleMeta` for every locale enabled on this deployment. Same array
- *  reference every call (see `ENABLED_LOCALES`). */
-export function availableLocales(): readonly LocaleMeta[] {
-  return ENABLED_LOCALES;
-}
-
 export interface LocaleSnapshot {
   tag: string;
   dir: "ltr" | "rtl";

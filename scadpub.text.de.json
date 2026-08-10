@@ -2,7 +2,7 @@
   "$schema": "./scadpub.config.text.schema.json",
   "popup": {
     "header": "Willkommen bei ScadPub",
-    "body": "Konfigurieren Sie ein OpenSCAD-Design in Ihrem Browser und exportieren Sie ein druckfertiges Modell — alles läuft lokal.\n\nScadPub ist Open Source: siehe das [Projekt auf GitHub](https://github.com/mfbernardes/scad-pub).",
+    "body": "Konfigurieren Sie ein OpenSCAD-Design in Ihrem Browser und laden Sie ein druckfertiges Modell herunter — alles läuft lokal.\n\nScadPub ist Open Source: siehe das [Projekt auf GitHub](https://github.com/mfbernardes/scad-pub).",
     "footnote": "Alles läuft in Ihrem Browser. Nichts wird hochgeladen."
   },
   "help": {

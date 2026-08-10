@@ -8,8 +8,8 @@
 //
 // Its three consumers and the full vocabulary of the field-descriptor markers
 // (`custom`, `openKeys`, `required`, `collapseEmptyToNull`, `alwaysPresent`,
-// `rootTypeError`) are documented in docs/config-pipeline.md. Add a marker
-// there and here together.
+// `rootTypeError`, `textSuppliable`) are documented in docs/config-pipeline.md.
+// Add a marker there and here together.
 
 // Small factories for the repeated field shapes, still plain data, they only
 // save re-typing the same few keys 30 times over.
@@ -588,9 +588,27 @@ export const CONFIG_SPEC = {
     description: "One-off notice dialog shown over the app on load.",
     rootTypeError: "gen-schema: 'popup' must be an object with 'header', 'body' and an optional 'mode'",
     properties: {
-      header: localizable({ required: true, description: "Dialog title. Localizable, see docs/config.md." }),
+      // `required: true` is the runtime invariant AFTER scripts/lib/config-text.mjs's
+      // fold (parsePopup genuinely throws if either is still missing once the
+      // pipeline reaches it) — but a deployment with the top-level `text` key
+      // configured legitimately omits both here in the RAW file, since
+      // foldPopup fills them in from that deployment's text file(s) before
+      // parsePopup ever runs (see foldPopup's own comment). `textSuppliable`
+      // tells gen-config-schema.mjs's objectSchema to leave both out of this
+      // group's emitted `required` list — presence, not nullability, is what a
+      // text-mode config legitimately relaxes — while a description note
+      // still says where the value can come from instead. Without this, the
+      // schema flagged this repo's OWN scadpub.config.json (which sets
+      // 'popup.mode' only, with 'header'/'body' supplied by
+      // scadpub.text.en.json) as invalid.
+      header: localizable({
+        required: true,
+        textSuppliable: true,
+        description: "Dialog title. Localizable, see docs/config.md.",
+      }),
       body: localizable({
         required: true,
+        textSuppliable: true,
         description: "Dialog message (Markdown subset). Mutually exclusive with 'bodyFile'. Localizable.",
       }),
       // Resolved by gen-schema.mjs's prose-file pre-pass (scripts/lib/prose-files.mjs)

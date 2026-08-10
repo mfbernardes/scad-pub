@@ -36,7 +36,7 @@ file-by-file tour of the diff. Length is not thoroughness.
 npm install
 npm run dev        # predev fetches pinned WASM + regenerates the schema, then vite
 npm test           # node:test unit suite; Node >= 22.18
-npm run build      # prebuild gen-schema + tsc -b + vite build -> dist/
+npm run build      # prebuild fetches pinned WASM + regenerates the schema, then tsc -b + vite build -> dist/
 npm run smoke      # headless axe + end-to-end check of the BUILT app — build first
 npm run vis        # visual regression vs tests/screenshots/ (--update to rebaseline)
 npm run check:studio # builds a viewer.style "studio" variant and measures its lighting
@@ -197,7 +197,7 @@ at 2.66:1, under 1.4.11's 3:1) and can only say "amber", never what is wrong.
   raw palette values so config `colors` overrides keep working. `src/index.css` keeps only
   structural CSS, in a `components` layer below `utilities`, with an `@theme inline` block
   bridging the shadcn `--color-*` tokens onto the existing AA palette.
-- **Keep the script hook classes**: `.status-pill`, `.param-group`, `.file-manager__name`,
+- **Keep the script hook classes**: `.status-strip`, `.param-group`, `.file-manager__name`,
   `.output-console__close`, `.brand-logo` and friends. No stylesheet rule targets them; the
   smoke/vis/capture scripts and the `extraCss` escape hatch do.
 - **UI text goes through the i18n catalogue.** ScadPub’s chrome copy lives in

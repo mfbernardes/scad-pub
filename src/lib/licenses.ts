@@ -56,6 +56,21 @@ SOFTWARE.`;
 const mit = (copyright: string) =>
   `MIT License\n\n${copyright}\n\n${MIT_BODY}`;
 
+// The ISC permission notice (lucide-react's; short enough to inline like MIT's).
+const ISC_BODY = `Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.`;
+
+const isc = (copyright: string) => `ISC License\n\n${copyright}\n\n${ISC_BODY}`;
+
 /**
  * The app's built-in attributions, in display order, with each entry's version
  * taken from the build. Consumer-configured notices are appended after these by
@@ -114,6 +129,66 @@ export function licenseList(versions: BuildVersions = {}): ResolvedSoftwareLicen
       licenseUrl: "https://github.com/facebook/react/blob/main/LICENSE",
       text: mit("Copyright (c) Meta Platforms, Inc. and affiliates."),
       note: t("licenses.note.react"),
+    },
+    {
+      name: "Radix UI primitives",
+      // No single version: this covers 12 independently-versioned
+      // @radix-ui/react-* packages (dialog, alert-dialog, popover, select,
+      // tabs, slider, switch, checkbox, label, slot, progress, tooltip — see
+      // BUNDLED_PACKAGES), each pinned and cross-checked against
+      // package.json, but with no one number that describes them all.
+      license: "MIT",
+      copyright: "Copyright (c) 2022 WorkOS",
+      url: "https://github.com/radix-ui/primitives",
+      licenseUrl: "https://github.com/radix-ui/primitives/blob/main/LICENSE",
+      text: mit("Copyright (c) 2022 WorkOS"),
+    },
+    {
+      name: "lucide-react",
+      version: pkg("lucide-react"),
+      license: "ISC",
+      copyright: "Copyright (c) 2026 Lucide Icons and Contributors",
+      url: "https://github.com/lucide-icons/lucide",
+      licenseUrl: "https://github.com/lucide-icons/lucide/blob/main/LICENSE",
+      text: isc("Copyright (c) 2026 Lucide Icons and Contributors"),
+    },
+    {
+      name: "sonner",
+      version: pkg("sonner"),
+      license: "MIT",
+      copyright: "Copyright (c) 2023 Emil Kowalski",
+      url: "https://github.com/emilkowalski/sonner",
+      licenseUrl: "https://github.com/emilkowalski/sonner/blob/main/LICENSE.md",
+      text: mit("Copyright (c) 2023 Emil Kowalski"),
+    },
+    {
+      name: "clsx",
+      version: pkg("clsx"),
+      license: "MIT",
+      copyright: "Copyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)",
+      url: "https://github.com/lukeed/clsx",
+      licenseUrl: "https://github.com/lukeed/clsx/blob/master/license",
+      text: mit("Copyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)"),
+    },
+    {
+      name: "tailwind-merge",
+      version: pkg("tailwind-merge"),
+      license: "MIT",
+      copyright: "Copyright (c) 2021 Dany Castillo",
+      url: "https://github.com/dcastil/tailwind-merge",
+      licenseUrl: "https://github.com/dcastil/tailwind-merge/blob/main/LICENSE.md",
+      text: mit("Copyright (c) 2021 Dany Castillo"),
+    },
+    {
+      name: "class-variance-authority",
+      version: pkg("class-variance-authority"),
+      license: "Apache-2.0",
+      copyright: "Copyright 2022 Joe Bell",
+      url: "https://github.com/joe-bell/cva",
+      // Apache-2.0 runs to ~200 lines; unlike the MIT/ISC bodies above it
+      // isn't reproduced inline (same call this file makes for OpenSCAD's
+      // GPL text) — licenseUrl is the canonical copy.
+      licenseUrl: "https://github.com/joe-bell/cva/blob/main/LICENSE",
     },
     {
       name: "Liberation Fonts",
