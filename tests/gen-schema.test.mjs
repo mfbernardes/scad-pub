@@ -2644,6 +2644,19 @@ test("only a string or enum param with an explicit @font is flagged isFont", () 
   assert.equal(byName.mode.isFont, undefined);
 });
 
+test("@font on a non-string/non-enum parameter fails instead of silently no-oping", () => {
+  // number
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @font\nsize = 5;\n`),
+    /f\.scad:2: @font on 'size' must be a string or enum parameter \(got type number\)/
+  );
+  // boolean
+  assert.throws(
+    () => paramsOf(`/* [S] */\n// @font\nflag = true;\n`),
+    /f\.scad:2: @font on 'flag' must be a string or enum parameter \(got type boolean\)/
+  );
+});
+
 test("@info marks a param for the viewer panel, with optional label + unit", () => {
   const params = paramsOf(
     `/* [Main] */\n` +

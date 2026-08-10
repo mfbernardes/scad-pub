@@ -466,8 +466,10 @@ function parseAnnotation(content, raw, lineNo, pending, absPath) {
     validateShowIfGrammar(expr, absPath, lineNo);
     pending.showIf = expr;
     pending.showIfLine = lineNo;
-  } else if (FONT_ANNOT_RE.test(content)) pending.font = true;
-  else if (EDITONMODEL_RE.test(content)) {
+  } else if (FONT_ANNOT_RE.test(content)) {
+    pending.font = true;
+    pending.fontLine = lineNo;
+  } else if (EDITONMODEL_RE.test(content)) {
     pending.editOnModel = true;
     pending.editOnModelLine = lineNo;
   } else if (info) {
@@ -784,6 +786,7 @@ export function parseParams(absPath) {
     showIf: null,
     showIfLine: 0,
     font: false,
+    fontLine: 0,
     advanced: false,
     info: null,
     review: null,
@@ -839,9 +842,19 @@ export function parseParams(absPath) {
     // param with an explicit `@font` annotation. The availability check then
     // runs against the known font set. Enums are included so a design can keep
     // the native OpenSCAD `// [...]` dropdown (which the desktop Customizer
-    // renders) and still get the in-app import / fallback affordance.
-    if ((p.type === "string" || p.type === "enum") && pending.font)
+    // renders) and still get the in-app import / fallback affordance. M9: a
+    // type mismatch (the annotation on a number/boolean param, which FontSelect
+    // never renders — see ParamForm's isFontParam) fails the build instead of
+    // silently no-oping.
+    if (pending.font) {
+      if (p.type !== "string" && p.type !== "enum")
+        fail(
+          absPath,
+          pending.fontLine,
+          `@font on '${name}' must be a string or enum parameter (got type ${p.type})`
+        );
       p.isFont = true;
+    }
     if (pending.advanced || sectionAdvanced) p.advanced = true;
     // Surface this param's value in the viewer info panel (see `// @info`).
     if (pending.info) p.info = pending.info;
