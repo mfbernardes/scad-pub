@@ -72,7 +72,7 @@
     },
     "body": {
       "en": "Configure an OpenSCAD design in your browser and export a ready-to-print model — everything runs locally.\n\nScadPub is open source: see the [project on GitHub](https://github.com/mfbernardes/scad-pub).",
-      "de": "Konfigurieren Sie ein OpenSCAD-Design in Ihrem Browser und exportieren Sie ein druckfertiges Modell — alles läuft lokal.\n\nScadPub ist Open Source: siehe das [Projekt auf GitHub](https://github.com/mfbernardes/scad-pub)."
+      "de": "Konfigurieren Sie ein OpenSCAD-Design in Ihrem Browser und laden Sie ein druckfertiges Modell herunter — alles läuft lokal.\n\nScadPub ist Open Source: siehe das [Projekt auf GitHub](https://github.com/mfbernardes/scad-pub)."
     },
     "mode": "dismissible",
     "footnote": {
