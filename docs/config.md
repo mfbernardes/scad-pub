@@ -22,7 +22,7 @@ This representative config shows the major surfaces. The sections below define e
   "designs": [
     { "id": "tag", "label": "Tag", "heavy": false }
   ],                              // omit to auto-discover *.scad in source; presets auto-detected as <id>.json
-  "assets": ["lib"],              // files/dirs to bundle verbatim, preserving paths
+  "assets": ["lib"],              // a dir bundles only its .scad; glob/file for other content
   "render": {
     "features": ["textmetrics"],    // OpenSCAD --enable flags for every render
     "format": "3mf"                 // export/preview format: "3mf" (colour) or "stl"; default "3mf"
@@ -60,7 +60,7 @@ These keys tell `gen-schema` which `.scad` files and assets to bundle:
 - **`source`**: directory of Customizer-style `.scad` designs, relative to this config file. Defaults to `"."`
 - **`designs`**: explicit list with id, label, and optional `file`. Omit it to auto-discover designs. Set `"heavy": true` to start a design in manual-render mode. `label` (picker text, defaulting to a humanized `id`) is [localizable](#localizing-config-text)
 - **`defaultDesign`**: optional design `id` shown on a visit that carries no `#d=` deep link. A saved session or hash still wins. Must name a configured design; defaults to the first
-- **`assets`**: files, directories, or glob patterns (`*`/`?`/`**`) to copy verbatim. If omitted, `gen-schema` follows each design’s `use`/`include` graph
+- **`assets`**: files, directories, or glob patterns (`*`/`?`/`**`) to bundle. A named file is copied as-is; a directory contributes only the `.scad` files under it (recursively) — use a glob (`lib/**`, `**/*.svg`) or name the file directly to bundle non-`.scad` content. If omitted, `gen-schema` follows each design’s `use`/`include` graph
 - **Bundled presets** are auto-detected: a `<design>.json` file beside `<design>.scad` is bundled automatically and appears read-only under “Bundled” in the preset picker.
 
 A `designs[]` entry’s own keys get the same unknown-key check as the top level: an unrecognised key fails the build, naming the offending design’s `id` and listing the keys an entry accepts. (A missing or malformed `id` is itself checked first, so that failure is reported on its own rather than as a confusing unknown-key error.)
@@ -286,12 +286,14 @@ each is treated differently:
     naming the file. Leaving it to the element rule instead emptied the
     document rather than refusing it, and what shipped was a rootless file.
   - **Elements**: only SVG-namespace elements an icon is made of (structure,
-    shapes, text, painting, filter primitives, `<title>`/`<desc>`). Everything
-    else goes, including every HTML element — SVG 2 permits them, and
-    `<html:video src>`, `<html:video poster>`, `<html:img src>` and
-    `<html:iframe src>` all fetch. `<image>` is excluded too: its only job is to
-    reference a raster, and the reference rule below allows nothing it could
-    point at.
+    shapes, text, painting, filter primitives, `<title>`/`<desc>`), plus a
+    short closed list of inert metadata vocabularies (RDF, Dublin Core,
+    Creative Commons, Sodipodi, Inkscape) so a CC-licensed icon can keep the
+    attribution its licence requires. Everything else goes, including every
+    HTML element — SVG 2 permits them, and `<html:video src>`, `<html:video
+    poster>`, `<html:img src>` and `<html:iframe src>` all fetch. `<image>` is
+    excluded too: its only job is to reference a raster, and the reference
+    rule below allows nothing it could point at.
   - **References**: an `href` (in any namespace) or a CSS `url()` is kept only
     when it is a same-document `#fragment`. Deciding whether a value is
     *external* instead would mean reproducing, in the browser’s own order, the
