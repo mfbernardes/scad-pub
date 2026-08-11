@@ -473,16 +473,20 @@ function bundleFonts(config, SOURCE, outPublicDir, configPath, { checkContained,
   return { FONTS, FONT_FAMILIES, FONT_FACES, fontPaths, fontsConf, fontWrites };
 }
 
-// Copy a BROWSER-FACING file (logo, design picker icon, PWA icon, always
-// rendered in an <img>/<use>/CSS context, never fed to OpenSCAD) from `src` to
-// `dest`. An .svg source is run through sanitizeSvg() first (M13, see
-// docs/config.md "SVG asset trust model" and scripts/lib/svg-sanitize.mjs):
-// cheap defense-in-depth so a served SVG can't execute as an active document
-// if it's ever navigated to directly, without needing to trust every byte of
-// operator-supplied markup. Anything else (PNG, …) copies verbatim. Deliberately
-// NOT used for render-input assets (copyAsset, below): those are geometry
-// OpenSCAD's import()/surface() reads, not display markup, and are covered by
-// the operator-input trust boundary + public/_headers instead.
+// Copy a BROWSER-FACING file (logo, design picker icon/image, bundled-preset
+// thumbnail, PWA icon, always rendered in an <img>/<use>/CSS context, never fed
+// to OpenSCAD) from `src` to `dest`. Every caller below writes `dest` under
+// public/art/, not public/scad/: this is generated artwork, not render input,
+// so public/sw.js's stale-while-revalidate branch (network-first only applies
+// to scad/) can serve it cache-first. An .svg source is run through
+// sanitizeSvg() first (M13, see docs/config.md "SVG asset trust model" and
+// scripts/lib/svg-sanitize.mjs): cheap defense-in-depth so a served SVG can't
+// execute as an active document if it's ever navigated to directly, without
+// needing to trust every byte of operator-supplied markup. Anything else (PNG,
+// …) copies verbatim. Deliberately NOT used for render-input assets (copyAsset,
+// below): those are geometry OpenSCAD's import()/surface() reads, not display
+// markup, and are covered by the operator-input trust boundary + public/_headers
+// instead.
 function copyBrowserFacing(src, dest) {
   if (/\.svg$/i.test(src)) {
     writeFileSync(dest, sanitizeBrowserFacingSvg(readFileSync(src, "utf-8"), { src }));
@@ -495,15 +499,15 @@ function copyBrowserFacing(src, dest) {
 // themes) or { light, dark } (either may be omitted -> the other is used).
 // Each referenced file is copied into the served tree; returns the resolved
 // { light, dark } URLs, or null when no logo is configured.
-function copyLogoAssets(config, CONFIG_DIR, outScadDir, mustExist, register) {
+function copyLogoAssets(config, CONFIG_DIR, outArtDir, mustExist, register) {
   if (!config.logo) return null;
   // Map each resolved source to the URL it was copied to, so a single source
   // used for both themes is copied once and two distinct sources never clobber
   // each other, even when they share a basename (light/logo.svg vs
   // dark/logo.svg), which a flat basename would silently overwrite. `register`
   // (H6) additionally catches a logo basename colliding with some other
-  // generated output class (a design, asset, icon, doc, or extraCss) sharing
-  // the same flat public/scad/ namespace.
+  // generated output class (a design icon/image/preset thumbnail) sharing the
+  // same flat public/art/ namespace.
   const copiedByAbs = new Map();
   const usedNames = new Set();
   const copyLogo = (src) => {
@@ -519,10 +523,10 @@ function copyLogoAssets(config, CONFIG_DIR, outScadDir, mustExist, register) {
       name = dot > 0 ? `${name.slice(0, dot)}-${tag}${name.slice(dot)}` : `${name}-${tag}`;
     }
     usedNames.add(name);
-    const dest = join(outScadDir, name);
+    const dest = join(outArtDir, name);
     register(dest, `logo '${src}'`);
     copyBrowserFacing(abs, dest);
-    const url = `scad/${name}`;
+    const url = `art/${name}`;
     copiedByAbs.set(abs, url);
     return url;
   };
@@ -685,7 +689,7 @@ function resolvePresetImages({
   presetRel,
   d,
   CONFIG_DIR,
-  outScadDir,
+  outArtDir,
   mustExist,
   register,
 }) {
@@ -720,10 +724,10 @@ function resolvePresetImages({
       );
       const ext = extOf(rel);
       const outName = `${d.id}-preset-${i}${ext}`;
-      const dest = join(outScadDir, outName);
+      const dest = join(outArtDir, outName);
       register(dest, `design '${d.id}' presets.images["${presetName}"]`);
       copyBrowserFacing(src, dest);
-      presetImages[presetName] = `scad/${outName}`;
+      presetImages[presetName] = `art/${outName}`;
     });
   } else if (presetImagesSrc?.kind === "dir") {
     const dirRel = presetImagesSrc.dir;
@@ -743,10 +747,10 @@ function resolvePresetImages({
       if (!fileName) continue;
       const ext = extOf(fileName);
       const outName = `${d.id}-preset-${matched}${ext}`;
-      const dest = join(outScadDir, outName);
+      const dest = join(outArtDir, outName);
       register(dest, `design '${d.id}' presets.images["${presetName}"]`);
       copyBrowserFacing(join(dirAbs, fileName), dest);
-      presetImages[presetName] = `scad/${outName}`;
+      presetImages[presetName] = `art/${outName}`;
       matched++;
     }
     console.log(
@@ -760,7 +764,7 @@ function resolvePresetImages({
 
 // Parse each design's Customizer parameters and copy its .scad, sibling
 // parameterSets .json, and picker icon into the served tree.
-function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, checkContained, relPosix, copyAsset, register, languages, defaultTag }) {
+function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, outArtDir, mustExist, checkContained, relPosix, copyAsset, register, languages, defaultTag }) {
   // designDir -> Set of every design's sidecar base seen in that directory,
   // collected below as each design is processed; used after the .map() to
   // find sidecar-SHAPED files that match no design at all (see the orphan
@@ -799,9 +803,11 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
     // docs/annotations.md); there is no config-level override left. Each
     // path resolves relative to the design's own .scad file, i.e. within
     // SOURCE, so each is also checked to stay contained in it. Copy icon/
-    // image into the served tree under a deterministic `<id>-icon.<ext>` /
-    // `<id>-image.<ext>` name so distinct designs never clobber each other;
-    // the id charset is already URL-safe.
+    // image into public/art/ (not public/scad/: browser-facing artwork the
+    // service worker can serve cache-first, not a build-volatile render
+    // input) under a deterministic `<id>-icon.<ext>` / `<id>-image.<ext>`
+    // name so distinct designs never clobber each other; the id charset is
+    // already URL-safe.
     const description = meta.description;
     let icon = null;
     if (meta.icon) {
@@ -809,10 +815,10 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       checkContained(src, `design '${d.id}' icon '${meta.icon}'`, relPosix(abs));
       const ext = extOf(meta.icon);
       const name = `${d.id}-icon${ext}`;
-      const dest = join(outScadDir, name);
+      const dest = join(outArtDir, name);
       register(dest, `design '${d.id}' icon`);
       copyBrowserFacing(src, dest);
-      icon = `scad/${name}`;
+      icon = `art/${name}`;
     }
     // Larger card artwork for the optional visual picker.
     let image = null;
@@ -821,10 +827,10 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       checkContained(src, `design '${d.id}' image '${meta.image}'`, relPosix(abs));
       const ext = extOf(meta.image);
       const name = `${d.id}-image${ext}`;
-      const dest = join(outScadDir, name);
+      const dest = join(outArtDir, name);
       register(dest, `design '${d.id}' image`);
       copyBrowserFacing(src, dest);
-      image = `scad/${name}`;
+      image = `art/${name}`;
     }
     // User documentation, same base/containment rule as icon/image. The
     // Markdown file is copied verbatim under a deterministic `<id>-doc.md`
@@ -860,7 +866,7 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, mustExist, check
       presetRel,
       d,
       CONFIG_DIR,
-      outScadDir,
+      outArtDir,
       mustExist,
       register,
     });
@@ -1564,6 +1570,10 @@ function writePrecacheManifest({ outPublicDir, schema, appleSplash, assets, logo
  * @param {string} opts.configPath  Path to the configurator config JSON.
  * @param {string} opts.outSchemaDir  Where designs.json is written.
  * @param {string} opts.outScadDir  Where the copied .scad/presets are written.
+ * @param {string} [opts.outArtDir]  Where generated browser-facing artwork
+ *   (design icon/image, bundled-preset thumbnails, the header logo) is
+ *   written — served cache-first, unlike outScadDir's build-volatile sources.
+ *   Defaults to outScadDir's own sibling `art` directory.
  * @param {string} [opts.version]  ScadPub version stamp for this build; defaults
  *   to this checkout's `git describe` (see scripts/lib/version.mjs). Any falsy
  *   value (no git metadata and no override, or an explicit "") leaves the stamp
@@ -1840,6 +1850,8 @@ function assembleSchema(parts) {
 function commitOutputs({
   outScadDir,
   stageScadDir,
+  outArtDir,
+  stageArtDir,
   outSchemaDir,
   outPublicDir,
   schema,
@@ -1857,13 +1869,20 @@ function commitOutputs({
 }) {
   // COMMIT POINT (H6/M8): every fallible step. Design parsing, containment
   // checks, PWA rasterization. Has now succeeded and the schema is in hand, so
-  // atomically swap the staged scad tree into the live location. Everything
-  // past here (font copies, precache manifest, reconciliation, designs.json) is
-  // a plain non-fallible write, so scad sources, PWA/font assets, and the
-  // schema all land together: a failure earlier left the entire previous output
-  // intact and internally consistent.
+  // atomically swap the staged scad and art trees into the live location.
+  // Everything past here (font copies, precache manifest, reconciliation,
+  // designs.json) is a plain non-fallible write, so scad sources, artwork,
+  // PWA/font assets, and the schema all land together: a failure earlier left
+  // the entire previous output intact and internally consistent.
   rmSync(outScadDir, { recursive: true, force: true });
   renameSync(stageScadDir, outScadDir);
+  // outArtDir gets the identical wholesale swap, not M8 manifest
+  // reconciliation: like outScadDir (and unlike public/fonts or the public
+  // root), it holds ONLY generated files, nothing tracked ever lives there, so
+  // there's nothing reconciliation's mixed-ownership handling buys over a
+  // clean replace — see scripts/lib/destinations.mjs's module comment.
+  rmSync(outArtDir, { recursive: true, force: true });
+  renameSync(stageArtDir, outArtDir);
 
   // The generated font tree AND the PWA icon/splash/screenshot/manifest batch
   // are committed here too (deferred from bundleFonts and generatePwaAssets
@@ -1971,6 +1990,11 @@ export function generate({
   configPath,
   outSchemaDir,
   outScadDir,
+  // Defaults to outScadDir's own sibling: every real caller (main() below)
+  // already puts the two side by side under public/, and defaulting here
+  // means a test (or other caller) that only cares about outScadDir doesn't
+  // also have to name outArtDir.
+  outArtDir = join(dirname(outScadDir), "art"),
   outPublicDir,
   rendererFiles,
   version = scadpubVersion(),
@@ -2080,18 +2104,22 @@ export function generate({
     }
   );
 
-  // outScadDir is entirely generated. H6/M8: build the complete new tree in a
-  // staging directory first, and only replace the live outScadDir once every
-  // fallible step below (design parsing, containment checks, PWA icon
-  // generation, …) has succeeded, so a build that fails partway leaves the
-  // previous complete output rather than a wiped-and-half-repopulated (or, per
-  // H6, silently cross-clobbered) outScadDir. A stage left over from a previous
-  // crashed run is wiped before use.
+  // outScadDir and outArtDir are entirely generated. H6/M8: build each
+  // complete new tree in its own staging directory first, and only replace
+  // the live directory once every fallible step below (design parsing,
+  // containment checks, PWA icon generation, …) has succeeded, so a build
+  // that fails partway leaves the previous complete output rather than a
+  // wiped-and-half-repopulated (or, per H6, silently cross-clobbered)
+  // outScadDir/outArtDir. A stage left over from a previous crashed run is
+  // wiped before use.
   const stageScadDir = `${outScadDir}.staging`;
   rmSync(stageScadDir, { recursive: true, force: true });
   mkdirSync(stageScadDir, { recursive: true });
+  const stageArtDir = `${outArtDir}.staging`;
+  rmSync(stageArtDir, { recursive: true, force: true });
+  mkdirSync(stageArtDir, { recursive: true });
 
-  const logo = copyLogoAssets(config, CONFIG_DIR, stageScadDir, mustExist, registry.register);
+  const logo = copyLogoAssets(config, CONFIG_DIR, stageArtDir, mustExist, registry.register);
 
   // Copy a source file into the staged scad dir, preserving its relative
   // path, registering the destination first (H6).
@@ -2109,6 +2137,7 @@ export function generate({
     SOURCE,
     CONFIG_DIR,
     outScadDir: stageScadDir,
+    outArtDir: stageArtDir,
     mustExist,
     checkContained,
     relPosix,
@@ -2176,7 +2205,7 @@ export function generate({
   // files that will be written (M8), and the pending write batch itself:
   // flushed below, and also the source of the written-path list the M8
   // lifecycle reconciliation below derives from it. It reads design
-  // picker-icon dimensions from the STAGING scad dir (scadDir), since the
+  // picker-icon dimensions from the STAGING art dir (artDir), since the
   // live swap hasn't happened yet.
   let appleSplash = [];
   let iconFiles = ["icon.svg"];
@@ -2200,7 +2229,7 @@ export function generate({
       mustExist,
       register: registry.register,
       isTracked: isTrackedFile,
-      scadDir: stageScadDir,
+      artDir: stageArtDir,
     }));
   }
 
@@ -2290,6 +2319,8 @@ export function generate({
   commitOutputs({
     outScadDir,
     stageScadDir,
+    outArtDir,
+    stageArtDir,
     outSchemaDir,
     outPublicDir,
     schema,
@@ -2317,6 +2348,7 @@ function main() {
       process.env.SCADPUB_CONFIG || join(WEB, "scadpub.config.json"),
     outSchemaDir: join(WEB, "src", "generated"),
     outScadDir: join(WEB, "public", "scad"),
+    outArtDir: join(WEB, "public", "art"),
     outPublicDir: join(WEB, "public"),
     // H3: the renderer's source fixes the OpenSCAD CLI contract (flags,
     // mounting), so its bytes belong in renderHash. A worker change
@@ -2328,7 +2360,7 @@ function main() {
   console.log(
     `gen-schema: ${schema.designs.length} designs, ${schema.assets.length} ` +
       `dependency files, ${schema.features.length} feature(s) -> ` +
-      `src/generated/designs.json, public/scad/` +
+      `src/generated/designs.json, public/scad/, public/art/` +
       // Surfaced here too so a deploy log records which ScadPub produced the
       // bundle (and shows when the stamp is missing, e.g. a git-less tree).
       ` [ScadPub ${schema.scadpubVersion ?? "version unknown"}]`

@@ -8,10 +8,10 @@
 // $SCADPUB_CONFIG exactly like `npm run gen` does.
 //
 // `buildDesigns` also copies each design's own files (the .scad, its preset
-// JSON, icon/image/doc) into the scad tree it's handed, as gen-schema.mjs's
+// JSON, icon/image/doc) into the scad/art trees it's handed, as gen-schema.mjs's
 // real build does — a side effect this read-only reporting tool doesn't want
-// against the real `public/scad/`, so it points that copy at a throwaway
-// temp directory, removed again once buildDesigns returns.
+// against the real `public/scad/`/`public/art/`, so it points both at one
+// throwaway temp directory, removed again once buildDesigns returns.
 //
 // Usage:
 //   npm run i18n:status                 # coverage + drift report
@@ -116,6 +116,11 @@ function loadDesigns(configPath) {
       SOURCE,
       CONFIG_DIR,
       outScadDir: scratchDir,
+      // Icon/image/preset-thumbnail writes land in the same throwaway
+      // scratch dir as the .scad copies: this tool discards the whole
+      // directory either way, so there's no reason to mirror gen-schema's
+      // real build separating scad/ from art/ here.
+      outArtDir: scratchDir,
       mustExist,
       checkContained,
       relPosix,

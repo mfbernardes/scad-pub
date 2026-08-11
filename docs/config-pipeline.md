@@ -157,8 +157,14 @@ flat shape when it doesn't.
 
 ## Reconciling generated files (`scripts/lib/destinations.mjs`)
 
-Generated output lands in directories that also hold tracked files, so "clean up what the
-last build wrote" has to mean exactly that and nothing broader. `reconcileGenerated` reads
+`public/scad/` (render-input sources, presets) and `public/art/` (browser-facing artwork —
+design icon/image, bundled-preset thumbnails, the header logo — split out of `scad/` so
+`public/sw.js` can serve it cache-first) hold nothing but generated files, so `gen-schema`
+builds each into its own staging directory and swaps it into place wholesale; neither needs
+what follows in this section.
+
+Generated output *elsewhere* lands in directories that also hold tracked files, so "clean up
+what the last build wrote" has to mean exactly that and nothing broader. `reconcileGenerated` reads
 the manifest of what the tool wrote on the previous run and deletes only paths that (a) it
 wrote before and (b) it did not write this run. A first run — no manifest yet — deletes
 nothing.

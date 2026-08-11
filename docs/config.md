@@ -275,11 +275,17 @@ each is treated differently:
   comment there). Defense-in-depth against exactly that direct-navigation
   case, without touching the geometry.
 - **Browser-facing SVGs**. The app `logo`, the PWA `icon`, and each design’s
-  picker `icon`. Are only ever displayed, never read as geometry. `gen-schema`
-  runs these through a sanitizer (`scripts/lib/svg-sanitize.mjs`) before writing
-  them. It **parses the document** (`@xmldom/xmldom`, a build-time dependency the
-  project already carried) rather than pattern-matching markup, and it is built
-  out of three **allowlists** — because every denylist here proved open-ended:
+  picker `icon`/card `image`/bundled-preset thumbnails. Are only ever displayed,
+  never read as geometry. `gen-schema` runs these through a sanitizer
+  (`scripts/lib/svg-sanitize.mjs`) before writing them, and (unlike the PWA
+  `icon`, which lands at the served root) copies the design/logo/preset ones
+  into `public/art/` — a separate generated directory from the render-input
+  `public/scad/` tree above, so the service worker can serve this artwork
+  cache-first instead of `/scad/*`'s network-first treatment; `/art/*` gets the
+  same `_headers` hardening as `/scad/*` (see below) either way. It **parses
+  the document** (`@xmldom/xmldom`, a build-time dependency the project already
+  carried) rather than pattern-matching markup, and it is built out of three
+  **allowlists** — because every denylist here proved open-ended:
 
   - **The document itself**: the root must be `<svg>` in the SVG namespace, and
     must declare that namespace. A document that isn’t one fails the build,
@@ -369,8 +375,9 @@ each is treated differently:
 Netlify custom-headers convention. **GitHub Pages serves no custom response
 headers at all** and silently ignores `_headers`: if you deploy there, the
 CSP/`nosniff` layer described above does not apply, and the SVG sanitization
-above is your only defense-in-depth layer for `logo`/`icon` assets (render-
-input SVGs under `/scad/` get none). This is one more reason the trust model
+above is your only defense-in-depth layer for `logo`/`icon`/`image`/preset-
+thumbnail assets under `/art/` (render-input SVGs under `/scad/` get none).
+This is one more reason the trust model
 above is load-bearing: on GitHub Pages, treat everything under `source` and
 every config-referenced path as fully trusted, full stop.
 

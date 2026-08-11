@@ -113,12 +113,12 @@ export function generatePwaAssets({
   mustExist,
   register,
   isTracked,
-  // Where design picker-icon files (`d.icon` = "scad/<id>-icon.<ext>") live on
+  // Where design picker-icon files (`d.icon` = "art/<id>-icon.<ext>") live on
   // disk right now, so their real PNG dimensions can be read back for the
-  // manifest. During a build this is the STAGING scad dir: generate() runs PWA
-  // generation before it swaps staging into the live scad location, so the
+  // manifest. During a build this is the STAGING art dir: generate() runs PWA
+  // generation before it swaps staging into the live art location, so the
   // whole output can commit atomically. Defaults to the live location.
-  scadDir = join(outPublicDir, "scad"),
+  artDir = join(outPublicDir, "art"),
 }) {
   // iOS standalone launch images (apple-touch-startup-image). Populated below
   // when a rasterizer is available; injected into index.html by vite.
@@ -398,12 +398,15 @@ export function generatePwaAssets({
     const type = mimeOf(src);
     let sizes = "any";
     if (ext === "png") {
-      // A design picker icon (`d.icon`) is served from scad/ but lives, at this
-      // point in the build, in `scadDir` (the staging dir); read it there.
-      // Root-level PWA images (screenshots) resolve under outPublicDir.
-      const abs = src.startsWith("scad/")
-        ? join(scadDir, src.slice("scad/".length))
-        : join(outPublicDir, src);
+      // A design picker icon (`d.icon`) is served from art/ but lives, at this
+      // point in the build, in `artDir` (the staging dir); read it there.
+      // Anything else — a root-level PWA image (screenshot), or a leftover
+      // `scad/`-prefixed src from before artwork split out of it — resolves
+      // under outPublicDir instead: gen-schema itself never emits a `scad/`
+      // icon path anymore, and outPublicDir + "scad/..." simply won't exist
+      // there, so the read below falls through to the "any" fallback rather
+      // than throwing.
+      const abs = src.startsWith("art/") ? join(artDir, src.slice("art/".length)) : join(outPublicDir, src);
       try {
         sizes = pngSize(readFileSync(abs)) ?? "any";
       } catch {

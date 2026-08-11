@@ -484,7 +484,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets (hashed JS/CSS, fonts, presets): stale-while-revalidate.
+  // Static assets (hashed JS/CSS, fonts, presets, artwork): stale-while-revalidate.
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE);

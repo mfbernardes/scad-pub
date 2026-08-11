@@ -9,11 +9,12 @@
 // `outScadDir` is one flat namespace on disk, so it shares one registry; give
 // every write a distinctive label so a collision message is actionable.
 //
-// M8: `outScadDir` is wiped and repopulated every run, so nothing there needs
-// reconciliation. The public root and public/fonts mix generated files with
-// files this tool must never touch, so they cannot be wiped wholesale —
-// `reconcileGenerated` handles them, under the three guards and the
-// relative-path containment rule docs/config-pipeline.md sets out.
+// M8: `outScadDir` and `outArtDir` are each wiped and repopulated every run
+// (gen-schema.mjs's own staging-dir swap), so neither needs reconciliation.
+// The public root and public/fonts mix generated files with files this tool
+// must never touch, so they cannot be wiped wholesale — `reconcileGenerated`
+// handles them, under the three guards and the relative-path containment rule
+// docs/config-pipeline.md sets out.
 import {
   readFileSync,
   writeFileSync,
