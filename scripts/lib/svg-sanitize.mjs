@@ -17,7 +17,9 @@
 //   - CSS is the part that is not parsed, so it FAILS CLOSED: escapes are
 //     normalised, the allowlist is applied, and anything url- or import-shaped
 //     that survives means the patterns could not account for it, so the whole
-//     block or attribute goes.
+//     block or attribute goes. At-rules are rejected unmatched — except
+//     `@media`, whose prelude gets its own narrow grammar check and whose body
+//     is held to exactly the same checks as top-level CSS.
 //
 // Returns { text, removed }. `removed` is empty exactly when the input was
 // already inert — in which case the ORIGINAL BYTES come back, unparsed and
@@ -139,6 +141,24 @@ function normalizeCssEscapes(css) {
 // notable exclusion (a `font-family:"My Font"` in an icon), and it is excluded
 // because a bare quoted string is exactly how image-set carries a URL and
 // there is no way to tell the two apart without a value grammar per property.
+//
+// At-rules are refused wholesale by default, for the same reason as above:
+// each one introduces a body with its own grammar this module doesn't parse,
+// and some of them fetch on their own — `@import`, `@font-face`'s `src`.
+// `@media` is the one exception, because it is the one at-rule that
+// introduces no construct of its own: a media query has no fetching
+// primitive in any CSS spec, and its body is ordinary declarations the
+// whole-text checks below already scan regardless of how deeply they are
+// nested. The prelude is elided for the function-allowlist scan rather than
+// adding `media`/`and`/`not`/`only` to SAFE_CSS_FUNCTIONS above, because that
+// list means "value functions that cannot reference anything" — `and`/`not`
+// are query keywords, not value functions, and putting them on it would also
+// legalize `fill: not(...)`. This closes a real bug: an icon themed entirely
+// via CSS classes plus `@media (prefers-color-scheme: dark)` lost ALL its
+// styling, not just the dark-mode override, when the whole block was
+// dropped — and such an icon can be wired directly into
+// `manifest.webmanifest`'s `shortcuts[].icons[]`, which the OS reads with
+// nothing in between.
 const SAFE_CSS_FUNCTIONS = new Set([
   // colour
   "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color",
@@ -152,12 +172,70 @@ const SAFE_CSS_FUNCTIONS = new Set([
 // Every `name(` in the text, so an unvouched function can be named in the log.
 const CSS_FUNCTION_RE = /([-\w]+)\s*\(/g;
 
+// Every `@ident` at-keyword in the text, matched as a MAXIMAL run of CSS
+// ident characters (escapes are already normalized out by the time cssRisk
+// sees this text, and CSS treats every code point >= U+0080 as an ident
+// character) so a hostile ident can never masquerade as a shorter permitted
+// one (`@media-x` reads as `@media-x`, never as a prefix-match on `@media`).
+// `-` is included on purpose: `@-webkit-keyframes` is an at-rule the old
+// `/@\w/` test did not see (`\w` has no `-`) — this closes that gap.
+const CSS_AT_RULE_RE = /@([-\w\u0080-\uffff]+)/g;
+
+// The character allowlist for a @media PRELUDE (the text between `@media`
+// and its `{`): idents, numbers, ratios (16/9), the range-syntax comparison
+// operators, commas, colons, parens, whitespace — everything the media-query
+// grammar can spell. Deliberately excludes `@`, braces, `;`, quotes, `\`,
+// `*`, `#`, `&`, brackets, `!`, `%`, `+`, `~` and every non-ASCII code point,
+// so a second at-rule, a comment, a string, a fragment, or the approved-url()
+// marker can never hide inside a prelude. Empty preludes are allowed.
+const MEDIA_PRELUDE_RE = /^[-\w\s(),.:/<>=]*$/;
+
+// The only `name(` spellings a @media prelude may contain. Kept separate
+// from SAFE_CSS_FUNCTIONS (the VALUE-function allowlist) on purpose: a
+// prelude like `screen and (min-width:100px)` reads to CSS_FUNCTION_RE as
+// `and(`, and putting query keywords on the value allowlist would also let
+// `fill: not(...)` past a list whose whole meaning is "value functions that
+// cannot reference anything". Two grammars, two rules.
+const MEDIA_QUERY_FUNCTIONS = new Set(["media", "and", "or", "not", "only"]);
+
+/**
+ * Scans `css` for at-rules. Every at-rule other than `@media` is an
+ * immediate reject. A `@media` rule's PRELUDE (the text between `@media`
+ * and its opening `{`) must be plain media-query syntax; its BODY (after
+ * the `{`) is left untouched in `probe` so the caller's other checks (still
+ * run against the ORIGINAL full `css`, not `probe`) see it exactly as they
+ * would see top-level CSS. Returns `probe` — `css` with every validated
+ * `@media` prelude replaced by a single space — for the function-allowlist
+ * scan alone, which is the only check confused by media-query syntax.
+ */
+function readAtRules(css) {
+  let out = "";
+  let last = 0;
+  for (const m of css.matchAll(CSS_AT_RULE_RE)) {
+    const name = m[1].toLowerCase();
+    if (name !== "media") return { reason: `the at-rule @${m[1]}` };
+    const open = css.indexOf("{", m.index + m[0].length);
+    if (open < 0) return { reason: "a @media rule with no block" };
+    const span = css.slice(m.index, open);
+    const prelude = span.slice(m[0].length);
+    if (!MEDIA_PRELUDE_RE.test(prelude)) return { reason: "a @media prelude this module cannot read" };
+    for (const [, fn] of span.matchAll(CSS_FUNCTION_RE)) {
+      if (!MEDIA_QUERY_FUNCTIONS.has(fn.toLowerCase()))
+        return { reason: `the function ${fn}() in a @media prelude` };
+    }
+    out += css.slice(last, m.index) + " ";
+    last = open;
+  }
+  return { reason: "", probe: out + css.slice(last) };
+}
+
 /** What makes a stylesheet unfit to keep, or "" when it is fit. */
 function cssRisk(css) {
-  if (/@\w/.test(css)) return "an at-rule";
+  const { reason, probe } = readAtRules(css);
+  if (reason) return reason;
   if (/["']/.test(css)) return "a string literal (image-set carries a URL that way)";
   if (/:\s*\/\//.test(css) || /\w+:\/\//.test(css)) return "a URL scheme";
-  for (const [, name] of css.matchAll(CSS_FUNCTION_RE)) {
+  for (const [, name] of probe.matchAll(CSS_FUNCTION_RE)) {
     if (!SAFE_CSS_FUNCTIONS.has(name.toLowerCase())) return `the function ${name}()`;
   }
   return "";

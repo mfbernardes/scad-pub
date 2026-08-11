@@ -28,6 +28,22 @@ const svg = (inner, rootAttrs = "") =>
 const VECTORS = {
   "css url()": [svg(`<style>.a{fill:url(${EVIL}/a.svg#p)}</style><rect class="a" width="40" height="40"/>`), "load"],
   "css image-set()": [svg(`<style>svg{background:image-set("${EVIL}/b.png" 1x)}</style><rect width="40" height="40"/>`), "load"],
+  // @media is the one at-rule the sanitizer keeps (see svg-sanitize.mjs's
+  // cssRisk): the sanitized form here SURVIVES rather than being dropped, so
+  // this vector is the important one — it proves the surviving url() is still
+  // scrubbed rather than merely proving an already-empty block fetches nothing.
+  "@media css url()": [
+    svg(`<style>@media (min-width:1px){.a{fill:url(${EVIL}/k.svg#p)}}</style><rect class="a" width="40" height="40"/>`),
+    "load",
+  ],
+  // "screen", not "print": a page loaded normally (not printing) never
+  // applies @media print rules at all, which would make the RAW form fetch
+  // nothing and the vector insurance-only for a reason unrelated to the
+  // sanitizer.
+  "@media image-set()": [
+    svg(`<style>@media screen{svg{background:image-set("${EVIL}/l.png" 1x)}}</style><rect width="40" height="40"/>`),
+    "load",
+  ],
   "cursor image-set()": [svg(`<rect width="40" height="40" fill="#ccc" cursor="image-set(&quot;${EVIL}/c.png&quot; 1x), auto"/>`), "hover"],
   "@font-face src": [svg(`<style>@font-face{font-family:x;src:url(${EVIL}/d.woff)}text{font-family:x}</style><text y="20">hi</text>`), "load"],
   "html:video": [svg(`<html:video ${H} src="${EVIL}/e.mp4" poster="${EVIL}/e.png"/>`), "load"],
