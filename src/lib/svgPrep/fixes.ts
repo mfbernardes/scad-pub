@@ -191,14 +191,33 @@ function removeCanvasBackground(root: Element): Change[] {
   return count ? [change("removed-background", { count })] : [];
 }
 
-/** Remove every element that can execute (see ACTIVE_TAGS), strip any
- *  event-handler attribute or non-same-document `href`/`xlink:href` off what
- *  survives, and neutralise what a `<style>` block can fetch (`@import`, an
- *  external `url()`), leaving its rules — and therefore the drawing's colours
- *  — untouched. The result is inert by construction rather than by the
- *  accident of never being rendered: see ACTIVE_TAGS's comment in dom.ts for
- *  why that accident isn't something to lean on. None of it becomes geometry,
- *  and a user-supplied drawing is the one SVG class ScadPub does not trust. */
+// Attributes whose value is CSS and can therefore carry a fetching `url()`:
+// `style` plus the SVG presentation attributes that take a <paint>, <filter>
+// or reference. Mirrors svg-sanitize.mjs's CSS_VALUE_ATTRS.
+const CSS_VALUE_ATTRS = new Set([
+  "style",
+  "fill",
+  "stroke",
+  "filter",
+  "mask",
+  "clip-path",
+  "cursor",
+  "marker",
+  "marker-start",
+  "marker-mid",
+  "marker-end",
+]);
+
+/** Remove every element that can execute (see ACTIVE_TAGS), strip every
+ *  fetch/execute vector off what survives — event-handler attributes,
+ *  non-same-document `href`/`xlink:href`, `ping`, `xml:base`, and external
+ *  `url()` in style/presentation attributes — and neutralise what a `<style>`
+ *  block can fetch (`@import`, an external `url()`), leaving its rules — and
+ *  therefore the drawing's colours — untouched. The result is inert by
+ *  construction rather than by the accident of never being rendered: see
+ *  ACTIVE_TAGS's comment in dom.ts for why that accident isn't something to
+ *  lean on. None of it becomes geometry, and a user-supplied drawing is the one
+ *  SVG class ScadPub does not trust. */
 export function removeActiveContent(root: Element): Change[] {
   const changes: Change[] = [];
   // One walk: on a 2 MB drawing a second full traversal is ~50k nodes for a
@@ -214,25 +233,44 @@ export function removeActiveContent(root: Element): Change[] {
   }
   if (count) changes.push(change("removed-active", { count }));
 
-  // localName strips the namespace prefix, so this catches xlink:href the
-  // same way it catches a bare href — matching svg-sanitize.mjs's rule for
-  // the same reference.
+  // Make what survives inert too, mirroring svg-sanitize.mjs's attribute
+  // rules: an event handler executes; a non-same-document href/xlink:href
+  // (localName strips the prefix) navigates or fetches; `ping` beacons on
+  // activation; `xml:base` rebases a kept reference; and an external `url()`
+  // in a style or presentation attribute fetches (a same-document `url(#id)`
+  // paint reference is routine and kept). Descendants of the elements just
+  // removed are skipped so the count reflects only what stayed in the drawing.
+  const removed = new Set<Element>();
+  for (const el of active) for (const d of iterElements(el)) removed.add(d);
   let unsafeAttrs = 0;
   for (const el of els) {
+    if (removed.has(el)) continue;
     const attrs = el.attributes;
     if (!attrs) continue;
     const toRemove: string[] = [];
+    const toSet: [string, string][] = [];
     for (let i = 0; i < attrs.length; i++) {
       const attr = attrs[i];
       const local = (attr.localName ?? attr.name).toLowerCase();
-      if (local.startsWith("on")) {
+      const name = attr.name.toLowerCase();
+      const value = attr.value ?? "";
+      if (local.startsWith("on") || local === "ping" || name === "xml:base") {
         toRemove.push(attr.name);
-      } else if (local === "href" && !isSameDocumentRef(attr.value ?? "")) {
+      } else if (local === "href" && !isSameDocumentRef(value)) {
         toRemove.push(attr.name);
+      } else if (CSS_VALUE_ATTRS.has(local)) {
+        const cleaned = value.replace(CSS_URL_RE, (m, dq: string, sq: string, bare: string) =>
+          isSameDocumentRef(dq ?? sq ?? bare ?? "") ? m : "none"
+        );
+        if (cleaned !== value) toSet.push([attr.name, cleaned]);
       }
     }
     for (const name of toRemove) {
       el.removeAttribute(name);
+      unsafeAttrs += 1;
+    }
+    for (const [name, value] of toSet) {
+      el.setAttribute(name, value);
       unsafeAttrs += 1;
     }
   }

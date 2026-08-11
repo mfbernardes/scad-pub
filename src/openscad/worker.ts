@@ -222,15 +222,23 @@ async function resolveWasmModule(
     const module = await WebAssembly.compile(bytes).catch(() => null);
     return { module, bytes: module ? null : bytes };
   };
+  const digest = digestFromUrl(url);
   const fromCached = async (cache: Cache, hit: Response) => {
     const module = await WebAssembly.compileStreaming(hit).catch(() => null);
     if (module) return { module, bytes: null };
     // Re-match rather than reusing `hit`: the failed compileStreaming
-    // attempt may already have drained its body.
+    // attempt may already have drained its body. The entry could have been
+    // rewritten (M1) between the verifiedHit check above and this re-match,
+    // so re-verify these bytes too; a mismatch evicts and re-fetches from the
+    // network rather than compiling unverified bytes.
     const retry = (await cache.match(url)) ?? hit;
-    return fromBytes(await retry.arrayBuffer());
+    const bytes = await retry.arrayBuffer();
+    if (digest && !(await bytesMatchDigest(bytes, digest))) {
+      await cache.delete(url);
+      return fromBytes(await (await checkedFetch(url)).arrayBuffer());
+    }
+    return fromBytes(bytes);
   };
-  const digest = digestFromUrl(url);
   // BIN_CACHE is origin-shared (see its declaration comment), so a co-hosted
   // same-origin app could `cache.put` poisoned bytes under this exact URL.
   // Verify a hit against its content-addressed digest via a CLONE, so the

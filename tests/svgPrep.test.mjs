@@ -712,6 +712,25 @@ test("applyFixes strips event-handler attributes and non-same-document href/xlin
   assert.match(svg, /href="#localShape"/, "a same-document href survives");
 });
 
+test("applyFixes strips ping/xml:base and external url() in style/presentation attributes, keeping url(#id)", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+          xml:base="http://evil.test/" viewBox="0 0 10 10">
+       <a href="#x" ping="http://evil.test/beacon"><rect width="1" height="1"/></a>
+       <rect width="5" height="5" style="fill:url(http://evil.test/p.png)"/>
+       <rect width="5" height="5" fill="url(http://evil.test/q.png)"/>
+       <linearGradient id="g"/>
+       <rect width="5" height="5" fill="url(#g)"/>
+     </svg>`,
+  );
+  applyFixes(root);
+  const svg = serializeSvg(root);
+  assert.doesNotMatch(svg, /evil\.test/, "ping, xml:base and external url() are all gone");
+  assert.doesNotMatch(svg, /ping=/i);
+  assert.doesNotMatch(svg, /xml:base/i);
+  assert.match(svg, /url\(#g\)/, "a same-document url(#id) paint reference survives");
+});
+
 // Shared with scripts/lib/svg-sanitize.mjs via src/lib/cssRefs.mjs: a quoted
 // url() value containing ')' used to parse differently on the two sides (see
 // that module's header). Pins that check/applyFixes now agree with the
