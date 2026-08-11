@@ -740,22 +740,20 @@ async function checkPresetImport({ page, check, ids, presetsTabName, paramsTabNa
 // Export the model (+ PNG, when the config offers Save image) on the first
 // design.
 //
-// The example "tag" design (ids[0]) carries an attention-flagged notice by
-// default (both an emblem and a label shown at once, see tag.scad's own
-// comment), so Download opens the Review dialog (ReviewDialog.tsx) armed with
-// "Download anyway" instead of exporting immediately (ActionButtons.tsx's
-// onDownloadClick). Arm the download listener BEFORE the click so the event
-// can never fire and go unheard while we're still deciding whether a dialog
-// showed up.
+// Whether Download exports straight away or opens the Review dialog
+// (ReviewDialog.tsx) armed with "Download anyway" depends on the first
+// design's live readiness (ActionButtons.tsx's onDownloadClick). Arm the
+// download listener BEFORE the click so the event can never fire and go
+// unheard while we're still deciding whether a dialog showed up.
 async function checkExports({ page, check, ids, dir, schema }) {
   await selectDesign(page, ids[0]);
   console.log("=== export 3MF ===");
   // Whether the Review gate opens is a property of the DESIGN's live readiness,
   // not of the suite: only a "ready" render exports straight from the dock
-  // (AppShell's onDownloadClick). The dogfood config's first design ("tag")
-  // carries a default attention issue, but another config's first design may be
-  // clean, so branch on what actually happened and assert the matching
-  // contract either way, instead of assuming one config's shape.
+  // (AppShell's onDownloadClick). The dogfood config's first design ("tag") is
+  // clean at its defaults, but another config's first design may carry an
+  // attention issue, so branch on what actually happened and assert the
+  // matching contract either way, instead of assuming one config's shape.
   const downloadPromise = page.waitForEvent("download");
   await page.click('[aria-label^="Download "]');
   const reviewDialog = await openDialog(page, "Review", { timeout: 2000 }).catch(() => null);
@@ -813,14 +811,18 @@ async function checkExportDock({ page, check }) {
 // the attention/failed states (a ready model needs no announcement; see
 // StatusStrip's own doc), so "present" and "absent" are both assertions here.
 // Which footer actions the dialog offers is keyed on the LIVE readiness state,
-// not on how it was opened, so branch on what the first design actually
-// reports (the dogfood config's "tag" carries a default attention issue;
-// another config's first design may be clean) rather than assuming one
-// config's shape. The pill's own copy is resolved through the i18n catalogue +
-// `strings` overrides (see `labels` in main()).
+// not on how it was opened, so branch on what the design under test actually
+// reports (the dogfood config's "diagnostics" raises an alert and a warning at
+// its defaults; another config may have nothing in that state) rather than
+// assuming one config's shape. The pill's own copy is resolved through the
+// i18n catalogue + `strings` overrides (see `labels` in main()).
 async function checkStatusStripAndReview({ page, check, ids, labels }) {
   console.log("=== status pill + review dialog ===");
-  await selectDesign(page, ids[0]);
+  // The dogfood config's example designs are silent at their defaults except
+  // "diagnostics", which exists to raise messages; fall back to the first
+  // design for a config without it.
+  const noisy = ids.includes("diagnostics") ? "diagnostics" : ids[0];
+  await selectDesign(page, noisy);
   const pill = page.locator(".status-strip").first();
   await pill.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
   if (await pill.count()) {
@@ -847,7 +849,7 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
     await infoFooter.getByRole("button", { name: "Go back and fix" }).click();
     await waitDialogClosed(page, "Review").catch(() => {});
     // With a pill up, the pill owns the count and the bell drops its badge.
-    await checkBellCount(page, check, ids[0]);
+    await checkBellCount(page, check, noisy);
     // Nothing is hidden by that: pending messages stay reported to assistive
     // tech. Only assertable when this design actually has some.
     if ((await bellNoticeCount(page)) > 0) {
@@ -860,13 +862,13 @@ async function checkStatusStripAndReview({ page, check, ids, labels }) {
       console.log("  (this design's attention state carries no messages — the bell's label is not exercised)");
     }
   } else {
-    console.log(`  (the first design "${ids[0]}" is clean — no pill, as designed)`);
+    console.log(`  (the design "${noisy}" is clean — no pill, as designed)`);
   }
 
   // The other half of the contract needs a design in the OPPOSITE state. The
-  // dogfood config pairs "tag" (attention by default) with "panel" (a clean
-  // SVG-extrusion design, no font/notice concerns); a config without such a
-  // known-clean design does not exercise it. A clean design must show NO
+  // dogfood config pairs "diagnostics" (attention by default) with "panel" (a
+  // clean SVG-extrusion design, no font/notice concerns); a config without such
+  // a known-clean design does not exercise it. A clean design must show NO
   // pill at all: the ready state is deliberately silent.
   if (ids.includes("panel")) {
     await selectDesign(page, "panel");
@@ -1050,6 +1052,16 @@ async function checkReviewOverride({ page, check, ids, schema, paramsTabName }) 
   console.log('=== curated review value (echo("@review")) ===');
   await selectDesign(page, "tag");
   await page.getByRole("tab", { name: paramsTabName }).first().click().catch(() => {});
+  // The Review dialog is only reachable while something asks to be reviewed
+  // (the status pill is its only trigger short of a non-ready Download), and
+  // tag is deliberately quiet at its defaults. Widening the emblem past half
+  // the tag trips tag's `emblem is wide` alert, which holds whether or not the
+  // text is engraved below — the alert has to survive both readings, or the
+  // pill would vanish halfway through.
+  const emblem = paramRow(page, "emblem_size").locator('input[type="number"]');
+  await emblem.fill("60");
+  await emblem.blur();
+  await waitRenderDone(page).catch(() => {});
   const row = (label) =>
     page.locator(".review-summary > div").filter({ has: page.locator("dt", { hasText: label }) });
   const readRow = async (label) => {
@@ -1070,7 +1082,8 @@ async function checkReviewOverride({ page, check, ids, schema, paramsTabName }) 
     'the echo("@review") override replaces the row value once the render reports it'
   );
   await engrave.click();
-  await waitRenderDone(page).catch(() => {});
+  await resetDefaults(page);
+  await waitRendered(page, "tag");
 }
 
 async function checkServiceWorker({ page, check, base }) {
@@ -1163,10 +1176,26 @@ async function checkTagDesign({ page, check, ids, schema, paramsTabName }) {
   await hd.first().waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
   check((await hd.count()) === 0, "hole_diameter hidden when hole off");
 
-  console.log("=== notice + assert badges on the OpenSCAD output panel (tag) ===");
-  // Start from known defaults (also re-checks `hole` toggled off above).
+  // Restore a clean, rendering state for the checks that follow.
   await resetDefaults(page);
   await waitRendered(page, "tag");
+}
+
+// Notice / warning / assert reporting, exercised on the example "diagnostics"
+// design, whose whole purpose is a switch per message kind (see
+// examples/diagnostics.scad). Every other example design is silent at its
+// defaults, so this is the only place the badge machinery has anything to
+// count. A config without the design skips it rather than hunting for a
+// design that happens to echo something.
+async function checkDiagnosticsDesign({ page, check, ids }) {
+  if (!ids.includes("diagnostics")) {
+    console.log('=== notice + warning + assert reporting === (no "diagnostics" design in this config — skipped)');
+    return;
+  }
+  console.log("=== notice + warning + assert reporting (diagnostics) ===");
+  await selectDesign(page, "diagnostics");
+  await resetDefaults(page);
+  await waitRendered(page, "diagnostics");
 
   // Wait for a DOM predicate (returns false on timeout instead of throwing)
   // — a param edit only re-renders after a debounce, and the status text can
@@ -1179,37 +1208,38 @@ async function checkTagDesign({ page, check, ids, schema, paramsTabName }) {
       return false;
     }
   };
+  const consoleText = () =>
+    page.evaluate(() => document.querySelector(".output-console")?.textContent || "");
 
-  // Engraving the label trips the design's `note` category (a config-driven
-  // notice). The console auto-opens on the first notice; open it explicitly
-  // in case it was already showing earlier notices (no badge in the top bar).
-  await paramRow(page, "engrave_text").getByRole("switch").click();
+  // All three non-fatal switches are on at the design's defaults: an `alert`
+  // and a `note` (config-driven categories) plus OpenSCAD's own WARNING.
   await openConsole(page);
-  check(
-    await waitFor(() =>
-      /engraved/.test(document.querySelector(".output-console")?.textContent || "")
-    ),
-    "the engrave note is surfaced as a diagnostic"
-  );
-  // Close the console again
-  await page.click('.output-console__close').catch(() => {});
+  const notices = await consoleText();
+  check(/attention notice/.test(notices), "the alert notice is surfaced as a diagnostic");
+  check(/informational notice/.test(notices), "the note is surfaced as a diagnostic");
+  check(/unknown module/i.test(notices), "OpenSCAD's own warning is surfaced as a diagnostic");
 
-  // Making the engraving deeper than the plate trips a hard assert(): the
-  // render fails and the hardcoded "asserts" badge appears.
-  const setNum = async (name, value) => {
-    const input = paramRow(page, name).locator('input[type="number"]');
-    await input.fill(String(value));
-    await input.blur();
-  };
-  await setNum("thickness", 1);
-  await setNum("text_depth", 2);
+  // Each switch owns exactly its own message: turning the note off drops it
+  // and leaves the alert standing.
+  await paramRow(page, "show_note").getByRole("switch").click();
+  check(
+    await waitFor(() => {
+      const text = document.querySelector(".output-console")?.textContent || "";
+      return !/informational notice/.test(text) && /attention notice/.test(text);
+    }),
+    "turning a switch off retires that message alone"
+  );
+  await paramRow(page, "show_note").getByRole("switch").click();
+
+  // The assert switch is the fatal one: the render fails and the hardcoded
+  // "asserts" badge appears.
+  await paramRow(page, "fail_assert").getByRole("switch").click();
   check(
     await waitFor(() =>
       /Failed/.test(document.querySelector(".render-status")?.textContent || "")
     ),
     "the failed assert render reports a render failure"
   );
-  // The console surfaces the assert as an "asserts" count badge in its header.
   await openConsole(page);
   check(
     await waitFor(() => document.querySelector(".badge-assert") !== null),
@@ -1217,8 +1247,9 @@ async function checkTagDesign({ page, check, ids, schema, paramsTabName }) {
   );
 
   // Restore a clean, rendering state for the checks that follow.
+  await page.click(".output-console__close").catch(() => {});
   await resetDefaults(page);
-  await waitRendered(page, "tag");
+  await waitRendered(page, "diagnostics");
 }
 
 // On-model text editing ("type on the sign"): exercised on the example "tag"
@@ -1425,7 +1456,8 @@ async function checkSectionNavigator({ page, check, ids, schema, paramsTabName }
 
 // @showIf arrow_style: exercised on a "signage" design when present. (No
 // notice expectation here: a well-tuned config renders its defaults
-// advisory-free; the notice/assert badge machinery is covered by "tag".)
+// advisory-free; the notice/assert badge machinery is covered by
+// "diagnostics".)
 // Params are located by their stable `data-param` hook, which exists
 // regardless of ui.showVarName.
 async function checkSignageDesign({ page, check, ids, schema }) {
@@ -1778,10 +1810,10 @@ async function checkFirstVisitSheetPolicy({ browser, base, check, schema }) {
       // …and it must be VISIBLE, not only mounted: the nudge shares its
       // over-sheet slot with the export dock, which outranks it (z-10 vs z-9)
       // and grows with what it holds. A readiness pill, an after-export panel.
-      // The dogfood config's first design carries a default attention issue, so
-      // this first visit has a pill up, which is exactly the case that used to
-      // cover an 8-second, once-per-browser nudge. Geometry, not counts: both
-      // elements exist either way. See `--action-dock-h` in index.css.
+      // A first design carrying an attention issue puts a pill up, which is
+      // exactly the case that used to cover an 8-second, once-per-browser
+      // nudge. Geometry, not counts: both elements exist either way. See
+      // `--action-dock-h` in index.css.
       const nudgeBox = await hint.first().boundingBox();
       const dockBox = await page.locator(".action-dock").first().boundingBox();
       check(
@@ -2477,6 +2509,7 @@ const SHARED_PAGE_CHECKS = [
   checkPwaManifest,
   checkDesignGallery,
   checkTagDesign,
+  checkDiagnosticsDesign,
   checkEditOnModel,
   checkReviewOverride,
   checkSignageDesign,

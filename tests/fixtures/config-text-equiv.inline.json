@@ -28,6 +28,13 @@
     {
       "id": "panel",
       "label": "Panel"
+    },
+    {
+      "id": "diagnostics",
+      "label": {
+        "en": "Diagnostics demo",
+        "de": "Diagnose-Demo"
+      }
     }
   ],
   "assets": [

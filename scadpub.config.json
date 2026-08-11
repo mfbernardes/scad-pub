@@ -19,6 +19,9 @@
     },
     {
       "id": "panel"
+    },
+    {
+      "id": "diagnostics"
     }
   ],
   "assets": [

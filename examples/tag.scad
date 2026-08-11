@@ -1,7 +1,9 @@
 // tag.scad: a small, self-contained example design that exercises the whole
 // configurator: Customizer sections, slider/checkbox/string parameters, a
 // [Hidden] block, a `// @showIf` conditional control, and, importantly, both
-// uploadable file kinds:
+// uploadable file kinds (its own notices stay quiet at the defaults;
+// diagnostics.scad is the design that demonstrates the app's message
+// reporting):
 //   • text() uses a font (try the "Import file" button to add your own TTF/OTF,
 //     then set `font` to its family name),
 //   • import() extrudes an SVG (a default emblem.svg is bundled; upload your own
@@ -110,24 +112,17 @@ both = show_emblem && label != "";
 text_y = both ? -height / 4 : 0;
 emblem_y = both ? height / 4 : 0;
 
-// --- Configurator notices --------------------------------------------------
-// Non-fatal hints surfaced in the app's "OpenSCAD output" panel as count
+// Non-fatal design feedback, surfaced in the app's Messages panel as count
 // badges. The app matches the `: <marker>:` echo convention, so the `alert`
-// and `note` markers here line up with the `notices` categories configured in
-// scadpub.config.json. Each fires only in a specific, parameter-driven case, so
-// you can trigger them from the form:
+// and `note` markers line up with the `notices` categories configured in
+// scadpub.config.json. None of these hold at the shipped defaults — this design
+// is quiet until you steer it somewhere questionable, and diagnostics.scad is
+// the design that demonstrates the badges themselves. Each fires in a specific,
+// parameter-driven case you can reach from the form:
 //   • raise "Font height" past its half of the plate      -> an alert
 //   • widen the emblem past half the tag width            -> an alert
 //   • enable "Carve the text into the plate"              -> a note
 //   • enlarge the hanging hole past a quarter the height  -> a note
-// The first two below fire for the shipped defaults, so the OpenSCAD-output
-// badges are populated out of the box (an amber alert + a blue note):
-//   • an emblem and lettering filling over half the plate -> an alert
-//   • no hanging hole                                     -> a note
-if (both && emblem_size + text_size > height / 2)
-  echo("tag: alert: the emblem and lettering together fill more than half the plate's height");
-if (!hole)
-  echo("tag: note: this tag has no hanging hole; turn on \"Add a hole\" to thread it");
 if (label != "" && !engrave_text && text_size > (both ? height / 4 : height / 2))
   echo("tag: alert: the label text is tall for the space it has and may overflow the plate");
 if (show_emblem && emblem_size > width / 2)
@@ -144,10 +139,9 @@ if (hole && hole_diameter > height / 4)
 echo("@review", "label",
      label == "" ? "no text" : engrave_text ? str(label, " (engraved)") : label);
 
-// --- Hard constraints (asserts) -------------------------------------------
-// Unlike the notices above, a failed assert aborts the render with an
-// `ERROR: Assertion …` (which the app counts on the "asserts" badge). These
-// guard genuinely unbuildable combinations you can reach from the form:
+// A failed assert aborts the render with an `ERROR: Assertion …` (which the app
+// counts on the "asserts" badge). These guard genuinely unbuildable
+// combinations you can reach from the form; neither holds at the defaults:
 //   • enable + deepen engraving past the plate thickness -> assert
 //   • enlarge the hanging hole until it won't fit the tag -> assert
 assert(!(engrave_text && label != "" && text_depth >= thickness),

@@ -51,7 +51,7 @@
     },
     "font": {
       "description": "Schriftfamilie / -stil.",
-      "help": "Schriftfamilie / -stil. Verwendet standardmäßig eine Schrift, die ScadPub nicht mitliefert, um den Hinweis „Schrift nicht geladen“ zu zeigen: importieren Sie sie (oder klicken Sie auf die im Hinweis angebotene mitgelieferte Ersatzschrift), um die echte Vorderseite darzustellen."
+      "help": "Schriftfamilie / -stil. Wechseln Sie zur Familie einer importierten Schrift, um die Münze damit zu beschriften; die mitgelieferte Standardschrift wird unverändert dargestellt."
     },
     "text_color": {
       "description": "Farbe des erhabenen Texts im Export.",

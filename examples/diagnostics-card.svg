@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-label="A plaque reading Messages, with an alert badge and a note badge beside it">
+  <defs>
+    <linearGradient id="diagnostics-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f9fc"/>
+      <stop offset="1" stop-color="#e4eaf3"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="240" fill="url(#diagnostics-bg)"/>
+  <g transform="translate(160 132) rotate(-5)">
+    <ellipse cx="0" cy="52" rx="112" ry="10" fill="#0f172a" opacity="0.08"/>
+    <rect x="-112" y="-40" width="224" height="88" rx="14" fill="#b9c4d6"/>
+    <rect x="-112" y="-46" width="224" height="88" rx="14" fill="#ffffff"/>
+    <text x="0" y="10" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="bold"
+          fill="#e0a458" text-anchor="middle">Messages</text>
+  </g>
+  <g transform="translate(58 54)">
+    <rect x="-30" y="-16" width="60" height="32" rx="16" fill="#e0a458"/>
+    <text x="0" y="7" font-family="Helvetica, Arial, sans-serif" font-size="19" font-weight="bold"
+          fill="#1f2229" text-anchor="middle">1</text>
+  </g>
+  <g transform="translate(262 54)">
+    <rect x="-30" y="-16" width="60" height="32" rx="16" fill="#86a9ff"/>
+    <text x="0" y="7" font-family="Helvetica, Arial, sans-serif" font-size="19" font-weight="bold"
+          fill="#1f2229" text-anchor="middle">1</text>
+  </g>
+</svg>
