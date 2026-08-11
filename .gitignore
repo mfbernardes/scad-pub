@@ -7,10 +7,16 @@ public/wasm/
 
 # Generated from the configured design source via scripts/gen-schema.mjs
 public/scad/
-# gen-schema builds the new tree here and renames it over public/scad/ at its
-# commit point; a build that dies partway leaves it behind, and an untracked
-# half-built tree must never be committable.
+# Browser-facing artwork (design icon/image/preset thumbnails, header logo):
+# split out of public/scad/ so public/sw.js's stale-while-revalidate branch
+# serves it cache-first instead of the network-first treatment every scad/
+# path gets (it's build-volatile source content, artwork isn't).
+public/art/
+# gen-schema builds the new tree here and renames it over public/scad/ (resp.
+# public/art/) at its commit point; a build that dies partway leaves it
+# behind, and an untracked half-built tree must never be committable.
 public/scad.staging/
+public/art.staging/
 src/generated/
 # fontconfig config is generated (carries the optional fontFallback rule)
 public/fonts/fonts.conf

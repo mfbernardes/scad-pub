@@ -67,6 +67,7 @@ function run(configName) {
     configPath: join(FIXTURES, configName),
     outSchemaDir: join(out, "schema"),
     outScadDir: join(out, "scad"),
+    outArtDir: join(out, "art"),
   });
   return { schema, out };
 }
@@ -80,6 +81,7 @@ function runWithPublic(configName) {
     configPath: join(FIXTURES, configName),
     outSchemaDir: join(out, "schema"),
     outScadDir: join(outPublicDir, "scad"),
+    outArtDir: join(outPublicDir, "art"),
     outPublicDir,
   });
   return { schema, out };
@@ -282,13 +284,13 @@ test("enum hint forms: bare, labelled, quoted", () => {
 test("a string logo is used for both themes (copied to the served tree)", () => {
   const { schema, out } = run("widget.config.json");
   assert.equal(schema.title, "Widget Studio");
-  assert.deepEqual(schema.logo, { light: "scad/logo.svg", dark: "scad/logo.svg" });
-  assert.ok(existsSync(join(out, "scad", "logo.svg")));
+  assert.deepEqual(schema.logo, { light: "art/logo.svg", dark: "art/logo.svg" });
+  assert.ok(existsSync(join(out, "art", "logo.svg")));
 });
 
 test("a per-theme logo with one side omitted falls back to the other", () => {
   const { schema } = run("widget-logo-fallback.config.json");
-  assert.deepEqual(schema.logo, { light: "scad/logo.svg", dark: "scad/logo.svg" });
+  assert.deepEqual(schema.logo, { light: "art/logo.svg", dark: "art/logo.svg" });
 });
 
 test("title defaults when omitted; no logo or fileImport by default", () => {
@@ -468,8 +470,8 @@ test("reviewLabels/reviewNote: a design's own @review/@reviewNote annotations ar
 test("presetImages: a key matching a bundled preset name is resolved and copied", () => {
   const { schema, out } = run("widget-presetimages.config.json");
   const widget = schema.designs.find((d) => d.id === "widget");
-  assert.deepEqual(widget.presetImages, { Tall: "scad/widget-preset-0.png" });
-  assert.ok(existsSync(join(out, "scad", "widget-preset-0.png")));
+  assert.deepEqual(widget.presetImages, { Tall: "art/widget-preset-0.png" });
+  assert.ok(existsSync(join(out, "art", "widget-preset-0.png")));
 });
 
 test("a design with no configured presetImages omits the field", () => {
@@ -493,15 +495,15 @@ test("presets.images directory form: each preset's image is found by slug, tryin
   const design = schema.designs.find((d) => d.id === "presetdir");
   // "Salz (Deutsch)" has both a .svg and a .png in the directory: .svg wins
   // (the documented extension priority).
-  assert.equal(design.presetImages["Salz (Deutsch)"], "scad/presetdir-preset-0.svg");
-  assert.ok(existsSync(join(out, "scad", "presetdir-preset-0.svg")));
-  assert.equal(design.presetImages["Office (English US)"], "scad/presetdir-preset-1.png");
+  assert.equal(design.presetImages["Salz (Deutsch)"], "art/presetdir-preset-0.svg");
+  assert.ok(existsSync(join(out, "art", "presetdir-preset-0.svg")));
+  assert.equal(design.presetImages["Office (English US)"], "art/presetdir-preset-1.png");
   // The two punctuation-only names slug identically; only the FIRST one
   // (matching "...english-us.webp", no "-2" suffix) has a file in the
   // directory, so only it gets an image.
   assert.equal(
     design.presetImages["Punctuation | English UEB: - : ; ' (English US)"],
-    "scad/presetdir-preset-2.webp"
+    "art/presetdir-preset-2.webp"
   );
   assert.equal("Punctuation | English UEB: . , ? ! (English US)" in design.presetImages, false);
   // "No Image Here" has no matching file in the directory at all: legitimate
@@ -594,12 +596,12 @@ test("per-design description + icon come from the design's own annotations", () 
   // widget's `// @description` / `// @icon` annotations (the icon path is
   // resolved relative to the design file and copied under <id>-icon.<ext>).
   assert.equal(widget.description, "A little widget.");
-  assert.equal(widget.icon, "scad/widget-icon.svg");
-  assert.ok(existsSync(join(out, "scad", "widget-icon.svg")));
+  assert.equal(widget.icon, "art/widget-icon.svg");
+  assert.ok(existsSync(join(out, "art", "widget-icon.svg")));
   // collapsible's own `// @description` / `// @icon` annotations.
   assert.equal(collapsible.description, "A collapsible gadget.");
-  assert.equal(collapsible.icon, "scad/collapsible-icon.svg");
-  assert.ok(existsSync(join(out, "scad", "collapsible-icon.svg")));
+  assert.equal(collapsible.icon, "art/collapsible-icon.svg");
+  assert.ok(existsSync(join(out, "art", "collapsible-icon.svg")));
 });
 
 test("per-design @doc is resolved, copied and served (annotation paths)", () => {
@@ -675,11 +677,11 @@ test("lang/dir + per-design shortcut icons + screenshot fields reach the manifes
   // each design's own `// @icon` annotation.
   const widgetShortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
   assert.deepEqual(widgetShortcut.icons, [
-    { src: "scad/widget-icon.svg", sizes: "any", type: "image/svg+xml" },
+    { src: "art/widget-icon.svg", sizes: "any", type: "image/svg+xml" },
   ]);
   const collapsibleShortcut = manifest.shortcuts.find((s) => s.url === "./#d=collapsible");
   assert.deepEqual(collapsibleShortcut.icons, [
-    { src: "scad/collapsible-icon.svg", sizes: "any", type: "image/svg+xml" },
+    { src: "art/collapsible-icon.svg", sizes: "any", type: "image/svg+xml" },
   ]);
   // Screenshot label/platform are passed through.
   assert.equal(manifest.screenshots[0].label, "Home screen");
@@ -717,15 +719,15 @@ test("a PNG design icon is served as-is and its real pixel size reaches the mani
     outPublicDir: join(out, "public"),
   });
   // PNG copied verbatim (no rasterization) preserving its extension.
-  assert.equal(schema.designs.find((d) => d.id === "widget").icon, "scad/widget-icon.png");
-  assert.ok(existsSync(join(out, "public", "scad", "widget-icon.png")));
+  assert.equal(schema.designs.find((d) => d.id === "widget").icon, "art/widget-icon.png");
+  assert.ok(existsSync(join(out, "public", "art", "widget-icon.png")));
   // The derived shortcut icon advertises the PNG's real 48x24 size (not "any").
   const manifest = JSON.parse(
     readFileSync(join(out, "public", "manifest.webmanifest"), "utf-8")
   );
   const shortcut = manifest.shortcuts.find((s) => s.url === "./#d=widget");
   assert.deepEqual(shortcut.icons, [
-    { src: "scad/widget-icon.png", sizes: "48x24", type: "image/png" },
+    { src: "art/widget-icon.png", sizes: "48x24", type: "image/png" },
   ]);
 });
 
@@ -913,7 +915,7 @@ test("public precache manifest lists generated runtime assets", () => {
     "scad/widget.json",
     "scad/lib/core.scad",
     "scad/lib/util.scad",
-    "scad/logo.svg",
+    "art/logo.svg",
   ]) {
     assert.ok(precache.shell.includes(path), `${path} should be shell-precached`);
   }
@@ -3667,24 +3669,27 @@ test("a PWA/icon failure after a prior successful build leaves the previous outp
   const out = mkdtempSync(join(tmpdir(), "gen-schema-txn-"));
   const outPublicDir = join(out, "public");
   const outScadDir = join(outPublicDir, "scad");
+  const outArtDir = join(outPublicDir, "art");
   const outSchemaDir = join(out, "schema");
-  const base = { outSchemaDir, outScadDir, outPublicDir };
+  const base = { outSchemaDir, outScadDir, outArtDir, outPublicDir };
   // A good build first.
   generate({ ...base, configPath: join(FIXTURES, "widget.config.json") });
   const beforeScad = readdirSync(outScadDir).sort();
+  const beforeArt = readdirSync(outArtDir).sort();
   const beforeSchema = readFileSync(join(outSchemaDir, "designs.json"));
   const iconPath = join(outPublicDir, "icon-192.png");
   const beforeIcon = existsSync(iconPath) ? readFileSync(iconPath) : null;
 
   // A build whose configured icon can't rasterize fails AFTER staging the new
-  // scad but before the commit, so scad, schema, and the icons must all stay
-  // exactly as the last good build left them (no new-scad/old-schema mismatch,
-  // no clobbered/deleted last-good icon).
+  // scad/art trees but before the commit, so scad, art, schema, and the icons
+  // must all stay exactly as the last good build left them (no new-scad/
+  // old-schema mismatch, no clobbered/deleted last-good icon).
   assert.throws(
     () => generate({ ...base, configPath: join(FIXTURES, "widget-badicon.config.json") }),
     /icon rasterization failed/
   );
   assert.deepEqual(readdirSync(outScadDir).sort(), beforeScad);
+  assert.deepEqual(readdirSync(outArtDir).sort(), beforeArt);
   assert.deepEqual(readFileSync(join(outSchemaDir, "designs.json")), beforeSchema);
   if (beforeIcon) assert.deepEqual(readFileSync(iconPath), beforeIcon);
 });
@@ -3812,7 +3817,8 @@ test("changing a font then failing a later step leaves the prior font bytes and 
   assert.notDeepEqual(readFileSync(BOLD), beforeFont);
 });
 
-// M13: browser-facing SVGs (logo, PWA icon, design picker icon) are run
+// M13: browser-facing SVGs (logo, PWA icon, design picker icon — the first
+// and third land in public/art/, the PWA icon at the served root) are run
 // through scripts/lib/svg-sanitize.mjs; render-input SVGs (config `assets` /
 // a design's use/include graph, copied into public/scad/ for OpenSCAD's
 // import()/surface()) are deliberately left byte-for-byte untouched. See
@@ -4319,9 +4325,9 @@ test("a well-formed document that is not an SVG fails the build and names the fi
   // Each entry names the destination that path would have written, so "no
   // husk" is asked about the file this case could actually have left behind.
   for (const [what, extra, dest] of [
-    ["logo", { logo: "notsvg.svg" }, ["public", "scad", "notsvg.svg"]],
+    ["logo", { logo: "notsvg.svg" }, ["public", "art", "notsvg.svg"]],
     ["pwa.icon", { pwa: { icon: "notsvg.svg" } }, ["public", "icon.svg"]],
-    ["a design @icon", { designs: [{ id: "iconed", label: "I" }] }, ["public", "scad", "notsvg.svg"]],
+    ["a design @icon", { designs: [{ id: "iconed", label: "I" }] }, ["public", "art", "notsvg.svg"]],
   ]) {
     const out = mkdtempSync(join(tmpdir(), "gen-schema-out-"));
     const cfg = join(root, `notsvg-${what.replace(/\W/g, "")}.config.json`);
@@ -4490,7 +4496,7 @@ test("a browser-facing SVG that IS sanitized says so, at BOTH entry points", () 
   };
 
   for (const [what, extra, written] of [
-    ["logo", { logo: "dirty.svg" }, ["public", "scad", "dirty.svg"]],
+    ["logo", { logo: "dirty.svg" }, ["public", "art", "dirty.svg"]],
     ["pwa icon", { pwa: { icon: "dirty.svg" } }, ["public", "icon.svg"]],
   ]) {
     const { out, warnings } = build(extra, `dirty-${what.replace(/\W/g, "")}`);

@@ -26,20 +26,27 @@
 /wasm/*
   Cache-Control: public, max-age=86400
 
-# M13 — design/config sources (including the SVGs mounted under /scad/: use/
-# include assets consumed by OpenSCAD's import()/surface(), plus the copied
-# logo/design-icon files) and the generated /icon.svg are trusted OPERATOR
-# input, not sandboxed third-party content — see docs/config.md "SVG asset
-# trust model". They're safe wherever they're actually used (<img>, <use>,
-# CSS, OpenSCAD's WASM FS), but an SVG can carry <script>, and a browser that
-# is navigated to one *directly* would otherwise execute it in this app's
-# origin. These headers are cheap defense-in-depth against exactly that direct
-# -navigation case; they don't restrict — and can't break — the app's own
-# <img>/<use>/CSS/import() consumption of the same files, since a CSP header
-# only governs the fetched resource when *it* is the top-level document (or an
-# embedded document, e.g. an iframe), not when it's decoded as an image or
-# mounted into the WASM filesystem.
+# M13 — design/config sources (the SVGs mounted under /scad/: use/include
+# assets consumed by OpenSCAD's import()/surface()) and generated artwork
+# (design icon/image, bundled-preset thumbnails, the header logo, under
+# /art/; the app icon at /icon.svg) are trusted OPERATOR input, not sandboxed
+# third-party content — see docs/config.md "SVG asset trust model". They're
+# safe wherever they're actually used (<img>, <use>, CSS, OpenSCAD's WASM
+# FS), but an SVG can carry <script>, and a browser that is navigated to one
+# *directly* would otherwise execute it in this app's origin. These headers
+# are cheap defense-in-depth against exactly that direct-navigation case;
+# they don't restrict — and can't break — the app's own <img>/<use>/CSS/
+# import() consumption of the same files, since a CSP header only governs the
+# fetched resource when *it* is the top-level document (or an embedded
+# document, e.g. an iframe), not when it's decoded as an image or mounted
+# into the WASM filesystem. (The trailing /*.svg rule below already covers
+# every SVG regardless of directory; /scad/* and /art/* additionally cover
+# non-SVG files under each, e.g. a bundled-preset PNG, for the same
+# defense-in-depth reason.)
 /scad/*
+  Content-Security-Policy: default-src 'none'; sandbox
+  X-Content-Type-Options: nosniff
+/art/*
   Content-Security-Policy: default-src 'none'; sandbox
   X-Content-Type-Options: nosniff
 /icon.svg

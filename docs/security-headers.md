@@ -6,7 +6,7 @@ rules so the smoke server validates the policy that actually ships. This page is
 rationale; the source is the policy.
 
 Related: the SVG asset trust model in [config.md](config.md), which is what the `/scad/*`
-rule below exists to enforce.
+and `/art/*` rules below exist to enforce.
 
 ## The app CSP, directive by directive
 
