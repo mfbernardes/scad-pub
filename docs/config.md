@@ -304,20 +304,31 @@ each is treated differently:
   - **CSS**: a `<style>` block or a CSS-valued attribute survives only if what
     remains, after `@import` and foreign `url()` are removed, is literal values
     and functions that cannot reference anything (colours, maths, transforms).
+    `@media` is the one at-rule kept; its prelude must be plain media-query
+    syntax (idents, numbers, ratios, range operators — no strings, no other
+    `@`, no function but the query keywords, no comment, no `calc()`), and
+    everything inside its braces is held to exactly the same rules as
+    top-level CSS, so a `@media` block can neither fetch nor shelter a
+    fetching construct.
 
   It also removes what can execute — `<script>`, `<foreignObject>`, the SMIL
   animation elements, `on*` handlers — and any `<?xml-stylesheet?>` processing
   instruction.
 
   **What this costs.** The CSS rule is strict, and deliberately so: a **quoted
-  string** or an **at-rule** drops the whole block. `font-family: "My Font"` and
-  `@media print { … }` are casualties, because `image-set("…" 1x)` carries a URL
-  as a bare quoted string and there is no way to tell the two apart without a
-  per-property value grammar (LightningCSS, which this repo already has, does not
-  surface that one either). A `data:` URI is the other casualty. Relative
-  references cost nothing: each of these files is copied on its own into a flat
-  served directory under a generated name, so a reference to a sibling already
-  resolved to a file that was never copied.
+  string** still drops the whole block — `font-family: "My Font"` is a casualty,
+  because `image-set("…" 1x)` carries a URL as a bare quoted string and there is
+  no way to tell the two apart without a per-property value grammar
+  (LightningCSS, which this repo already has, does not surface that one
+  either). Every **at-rule except `@media`** still drops the whole block too:
+  `@font-face`, `@keyframes` and `@supports` are casualties, because each
+  brings a body with its own grammar this sanitizer doesn't parse, and
+  `@font-face`'s `src` fetches. `@media` is kept specifically so an icon that
+  retints itself for dark mode keeps its styling — dropping the whole block
+  used to remove the base rules too, not merely the override. A `data:` URI is
+  the other casualty. Relative references cost nothing: each of these files is
+  copied on its own into a flat served directory under a generated name, so a
+  reference to a sibling already resolved to a file that was never copied.
 
   It also removes `ping` from an SVG `<a>`: SVG 2 delegates it to HTML’s
   hyperlink auditing, and activating such a link really does send every URL

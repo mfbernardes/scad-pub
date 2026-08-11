@@ -264,12 +264,20 @@ test("a stylesheet is kept only if what remains cannot reference anything", () =
     ["image-set with a URL", `.a{background:image-set("https://evil.example/x.png" 1x)}`],
     ["image-set with a relative path", `.a{background:image-set("x.png" 1x)}`],
     ["an unterminated url(", `.a{fill:url(https://evil.example/a.svg#x`],
-    ["an at-rule", `@media print{.a{fill:red}}`],
     ["a function nobody vouched for", `.a{fill:some-future-fn(https://evil.example/x)}`],
+    // `@media` is the one at-rule that survives (see cssRisk); these are
+    // still correctly rejected BY THE AT-RULE RULE, with no string or
+    // function involved, so they isolate what they claim to test.
+    ["a font-face at-rule", `@font-face{font-family:x}`],
+    ["a keyframes at-rule", `@keyframes s{from{fill:red}}`],
+    ["a supports at-rule", `@supports (fill:red){.a{fill:red}}`],
+    ["a safe at-rule beside an unsafe one", `@media print{.a{fill:red}}@font-face{font-family:x}`],
+    ["an at-rule whose name only starts with media", `@media-x (min-width:1px){.a{fill:red}}`],
   ]) {
     const { text, removed } = sanitizeSvg(doc(`<style>${css}</style><rect class="a"/>`));
     assert.doesNotMatch(text, /evil\.example|image-set/, what);
     assert.ok(removed.length > 0, `${what}: nothing reported`);
+    assert.doesNotMatch(text, /<style/, `${what}: the block should have been dropped, not merely rewritten`);
     assert.match(text, /<rect/, `${what}: the drawing is not collateral`);
   }
 
@@ -279,6 +287,15 @@ test("a stylesheet is kept only if what remains cannot reference anything", () =
     `.a{fill:rgb(1 2 3)}`,
     `.a{fill:url(#g);width:calc(1px + var(--x))}`,
     `.a{transform:translate(1px,2px) rotate(45deg)}`,
+    `@media (prefers-color-scheme: dark){.a{fill:#8FB0F5}}`,
+    `.a{fill:#333}@media (prefers-color-scheme:dark){.a{fill:#fff}}`,
+    `@media screen and (min-width:100px){.a{fill:red}}`,
+    `@MEDIA print{.a{fill:#000}}`,
+    `@media screen{@media (min-width:1px){.a{fill:red}}}`,
+    `@media (min-aspect-ratio: 16/9){.a{fill:red}}`,
+    // An escaped at-keyword that normalizes to `@media` — kept WITH the
+    // escape intact, since the output is never the normalized copy.
+    String.raw`@\6d edia print{.a{fill:red}}`,
   ]) {
     const svg = doc(`<style>${css}</style><rect class="a"/>`);
     const res = sanitizeSvg(svg);
@@ -473,7 +490,7 @@ test("a dropped stylesheet says WHY it was dropped", () => {
   const D = (inner) => sanitizeSvg(doc(inner)).removed.join("; ");
   assert.match(D(`<text style="font-family:&apos;ArialMT&apos;;fill:#231F20">Hi</text>`), /string literal/);
   assert.match(D(`<text style="font-family:&apos;ArialMT&apos;;fill:#231F20">Hi</text>`), /style attribute/);
-  assert.match(D(`<style>.a{fill:#333}@media print{.a{fill:#000}}</style><rect class="a"/>`), /at-rule/);
+  assert.match(D(`<style>@font-face{font-family:x}</style><rect class="a"/>`), /the at-rule @font-face/);
   assert.match(D(`<style>.a{fill:some-future-fn(x)}</style><rect class="a"/>`), /some-future-fn\(\)/);
 });
 
@@ -562,4 +579,109 @@ test("a quoted url() value containing ')' is recognised as external, not same-do
     wrap(`<style>.a{background:url("http://evil.test/a)b.png")}</style><rect width="1" height="1"/>`)
   );
   assert.doesNotMatch(out, /evil\.test/, `external ref with ')' survived: ${out}`);
+});
+
+test("a @media block is kept, and everything inside it is still checked", () => {
+  // Dropping a stylesheet for containing ANY at-rule used to remove an icon's
+  // BASE styling too, not just a dark-mode override, whenever the icon was
+  // themed entirely via CSS classes with a `@media (prefers-color-scheme:
+  // dark)` retint and no inline fill/stroke fallback. A design's picker icon
+  // is wired directly into `manifest.webmanifest`'s `shortcuts[].icons[]`,
+  // which the OS reads with nothing in between (Android long-press shortcuts,
+  // desktop jump lists), so losing all styling there is not cosmetic.
+
+  // Still refused: a @media wrapper does not launder what is inside it.
+  for (const [what, css] of [
+    [
+      "image-set inside a media body",
+      `@media print{.a{background:image-set("https://evil.example/x.png" 1x)}}`,
+    ],
+    ["an unvouched function inside a media body", `@media print{.a{fill:some-future-fn(x)}}`],
+    ["a function carrying a URL inside a media body", `@media print{.a{fill:some(https://evil.example/x)}}`],
+    ["a function smuggled into the prelude", `@media (min-width:1px) some-fn(y){.a{fill:red}}`],
+    ["an unterminated url( in the prelude", `@media (x) url(evil.png {.a{fill:red}}`],
+    ["a @media rule with no block at all", `.a{fill:red} @media (min-width:1px)`],
+    ["an escaped at-keyword normalizing to @font-face", String.raw`@\66 ont-face{font-family:x}`],
+    // Only the prelude character-class allowlist rejects this one — no
+    // disallowed function, no string, no scheme — so it is the sole case
+    // that would still pass if MEDIA_PRELUDE_RE were mutated to accept
+    // everything.
+    ["a prelude character the allowlist does not spell", `@media (x);{.a{fill:red}}`],
+    // A prelude that is scheme-shaped but contains no `(`/`)`, so it passes
+    // both the character class and the (function-only) prelude allowlist,
+    // and is only caught because the URL-scheme check runs against the
+    // ORIGINAL `css`, not the elided `probe`. Mutating cssRisk to scan
+    // `probe` for every check would let this one through.
+    ["a URL scheme hiding in the prelude", `@media http://evil.example/x {.a{fill:red}}`],
+  ]) {
+    const { text, removed } = sanitizeSvg(doc(`<style>${css}</style><rect class="a"/>`));
+    assert.doesNotMatch(text, /evil\.example|image-set/, what);
+    assert.ok(removed.length > 0, `${what}: nothing reported`);
+    // Not just "something was reported" — the whole <style> element is gone.
+    assert.doesNotMatch(text, /<style/, `${what}: the block should have been dropped, not merely rewritten`);
+    assert.match(text, /<rect/, `${what}: the drawing is not collateral`);
+  }
+  {
+    const { removed } = sanitizeSvg(
+      doc(`<style>@media (x);{.a{fill:red}}</style><rect class="a"/>`)
+    );
+    assert.ok(
+      removed.some((r) => /prelude this module cannot read/.test(r)),
+      removed.join("; ")
+    );
+  }
+  {
+    const { removed } = sanitizeSvg(
+      doc(`<style>@media http://evil.example/x {.a{fill:red}}</style><rect class="a"/>`)
+    );
+    assert.ok(
+      removed.some((r) => /URL scheme/.test(r)),
+      removed.join("; ")
+    );
+  }
+  {
+    const { removed } = sanitizeSvg(
+      doc(`<style>@media (x) url(evil.png {.a{fill:red}}</style><rect class="a"/>`)
+    );
+    assert.ok(removed.some((r) => r.includes("prelude")), removed.join("; "));
+  }
+  {
+    const { removed } = sanitizeSvg(doc(`<style>.a{fill:red} @media (min-width:1px)</style><rect class="a"/>`));
+    assert.ok(
+      removed.some((r) => /no block/.test(r)),
+      removed.join("; ")
+    );
+  }
+
+  // Kept but rewritten: a surviving @media block whose internal references
+  // are still scrubbed exactly as top-level CSS would be.
+  {
+    const { text, removed } = sanitizeSvg(
+      doc(`<style>@media print{.a{fill:url(https://evil.example/x.svg#p)}}</style><rect class="a"/>`)
+    );
+    assert.doesNotMatch(text, /evil\.example/);
+    assert.match(text, /fill:none/);
+    assert.match(text, /@media print/);
+    assert.ok(removed.some((r) => r.includes("not a same-document")), removed.join("; "));
+  }
+  {
+    const { text, removed } = sanitizeSvg(
+      doc(
+        `<style>@media print{@import url("https://evil.example/x.css");.a{fill:red}}</style><rect class="a"/>`
+      )
+    );
+    assert.doesNotMatch(text, /@import/i);
+    assert.doesNotMatch(text, /evil\.example/);
+    assert.match(text, /\.a\{fill:red\}/);
+    assert.match(text, /@media print/);
+    assert.ok(!removed.some((r) => r.includes("will not vouch for")), removed.join("; "));
+  }
+  {
+    // An approved same-document reference inside a media block must not make
+    // the block look unreadable: kept byte-for-byte, nothing reported.
+    const svg = doc(`<style>@media (min-width:1px){.a{fill:url(#g)}}</style><rect class="a"/>`);
+    const res = sanitizeSvg(svg);
+    assert.equal(res.text, svg);
+    assert.deepEqual(res.removed, []);
+  }
 });
