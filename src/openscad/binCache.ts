@@ -57,3 +57,34 @@ export function staleBinaryCaches(
   const kept = new Set(sorted.slice(sorted.length - keepCount));
   return others.filter((k) => !kept.has(k));
 }
+
+// M1 (cache-poisoning hardening): BIN_CACHE is deliberately origin-shared
+// (see the module comment), which means any other same-origin app can write
+// into it. versionedAssetUrl (lib/assetUrl.ts) already content-addresses each
+// binary's fetch URL with a `?v=<digest>` of its build-time SHA-256, so a
+// cache HIT can be verified against that digest before its bytes are
+// compiled/executed — turning a same-origin cache-poisoning write into a
+// self-healing cache miss rather than trusted, unverified input. Extracts the
+// digest a URL was fetched under; a URL with no `v` param (dev/fixture builds
+// with no binAssets entry, see versionedAssetUrl) yields null, meaning
+// "nothing to verify against" — the caller should skip verification and
+// behave exactly as before.
+export function digestFromUrl(url: string): string | null {
+  try {
+    return new URL(url).searchParams.get("v");
+  } catch {
+    return null;
+  }
+}
+
+// Whether `bytes` hashes (SHA-256, hex, truncated to digest's length) to
+// `digest`. Mirrors scripts/lib/hash.mjs's computeBinAssetVersions exactly
+// (same algorithm, same truncation) so a build-time digest and a runtime
+// re-hash of the same bytes always agree.
+export async function bytesMatchDigest(bytes: ArrayBuffer, digest: string): Promise<boolean> {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+  const hex = [...new Uint8Array(hashBuffer)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return hex.slice(0, digest.length) === digest;
+}

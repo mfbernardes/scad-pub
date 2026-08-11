@@ -83,6 +83,7 @@ test("the engine's emitted-code exports are exactly its known codes", () => {
       "removed-active",
       "removed-background",
       "removed-external",
+      "removed-unsafe-attrs",
       "style-fills",
     ].sort(),
   );
@@ -687,6 +688,28 @@ test("applyFixes strips what executes and what fetches, keeping the colours", ()
   assert.match(svg, /url\(#g\)/, "a same-document reference survives");
   assert.match(svg, /fill="red"/, "the stylesheet's colour reached the shape");
   assert.ok(check(root).every((f) => f.code !== "active-content"), "re-check is clean");
+});
+
+test("applyFixes strips event-handler attributes and non-same-document href/xlink:href, keeping a #frag ref", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10 10">
+       <rect id="r" onload="alert(1)" width="5" height="5" fill="red"/>
+       <a href="javascript:alert(1)"><rect width="1" height="1"/></a>
+       <use xlink:href="http://evil.test/x.svg#y"/>
+       <use href="#localShape"/>
+       <circle id="localShape" cx="5" cy="5" r="1" fill="blue"/>
+     </svg>`,
+  );
+  const changes = applyFixes(root);
+  assert.ok(
+    changes.some((c) => c.code === "removed-unsafe-attrs" && c.vars.count >= 3),
+    "unsafe attributes are reported",
+  );
+  const svg = serializeSvg(root);
+  assert.doesNotMatch(svg, /onload/i);
+  assert.doesNotMatch(svg, /javascript:/i);
+  assert.doesNotMatch(svg, /evil\.test/);
+  assert.match(svg, /href="#localShape"/, "a same-document href survives");
 });
 
 // Shared with scripts/lib/svg-sanitize.mjs via src/lib/cssRefs.mjs: a quoted

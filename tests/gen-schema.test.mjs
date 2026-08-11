@@ -1764,6 +1764,31 @@ test("parseColors validates tokens and values", () => {
   assert.throws(() => parseColors({ dark: "#fff" }), /'colors\.dark' must be an object/);
 });
 
+test("parseColors rejects url() and protocol-relative values though the charset allows them", () => {
+  // Neither shape needs a ':', so the charset regex alone can't catch them —
+  // isSafeColorValue's explicit url()/// guard is what rejects these.
+  assert.throws(
+    () => parseColors({ dark: { bg: "url(//evil/x)" } }),
+    /'colors\.dark\.bg' must be a plain CSS colour/,
+  );
+  assert.throws(
+    () => parseColors({ dark: { bg: "//evil" } }),
+    /'colors\.dark\.bg' must be a plain CSS colour/,
+  );
+  assert.throws(
+    () => parseColors({ dark: { bg: "URL(#x)" } }),
+    /'colors\.dark\.bg' must be a plain CSS colour/,
+    "case-insensitive",
+  );
+  // Real CSS colour functions still pass.
+  assert.deepEqual(parseColors({ dark: { bg: "rgb(0 0 0 / 50%)" } }), {
+    dark: { bg: "rgb(0 0 0 / 50%)" },
+  });
+  assert.deepEqual(parseColors({ dark: { bg: "oklch(.7 .1 200)" } }), {
+    dark: { bg: "oklch(.7 .1 200)" },
+  });
+});
+
 test("colors: an explicit null token means unset, same as an absent one", () => {
   assert.deepEqual(parseColors({ dark: { bg: null } }), null);
   assert.deepEqual(parseColors({ dark: { bg: null, accent: "#fff" } }), {

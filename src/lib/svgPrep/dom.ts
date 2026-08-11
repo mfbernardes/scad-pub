@@ -33,11 +33,12 @@ export const IGNORED_TAGS = new Set([
 // Elements that can EXECUTE rather than describe geometry. OpenSCAD ignores
 // them like everything in IGNORED_TAGS, but they are reported and stripped
 // separately: a user-supplied drawing is the one SVG class ScadPub does not
-// trust (see docs/config.md's trust model), and the invariant that keeps it
-// safe — a wizard-prepared SVG is never rendered in the DOM, only mounted into
-// the WASM filesystem — is one line of future code away from not holding.
-// Stripping them makes the runtime path safe by construction rather than by
-// circumstance.
+// trust (see docs/config.md's trust model). Stripping these, plus the event-
+// handler and non-same-document href/xlink:href attributes fixes.ts's
+// removeActiveContent also removes from every surviving element, makes the
+// output inert by construction rather than by the accident of a wizard-
+// prepared SVG never (yet) being rendered in the DOM — an invariant that used
+// to be one line of future code away from not holding.
 //
 // SMIL is here because `<animate attributeName="href" values="javascript:…">`
 // sets at runtime what no static scan of the markup would show.

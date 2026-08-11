@@ -30,6 +30,7 @@ export const CHANGE_CODES = [
   "removed-background",
   "removed-active",
   "removed-external",
+  "removed-unsafe-attrs",
   "style-fills",
 ] as const;
 export type FixChangeCode = (typeof CHANGE_CODES)[number];
@@ -190,11 +191,14 @@ function removeCanvasBackground(root: Element): Change[] {
   return count ? [change("removed-background", { count })] : [];
 }
 
-/** Remove every element that can execute (see ACTIVE_TAGS), and neutralise what
- *  a `<style>` block can fetch (`@import`, an external `url()`), leaving its
- *  rules — and therefore the drawing's colours — untouched. None of it becomes
- *  geometry, and a user-supplied drawing is the one SVG class ScadPub does not
- *  trust. */
+/** Remove every element that can execute (see ACTIVE_TAGS), strip any
+ *  event-handler attribute or non-same-document `href`/`xlink:href` off what
+ *  survives, and neutralise what a `<style>` block can fetch (`@import`, an
+ *  external `url()`), leaving its rules — and therefore the drawing's colours
+ *  — untouched. The result is inert by construction rather than by the
+ *  accident of never being rendered: see ACTIVE_TAGS's comment in dom.ts for
+ *  why that accident isn't something to lean on. None of it becomes geometry,
+ *  and a user-supplied drawing is the one SVG class ScadPub does not trust. */
 export function removeActiveContent(root: Element): Change[] {
   const changes: Change[] = [];
   // One walk: on a 2 MB drawing a second full traversal is ~50k nodes for a
@@ -209,6 +213,30 @@ export function removeActiveContent(root: Element): Change[] {
     }
   }
   if (count) changes.push(change("removed-active", { count }));
+
+  // localName strips the namespace prefix, so this catches xlink:href the
+  // same way it catches a bare href — matching svg-sanitize.mjs's rule for
+  // the same reference.
+  let unsafeAttrs = 0;
+  for (const el of els) {
+    const attrs = el.attributes;
+    if (!attrs) continue;
+    const toRemove: string[] = [];
+    for (let i = 0; i < attrs.length; i++) {
+      const attr = attrs[i];
+      const local = (attr.localName ?? attr.name).toLowerCase();
+      if (local.startsWith("on")) {
+        toRemove.push(attr.name);
+      } else if (local === "href" && !isSameDocumentRef(attr.value ?? "")) {
+        toRemove.push(attr.name);
+      }
+    }
+    for (const name of toRemove) {
+      el.removeAttribute(name);
+      unsafeAttrs += 1;
+    }
+  }
+  if (unsafeAttrs) changes.push(change("removed-unsafe-attrs", { count: unsafeAttrs }));
 
   let fetches = 0;
   for (const el of els) {
