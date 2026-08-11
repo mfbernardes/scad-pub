@@ -17,16 +17,26 @@
  * drop them and prompt the user to reload instead.
  *
  * Customizer parameters are top-level `name = …;` assignments whose name follows
- * OpenSCAD's identifier grammar (so the name needs no regex escaping). The
+ * OpenSCAD's identifier grammar, so no name here is ever expected to contain a
+ * regex metacharacter — `escapeRegExp` below is defense-in-depth for that
+ * invariant living a caller away, not a workaround for a real input. The
  * negative lookahead avoids matching an `==` comparison, and matching at any
  * indentation only errs toward "present", i.e. we flag a define only when its
  * name is genuinely absent.
  */
+
+// Local copy of lib/diagnostics.ts's escapeRegExp: importing that file would
+// pull it (and everything it in turn imports) into worker.ts's dependency
+// closure, which renderHash hashes in full (see worker-deps.test.mjs).
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function orphanedDefines(
   defineNames: Iterable<string>,
   source: string
 ): string[] {
   return [...defineNames].filter(
-    (name) => !new RegExp(`^\\s*${name}\\s*=(?!=)`, "m").test(source)
+    (name) => !new RegExp(`^\\s*${escapeRegExp(name)}\\s*=(?!=)`, "m").test(source)
   );
 }

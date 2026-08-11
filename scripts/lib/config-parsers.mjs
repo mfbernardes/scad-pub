@@ -99,9 +99,9 @@ function validateFieldValue(value, field, path) {
     }
     case "color": {
       // Same strictness as every other colour input in this config
-      // (COLOR_VALUE_RE, defined below): safe to interpolate into generated
+      // (isSafeColorValue, defined below): safe to interpolate into generated
       // SVG/HTML attributes and the manifest.
-      if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
+      if (typeof value !== "string" || !isSafeColorValue(value.trim()))
         throw new Error(`${prefix} must be a CSS colour string (got ${JSON.stringify(value)})`);
       return value.trim();
     }
@@ -193,6 +193,16 @@ export function applyGroupSpec(raw, node, path) {
 // named colour. Forbids `;`, `{`, `}` and comment markers so a value can't break
 // out of the generated `<style>` rule it gets interpolated into.
 export const COLOR_VALUE_RE = /^[#a-zA-Z0-9 ,.()%/-]+$/;
+
+// The charset above still admits `url(` (a fetch, no `:` required — CSS syntax
+// doesn't need one) and a bare `//host/path` (protocol-relative, same story).
+// Neither is a colour function, so reject both explicitly rather than widen
+// the charset test into an unreadable single regex. This is defence-in-depth
+// only: the value is CSP-blocked at render time regardless (operator-supplied
+// config, not user input) — see docs/security-headers.md.
+export function isSafeColorValue(value) {
+  return COLOR_VALUE_RE.test(value) && !/url\(/i.test(value) && !value.includes("//");
+}
 
 // Escape a value for safe interpolation into generated XML/SVG attribute text.
 export const xmlEscape = (s) =>
@@ -444,7 +454,7 @@ export function parseColors(raw) {
       // An explicit `null` means "not set", same as every other optional
       // field in this config.
       if (value === null) continue;
-      if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
+      if (typeof value !== "string" || !isSafeColorValue(value.trim()))
         throw new Error(
           `gen-schema: 'colors.${theme}.${token}' must be a plain CSS colour ` +
             `(got ${JSON.stringify(value)})`
@@ -560,7 +570,7 @@ export function parseStringArray(raw, key) {
 }
 
 function validateThemeColorValue(value, path) {
-  if (typeof value !== "string" || !COLOR_VALUE_RE.test(value.trim()))
+  if (typeof value !== "string" || !isSafeColorValue(value.trim()))
     throw new Error(`${messagePrefix(path)} must be a CSS colour string (got ${JSON.stringify(value)})`);
   return value.trim();
 }
@@ -747,7 +757,7 @@ export function parseNotices(raw, languages, defaultTag) {
     seenMarkers.set(markerKey, i);
     const out = { marker, label: parseNoticeLabel(entry.label, marker, i, languages, defaultTag) };
     if (entry.color !== undefined && entry.color !== null) {
-      if (typeof entry.color !== "string" || !COLOR_VALUE_RE.test(entry.color.trim()))
+      if (typeof entry.color !== "string" || !isSafeColorValue(entry.color.trim()))
         throw new Error(
           `gen-schema: 'notices[${i}].color' must be a plain CSS colour ` +
             `(got ${JSON.stringify(entry.color)})`

@@ -36,7 +36,7 @@ import {
   mountDir,
   userFileMountPath,
 } from "./renderArgs";
-import { binCacheName, staleBinaryCaches } from "./binCache";
+import { binCacheName, bytesMatchDigest, digestFromUrl, staleBinaryCaches } from "./binCache";
 import { retryableOnce } from "./retryableOnce";
 import { makeProgressThrottle } from "./progressThrottle";
 
@@ -143,13 +143,35 @@ function withBinLock<T>(url: string, fn: () => Promise<T>): Promise<T> {
 async function cachedBuffer(url: string): Promise<ArrayBuffer> {
   if (typeof caches === "undefined") return (await checkedFetch(url)).arrayBuffer();
   const cache = await caches.open(BIN_CACHE);
+  const digest = digestFromUrl(url);
+  // BIN_CACHE is origin-shared (see its declaration comment), so a co-hosted
+  // same-origin app could `cache.put` poisoned bytes under this exact URL. A
+  // content-addressed URL (digest present) lets a hit be verified before use;
+  // a mismatch evicts the entry and is treated as a miss, not an error, so
+  // the caller just re-fetches from the network (see digestFromUrl/
+  // bytesMatchDigest in binCache.ts).
+  const verified = async (res: Response): Promise<ArrayBuffer | null> => {
+    const bytes = await res.arrayBuffer();
+    if (digest && !(await bytesMatchDigest(bytes, digest))) {
+      await cache.delete(url);
+      return null;
+    }
+    return bytes;
+  };
+
   const hit = await cache.match(url);
-  if (hit) return hit.arrayBuffer();
+  if (hit) {
+    const bytes = await verified(hit);
+    if (bytes) return bytes;
+  }
   return withBinLock(url, async () => {
     // The service worker's warm-up may have filled the entry while we
     // waited for the lock, see withBinLock.
     const filled = await cache.match(url);
-    if (filled) return filled.arrayBuffer();
+    if (filled) {
+      const bytes = await verified(filled);
+      if (bytes) return bytes;
+    }
     const res = await checkedFetch(url);
     // M1: a Cache Storage write failure (quota, private browsing, a blocked
     // storage backend) must degrade to uncached bytes for THIS render rather
@@ -200,13 +222,36 @@ async function resolveWasmModule(
     const module = await WebAssembly.compile(bytes).catch(() => null);
     return { module, bytes: module ? null : bytes };
   };
+  const digest = digestFromUrl(url);
   const fromCached = async (cache: Cache, hit: Response) => {
     const module = await WebAssembly.compileStreaming(hit).catch(() => null);
     if (module) return { module, bytes: null };
     // Re-match rather than reusing `hit`: the failed compileStreaming
-    // attempt may already have drained its body.
+    // attempt may already have drained its body. The entry could have been
+    // rewritten (M1) between the verifiedHit check above and this re-match,
+    // so re-verify these bytes too; a mismatch evicts and re-fetches from the
+    // network rather than compiling unverified bytes.
     const retry = (await cache.match(url)) ?? hit;
-    return fromBytes(await retry.arrayBuffer());
+    const bytes = await retry.arrayBuffer();
+    if (digest && !(await bytesMatchDigest(bytes, digest))) {
+      await cache.delete(url);
+      return fromBytes(await (await checkedFetch(url)).arrayBuffer());
+    }
+    return fromBytes(bytes);
+  };
+  // BIN_CACHE is origin-shared (see its declaration comment), so a co-hosted
+  // same-origin app could `cache.put` poisoned bytes under this exact URL.
+  // Verify a hit against its content-addressed digest via a CLONE, so the
+  // good path still compileStreaming()s straight from the original Response
+  // (see resolveWasmModule's doc comment on why that matters for the
+  // engine's persistent code cache); a mismatch evicts the entry and
+  // resolves to null, which callers treat as a cache miss.
+  const verifiedHit = async (cache: Cache, hit: Response): Promise<Response | null> => {
+    if (!digest) return hit;
+    const bytes = await hit.clone().arrayBuffer();
+    if (await bytesMatchDigest(bytes, digest)) return hit;
+    await cache.delete(url);
+    return null;
   };
 
   if (typeof caches === "undefined")
@@ -214,13 +259,19 @@ async function resolveWasmModule(
 
   const cache = await caches.open(BIN_CACHE);
   const hit = await cache.match(url);
-  if (hit) return fromCached(cache, hit);
+  if (hit) {
+    const verified = await verifiedHit(cache, hit);
+    if (verified) return fromCached(cache, verified);
+  }
 
   return withBinLock(url, async () => {
     // The service worker's warm-up may have filled the entry while we
     // waited for the lock, see withBinLock.
     const filled = await cache.match(url);
-    if (filled) return fromCached(cache, filled);
+    if (filled) {
+      const verified = await verifiedHit(cache, filled);
+      if (verified) return fromCached(cache, verified);
+    }
 
     const res = await checkedFetch(url);
     const progressClone = res.clone();

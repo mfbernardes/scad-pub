@@ -5,10 +5,13 @@
 // in-use cache or leak stale ~10 MB binaries across deploys, so it's worth pinning.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   BIN_CACHE_PREFIX,
   MAX_RETAINED_BIN_CACHES,
   binCacheName,
+  bytesMatchDigest,
+  digestFromUrl,
   staleBinaryCaches,
 } from "../src/openscad/binCache.ts";
 import { PINNED_WASM_VERSION } from "../scripts/wasm-version.mjs";
@@ -91,4 +94,32 @@ test("staleBinaryCaches leaves non-binary caches untouched", () => {
 test("MAX_RETAINED_BIN_CACHES is a small positive bound", () => {
   assert.ok(MAX_RETAINED_BIN_CACHES >= 1);
   assert.ok(MAX_RETAINED_BIN_CACHES <= 10);
+});
+
+test("digestFromUrl extracts the ?v= content-address digest", () => {
+  assert.equal(digestFromUrl("https://x/wasm/openscad.wasm?v=abc123def4567890"), "abc123def4567890");
+  // order/other params don't matter
+  assert.equal(digestFromUrl("https://x/fonts/a.ttf?foo=1&v=deadbeef"), "deadbeef");
+});
+
+test("digestFromUrl returns null when no v param is present (dev/fixture builds)", () => {
+  assert.equal(digestFromUrl("https://x/wasm/openscad.wasm"), null);
+  assert.equal(digestFromUrl("https://x/wasm/openscad.wasm?other=1"), null);
+});
+
+test("digestFromUrl returns null for an unparseable URL rather than throwing", () => {
+  assert.equal(digestFromUrl("not a url"), null);
+});
+
+test("bytesMatchDigest agrees with the build-time digest (scripts/lib/hash.mjs) for matching bytes", async () => {
+  const bytes = new TextEncoder().encode("hello binary asset").buffer;
+  const expected = createHash("sha256").update(Buffer.from(bytes)).digest("hex").slice(0, 16);
+  assert.equal(await bytesMatchDigest(bytes, expected), true);
+});
+
+test("bytesMatchDigest rejects tampered bytes", async () => {
+  const bytes = new TextEncoder().encode("hello binary asset").buffer;
+  const expected = createHash("sha256").update(Buffer.from(bytes)).digest("hex").slice(0, 16);
+  const tampered = new TextEncoder().encode("hello binary ASSET").buffer;
+  assert.equal(await bytesMatchDigest(tampered, expected), false);
 });

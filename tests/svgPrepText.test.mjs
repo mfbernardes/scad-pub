@@ -119,6 +119,7 @@ const CHANGE_VARS = {
   "removed-background": { count: 1 },
   "removed-active": { count: 2 },
   "removed-external": { count: 1 },
+  "removed-unsafe-attrs": { count: 2 },
   "style-fills": { count: 3 },
   "grouped-colour": { count: 2, color: "red" },
   // autoGroupByColor's surfaced errors (see src/lib/svgPrep/index.ts): coded

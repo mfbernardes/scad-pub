@@ -60,6 +60,37 @@ test("colorStyle accepts the usual CSS colour forms", () => {
   assert.match(css, /--d: var\(--x\);/);
 });
 
+test("colorStyle rejects url() and protocol-relative values even though the charset allows them", () => {
+  // The charset (letters, digits, `# , . ( ) % / -` and spaces) admits these
+  // shapes with no `:` at all, so they can't be caught by a scheme check.
+  assert.equal(colorStyle({ dark: { bg: "url(//evil/x)" } }), "");
+  assert.equal(colorStyle({ dark: { bg: "//evil" } }), "");
+  assert.equal(colorStyle({ dark: { bg: "URL(#x)" } }), "", "case-insensitive");
+  // A valid token alongside a rejected one still emits only the valid one.
+  const css = colorStyle({ dark: { accent: "#fff", bg: "url(//evil/x)" } });
+  assert.match(css, /--accent: #fff;/);
+  assert.ok(!css.includes("--bg"));
+});
+
+test("colorStyle still accepts real CSS colour functions after the url()/// guard", () => {
+  const css = colorStyle({
+    dark: {
+      a: "rgb(0 0 0 / 50%)",
+      b: "hsl(210,50%,40%)",
+      c: "oklch(.7 .1 200)",
+      d: "#abc",
+      e: "rebeccapurple",
+      f: "rgba(0,0,0,.5)",
+    },
+  });
+  assert.match(css, /--a: rgb\(0 0 0 \/ 50%\);/);
+  assert.match(css, /--b: hsl\(210,50%,40%\);/);
+  assert.match(css, /--c: oklch\(\.7 \.1 200\);/);
+  assert.match(css, /--d: #abc;/);
+  assert.match(css, /--e: rebeccapurple;/);
+  assert.match(css, /--f: rgba\(0,0,0,\.5\);/);
+});
+
 test("headStyleInjection: nothing configured -> empty string", () => {
   assert.equal(headStyleInjection({}), "");
   assert.equal(headStyleInjection({ colors: null, extraCss: null }), "");

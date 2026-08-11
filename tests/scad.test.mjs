@@ -103,4 +103,9 @@ test("orphanedDefines flags only names the source no longer declares", () => {
   assert.deepEqual(orphanedDefines(["depth"], src), ["depth"]);
   // empty input is empty
   assert.deepEqual(orphanedDefines([], src), []);
+  // a name containing regex metacharacters is matched literally, not as a
+  // pattern (defense-in-depth: identifier-grammar validation happens a
+  // caller away, so this must not throw or misbehave on adversarial input)
+  assert.deepEqual(orphanedDefines(["wid.h"], src), ["wid.h"]);
+  assert.doesNotThrow(() => orphanedDefines(["(bad["], src));
 });

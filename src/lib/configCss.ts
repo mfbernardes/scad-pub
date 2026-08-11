@@ -24,6 +24,15 @@ export interface ConfigChrome {
 const SAFE_NAME = /^[A-Za-z0-9_-]+$/;
 const SAFE_VALUE = /^[#a-zA-Z0-9 ,.()%/-]+$/;
 
+// The charset above still admits `url(` (no `:` required — CSS syntax doesn't
+// need one) and a bare `//host/path` (protocol-relative, same story). Neither
+// is a colour function, so reject both explicitly rather than widen the
+// charset test into an unreadable single regex — mirrors gen-schema.mjs's
+// `isSafeColorValue`, and must stay mirrored.
+function isSafeColorValue(value: string): boolean {
+  return SAFE_VALUE.test(value) && !/url\(/i.test(value) && !value.includes("//");
+}
+
 // HTML-escape a config string before vite.config.ts interpolates it into
 // index.html (<title> text, <meta content="…"> attributes). Covers both
 // contexts: `& < >` for element text, quotes for attribute values. Free-form
@@ -46,7 +55,7 @@ export function colorStyle(colors: ConfigChrome["colors"]): string {
   if (!colors) return "";
   const block = (sel: string, tokens?: Record<string, string>) => {
     const decls = Object.entries(tokens ?? {})
-      .filter(([k, v]) => SAFE_NAME.test(k) && SAFE_VALUE.test(v))
+      .filter(([k, v]) => SAFE_NAME.test(k) && isSafeColorValue(v))
       .map(([k, v]) => `  --${k}: ${v};`)
       .join("\n");
     return decls ? `${sel} {\n${decls}\n}` : "";
