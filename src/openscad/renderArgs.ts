@@ -23,12 +23,19 @@ export function stripFilename(rawName: string): string {
   return /^\.*$/.test(stripped) ? "file" : stripped;
 }
 
+// Every path exportFor() can write a render's output to, so a user upload
+// named the same can never mount over it.
+const EXPORT_PATHS = new Set(["stl", "3mf"].map((f) => exportFor(f as ModelFormat).file));
+
 // Absolute FS mount path for an untrusted user file: fonts go into /fonts (the
 // only dir fontconfig scans), everything else at the FS root so a design can
-// reference it by bare name (e.g. `import("logo.svg")`).
+// reference it by bare name (e.g. `import("logo.svg")`). A name that would
+// land on an export output path (out.stl, out.3mf) is renamed so an upload
+// can never mount over the render's own output.
 export function userFileMountPath(rawName: string): string {
   const name = stripFilename(rawName);
-  return isFontFile(name) ? `/fonts/${name}` : `/${name}`;
+  const path = isFontFile(name) ? `/fonts/${name}` : `/${name}`;
+  return EXPORT_PATHS.has(path) ? `${path}.upload` : path;
 }
 
 // M10: two distinct raw upload names can sanitize (via stripFilename, above)

@@ -65,6 +65,17 @@ test("userFileMountPath routes fonts to /fonts and everything else to root", () 
   assert.equal(userFileMountPath("."), "/file");
 });
 
+test("userFileMountPath diverts an upload that would collide with the export output", () => {
+  // out.stl / out.3mf are exportFor()'s output paths; an upload named the same
+  // must not be able to mount over the render's own output.
+  assert.equal(userFileMountPath("out.stl"), "/out.stl.upload");
+  assert.equal(userFileMountPath("out.3mf"), "/out.3mf.upload");
+  // Reachable via traversal too.
+  assert.equal(userFileMountPath("../out.stl"), "/out.stl.upload");
+  // A name that merely resembles the export path is untouched.
+  assert.equal(userFileMountPath("out.stl.bak"), "/out.stl.bak");
+});
+
 // ---- M10: sanitized mount-path collisions ----
 
 test("detectMountCollisions is empty for distinct sanitized names", () => {

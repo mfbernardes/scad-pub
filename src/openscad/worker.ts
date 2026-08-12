@@ -511,6 +511,10 @@ function mkdirp(FS: OpenSCADInstance["FS"], dir: string) {
 let announcedReady = false;
 
 async function render(req: RenderRequest): Promise<RenderResult> {
+  // Commit before any fallible await: runner.ts sets lastSentFileSig optimistically
+  // at post time and only resets it on a fatal result, so a non-fatal throw between
+  // this commit and the mount below must not leave the two out of sync.
+  if (req.userFiles) cachedUserFiles = req.userFiles;
   await ensureAssets();
   if (!announcedReady) {
     announcedReady = true;
@@ -570,11 +574,6 @@ async function render(req: RenderRequest): Promise<RenderResult> {
   // Shared dependency files at their source-relative paths, so each design's
   // `use`/`include` resolves exactly as it does in the source tree.
   for (const [path, src] of Object.entries(assetSources!)) mount(path, src);
-
-  // M10: `req.userFiles` present means the runner is sending a (possibly
-  // updated) file set. Replace the cache; absent means "unchanged, reuse
-  // what you already have" (see cachedUserFiles's comment).
-  if (req.userFiles) cachedUserFiles = req.userFiles;
 
   // M10: reject a request whose sanitized mount paths collide (two raw names
   // that strip down to the same FS path) instead of silently letting
