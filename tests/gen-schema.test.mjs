@@ -1145,7 +1145,7 @@ const VIEWER_DEFAULTS = {
   style: "plain",
   restOnGrid: false,
   grid: "off",
-  controls: { measure: true, viewPicker: true, reset: true, zoom: false, fullscreen: true },
+  controls: { measure: true, viewPicker: true, reset: true, zoom: true, fullscreen: true },
 };
 
 test("viewer defaults every field (style, restOnGrid, grid, controls), validates style, rejects junk", () => {

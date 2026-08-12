@@ -354,8 +354,10 @@ export const AppShell = memo(function AppShell({
   const showViewPicker = viewerControls.viewPicker !== false;
   // Whether the viewer offers the "reset view" button.
   const showReset = viewerControls.reset !== false;
-  // Whether the viewer offers the zoom in/out buttons (off by default).
-  const showZoom = viewerControls.zoom === true;
+  // Whether the viewer offers the zoom in/out buttons (default true: the
+  // canvas is otherwise pointer/gesture-only, with no keyboard path to zoom —
+  // WCAG 2.1.1).
+  const showZoom = viewerControls.zoom !== false;
   // Whether the viewer offers the fullscreen toggle (where it works at all).
   const showFullscreen = viewerControls.fullscreen !== false;
   // Optional after-export success panel (see ExportSuccess.tsx). Undefined

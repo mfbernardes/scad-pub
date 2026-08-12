@@ -39,7 +39,8 @@ export interface ViewerControls {
   viewPicker?: boolean;
   /** Whether the viewer's "reset view" button is offered (default true). */
   reset?: boolean;
-  /** Whether the viewer's zoom in/out buttons are offered (default false). */
+  /** Whether the viewer's zoom in/out buttons are offered (default true: the
+   *  canvas otherwise has no keyboard path to zoom). */
   zoom?: boolean;
   /**
    * Whether the viewer's fullscreen toggle is offered (default true). Only ever

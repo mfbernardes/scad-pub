@@ -143,7 +143,7 @@ const VIEWER_CONTROLS_SPEC = {
     measure: bool(true, { description: "Show the viewer's measure (ruler) toggle." }),
     viewPicker: bool(true, { description: "Show the camera-angle cube button." }),
     reset: bool(true, { description: "Show the 'reset view' button." }),
-    zoom: bool(false, { description: "Show explicit zoom in/out buttons." }),
+    zoom: bool(true, { description: "Show explicit zoom in/out buttons." }),
     fullscreen: bool(true, { description: "Show the fullscreen toggle (browser tabs only)." }),
   },
 };
