@@ -140,7 +140,10 @@ export function OutputConsole({
                 <FriendlyFailureCard info={failure} />
               </div>
             ) : diagnostics.length ? (
-              <ul className="px-3 py-[0.4rem]" aria-live="polite">
+              // No aria-live here: OutputToggle's own persistent live region
+              // (always mounted, unlike this list) already announces a rise
+              // in the notice count.
+              <ul className="px-3 py-[0.4rem]">
                 {diagnostics.map((d, i) => (
                   <li key={i} className="flex items-baseline gap-2 py-[0.2rem] text-[0.82rem]">
                     <span

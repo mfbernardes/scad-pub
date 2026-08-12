@@ -15,6 +15,7 @@
 // both at once invites the reading that one of them is lying, so the caller
 // hides this count while the pill is up (`showCount`), and the bell carries no
 // amber of its own for an attention-flagged notice.
+import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";
@@ -84,6 +85,21 @@ export function OutputToggle({
     ? tn("console.bellLabel", noticeCount, { action })
     : t("console.bellLabelEmpty", { action });
 
+  // OutputConsole's own notices list only exists in the DOM while the console
+  // is open AND its Notices tab is the active Radix tab, so a fresh render's
+  // warnings/asserts go unannounced whenever either isn't true (WCAG 4.1.3).
+  // This region lives on the bell instead, which is always mounted, and
+  // announces only a RISE in the count — reopening/switching tabs doesn't
+  // change noticeCount, so it stays silent for those.
+  const prevCount = useRef(noticeCount);
+  const [announcement, setAnnouncement] = useState("");
+  useEffect(() => {
+    if (noticeCount > prevCount.current) {
+      setAnnouncement(tn("console.newMessages", noticeCount - prevCount.current));
+    }
+    prevCount.current = noticeCount;
+  }, [noticeCount]);
+
   return (
     <Button
       size="icon"
@@ -132,6 +148,12 @@ export function OutputToggle({
           {t("status.renderStatusPrefix", { status: derived.text })}
         </span>
       )}
+      {/* Persistent (unlike OutputConsole's own list, which unmounts on close
+          or a non-Notices tab) live region announcing a rise in the notice
+          count. */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </span>
     </Button>
   );
 }

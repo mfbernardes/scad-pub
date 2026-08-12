@@ -80,6 +80,8 @@
   "console.bellLabel#one": "{action} Messages — {count} message",
   "console.bellLabel#other": "{action} Messages — {count} messages",
   "console.bellLabelEmpty": "{action} Messages",
+  "console.newMessages#one": "{count} new message",
+  "console.newMessages#other": "{count} new messages",
   "viewer.webglUnavailableTitle": "3D preview isn’t available",
   "viewer.webglUnavailableBody": "Your browser or device couldn’t start 3D graphics. Try enabling hardware acceleration in your browser’s settings, updating your graphics drivers, or opening this page in another browser.",
   "viewer.webglLostTitle": "3D preview lost",

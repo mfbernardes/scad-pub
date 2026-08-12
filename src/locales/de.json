@@ -80,6 +80,8 @@
   "console.bellLabel#one": "{action}: Meldungen — {count} Meldung",
   "console.bellLabel#other": "{action}: Meldungen — {count} Meldungen",
   "console.bellLabelEmpty": "{action}: Meldungen",
+  "console.newMessages#one": "{count} neue Meldung",
+  "console.newMessages#other": "{count} neue Meldungen",
   "viewer.webglUnavailableTitle": "3D-Vorschau ist nicht verfügbar",
   "viewer.webglUnavailableBody": "Ihr Browser oder Gerät konnte keine 3D-Grafik starten. Aktivieren Sie die Hardwarebeschleunigung in den Browser-Einstellungen, aktualisieren Sie die Grafiktreiber oder öffnen Sie diese Seite in einem anderen Browser.",
   "viewer.webglLostTitle": "3D-Vorschau unterbrochen",
