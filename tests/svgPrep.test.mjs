@@ -84,6 +84,7 @@ test("the engine's emitted-code exports are exactly its known codes", () => {
       "removed-background",
       "removed-external",
       "removed-unsafe-attrs",
+      "removed-unsafe-style",
       "style-fills",
     ].sort(),
   );
@@ -745,6 +746,73 @@ test("a quoted url() value containing ')' is reported and stripped, not mistaken
   assert.ok(check(root).some((f) => f.code === "active-content"), "reported as active content");
   applyFixes(root);
   assert.doesNotMatch(serializeSvg(root), /evil\.test/);
+});
+
+// Shared with scripts/lib/svg-sanitize.mjs via src/lib/cssRefs.mjs's
+// cssUnsafeReason: a CSS tokenizer resolves `\<hex>` escapes before deciding
+// an ident is `url`/`@import`, so a literal-spelling-only scan misses these
+// entirely. check must detect them (on an escape-normalized copy) and
+// applyFixes must drop the whole block/attribute rather than half-scrub it,
+// since the ordinary url()/@import rewrite can't match the escaped spelling.
+test("an escaped url() (u\\72 l(...)) is reported and the whole <style> block is dropped", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+       <style>.a{background:u\\72 l(http://evil.test/x.png)}</style>
+       <rect class="a" width="5" height="5"/>
+     </svg>`,
+  );
+  assert.ok(check(root).some((f) => f.code === "active-content"), "reported as active content");
+  const changes = applyFixes(root);
+  assert.ok(changes.some((c) => c.code === "removed-unsafe-style"), "the block's removal is reported");
+  const svg = serializeSvg(root);
+  assert.doesNotMatch(svg, /evil\.test/);
+  assert.doesNotMatch(svg, /<style/i, "the whole block is gone, not half-rewritten");
+});
+
+test("an escaped @import (@\\69 mport \"...\") is reported and the whole <style> block is dropped", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+       <style>@\\69 mport "http://evil.test/x.css";.a{fill:red}</style>
+       <rect class="a" width="5" height="5"/>
+     </svg>`,
+  );
+  assert.ok(check(root).some((f) => f.code === "active-content"), "reported as active content");
+  const changes = applyFixes(root);
+  assert.ok(changes.some((c) => c.code === "removed-unsafe-style"), "the block's removal is reported");
+  const svg = serializeSvg(root);
+  assert.doesNotMatch(svg, /evil\.test/);
+  assert.doesNotMatch(svg, /<style/i, "the whole block is gone, not half-rewritten");
+});
+
+test("image-set()'s bare quoted-string URL (no url() in sight) is reported and dropped", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+       <style>.a{background:image-set("http://evil.test/x.png" 1x)}</style>
+       <rect class="a" width="5" height="5"/>
+     </svg>`,
+  );
+  assert.ok(check(root).some((f) => f.code === "active-content"), "reported as active content");
+  const changes = applyFixes(root);
+  assert.ok(changes.some((c) => c.code === "removed-unsafe-style"), "the block's removal is reported");
+  const svg = serializeSvg(root);
+  assert.doesNotMatch(svg, /evil\.test/);
+  assert.doesNotMatch(svg, /image-set/i);
+});
+
+test("an escaped url() in a CSS-value attribute drops the whole attribute", () => {
+  const root = parse(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+       <rect width="5" height="5" style="fill:u\\72 l(http://evil.test/x.png)"/>
+     </svg>`,
+  );
+  const changes = applyFixes(root);
+  assert.ok(
+    changes.some((c) => c.code === "removed-unsafe-attrs" && c.vars.count >= 1),
+    "the attribute's removal is reported",
+  );
+  const svg = serializeSvg(root);
+  assert.doesNotMatch(svg, /evil\.test/);
+  assert.doesNotMatch(svg, /style=/i, "the whole attribute is gone, not half-rewritten");
 });
 
 // ── the check codes nothing asserted ───────────────────────────────────────

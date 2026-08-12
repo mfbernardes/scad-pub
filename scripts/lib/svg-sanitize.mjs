@@ -25,7 +25,12 @@
 // already inert — in which case the ORIGINAL BYTES come back, unparsed and
 // unserialized, so a clean asset is never perturbed.
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
-import { CSS_IMPORT_RE, CSS_URL_RE, isSameDocumentRef } from "../../src/lib/cssRefs.mjs";
+import {
+  CSS_IMPORT_RE,
+  CSS_URL_RE,
+  cssUnsafeReason,
+  isSameDocumentRef,
+} from "../../src/lib/cssRefs.mjs";
 
 // ── which elements may stay: an ALLOWLIST ─────────────────────────────────
 // This was a denylist of things that execute (`<script>`, `<foreignObject>`,
@@ -108,191 +113,20 @@ const TEXT_NODE = 3;
 const CDATA_NODE = 4;
 const PROCESSING_INSTRUCTION_NODE = 7;
 
-// CSS escapes: `\<1-6 hex><one optional whitespace>` or `\<any char>`. Decoding
-// them is what a CSS tokenizer does before it decides whether an ident is
-// `url`, so it has to happen before anything looks for one.
-function normalizeCssEscapes(css) {
-  return css.replace(/\\(?:([0-9a-fA-F]{1,6})[ \t\n\r\f]?|([\s\S]))/g, (_, hex, ch) => {
-    if (!hex) return ch;
-    const n = parseInt(hex, 16);
-    return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : "";
-  });
-}
-
-// ── the CSS rule, inverted for the last time ──────────────────────────────
-// Removing "the things that fetch" is an open-ended list. `url()` was the
-// first, `@import` the second, and `image-set("…" 1x)` — which a browser
-// really does fetch, verified against Chromium — is a third that carries its
-// URL as a bare string with no `url()` anywhere in it. LightningCSS, which
-// this repo already has, does not surface that one either: its `Url` visitor
-// sees `url()` in every property and misses `image-set` entirely. So a CSS
-// parser would not have closed it, and the next construct would not be closed
-// either.
-//
-// What IS closed-ended is the set of value functions that cannot reference
-// anything: colours, maths, transforms. So after the passes above have
-// approved `url(#fragment)` and removed the rest, a block survives only if
-// what remains is literal values and functions from this list. Anything else
-// — a string literal, a scheme, a function nobody vouched for — drops the
-// whole block, reported.
-//
-// The cost is real and bounded: an icon stylesheet may use colours, lengths,
-// keywords, custom properties and `url(#gradient)`. A quoted string is the
-// notable exclusion (a `font-family:"My Font"` in an icon), and it is excluded
-// because a bare quoted string is exactly how image-set carries a URL and
-// there is no way to tell the two apart without a value grammar per property.
-//
-// At-rules are refused wholesale by default, for the same reason as above:
-// each one introduces a body with its own grammar this module doesn't parse,
-// and some of them fetch on their own — `@import`, `@font-face`'s `src`.
-// `@media` is the one exception, because it is the one at-rule that
-// introduces no construct of its own: a media query has no fetching
-// primitive in any CSS spec, and its body is ordinary declarations the
-// whole-text checks below already scan regardless of how deeply they are
-// nested. The prelude is elided for the function-allowlist scan rather than
-// adding `media`/`and`/`not`/`only` to SAFE_CSS_FUNCTIONS above, because that
-// list means "value functions that cannot reference anything" — `and`/`not`
-// are query keywords, not value functions, and putting them on it would also
-// legalize `fill: not(...)`. This closes a real bug: an icon themed entirely
-// via CSS classes plus `@media (prefers-color-scheme: dark)` lost ALL its
-// styling, not just the dark-mode override, when the whole block was
-// dropped — and such an icon can be wired directly into
-// `manifest.webmanifest`'s `shortcuts[].icons[]`, which the OS reads with
-// nothing in between.
-const SAFE_CSS_FUNCTIONS = new Set([
-  // colour
-  "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color",
-  "color-mix", "light-dark",
-  // maths and custom properties
-  "calc", "min", "max", "clamp", "round", "var", "env",
-  // transforms
-  "translate", "translatex", "translatey", "translate3d", "scale", "scalex",
-  "scaley", "rotate", "rotate3d", "skew", "skewx", "skewy", "matrix", "matrix3d",
-]);
-// Every `name(` in the text, so an unvouched function can be named in the log.
-const CSS_FUNCTION_RE = /([-\w]+)\s*\(/g;
-
-// Every `@ident` at-keyword in the text, matched as a MAXIMAL run of CSS
-// ident characters (escapes are already normalized out by the time cssRisk
-// sees this text, and CSS treats every code point >= U+0080 as an ident
-// character) so a hostile ident can never masquerade as a shorter permitted
-// one (`@media-x` reads as `@media-x`, never as a prefix-match on `@media`).
-// `-` is included on purpose: `@-webkit-keyframes` is an at-rule the old
-// `/@\w/` test did not see (`\w` has no `-`) — this closes that gap.
-const CSS_AT_RULE_RE = /@([-\w\u0080-\uffff]+)/g;
-
-// The character allowlist for a @media PRELUDE (the text between `@media`
-// and its `{`): idents, numbers, ratios (16/9), the range-syntax comparison
-// operators, commas, colons, parens, whitespace — everything the media-query
-// grammar can spell. Deliberately excludes `@`, braces, `;`, quotes, `\`,
-// `*`, `#`, `&`, brackets, `!`, `%`, `+`, `~` and every non-ASCII code point,
-// so a second at-rule, a comment, a string, a fragment, or the approved-url()
-// marker can never hide inside a prelude. Empty preludes are allowed.
-const MEDIA_PRELUDE_RE = /^[-\w\s(),.:/<>=]*$/;
-
-// The only `name(` spellings a @media prelude may contain. Kept separate
-// from SAFE_CSS_FUNCTIONS (the VALUE-function allowlist) on purpose: a
-// prelude like `screen and (min-width:100px)` reads to CSS_FUNCTION_RE as
-// `and(`, and putting query keywords on the value allowlist would also let
-// `fill: not(...)` past a list whose whole meaning is "value functions that
-// cannot reference anything". Two grammars, two rules.
-const MEDIA_QUERY_FUNCTIONS = new Set(["media", "and", "or", "not", "only"]);
-
-/**
- * Scans `css` for at-rules. Every at-rule other than `@media` is an
- * immediate reject. A `@media` rule's PRELUDE (the text between `@media`
- * and its opening `{`) must be plain media-query syntax; its BODY (after
- * the `{`) is left untouched in `probe` so the caller's other checks (still
- * run against the ORIGINAL full `css`, not `probe`) see it exactly as they
- * would see top-level CSS. Returns `probe` — `css` with every validated
- * `@media` prelude replaced by a single space — for the function-allowlist
- * scan alone, which is the only check confused by media-query syntax.
- */
-function readAtRules(css) {
-  let out = "";
-  let last = 0;
-  for (const m of css.matchAll(CSS_AT_RULE_RE)) {
-    const name = m[1].toLowerCase();
-    if (name !== "media") return { reason: `the at-rule @${m[1]}` };
-    const open = css.indexOf("{", m.index + m[0].length);
-    if (open < 0) return { reason: "a @media rule with no block" };
-    const span = css.slice(m.index, open);
-    const prelude = span.slice(m[0].length);
-    if (!MEDIA_PRELUDE_RE.test(prelude)) return { reason: "a @media prelude this module cannot read" };
-    for (const [, fn] of span.matchAll(CSS_FUNCTION_RE)) {
-      if (!MEDIA_QUERY_FUNCTIONS.has(fn.toLowerCase()))
-        return { reason: `the function ${fn}() in a @media prelude` };
-    }
-    out += css.slice(last, m.index) + " ";
-    last = open;
-  }
-  return { reason: "", probe: out + css.slice(last) };
-}
-
-/** What makes a stylesheet unfit to keep, or "" when it is fit. */
-function cssRisk(css) {
-  const { reason, probe } = readAtRules(css);
-  if (reason) return reason;
-  if (/["']/.test(css)) return "a string literal (image-set carries a URL that way)";
-  if (/:\s*\/\//.test(css) || /\w+:\/\//.test(css)) return "a URL scheme";
-  for (const [, name] of probe.matchAll(CSS_FUNCTION_RE)) {
-    if (!SAFE_CSS_FUNCTIONS.has(name.toLowerCase())) return `the function ${name}()`;
-  }
-  return "";
-}
-
-// The stand-in for a url() the allowlist approved, so the risk check above
-// cannot see it. A private-use code point rather than a NUL: a control
-// character in a regex is a lint error, and neither belongs in a stylesheet.
-const APPROVED_MARK = "\uE000";
-
 /**
  * One CSS text, with `@import` and foreign `url()` removed.
  * Returns { css, changed, unsafe }: `unsafe` means what remained is not
  * something this module will vouch for, and the caller must discard it.
  *
- * DETECTION runs on an escape-normalized copy (a CSS tokenizer resolves
- * escapes before deciding an ident is `url`, so `u\72 l(` has to be seen);
- * REWRITING runs on the ORIGINAL text and never emits the normalized copy.
- * Emitting it corrupted valid CSS — `.\31 23` is a legal class that becomes
- * the illegal `.123`, and a literal private-use character was deleted — and
- * reported both as if they were external references. Anything the normalized
- * view catches that the original spelling does not is `unsafe` rather than
- * rewritten, so the two views can never disagree in the shipping direction.
+ * DETECTION (cssUnsafeReason, src/lib/cssRefs.mjs) runs on an escape-
+ * normalized copy; REWRITING here runs on the ORIGINAL text and never emits
+ * the normalized copy. Emitting it corrupted valid CSS — `.\31 23` is a
+ * legal class that becomes the illegal `.123`, and a literal private-use
+ * character was deleted — and reported both as if they were external
+ * references.
  */
 function scrubCss(text) {
-  // How many foreign references a given spelling of this text exposes.
-  let count = 0;
-  const strip = (src) => {
-    count = 0;
-    return src.replace(CSS_IMPORT_RE, () => {
-      count++;
-      return "";
-    }).replace(CSS_URL_RE, (m, dq, sq, bare) => {
-      if (isSameDocumentRef(dq ?? sq ?? bare ?? "")) return APPROVED_MARK;
-      count++;
-      return "none";
-    });
-  };
-
-  const normalized = normalizeCssEscapes(text).split(APPROVED_MARK).join("");
-  const strippedNormalized = strip(normalized);
-  const normalizedCount = count;
-  strip(text);
-  const literalCount = count;
-
-  // Two ways to be unfit. The risk check is what remains after the allowlist;
-  // the count comparison is the escaped-spelling case, and it is the reason
-  // detection and rewriting cannot simply be the same pass: normalizing
-  // `u\72 l(https://…)` NEUTRALISES it in the probe, so a probe judged on its
-  // own content looks clean while the original text still carries the
-  // reference the rewrite pass cannot match. More removals in the normalized
-  // spelling than in the literal one means exactly that.
-  const unsafe =
-    normalizedCount > literalCount
-      ? "a reference written with CSS escapes"
-      : cssRisk(strippedNormalized);
-
+  const unsafe = cssUnsafeReason(text);
   let changed = false;
   const css = text
     .replace(CSS_IMPORT_RE, () => {
@@ -465,7 +299,7 @@ export function sanitizeSvg(svgText) {
       if (CSS_VALUE_ATTRS.has(local.toLowerCase())) {
         const { css, changed, unsafe } = scrubCss(value);
         if (unsafe) {
-          // `unsafe` is the REASON cssRisk worked out. Reporting a generic
+          // `unsafe` is the REASON cssUnsafeReason worked out. Reporting a generic
           // "url() could not be read" sent an operator whose Illustrator icon
           // just lost its `style="font-family:'ArialMT';fill:#231F20"` looking
           // for a URL that is not in the file.

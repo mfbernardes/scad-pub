@@ -367,6 +367,8 @@
   "svgPrep.change.removed-external#other": "removed {count} external references from the drawing's styles",
   "svgPrep.change.removed-unsafe-attrs#one": "removed {count} unsafe attribute (event handler or external reference)",
   "svgPrep.change.removed-unsafe-attrs#other": "removed {count} unsafe attributes (event handlers or external references)",
+  "svgPrep.change.removed-unsafe-style#one": "removed {count} <style> block this module could not vouch for (a disguised or otherwise unsafe reference)",
+  "svgPrep.change.removed-unsafe-style#other": "removed {count} <style> blocks this module could not vouch for (a disguised or otherwise unsafe reference)",
   "svgPrep.change.style-fills#one": "applied {count} stylesheet colour directly to the shapes",
   "svgPrep.change.style-fills#other": "applied {count} stylesheet colours directly to the shapes",
   "svgPrep.change.grouped-colour#one": "grouped {count} shape into the \"{color}\" colour region",

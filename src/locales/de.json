@@ -367,6 +367,8 @@
   "svgPrep.change.removed-external#other": "{count} externe Verweise aus den Stilen der Zeichnung entfernt",
   "svgPrep.change.removed-unsafe-attrs#one": "{count} unsicheres Attribut (Ereignis-Handler oder externer Verweis) entfernt",
   "svgPrep.change.removed-unsafe-attrs#other": "{count} unsichere Attribute (Ereignis-Handler oder externe Verweise) entfernt",
+  "svgPrep.change.removed-unsafe-style#one": "{count} <style>-Block entfernt, der sich nicht als sicher einstufen ließ (ein verschleierter oder anderweitig unsicherer Verweis)",
+  "svgPrep.change.removed-unsafe-style#other": "{count} <style>-Blöcke entfernt, die sich nicht als sicher einstufen ließen (ein verschleierter oder anderweitig unsicherer Verweis)",
   "svgPrep.change.style-fills#one": "{count} Stylesheet-Farbe direkt auf die Form angewendet",
   "svgPrep.change.style-fills#other": "{count} Stylesheet-Farben direkt auf die Formen angewendet",
   "svgPrep.change.grouped-colour#one": "{count} Form in den Farbbereich „{color}“ gruppiert",
