@@ -4,7 +4,8 @@
 // serves instantly instead of re-running OpenSCAD.
 //
 // Entries are keyed by a content-stable key built in runner.ts (design + sorted
-// defines + font signature + CACHE_VERSION). Payloads live in STL_DATA_STORE;
+// defines + full user-file signature + CACHE_VERSION + the build's renderHash).
+// Payloads live in STL_DATA_STORE;
 // small {bytes,lastAccess} records live in STL_META_STORE so LRU eviction can
 // scan sizes/recency without deserializing the STL blobs. Every operation is
 // best-effort: any failure (private mode, quota, blocked upgrade) degrades to
