@@ -19,7 +19,8 @@ export const MENU_ROW_CLASS =
   "flex w-full items-center gap-2 rounded-(--radius-sm) px-2 py-[0.45rem] text-left text-[0.9rem] text-foreground cursor-pointer hover:bg-muted focus-visible:bg-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent";
 
 interface Props {
-  /** The row's visible text, and its accessible name. */
+  /** The row's visible text, and its accessible name — the same string on
+   *  purpose (WCAG 2.5.3): a diverging override once broke voice control. */
   label: ReactNode;
   onClick: () => void;
   disabled?: boolean;
@@ -39,26 +40,14 @@ interface Props {
   /** Trailing content: a Switch, a shortcut hint, a badge. Not an icon. */
   children?: ReactNode;
   className?: string;
-  /** Overrides the accessible name when `label` isn't plain text. */
-  "aria-label"?: string;
 }
 
-export function MenuRow({
-  label,
-  onClick,
-  disabled,
-  pressed,
-  icon,
-  children,
-  className,
-  "aria-label": ariaLabel,
-}: Props) {
+export function MenuRow({ label, onClick, disabled, pressed, icon, children, className }: Props) {
   return (
     <button
       type="button"
       className={cn(MENU_ROW_CLASS, pressed && "text-brand font-medium", className)}
       aria-pressed={pressed}
-      aria-label={ariaLabel}
       disabled={disabled}
       onClick={onClick}
     >
