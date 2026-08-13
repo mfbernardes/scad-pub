@@ -92,10 +92,17 @@ export function OutputToggle({
   // announces only a RISE in the count — reopening/switching tabs doesn't
   // change noticeCount, so it stays silent for those.
   const prevCount = useRef(noticeCount);
-  const [announcement, setAnnouncement] = useState("");
+  // `seq` forces a DOM mutation on every rise even when the announced text is
+  // identical to a prior one (e.g. 0->1, 1->0, 0->1 all say "1 new message"):
+  // React bails out on an unchanged string, so a repeat would otherwise never
+  // reach the DOM and a screen reader would never hear it. Keying the text
+  // node on `seq` makes each rise a fresh insertion instead of a same-text
+  // update.
+  const [announcement, setAnnouncement] = useState({ text: "", seq: 0 });
   useEffect(() => {
     if (noticeCount > prevCount.current) {
-      setAnnouncement(tn("console.newMessages", noticeCount - prevCount.current));
+      const text = tn("console.newMessages", noticeCount - prevCount.current);
+      setAnnouncement((prev) => ({ text, seq: prev.seq + 1 }));
     }
     prevCount.current = noticeCount;
   }, [noticeCount]);
@@ -152,7 +159,7 @@ export function OutputToggle({
           or a non-Notices tab) live region announcing a rise in the notice
           count. */}
       <span className="sr-only" role="status" aria-live="polite">
-        {announcement}
+        <span key={announcement.seq}>{announcement.text}</span>
       </span>
     </Button>
   );

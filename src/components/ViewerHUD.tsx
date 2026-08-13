@@ -141,7 +141,10 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
   // Stable accessible names (WCAG 4.1.2): a toggle's aria-pressed carries the
   // on/off state, so the name itself doesn't need to say "show"/"hide" too —
   // and must not, or a screen reader hears a different control on every
-  // press. The show/hide phrasing survives as the sighted tooltip/menu text.
+  // press. The show/hide phrasing survives only as the inline buttons'
+  // sighted tooltip text; the collapsed menu rows use the stable label as
+  // their visible text too, since MenuRow's label doubles as its accessible
+  // name (WCAG 2.5.3 Label in Name) and pressed styling already shows state.
   const dimensionsLabel = t("hud.dimensions");
   const dimensionsTooltip = showDimensions ? t("hud.hideDimensions") : t("hud.showDimensions");
   const gridLabel = t("hud.grid");
@@ -241,16 +244,14 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
             )}
             {measure && (
               <MenuRow
-                label={dimensionsTooltip}
-                aria-label={dimensionsLabel}
+                label={dimensionsLabel}
                 onClick={onToggleDimensions}
                 pressed={showDimensions}
                 icon={<RulerIcon size={16} />}
               />
             )}
             <MenuRow
-              label={gridTooltip}
-              aria-label={gridLabel}
+              label={gridLabel}
               onClick={onToggleGrid}
               pressed={showGrid}
               icon={<GridIcon size={16} />}
