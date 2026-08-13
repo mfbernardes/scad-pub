@@ -59,6 +59,10 @@ interface Props {
   onComplete: (result: SvgWizardResult) => void;
 }
 
+// A single dialog instance mounts at a time, so a plain constant id is safe;
+// referenced by each bad-height input's aria-describedby.
+const HEIGHT_ERROR_ID = "svg-wizard-height-error";
+
 const LEVEL_BADGE: Record<Finding["level"], "destructive" | "warn" | "secondary"> = {
   ERROR: "destructive",
   WARN: "warn",
@@ -321,6 +325,9 @@ export function SvgWizard({
                                 placeholder={defaultHeight === null ? "" : String(defaultHeight)}
                                 aria-label={t("svgWizard.regionHeightAria", { id: r.id })}
                                 aria-invalid={badHeights.has(r.id) || undefined}
+                                aria-describedby={
+                                  badHeights.has(r.id) && !blockedByError ? HEIGHT_ERROR_ID : undefined
+                                }
                                 onChange={(e) => setHeight(r.id, e.target.value)}
                               />
                               <span className="text-muted-foreground">{t("common.mm")}</span>
@@ -360,7 +367,11 @@ export function SvgWizard({
             )}
 
             {blockedByHeight && !blockedByError && (
-              <p className="svg-wizard__height-error mt-3 text-sm font-medium text-destructive">
+              <p
+                id={HEIGHT_ERROR_ID}
+                role="status"
+                className="svg-wizard__height-error mt-3 text-sm font-medium text-destructive"
+              >
                 {tn("svgWizard.heightError", badHeights.size, {
                   names: formatList([...badHeights].map((id) => `“${id}”`)),
                 })}
