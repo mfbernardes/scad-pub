@@ -908,6 +908,11 @@ button:disabled { cursor: default; }
   .bottom-sheet { transition: none !important; }
   .app-shell__mobile-viewer { transition: none !important; }
   .param-group > summary::before { transition: none; }
+  /* Their own `bottom` transitions track the sheet's live top edge (see the
+     rules above); `.sheet-hint` needs no entry here, its only animation is
+     the opacity fade already gated by its own motion-reduce: utility. */
+  .app-shell__mobile .action-dock { transition: none !important; }
+  .app-shell__mobile .viewer-hint { transition: none !important; }
 }
 } /* end @layer components */
 
