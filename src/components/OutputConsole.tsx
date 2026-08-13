@@ -75,6 +75,10 @@ export function OutputConsole({
   const hasAssert = contributing.some((b) => b.key === "assert");
   const anyAttention = contributing.some((b) => b.attention);
   const soleColor = contributing.length === 1 ? contributing[0].color : undefined;
+  // The per-category breakdown ("3 warnings, 1 advisory"): a hover-only
+  // `title` reaches a mouse user but not one on a keyboard or screen reader,
+  // so the same text is also read from an sr-only span in the trigger.
+  const breakdown = contributing.length > 1 ? contributing.map((b) => `${b.count} ${b.label}`).join(", ") : undefined;
 
   return (
     <div
@@ -102,11 +106,7 @@ export function OutputConsole({
                 The per-category nouns countBadges already resolves (plural
                 form included) go in the trigger's title, so the breakdown is
                 one hover away instead of gone. */}
-            <TabsTrigger
-              value="notices"
-              className={cn(chipTabTrigger, "px-3")}
-              title={contributing.length > 1 ? contributing.map((b) => `${b.count} ${b.label}`).join(", ") : undefined}
-            >
+            <TabsTrigger value="notices" className={cn(chipTabTrigger, "px-3")} title={breakdown}>
               {t("console.notices")}
               {noticeTotal > 0 && (
                 <Badge
@@ -117,6 +117,7 @@ export function OutputConsole({
                   {noticeTotal}
                 </Badge>
               )}
+              {breakdown && <span className="sr-only">{`: ${breakdown}`}</span>}
             </TabsTrigger>
             <TabsTrigger value="log" className={cn(chipTabTrigger, "px-3")}>
               {t("console.log")}
