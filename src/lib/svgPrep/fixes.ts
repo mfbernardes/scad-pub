@@ -327,8 +327,10 @@ export function applyFixes(root: Element): Change[] {
     ...fixViewBoxOrigin(root),
     // Before resolveStyleFills, not after: an `@import` sits in the same text
     // parseStyleFillRules reads selectors out of, and takes the following rule's
-    // selector down with it. Scrubbing the fetches first is also why `<style>`
-    // is neutralised rather than removed — the rules still have to be readable.
+    // selector down with it. Scrubbing the fetches first is also why a vouched-
+    // for `<style>` block is neutralised in place rather than removed — its
+    // rules still have to be readable; a block cssUnsafeReason can't vouch for
+    // is removed outright instead (see removeActiveContent above).
     ...removeActiveContent(root),
     ...resolveStyleFills(root),
   ];
