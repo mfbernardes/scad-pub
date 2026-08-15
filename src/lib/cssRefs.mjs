@@ -133,21 +133,23 @@ function cssRisk(css) {
 // character in a regex is a lint error, and neither belongs in a stylesheet.
 const APPROVED_MARK = "\uE000";
 
-// How many foreign `@import`/`url()` references a given spelling of `css`
-// exposes: a same-document `url(#frag)` is approved (marked, not counted).
-function foreignRefCount(css) {
+// The one spelling of the foreign-reference rewrite: `@import` stripped, a
+// foreign `url()` replaced by `none`, a same-document `url(#id)` either kept
+// in place (shipping) or masked with APPROVED_MARK so cssRisk's function scan
+// cannot see it (probing). `count` is how many foreign references were hit.
+function rewriteForeignRefs(css, keepSameDoc) {
   let count = 0;
-  css
+  const out = css
     .replace(CSS_IMPORT_RE, () => {
-      count++;
+      count += 1;
       return "";
     })
     .replace(CSS_URL_RE, (m, dq, sq, bare) => {
-      if (isSameDocumentRef(dq ?? sq ?? bare ?? "")) return APPROVED_MARK;
-      count++;
+      if (isSameDocumentRef(dq ?? sq ?? bare ?? "")) return keepSameDoc ? m : APPROVED_MARK;
+      count += 1;
       return "none";
     });
-  return count;
+  return { out, count };
 }
 
 /**
@@ -165,12 +167,27 @@ function foreignRefCount(css) {
  */
 export function cssUnsafeReason(css) {
   const normalized = normalizeCssEscapes(css).split(APPROVED_MARK).join("");
-  if (foreignRefCount(normalized) > foreignRefCount(css))
+  const probe = rewriteForeignRefs(normalized, false);
+  if (probe.count > rewriteForeignRefs(css, false).count)
     return "a reference written with CSS escapes";
-  const probe = normalized
-    .replace(CSS_IMPORT_RE, () => "")
-    .replace(CSS_URL_RE, (m, dq, sq, bare) =>
-      isSameDocumentRef(dq ?? sq ?? bare ?? "") ? APPROVED_MARK : "none"
-    );
-  return cssRisk(probe);
+  return cssRisk(probe.out);
+}
+
+/**
+ * Rewrites the foreign references out of CSS a caller intends to KEEP:
+ * `@import` stripped, a foreign `url()` replaced by `none`, a same-document
+ * `url(#id)` kept in place. Only meaningful after `cssUnsafeReason` returned
+ * "" — an unfit block/value must be discarded, not scrubbed. `removed` is how
+ * many references went (0 means `css` came back untouched).
+ */
+export function scrubForeignRefs(css) {
+  const { out, count } = rewriteForeignRefs(css, true);
+  return { css: count ? out : css, removed: count };
+}
+
+/** Whether any spelling of `css` exposes a foreign `@import`/`url()` —
+ *  matched on an escape-normalized copy, exactly as a CSS tokenizer would
+ *  resolve it. */
+export function hasForeignRefs(css) {
+  return rewriteForeignRefs(normalizeCssEscapes(css), false).count > 0;
 }

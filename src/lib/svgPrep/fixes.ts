@@ -11,7 +11,7 @@ import {
   localName,
   trappedLayers,
 } from "./dom";
-import { CSS_IMPORT_RE, CSS_URL_RE, cssUnsafeReason, isSameDocumentRef } from "../cssRefs.mjs";
+import { cssUnsafeReason, isSameDocumentRef, scrubForeignRefs } from "../cssRefs.mjs";
 import { gFormat, parseViewBox } from "./geometry";
 import type { Change, Vars } from "./types";
 
@@ -266,10 +266,8 @@ export function removeActiveContent(root: Element): Change[] {
         if (cssUnsafeReason(value)) {
           toRemove.push(attr.name);
         } else {
-          const cleaned = value.replace(CSS_URL_RE, (m, dq: string, sq: string, bare: string) =>
-            isSameDocumentRef(dq ?? sq ?? bare ?? "") ? m : "none"
-          );
-          if (cleaned !== value) toSet.push([attr.name, cleaned]);
+          const { css: cleaned, removed } = scrubForeignRefs(value);
+          if (removed) toSet.push([attr.name, cleaned]);
         }
       }
     }
@@ -301,17 +299,11 @@ export function removeActiveContent(root: Element): Change[] {
       }
       continue;
     }
-    const cleaned = css
-      .replace(CSS_IMPORT_RE, () => {
-        fetches += 1;
-        return "";
-      })
-      .replace(CSS_URL_RE, (m, dq: string, sq: string, bare: string) => {
-        if (isSameDocumentRef(dq ?? sq ?? bare ?? "")) return m; // a same-document reference is routine
-        fetches += 1;
-        return "none";
-      });
-    if (cleaned !== css) el.textContent = cleaned;
+    const { css: cleaned, removed } = scrubForeignRefs(css);
+    if (removed) {
+      fetches += removed;
+      el.textContent = cleaned;
+    }
   }
   if (fetches) changes.push(change("removed-external", { count: fetches }));
   if (unsafeStyles) changes.push(change("removed-unsafe-style", { count: unsafeStyles }));

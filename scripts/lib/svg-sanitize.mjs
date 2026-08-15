@@ -26,10 +26,9 @@
 // unserialized, so a clean asset is never perturbed.
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import {
-  CSS_IMPORT_RE,
-  CSS_URL_RE,
   cssUnsafeReason,
   isSameDocumentRef,
+  scrubForeignRefs,
 } from "../../src/lib/cssRefs.mjs";
 
 // ── which elements may stay: an ALLOWLIST ─────────────────────────────────
@@ -119,26 +118,17 @@ const PROCESSING_INSTRUCTION_NODE = 7;
  * something this module will vouch for, and the caller must discard it.
  *
  * DETECTION (cssUnsafeReason, src/lib/cssRefs.mjs) runs on an escape-
- * normalized copy; REWRITING here runs on the ORIGINAL text and never emits
- * the normalized copy. Emitting it corrupted valid CSS — `.\31 23` is a
+ * normalized copy; REWRITING (scrubForeignRefs, same module) runs on the
+ * ORIGINAL text and never emits the normalized copy. Emitting it corrupted valid CSS — `.\31 23` is a
  * legal class that becomes the illegal `.123`, and a literal private-use
  * character was deleted — and reported both as if they were external
  * references.
  */
 function scrubCss(text) {
   const unsafe = cssUnsafeReason(text);
-  let changed = false;
-  const css = text
-    .replace(CSS_IMPORT_RE, () => {
-      changed = true;
-      return "";
-    })
-    .replace(CSS_URL_RE, (m, dq, sq, bare) => {
-      if (isSameDocumentRef(dq ?? sq ?? bare ?? "")) return m; // untouched, in place
-      changed = true;
-      return "none";
-    });
-  return { css: changed ? css : text, changed, unsafe };
+  if (unsafe) return { css: text, changed: false, unsafe };
+  const { css, removed } = scrubForeignRefs(text);
+  return { css, changed: removed > 0, unsafe };
 }
 
 // The attributes whose value is CSS, and so may carry a `url()`: `style`

@@ -23,10 +23,6 @@ export function stripFilename(rawName: string): string {
   return /^\.*$/.test(stripped) ? "file" : stripped;
 }
 
-// Every path exportFor() can write a render's output to, so a user upload
-// named the same can never mount over it.
-const EXPORT_PATHS = new Set(["stl", "3mf"].map((f) => exportFor(f as ModelFormat).file));
-
 // Absolute FS mount path for an untrusted user file: fonts go into /fonts (the
 // only dir fontconfig scans), everything else at the FS root so a design can
 // reference it by bare name (e.g. `import("logo.svg")`). A name that would
@@ -96,22 +92,30 @@ export interface ExportSpec {
 
 // The export format is chosen at build time (config -> schema). 3MF carries
 // per-object colour (manifold writes each `color(...)` into the file, which the
-// viewer and downstream slicers read back); STL is geometry-only.
+// viewer and downstream slicers read back); STL is geometry-only. Keyed by the
+// full ModelFormat union so a future format cannot miss EXPORT_PATHS' cover.
+const EXPORTS: Record<ModelFormat, ExportSpec> = {
+  stl: { flag: "binstl", file: "/out.stl", extra: [] },
+  "3mf": {
+    flag: "3mf",
+    file: "/out.3mf",
+    // Write per-object colour as a 3MF colour group (color-mode=model,
+    // material-type=color): the encoding BambuStudio / OrcaSlicer read.
+    extra: [
+      "-O",
+      "export-3mf/color-mode=model",
+      "-O",
+      "export-3mf/material-type=color",
+    ],
+  },
+};
+
+// Every path exportFor() can write a render's output to, so a user upload
+// named the same can never mount over it (see userFileMountPath).
+const EXPORT_PATHS = new Set(Object.values(EXPORTS).map((e) => e.file));
+
 export function exportFor(format: ModelFormat): ExportSpec {
-  return format === "stl"
-    ? { flag: "binstl", file: "/out.stl", extra: [] }
-    : {
-        flag: "3mf",
-        file: "/out.3mf",
-        // Write per-object colour as a 3MF colour group (color-mode=model,
-        // material-type=color): the encoding BambuStudio / OrcaSlicer read.
-        extra: [
-          "-O",
-          "export-3mf/color-mode=model",
-          "-O",
-          "export-3mf/material-type=color",
-        ],
-      };
+  return EXPORTS[format];
 }
 
 /**

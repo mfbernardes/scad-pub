@@ -7,3 +7,5 @@ export const CSS_URL_RE: RegExp;
 export function urlRefValue(match: RegExpMatchArray): string;
 export function normalizeCssEscapes(css: string): string;
 export function cssUnsafeReason(css: string): string;
+export function scrubForeignRefs(css: string): { css: string; removed: number };
+export function hasForeignRefs(css: string): boolean;

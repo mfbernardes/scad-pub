@@ -104,15 +104,15 @@ function HudTooltipButton({
   pressed?: boolean;
   children: ReactNode;
 }) {
-  const tooltipText = tooltip ?? label;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <IconButton label={label} title={tooltipText} className={className} pressed={pressed} onClick={onClick}>
+        {/* IconButton itself falls back to title={label} when tooltip is unset. */}
+        <IconButton label={label} title={tooltip} className={className} pressed={pressed} onClick={onClick}>
           {children}
         </IconButton>
       </TooltipTrigger>
-      <TooltipContent side="left">{tooltipText}</TooltipContent>
+      <TooltipContent side="left">{tooltip ?? label}</TooltipContent>
     </Tooltip>
   );
 }

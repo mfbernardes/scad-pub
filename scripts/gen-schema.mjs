@@ -1097,11 +1097,8 @@ function buildDesigns({ config, SOURCE, CONFIG_DIR, outScadDir, outArtDir, mustE
 
     // Strip the transient `reviewLabel` annotation flag off each param before
     // it reaches designs.json: it's already folded into `reviewLabels` above,
-    // and src/openscad/types.ts's ParamBase carries no such field, matching
-    // protocol.ts (the message shapes actually in worker.ts's hashed import
-    // closure, per scripts/lib/worker-deps.mjs) which carries none either —
-    // adding one there would change renderHash and evict every deployment's
-    // persisted render cache for a field that can't affect a triangle.
+    // and no Param type carries it (why: scripts/lib/params.mjs, where the
+    // flag is minted).
     const cleanParams = params.map(({ reviewLabel, ...rest }) => rest);
     return {
       ...d,

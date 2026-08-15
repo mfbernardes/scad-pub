@@ -53,7 +53,7 @@ import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
 import { ExportSuccess, type ExportSuccessState } from "./ExportSuccess";
-import { OutputToggle } from "./OutputToggle";
+import { NoticeAnnouncer, OutputToggle } from "./OutputToggle";
 import { BarActions } from "./BarActions";
 import { ICON_BUTTON_CLASS } from "./IconButton";
 import { cn } from "../lib/utils";
@@ -645,6 +645,9 @@ export const AppShell = memo(function AppShell({
       <a className={SKIP_LINK_CLASS} href={isMobile ? "#params-mobile" : "#params"}>
         {t("appShell.skipToParams")}
       </a>
+
+      {/* At the shell root, not in the bell: see NoticeAnnouncer's own doc. */}
+      <NoticeAnnouncer count={diagnostics.length} />
 
       {/* Only the active layout mounts (M7): desktop and mobile used to both
           render at once with CSS hiding one, doubling ParamForm/tab/search
