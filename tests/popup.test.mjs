@@ -66,6 +66,16 @@ test("changing the button label re-shows a remembered popup", () => {
   assert.equal(shouldShowPopup({ ...p, button: "Start designing" }), true);
 });
 
+test("changing the footnote re-shows a remembered popup", () => {
+  // Footnote renders in every mode (PopupModal), so it must be part of the
+  // content hash like header/body/button, or a footnote-only edit would go
+  // unnoticed by returning visitors.
+  const p = notice({ mode: "once", footnote: "Printed with Manifold." });
+  rememberPopup(p);
+  assert.equal(shouldShowPopup(p), false);
+  assert.equal(shouldShowPopup({ ...p, footnote: "Printed with CGAL." }), true);
+});
+
 test("a plain-string popup hashes exactly like the pre-LocalizableText formula", () => {
   // Reproduces contentHash's ORIGINAL formula (bare template-literal
   // interpolation, before `header`/`body`/`button` could be a locale-map
@@ -76,7 +86,7 @@ test("a plain-string popup hashes exactly like the pre-LocalizableText formula",
   // regression an earlier draft of the LocalizableText change introduced by
   // JSON.stringify-ing every field unconditionally.
   function legacyHash(popup) {
-    const s = `${popup.mode}\n${popup.header}\n${popup.body}\n${popup.button ?? ""}`;
+    const s = `${popup.mode}\n${popup.header}\n${popup.body}\n${popup.button ?? ""}\n${popup.footnote ?? ""}`;
     let h = 5381;
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
     return (h >>> 0).toString(36);

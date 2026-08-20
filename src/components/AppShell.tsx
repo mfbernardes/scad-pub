@@ -53,7 +53,7 @@ import { CommandBar } from "./CommandBar";
 import { ParamPanel } from "./ParamPanel";
 import { ActionButtons } from "./ActionButtons";
 import { ExportSuccess, type ExportSuccessState } from "./ExportSuccess";
-import { OutputToggle } from "./OutputToggle";
+import { NoticeAnnouncer, OutputToggle } from "./OutputToggle";
 import { BarActions } from "./BarActions";
 import { ICON_BUTTON_CLASS } from "./IconButton";
 import { cn } from "../lib/utils";
@@ -354,8 +354,10 @@ export const AppShell = memo(function AppShell({
   const showViewPicker = viewerControls.viewPicker !== false;
   // Whether the viewer offers the "reset view" button.
   const showReset = viewerControls.reset !== false;
-  // Whether the viewer offers the zoom in/out buttons (off by default).
-  const showZoom = viewerControls.zoom === true;
+  // Whether the viewer offers the zoom in/out buttons (default true: the
+  // canvas is otherwise pointer/gesture-only, with no keyboard path to zoom —
+  // WCAG 2.1.1).
+  const showZoom = viewerControls.zoom !== false;
   // Whether the viewer offers the fullscreen toggle (where it works at all).
   const showFullscreen = viewerControls.fullscreen !== false;
   // Optional after-export success panel (see ExportSuccess.tsx). Undefined
@@ -643,6 +645,9 @@ export const AppShell = memo(function AppShell({
       <a className={SKIP_LINK_CLASS} href={isMobile ? "#params-mobile" : "#params"}>
         {t("appShell.skipToParams")}
       </a>
+
+      {/* At the shell root, not in the bell: see NoticeAnnouncer's own doc. */}
+      <NoticeAnnouncer count={diagnostics.length} />
 
       {/* Only the active layout mounts (M7): desktop and mobile used to both
           render at once with CSS hiding one, doubling ParamForm/tab/search

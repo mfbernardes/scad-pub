@@ -1019,7 +1019,7 @@
             },
             "zoom": {
               "description": "Show explicit zoom in/out buttons.",
-              "default": false,
+              "default": true,
               "type": [
                 "boolean",
                 "null"

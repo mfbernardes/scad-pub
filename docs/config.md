@@ -706,7 +706,7 @@ the render cache, so `viewer` is absent from `renderHash`.
       "measure": true,       // the ruler/measure toggle; default true
       "viewPicker": true,    // the camera-angle cube button; default true
       "reset": true,         // the "reset view" button; default true
-      "zoom": false,         // explicit zoom in/out buttons; default false
+      "zoom": true,          // explicit zoom in/out buttons; default true (the canvas has no other keyboard path to zoom)
       "fullscreen": true     // the fullscreen toggle (browser tabs only); default true
     }
   }
@@ -720,7 +720,7 @@ the render cache, so `viewer` is absent from `renderHash`.
   - **`measure`**: `true` by default, or `false`. Controls the viewer measure toggle, the ruler button that draws the W x D x H overlay and shows the measurements/`@info` panel. Set `false` to hide the button entirely
   - **`viewPicker`**: `true` by default, or `false`. Controls the cube button whose menu snaps the camera to standard angles. Set `false` to hide it
   - **`reset`**: `true` by default, or `false`. Controls the “reset view” button. Mouse/touch orbit and zoom still work regardless
-  - **`zoom`**: `false` by default, or `true`. Controls the zoom in/out buttons. Mouse-wheel and pinch zoom already work, so the buttons are off by default
+  - **`zoom`**: `true` by default, or `false`. Controls the zoom in/out buttons. Mouse-wheel and pinch zoom already work, but the canvas otherwise has no keyboard path to zoom (WCAG 2.1.1), so the buttons are on by default
   - **`fullscreen`**: `true` by default, or `false`. Controls the fullscreen toggle. The button only appears in a browser tab whose browser supports the Fullscreen API. It never appears in an installed PWA, which already has its own window
 
 ## Popup notice (`popup`)

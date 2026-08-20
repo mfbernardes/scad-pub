@@ -83,16 +83,22 @@ interface Props {
 }
 
 // Every inline HUD button is an IconButton wrapped in the same left-anchored
-// hover/focus Tooltip, with the tooltip text mirroring the aria-label: this
-// composes that once so the buttons below stay identical in output.
+// hover/focus Tooltip. `label` is the accessible name (aria-label) and the
+// tooltip text default; `tooltip`, when given, overrides only the VISIBLE
+// tooltip/title text, so a toggle (dimensions, grid) can keep its sighted
+// show/hide phrasing there while its accessible name stays put — flipping
+// the name alongside aria-pressed on every toggle reads to a screen reader as
+// a different control appearing each time, not the same one changing state.
 function HudTooltipButton({
   label,
+  tooltip,
   onClick,
   className,
   pressed,
   children,
 }: {
   label: string;
+  tooltip?: string;
   onClick: () => void;
   className?: string;
   pressed?: boolean;
@@ -101,11 +107,12 @@ function HudTooltipButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <IconButton label={label} className={className} pressed={pressed} onClick={onClick}>
+        {/* IconButton itself falls back to title={label} when tooltip is unset. */}
+        <IconButton label={label} title={tooltip} className={className} pressed={pressed} onClick={onClick}>
           {children}
         </IconButton>
       </TooltipTrigger>
-      <TooltipContent side="left">{label}</TooltipContent>
+      <TooltipContent side="left">{tooltip ?? label}</TooltipContent>
     </Tooltip>
   );
 }
@@ -131,8 +138,17 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
     }
   };
 
-  const dimensionsLabel = showDimensions ? t("hud.hideDimensions") : t("hud.showDimensions");
-  const gridLabel = showGrid ? t("hud.hideGrid") : t("hud.showGrid");
+  // Stable accessible names (WCAG 4.1.2): a toggle's aria-pressed carries the
+  // on/off state, so the name itself doesn't need to say "show"/"hide" too —
+  // and must not, or a screen reader hears a different control on every
+  // press. The show/hide phrasing survives only as the inline buttons'
+  // sighted tooltip text; the collapsed menu rows use the stable label as
+  // their visible text too, since MenuRow's label doubles as its accessible
+  // name (WCAG 2.5.3 Label in Name) and pressed styling already shows state.
+  const dimensionsLabel = t("hud.dimensions");
+  const dimensionsTooltip = showDimensions ? t("hud.hideDimensions") : t("hud.showDimensions");
+  const gridLabel = t("hud.grid");
+  const gridTooltip = showGrid ? t("hud.hideGrid") : t("hud.showGrid");
   // Shared by both the collapsed popover's MenuRows and the inline column's
   // HudTooltipButtons below, so the two presentations can't drift.
   const zoomInLabel = t("hud.zoomIn");
@@ -227,9 +243,19 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
               />
             )}
             {measure && (
-              <MenuRow label={dimensionsLabel} onClick={onToggleDimensions} pressed={showDimensions} icon={<RulerIcon size={16} />} />
+              <MenuRow
+                label={dimensionsLabel}
+                onClick={onToggleDimensions}
+                pressed={showDimensions}
+                icon={<RulerIcon size={16} />}
+              />
             )}
-            <MenuRow label={gridLabel} onClick={onToggleGrid} pressed={showGrid} icon={<GridIcon size={16} />} />
+            <MenuRow
+              label={gridLabel}
+              onClick={onToggleGrid}
+              pressed={showGrid}
+              icon={<GridIcon size={16} />}
+            />
             {canFullscreen && (
               <MenuRow label={fullscreenLabel} onClick={act(toggleFullscreen)} icon={<MaximizeIcon size={16} />} />
             )}
@@ -263,6 +289,7 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
       {measure && (
         <HudTooltipButton
           label={dimensionsLabel}
+          tooltip={dimensionsTooltip}
           onClick={onToggleDimensions}
           pressed={showDimensions}
           className={cn(HUD_GLASS_BTN, showDimensions && "border-brand text-brand")}
@@ -276,6 +303,7 @@ export function ViewerHUD({ viewerRef, visible, collapse = false, measure, showD
           doesn't gate the button (see src/lib/viewerPrefs.ts). */}
       <HudTooltipButton
         label={gridLabel}
+        tooltip={gridTooltip}
         onClick={onToggleGrid}
         pressed={showGrid}
         className={cn(HUD_GLASS_BTN, showGrid && "border-brand text-brand")}

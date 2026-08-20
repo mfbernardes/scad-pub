@@ -11,7 +11,7 @@ import {
   localName,
   trappedLayers,
 } from "./dom";
-import { CSS_IMPORT_RE, CSS_URL_RE, isSameDocumentRef } from "../cssRefs.mjs";
+import { cssUnsafeReason, isSameDocumentRef, scrubForeignRefs } from "../cssRefs.mjs";
 import { gFormat, parseViewBox } from "./geometry";
 import type { Change, Vars } from "./types";
 
@@ -31,6 +31,7 @@ export const CHANGE_CODES = [
   "removed-active",
   "removed-external",
   "removed-unsafe-attrs",
+  "removed-unsafe-style",
   "style-fills",
 ] as const;
 export type FixChangeCode = (typeof CHANGE_CODES)[number];
@@ -259,10 +260,15 @@ export function removeActiveContent(root: Element): Change[] {
       } else if (local === "href" && !isSameDocumentRef(value)) {
         toRemove.push(attr.name);
       } else if (CSS_VALUE_ATTRS.has(local)) {
-        const cleaned = value.replace(CSS_URL_RE, (m, dq: string, sq: string, bare: string) =>
-          isSameDocumentRef(dq ?? sq ?? bare ?? "") ? m : "none"
-        );
-        if (cleaned !== value) toSet.push([attr.name, cleaned]);
+        // Escape-hidden or otherwise unvouched-for CSS (see cssUnsafeReason)
+        // can't be trusted to a same-document/foreign url() rewrite: drop the
+        // whole attribute rather than ship it half-scrubbed.
+        if (cssUnsafeReason(value)) {
+          toRemove.push(attr.name);
+        } else {
+          const { css: cleaned, removed } = scrubForeignRefs(value);
+          if (removed) toSet.push([attr.name, cleaned]);
+        }
       }
     }
     for (const name of toRemove) {
@@ -277,22 +283,30 @@ export function removeActiveContent(root: Element): Change[] {
   if (unsafeAttrs) changes.push(change("removed-unsafe-attrs", { count: unsafeAttrs }));
 
   let fetches = 0;
+  let unsafeStyles = 0;
   for (const el of els) {
     if (localName(el) !== "style") continue;
     const css = el.textContent ?? "";
-    const cleaned = css
-      .replace(CSS_IMPORT_RE, () => {
-        fetches += 1;
-        return "";
-      })
-      .replace(CSS_URL_RE, (m, dq: string, sq: string, bare: string) => {
-        if (isSameDocumentRef(dq ?? sq ?? bare ?? "")) return m; // a same-document reference is routine
-        fetches += 1;
-        return "none";
-      });
-    if (cleaned !== css) el.textContent = cleaned;
+    // Mirrors svg-sanitize.mjs: escape-hidden references and constructs
+    // outside the closed safe-function/@media allowlist (a quoted string —
+    // how image-set() carries a URL with no url() in sight — a disallowed
+    // function, another at-rule) can't be trusted to the url()/@import
+    // rewrite below, so the whole block goes rather than half-scrubbed.
+    if (cssUnsafeReason(css)) {
+      if (el.parentNode) {
+        el.parentNode.removeChild(el);
+        unsafeStyles += 1;
+      }
+      continue;
+    }
+    const { css: cleaned, removed } = scrubForeignRefs(css);
+    if (removed) {
+      fetches += removed;
+      el.textContent = cleaned;
+    }
   }
   if (fetches) changes.push(change("removed-external", { count: fetches }));
+  if (unsafeStyles) changes.push(change("removed-unsafe-style", { count: unsafeStyles }));
   return changes;
 }
 
@@ -305,8 +319,10 @@ export function applyFixes(root: Element): Change[] {
     ...fixViewBoxOrigin(root),
     // Before resolveStyleFills, not after: an `@import` sits in the same text
     // parseStyleFillRules reads selectors out of, and takes the following rule's
-    // selector down with it. Scrubbing the fetches first is also why `<style>`
-    // is neutralised rather than removed — the rules still have to be readable.
+    // selector down with it. Scrubbing the fetches first is also why a vouched-
+    // for `<style>` block is neutralised in place rather than removed — its
+    // rules still have to be readable; a block cssUnsafeReason can't vouch for
+    // is removed outright instead (see removeActiveContent above).
     ...removeActiveContent(root),
     ...resolveStyleFills(root),
   ];

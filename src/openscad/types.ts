@@ -39,7 +39,8 @@ export interface ViewerControls {
   viewPicker?: boolean;
   /** Whether the viewer's "reset view" button is offered (default true). */
   reset?: boolean;
-  /** Whether the viewer's zoom in/out buttons are offered (default false). */
+  /** Whether the viewer's zoom in/out buttons are offered (default true: the
+   *  canvas otherwise has no keyboard path to zoom). */
   zoom?: boolean;
   /**
    * Whether the viewer's fullscreen toggle is offered (default true). Only ever
@@ -558,10 +559,11 @@ export interface UiConfig {
    */
   afterExport?: {
     /**
-     * Help-modal tab label to deep-link the panel's "Open printing help"
-     * action to (HelpModal's `initialTab`). Validated at build time against
-     * this config's `help` tabs: gen-schema fails the build if no tab
-     * carries this exact label. Omit to hide the action entirely.
+     * Help-modal tab to deep-link the panel's "Open printing help" action to
+     * (HelpModal's `initialTab`): a tab id, or (back-compat) its plain-string
+     * label. Validated at build time against this config's `help` tabs:
+     * gen-schema fails the build if no tab's id or label matches. Omit to
+     * hide the action entirely.
      */
     helpTab?: string;
   };
@@ -734,6 +736,9 @@ export interface Schema {
   /** Optional id of the design shown when a visit carries no `#d=` deep link.
    *  Validated at build time to name a real design; null/absent → the first. */
   defaultDesign?: string | null;
+  /** Dark-mode (default) theme color for `<meta name="theme-color">`. Consumed
+   *  by vite.config.ts at build time, not read from the app at runtime. */
+  themeColor?: string;
   /** Light-mode theme color for `<meta name="theme-color">` (default "#ffffff"). */
   themeColorLight?: string;
   /** iOS standalone launch images (apple-touch-startup-image), generated when a

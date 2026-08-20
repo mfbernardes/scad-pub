@@ -15,6 +15,7 @@
 // both at once invites the reading that one of them is lying, so the caller
 // hides this count while the pill is up (`showCount`), and the bell carries no
 // amber of its own for an attention-flagged notice.
+import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { deriveRenderStatus, STATE_STYLES, type RenderStatusInput } from "../lib/renderStatus";
@@ -133,5 +134,37 @@ export function OutputToggle({
         </span>
       )}
     </Button>
+  );
+}
+
+/**
+ * Live region announcing a rise in the notice count. Not inside the bell (or
+ * OutputConsole, whose notices list unmounts on close or a non-Notices tab):
+ * on mobile the bell sits in `app-shell__mobile-background`, which is `inert`
+ * at the Full detent — exactly the detent where parameter edits produce new
+ * notices — and an inert live region announces nothing (WCAG 4.1.3). Mount
+ * once at the shell root, outside every inertable subtree.
+ */
+export function NoticeAnnouncer({ count }: { count: number }) {
+  useLocale(); // subscription only (see the rule in CLAUDE.md)
+  const prevCount = useRef(count);
+  // `seq` forces a DOM mutation on every rise even when the announced text is
+  // identical to a prior one (e.g. 0->1, 1->0, 0->1 all say "1 new message"):
+  // React bails out on an unchanged string, so a repeat would otherwise never
+  // reach the DOM and a screen reader would never hear it. Keying the text
+  // node on `seq` makes each rise a fresh insertion instead of a same-text
+  // update.
+  const [announcement, setAnnouncement] = useState({ text: "", seq: 0 });
+  useEffect(() => {
+    if (count > prevCount.current) {
+      const text = tn("console.newMessages", count - prevCount.current);
+      setAnnouncement((prev) => ({ text, seq: prev.seq + 1 }));
+    }
+    prevCount.current = count;
+  }, [count]);
+  return (
+    <span className="sr-only" role="status" aria-live="polite">
+      <span key={announcement.seq}>{announcement.text}</span>
+    </span>
   );
 }

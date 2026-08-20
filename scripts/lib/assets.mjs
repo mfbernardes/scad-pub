@@ -342,7 +342,8 @@ export function createAssetTools({ SOURCE, configPath, mustExist }) {
 
   // Walk the use/include graph from a design, returning every dependency's
   // source-relative POSIX path. Each `<path>` is resolved relative to the file
-  // that references it, matching OpenSCAD. Used only when `assets` is omitted.
+  // that references it, matching OpenSCAD. Always walked now (also feeds
+  // checkAssetCoverage), not only when `assets` is omitted.
   const collectDeps = (designAbs) => {
     const deps = new Set();
     const visited = new Set([designAbs]);

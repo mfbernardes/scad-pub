@@ -74,6 +74,7 @@ export const CHANGE_KEY: Record<string, string> = {
   "removed-active": "svgPrep.change.removed-active",
   "removed-external": "svgPrep.change.removed-external",
   "removed-unsafe-attrs": "svgPrep.change.removed-unsafe-attrs",
+  "removed-unsafe-style": "svgPrep.change.removed-unsafe-style",
   "style-fills": "svgPrep.change.style-fills",
   "grouped-colour": "svgPrep.change.grouped-colour",
 };

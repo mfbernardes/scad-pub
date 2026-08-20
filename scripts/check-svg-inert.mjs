@@ -28,6 +28,18 @@ const svg = (inner, rootAttrs = "") =>
 const VECTORS = {
   "css url()": [svg(`<style>.a{fill:url(${EVIL}/a.svg#p)}</style><rect class="a" width="40" height="40"/>`), "load"],
   "css image-set()": [svg(`<style>svg{background:image-set("${EVIL}/b.png" 1x)}</style><rect width="40" height="40"/>`), "load"],
+  // CSS-escaped spellings: a browser's CSS tokenizer decodes `\<hex>` before
+  // deciding an ident is `url`/an at-keyword is `@import`, so these fetch
+  // identically to their plain spellings — proving the escape is a real
+  // evasion of a literal-spelling-only scan, not spec-only insurance.
+  "css url() (escaped)": [
+    svg(`<style>.a{fill:u\\72 l(${EVIL}/a2.svg#p)}</style><rect class="a" width="40" height="40"/>`),
+    "load",
+  ],
+  "css @import (escaped)": [
+    svg(`<style>@\\69 mport "${EVIL}/m.css";</style><rect width="40" height="40"/>`),
+    "load",
+  ],
   // @media is the one at-rule the sanitizer keeps (see svg-sanitize.mjs's
   // cssRisk): the sanitized form here SURVIVES rather than being dropped, so
   // this vector is the important one — it proves the surviving url() is still

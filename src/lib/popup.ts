@@ -28,7 +28,7 @@ function encodeField(v: string | Record<string, string> | undefined): string {
 // A small, stable hash of the popup's content + mode. Lets "once"/"dismissible"
 // re-appear when a deploy changes the message, instead of staying hidden forever.
 function contentHash(popup: PopupNotice): string {
-  const s = `${popup.mode}\n${encodeField(popup.header)}\n${encodeField(popup.body)}\n${encodeField(popup.button)}`;
+  const s = `${popup.mode}\n${encodeField(popup.header)}\n${encodeField(popup.body)}\n${encodeField(popup.button)}\n${encodeField(popup.footnote)}`;
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   return (h >>> 0).toString(36);

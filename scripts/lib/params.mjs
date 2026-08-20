@@ -860,7 +860,10 @@ export function parseParams(absPath) {
     if (pending.info) p.info = pending.info;
     // Transient: gen-schema.mjs's buildDesigns folds this into the design's
     // `reviewLabels` map and strips it before the param reaches designs.json,
-    // so ParamBase deliberately carries no such field.
+    // so ParamBase deliberately carries no such field — matching protocol.ts
+    // (worker.ts's hashed message-shape module), where adding one would
+    // change renderHash and evict every deployment's persisted render cache
+    // for a field that can't affect a triangle.
     if (pending.review) p.reviewLabel = pending.review;
     // Mark a string SVG field for the in-app wizard (see `// @svg`), and a
     // wizard-populated target for demoted rendering (see `// @filledBy`).

@@ -128,7 +128,7 @@ export function computeRenderHash({
 // can never be mistaken for the new one, independent of whether wasmVersion
 // changed.
 export function computeBinAssetVersions({ fontPaths = {}, fontsConf = null, outPublicDir }) {
-  const digestBytes = (bytes) => createHash("sha256").update(bytes).digest("hex").slice(0, 16);
+  const digestBytes = (bytes) => createHash("sha256").update(bytes).digest("hex");
   const digestFile = (abs) => {
     try {
       return digestBytes(readFileSync(abs));

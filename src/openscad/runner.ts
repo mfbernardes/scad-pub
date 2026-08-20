@@ -6,8 +6,9 @@
 // Two-tier render cache: an in-memory LRU (L1, this file) in front of an
 // optional persistent IndexedDB store (L2, stlCache.ts). A render checks L1,
 // then L2, then the worker; a successful worker render is written back to both.
-// Both tiers share one content-stable key (design + sorted defines + user-file
-// signature + CACHE_VERSION), so hits survive reloads.
+// Both tiers share one content-stable key (design + sorted defines + full
+// user-file signature + CACHE_VERSION + the build's renderHash), so hits
+// survive reloads.
 import { CACHE_VERSION, MB, createStlCache } from "../lib/stlCache";
 import type { StlCacheStore, StoredStl } from "../lib/stlCache";
 import type { RenderRequest, RenderResult, WorkerModuleMessage, WorkerProgress } from "./types";

@@ -14,7 +14,7 @@ import {
   paint,
   trappedLayers,
 } from "./dom";
-import { CSS_IMPORT_RE, CSS_URL_RE, isSameDocumentRef, urlRefValue } from "../cssRefs.mjs";
+import { cssUnsafeReason, hasForeignRefs } from "../cssRefs.mjs";
 import { canvasBackgrounds } from "./background";
 import { contentBbox, parseViewBox } from "./geometry";
 import { deriveRegions, effectiveFill, groupIndex, shapesUnder } from "./regions";
@@ -121,13 +121,14 @@ export function check(root: Element, layers: string[] = [], regions?: Region[]):
   // here is not "OpenSCAD will skip it" but "this file is untrusted input".
   // applyFixes strips these; see ACTIVE_TAGS.
   const active = els.filter((el) => ACTIVE_TAGS.has(localName(el)));
-  // matchAll, not test(): both regexes are global, and `test` on a global regex
-  // advances its lastIndex, so a second call over different text can miss.
+  // hasForeignRefs matches escape-normalized (u\72 l(...), @\69 mport);
+  // cssUnsafeReason additionally catches what a reference match alone can't
+  // see (image-set()'s bare quoted-string URL, an unlisted function, another
+  // at-rule).
   const fetching = els.filter((el) => {
     if (localName(el) !== "style") return false;
     const css = el.textContent ?? "";
-    if ([...css.matchAll(CSS_IMPORT_RE)].length > 0) return true;
-    return [...css.matchAll(CSS_URL_RE)].some((m) => !isSameDocumentRef(urlRefValue(m)));
+    return cssUnsafeReason(css) !== "" || hasForeignRefs(css);
   });
   if (active.length > 0 || fetching.length > 0) {
     const names = [
