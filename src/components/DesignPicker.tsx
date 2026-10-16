@@ -234,8 +234,8 @@ export function DesignPicker({ designs, value, onChange, openSignal, gallery = f
     }
   }, [openSignal]);
 
+  const current = designs.find((d) => d.id === value);
   if (gallery) {
-    const current = designs.find((d) => d.id === value);
     return (
       <Dialog open={open} onOpenChange={setOpen}>
         {/* Through DialogTrigger rather than a bare button with onClick: Radix
@@ -245,7 +245,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, gallery = f
         <DialogTrigger asChild>
           <button
             type="button"
-            aria-label={t("designPicker.title")}
+            aria-label={t("designPicker.trigger", { design: current?.label ?? value })}
             className="font-display inline-flex h-8 min-w-0 items-center gap-1 rounded-md px-2 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="truncate">{current?.label ?? value}</span>
@@ -275,7 +275,7 @@ export function DesignPicker({ designs, value, onChange, openSignal, gallery = f
     <Select value={value} onValueChange={onChange} open={open} onOpenChange={setOpen}>
       <SelectTrigger
         size="sm"
-        aria-label={t("designPicker.title")}
+        aria-label={t("designPicker.trigger", { design: current?.label ?? value })}
         className="font-display h-7 gap-1 border-0 bg-transparent px-1 font-semibold shadow-none focus-visible:ring-0"
       >
         <SelectValue />

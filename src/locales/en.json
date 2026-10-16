@@ -70,6 +70,7 @@
   "bar.helpShortcuts": "Help & keyboard shortcuts",
   "bar.licenses": "Open-source licenses",
   "designPicker.title": "Choose a design",
+  "designPicker.trigger": "{design}: choose a design",
   "designPicker.description": "Select what you want to configure.",
   "designPicker.searchPlaceholder": "Search designs…",
   "designPicker.searchLabel": "Search designs",
