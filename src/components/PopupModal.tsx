@@ -94,7 +94,7 @@ export function PopupModal({
       </div>
       <div className="modal-actions flex flex-wrap items-center gap-2 px-4 pb-4">
         {popup.mode === "dismissible" && (
-          <Label className="notice-dismiss flex cursor-pointer items-center gap-[0.4rem] text-[0.85rem] font-normal text-muted-foreground">
+          <Label className="notice-dismiss flex cursor-pointer items-center gap-[0.4rem] text-[0.85rem] leading-normal font-normal text-muted-foreground">
             <Checkbox
               checked={dontShow}
               onCheckedChange={(v) => setDontShow(v === true)}

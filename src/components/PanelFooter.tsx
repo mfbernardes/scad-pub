@@ -27,7 +27,7 @@ export function PanelFooter({
           reads (BarActions), so a deployment's `strings` override doesn't
           change the label halfway across the breakpoint. */}
       <Label
-        className="auto-render inline-flex cursor-pointer select-none items-center gap-[0.35rem] text-[0.85rem] font-normal text-muted-foreground hover:text-foreground"
+        className="auto-render inline-flex cursor-pointer select-none items-center gap-[0.35rem] text-[0.85rem] leading-normal font-normal text-muted-foreground hover:text-foreground"
         title={t("settings.livePreviewTitle")}
       >
         <Switch
